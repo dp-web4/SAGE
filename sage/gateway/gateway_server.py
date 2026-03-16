@@ -416,11 +416,21 @@ class GatewayHandler(BaseHTTPRequestHandler):
 
     def _collect_dashboard_stats(self) -> Dict[str, Any]:
         """Gather all stats the dashboard needs."""
+        # Resolve operator name from identity relationships
+        operator_name = 'operator'
+        if self.daemon and hasattr(self.daemon, 'identity_state') and self.daemon.identity_state:
+            rels = self.daemon.identity_state.get('relationships', {})
+            for name, rel in rels.items():
+                if rel.get('role') in ('creator', 'operator') and name != 'claude':
+                    operator_name = name
+                    break
+
         stats: Dict[str, Any] = {
             'timestamp': time.time(),
             'machine': getattr(self.config, 'machine_name', 'unknown') if self.config else 'unknown',
             'lct_id': getattr(self.config, 'lct_id', '') if self.config else '',
             'network_open': GatewayHandler.network_open,
+            'operator_name': operator_name,
         }
 
         # Version info

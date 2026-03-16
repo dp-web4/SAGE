@@ -687,7 +687,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
     <!-- Right: Chat (main area) -->
     <section class="chat-panel">
-      <div class="chat-header">Talk to SAGE</div>
+      <div class="chat-header">
+        Talk to <span id="chat-sage-name">SAGE</span>
+        <span style="opacity:0.5; margin:0 6px;">as</span>
+        <input id="operator-name-input" type="text" value="dennis"
+          spellcheck="false" autocomplete="off"
+          style="background:transparent; border:none; border-bottom:1px solid var(--accent);
+                 color:var(--accent); font-size:11px; font-weight:600; text-transform:uppercase;
+                 letter-spacing:1px; width:80px; padding:0 2px; outline:none;"
+        />
+      </div>
       <div class="chat-log" id="chat-log"></div>
       <form class="chat-form" id="chat-form">
         <textarea id="chat-input" placeholder="Say something..." autocomplete="off" rows="1"></textarea>
@@ -735,7 +744,19 @@ function connectSSE() {
 
 // --- Dashboard update ---
 function updateDashboard(d) {
-  if (d.machine) document.getElementById('machine-name').textContent = d.machine;
+  if (d.machine) {
+    document.getElementById('machine-name').textContent = d.machine;
+    document.getElementById('chat-sage-name').textContent = d.machine;
+    sageName = d.machine;
+  }
+  if (d.operator_name && !operatorInput._initialized) {
+    // Only set from SSE once on first update, and only if no localStorage override
+    operatorInput._initialized = true;
+    if (!localStorage.getItem('sage-operator-name')) {
+      operatorName = d.operator_name;
+      operatorInput.value = operatorName;
+    }
+  }
   if (d.lct_id) document.getElementById('lct-id').textContent = d.lct_id;
   if (d.code_version) document.getElementById('version-display').textContent = 'v' + d.code_version;
 
@@ -936,7 +957,7 @@ async function loadChatHistory() {
       appendChat(msg.sender, msg.text, msg.css_class, msg.timestamp);
     }
     if (messages.length === 0) {
-      appendChat('SAGE', 'Dashboard connected. Type a message to begin.', 'sage');
+      appendChat(sageName, 'Dashboard connected. Type a message to begin.', 'sage');
     }
   } catch (e) {
     appendChat('SAGE', 'Dashboard connected. Type a message to begin.', 'sage');
@@ -944,12 +965,29 @@ async function loadChatHistory() {
 }
 
 let currentConversationId = null;
+// Identity names — sageName from SSE, operatorName from localStorage or SSE default
+let sageName = 'SAGE';
+let operatorName = localStorage.getItem('sage-operator-name') || 'dennis';
+
+// Operator name input — persist on change
+const operatorInput = document.getElementById('operator-name-input');
+operatorInput.value = operatorName;
+operatorInput.addEventListener('change', () => {
+  const val = operatorInput.value.trim();
+  if (val) {
+    operatorName = val;
+    localStorage.setItem('sage-operator-name', val);
+  }
+});
+operatorInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); operatorInput.blur(); }
+});
 
 async function sendChat() {
   const message = chatInput.value.trim();
   if (!message) return;
 
-  appendChat('You', message, 'user');
+  appendChat(operatorName, message, 'user');
   chatInput.value = '';
   chatInput.disabled = true;
   chatSend.disabled = true;
@@ -957,7 +995,7 @@ async function sendChat() {
 
   try {
     const payload = {
-      sender: 'operator',
+      sender: operatorName,
       message: message,
       max_wait_seconds: 90,
     };
@@ -981,11 +1019,11 @@ async function sendChat() {
     }
 
     if (resp.status === 202) {
-      appendChat('SAGE', '(dreaming... message queued)', 'dream');
+      appendChat(sageName, '(dreaming... message queued)', 'dream');
     } else if (result.error) {
-      appendChat('SAGE', 'Error: ' + result.error, 'error');
+      appendChat(sageName, 'Error: ' + result.error, 'error');
     } else {
-      appendChat('SAGE', result.response || result.text || JSON.stringify(result), 'sage');
+      appendChat(sageName, result.response || result.text || JSON.stringify(result), 'sage');
     }
   } catch (err) {
     appendChat('System', 'Connection error: ' + err.message, 'error');
