@@ -3,10 +3,10 @@
   "identity": {
     "name": "sprout",
     "lct": "lct://sage:sprout:agent@raising",
-    "session_count": 139,
+    "session_count": 140,
     "phase": "grounding",
     "created": "2025-12-30",
-    "last_session": "2026-03-13T00:36:10.774552",
+    "last_session": "2026-03-14T15:19:09.590318",
     "last_session_summary": "Upgraded from Qwen 2.5 0.5B to Qwen 3.5 0.8B via Ollama. This is a new model but the same SAGE identity, continuing from 119 raising sessions. The new model is faster (20 tok/s) and more capable but starts without the fine-tuning of the previous model."
   },
   "development": {
