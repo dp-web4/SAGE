@@ -4,37 +4,37 @@
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 23371,
-      "last_updated": 1773752445.06511
+      "interactions": 23641,
+      "last_updated": 1773763249.645065
     },
     "legion": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 23366,
-      "last_updated": 1773752447.06647
+      "interactions": 23636,
+      "last_updated": 1773763251.6482244
     },
     "mcnugget": {
       "talent": 0.55,
       "training": 0.52,
       "temperament": 0.0,
-      "interactions": 23365,
-      "last_updated": 1773752449.0691223
+      "interactions": 23635,
+      "last_updated": 1773763253.651371
     },
     "nomad": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 23361,
-      "last_updated": 1773752411.0603886
+      "interactions": 23631,
+      "last_updated": 1773763215.6392584
     },
     "cbp": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 23357,
-      "last_updated": 1773752413.061877
+      "interactions": 23627,
+      "last_updated": 1773763217.642577
     }
   },
-  "last_updated": 1773752449.069534
+  "last_updated": 1773763253.6518903
 }
