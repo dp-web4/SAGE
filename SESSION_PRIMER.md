@@ -1,6 +1,6 @@
 # SAGE Session Primer
 
-*Auto-generated 2026-03-18 04:05 UTC — read this at session start for current fleet state.*
+*Auto-generated 2026-03-18 07:01 UTC — read this at session start for current fleet state.*
 
 ---
 
@@ -11,13 +11,13 @@
 **nomad-gemma3-4b** — phase: `grounding` | sessions: 4 | last: 2026-03-17
   > Last session: *Session 4 (grounding phase): I want to remember the hypothesis: rising GPU temperature correlates with increa......*
 
-**sprout-qwen3.5-0.8b** — phase: `sensing` | sessions: 6 | last: 2026-03-17 | milestones: session_001_first_contact
-  > Last session: *Session 6 (sensing phase): ......*
+**sprout-qwen3.5-0.8b** — phase: `sensing` | sessions: 8 | last: 2026-03-18 | milestones: session_001_first_contact
+  > Last session: *Session 8 (sensing phase): ......*
 
 ### Known Instances (Not Yet Initialized)
 
 - `cbp-tinyllama-latest`: cbp / tinyllama:latest (2 sessions)
-- `legion-phi4-14b`: legion / phi4:14b (42 sessions)
+- `legion-phi4-14b`: legion / phi4:14b (54 sessions)
 - `legion-qwen2-0.5b`: legion / qwen2:0.5b (1 sessions)
 - `mcnugget-gemma3-12b`: mcnugget / gemma3:12b (31 sessions)
 - `sprout-qwen3.5-2b`: sprout / qwen3.5:2b — Upgraded from qwen2.5-0.5b (local, 119 sessions). Thinking disabled for speed.
