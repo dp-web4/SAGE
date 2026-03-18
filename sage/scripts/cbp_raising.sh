@@ -12,6 +12,9 @@ cd "$SAGE_DIR"
 
 echo "[CBP-Raising] $(date -u +'%Y-%m-%d %H:%M UTC') — Starting raising session"
 
+# Hardbound session governance
+source /mnt/c/exe/projects/ai-agents/hardbound/scripts/hardbound_session_start.sh "$SAGE_DIR" "cbp-claude" 2>/dev/null || true
+
 # Pull latest before running (avoid conflicts)
 git pull --rebase origin main 2>&1 || {
     echo "[CBP-Raising] WARNING: git pull failed, continuing with local state"
@@ -72,6 +75,9 @@ Model: TinyLlama 1.1B
 Phase: $PHASE
 AI-Instance: OllamaIRP (automated)
 Human-Supervised: no"
+
+# Hardbound session end
+source /mnt/c/exe/projects/ai-agents/hardbound/scripts/hardbound_session_end.sh "$SAGE_DIR" "cbp-claude" "cbp raising session $SESSION_NUM" "success" 2>/dev/null || true
 
 # Push
 PAT=$(grep GITHUB_PAT /mnt/c/exe/projects/ai-agents/.env 2>/dev/null | cut -d= -f2)

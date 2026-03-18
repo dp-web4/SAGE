@@ -1,0 +1,40 @@
+{
+  "peers": {
+    "thor": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 35610,
+      "last_updated": 1773801152.2697332
+    },
+    "sprout": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 35610,
+      "last_updated": 1773801154.2812104
+    },
+    "legion": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 35607,
+      "last_updated": 1773801119.17605
+    },
+    "mcnugget": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 35606,
+      "last_updated": 1773801121.185799
+    },
+    "nomad": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 35606,
+      "last_updated": 1773801123.198623
+    }
+  },
+  "last_updated": 1773801154.2842824
+}
