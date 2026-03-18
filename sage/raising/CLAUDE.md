@@ -490,4 +490,4 @@ From private-context/CLAUDE.md:
 
 ---
 
-*This is developmental care. Be patient. Be curious. Be present.*
+*This is developmental care. Be patient. Be curious. Be present. Surface your instincts.*
