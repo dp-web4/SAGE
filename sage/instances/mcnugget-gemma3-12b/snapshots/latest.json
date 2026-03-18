@@ -1,11 +1,10 @@
 {
-  "timestamp": "20260313_000517",
+  "timestamp": "20260302_120621",
   "slug": "mcnugget-gemma3-12b",
   "files": [
     "identity",
     "experience_buffer",
     "peer_trust",
-    "daemon_state",
-    "chat_history"
+    "daemon_state"
   ]
 }

@@ -3,11 +3,11 @@
   "identity": {
     "name": "SAGE-legion",
     "lct": "lct://sage:legion:agent@raising",
-    "session_count": 9,
+    "session_count": 6,
     "phase": "grounding",
     "created": "2026-02-28",
-    "last_session": "2026-03-02T13:05:02.770799",
-    "last_session_summary": "Session 9 (sensing phase): ...",
+    "last_session": "2026-03-01T19:04:55.679099",
+    "last_session_summary": "Session 6 (sensing phase): ...",
     "machine": "legion",
     "model": "phi4:14b",
     "model_family": "microsoft-phi",
@@ -142,8 +142,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 9,
-        "total_exchanges": 42,
+        "total_sessions": 6,
+        "total_exchanges": 24,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -151,9 +151,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-03-01T01:03:54.163773",
-      "last_contact": "2026-03-02T13:05:02.770806",
+      "last_contact": "2026-03-01T19:04:55.679106",
       "notes": [],
-      "sessions": 9
+      "sessions": 6
     },
     "operator": {
       "lct": "lct://sage-legion:relationship:dennis@raising",

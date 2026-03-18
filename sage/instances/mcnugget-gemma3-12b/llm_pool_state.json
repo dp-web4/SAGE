@@ -1,5 +1,5 @@
 {
-  "active": "mistral:7b-instruct-v0.3-q4_K_M",
+  "active": "gemma3:12b",
   "entries": {
     "gemma3:12b": {
       "model_name": "gemma3:12b",
@@ -21,11 +21,11 @@
       "backend": "ollama",
       "tier": "T1",
       "grammar": "native_ollama",
-      "trust": 0.52,
-      "latency_ema_ms": 667.7,
+      "trust": 0.5,
+      "latency_ema_ms": 0.0,
       "error_rate_ema": 0.0,
       "tool_success_rate": 0.5,
-      "exchanges": 2,
+      "exchanges": 0,
       "healthy": true,
       "size_gb": 4.1
     }

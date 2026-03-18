@@ -1,6 +1,20 @@
 {
-  "active": "qwen2:0.5b",
+  "active": "/home/sprout/ai-workspace/HRM/model-zoo/sage/epistemic-stances/qwen2.5-0.5b/introspective-qwen-merged",
   "entries": {
+    "/home/sprout/ai-workspace/HRM/model-zoo/sage/epistemic-stances/qwen2.5-0.5b/introspective-qwen-merged": {
+      "model_name": "/home/sprout/ai-workspace/HRM/model-zoo/sage/epistemic-stances/qwen2.5-0.5b/introspective-qwen-merged",
+      "model_family": "/home/sprout/ai-workspace/HRM/model-zoo/sage/epistemic-stances/qwen2.5-0.5b/introspective-qwen-merged",
+      "backend": "local",
+      "tier": "T3",
+      "grammar": "",
+      "trust": 0.5,
+      "latency_ema_ms": 0.0,
+      "error_rate_ema": 0.0,
+      "tool_success_rate": 0.5,
+      "exchanges": 0,
+      "healthy": true,
+      "size_gb": 0.0
+    },
     "qwen2:0.5b": {
       "model_name": "qwen2:0.5b",
       "model_family": "qwen2",
@@ -12,7 +26,7 @@
       "error_rate_ema": 0.0,
       "tool_success_rate": 0.5,
       "exchanges": 0,
-      "healthy": false,
+      "healthy": true,
       "size_gb": 0.3
     },
     "deepseek-coder:1.3b": {
@@ -26,7 +40,7 @@
       "error_rate_ema": 0.0,
       "tool_success_rate": 0.5,
       "exchanges": 0,
-      "healthy": false,
+      "healthy": true,
       "size_gb": 0.7
     },
     "llama3.2:latest": {
@@ -40,7 +54,7 @@
       "error_rate_ema": 0.0,
       "tool_success_rate": 0.5,
       "exchanges": 0,
-      "healthy": false,
+      "healthy": true,
       "size_gb": 1.9
     },
     "mistral:latest": {
@@ -54,7 +68,7 @@
       "error_rate_ema": 0.0,
       "tool_success_rate": 0.5,
       "exchanges": 0,
-      "healthy": false,
+      "healthy": true,
       "size_gb": 4.1
     },
     "gemma:2b": {
@@ -68,7 +82,7 @@
       "error_rate_ema": 0.0,
       "tool_success_rate": 0.5,
       "exchanges": 0,
-      "healthy": false,
+      "healthy": true,
       "size_gb": 1.6
     },
     "phi3:mini": {
@@ -82,7 +96,7 @@
       "error_rate_ema": 0.0,
       "tool_success_rate": 0.5,
       "exchanges": 0,
-      "healthy": false,
+      "healthy": true,
       "size_gb": 2.0
     },
     "tinyllama:latest": {
@@ -96,36 +110,8 @@
       "error_rate_ema": 0.0,
       "tool_success_rate": 0.5,
       "exchanges": 0,
-      "healthy": false,
+      "healthy": true,
       "size_gb": 0.6
-    },
-    "qwen3.5:0.8b": {
-      "model_name": "qwen3.5:0.8b",
-      "model_family": "qwen3.5",
-      "backend": "ollama",
-      "tier": "T3",
-      "grammar": "intent_heuristic",
-      "trust": 0.5,
-      "latency_ema_ms": 0.0,
-      "error_rate_ema": 0.0,
-      "tool_success_rate": 0.5,
-      "exchanges": 0,
-      "healthy": false,
-      "size_gb": 1.0
-    },
-    "qwen3.5:2b": {
-      "model_name": "qwen3.5:2b",
-      "model_family": "qwen3.5",
-      "backend": "ollama",
-      "tier": "T3",
-      "grammar": "intent_heuristic",
-      "trust": 0.5,
-      "latency_ema_ms": 0.0,
-      "error_rate_ema": 0.0,
-      "tool_success_rate": 0.5,
-      "exchanges": 0,
-      "healthy": false,
-      "size_gb": 2.6
     }
   }
 }
