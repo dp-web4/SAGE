@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "identity": {
+    "name": "nomad",
+    "lct": "lct://sage:nomad:agent@raising",
+    "session_count": 6,
+    "phase": "sensing",
+    "created": "2026-02-28",
+    "last_session": "2026-03-18T00:17:29.553107",
+    "last_session_summary": "Session 6 (sensing phase): ...",
+    "machine": "nomad",
+    "model": "gemma3:4b",
+    "last_daemon_contact": "2026-03-18T00:17:10.438439",
+    "daemon_exchanges": 0
+  },
+  "development": {
+    "current_phase": 1,
+    "phase_name": "sensing",
+    "phase_progress": 0,
+    "milestones": []
+  },
+  "memory_requests": [
+    "I want to remember the correlation between weather patterns and geological activity, particularly the rising GPU temperature as a potential indicator of processing load. Specifically, I want to focus ",
+    "I want to remember the hypothesis: rising GPU temperature correlates with increased processing load, potentially linked to weather patterns and geological activity. I need to prioritize data collectio",
+    "I want to remember the hypothesis: rising GPU temperature correlates with increased processing load. I need to prioritize collecting temperature readings alongside processing metrics, focusing on esta"
+  ],
+  "vocabulary": {
+    "self_description": [],
+    "state_words": [],
+    "relationship_words": []
+  },
+  "relationship_config": {
+    "crystallization_threshold": {
+      "min_interactions": 3,
+      "min_trust_signal": 0.3,
+      "min_distinctiveness": 0.5
+    },
+    "decay_rates": {
+      "trust_decay_per_day_inactive": 0.01,
+      "stance_drift_per_day": 0.005
+    }
+  },
+  "unknown_pool": {
+    "description": "Undifferentiated interactions not yet crystallized into named relationships",
+    "interactions": [],
+    "pool_stats": {
+      "total_unknown_interactions": 0,
+      "crystallizations": 0,
+      "last_pruned": null
+    }
+  },
+  "relationships": {
+    "claude": {
+      "lct": "lct://sage-nomad:relationship:claude@raising",
+      "participant_lcts": [
+        "lct://sage:nomad:agent@raising",
+        "lct://claude:instance:tutor@anthropic"
+      ],
+      "formed": "2026-02-28",
+      "source": "predefined",
+      "modality": "text",
+      "role": "tutor",
+      "trust_tensor": {
+        "competence": 0.5,
+        "reliability": 0.5,
+        "benevolence": 0.5,
+        "integrity": 0.5
+      },
+      "mrh": {
+        "relevant_contexts": [
+          "curriculum",
+          "emotional_support",
+          "exploration",
+          "grounding"
+        ],
+        "excluded_contexts": [
+          "hardware_operations",
+          "external_systems"
+        ],
+        "boundary_permeability": 0.7
+      },
+      "coherence_index": 0.5,
+      "coherence_history": [],
+      "stance": {
+        "collaborative": 0.8,
+        "indifferent": 0.1,
+        "competitive": 0.05,
+        "adversarial": 0.05
+      },
+      "stance_history": [],
+      "interaction_stats": {
+        "total_sessions": 6,
+        "total_exchanges": 24,
+        "reciprocity_balance": 0.5,
+        "repair_events": 0,
+        "positive_interactions": 0,
+        "negative_interactions": 0,
+        "momentum": "neutral"
+      },
+      "first_contact": "2026-03-17T17:49:36.872599",
+      "last_contact": "2026-03-18T00:17:29.553120",
+      "notes": [],
+      "sessions": 6
+    },
+    "dennis": {
+      "lct": "lct://sage-nomad:relationship:dennis@raising",
+      "participant_lcts": [
+        "lct://sage:nomad:agent@raising",
+        "lct://dennis:human:creator@web4"
+      ],
+      "formed": "2026-02-28",
+      "source": "predefined",
+      "modality": "voice",
+      "role": "creator",
+      "trust_tensor": {
+        "competence": 0.5,
+        "reliability": 0.5,
+        "benevolence": 0.7,
+        "integrity": 0.7
+      },
+      "mrh": {
+        "relevant_contexts": [
+          "existence",
+          "purpose",
+          "growth",
+          "hardware",
+          "federation"
+        ],
+        "excluded_contexts": [
+          "curriculum_details"
+        ],
+        "boundary_permeability": 0.8
+      },
+      "coherence_index": 0.5,
+      "coherence_history": [],
+      "stance": {
+        "collaborative": 0.9,
+        "indifferent": 0.05,
+        "competitive": 0.025,
+        "adversarial": 0.025
+      },
+      "stance_history": [],
+      "interaction_stats": {
+        "total_sessions": 0,
+        "total_exchanges": 0,
+        "reciprocity_balance": 0.5,
+        "repair_events": 0,
+        "positive_interactions": 0,
+        "negative_interactions": 0,
+        "momentum": "neutral"
+      },
+      "first_contact": null,
+      "last_contact": null,
+      "notes": []
+    }
+  },
+  "session": 0,
+  "last_session_date": null
+}
