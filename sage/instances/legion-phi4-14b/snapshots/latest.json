@@ -1,10 +1,11 @@
 {
-  "timestamp": "20260302_130502",
+  "timestamp": "20260318_130356",
   "slug": "legion-phi4-14b",
   "files": [
     "identity",
     "experience_buffer",
     "peer_trust",
-    "daemon_state"
+    "daemon_state",
+    "chat_history"
   ]
 }
