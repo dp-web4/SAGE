@@ -40,8 +40,24 @@ else
     sleep 10
 fi
 
-# Pull latest code
+# Pull latest code and check if daemon needs restart
+BEFORE_HASH=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 git pull --rebase --quiet 2>/dev/null || echo "[Legion-Raising] WARN: git pull failed, continuing with current code"
+AFTER_HASH=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+
+if [ "$BEFORE_HASH" != "$AFTER_HASH" ]; then
+    echo "[Legion-Raising] Code updated ($BEFORE_HASH → $AFTER_HASH), restarting daemon..."
+    systemctl --user restart sage-daemon.service
+    sleep 5
+    HEALTH=$(curl -s --max-time 5 http://localhost:8750/health 2>/dev/null || echo "")
+    if echo "$HEALTH" | $PYTHON -c "import sys,json; d=json.load(sys.stdin); assert d.get('status')=='alive'" 2>/dev/null; then
+        echo "[Legion-Raising] Daemon restarted with new code, healthy"
+    else
+        echo "[Legion-Raising] WARNING: Daemon restart failed, continuing anyway"
+    fi
+else
+    echo "[Legion-Raising] Code unchanged ($BEFORE_HASH)"
+fi
 
 # Run the raising session (continue from last session number)
 $PYTHON -m sage.raising.scripts.ollama_raising_session --machine legion -c 2>&1
