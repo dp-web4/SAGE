@@ -557,13 +557,14 @@ RESPONSE STYLE:
                 break
 
         # Truncate bilateral generation — small models generate both sides
-        # of conversation. Cut at the first turn marker that isn't ours.
+        # of conversation. Cut at the first OTHER-speaker turn marker.
+        # Don't match the model's own name — it may self-reference legitimately.
         import re
-        turn_markers = re.compile(
-            r'\n\s*\[?(Claude|System|User|' + re.escape(self.identity_name) + r')\]?\s*:',
+        other_speakers = re.compile(
+            r'\n\s*\[?(Claude|System|User)\]?\s*:',
             re.IGNORECASE
         )
-        match = turn_markers.search(response)
+        match = other_speakers.search(response)
         if match:
             response = response[:match.start()].strip()
 
