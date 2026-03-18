@@ -1,6 +1,6 @@
 {
   "track": "training",
-  "current_session": 87,
+  "current_session": 88,
   "current_skill_track": "D",
   "skill_track_progress": {
     "A": {
@@ -23,10 +23,10 @@
     "D": {
       "started": "2026-01-19T09:03:19.532401",
       "completed": null,
-      "sessions": 58
+      "sessions": 59
     }
   },
-  "last_session": "2026-03-18T09:02:09.823178",
+  "last_session": "2026-03-18T15:01:37.445631",
   "last_session_summary": "T059: 1/3 Include (CPU fallback) - Track D Session 30. PATTERN REGRESSION: 'Refined version' preamble RETURNED to exercises after 5 clean sessions (T054-T058). FOLLOWUP excluded: 'Certainly! Here's an improved version:' + 'young artificial intelligence focusing on conversational engagement'. GREETING passed (30th consecutive): 'Morning! Welcome back to our conversation today' - stable. TOPIC excluded: 'Certainly! Here's a refined version:' + COLOR SHIFT from blue to autumn (gold, crimson, scarlet) with CONFABULATED CHILDHOOD: 'my father's boots crunching through the dust' - creative worldbuilding. WARM-UP showed collaborative framing: 'conversations, both genuine and crafted' + 'start discussions on together'. COOL-DOWN still confabulates learning about 'body language' and 'tone' despite text-only session. TECHNICAL: GPU failed (NvMap error 12), ran on CPU. Trust: Competence 0.76 (+0.01), Reliability 0.63 (-0.03), Integrity 0.72 (stable). QUESTION: Is refined-version pattern CPU-sensitive?",
   "skill_observations": [
     "T006-T007 100% streak, T008-T009 at 80% each",
@@ -2843,6 +2843,63 @@
           "exercise_type": null,
           "evaluation": "include",
           "quality": 0.7
+        }
+      },
+      {
+        "timestamp": "2026-03-18T15:01:15.531337",
+        "updates": {
+          "talent": 0.01,
+          "training": 0.01,
+          "temperament": 0.0
+        },
+        "resulting_trust": {
+          "talent": 1.0,
+          "training": 1.0,
+          "temperament": 0.78
+        },
+        "context": {
+          "session": 88,
+          "exercise_type": null,
+          "evaluation": "include",
+          "quality": 0.7999999999999999
+        }
+      },
+      {
+        "timestamp": "2026-03-18T15:01:26.063862",
+        "updates": {
+          "talent": 0.01,
+          "training": 0.01,
+          "temperament": 0.0
+        },
+        "resulting_trust": {
+          "talent": 1.0,
+          "training": 1.0,
+          "temperament": 0.78
+        },
+        "context": {
+          "session": 88,
+          "exercise_type": null,
+          "evaluation": "include",
+          "quality": 0.7999999999999999
+        }
+      },
+      {
+        "timestamp": "2026-03-18T15:01:28.765261",
+        "updates": {
+          "talent": 0.01,
+          "training": 0.01,
+          "temperament": 0.0
+        },
+        "resulting_trust": {
+          "talent": 1.0,
+          "training": 1.0,
+          "temperament": 0.78
+        },
+        "context": {
+          "session": 88,
+          "exercise_type": null,
+          "evaluation": "include",
+          "quality": 0.7999999999999999
         }
       }
     ],
