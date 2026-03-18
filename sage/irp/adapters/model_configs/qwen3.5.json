@@ -1,0 +1,15 @@
+{
+    "family": "qwen3.5",
+    "aliases": ["qwen3"],
+    "api_mode": "chat",
+    "bilateral_prone": true,
+    "supports_tool_calls": false,
+    "max_context_tokens": 4096,
+    "max_context_turns": 4,
+    "thinking_supported": true,
+    "tier": "T3",
+    "stop_sequences": [],
+    "echo_prefixes": ["[{self_name}]:", "{self_name}:", "[SAGE]:", "SAGE:"],
+    "bilateral_speakers": ["Claude", "System", "User", "Human"],
+    "notes": "0.8B is bilateral-prone. 2B less so. 27B is not. Thinking mode available but disabled by default for small variants."
+}

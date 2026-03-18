@@ -537,8 +537,9 @@ RESPONSE STYLE:
         """Generate SAGE's response via OllamaIRP with conversation context."""
         system_prompt = self._build_system_prompt()
 
+        max_turns = self.llm._adapter.capabilities.max_context_turns
         full_prompt = f"[System]\n{system_prompt}\n\n"
-        for turn in self.conversation_history[-6:]:
+        for turn in self.conversation_history[-max_turns:]:
             full_prompt += f"[Claude]: {turn['claude']}\n"
             full_prompt += f"[{self.identity_name}]: {turn['sage']}\n\n"
         full_prompt += f"[Claude]: {user_message}\n[{self.identity_name}]:"
@@ -549,28 +550,10 @@ RESPONSE STYLE:
             print(f"  ERROR generating response: {e}")
             response = "(no response — connection error)"
 
-        response = response.strip()
-        # Strip echo of conversation label prefix
-        for prefix in [f"[{self.identity_name}]:", f"{self.identity_name}:", "[SAGE]:", "SAGE:"]:
-            if response.startswith(prefix):
-                response = response[len(prefix):].strip()
-                break
-
-        # Truncate bilateral generation — small models (< ~4B) generate both
-        # sides of conversation. Larger models don't exhibit this.
-        # Only apply for known-affected model families.
-        bilateral_prone = any(tag in self.model_name.lower() for tag in [
-            'tinyllama', 'qwen2.5:0.5b', 'qwen2:0.5b', 'qwen3.5:0.8b',
-        ])
-        if bilateral_prone:
-            import re
-            other_speakers = re.compile(
-                r'\n\s*\[?(Claude|System|User)\]?\s*:',
-                re.IGNORECASE
-            )
-            match = other_speakers.search(response)
-            if match:
-                response = response[:match.start()].strip()
+        # All response cleaning delegated to the model adapter
+        # — echo stripping, bilateral generation, model-specific quirks
+        adapter = self.llm._adapter
+        response = adapter.clean_response(response.strip(), self.identity_name)
 
         return response
 

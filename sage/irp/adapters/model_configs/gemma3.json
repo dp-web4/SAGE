@@ -1,0 +1,15 @@
+{
+    "family": "gemma3",
+    "aliases": ["gemma"],
+    "api_mode": "chat",
+    "bilateral_prone": false,
+    "supports_tool_calls": true,
+    "max_context_tokens": 8192,
+    "max_context_turns": 8,
+    "thinking_supported": false,
+    "tier": "T2",
+    "stop_sequences": [],
+    "echo_prefixes": ["{self_name}:"],
+    "bilateral_speakers": ["Human", "User"],
+    "notes": "4B: clean XML tool calls (T2), good instruction following. 12B: same family, stronger. McNugget uses 12B, Nomad uses 4B."
+}

@@ -1,0 +1,15 @@
+{
+    "family": "tinyllama",
+    "aliases": ["llama", "llama2"],
+    "api_mode": "chat",
+    "bilateral_prone": true,
+    "supports_tool_calls": false,
+    "max_context_tokens": 2048,
+    "max_context_turns": 4,
+    "thinking_supported": false,
+    "tier": "T3",
+    "stop_sequences": [],
+    "echo_prefixes": ["[{self_name}]:", "{self_name}:", "[SAGE]:", "SAGE:", "CBP:"],
+    "bilateral_speakers": ["Claude", "System", "User", "Human"],
+    "notes": "Uses /api/chat. /api/generate with manual [INST] causes empty responses. Bilateral generation is common — generates both sides of conversation."
+}

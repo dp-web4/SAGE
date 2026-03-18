@@ -1,0 +1,15 @@
+{
+    "family": "phi4",
+    "aliases": ["phi3", "phi"],
+    "api_mode": "chat",
+    "bilateral_prone": false,
+    "supports_tool_calls": true,
+    "max_context_tokens": 16384,
+    "max_context_turns": 10,
+    "thinking_supported": false,
+    "tier": "T1",
+    "stop_sequences": [],
+    "echo_prefixes": ["{self_name}:"],
+    "bilateral_speakers": ["Human", "User"],
+    "notes": "14B: strong instruction following, native tool calling. Legion primary model. Microsoft MIT license."
+}

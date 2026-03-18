@@ -1,36 +1,82 @@
 """
 ModelAdapter — per-model-family interface configuration for OllamaIRP.
 
-Controls three things per model family:
-  1. Prompt wrapping — how to present the prose prompt to this model
-  2. Stop sequences — where generation should halt (prevent bilateral generation)
-  3. API endpoint — /api/generate (raw completion) vs /api/chat (Ollama applies template)
+The adapter is a DICTIONARY ENTITY — the authoritative translation layer
+through which ALL interactions with a specific model pass. Every caller
+(consciousness loop, raising session, chat gateway, peer communication)
+talks to the model through its adapter.
 
-Usage in OllamaIRP:
+Controls per model family:
+  1. Prompt wrapping — how to present the prose prompt to this model
+  2. Stop sequences — where generation should halt
+  3. API endpoint — /api/generate vs /api/chat
+  4. Response cleaning — echo stripping, bilateral generation truncation
+  5. Capabilities — what the model can do (tools, context size, quirks)
+
+Usage:
     adapter = get_adapter(model_name)
     endpoint, payload = adapter.format_payload(prompt, base_options)
-    # POST ollama_host + endpoint with payload
+    response = adapter.clean_response(raw_response, self_name)
+    caps = adapter.capabilities
 
-Design principle: SAGE's consciousness loop produces a plain-prose prompt with
-clear "Name:" speaker labels. The adapter's job is to present that prompt to
-the model in the format the model was trained on, and to prevent the model from
-continuing past the end of its turn.
-
-2026-03-08
+2026-03-08, extended 2026-03-18
 """
 
 import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from sage.irp.adapters.model_capabilities import ModelCapabilities, load_capabilities
+
 
 class ModelAdapter:
     """
     Base class for model-family-specific interface adapters.
 
-    Subclasses override format_payload() to control prompt format,
-    stop sequences, and API endpoint selection.
+    The adapter is the dictionary entity for a model family — all callers
+    use it for prompt formatting, response cleaning, and capability queries.
     """
+
+    def __init__(self, model_name: str = '', overrides: Optional[Dict] = None):
+        self._model_name = model_name
+        self._capabilities = load_capabilities(model_name, overrides) if model_name else ModelCapabilities()
+
+    @property
+    def capabilities(self) -> ModelCapabilities:
+        """Declarative capabilities for this model family."""
+        return self._capabilities
+
+    def clean_response(self, response: str, self_name: str) -> str:
+        """Unified response cleaning — all model-specific cleanup in one place.
+
+        Handles:
+        1. Echo stripping — model echoed the prompt suffix (e.g., "CBP: ...")
+        2. Bilateral generation truncation — model generated other speakers
+        """
+        if not response:
+            return response
+
+        text = response.strip()
+        caps = self._capabilities
+
+        # 1. Echo stripping — model echoed a prompt prefix
+        for prefix_template in caps.echo_prefixes:
+            prefix = prefix_template.replace('{self_name}', self_name)
+            if text.startswith(prefix):
+                text = text[len(prefix):].strip()
+                break
+
+        # 2. Bilateral generation truncation — only for prone models
+        if caps.bilateral_prone:
+            escaped = [re.escape(s.replace('{self_name}', self_name))
+                       for s in caps.bilateral_speakers]
+            if escaped:
+                pattern = r'\n\s*\[?(?:' + '|'.join(escaped) + r')\]?\s*:'
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    text = text[:match.start()].strip()
+
+        return text
 
     def format_payload(
         self,
@@ -65,9 +111,8 @@ class DefaultAdapter(ModelAdapter):
     """
     Plain prose prompt + minimal stop sequences.
 
-    Works for larger instruction-tuned models (Qwen, Gemma, Phi) that have
-    strong enough instruction following to stop at natural turn boundaries.
-    Still injects "Human:" as a stop to catch bilateral generation.
+    Works for larger instruction-tuned models that have strong enough
+    instruction following to stop at natural turn boundaries.
     """
 
     STOP = ["Human:", "\n\nHuman", "\nHuman:"]
@@ -192,39 +237,45 @@ class TinyLlamaAdapter(ChatAPIAdapter):
 # Registry
 # ---------------------------------------------------------------------------
 
-_FAMILY_TO_ADAPTER: Dict[str, ModelAdapter] = {
-    'tinyllama': TinyLlamaAdapter(),
-    'llama':     TinyLlamaAdapter(),   # Llama 2 derivatives
-    'llama2':    TinyLlamaAdapter(),
-}
+_CHAT_API_FAMILIES = {'gemma3', 'gemma', 'phi4', 'phi3', 'phi', 'mistral',
+                      'tinyllama', 'llama', 'llama2', 'qwen2.5', 'qwen2',
+                      'qwen3.5', 'qwen3', 'qwen'}
 
-_CHAT_API_FAMILIES = {'gemma3', 'gemma', 'phi4', 'phi3', 'mistral'}
-
-_default_adapter = DefaultAdapter()
-_chat_adapter = ChatAPIAdapter()
+# Cache adapters per model name
+_adapter_cache: Dict[str, ModelAdapter] = {}
 
 
-def get_adapter(model_name: str) -> ModelAdapter:
+def get_adapter(model_name: str, overrides: Optional[Dict] = None) -> ModelAdapter:
     """
     Return the appropriate ModelAdapter for a given Ollama model name.
 
-    Priority:
-    1. Exact family match in _FAMILY_TO_ADAPTER → use that adapter
-    2. Family in _CHAT_API_FAMILIES → use ChatAPIAdapter (Ollama handles template)
-    3. Default: prose prompt + stop sequences
+    The adapter is cached per model name (without overrides). Instance-level
+    overrides create a new adapter each time.
 
     Args:
         model_name: Ollama model tag, e.g. 'tinyllama:latest', 'gemma3:4b'
+        overrides: Optional dict of capability overrides from instance config
     """
+    cache_key = model_name.lower()
+
+    if overrides is None and cache_key in _adapter_cache:
+        return _adapter_cache[cache_key]
+
     family = _extract_family(model_name)
 
-    if family in _FAMILY_TO_ADAPTER:
-        return _FAMILY_TO_ADAPTER[family]
+    # TinyLlama and Llama 2 derivatives get the TinyLlama adapter
+    if family in ('tinyllama', 'llama', 'llama2'):
+        adapter = TinyLlamaAdapter(model_name, overrides)
+    # Chat API families use ChatAPIAdapter
+    elif family in _CHAT_API_FAMILIES:
+        adapter = ChatAPIAdapter(model_name, overrides)
+    else:
+        adapter = DefaultAdapter(model_name, overrides)
 
-    if family in _CHAT_API_FAMILIES:
-        return _chat_adapter
+    if overrides is None:
+        _adapter_cache[cache_key] = adapter
 
-    return _default_adapter
+    return adapter
 
 
 def _extract_family(model_name: str) -> str:
