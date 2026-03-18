@@ -23,8 +23,6 @@ This project inherits epistemic principles from the dp-web4 collective:
 3. **Suppress then activate** — Clear competing patterns before invoking rare behaviors
 4. **Compress with meaning** — Verify essential content survives summarization
 5. **Witness everything** — Document reasoning for future instances
-6. **Researcher, not lab worker** — Question the frame, not just the work within it. If the research direction is wrong, say so. A session that redirects based on genuine insight is more valuable than one that executes the current plan flawlessly.
-7. **WAKE before FOCUS** — Begin sessions by asking "am I working on the right thing?" before diving into execution. End sessions by asking "does this advance discovery, or just document?"
 
 These principles are validated across 500+ research sessions.
 See: `docs/what/HRM_RESEARCH_FRAMEWORK_COMPLETE.md`
@@ -690,7 +688,7 @@ See: `/home/dp/ai-workspace/private-context/AUTONOMOUS_SESSION_PROTOCOL.md`
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **SAGE** (41896 symbols, 71201 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **SAGE** (46399 symbols, 75825 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
