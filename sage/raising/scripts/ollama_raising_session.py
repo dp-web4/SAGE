@@ -684,23 +684,25 @@ RESPONSE STYLE:
         try:
             from sage.gateway.gateway_server import append_chat_message
             from types import SimpleNamespace
+            import time as _time
             _chat_config = SimpleNamespace(instance_dir=str(self.instance.root))
             for turn in self.conversation_history:
+                # Parse ISO timestamp to unix seconds (dashboard expects numeric)
+                try:
+                    ts = datetime.fromisoformat(turn['timestamp']).timestamp()
+                except (KeyError, ValueError):
+                    ts = _time.time()
                 append_chat_message(_chat_config, {
-                    'speaker': 'Claude',
-                    'text': turn['claude'],
-                    'timestamp': turn.get('timestamp', datetime.now().isoformat()),
-                    'source': 'raising',
-                    'session': self.session_number,
-                    'phase': self.phase,
+                    'sender': 'claude',
+                    'text': f"[raising S{self.session_number}/{self.phase}] {turn['claude']}",
+                    'css_class': 'user',
+                    'timestamp': ts,
                 })
                 append_chat_message(_chat_config, {
-                    'speaker': self.identity_name,
+                    'sender': self.identity_name,
                     'text': turn['sage'],
-                    'timestamp': turn.get('timestamp', datetime.now().isoformat()),
-                    'source': 'raising',
-                    'session': self.session_number,
-                    'phase': self.phase,
+                    'css_class': 'sage',
+                    'timestamp': ts + 0.001,
                 })
             print(f"\n  Chat history: {len(self.conversation_history) * 2} messages appended to dashboard")
         except Exception as e:
