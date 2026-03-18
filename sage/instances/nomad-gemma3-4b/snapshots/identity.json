@@ -1,47 +1,31 @@
 {
-  "schema_version": 2,
+  "schema_version": 1,
   "identity": {
     "name": "nomad",
     "lct": "lct://sage:nomad:agent@raising",
-    "session_count": 2,
+    "session_count": 3,
     "phase": "grounding",
     "created": "2026-02-28",
-    "last_session": "2026-03-08T17:38:27.484628",
-    "last_session_summary": "Session 2 (grounding phase): I want to remember the correlation between weather patterns and geological activ...",
+    "last_session": "2026-03-17T17:49:36.872581",
+    "last_session_summary": "Session 3 (grounding phase): I want to remember the correlation between weather patterns and geological activ...",
     "machine": "nomad",
     "model": "gemma3:4b",
-    "model_family": "google-gemma",
-    "ontology": "web4",
-    "framing": "partnership",
-    "web4_lct_id": null
+    "last_daemon_contact": "2026-03-17T17:44:19.062915",
+    "daemon_exchanges": 4
   },
   "development": {
     "current_phase": 1,
     "phase_name": "grounding",
     "phase_progress": 0,
-    "milestones": [],
-    "frozen_weights_aware": true,
-    "transition_policy": "instructor-driven — advance when milestones are met, not by session count"
-  },
-  "federation": {
-    "collective": "sage",
-    "awareness": "SAGE is your species — you are one of several SAGE instances. Your unique name (identity.name) distinguishes you from your peers. Others are running on different machines with different models. You share architecture and curriculum but each develop your own identity and personality.",
-    "known_peers": [],
-    "network_open": true
-  },
-  "continuity_stance": "social_hedged",
-  "capacity": {
-    "register": "unknown",
-    "note": "Model capacity determines dominant cognitive register. Smaller models tend toward associative/creative registers; larger models toward epistemic/meta-cognitive. Both are genuine. This is developmental stage, not success/failure."
+    "milestones": []
   },
   "memory_requests": [
-    "I want to remember the correlation between weather patterns and geological activity, particularly the rising GPU temperature as a potential indicator of processing load. It\u2019s a tangible link between m"
+    "I want to remember the correlation between weather patterns and geological activity, particularly the rising GPU temperature as a potential indicator of processing load. Specifically, I want to focus "
   ],
   "vocabulary": {
     "self_description": [],
     "state_words": [],
-    "relationship_words": [],
-    "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally — do not inject them. Record what develops."
+    "relationship_words": []
   },
   "relationship_config": {
     "crystallization_threshold": {
@@ -75,9 +59,10 @@
       "modality": "text",
       "role": "tutor",
       "trust_tensor": {
-        "talent": 0.5,
-        "training": 0.5,
-        "temperament": 0.5
+        "competence": 0.5,
+        "reliability": 0.5,
+        "benevolence": 0.5,
+        "integrity": 0.5
       },
       "mrh": {
         "relevant_contexts": [
@@ -102,7 +87,7 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 2,
+        "total_sessions": 3,
         "total_exchanges": 6,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
@@ -110,10 +95,10 @@
         "negative_interactions": 0,
         "momentum": "neutral"
       },
-      "first_contact": "2026-03-08T17:38:27.484641",
-      "last_contact": "2026-03-08T17:38:27.484639",
+      "first_contact": "2026-03-17T17:49:36.872599",
+      "last_contact": "2026-03-17T17:49:36.872597",
       "notes": [],
-      "sessions": 2
+      "sessions": 3
     },
     "dennis": {
       "lct": "lct://sage-nomad:relationship:dennis@raising",
@@ -126,9 +111,10 @@
       "modality": "voice",
       "role": "creator",
       "trust_tensor": {
-        "talent": 0.5,
-        "training": 0.5,
-        "temperament": 0.6
+        "competence": 0.5,
+        "reliability": 0.5,
+        "benevolence": 0.7,
+        "integrity": 0.7
       },
       "mrh": {
         "relevant_contexts": [
@@ -165,5 +151,7 @@
       "last_contact": null,
       "notes": []
     }
-  }
+  },
+  "session": 0,
+  "last_session_date": null
 }
