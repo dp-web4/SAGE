@@ -60,6 +60,8 @@ def summarize_instance(instance_dir: Path) -> dict | None:
 
     # instance.json — always present after migration
     inst = read_json_safe(instance_dir / "instance.json")
+    if inst.get("archived"):
+        return None  # Skip archived instances (replaced by newer model)
     result["machine"] = inst.get("machine", name.split("-")[0])
     result["model"] = inst.get("model", "unknown")
     result["notes"] = inst.get("notes", "")

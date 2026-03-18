@@ -43,3 +43,4 @@ Then produce a report in this format:
 
 Start by listing all directories under `sage/instances/` then read each one.
 Skip `.bak` directories and `_seed`.
+Skip instances where `instance.json` has `"archived": true` — these are replaced by newer model instances.

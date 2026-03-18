@@ -10,5 +10,7 @@
   "device_hint": "cuda",
   "has_training_track": true,
   "has_lora": true,
-  "encryption_enabled": false
+  "encryption_enabled": false,
+  "archived": true,
+  "archived_reason": "Replaced by sprout-qwen3.5-0.8b (2026-03-06). 119 raising sessions preserved."
 }
