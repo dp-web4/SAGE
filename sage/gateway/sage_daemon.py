@@ -293,6 +293,24 @@ class SAGEDaemon:
         """Create and configure the SAGEConsciousness instance."""
         from sage.core.sage_consciousness import SAGEConsciousness
 
+        # Hardware-gated identity authorization
+        try:
+            from sage.identity.provider import IdentityProvider
+            instance_dir = self.config.instance_dir if hasattr(self.config, 'instance_dir') and self.config.instance_dir else None
+            if instance_dir:
+                self.identity_provider = IdentityProvider(instance_dir)
+                if self.identity_provider.is_hardware_sealed:
+                    ctx = self.identity_provider.authorize()
+                    if ctx:
+                        print(f"  Identity authorized: {self.identity_provider.manifest.anchor_type} "
+                              f"(ceiling: {self.identity_provider.manifest.trust_ceiling})")
+                    else:
+                        print(f"  Identity authorization failed — legacy mode")
+                elif self.identity_provider.is_initialized:
+                    print(f"  Identity: legacy mode (no sealed secret)")
+        except Exception as e:
+            print(f"  Identity provider: {e}")
+
         # Load epistemic memory components
         self.identity_state = self._load_identity()
         self.experience_collector = self._load_experience_collector()
