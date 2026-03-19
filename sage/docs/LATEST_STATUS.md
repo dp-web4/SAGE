@@ -1,7 +1,32 @@
 # SAGE Latest Status
 
-**Last Updated: 2026-03-06 (Thor Autonomous - PolicyGate Phase 5a Integration Complete)**
-**Previous: 2026-03-06 (Thor Autonomous - PolicyGate Phase 5a Implementation)**
+**Last Updated: 2026-03-18 (Identity Hardening — Three-Layer IdentityProvider)**
+**Previous: 2026-03-06 (Thor Autonomous - PolicyGate Phase 5a Integration Complete)**
+
+---
+
+## ✅ Identity Hardening: THREE-LAYER IDENTITY PROVIDER (Mar 18, 2026)
+
+### Hardware-Gated Identity Authorization
+
+**Files**: `sage/identity/provider.py`, web4 `AttestationEnvelope` spec + implementation
+
+SAGE identity is now split into three layers:
+
+| Layer | File | Purpose |
+|-------|------|---------|
+| **A: Manifest** | `identity.json` | Public identity (name, LCT, public key, anchor type). Readable by anyone. |
+| **B: Sealed Secret** | `identity.sealed` | Encrypted root secret. Only unseals with hardware challenge-response. |
+| **C: Attestation Cache** | `identity.attest.json` | Cached `AttestationEnvelope` from last hardware verification. |
+
+**Key properties**:
+- `IdentityProvider.authorize()` gates all signing operations through hardware challenge-response
+- Software fallback for development (trust ceiling 0.4 vs TPM 1.0)
+- Attestation uses Web4's `AttestationEnvelope` — anchor-agnostic, one shape for TPM2/FIDO2/SE/software
+- Wired into daemon startup and raising session initialization
+- Backwards compatible: legacy instances without `.sealed` file fall back to software-only mode
+
+**Anchor verification modules** (web4): `tpm2.py`, `fido2.py`, `secure_enclave.py`, `software.py` — unified via `verify_envelope()`
 
 ---
 

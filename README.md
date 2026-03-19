@@ -100,7 +100,10 @@ SAGE Cognition Kernel
 │   ├── LCT-anchored identity (Web4 Linked Context Tokens)
 │   ├── T3 trust tensors (Talent/Training/Temperament)
 │   ├── MRH context profiles (Markov Relevancy Horizon)
-│   └── Relationship crystallization (unknown pool → named relationships)
+│   ├── Relationship crystallization (unknown pool → named relationships)
+│   ├── Three-layer identity (manifest + sealed secret + attestation cache)
+│   ├── IdentityProvider with hardware authorization gate
+│   └── Software fallback, TPM2/FIDO2/Secure Enclave ready
 ├── Memory Systems (4 parallel)
 │   ├── SNARC selective memory (salience-gated)
 │   ├── IRP memory bridge (convergence pattern library)
@@ -135,6 +138,7 @@ Honest assessment as of March 2026:
 | PolicyGate | Real (Phase 5a) | Integrated at step 8.6, trust weight learning, 29/29 tests |
 | Tool use | Real (v0.4.0a3) | 7 tools, T2 grammar, MemoryHub SQLite, multi-turn conversation |
 | Identity/relationships | Real | LCT-anchored, trust tensors evolve from interaction |
+| Identity hardening | Real | Three-layer split (manifest/sealed/attestation), hardware-gated authorization, software fallback |
 | Sleep consolidation | Real | JSONL dream bundles (LoRA on Sprout only) |
 | Federation mesh | Real | PeerMonitor, PeerClient, PeerTrustTracker. Network currently OFF |
 | Snapshot persistence | Real | State snapshots at session boundaries, git-tracked |
