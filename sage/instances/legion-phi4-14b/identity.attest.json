@@ -1,0 +1,8 @@
+{
+  "entity_id": "lct://sage:legion:agent@raising",
+  "anchor_type": "software",
+  "purpose": "enrollment",
+  "timestamp": 1773907484.9281068,
+  "trust_ceiling": 0.4,
+  "version": "0.1"
+}
