@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "machine": "cbp",
+  "model": "tinyllama:latest",
+  "model_family": "meta-llama",
+  "slug": "cbp-tinyllama-latest",
+  "created": "2026-02-28",
+  "lct_id": "cbp_sage_lct",
+  "backend": "ollama",
+  "device_hint": "cpu",
+  "has_training_track": false,
+  "has_lora": false,
+  "encryption_enabled": false
+}

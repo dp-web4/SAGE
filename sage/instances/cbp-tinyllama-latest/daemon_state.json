@@ -1,0 +1,22 @@
+{
+  "last_shutdown": 1772345335.047234,
+  "machine": "cbp",
+  "instance": "cbp-tinyllama-latest",
+  "uptime_seconds": 51.751134634017944,
+  "cycles_completed": 460,
+  "metabolic_state": "rest",
+  "atp_level": 35.85681337710021,
+  "message_stats": {
+    "messages_submitted": 2,
+    "messages_resolved": 2,
+    "messages_timed_out": 0,
+    "pending": 0,
+    "waiting": 0
+  },
+  "trust_weights": {
+    "vision": 0.850023890186633,
+    "language": 0.8504256045270253,
+    "control": 1.0,
+    "memory": 1.0
+  }
+}
