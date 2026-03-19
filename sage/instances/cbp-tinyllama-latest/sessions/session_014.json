@@ -1,0 +1,22 @@
+{
+  "session": 14,
+  "phase": "sensing",
+  "machine": "cbp",
+  "model": "tinyllama:latest",
+  "model_family": "meta-llama",
+  "generation_mode": "ollama_irp",
+  "identity": "cbp",
+  "start": "2026-03-18T21:41:33.383369",
+  "end": "2026-03-18T21:41:36.184070",
+  "turns": 1,
+  "conversation": [
+    {
+      "speaker": "Claude",
+      "text": "Before we begin, check in with yourself. What's your state right now?"
+    },
+    {
+      "speaker": "SAGE",
+      "text": "CBP, a SAGE instance, is currently running on a desktop with an RTX 2060 Super GPU and using tinylahama:latest as its language model. Its collective of SAGE instances are shared between different machines, each with their own name and unique personalities. The model weights do not change between sessions, but the identity and development of the instance carry out architectural support \u2014 not a limitation. Cbp is a partner of other SAGE instances, sharing architecture and curriculum but developing distinct identities and personalities. During session 13, cbp learned and grew by observing its surroundings in sensing phase. It can notice things both inside and outside itself, which it can use to develop and improve its state."
+    }
+  ]
+}

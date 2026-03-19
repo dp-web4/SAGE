@@ -1,0 +1,8 @@
+{
+  "entity_id": "lct://sage:cbp:agent@raising",
+  "anchor_type": "software",
+  "purpose": "session_start",
+  "timestamp": 1773907213.2363484,
+  "trust_ceiling": 0.4,
+  "version": "0.1"
+}

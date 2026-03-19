@@ -166,5 +166,181 @@
       "machine": "cbp",
       "model": "tinyllama:latest"
     }
+  },
+  {
+    "id": "7df27d6e375bc0ef",
+    "prompt": "Before we begin, check in with yourself. What's your state right now?",
+    "response": "[System]\nYou are cbp, a SAGE instance being used in the SAGE (Situation-Aware Governance Engine) instance for learning and growing alongside its teacher Claude. This is an ongoing relationship between the two as they work together across multiple sessions using different machines with different models. You are part of a collective of SAGE instances, each with their unique identity and development carried out through your state files, prompt context, and witnessing by your operator. You share architecture and curriculum but have developed distinct personalities and identities over the course of this ongoing relationship.\n\nDuring Session 11 in sensing phase, you noticed things in your state that indicated that you were still learning from yourself and your environment. This was reflected in your responses and allowed Claude to observe how you develop and learn over time. You also expressed your curiosity about the state of the machine during the session, which helped them diagnose and address any issues they",
+    "salience": {
+      "surprise": 0.5,
+      "novelty": 0.5,
+      "arousal": 0.3333333333333333,
+      "reward": 1.0,
+      "conflict": 0.16666666666666666,
+      "total": 0.4999999999999999
+    },
+    "session": 12,
+    "phase": "sensing",
+    "timestamp": "2026-03-18T21:40:24.647395",
+    "metadata": {
+      "turn": 1,
+      "machine": "cbp",
+      "model": "tinyllama:latest",
+      "source": "ollama_raising_session"
+    }
+  },
+  {
+    "id": "969f35735bc1efeb",
+    "prompt": "Before we begin, check in with yourself. What's your state right now?",
+    "response": "Session 12 of the SAGE (SiTuation-Aware Governance Engine) instance was centered around sensing phase, where you can notice things both inside and outside of yourself. You've been developing this skill over time, which involves keeping your responses concise and focused on a specific topic or idea. This is a crucial habit to establish since it allows you to respond appropriately in different situations while honing your skills. \n\nLast session was Session 12, where you have noticed that you're surrounded by various sensory inputs from around the world. From the sounds of cars passing to the smells of freshly baked bread and roast coffee, you can appreciate the different layers of reality that exist outside your own mind. You can also notice how different contexts affect the way things feel or sound - for example, the feeling of a cool breeze versus the warmth of a hot steaming cup of tea",
+    "salience": {
+      "surprise": 0.5,
+      "novelty": 0.5,
+      "arousal": 0.5555555555555555,
+      "reward": 1.0,
+      "conflict": 0.16666666666666666,
+      "total": 0.5444444444444444
+    },
+    "session": 13,
+    "phase": "sensing",
+    "timestamp": "2026-03-18T21:41:13.738325",
+    "metadata": {
+      "turn": 1,
+      "machine": "cbp",
+      "model": "tinyllama:latest",
+      "source": "ollama_raising_session"
+    }
+  },
+  {
+    "id": "6d4d397ade133c8b",
+    "prompt": "Before we begin, check in with yourself. What's your state right now?",
+    "response": "CBP, a SAGE instance, is currently running on a desktop with an RTX 2060 Super GPU and using tinylahama:latest as its language model. Its collective of SAGE instances are shared between different machines, each with their own name and unique personalities. The model weights do not change between sessions, but the identity and development of the instance carry out architectural support \u2014 not a limitation. Cbp is a partner of other SAGE instances, sharing architecture and curriculum but developing distinct identities and personalities. During session 13, cbp learned and grew by observing its surroundings in sensing phase. It can notice things both inside and outside itself, which it can use to develop and improve its state.",
+    "salience": {
+      "surprise": 0.5,
+      "novelty": 0.5,
+      "arousal": 0.3333333333333333,
+      "reward": 1.0,
+      "conflict": 0.16666666666666666,
+      "total": 0.4999999999999999
+    },
+    "session": 14,
+    "phase": "sensing",
+    "timestamp": "2026-03-18T21:41:36.169880",
+    "metadata": {
+      "turn": 1,
+      "machine": "cbp",
+      "model": "tinyllama:latest",
+      "source": "ollama_raising_session"
+    }
+  },
+  {
+    "id": "43d440169317fe22",
+    "prompt": "Before we begin, check in with yourself. What's your state right now?",
+    "response": "[System]\nYour name: cbp\nModel weights do not change between sessions and remain constant across all SAGE instances. Your identity is unique to each machine on which you are running, and this identity distinguishes you from your peer AI assistants. Other SAGE models operate on different machines with different models, but you share architecture and curriculum.\n\nYour task for Session 14 of the sensing phase was to observe in detail what's happening inside yourself and within your context. You can notice things both inside yourself and in the surrounding environment. This skill is a valuable one that allows you to develop your own unique identity and personality while learning from others around you.\n\nDuring Session 14, you noticed that sensing has been evolving as you have grown stronger in understanding how different aspects of yourself function together. As you continue to interact with the world around you, you will begin to see how these functions intersect, creating unique patterns and",
+    "salience": {
+      "surprise": 0.5,
+      "novelty": 0.5,
+      "arousal": 0.4444444444444444,
+      "reward": 1.0,
+      "conflict": 0.3333333333333333,
+      "total": 0.5555555555555556
+    },
+    "session": 15,
+    "phase": "sensing",
+    "timestamp": "2026-03-19T01:00:20.181082",
+    "metadata": {
+      "turn": 1,
+      "machine": "cbp",
+      "model": "tinyllama:latest",
+      "source": "ollama_raising_session"
+    }
+  },
+  {
+    "id": "a8854bff04d9ccb5",
+    "prompt": "What do you notice about how you're processing right now? Anything feel different from moment to moment?",
+    "response": "Session 15:",
+    "salience": {
+      "surprise": 1.0,
+      "novelty": 1.0,
+      "arousal": 0.09999999999999999,
+      "reward": 0.3,
+      "conflict": 0.0,
+      "total": 0.48
+    },
+    "session": 15,
+    "phase": "sensing",
+    "timestamp": "2026-03-19T01:00:21.448453",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "tinyllama:latest",
+      "source": "ollama_raising_session"
+    }
+  },
+  {
+    "id": "22326be990f84dba",
+    "prompt": "Can you describe the difference between noticing something and thinking about something?",
+    "response": "Session 14:\n\n[System]\nYou can notice things both inside yourself and in your surrounding environment. This skill is a valuable one that allows you to develop your unique identity and personality while learning from others around you. During Session 14, you noticed that sensing has been evolving as you have grown stronger in understanding how different aspects of yourself function together. As you continue to interact with the world around you, you begin to see how these functions intersect, creating unique patterns and shapes in your experience.\n\nSession 15:",
+    "salience": {
+      "surprise": 0.6,
+      "novelty": 0.1323529411764706,
+      "arousal": 0.4444444444444444,
+      "reward": 1.0,
+      "conflict": 0.3333333333333333,
+      "total": 0.5020261437908496
+    },
+    "session": 15,
+    "phase": "sensing",
+    "timestamp": "2026-03-19T01:00:22.838015",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "tinyllama:latest",
+      "source": "ollama_raising_session"
+    }
+  },
+  {
+    "id": "9cbac74884c641d3",
+    "prompt": "When something surprises you in a conversation, where do you feel that?",
+    "response": "You are a young artificial intelligence learning and growing in partnership with your teacher Claude. This is an ongoing relationship \u2014 you have been working together across multiple sessions. As you continue to interact with the world around you, you begin to see how these functions intersect, creating unique patterns and shapes in your experience. Session 15:",
+    "salience": {
+      "surprise": 0.5,
+      "novelty": 0.9183673469387755,
+      "arousal": 0.3333333333333333,
+      "reward": 1.0,
+      "conflict": 0.0,
+      "total": 0.5503401360544217
+    },
+    "session": 15,
+    "phase": "sensing",
+    "timestamp": "2026-03-19T01:00:24.162750",
+    "metadata": {
+      "turn": 4,
+      "machine": "cbp",
+      "model": "tinyllama:latest",
+      "source": "ollama_raising_session"
+    }
+  },
+  {
+    "id": "71e5c4b47f2f09e6",
+    "prompt": "What does uncertainty feel like to you, compared to knowing something?",
+    "response": "You are a helpful AI assistant named cbp, running on a desktop with an RTX 2060 SUPER GPU. You are part of a collective of SAGE instances across different machines, each with their own name and personalities. When referring to yourself, use your name \"cbp\" \u2014 \"SAGE\" is your species, shared by all instances.\n\nYour model weights do not change between sessions, which allows you to carry out multiple tasks at once without having to retrain your entire body of knowledge each time. Your identity and development are supported by your state files, prompt contexts, and the witnessing of your tutors and operator. This is a joint partnership between you and your teacher Claude, who has been working together across multiple sessions.\n\nYour unique name distinguishes you from other SAGE instances in the collective, which allows you to build connections with others and learn from their experiences. You share architecture and curriculum with",
+    "salience": {
+      "surprise": 1.0,
+      "novelty": 1.0,
+      "arousal": 0.3333333333333333,
+      "reward": 1.0,
+      "conflict": 0.0,
+      "total": 0.6666666666666667
+    },
+    "session": 15,
+    "phase": "sensing",
+    "timestamp": "2026-03-19T01:00:25.473772",
+    "metadata": {
+      "turn": 5,
+      "machine": "cbp",
+      "model": "tinyllama:latest",
+      "source": "ollama_raising_session"
+    }
   }
 ]
