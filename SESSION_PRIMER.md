@@ -1,6 +1,6 @@
 # SAGE Session Primer
 
-*Auto-generated 2026-03-19 08:00 UTC — read this at session start for current fleet state.*
+*Auto-generated 2026-03-19 14:00 UTC — read this at session start for current fleet state.*
 
 ---
 
@@ -8,8 +8,8 @@
 
 ### Active Raising Instances
 
-**cbp-tinyllama-latest** — phase: `sensing` | sessions: 15 | last: 2026-03-19 | milestones: session_001_first_contact
-  > Last session: *Session 15 (sensing phase): ......*
+**cbp-tinyllama-latest** — phase: `relating` | sessions: 16 | last: 2026-03-19 | milestones: session_001_first_contact
+  > Last session: *Session 16 (relating phase): ......*
 
 **nomad-gemma3-4b** — phase: `sensing` | sessions: 10 | last: 2026-03-18
   > Last session: *Session 10 (sensing phase): ......*
