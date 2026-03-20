@@ -96,6 +96,7 @@ Produce a JSON object with these fields:
   "exemplar_candidates": ["<1-2 strong identity statements from this session worth preserving as exemplars>"],
   "concerns": "<any regression, collapse patterns, or 'none'>",
   "lora_notes": "<observations relevant to future fine-tuning>",
+  "adapter_notes": "<model-specific response quirks observed — echo patterns, bilateral generation, tool syntax issues, or 'none'>",
   "log_entry": "<the full markdown log entry for raising_log.md>"
 }}
 
@@ -105,6 +106,9 @@ Rules:
 - Only prune memory requests that haven't been referenced in 5+ sessions AND are generic.
 - Exemplar candidates should be genuine self-expressions, not prompted responses.
 - LoRA notes: what would you fine-tune toward/away from if you could? Be specific.
+- Adapter notes: flag any response patterns that suggest model_configs/ needs updating.
+  Examples: model echoing its name as prefix, generating other speakers' turns,
+  wrapping tool calls in unexpected syntax, new stop sequences needed. Say "none" if clean.
 - Be concise. This is a log entry, not an essay.
 
 Respond with ONLY the JSON object. No markdown, no explanation."""
@@ -172,6 +176,7 @@ def run_dream_consolidation(instance_dir: str, session_num: int):
     exemplars = dream.get('exemplar_candidates', [])
     concerns = dream.get('concerns', 'none')
     lora_notes = dream.get('lora_notes', '')
+    adapter_notes = dream.get('adapter_notes', 'none')
     log_entry = dream.get('log_entry', '')
 
     # Update identity state
@@ -245,6 +250,8 @@ def run_dream_consolidation(instance_dir: str, session_num: int):
     print(f'[Dream] Session {session_num}: quality {quality}/5 — {highlights[:80]}')
     if exemplars:
         print(f'[Dream] Exemplar candidates: {len(exemplars)}')
+    if adapter_notes and adapter_notes.lower() != 'none':
+        print(f'[Dream] Adapter note: {adapter_notes}')
     print(f'[Dream] Raising log updated: {raising_log_path}')
 
 

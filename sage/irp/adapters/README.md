@@ -105,6 +105,67 @@ clean = adapter.clean_response(raw, 'CBP')  # "Hello"
 adapter = get_adapter('qwen3.5:0.8b', overrides={'bilateral_prone': True})
 ```
 
+## Evolving Configs from Raising Sessions
+
+Raising sessions are the primary discovery mechanism for model quirks. When the tutor (Claude) or dream consolidation observes adapter-relevant behavior, it should be encoded back into the config.
+
+### What to Watch For
+
+| Symptom | Likely config field | Example |
+|---------|-------------------|---------|
+| Model echoes its own name before responding | `echo_prefixes` | TinyLlama outputs "CBP: Hello" instead of "Hello" |
+| Model generates other speakers' turns | `bilateral_prone` | 0.8B Qwen writes "Claude: ..." after its own response |
+| Model ignores tool XML / calls tools wrong | `supports_tool_calls`, `tier`, `notes` | Model wraps tool calls in markdown fences |
+| Model loses coherence past N turns | `max_context_turns` | Quality degrades after 4 turns at 1.1B |
+| Model produces structured output reliably | `tier` upgrade (T3→T2→T1) | Gemma3 reliably produces XML tool calls |
+| Model has thinking/reasoning mode | `thinking_supported` | Qwen3.5 27B uses `<think>` blocks |
+
+### How to Update
+
+1. **Observe** — raising session or dream consolidation flags the behavior
+2. **Reproduce** — confirm the quirk is consistent (not a one-off)
+3. **Edit the JSON config** — add/change the relevant field
+4. **No code changes needed** — `clean_response()` and `capabilities` read from the config
+5. **Test** — run the adapter self-test: `python3 -m sage.irp.adapters.model_adapter`
+
+### Adding New Config Fields
+
+If a quirk doesn't fit existing fields:
+
+1. Add the field to `model_capabilities.py` (ModelCapabilities dataclass)
+2. Add handling to `clean_response()` or the relevant method in `model_adapter.py`
+3. Set the default in `model_configs/default.json` (conservative — off/false)
+4. Set the model-specific value in the relevant family config
+
+Example: if raising discovers that a model wraps tool calls in markdown fences:
+```json
+// model_configs/newmodel.json
+{
+    "strip_markdown_fences": true,
+    "notes": "Wraps tool XML in ```xml blocks — strip before parsing"
+}
+```
+
+### Dream Consolidation Integration
+
+Dream consolidation reviews each session transcript. When it detects adapter-relevant patterns, it should note them in the raising log:
+
+```
+[Dream] Adapter note: TinyLlama echoed sender name in 4/6 turns — echo_prefixes working.
+[Dream] Adapter note: New pattern — model generated [System]: tag not in bilateral_speakers list.
+```
+
+These notes are human-reviewed. If a pattern is consistent across multiple sessions, update the config.
+
+### Size-Dependent Behavior
+
+The same model family often behaves differently at different parameter counts. Use instance-level `adapter_overrides` rather than changing the family config:
+
+- **0.8B Qwen**: bilateral-prone, short context, T3 tools → instance override `bilateral_prone: true`
+- **27B Qwen**: clean output, long context, T1 tools → instance override `bilateral_prone: false`
+
+The family config should reflect the most common behavior. Instance overrides handle the exceptions.
+
 ## Files
 
 ```
