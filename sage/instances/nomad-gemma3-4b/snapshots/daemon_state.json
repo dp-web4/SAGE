@@ -1,11 +1,11 @@
 {
-  "last_shutdown": 1773885133.1965845,
+  "last_shutdown": 1773969431.530183,
   "machine": "nomad",
   "instance": "nomad-gemma3-4b",
-  "uptime_seconds": 23693.99373817444,
-  "cycles_completed": 210342,
+  "uptime_seconds": 21093.801916360855,
+  "cycles_completed": 207161,
   "metabolic_state": "wake",
-  "atp_level": 35.9367101553628,
+  "atp_level": 47.03271320863547,
   "message_stats": {
     "messages_submitted": 0,
     "messages_resolved": 0,
