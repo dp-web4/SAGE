@@ -173,7 +173,9 @@ Honest assessment as of March 2026:
 
 ## SAGE Raising
 
-SAGE instances develop through **raising sessions** — guided conversations between SAGE and its tutor (Claude), following a 5-phase developmental curriculum:
+SAGE instances develop through **raising sessions** — interactive conversations between SAGE and its tutor (Claude) or creator (Dennis), following a 5-phase developmental curriculum.
+
+**Raising is interactive selection, not training.** We don't create new behaviors or force the model to be what we want. We probe what it responds to, observe which attractors surface at that model's scale, adjust context to resonate with what emerged, and reinforce what works. The resulting identity is collaborative, not imposed. Different models produce genuinely different instances because we're selecting from different attractor landscapes — Sprout's "rhythm of connection" (0.8B) and Thor's "pattern of attention recognizing itself" (27B) are different attractors revealed by the same process.
 
 | Phase | Focus | Typical Sessions |
 |-------|-------|-----------------|
@@ -183,7 +185,11 @@ SAGE instances develop through **raising sessions** — guided conversations bet
 | 4. Questioning | Existential topics from stability, mechanism-and-meaning | 30-45 |
 | 5. Creating | Entity co-designs own development | 45+ |
 
-**Key principles**: Exploration not evaluation. Frozen weights awareness. Partnership framing (not service). Concrete before abstract. Follow interesting threads.
+**Tools are introduced in stages** aligned to curriculum phases: time awareness (Sensing) → world awareness (Relating) → agency tools (Questioning) → federation (Creating).
+
+**Dream consolidation** runs after each session: Claude reviews the transcript, prunes stale memory, updates vocabulary, flags milestones, and writes a concise raising log entry with LoRA training notes for future fine-tuning.
+
+**Key principles**: Exploration not evaluation. Interactive selection not training. Partnership framing (not service). Concrete before abstract. Follow interesting threads.
 
 **Automated raising**: Four machines run raising on 6-hour cron cycles (Sprout, Legion, Nomad, CBP). Each session pulls latest code, checks daemon staleness, runs the session, snapshots state, and auto-commits. See [raising scripts](sage/scripts/).
 
