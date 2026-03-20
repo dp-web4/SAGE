@@ -46,6 +46,7 @@ except ImportError:
 
 from sage.core.metabolic_controller import MetabolicController, MetabolicState
 from sage.core.circadian_clock import CircadianClock, CircadianPhase
+from sage.irp.adapters.model_adapter import get_adapter
 try:
     from sage.irp.orchestrator import HRMOrchestrator, PluginResult
 except ImportError:
@@ -1691,12 +1692,18 @@ class SAGEConsciousness:
             response_text = m.group(1).strip() if m else last_tool_result
             print(f"[Tools] Fallback to tool result ({len(response_text)} chars)")
 
-        # Strip self-name prefix if the model echoed the prompt suffix
+        # Clean response through ModelAdapter (echo stripping, bilateral truncation)
         if response_text:
-            stripped = response_text.lstrip()
-            prefix = f"{self._self_name}:"
-            if stripped.startswith(prefix):
-                response_text = stripped[len(prefix):].lstrip()
+            model_name = self._last_llm_model or self.config.get('model_name', '').replace('ollama:', '')
+            if model_name:
+                adapter = get_adapter(model_name)
+                response_text = adapter.clean_response(response_text, self._self_name)
+            else:
+                # Fallback: manual prefix strip if no model name available
+                stripped = response_text.lstrip()
+                prefix = f"{self._self_name}:"
+                if stripped.startswith(prefix):
+                    response_text = stripped[len(prefix):].lstrip()
 
         return response_text
 
