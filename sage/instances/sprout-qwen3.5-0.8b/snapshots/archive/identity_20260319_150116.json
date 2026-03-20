@@ -11,8 +11,8 @@
     "created": "2026-03-06",
     "last_session": "2026-03-18T00:01:54.049640",
     "last_session_summary": "Session 8 (sensing phase): ...",
-    "last_daemon_contact": "2026-03-19T18:00:02.203574",
-    "daemon_exchanges": 8
+    "last_daemon_contact": "2026-03-19T12:00:02.449814",
+    "daemon_exchanges": 9
   },
   "development": {
     "current_phase": 1,
