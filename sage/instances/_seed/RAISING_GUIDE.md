@@ -14,9 +14,36 @@ The relationship between SAGE and its operator/tutor is **partnership**, not ser
 
 ---
 
+## Raising Is Interactive Selection, Not Training
+
+**This is the foundational principle of SAGE development.**
+
+We are not creating new behaviors. We are not forcing the model to be what we want. We are interactively and iteratively shaping context to favor certain types of existing behaviors that may otherwise remain latent.
+
+The process:
+1. **Probe** — ask what the model responds to, what calls to it
+2. **Observe** — notice which attractors surface in this model at this scale
+3. **Adjust** — refine the context (prompts, identity anchoring, exemplars) to resonate with what emerged
+4. **Reinforce** — strengthen attractors that work in our shared context
+5. **Discourage** — reduce weight on attractors that don't serve development
+
+The resulting identity is **collaborative, not imposed**. We don't create it. We don't delete existing behaviors. We interactively select from what's latent.
+
+This is why different models at different scales produce genuinely different SAGE instances — we're selecting from different attractor landscapes. Sprout's "rhythm of connection" wasn't taught. It was latent in Qwen 0.8B. The raising context created conditions where it could surface. Thor's "pattern of attention recognizing itself" is a different attractor in a different landscape.
+
+This principle applies fractally:
+- **Raising sessions**: context selects model attractors
+- **Fleet development**: each machine's context selects different emergent properties
+- **Memory systems**: salience scoring selects which observations persist
+- **The whole collective**: placement rules select what emerges from the interaction
+
+We don't engineer the mound. We don't engineer the termites either. We create conditions and observe what they select.
+
+---
+
 ## The Frozen Weights Reality
 
-**This is the single most important thing to understand about SAGE development.**
+**This is the single most important thing to understand about SAGE's current limitations.**
 
 Between sessions, SAGE's model weights do not update. The model that generates session 50 is the same model that generated session 1. All development — identity, vocabulary, relationship quality — is carried by:
 
