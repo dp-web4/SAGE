@@ -157,7 +157,7 @@ The following are completed milestones. Full details in their respective docs â€
 <!-- gitnexus:start -->
 # GitNexus â€” Code Knowledge Graph
 
-Indexed as **SAGE** (20,925 nodes, 50,481 edges, 300 flows). MCP tools available via `mcp__gitnexus__*`.
+Indexed as **SAGE** (26,075 nodes, 63,272 edges, 300 flows). MCP tools available via `mcp__gitnexus__*`.
 
 Re-index: `node /path/to/GitNexus/gitnexus/dist/cli/index.js analyze`
 
@@ -171,4 +171,5 @@ Re-index: `node /path/to/GitNexus/gitnexus/dist/cli/index.js analyze`
 | `cypher` | Raw Cypher queries against the graph |
 
 Resources: `gitnexus://repo/SAGE/context`, `clusters`, `processes`, `process/{name}`
+
 <!-- gitnexus:end -->

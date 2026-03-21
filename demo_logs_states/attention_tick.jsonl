@@ -1,0 +1,5 @@
+{"ts": 1772215958.6450982, "iso_ts": "2026-02-27T10:12:38.645099", "state": "IDLE", "events": [], "transitions": [], "decisions": [], "budget": {}, "duration_ms": 0.019073486328125}
+{"ts": 1772215959.1541252, "iso_ts": "2026-02-27T10:12:39.154127", "state": "IDLE", "events": [], "transitions": [], "decisions": [], "budget": {}, "duration_ms": 0.032901763916015625}
+{"ts": 1772215959.6676705, "iso_ts": "2026-02-27T10:12:39.667673", "state": "IDLE", "events": [], "transitions": [], "decisions": [], "budget": {}, "duration_ms": 0.026702880859375}
+{"ts": 1772215960.1739328, "iso_ts": "2026-02-27T10:12:40.173934", "state": "IDLE", "events": [], "transitions": [], "decisions": [], "budget": {}, "duration_ms": 0.021457672119140625}
+{"ts": 1772215960.6815224, "iso_ts": "2026-02-27T10:12:40.681524", "state": "IDLE", "events": [], "transitions": [], "decisions": [], "budget": {}, "duration_ms": 0.025510787963867188}
