@@ -2,7 +2,7 @@
   "entity_id": "lct://sage:nomad:agent@raising",
   "anchor_type": "software",
   "purpose": "session_start",
-  "timestamp": 1774077450.8808043,
+  "timestamp": 1774099040.8674903,
   "trust_ceiling": 0.4,
   "version": "0.1"
 }
