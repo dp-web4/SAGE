@@ -15,9 +15,9 @@ use axum::{
 use futures_util::stream::Stream;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use tracing::info;
+use tracing::{info, warn};
 
-use sage_lib::experience::buffer::ExperienceBuffer;
+use sage_lib::experience::buffer::{ExperienceBuffer, DEFAULT_CAPTURE_THRESHOLD};
 use sage_lib::federation::fleet::FleetRegistry;
 use sage_lib::federation::peer_trust::PeerTrustTracker;
 use sage_lib::metabolic::controller::{CycleData, MetabolicController, MetabolicState};
@@ -601,8 +601,38 @@ async fn main() {
     let (msg_tx, msg_rx) = tokio::sync::mpsc::channel(64);
     let consciousness_handle = ConsciousnessHandle::new(msg_tx);
 
-    let experience = ExperienceBuffer::with_defaults(&exp_path);
-    info!("experience buffer: {} existing entries", experience.count());
+    // Capture gate: the salience bar an admitted percept must clear to become
+    // memory (band semantics documented at DEFAULT_CAPTURE_THRESHOLD, buffer.rs).
+    // Whether to align it with presence's wake bar or keep the band is a raising
+    // decision (dp) — env-tunable so choosing doesn't need a rebuild. This is
+    // the knob dp is expected to reach for, so a bad value complains loudly
+    // instead of silently running the default.
+    let capture_gate = match std::env::var("SAGE_CAPTURE_THRESHOLD") {
+        Ok(raw) => match raw.parse::<f64>() {
+            Ok(v) if (0.0..=1.0).contains(&v) => v,
+            Ok(v) => {
+                warn!(
+                    "SAGE_CAPTURE_THRESHOLD={} outside [0,1] — using default {}",
+                    v, DEFAULT_CAPTURE_THRESHOLD
+                );
+                DEFAULT_CAPTURE_THRESHOLD
+            }
+            Err(_) => {
+                warn!(
+                    "SAGE_CAPTURE_THRESHOLD={:?} unparseable — using default {}",
+                    raw, DEFAULT_CAPTURE_THRESHOLD
+                );
+                DEFAULT_CAPTURE_THRESHOLD
+            }
+        },
+        Err(_) => DEFAULT_CAPTURE_THRESHOLD,
+    };
+    let experience = ExperienceBuffer::new(&exp_path, capture_gate);
+    info!(
+        "experience buffer: {} existing entries (capture gate {})",
+        experience.count(),
+        capture_gate
+    );
 
     // Non-forcing shadow-metabolism experiment log (sibling of the experience buffer).
     let shadow_path = exp_path.with_file_name("atp_shadow.jsonl");

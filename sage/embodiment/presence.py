@@ -29,7 +29,10 @@ LOW_ATP = 25.0            # below this (or a resting metabolic state) the being 
 
 POLL_S = 1.0            # check the perceptual state ~1/s
 STALE_S = 10.0         # perception older than this = cortex not live → don't wake on stale data
-WAKE_TH = 0.45        # salience bar to wake when engaged (eyes open); the cortex 'salient' bar is 0.35
+WAKE_TH = 0.45        # salience bar to wake when engaged (eyes open); the cortex 'salient' bar is 0.35.
+                      # NOTE: the daemon's capture (memory) gate is 0.5 (SAGE_CAPTURE_THRESHOLD,
+                      # sage-rs/sage-daemon/src/main.rs) — wakes in 0.45..0.50 interrupt the being
+                      # but leave no experience. Align-or-keep is an open raising decision (M1).
 WAKE_TH_REST = 0.70   # much higher when resting — only something strong stirs a sleeper
 COOLDOWN_S = 300      # min seconds between wakes (a sustained moment wakes once)
 HOURLY_CAP = 6        # never more than this many wakes in a rolling hour
@@ -90,18 +93,22 @@ class Presence:
         # then attends again. This is the metabolic rhythm of attention, not just a rate limit.
         depleted = atp < LOW_ATP or mstate in ("dream", "rest")
         threshold = WAKE_TH_REST if (resting or depleted) else WAKE_TH
+        # decided = the inputs the wake decision actually used. The log's "metabolic"/"atp" are the
+        # daemon's post-chat state (the chat itself can shift it), so without this the applied bar
+        # is not auditable from the log.
+        decided = {"atp": round(atp, 1), "mstate": mstate, "bar": threshold}
         # strong enough: high blended salience, OR a reafference conflict while fully receptive.
         strong = sal.get("salience", 0.0) >= threshold or (sal.get("conflict") == 1 and not (resting or depleted))
         if not (strong and descriptor):
-            return False, resting
+            return False, resting, decided
         if now - self.last_wake < COOLDOWN_S:
-            return False, resting
+            return False, resting, decided
         self.wake_times = [t for t in self.wake_times if now - t < 3600]
         if len(self.wake_times) >= HOURLY_CAP:
-            return False, resting
+            return False, resting, decided
         if descriptor[:40] == self.last_desc[:40]:   # same moment persisting → notice once
-            return False, resting
-        return True, resting
+            return False, resting, decided
+        return True, resting, decided
 
     def _log(self, ev: dict):
         os.makedirs(os.path.dirname(PRESENCE_LOG), exist_ok=True)
@@ -127,7 +134,7 @@ class Presence:
                     sal = d.get("salience", {})
                     gaze = d.get("gaze", "open")
                     descriptor = d.get("descriptor", "")
-                    wake, resting = self._should_wake(sal, gaze, descriptor, now)
+                    wake, resting, decided = self._should_wake(sal, gaze, descriptor, now)
                     if wake:
                         out = _wake(descriptor, resting, sal.get("salience"), d.get("coherence"))
                         noticing = out.get("response", "")
@@ -140,6 +147,7 @@ class Presence:
                             "snarc": {k: sal.get(k) for k in ("surprise", "novelty", "arousal", "conflict")},
                             "gaze": gaze, "resting": resting, "noticing": noticing,
                             "metabolic": out.get("metabolic_state"), "atp": out.get("atp_percentage"),
+                            "decided": decided,
                         })
                         print(f"[presence] noticed ({'rest' if resting else 'awake'}, "
                               f"sal={sal.get('salience')}): {noticing[:90]}", flush=True)

@@ -184,6 +184,10 @@ impl ConsciousnessLoop {
     }
 
     async fn process_message(&mut self, pending: PendingMessage) {
+        // Decision-side time: the salience, metabolic state, and record/drop
+        // decision below are all about THIS moment. ExperienceEntry::new's own
+        // timestamp is LLM-completion time, a full generation latency later.
+        let received_ts = sage_lib::snarc::temporal::now_secs();
         let obs = derive_observation(&pending.content);
 
         let surprise = self.surprise.compute(obs, "message");
@@ -261,9 +265,16 @@ impl ConsciousnessLoop {
                 );
                 entry.machine = Some(self.machine_name.clone());
                 entry.model = Some(self.model_name.clone());
+                entry.received_ts = Some(received_ts);
 
-                if self.experience.record(entry) {
+                let outcome = self.experience.record(entry);
+                if outcome.recorded() {
                     self.stats.experiences_recorded += 1;
+                } else if let Some(reason) = outcome.reason() {
+                    info!(
+                        "experience dropped ({}), salience {:.3}",
+                        reason, salience.total
+                    );
                 }
 
                 self.stats.messages_processed += 1;
