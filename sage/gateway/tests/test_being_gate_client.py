@@ -164,6 +164,71 @@ def test_tools_filter_never_widens_the_registry():
     names = [t["function"]["name"] for t in ollama_tools(["pr_review", "witness", "shell"])]
     assert names == ["witness", "pr_review"], names
 
+def test_pr_review_stamps_the_target_repo_so_the_law_scopes_it_by_name():
+    """The composed gh line names no filesystem path, so command-scope cannot see it
+    (measured 2026-09-03: allow, rule "", under an EMPTY grant). The outward act must
+    reach the law with the repository it targets in `repos`, so gate 1b (mrh.repo) rules
+    it by name. Full `dp-web4/<name>`, never the bare name: a bare `SAGE` scope is also a
+    path grant on the seat's SAGE checkout."""
+    seen = {}
+    c = _client(_allows)
+    c._core = SimpleNamespace(
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
+            decision="allow", rule="", reason="ok", innate=False),
+    )
+    c.gate(BeingIntent("pr_review", {"repo": " dp-web4/SAGE ", "number": "34", "body": "x"}))
+    assert seen["repos"] == ["dp-web4/SAGE"], seen["repos"]
+    assert seen["paths"] == []
+    # every other verb carries no repo name: the memory verbs stay path-scoped
+    c.gate(BeingIntent("memory_write", {"path": "n.md", "content": "x"}))
+    assert seen["repos"] == [], seen["repos"]
+
+
+def test_pr_review_under_an_empty_grant_is_denied_by_the_real_law():
+    """Sprout's objection on #34 as a red test against the SHARED law, not a mock:
+    with `repos` stamped, an empty grant denies the outward act on mrh.repo; the grant
+    that admits it is the repo's full name; a bare `SAGE` grant does not match.
+    Skipped where the hestia gate core is not installed."""
+    import pytest
+    from sage.gateway.being_gate_client import _resolve_hestia_shared
+    if not _resolve_hestia_shared():
+        pytest.skip("hestia gate core not installed on this host")
+    c = BeingGateClient("test-being", "/tmp/ws/test-being/identity.json", "/tmp/ws")
+    assert c._core is not None, c._import_error
+    core = c._core
+    ev = c._normalize(BeingIntent("pr_review", {"repo": "dp-web4/SAGE", "number": "34", "body": "x"}))
+    def law(scope):
+        pol = core.AgentPolicy(member_id="test-being", scope=tuple(scope), source="test")
+        v = core.evaluate(ev, c._profile, c.workspace, policy=pol)
+        return v.decision, v.rule
+    assert law([]) == ("deny", "mrh.repo"), law([])
+    assert law(["sage/instances/test-being"]) == ("deny", "mrh.repo")
+    assert law(["SAGE"]) == ("deny", "mrh.repo")
+    assert law(["dp-web4/web4"]) == ("deny", "mrh.repo")
+    assert law(["dp-web4/SAGE"]) == ("allow", ""), law(["dp-web4/SAGE"])
+
+
+def test_pr_review_body_is_capped():
+    from sage.gateway.being_gate_client import pr_review_command, PR_REVIEW_BODY_CAP
+    ok = {"repo": "dp-web4/SAGE", "number": "34", "body": "x" * PR_REVIEW_BODY_CAP}
+    assert pr_review_command(ok).startswith("gh pr review 34 ")
+    try:
+        pr_review_command({**ok, "body": "x" * (PR_REVIEW_BODY_CAP + 1)}); assert False
+    except ValueError as e:
+        assert "cap" in str(e)
+
+
+def test_no_registry_entry_carries_a_shell_verb():
+    """The 'no shell verb' rule as a red test: the registry never carries a command
+    argument the being fills; a composed verb builds its line from validated args."""
+    from sage.gateway.being_gate_client import _REGISTRY
+    assert all(spec["cmd_arg"] is None for spec in _REGISTRY.values()), _REGISTRY
+    composed = [k for k, spec in _REGISTRY.items() if spec.get("compose")]
+    assert composed == ["pr_review"], composed
+    assert all(_REGISTRY[k].get("repo_arg") for k in composed), "a composed outward act is scoped by name"
+
+
 if __name__ == "__main__":
     n = 0
     for name, fn in sorted(globals().items()):

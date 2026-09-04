@@ -65,6 +65,12 @@ class BeingIntent:
 # What the being's gate client calls itself when it connects to the daemon.
 _HOST_AGENT = "sage-gateway"
 
+# The most a being may post in one review. Without a cap the grammar lets a being put its
+# whole context window into a fleet PR in one act; with it the gate raises and records
+# (gate.raised) instead of GitHub receiving it. Sprout's nit on #34, 2026-09-03.
+PR_REVIEW_BODY_CAP = 16000
+
+
 def pr_review_command(args: dict) -> str:
     """The shell command the seat runs for a pr_review intent, built from validated args.
     Raises ValueError on anything the grammar cannot represent; never interpolates the body
@@ -77,8 +83,11 @@ def pr_review_command(args: dict) -> str:
         raise ValueError(f"pr_review 'repo' must be a dp-web4/<name> repo, got {repo!r}")
     if not re.fullmatch(r"[0-9]{1,7}", number):
         raise ValueError(f"pr_review 'number' must be a PR number, got {number!r}")
-    if not str(args.get("body", "")).strip():
+    body = str(args.get("body", ""))
+    if not body.strip():
         raise ValueError("pr_review needs a non-empty 'body'")
+    if len(body) > PR_REVIEW_BODY_CAP:
+        raise ValueError(f"pr_review 'body' is {len(body)} chars; the cap is {PR_REVIEW_BODY_CAP}")
     return f"gh pr review {number} --repo {repo} --comment --body-file -"
 
 
@@ -108,8 +117,13 @@ _REGISTRY = {
     # judges the exact shell command the seat will run (see pr_review_command), so the
     # law sees an outward `gh` act, not a friendly verb name. Advisory by construction:
     # a being holds no reviewer role, so the comment never counts toward merge.
+    # repo_arg: the validated arg naming the repository the act targets. _normalize stamps
+    # it into NormalizedEvent.repos so the law's mrh.repo branch rules the act BY NAME.
+    # Measured (Sprout 2026-09-03, reproduced on Legion): the composed gh line names no
+    # filesystem path, so command-scope judges it "not a reach" and ALLOWS it under an
+    # EMPTY grant. The one outward act in this registry was the one act scope never saw.
     "pr_review":      dict(tool="pr_review",    path_args=(),       cmd_arg=None,
-                           compose=pr_review_command),
+                           compose=pr_review_command, repo_arg="repo"),
 }
 
 
@@ -288,8 +302,18 @@ class BeingGateClient:
             # turns that into a deny (gate.raised), never a silent pass. The being never
             # fills a command; the registry never carries a cmd_arg for a composed verb.
             command = compose(intent.args)
+        repos: List[str] = []
+        if spec.get("repo_arg"):
+            # The act is scoped by the NAME it carries (gate 1b, mrh.repo), the grant the
+            # being asks for and dp says yes to. Stamped AFTER compose, so it is the same
+            # validated value the command line carries. Full `dp-web4/<name>` on purpose: a
+            # bare `SAGE` scope is also a path grant on the seat's SAGE checkout (measured:
+            # scope ["SAGE"] allows read_file on <ws>/SAGE/README.md), while `dp-web4/SAGE`
+            # never matches a workspace segment, so the outward grant does not double as
+            # filesystem reach. Spell the grant as GitHub spells the repo, case-sensitive.
+            repos = [str(intent.args.get(spec["repo_arg"], "")).strip()]
         return self._core.NormalizedEvent(
-            tool=spec["tool"], paths=paths, command=command,
+            tool=spec["tool"], paths=paths, repos=repos, command=command,
             cwd=self.workspace, raw={"effector": intent.effector, **intent.args},
         )
 
