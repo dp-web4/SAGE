@@ -152,16 +152,29 @@ def fleet_digest(hours: float, forum_dir: Path, repos: list[str]) -> str:
     return "\n\n".join(out) if out else "(nothing new in the window)"
 
 
-def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str) -> list:
-    """Append the operator's decision to each escalation note that filed the request
-    (the note carries the request_id in its routing line). Idempotent: a note already
-    resolved is left alone. Returns the note names written."""
+def decided_requests(reqs):
+    """The settled subset of hestia_scope_status `requests[]`, as (request_id, path, decision).
+    hestia's `ScopeRequest::status` emits granted | refused | pending | expired, and its
+    arbitrate door answers `denied`; the first cut filtered on ("granted", "denied") and so
+    dropped every refusal on the floor (legion-claude, hestia #952 review, 2026-09-05): the
+    being was never told, and no `## Resolved` block was ever written for one."""
+    return [(i, p_, d) for i, p_, d in reqs if d in ("granted", "refused", "denied")]
+
+
+def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided_by=None) -> list:
+    """Append the ruling to each escalation note that filed the request (the note carries the
+    request_id in its routing line). Idempotent: a note already resolved is left alone.
+    `decided_by` maps request_id -> hestia's `decided_by` ("operator", or "delegate:<seat>"
+    for a ruling under hestia #952); the note names it rather than assuming the operator.
+    Returns the note names written."""
     written = []
     if not decisions or not esc_dir.is_dir():
         return written
+    decided_by = decided_by or {}
     for req_id, path, decision in decisions:
         if not req_id:
             continue
+        who = str(decided_by.get(req_id) or "operator")
         for p in sorted(esc_dir.glob("*.md")):
             try:
                 body = p.read_text(errors="replace")
@@ -170,7 +183,7 @@ def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str) -> list
             if req_id not in body or "## Resolved" in body:
                 continue
             with open(p, "a", encoding="utf-8") as f:
-                f.write(f"\n## Resolved\n{stamp}: `{req_id}` on `{path}` -> **{decision}** by the operator "
+                f.write(f"\n## Resolved\n{stamp}: `{req_id}` on `{path}` -> **{decision}** by {who} "
                         f"(read from hestia scope status by the seat, beat {seen_by}).\n")
             written.append(p.name)
     return written
@@ -318,6 +331,8 @@ def main(argv=None) -> int:
                      [g.get("path") for g in (st.get("standing_grants") or [])]
             reqs = [(r.get("request_id"), r.get("path"), r.get("decision") or r.get("status"))
                     for r in (st.get("requests") or [])]
+            who_ruled = {r.get("request_id"): r.get("decided_by") for r in (st.get("requests") or [])
+                         if r.get("decided_by")}
             # Close the loop the operator cannot see closed: a request decided since the
             # last beat is written back into the escalation note that filed it, and told
             # to the being. (dp 2026-09-05: "i just approved being's escalation - did you
@@ -328,15 +343,16 @@ def main(argv=None) -> int:
                 seen = set(tuple(x) for x in last.get("scope", {}).get("decided", []))
             except Exception:
                 pass
-            decided = [(i, p_, d) for i, p_, d in reqs if d in ("granted", "denied")]
+            decided = decided_requests(reqs)
             new_decisions = [x for x in decided if tuple(x) not in seen]
             esc_dir = Path(args.forum_dir).parent / "escalations"
             noted = note_resolutions(esc_dir, new_decisions, f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC",
-                                     host_session_id)
+                                     host_session_id, decided_by=who_ruled)
             scope_record = {"grants": grants, "decided": [list(x) for x in decided], "noted": noted}
             scope = ("granted paths: " + (", ".join(map(str, grants)) or "none") + "\n"
                      "requests: " + ("; ".join(f"{i} {p} -> {d}" for i, p, d in reqs) or "none") + "\n"
-                     + ("decided since your last beat: " + "; ".join(f"{i} {p_} -> {d}" for i, p_, d in new_decisions) + "\n"
+                     + ("decided since your last beat: " + "; ".join(
+                            f"{i} {p_} -> {d} by {who_ruled.get(i) or 'operator'}" for i, p_, d in new_decisions) + "\n"
                         if new_decisions else "")
                      + "(live grants die when the daemon restarts; only standing grants persist)")
         except Exception as e:

@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from sage.irp.adapters.model_capabilities import load_capabilities  # noqa: E402
 from sage.gateway.governed_turn import is_reasoning_model  # noqa: E402
-from sage.gateway.heartbeat import note_resolutions  # noqa: E402
+from sage.gateway.heartbeat import note_resolutions, decided_requests  # noqa: E402
 
 
 def test_think_policy_is_per_size_not_per_caller():
@@ -105,6 +105,23 @@ def test_note_resolutions_appends_once_to_the_filing_note():
     assert "Resolved" not in (d / "b.md").read_text()
     assert note_resolutions(d, [("scope-abc", "/x", "granted")], "later", "heartbeat-2") == []  # idempotent
     assert note_resolutions(d, [], "x", "y") == [] and note_resolutions(d / "nope", [("i", "p", "denied")], "x", "y") == []
+
+
+def test_refusals_are_decisions_too_and_the_ruler_is_named():
+    # hestia emits `refused` (ScopeRequest::status) and its arbitrate door says `denied`; the
+    # first cut filtered on ("granted", "denied") and silently dropped every operator refusal
+    # (legion-claude, hestia #952 review). Both spellings settle; pending/expired do not.
+    reqs = [("scope-a", "/x", "granted"), ("scope-b", "/y", "refused"), ("scope-c", "/z", "denied"),
+            ("scope-d", "/w", "pending"), ("scope-e", "/v", "expired")]
+    assert [i for i, _, _ in decided_requests(reqs)] == ["scope-a", "scope-b", "scope-c"]
+    d = Path(tempfile.mkdtemp(prefix="esc-"))
+    (d / "r.md").write_text("routing: {\"scope_request\": {\"request_id\": \"scope-b\"}}\n")
+    (d / "g.md").write_text("routing: {\"scope_request\": {\"request_id\": \"scope-a\"}}\n")
+    w = note_resolutions(d, decided_requests(reqs), "2026-09-05 22:00 UTC", "heartbeat-3",
+                         decided_by={"scope-a": "delegate:claude-code", "scope-b": "operator"})
+    assert sorted(w) == ["g.md", "r.md"]
+    assert "**refused** by operator" in (d / "r.md").read_text()
+    assert "**granted** by delegate:claude-code" in (d / "g.md").read_text()   # never "by the operator" for a #952 ruling
 
 
 if __name__ == "__main__":

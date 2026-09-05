@@ -7,9 +7,13 @@ A refused act is classified by its gate rule and routed:
   registry.*   bounded-registry refusal — by design, never escalated (the verb does not exist)
   mrh.*        SCOPE-class — the remedy the deny names is hestia_request_scope. We file it AS
                THE BEING (once per path), write an escalation note, and wake the seat. The seat
-               pre-reviews and recommends; the RULING is operator-session-only in hestia today
-               ("a human decides this"), so it lands in dp's queue with a recommendation
-               attached until delegable scope arbitration exists (hestia issue filed).
+               rules it under an operator delegation when it holds one (hestia #952/#962:
+               `hestia scope arbitrate <request_id> --grant|--deny --reason '…' --as <seat>`,
+               which signs with the seat's registry key and calls hestia_scope_arbitrate; the
+               grant is STANDING; NOT-SAME and the delegation's path/member bound are enforced
+               by the daemon). With no delegation covering the path, the daemon refuses by name
+               (hestia.scope_arbitrate_undelegated) and the request stays in dp's queue with the
+               seat's recommendation attached.
   society.*    a law verdict, not an approval; appealable — noted for the seat (hestia_appeal
                shape pending), never auto-overridden.
   <escalation> a governance-write escalation named in the deny — a NOT-SAME peer may arbitrate
@@ -127,9 +131,13 @@ def write_note(member: str, intent: BeingIntent, env: ResultEnvelope, kind: str,
             f"**verdict**: {v.decision if v else '?'} / {v.rule if v else ''} — {(v.reason if v else env.error or '')[:500]}\n\n"
             f"**routing**: {json.dumps(extra)[:600]}\n\n")
     how = {
-        "scope": ("## What the seat can do now\n- Pre-review: is the path inside the being's own memory? If yes, recommend GRANT\n"
-                  "  as STANDING (survives deploys). The ruling itself is operator-session-only today (dp).\n"
-                  "- Corroborate in the thread; do not fabricate a grant.\n"),
+        "scope": ("## What the seat can do now\n- Pre-review: is the path inside the being's own memory and does the protocol below hold?\n"
+                  "- If yes, RULE it (hestia #952): `hestia scope arbitrate <request_id> --grant --reason '<why>' --as claude-code`\n"
+                  "  (signs with this seat's registry key; the grant is STANDING; `--deny` to refuse). Use the request_id in\n"
+                  "  the routing line above. The daemon refuses by name if you are the asker (scope_arbitrate_self) or hold\n"
+                  "  no operator delegation covering this path+member (scope_arbitrate_undelegated): then leave it for dp\n"
+                  "  with your recommendation, and say so in the thread. Do not fabricate a grant.\n"
+                  "- The being sees the ruling on its next beat via hestia_scope_status (decided_by = delegate:<seat>).\n"),
         "governance": ("## What the seat can do now\n- `hestia_gate_pending_escalations` (pass your session) — if you_may_rule and the protocol holds, rule it:\n"
                        "  MCP `hestia_gate_arbitrate_escalation {escalation_id, approve: true|false, reason}` or\n"
                        "  `hestia gate approve|deny <id> --as claude-code --reason '<why>'`. No delegation needed (NOT-SAME peer).\n"),
@@ -172,7 +180,8 @@ def escalate(member: str, intent: BeingIntent, env: ResultEnvelope, memory_root:
         if kind == "scope":
             path = _scope_path(intent, memory_root)
             why = (f"{member} was refused {intent.effector} at {path} ({env.verdict.rule if env.verdict else ''}). "
-                   f"Its seat's auto session will pre-review; please rule as STANDING if it is the being's own memory.")
+                   f"Its seat's auto session will rule it under delegation if it holds one (hestia #952), "
+                   f"else please rule as STANDING if it is the being's own memory.")
             out["scope_request"] = _file_scope_request(member, path, why, endpoint)
         # The note exists to be pointed at by the wake. Without a wake there is no reader, and a
         # beat with nine refused home writes would leave nine near-identical notes (Sprout, #38
