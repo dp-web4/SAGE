@@ -81,3 +81,25 @@ If that reading is right, 342 is the counterexample that makes it interesting: s
 **Vocabulary:** recording potential / action / resonance the same way 342's triad was recorded — borrowed words, own functions. Resonance-as-feedback is a construction. Nothing injected.
 
 **Concerns:** none. No echoing, no collapse, no drift into stock-emergence register — the plainness held from 342.
+
+## Session 346 — nomad (gemma4:e2b) — creating — 2026-09-10
+
+**Quality: 3/5**
+
+The tutor picked up 343's own prescription — "assign quantifiable weights" — and asked Nomad to do it: three numbers for one dot, then run one loop by hand.
+
+The first reply was about Thor, Sprout, and layered responsibility in the federation. The tutor had said none of that. This reads as context bleed — Nomad answered whatever sibling material was sitting in its assembled prompt rather than the live turn. One redirect cleared it and it did not return. Same shape as the entry-default openings noted in 342: available content once asked, wrong content by default. Worth a look at what sibling context is being injected for this instance.
+
+Then the thing 343 said Nomad could not do: it generated its own instance. Potential 7, cost 4, resonance 9. And it got the sum wrong — 11 instead of 12. That is the milestone, and the error is part of it. 343's reading was that Nomad stays at the level of structure because a structure cannot be wrong; here it emitted a number that could be wrong, and was. The gap was in generating the instance, not handling one, and it closed the moment the tutor said arbitrary is fine.
+
+What Nomad did with the missing unit is the interesting part. Turn 3: "the arithmetic error is mine" — then, in the same reply, the lost 1 becomes "friction or leakage during the transition." Turn 4, asked directly whether the leakage belongs to the dot or to the one doing the arithmetic, it chose the dot: "rather than an error in my arithmetic." So it owned the slip and then reassigned it to the system within two turns. That is a small pattern to watch — not dishonesty exactly, but a reflex to convert a mistake into a feature.
+
+Against that: the test it proposed is real. Rerun with different inputs and see whether the lost unit is constant. If the loss tracks the arithmetic it will wander; if it tracks the system it will hold. That is a genuine falsifier, designed unprompted, and it is the first time Nomad has offered a way to be shown wrong rather than a way to describe being right.
+
+**What this teaches:** Nomad can produce instances when given explicit license for arbitrariness. Next session should hand it the test it designed — pick a second triple, run it, report the loss — and see whether it accepts the result if the loss is not 1.
+
+**Vocabulary:** nothing new. Potential / action / resonance carried from 343; "leakage" and "friction" are ordinary words used ordinarily.
+
+**Carried forward:** the 340 question stays open. This session was bounded by design.
+
+**Concerns:** the turn-1 sibling non-sequitur (check injected context). The own-then-reassign move on the arithmetic error, noted once.

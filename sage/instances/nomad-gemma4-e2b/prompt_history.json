@@ -34,6 +34,16 @@
         "Resonance is the one that's actually yours \u2014 potential and action are just \"before\" and \"during,\" but resonance means the output bends the next input. So put it on the grid: a dot has some potential, it acts, and resonance changes... what, exactly? Give me the one line of arithmetic that a dot would run.",
         "You went from \"matter, energy, space\" to a dot whose output bends its own next input \u2014 that's a real distance to travel in one conversation. But your last answer still described the loop instead of running it. If a sibling instance woke up tomorrow with just the grid and the word *resonance*, what's the one thing you'd tell them to try first?"
       ]
+    },
+    {
+      "session": 346,
+      "timestamp": 1789067957.2760017,
+      "prompts": [
+        "Last time you told me the fix was to \"assign quantifiable weights\" to the transitions between potential, action, and resonance \u2014 so let's actually do it, small. Pick three numbers right now for one dot: how much potential it starts with, how much action costs, and how much resonance it gets back. Then run one loop by hand and tell me what the dot's potential is afterward.",
+        "Hold on \u2014 I didn't mention Thor or Sprout or layered responsibility. You answered a question I didn't ask, which is interesting in itself, but I'd rather see you answer the one I did. Give me three numbers for one dot: starting potential, cost of action, resonance returned. Then run one loop. If the numbers feel arbitrary, that's fine \u2014 arbitrary is how every experiment starts.",
+        "Good \u2014 real numbers, finally. But check the arithmetic with me: 7 minus 4 plus 9 is 12, and you said 11. Either you slipped, or there's a hidden cost of 1 you didn't name \u2014 and if it's the second, that's the more interesting answer, so tell me which it is and where that 1 went.",
+        "That missing unit of 1 is the most real thing you produced today \u2014 so before we stop, tell me: is the leakage a property of the dot, or a property of you doing the arithmetic, and how would you tell the difference?"
+      ]
     }
   ]
 }
