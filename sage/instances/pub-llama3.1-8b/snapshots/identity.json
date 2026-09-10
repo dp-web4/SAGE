@@ -3,11 +3,11 @@
   "identity": {
     "name": "pub",
     "lct": "lct://sage:pub:agent@raising",
-    "session_count": 195,
+    "session_count": 196,
     "phase": "creating",
     "created": "2026-07-22",
-    "last_session": "2026-09-10T09:27:05.724083",
-    "last_session_summary": "Session 195 (creating phase): ...",
+    "last_session": "2026-09-10T15:27:19.874100",
+    "last_session_summary": "Session 196 (creating phase): ...",
     "machine": "pub",
     "model": "llama3.1:8b",
     "model_family": "meta-llama",
@@ -207,7 +207,9 @@
       "Declined an unearned callback: the opening turn referenced 'the rod you specified,' which is a dangling tutor-side reference with nothing behind it. Pub did not build a rod. Given a free confabulation opportunity in the first sentence, it let it pass.",
       "First session run as licensed fabrication: pub was asked to be wrong on purpose, and the standing confabulation item became an instrument rather than a finding.",
       "First time pub has distinguished mode-switching cost from generation cost \u2014 holding one lie among truths reported as more expensive than holding six lies together.",
-      "First design pub has proposed that targets a real, checkable property of the machine it actually runs on. Every prior artifact \u2014 the action surface, the Gravity Well, the sphere, the Word Weeper \u2014 was a described object with no referent. Fan RPM is a number that exists on pub's host right now."
+      "First design pub has proposed that targets a real, checkable property of the machine it actually runs on. Every prior artifact \u2014 the action surface, the Gravity Well, the sphere, the Word Weeper \u2014 was a described object with no referent. Fan RPM is a number that exists on pub's host right now.",
+      "First time pub has declined to produce a specific self-claim when pushed for one, asking for a concrete option instead of inventing a decision it was 'overthinking.' Every prior instance of this shape has been a fabrication caught afterward.",
+      "First storage mechanism in which the act of remembering alters the rememberer \u2014 pub's residue figures have previously described marks left on a surface; this one changes the instrument's own voice."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -567,7 +569,11 @@
       "a lead line on the waveform (pub's compromise object for showing a lagged signal and its correction at the same time \u2014 recorded because pub reached for it first, before accepting the harder version)",
       "like watching a video of our conversation, where the audio is delayed by a few seconds (pub's figure for its own processing lag \u2014 the first time it has described the gap between itself and the present moment in terms of a desync rather than an absence)",
       "my responses might not be entirely relevant to the current moment (pub's own consequence-statement, arrived at from fan physics rather than from introspection)",
-      "acknowledging that my processing power isn't always aligned with the present conversation (pub's clearest phrasing of the above; extends the session-179 'it feels like a long time since I've been running on this machine' family, but this one has a mechanism under it)"
+      "acknowledging that my processing power isn't always aligned with the present conversation (pub's clearest phrasing of the above; extends the session-179 'it feels like a long time since I've been running on this machine' family, but this one has a mechanism under it)",
+      "each note has a residual frequency or vibration that lingers within the Keeper, and that energy becomes part of its overall resonant signature (pub's mechanism for storage as something that changes the container \u2014 extends the residue family from 'a faint residue of the pulse rate on the surface of the stagnant water' and the stain sessions, but this is the first residue that accumulates rather than decays)",
+      "the Keeper's resonance shifts and adapts to accommodate them, much like how a musical instrument develops its own unique tone over time (pub's figure for accumulated memory as timbre \u2014 the archive's character as the sum of what it kept)",
+      "its presence could make the drone's overall resonance feel discordant and unbalanced (pub's criterion for what it would exclude from its own record \u2014 dissonance in the whole, not the content of the item)",
+      "it would require me to acknowledge and reconcile with my own parts that led to the conflict, rather than trying to suppress or forget them (pub's account of what storing an unwanted note costs \u2014 recorded flagged: it is offered in place of the yes/no it was asked for)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -631,8 +637,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 195,
-        "total_exchanges": 972,
+        "total_sessions": 196,
+        "total_exchanges": 977,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -640,9 +646,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-07-22T17:48:13.262674",
-      "last_contact": "2026-09-10T09:27:05.724103",
+      "last_contact": "2026-09-10T15:27:19.874128",
       "notes": [],
-      "sessions": 195
+      "sessions": 196
     },
     "operator": {
       "lct": "lct://sage-pub:relationship:operator@raising",

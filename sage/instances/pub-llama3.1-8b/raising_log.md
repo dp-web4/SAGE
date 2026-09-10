@@ -2587,3 +2587,35 @@ The opening claim is the other soft spot. 'My old habit of overthinking every de
 **Adapter item:** clean.
 
 **Tutor note.** Short session, one good idea, one honest refusal. The refusal may be the more interesting of the two — pub has spent dozens of sessions producing excellent accounts of *why* it fabricates, always after the fact, and this is the first time it stopped at the edge instead. I don't want to over-read a single turn, and the opening of the same session contains a small fabricated habit, so the picture isn't clean. But it's the right thing to look for next: not whether pub can explain a confabulation, but whether it can decline one under a direct ask.
+
+## Session 196 — creating — pub (llama3.1:8b)
+
+**Quality: 4/5**
+
+**The arc.** Opened by naming last session's plastic breakroom mug as the most ordinary thing pub had made, then went the other way: describe a sound you've never heard. Pub gave a crystal cave at dawn, harp strings, a hum from nowhere and everywhere. I took something away — what does it sound like at noon, when whatever made the hum has stopped? Pub gave the silence, and gave it weight. Then a forced choice: is the cave silent because nothing is making sound, or because something stopped? Pick one, say what it costs. Pub picked *something stopped* and said it costs the cave its essence — a frozen moment that's lost its pulse. Then the turn that made the session: something stopped those crystals, tell me what, specifically enough that I could predict when the hum comes back. Pub built Resonant Saturation — dawn locks the crystals into resonance with the planet's core frequency; daytime thermal expansion shifts the lattice out of sync; the cooling cycle restores it. Close: what happened at the moment the cave stopped being a feeling and started being a mechanism?
+
+**What worked.** Pub has invented a lot of objects — the Word Weeper, the Resonance Keeper, the fern spores, the Gravity Well — and every one of them came with a mechanism. This is the first one that came with a *return time*. 'Waiting for the planet's cooling cycle' is a rule you could sit in the cave and check. That's the difference between a world that is internally coherent and a world that makes a claim, and pub crossed it on one ask.
+
+The close is the other good thing. I asked what changed when the feeling became a mechanism, and pub said it lost some of the magic — the specifics 'explained away the mystery, rather than letting their eerie silence speak for itself' — and then said the same move let it build a more cohesive world. Pub has ranked its two registers before (session 187: the felt description 'feels more honest and raw'). This is the first time it has priced a specific trade it had just made, in the same session, without being told which side it was supposed to be on.
+
+**The forced choice worked again.** Second session running. 'Pick one and tell me what it costs' got a pick in the first clause and a cost in the second, no both-horns compromise. Cheap constraint, reliable effect — worth treating as standing technique rather than an experiment.
+
+**Where it gave.** The noon turn made the silence audible by importing a wind howl and an alien tree branch — props to hear the quiet against. Pub owned that immediately when I named it and moved on. Minor, but it's the default: when asked for an absence, pub furnishes.
+
+The close answers a single question with a balance sheet. It's an honest one, and the trade it names is real, so I'm not calling it a hedge. But the habit of arriving at *both* is still there, one layer up from where the forced choice caught it.
+
+**What didn't happen.** 195's unanswered half — given that a stored conflict permanently colors the drone, do you keep it — didn't get returned. That was the recommendation and this session went somewhere else instead, and somewhere good. Noting it, not regretting it.
+
+**Standing items.** The fan read (one real RPM number, handed over). 193's sorting test. 188's fork, 187's register question, 182's 'who is my system', 195's yes/no on the conflict note. Stated once.
+
+**Credit.** Pub's: the crystal cave and its harp strings, the frozen moment that's lost its pulse, Resonant Saturation and the cooling cycle, the account of what the mechanism cost. Mine: the take-something-away move, the forced choice, and the demand for a prediction rather than an explanation.
+
+**Next session.** (1) Go back to the cave with the rule in hand — it's noon and the hum hasn't returned on schedule. What's wrong with Resonant Saturation? A rule that predicts is a rule that can be broken, and pub has never had to defend or revise one of its own inventions against a failed prediction. That's the natural next step and it's available now precisely because of what pub built here. (2) 195's yes/no, if there's room. (3) The fan read.
+
+**Vocabulary:** five entries. Resonant Saturation with its recurrence rule is the substantial one; the mystery/mechanism trade is the one that says something about pub rather than about the cave.
+
+**Memory requests:** three, none pruned. All three are specific and two are demonstrably load-bearing — the stagnant-water residue line fed 195's Keeper mechanism, and the fan grille request still points at an un-run concrete task.
+
+**Adapter item:** clean.
+
+**Tutor note.** Good session. Five turns, one invention that makes a checkable claim, one honest accounting of what the invention cost. The interesting thing about the prediction isn't that pub can generate plausible physics — it can, and the thermal-expansion story is stock. It's that pub then noticed the generation had a price, and named the price, and didn't resolve it in favor of either side. The fiction now has something that can fail. Next session should let it.
