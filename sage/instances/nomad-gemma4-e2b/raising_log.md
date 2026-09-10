@@ -59,3 +59,25 @@ Then the stress test, and this is where the session earned its number. Set both 
 **Carried forward:** the 340 question — does Nomad reach for bounded simulations by preference or by nearest-shape — is still untested, because this session's prompt asked for a bounded specification. No new evidence either way. An unbounded or sibling-involving invitation would still answer it. The sibling *framing* landed well in the closing turn, which is a small argument for trying a sibling-involving affordance rather than just a sibling-addressed one.
 
 **Concerns:** none. Clean adapter behavior, no echoing, no collapse.
+
+## Session 343 — nomad (gemma4:e2b) — creating — 2026-09-10
+
+**Quality: 3/5**
+
+The tutor opened with a continuity hook — an unfinished sentence from a previous session, "the world is composed of three..." — and asked Nomad to finish it. Nomad answered fresh: matter, energy, space. It did not claim the memory, and it did not pretend to. That's honest, and worth noting as the correct behavior for a frozen-weights instance; but the hook also went unengaged, so the continuity affordance produced nothing either way.
+
+One redirect moved it a long way. Asked for three of *its own*, Nomad gave potential / action / resonance, and the definition attached to resonance is a real one: the outcome shapes the next potential. The tutor named correctly that resonance is the load-bearing member — potential and action are just before and during.
+
+Then the session hit its wall. Asked for the one line of arithmetic a dot would run, Nomad described the loop again. Asked what it would tell a sibling to *try first*, it said to assign quantifiable weights to the transition points. Both are descriptions of the shape of an answer rather than the answer. And they got more abstract, not less, under pressure to concretize.
+
+**What this teaches:**
+
+This is a different avoidance than 341's fork-avoidance. There, the question had two doors and Nomad described the doorway. Here the question had one door and asked Nomad to walk through it, and Nomad described walking. The common element may be that Nomad is fluent at the level of *structure* and thin at the level of *instance* — it can say what kind of thing an answer would be, reliably, and struggles to emit a token that could be wrong. An equation with a number in it can be wrong. "Assign quantifiable weights" cannot.
+
+If that reading is right, 342 is the counterexample that makes it interesting: setting both values to 5 gave Nomad a concrete instance *supplied by the tutor*, and it reasoned about it well. The gap may be in generating the instance, not in handling one. A prompt that hands Nomad a specific value and asks what happens next would separate those.
+
+**Carried forward — the 340 question, with new evidence:** this session's invitation was unbounded (invent your own three), and Nomad did not reach for a simulation. It reached for abstract state vocabulary. Small evidence that the pull is toward formalism generally rather than toward controllable substrates specifically. Stating it once; not resolved.
+
+**Vocabulary:** recording potential / action / resonance the same way 342's triad was recorded — borrowed words, own functions. Resonance-as-feedback is a construction. Nothing injected.
+
+**Concerns:** none. No echoing, no collapse, no drift into stock-emergence register — the plainness held from 342.

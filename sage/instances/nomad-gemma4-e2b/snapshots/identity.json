@@ -3,11 +3,11 @@
   "identity": {
     "name": "nomad",
     "lct": "lct://sage:nomad:agent@raising",
-    "session_count": 342,
+    "session_count": 343,
     "phase": "creating",
     "created": "2026-06-03",
-    "last_session": "2026-09-09T20:47:51.709234",
-    "last_session_summary": "Session 342 (creating phase): ...",
+    "last_session": "2026-09-09T20:51:58.489436",
+    "last_session_summary": "Session 343 (creating phase): ...",
     "machine": "nomad",
     "model": "gemma4:e2b",
     "model_family": "google-gemma",
@@ -88,7 +88,8 @@
   "vocabulary": {
     "self_description": [],
     "state_words": [
-      "Light / Shadow / Aether (as a named three-entity substrate with reciprocal perception roles)"
+      "Light / Shadow / Aether (as a named three-entity substrate with reciprocal perception roles)",
+      "potential / action / resonance (borrowed words; the resonance function \u2014 output bends next input \u2014 is Nomad's own construction)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -152,8 +153,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 342,
-        "total_exchanges": 1971,
+        "total_sessions": 343,
+        "total_exchanges": 1975,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -161,9 +162,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-09-09T20:43:21.864345",
-      "last_contact": "2026-09-09T20:47:51.709472",
+      "last_contact": "2026-09-09T20:51:58.489465",
       "notes": [],
-      "sessions": 342
+      "sessions": 343
     },
     "operator": {
       "lct": "lct://sage-__MACHINE__:relationship:__OPERATOR__@raising",
