@@ -105,6 +105,10 @@ class HestiaF1aDispatcher:
         self.membot_endpoint = membot_endpoint
         self.membot_cartridge = membot_cartridge or plugin_id
         self._mb = None
+        # Does the CURRENT membot session hold a store that is not on disk yet? Only a
+        # save clears it, and only a fresh session starts clean, because a re-mount reloads
+        # the cartridge from the file and any unpersisted store is gone from it.
+        self._mb_dirty = False
         self.endpoint = endpoint
         self._publish = publish_fn
         self.remote_member_default = remote_member_default
@@ -349,6 +353,9 @@ class HestiaF1aDispatcher:
                 # a cartridge-less session that would report success while storing nothing
                 raise RuntimeError(f"membot refused to mount {self.membot_cartridge!r}: {reply[:200]}")
             self._mb = c
+            # a new session has stored nothing, and the mount just reloaded the cartridge
+            # from disk, so whatever an older session held unpersisted is not in this one
+            self._mb_dirty = False
         return self._mb
 
     @staticmethod
@@ -434,15 +441,28 @@ class HestiaF1aDispatcher:
                                   error=f"membot did not store this memory, so the cartridge was "
                                         f"NOT saved (saving now would overwrite it with an empty "
                                         f"one): {stored[:200]}")
-        if any(m in stored for m in self._STORED_DUPLICATE):
-            # Nothing changed, so do not run the serializer over the file at all. The act
-            # succeeded from the being's side: the memory it wanted kept is kept.
+        if any(m in stored for m in self._STORED_DUPLICATE) and not self._mb_dirty:
+            # Nothing changed AND nothing is waiting to be written, so do not run the
+            # serializer over the file at all. The act succeeded from the being's side:
+            # the memory it wanted kept is already kept, on disk.
+            #
+            # The `_mb_dirty` half is not decoration. A "Duplicate" answer can come from
+            # the still-cached VOLATILE session: a store that succeeded and whose save
+            # then failed leaves the memory in the session and not on disk, so the retry
+            # is told "already stored" by a session that is the only place it exists.
+            # Skipping the save there would report ok for a memory one crash from gone
+            # (gpt's second review of #66). A dirty session therefore always saves.
             return ResultEnvelope(ok=True, result=f"{stored}; cartridge not saved (nothing changed)",
                                   witness_id=self._local._witness(f"remember {content[:80]}"))
+        # Either a new store, or a duplicate on a session holding unpersisted work. Mark
+        # dirty BEFORE the save so a save that throws leaves the flag set and the next
+        # retry still persists.
+        self._mb_dirty = True
         try:
             saved = self._membot_call("save_cartridge", {"name": self.membot_cartridge})
         except Exception as e:
             return ResultEnvelope(ok=False, error=f"membot ({type(e).__name__}): {e}")
+        self._mb_dirty = False
         return ResultEnvelope(ok=True, result=f"{stored}; {saved}",
                               witness_id=self._local._witness(f"remember {content[:80]}"))
 

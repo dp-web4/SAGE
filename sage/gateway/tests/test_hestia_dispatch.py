@@ -649,3 +649,50 @@ def test_a_duplicate_succeeds_without_running_the_destructive_save():
     assert env.ok and env.witness_id, env
     assert "nothing changed" in env.result
     assert _mb_calls("save_cartridge") == [], "a duplicate must not run the serializer"
+
+
+def test_a_duplicate_still_saves_when_the_session_holds_unpersisted_work():
+    """The failure/retry sequence gpt found on #66.
+
+    A NEW store succeeds, its save then fails, so the memory lives only in membot's
+    volatile session. The retry of the same content is answered "Duplicate — already
+    stored" BY THAT SESSION, which is the one place it exists. Letting a duplicate skip
+    the save there would report ok for a memory that is one crash from gone, which is the
+    same class of lie as the empty-cartridge bug this guard exists to stop, arriving from
+    the other direction. A dirty session always saves."""
+    FakeMcp.calls = []
+    root = tempfile.mkdtemp(prefix="hd-")
+
+    class Flaky(FakeMembot):
+        stores = 0
+        save_fails = True
+
+        def call(self, name, args):
+            if name == "memory_store":
+                FakeMcp.calls.append((name, args))
+                Flaky.stores += 1
+                t = ("Stored memory #7 (12ms)" if Flaky.stores == 1
+                     else 'Duplicate — already stored, skipped: "keep me"')
+                return {"result": {"content": [{"type": "text", "text": t}],
+                                   "structuredContent": {"result": t}}}
+            if name == "save_cartridge" and Flaky.save_fails:
+                FakeMcp.calls.append((name, args))
+                return {"jsonrpc": "2.0", "id": 1,
+                        "error": {"code": -32603, "message": "save_cartridge exploded"}}
+            return super().call(name, args)
+
+    d = HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: Flaky(ep, pid))
+
+    first = d(BeingIntent("remember", {"content": "keep me"}), _ALLOW)
+    assert not first.ok and "save_cartridge exploded" in first.error, first
+    assert d._mb_dirty, "a failed save must leave the session marked unpersisted"
+
+    Flaky.save_fails = False
+    FakeMcp.calls = []
+    retry = d(BeingIntent("remember", {"content": "keep me"}), _ALLOW)
+    assert retry.ok and retry.witness_id, retry
+    assert "nothing changed" not in (retry.result or ""), \
+        "this duplicate DID have something to change: the disk did not have it"
+    assert _mb_calls("save_cartridge") == [{"name": "sprout-being"}], \
+        "a duplicate on a dirty session must still persist"
+    assert not d._mb_dirty, "a successful save clears the flag"
