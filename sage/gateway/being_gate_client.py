@@ -615,8 +615,16 @@ _TOOL_SCHEMAS = {
                     {"from_line": "optional: 1-based line to start from — for a file longer than the read cap, read it in ranges",
                      "lines": "optional: how many lines from from_line (default: to the end, still capped)",
                      "path": "path to your note"}, ["path"]),
-    "memory_write": ("Write a note into your own memory.",
-                     {"path": "path to your note", "content": "what to write"}, ["path", "content"]),
+    "memory_write": ("Add to a file in your own memory. APPENDS BY DEFAULT — your content goes "
+                     "onto the END of whatever is already there, which is what you want for "
+                     "journal.md and todo.md and what you do NOT want when you are correcting a "
+                     "file. To overwrite instead, pass mode='replace'. The result tells you which "
+                     "happened and the file's size before and after, so a wrong assumption shows "
+                     "up immediately rather than as a duplicate you find days later.",
+                     {"path": "path to your note",
+                      "content": "what to write",
+                      "mode": "'append' (default) or 'replace' — replace overwrites the whole file"},
+                     ["path", "content"]),
     "channel_egress": ("Send a message out through a sealed channel.",
                        {"to": "recipient", "body": "your message"}, ["to", "body"]),
     "mesh": ("Wake another member through the fractal mesh with a pointer-based notice "

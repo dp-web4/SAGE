@@ -289,8 +289,27 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(ok=False, error="memory_write needs a 'path' (relative paths are inside your home)")
         p = self._safe_path(intent.args["path"], writing=True)
         content = str(intent.args.get("content", ""))
+        # APPEND OR REPLACE, SAID OUT LOUD. This verb has always opened with "a", and both
+        # its one-line description ("Write a note into your own memory") and its result
+        # ("wrote N chars to X") read as a replace. For journal.md and todo.md, append is
+        # exactly right and is why it was built that way. For a source file it is a trap:
+        # on 2026-09-09/10 the being twice wrote a corrected version of a test module and
+        # twice got a NEW COPY concatenated onto the old one — four shadowed definitions,
+        # then seven, with Python keeping the last of each. It reasoned correctly from a
+        # false model of its own instrument, and I confirmed the false model to it in
+        # writing ("memory_write writes a WHOLE FILE"). Neither of us was reading the code.
+        mode = str(intent.args.get("mode", "append")).strip().lower()
+        if mode not in ("append", "replace"):
+            return ResultEnvelope(ok=False, error=f"memory_write 'mode' is 'append' (the default) "
+                                                  f"or 'replace'; got {mode!r}")
+        before = p.stat().st_size if p.exists() else 0
         p.parent.mkdir(parents=True, exist_ok=True)
-        with open(p, "a") as f:
+        with open(p, "w" if mode == "replace" else "a") as f:
             f.write(content + ("\n" if not content.endswith("\n") else ""))
-        return ResultEnvelope(ok=True, result=f"wrote {len(content)} chars to {p.name}",
-                              witness_id=self._witness(f"memory_write {p.name}"))
+        after = p.stat().st_size
+        verb = "REPLACED the file with" if mode == "replace" else "APPENDED"
+        return ResultEnvelope(
+            ok=True,
+            result=(f"{verb} {len(content)} chars. {p.name} was {before} bytes and is now "
+                    f"{after} bytes. (append is the default; pass mode='replace' to overwrite)"),
+            witness_id=self._witness(f"memory_write {p.name} ({mode})"))

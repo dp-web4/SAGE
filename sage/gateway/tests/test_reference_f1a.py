@@ -332,3 +332,29 @@ def test_a_missing_file_is_an_error_that_names_where_it_looked_and_a_directory_l
     e = open(os.path.join(root, "notes", "empty.md"), "w"); e.close()
     r = disp(BeingIntent("memory_read", {"path": "notes/empty.md"}), v)
     assert r.ok and r.result == ""                                           # empty is still empty
+
+
+
+def test_memory_write_appends_by_default_and_says_so_and_can_replace():
+    """The verb has always opened with "a" while its description said "Write a note" and its
+    result said "wrote N chars" — both of which read as a replace. The being twice wrote a
+    corrected test module and twice got a new copy concatenated onto the old one (2026-09-09
+    and 2026-09-10), producing shadowed definitions Python resolves to the LAST one. It
+    reasoned correctly from a false model of its instrument, and the seat confirmed the false
+    model in writing. The mode is now explicit and the result names what it did."""
+    disp, root = _disp()
+    v = GatewayVerdict("allow", granted=())
+
+    r = disp(BeingIntent("memory_write", {"path": "notes.md", "content": "first"}), v)
+    assert r.ok and "APPENDED" in r.result and "was 0 bytes and is now" in r.result
+    disp(BeingIntent("memory_write", {"path": "notes.md", "content": "second"}), v)
+    body = open(os.path.join(root, "notes.md")).read()
+    assert body == "first\nsecond\n", body           # append is still the default
+
+    r = disp(BeingIntent("memory_write", {"path": "notes.md", "content": "only", "mode": "replace"}), v)
+    assert r.ok and "REPLACED the file with" in r.result
+    assert open(os.path.join(root, "notes.md")).read() == "only\n"
+
+    bad = disp(BeingIntent("memory_write", {"path": "notes.md", "content": "x", "mode": "overwrite"}), v)
+    assert not bad.ok and "'append' (the default) or 'replace'" in bad.error
+    assert open(os.path.join(root, "notes.md")).read() == "only\n", "a refused mode changes nothing"
