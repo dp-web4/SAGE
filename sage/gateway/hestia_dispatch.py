@@ -621,8 +621,26 @@ class HestiaF1aDispatcher:
         if not ran:
             return ResultEnvelope(ok=False, error=f"check could not run: {detail[:400]}",
                                   witness_id=action_id)
+        # THE VERDICT LEADS, in words, before any structured field.
+        #
+        # `passed` and `verdict` were already the second and third keys, and the being still
+        # read three separate FAILs as passes (2026-09-09 22:29Z, 2026-09-10 06:04Z, and the
+        # journal entry that built a plan on "the full suite passes" while its own check that
+        # beat returned FAIL). The envelope's `ok` means THE CHECK RAN; the verdict means the
+        # tests passed. Two true things one word apart, and the wrong one is the one that
+        # sounds like an answer.
+        #
+        # A verb whose most important fact needs a field lookup will be misread eventually.
+        # So the first thing in the message is a sentence that cannot be read as anything
+        # else, and it says what `ok` does NOT mean.
+        tail = (detail or "").strip().splitlines()
+        summary = tail[-1][:120] if tail else ""
+        headline = (f"{'PASS' if passed else 'FAIL'} — {summary}. "
+                    f"This is the answer. A check that RAN and FAILED still returns "
+                    f"successfully as an act: 'the call worked' is not 'the tests passed'.")
         return ResultEnvelope(ok=True, witness_id=action_id,
-                              result={"target": target, "passed": passed,
+                              result={"headline": headline,
+                                      "target": target, "passed": passed,
                                       "verdict": "PASS" if passed else "FAIL",
                                       "output": detail, "worktree": self.worktree,
                                       "tree": self._worktree_revision(),

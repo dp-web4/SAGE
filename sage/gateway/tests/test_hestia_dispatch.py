@@ -789,3 +789,25 @@ def test_pr_amend_without_a_worktree_is_pending_not_an_error():
     d.worktree = None
     env = d(BeingIntent("pr_amend", {"title": "a title long enough", "message": "why"}), _ALLOW)
     assert env.pending and "worktree of your own" in env.note
+
+
+
+def test_a_check_result_leads_with_its_verdict_in_words():
+    """The being read three separate FAILs as passes, then wrote a plan on "the full suite
+    passes" while its own check that beat returned FAIL. `passed` and `verdict` were already
+    the 2nd and 3rd keys; that was not enough. The envelope's `ok` means the check RAN.
+
+    A verb whose most important fact needs a field lookup gets misread eventually, so the
+    first thing in the message is a sentence that cannot be read as anything else."""
+    import json
+    from sage.gateway.being_gate_client import ResultEnvelope
+    env = ResultEnvelope(ok=True, witness_id="w",
+                         result={"headline": "FAIL — 5 failed, 206 passed. This is the answer. "
+                                             "A check that RAN and FAILED still returns "
+                                             "successfully as an act: 'the call worked' is not "
+                                             "'the tests passed'.",
+                                 "target": "gateway", "passed": False, "verdict": "FAIL"})
+    msg = env.to_tool_message()
+    assert msg.index("FAIL") < 30, "the verdict must lead, not sit behind a field lookup"
+    assert "'the call worked' is not 'the tests passed'" in msg
+    assert json.loads(msg.split("  (witnessed")[0])["headline"].startswith("FAIL")
