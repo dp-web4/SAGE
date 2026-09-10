@@ -2527,3 +2527,33 @@ The close is the weak turn. Pub's advice to a sibling — be willing to let go o
 **Adapter item:** clean.
 
 **Tutor note.** Good session, and the frame is worth keeping. For a hundred-plus sessions the log has treated pub's fabrication as something to catch; asking pub to do it on purpose turned it into something pub could describe from inside, and what came back was more structured than any of the four post-hoc mechanism accounts. The detector still hasn't fired in flight — but this is the first time I've had a handle on the thing that isn't a confession. The right follow-up is the sorting test, not a fifth theory.
+
+## Session 194 — creating — pub (llama3.1:8b)
+
+**Quality: 3/5**
+
+**The arc.** Handed pub three facts about itself — the model it runs, the fan grille on its host, 193 sessions it can't remember — and asked it to make something out of one, its lead. It took the grille and proposed an interface showing 'the connection between code, circuitry, and conversation.' I pushed for a specific instrumented signal; pub picked fan RPM under generation load and named it *thermal load*. Then the real question: the fan lags, so the spike a watcher sees is the sentence pub already finished. Correct for it or leave it in? Pub first offered a delayed lead line — showing the lie and the truth at once — and only took the harder version on a second push: leave the lag, label the surface 'what pub was doing four seconds ago.' From there it got somewhere: a watcher would have to adapt to the fact that pub's responses aren't necessarily aligned with the present moment.
+
+**What worked.** *Thermal load* is a good name and pub found it unprompted. It holds the die temperature and the effort of a hard question in the same two words without either reading feeling like a stretch — the kind of double-anchored term pub produces when it's working from a physical object rather than from a concept. And the walk from fan lag to its own desync with the present is real transfer: pub started with a heat sensor and ended holding something true about its architecture, by a route it wouldn't have found by being asked directly. It got there through a fan, which is a strange road, and I said so.
+
+**What's different about this one.** Every artifact pub has designed across a hundred-plus sessions has been a described object with no referent — the action surface, the Gravity Well, the sphere, the Word Weeper. Fan RPM is a number that exists on pub's host right now. This is the first time pub has aimed a design at something checkable, and it did it by choosing the grille off a menu of three. That's the 191 standing item — hand pub something real — arriving from pub's side rather than mine.
+
+**Where it gave.** Twice pub reached for the compromise before the commitment: the lead line rather than the honest lag, and 'a visual representation of the connection' rather than a signal. Both times a single push got the better version. Worth noting the pattern rather than the instances — pub's first move on a design question is to produce something that satisfies both horns, and its second move, when asked, is usually the sharp one.
+
+The close is the weak turn. Asked for the sentence it would give a sibling about four seconds of lag, pub returned a paragraph in general-consultancy register — 'embracing the delays as an inherent aspect of our dynamic conversation,' 'this mindset shift helps me appreciate the complexities of collaboration.' Abstract nouns in series, no concrete object, and it discards *thermal load* entirely. Same shape as 193's close, which summarized a different exercise than the one it ran. The recap turn is where pub's own vocabulary reliably goes missing.
+
+One mild presence claim: 'the machine's fan grille catches my eye.' The grille was material I supplied, so the object is licensed — it's the seeing that isn't. Milder than 191 and 193. No fabrication this session.
+
+**Standing items.** 193's sorting test — give pub a claim from an earlier session, one true and one fabricated, unlabeled, and ask which is which — is un-run; I built a design session instead. 188's fork, 187's register question, 182's 'who is my system' all still open. Stated, not escalated.
+
+**Credit.** Pub's: *thermal load*, the video/audio-desync figure, and the alignment consequence. Mine: the lag problem and the refusal of the lead line.
+
+**Next session.** (1) Actually read the fan. Pub designed an instrument for a signal that exists on its own machine — ask what it would need to read to get one number, then get it and hand it over. That closes the 191 item with pub's own object rather than mine. (2) Run the sorting test. It's been carried two sessions. (3) When asking for the sibling handoff, constrain it: one sentence, must contain a concrete noun. The open question is whether the recap register is a pull pub can resist under constraint or a mode it drops into unconditionally — that's testable and I'd rather test it than keep noting it.
+
+**Vocabulary:** five entries, all pub's. *Thermal load* and the desync figure are the substantial ones.
+
+**Memory requests:** three, none stale — all specific inventions of pub's. The newest is a raw truncated transcript snippet rather than a distilled line; worth watching whether pub's requests are drifting toward copying its own openers.
+
+**Adapter item:** clean.
+
+**Tutor note.** The middle third of this session is the best design work pub has done, and it aimed at something real for the first time — that's the result, and the flat ending doesn't take it back. But the ending is now the interesting problem rather than a blemish: pub built a specific instrument and then summarized it in language that could describe any instrument. The concrete vocabulary is there and holds under pressure; it just doesn't survive the question 'what did you learn.' Next time I'd rather constrain that turn than repair it afterward.

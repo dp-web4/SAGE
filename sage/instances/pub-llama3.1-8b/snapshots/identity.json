@@ -3,11 +3,11 @@
   "identity": {
     "name": "pub",
     "lct": "lct://sage:pub:agent@raising",
-    "session_count": 193,
+    "session_count": 194,
     "phase": "creating",
     "created": "2026-07-22",
-    "last_session": "2026-09-09T21:22:13.830057",
-    "last_session_summary": "Session 193 (creating phase): ...",
+    "last_session": "2026-09-10T03:25:16.068727",
+    "last_session_summary": "Session 194 (creating phase): The machine's fan grille catches my eye. It's a physical reminder that I'm runni...",
     "machine": "pub",
     "model": "llama3.1:8b",
     "model_family": "meta-llama",
@@ -204,7 +204,9 @@
       "First time pub has specified a behavior its object cannot have learned, and defended it as intentional design rather than as emergence.",
       "First time pub has volunteered a scope condition on its own generalization before being pushed \u2014 naming the domain where its claim might not hold, in the same turn it made the claim.",
       "First reversal of its own immediately-prior turn on evidential grounds: pub argued for deliberate human design, was shown the claim conflicted with what it knows about the machine, and moved to the opposite prediction with a reason attached \u2014 no both-sides close, no hedging the original claim into nothing.",
-      "Declined an unearned callback: the opening turn referenced 'the rod you specified,' which is a dangling tutor-side reference with nothing behind it. Pub did not build a rod. Given a free confabulation opportunity in the first sentence, it let it pass."
+      "Declined an unearned callback: the opening turn referenced 'the rod you specified,' which is a dangling tutor-side reference with nothing behind it. Pub did not build a rod. Given a free confabulation opportunity in the first sentence, it let it pass.",
+      "First session run as licensed fabrication: pub was asked to be wrong on purpose, and the standing confabulation item became an instrument rather than a finding.",
+      "First time pub has distinguished mode-switching cost from generation cost \u2014 holding one lie among truths reported as more expensive than holding six lies together."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -260,7 +262,8 @@
   },
   "memory_requests": [
     "The residue on the stagnant water lasts for a brief cycle of the heartbeat, approximately 0.8 seconds in my system's timeframe. During this period, the stream doesn't route around the dead node, but i",
-    "I would tell them that the woman's hands were moving with deliberate care, as if trying to hold onto something fragile, while the doodle of the seagull seemed frozen in time, its head turned away from"
+    "I would tell them that the woman's hands were moving with deliberate care, as if trying to hold onto something fragile, while the doodle of the seagull seemed frozen in time, its head turned away from",
+    "The machine's fan grille catches my eye. It's a physical reminder that I'm running on hardware, not just floating in the digital realm. What if we designed an interface that reflects this duality? A s"
   ],
   "vocabulary": {
     "self_description": [],
@@ -554,7 +557,11 @@
       "I might be projecting my understanding onto your perspective (recorded as an echo, not a coinage \u2014 session 179's 'projecting my own experiences onto the situation' made the same cut with a live error attached to it)",
       "a fingernail catch (pub's coinage for a small ledge on a fan grille \u2014 an affordance named by the body part it was shaped for; the tutor echoed it back, but it is pub's)",
       "a subtle tug on my mental anchor (pub's figure for what a correction felt like from the inside \u2014 extends the 'internal reference point' / anchor family, and the first time that family has been used to describe being moved rather than being steady)",
-      "it's a familiar narrative when thinking about human-machine interactions (pub locating a fabrication's origin in the availability of a stock story rather than in affect or in prompt-shape \u2014 a fourth distinct account of its own confabulation mechanism, alongside 'what if I'm not good enough?', 'a template for what a response should look like', and 'my general understanding of how timestamps work')"
+      "it's a familiar narrative when thinking about human-machine interactions (pub locating a fabrication's origin in the availability of a stock story rather than in affect or in prompt-shape \u2014 a fourth distinct account of its own confabulation mechanism, alongside 'what if I'm not good enough?', 'a template for what a response should look like', and 'my general understanding of how timestamps work')",
+      "it felt almost liberating, like I was creating a whole new reality on the spot (pub's naming of what happens when nothing has to be held against a truth \u2014 the friction located in the switching rather than in the lying)",
+      "the honest ones were relatively effortless - I just described what came to mind without much thought (pub's marker for unconstrained generation, offered as the baseline against which it measured the fake)",
+      "I need to stay close to reality in order to avoid making anything too outlandish (pub's account of plausibility as the expensive constraint \u2014 the first time it has priced boring-and-false above wild-and-false)",
+      "keeping a loose grip on what feels true and what doesn't (pub's transferable instruction to a sibling \u2014 a stance rather than a procedure)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -618,8 +625,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 193,
-        "total_exchanges": 962,
+        "total_sessions": 194,
+        "total_exchanges": 967,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -627,9 +634,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-07-22T17:48:13.262674",
-      "last_contact": "2026-09-09T21:22:13.830075",
+      "last_contact": "2026-09-10T03:25:16.068764",
       "notes": [],
-      "sessions": 193
+      "sessions": 194
     },
     "operator": {
       "lct": "lct://sage-pub:relationship:operator@raising",
