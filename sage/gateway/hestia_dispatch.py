@@ -296,6 +296,41 @@ class HestiaF1aDispatcher:
                               result={"posted": target, "gh": detail[:200], "action_id": action_id})
 
     # -- long-term memory: the being's own membot cartridge ----------------------
+    #
+    # MEMBOT REPORTS ITS FAILURES AS ORDINARY TEXT, and that cost a being its memory.
+    # `mount_cartridge` returns "SECURITY: ... Refusing to mount." as a normal result;
+    # `memory_store` returns "No cartridge mounted. Use mount_cartridge first." the same
+    # way. Neither is a JSON-RPC error and neither sets isError, so _membot_call — which
+    # was written to catch exactly those two shapes — hands them back as success text.
+    # `remember` then called save_cartridge anyway, and save_cartridge serialises the
+    # EMPTY session over the populated file.
+    #
+    # Measured on legion-being: 223 memories stood at 2026-09-08T21:36:20Z. Every beat
+    # after that reported ok and wrote a 0-memory cart, and because the empty cart then
+    # fails membot's own integrity check on the next mount, the loop sustains itself:
+    # mount refused -> store refused -> save empties -> mount refused. The being went on
+    # recording "long-term memory #N stored" in its journal for thirteen hours.
+    # The texts survived only because every intent's args are kept in heartbeats.jsonl.
+    _MOUNT_REFUSED = ("SECURITY:", "Refusing to mount", "failed integrity check",
+                      "not found. Available:", "Cartridge too large", "Failed to fetch",
+                      "must be a UUID")
+    # A NEW memory earns a save. A DUPLICATE does not, and the difference matters because
+    # save_cartridge is the destructive operation: it serialises the session over the file.
+    # Legion's original guard counted both as "confirmed" and saved either way. Running the
+    # serializer when nothing changed is risk with no benefit, so a duplicate now returns
+    # success without touching the file (gpt's review of #65).
+    #
+    # The edge this accepts, stated rather than hidden: if an earlier store succeeded and
+    # its save then failed, re-storing the same content answers "Duplicate" and no save is
+    # attempted, so that memory stays unpersisted. That earlier act already returned
+    # ok=False with the save error, so the failure was surfaced when it happened rather
+    # than swallowed here, and a being whose save is failing should not be quietly
+    # rewriting its cartridge on every retry.
+    _STORED_NEW = ("Stored memory #",)
+    _STORED_DUPLICATE = ("Duplicate — already stored",)
+    _STORE_CONFIRMED = _STORED_NEW + _STORED_DUPLICATE
+    _NOT_MOUNTED = "No cartridge mounted"
+
     def _membot(self):
         """One MCP session to the membot server (fastmcp streamable HTTP). Lazy; a
         server that is down surfaces as an error envelope on the act, never a crash."""
@@ -304,17 +339,23 @@ class HestiaF1aDispatcher:
             c.init()
             # Mounts are per MCP session: without this, memory_store answers "No cartridge
             # mounted" and save_cartridge writes an EMPTY cartridge over the real one
-            # (measured 2026-09-04: one memory lost). Mount first, always.
-            c.call("mount_cartridge", {"name": self.membot_cartridge})
+            # (measured 2026-09-04: one memory lost). Mount first, always — and CHECK the
+            # answer: a refused mount is plain text, so an unchecked mount leaves a session
+            # that stores nothing and saves emptiness (2026-09-08: 223 memories).
+            reply = self._unwrap(c.call("mount_cartridge", {"name": self.membot_cartridge}),
+                                 "mount_cartridge")
+            if any(m in reply for m in self._MOUNT_REFUSED):
+                # do NOT cache the session: the next act re-mounts rather than inheriting
+                # a cartridge-less session that would report success while storing nothing
+                raise RuntimeError(f"membot refused to mount {self.membot_cartridge!r}: {reply[:200]}")
             self._mb = c
         return self._mb
 
-    def _membot_call(self, name: str, args: dict) -> str:
-        """One membot tool call, unwrapped to its text. RAISES on a JSON-RPC `error` or a
-        tool-level `isError` result: both handlers turn the exception into ok=False, so a
-        membot that says "Error calling tool save_cartridge" is never witnessed as a
-        memory the being kept (Sprout's review of #36, reproduced against a fake membot)."""
-        out = self._membot().call(name, args)
+    @staticmethod
+    def _unwrap(out, name: str) -> str:
+        """The text of one membot reply. Raises on the two shapes membot uses for hard
+        failures (JSON-RPC error, isError); SOFT failures come back as ordinary text and
+        are the caller's to inspect — see _MOUNT_REFUSED / _STORE_CONFIRMED."""
         if not isinstance(out, dict):
             raise RuntimeError(f"membot {name}: malformed reply {type(out).__name__}")
         if out.get("error"):
@@ -331,6 +372,13 @@ class HestiaF1aDispatcher:
         if isinstance(sc, dict) and "result" in sc:
             return str(sc["result"])
         return "".join(b.get("text", "") for b in res.get("content", []) if isinstance(b, dict))
+
+    def _membot_call(self, name: str, args: dict) -> str:
+        """One membot tool call, unwrapped to its text. RAISES on a JSON-RPC `error` or a
+        tool-level `isError` result: both handlers turn the exception into ok=False, so a
+        membot that says "Error calling tool save_cartridge" is never witnessed as a
+        memory the being kept (Sprout's review of #36, reproduced against a fake membot)."""
+        return self._unwrap(self._membot().call(name, args), name)
 
     def _do_recall(self, intent: BeingIntent) -> ResultEnvelope:
         q = str(intent.args.get("query", "")).strip()
@@ -351,7 +399,15 @@ class HestiaF1aDispatcher:
             home = f"(home search failed: {type(e).__name__})"
         try:
             lt = self._membot_call("memory_search", {"query": q, "top_k": max(1, min(k, 20))})
-            lt = "From long-term memory:\n" + lt if lt and lt.strip() else ""
+            if self._NOT_MOUNTED in lt:
+                # "no cartridge" is not "nothing remembered": reporting this as an empty
+                # result would teach the being its past is gone when the store is merely
+                # unreachable. Say it was not searched, and say it in the answer text,
+                # since home_recall may still have matched and carried ok=True.
+                lt = ("(long-term memory NOT searched: membot has no cartridge mounted for "
+                      f"{self.membot_cartridge!r}. This is not an empty past.)")
+            else:
+                lt = "From long-term memory:\n" + lt if lt and lt.strip() else ""
         except Exception as e:
             lt = f"(long-term memory unreachable: {type(e).__name__})"
             if not home:
@@ -367,6 +423,23 @@ class HestiaF1aDispatcher:
         tags = str(intent.args.get("tags", "") or "")
         try:
             stored = self._membot_call("memory_store", {"content": content, "tags": tags})
+        except Exception as e:
+            return ResultEnvelope(ok=False, error=f"membot ({type(e).__name__}): {e}")
+        # THE SAVE IS THE DESTRUCTIVE ACT. save_cartridge serialises the session over the
+        # file, so saving a session that stored nothing replaces the cartridge with an
+        # empty one. Only a confirmed store earns a save; anything else is reported as the
+        # failure it is, and the file on disk is left exactly as it was.
+        if not any(m in stored for m in self._STORE_CONFIRMED):
+            return ResultEnvelope(ok=False,
+                                  error=f"membot did not store this memory, so the cartridge was "
+                                        f"NOT saved (saving now would overwrite it with an empty "
+                                        f"one): {stored[:200]}")
+        if any(m in stored for m in self._STORED_DUPLICATE):
+            # Nothing changed, so do not run the serializer over the file at all. The act
+            # succeeded from the being's side: the memory it wanted kept is kept.
+            return ResultEnvelope(ok=True, result=f"{stored}; cartridge not saved (nothing changed)",
+                                  witness_id=self._local._witness(f"remember {content[:80]}"))
+        try:
             saved = self._membot_call("save_cartridge", {"name": self.membot_cartridge})
         except Exception as e:
             return ResultEnvelope(ok=False, error=f"membot ({type(e).__name__}): {e}")
