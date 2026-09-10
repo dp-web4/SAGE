@@ -713,3 +713,32 @@ def test_git_read_cat_returns_a_file_at_a_revision_and_still_takes_no_flags():
                      (({"op": "cat", "path": "a b.py"}), "may not contain whitespace")):
         with pytest.raises(ValueError, match=msg):
             git_read_command(bad, ctx)
+
+
+
+def test_git_restore_takes_its_content_from_history_and_no_flags():
+    """Restoring a file was possible with cat + memory_write(replace) and impossible in
+    practice: it means copying the file verbatim through the being's own output. Fifteen
+    beats, a 4,621-char file it could read perfectly, never restored. The reconstruction
+    was the wall, not the intent."""
+    import pytest
+    from sage.gateway.being_gate_client import git_restore_command, _REGISTRY, _CONSEQUENTIAL
+    from sage.gateway.heartbeat import EXPLORE_TOOLS
+    ctx = {"worktree": "/tmp/wt"}
+
+    cmd = git_restore_command({"rev": "cc64c838c", "path": "a/b.py"}, ctx)
+    assert cmd.startswith("git --no-pager -C /tmp/wt checkout cc64c838c -- ")
+    assert cmd.endswith("/tmp/wt/a/b.py")          # absolute, resolved inside the worktree
+
+    for bad, msg in ((({"rev": "cc64c838c"}), "needs a 'path'"),
+                     (({"path": "a/b.py"}), "must be a sha"),
+                     (({"rev": "--upload-pack=x", "path": "a/b.py"}), "must be a sha"),
+                     (({"rev": "HEAD", "path": "../../etc/passwd"}), "plain path inside"),
+                     (({"rev": "HEAD", "path": "a b.py"}), "may not contain whitespace")):
+        with pytest.raises(ValueError, match=msg):
+            git_restore_command(bad, ctx)
+    with pytest.raises(ValueError, match="needs a worktree"):
+        git_restore_command({"rev": "HEAD", "path": "a.py"}, {})
+
+    assert "git_restore" in _REGISTRY and "git_restore" in _CONSEQUENTIAL
+    assert "git_restore" in EXPLORE_TOOLS

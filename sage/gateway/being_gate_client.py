@@ -473,6 +473,40 @@ def pr_open_command(args: dict, ctx: Optional[dict] = None) -> str:
             f"--title {shlex.quote(title)} --body-file -")
 
 
+def git_restore_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """`git checkout <rev> -- <path>`: put one file back to a committed state.
+
+    WHY A VERB FOR THIS. Restoring a file was possible in principle with git_read cat plus
+    memory_write mode=replace — and impossible in practice, because it means copying the
+    whole file verbatim through the being's own output. Measured: legion-being spent
+    fifteen beats unable to restore a 4,621-char file it could read perfectly well. The
+    reconstruction, not the intent, was the wall.
+
+    SAFETY IS THE REV. The content can only come from a commit, so this cannot invent a
+    file or write being-authored bytes — everything it can produce already exists in the
+    repository's history. What it CAN destroy is uncommitted work on that one path, which
+    is the point (that is what "undo my mess" means) and is said plainly in the result."""
+    import re
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError("git_restore needs a worktree of your own; none is configured on this seat")
+    rev = str(args.get("rev", "")).strip()
+    if not re.fullmatch(_REV, rev):
+        raise ValueError(f"git_restore 'rev' must be a sha, HEAD, HEAD~n or a branch name, got {rev!r}")
+    path = str(args.get("path", "")).strip()
+    if not path:
+        raise ValueError("git_restore needs a 'path': the one file to put back")
+    if any(ch.isspace() for ch in path) or any(ch.isspace() for ch in rev):
+        raise ValueError("git_restore 'path' and 'rev' may not contain whitespace")
+    if path.startswith("-") or ".." in path.split("/"):
+        raise ValueError(f"git_restore 'path' must be a plain path inside your worktree, got {path!r}")
+    full = os.path.realpath(os.path.join(worktree, path))
+    root = os.path.realpath(worktree)
+    if not full.startswith(root + os.sep):
+        raise ValueError(f"git_restore 'path' escapes your worktree: {path!r}")
+    return f"git --no-pager -C {worktree} checkout {rev} -- {full}"
+
+
 def pr_amend_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The shell command for a pr_amend intent: `gh pr edit --body-file -` on the PR the
     being's current branch already has open, or `true` when only the commit changes.
@@ -558,6 +592,10 @@ _REGISTRY = {
     # judges the outward `gh pr edit` rather than a friendly verb name.
     "pr_amend":       dict(tool="pr_amend",    path_args=(),       cmd_arg=None,
                            compose=pr_amend_command),
+    # git_restore: put ONE file back to a committed state. Composed like check and git_read;
+    # the content can only come from history, so the being cannot author bytes through it.
+    "git_restore":    dict(tool="git_restore",  path_args=("path",), cmd_arg=None,
+                           compose=git_restore_command),
     # git_read: read the history of the tree that constitutes it. Composed like check —
     # the being names an op, the SEAT builds the command, the law judges THAT string, and
     # the being never holds a flag. See git_read_command for what it composes with.
@@ -603,7 +641,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "check", "git_read", "say", "pr_open",
-                            "pr_amend"})
+                            "pr_amend", "git_restore"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -682,6 +720,14 @@ _TOOL_SCHEMAS = {
                   "message": "what this revision changes and why (the commit body)",
                   "body": "the corrected PR body (optional; omit to leave it as written)"},
                  ["title", "message"]),
+    "git_restore": ("Put ONE file back to the way it was at a commit — `git checkout <rev> -- "
+                    "<path>`. Use it to undo your own edits to a file rather than trying to "
+                    "retype it: the content comes from history, so you cannot get it wrong. "
+                    "Uncommitted changes to that path are DISCARDED, which is usually the "
+                    "point; nothing else in your worktree is touched.",
+                    {"rev": "the commit to take the file from, e.g. a sha or HEAD",
+                     "path": "the one file to restore, inside your worktree"},
+                    ["rev", "path"]),
     "recall": ("Search your long-term memory (semantic search over everything you have "
                "remembered). Use it before deciding what to do; use it when something "
                "feels familiar.",

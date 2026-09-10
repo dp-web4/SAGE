@@ -915,6 +915,42 @@ class HestiaF1aDispatcher:
                                       "note": "your worktree is now on this branch; a reviewer "
                                               "who is not you decides. You cannot merge it."})
 
+    def _do_git_restore(self, intent: BeingIntent) -> ResultEnvelope:
+        """Put one file back to a committed state. Same composed shape as check/git_read:
+        the being names a rev and a path, the SEAT builds the command, the law judges that
+        string, and the being never holds a flag.
+
+        The result reports the file's size before and after, because "it worked" and "it
+        changed nothing" are different answers and only one of them is progress."""
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import git_restore_command
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="git_restore needs a worktree of your own; none is configured")
+        try:
+            cmd = git_restore_command(intent.args, {"worktree": self.worktree})
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        target = os.path.realpath(os.path.join(self.worktree, str(intent.args["path"])))
+        before = os.path.getsize(target) if os.path.exists(target) else 0
+        try:
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+                                  capture_output=True, timeout=120)
+        except Exception as e:
+            return ResultEnvelope(ok=False, error=f"git_restore could not run: {type(e).__name__}: {e}")
+        if proc.returncode != 0:
+            return ResultEnvelope(ok=False,
+                                  error=f"git_restore failed: {(proc.stderr or proc.stdout).strip()[:300]}")
+        after = os.path.getsize(target) if os.path.exists(target) else 0
+        rev = str(intent.args["rev"])
+        return ResultEnvelope(
+            ok=True,
+            result=(f"RESTORED {os.path.basename(target)} to its content at {rev}. "
+                    f"It was {before} bytes and is now {after} bytes. Any uncommitted edits you "
+                    f"had made to this one file are gone; nothing else was touched."),
+            witness_id=self._local._witness(f"git_restore {os.path.basename(target)} @ {rev}"))
+
     def _do_pr_amend(self, intent: BeingIntent) -> ResultEnvelope:
         """Revise a proposal already open: commit onto the same branch, push, optionally
         replace the PR body. Same witnessed shape as pr_open.

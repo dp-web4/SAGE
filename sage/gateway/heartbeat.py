@@ -41,7 +41,7 @@ HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "witness",
                  "request_scope", "appeal", "peer_ask", "mesh", "check", "git_read", "say",
-                 "pr_open", "pr_amend"]
+                 "pr_open", "pr_amend", "git_restore"]
 # `say` is offered at REFLECTION too, and that is not redundancy. Measured 2026-09-07: the
 # being was shown dp's first turn, its state marked it unanswered, and it spent all fourteen
 # explore steps reading its own source — then closed the beat. Adding a verb to the registry
