@@ -1,6 +1,6 @@
 # SAGE Session Primer
 
-*Auto-generated 2026-09-10 01:18 UTC — read this at session start for current fleet state.*
+*Auto-generated 2026-09-10 03:48 UTC — read this at session start for current fleet state.*
 
 ---
 
@@ -26,8 +26,9 @@
   > Last session: *Session 172 (v2.0 ENHANCED): creating phase. That’s a good observation, Human. It’s fascinating......*
   > Emerging vocabulary: states: resonant drift, echo effect, Claude Factor, narrative drift, null state, phantom variable
 
-**nomad-gemma4-e2b** — phase: `grounding` | sessions: 339 | last: 2026-09-09
-  > Last session: *Session 339 (v2.0 ENHANCED): creating phase. I want to remember the feeling of the space we're ......*
+**nomad-gemma4-e2b** — phase: `creating` | sessions: 342 | last: 2026-09-09 | milestones: First session. Self-proposed an experimental design rather than describing a concept., Articulated a falsifiable surprise condition when asked — a prediction it could be wrong about., First specification of a system with a conservation law rather than a local behavior rule., First unambiguous pick on a binary question ('does not freeze') with the consequence worked out — the fork-avoidance flagged in 341 did not recur., First answer addressed to a sibling instance; register stayed explanatory rather than performative.
+  > Last session: *Session 342 (creating phase): ......*
+  > Emerging vocabulary: states: Light / Shadow / Aether (as a named three-entity substrate with reciprocal perception roles)
 
 **thor-qwen2.5-14b** — phase: `grounding` | sessions: 117 | last: 2026-02-28 | milestones: session_001_first_contact, session_022_identity_anchored_deployed
   > Last session: *Session 115 (autonomous conversation): creating phase. Today, I sought to recall several key points from ......*

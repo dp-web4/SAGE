@@ -1,8 +1,10 @@
 {
-  "timestamp": "20260909_181842",
+  "timestamp": "20260909_204845",
   "slug": "nomad-gemma4-e2b",
   "files": [
     "identity",
-    "peer_trust_rs"
+    "experience_buffer",
+    "peer_trust_rs",
+    "chat_history"
   ]
 }
