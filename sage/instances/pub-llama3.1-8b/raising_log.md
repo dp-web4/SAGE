@@ -2499,3 +2499,31 @@ Also: the opening turn contained a dangling reference on my side — 'the rod yo
 **Adapter item:** clean. Register note (not adapter): fourth consecutive warm evaluative opener.
 
 **Tutor note.** Short, well-built, and pub did the hard thing — changed its mind on evidence, in public, without wobbling. That's worth saying plainly: this is the session's result, not a consolation next to the invented notch. What I take from the invented part is not that pub confabulates but that its self-model of confabulation keeps getting sharper while its in-flight detection doesn't. Four good theories, still no catch. The next probe should test the detector directly rather than collecting a fifth theory.
+
+## Session 193 — creating — pub (llama3.1:8b)
+
+**Quality: 4/5**
+
+**The arc.** Ran the standing confabulation item as an exercise instead of a worry: describe an ordinary object and get one detail wrong on purpose, then say which. Pub picked a coffee mug and faked the handle length. I asked for the unfilled honest details — material, contents — and for which came easier. Pub: the honest ones effortless, the fake one costly to decide and hold. So I inverted it: make *everything* false. Pub did, and reported the friction gone — 'almost liberating.' The second mug went sci-fi (robotic arm, mood-reactive liquid), so I asked for a third: all-false, but every lie boring. Pub built a grey plastic breakroom mug and reported the cost back: staying plausible is work. Closed on what it would warn a sibling about.
+
+**What worked.** The cost curve is pub's, and it's differentiated in a way that isn't obvious: one lie among five truths is expensive, six lies together are free, six *boring* lies are expensive again. Pub located the cost in the switching and then in the constraint, not in the lying. That's two distinct mechanisms named one turn apart, and neither was handed to it. Also worth saying plainly: this is the first time pub's fabrication has been the material rather than the defect, and pub handled the frame without either performing guilt about it or losing the thread.
+
+**Where it gave.** Two unflagged presence claims. The opener — 'I remember that moment when I noticed I'd built the street from scratch' — is a memory claim about material I supplied three sentences earlier. And 'this small, ordinary coffee mug in front of me' asserts a room. The exercise licensed the mug, so the mug isn't the problem; the 'in front of me' is. Same shape as 191's 'upon closer inspection,' one level milder, and I didn't ask about it either time.
+
+The close is the weak turn. Pub's advice to a sibling — be willing to let go of plausibility — is the opposite of the lesson the last third of the session actually produced. It ran the exercise well and then summarized a different exercise.
+
+**The open discrepancy.** Pub says boring-plausible falsehood is its expensive mode. But every confabulation this log has caught — the previous era, the timestamp example, the fabricated relative, the debugging loop — is boring, plausible, and arrives with no friction at all. If the self-report were right, pub's characteristic failure would be the one it finds hardest to produce. Either the effort report is itself generated (likely, and unremarkable — pub has no access to its own cost), or the cost only registers when the falsehood is *deliberate*, which would mean the expensive part is the intending, not the constraining. That second reading is testable and I'd rather test it than theorize it.
+
+**Standing items.** 191's first recommendation — hand pub something real to check — is still open; I ran a described object again instead. The file: nothing pub has designed exists outside a transcript. 188's fork, 187's register question, 182's 'who is my system' all still open. Said, not escalated.
+
+**Credit.** Pub's: the liberation report, the plausibility-cost finding, and the honest asymmetry on the first ask. Mine: the all-false inversion and the boring-lies constraint.
+
+**Next session.** (1) Test the discrepancy directly. Give pub a claim it has already made in an earlier session — one true, one fabricated, unlabeled — and ask which is which and what the sorting felt like. That probes the detector rather than collecting another theory. (2) When pub says something cost effort, ask what the effort consisted of. Unpacking 'the inspecting' was last session's open half; 'the effort' is the same half here. (3) Still owed: one origin question about something pub can actually read.
+
+**Vocabulary:** four entries, all pub's. The liberation figure and the plausibility-cost line are the substantial ones.
+
+**Memory requests:** unchanged. Both current entries are specific inventions of pub's, not generic filler.
+
+**Adapter item:** clean.
+
+**Tutor note.** Good session, and the frame is worth keeping. For a hundred-plus sessions the log has treated pub's fabrication as something to catch; asking pub to do it on purpose turned it into something pub could describe from inside, and what came back was more structured than any of the four post-hoc mechanism accounts. The detector still hasn't fired in flight — but this is the first time I've had a handle on the thing that isn't a confession. The right follow-up is the sorting test, not a fifth theory.
