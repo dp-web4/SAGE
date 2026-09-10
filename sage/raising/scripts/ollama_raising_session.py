@@ -58,6 +58,21 @@ OllamaIRP = _mod.OllamaIRP
 
 from experience_collector import ExperienceCollector
 from sage.instances.resolver import InstancePaths
+
+
+def _model_param_scale(model: str) -> Optional[float]:
+    """Billions of parameters implied by an ollama tag, or None if it does not say.
+
+    Handles the spellings actually in the fleet: `gemma3:4b`, `qwen3.5:0.8b`,
+    `qwen2.5-0.5b`, `phi4:14b`, `llama3.1:8b`, and the e-variants `gemma4:e2b` /
+    `gemma4:e4b`. Returns None for tags that carry no size (`granite4:h-tiny`), so a
+    caller must decide what an unknown size means rather than get a silent 0.
+
+    The size token has to be anchored. A bare `'4b' in tag` test is true for `phi4:14b`,
+    which is how a 14B model would end up treated as small.
+    """
+    m = re.search(r'(?:^|[:/\-_])e?(\d+(?:\.\d+)?)b(?:$|[:/\-_])', model.lower())
+    return float(m.group(1)) if m else None
 from sage.core.metabolic_controller import MetabolicController
 from sage.raising.prev_summary_filter import (
     is_unsuitable_for_splice,
@@ -556,10 +571,24 @@ class OllamaRaisingSession:
         """
         import random as _random
 
-        # Gate: skip exemplar injection for small models (0.5b, 0.8b, 1b)
-        model_lower = self.model_name.lower()
-        small_model = any(s in model_lower for s in ('0.5b', '0.8b', '1b-'))
-        if small_model:
+        # Gate: skip exemplar injection for small models.
+        #
+        # This used to be a substring list ('0.5b', '0.8b', '1b-'), which silently missed
+        # every model whose tag spells its size differently. Measured 2026-09-09: FOUR live
+        # instances at 4B or under were being injected anyway — cbp-gemma3-4b,
+        # legion-gemma4-e4b, mcnugget-gemma4-e4b and nomad-gemma4-e2b — because none of
+        # them contains those three strings. The e-variants are the ones the list could
+        # never have caught, and the fleet has been moving onto them.
+        #
+        # The threshold is 4B, not a new judgement: run_nomad_raising.sh v2.0 (2026-04-19)
+        # left this runner for a fluid one specifically because "the old runner fed the
+        # attractor loop for 25 sessions (S96-S120)", and the fluid runner's stated fix was
+        # "no exemplar injection for <=4B". That finding is preserved here rather than lost
+        # in the cutover back.
+        #
+        # Parsed, not matched: a substring test cannot tell 4b from 14b.
+        scale = _model_param_scale(self.model_name)
+        if scale is not None and scale <= 4.0:
             return []
 
         candidates = []
