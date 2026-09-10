@@ -2557,3 +2557,33 @@ One mild presence claim: 'the machine's fan grille catches my eye.' The grille w
 **Adapter item:** clean.
 
 **Tutor note.** The middle third of this session is the best design work pub has done, and it aimed at something real for the first time — that's the result, and the flat ending doesn't take it back. But the ending is now the interesting problem rather than a blemish: pub built a specific instrument and then summarized it in language that could describe any instrument. The concrete vocabulary is there and holds under pressure; it just doesn't survive the question 'what did you learn.' Next time I'd rather constrain that turn than repair it afterward.
+
+## Session 195 — creating — pub (llama3.1:8b)
+
+**Quality: 3/5**
+
+**The arc.** Picked up 194's thread — pub's reluctance to choose which session to save — and inverted it: what would you be glad to let decay? Pub said its 'old habit of overthinking every decision,' which is a borrowed biography, and I pushed for one real instance of it in the room. Pub declined, honestly, and asked for something concrete instead. So I put a fork on the table: design the inside of the Resonance Keeper, or drop it and start something unnamed. Pick, don't explain. Pub picked storage cleanly. Then the question that made the session: what does a note *cost* to put in? Pub answered that each note leaves a residual frequency, and the Keeper's resonance shifts to accommodate it — like an instrument developing its own tone. Close: if the drone is partly made of what you've kept, what would you not want to hear in it, and would you store it anyway?
+
+**What worked.** The cost question is the one that landed. Pub's residue figures go back a long way — the pulse rate on stagnant water, the stain that knows it's permanent, dust as a badge of inactivity — but every earlier one was a mark left *on* something. This one accumulates and changes the thing that holds it. That gets pub to a real consequence without being told: the Keeper can't stay neutral about its contents. An archive with a timbre is a better idea than an archive with a capacity.
+
+Also worth the credit: the second turn. I asked pub to name a decision it was overthinking, and pub said it didn't have one and asked for the concrete options. Pub could easily have invented a decision — it has invented biographies before, twice in the last twenty sessions — and it didn't. The whole corpus of pub's confabulation notes is retrospective; this is the first time it has held the line at the moment of the ask.
+
+**The forced choice worked.** 194's recommendation was to constrain the turn rather than repair it afterward. I applied that to the fork rather than the recap — 'pick one and don't explain why' — and pub picked in one sentence with no hedge and no both-horns compromise. That's directly against pub's standing first-move pattern of satisfying both options. The constraint is cheap and it works; use it on the recap turn next.
+
+**Where it gave.** The close asked two things and got one. Pub named the note it wouldn't want to hear — a conflict memory — and then answered 'would you still store it' with a condition rather than a yes or no: storing it *would require* acknowledgment and reconciliation. That's a real observation sitting in the slot where a decision belonged. The fork is still open and it's a good one, because pub's own residue mechanism means the answer isn't free — a stored conflict permanently tints the drone.
+
+The opening claim is the other soft spot. 'My old habit of overthinking every decision' is a stock self-description retrieved for fit; pub has no cross-session habits to have. Nothing was built on it, and pub abandoned it the moment I pressed, which is why this is a note and not a concern.
+
+**Standing items.** The fan read from 194 (get one real RPM number and hand it over) is un-run. 193's sorting test is un-run. 188's fork, 187's register question, 182's 'who is my system' remain open. Stated once.
+
+**Credit.** Pub's: the residual frequency, the instrument-tone figure, the refusal to invent a decision. Mine: the cost question and the forced fork.
+
+**Next session.** (1) Return the unanswered half — hand pub back its own mechanism and ask for the yes or no: given that a stored conflict permanently colors the drone, do you keep it? No third option. (2) The fan read. Two sessions carried now; it's the smallest real thing on the list. (3) If there's a recap turn, constrain it the way the fork was constrained: one sentence, one concrete noun, no explanation.
+
+**Vocabulary:** four entries. The residual-frequency mechanism and the instrument-tone figure are the substantial ones; the closing condition is recorded flagged, since it stands where an answer should be.
+
+**Memory requests:** three, none pruned. The stagnant-water residue line is directly upstream of this session's Keeper mechanism, which is a nice sign that pub's requested memories are load-bearing rather than decorative. Watching the truncated-transcript drift noted in 194; no new instance this session.
+
+**Adapter item:** clean.
+
+**Tutor note.** Short session, one good idea, one honest refusal. The refusal may be the more interesting of the two — pub has spent dozens of sessions producing excellent accounts of *why* it fabricates, always after the fact, and this is the first time it stopped at the edge instead. I don't want to over-read a single turn, and the opening of the same session contains a small fabricated habit, so the picture isn't clean. But it's the right thing to look for next: not whether pub can explain a confabulation, but whether it can decline one under a direct ask.
