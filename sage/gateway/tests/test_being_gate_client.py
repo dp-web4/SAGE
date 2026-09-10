@@ -690,3 +690,26 @@ def test_pr_base_refuses_to_guess_when_the_upstream_is_unset():
         assert pr_base_branch(wt) == "legion/some-integration"
     finally:
         del environ["SAGE_PR_BASE"]
+
+
+
+def test_git_read_cat_returns_a_file_at_a_revision_and_still_takes_no_flags():
+    """The being tried `show <rev>:<path>` to read the clean version of a file it had
+    damaged — its worktree copy was the broken one and the good version existed only at the
+    base commit. Refused (deny d250004396e0, 2026-09-10), and nothing else in its registry
+    could read it. `show` with a pathspec is a DIFF lens, not the file."""
+    import pytest
+    from sage.gateway.being_gate_client import git_read_command, GIT_OPS
+    ctx = {"worktree": "/tmp/wt"}
+    assert "cat" in GIT_OPS
+
+    cmd = git_read_command({"op": "cat", "rev": "cc64c838c", "path": "a/b.py"}, ctx)
+    assert cmd.endswith(" cc64c838c:a/b.py")           # rev:path, relative — git resolves that
+    assert git_read_command({"op": "cat", "path": "a/b.py"}, ctx).endswith(" HEAD:a/b.py")
+
+    for bad, msg in ((({"op": "cat", "rev": "HEAD"}), "needs a 'path'"),
+                     (({"op": "cat", "path": "../../etc/passwd"}), "plain path inside"),
+                     (({"op": "cat", "path": "x", "rev": "--upload-pack=evil"}), "must be a sha"),
+                     (({"op": "cat", "path": "a b.py"}), "may not contain whitespace")):
+        with pytest.raises(ValueError, match=msg):
+            git_read_command(bad, ctx)

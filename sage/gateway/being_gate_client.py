@@ -274,7 +274,13 @@ def sandbox_prefix(worktree: str) -> str:
 #     core.pager=cat so a repo-local config cannot turn a read into an exec.
 # Only these five subcommands, no others, and every argument is matched against a grammar
 # before it can reach the shell.
-GIT_OPS = ("log", "show", "diff", "status", "blame")
+# `cat` reads a FILE'S CONTENT at a revision — `git show <rev>:<path>` — which `show`
+# cannot do: show with a pathspec is a DIFF lens, not the file. The being hit this trying
+# to rebuild a file it had damaged: its worktree copy was the broken one, the clean version
+# existed only at the base commit, and nothing in its registry could read it (deny
+# d250004396e0, 2026-09-10). Without an edit verb every change means rewriting a whole file,
+# and rewriting a file you cannot read at its last good revision is guesswork.
+GIT_OPS = ("log", "show", "diff", "status", "blame", "cat")
 
 # A revision the being may name: a hex sha, HEAD with optional ~n/^n, or a plain branch or
 # tag name. Deliberately excludes anything containing a flag, a space, or a path separator
@@ -368,6 +374,17 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         # genuinely looks like traversal; the command should not hand it one.
         span = f"{rev} {rev2}" if rev and rev2 else (rev or "HEAD~1")
         return f"{base} diff --no-ext-diff --no-textconv {span}" + (f" -- {path}" if path else "")
+    if op == "cat":
+        if not path:
+            raise ValueError("git_read op='cat' needs a 'path': the file whose content you want")
+        # `<rev>:<path>` is ONE argument to git and the being supplies neither half raw —
+        # the rev passed _REV, the path was resolved absolute inside the worktree above. The
+        # path must be repo-relative here, so it is relativised back; an absolute path after
+        # a colon is not a thing git resolves.
+        rel = os.path.relpath(path, os.path.realpath(worktree))
+        if rel.startswith(".."):
+            raise ValueError(f"git_read 'path' escapes your worktree: {rel!r}")
+        return f"{base} show --no-ext-diff --no-textconv {rev or 'HEAD'}:{rel}"
     if not path:
         raise ValueError("git_read op='blame' needs a 'path' inside your worktree")
     return f"{base} blame --no-textconv -L 1,120 {rev or 'HEAD'} -- {path}"
