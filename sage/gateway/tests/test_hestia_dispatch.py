@@ -68,8 +68,16 @@ class FakeMembot(FakeMcp):
         super().__init__(endpoint, plugin_id)
         self.fail = dict(fail or {})
 
+    # membot's SOFT failures are ordinary text, not rpc/isError — the shape that emptied
+    # legion-being's cartridge on 2026-09-08. `fail[tool] = "soft"` reproduces them.
+    SOFT = {"mount_cartridge": "SECURITY: Cartridge 'x' failed integrity check: "
+                               "manifest read error: len() of unsized object. Refusing to mount.",
+            "memory_store": "No cartridge mounted. Use mount_cartridge first.",
+            "memory_search": "No cartridge mounted. Use mount_cartridge first.",
+            "save_cartridge": "Saved 'x': 0 memories, 0.0 MB, fingerprint=5feceb66ffc86f38"}
+
     def call(self, name, args):
-        if name not in ("memory_search", "memory_store", "save_cartridge"):
+        if name not in ("memory_search", "memory_store", "save_cartridge", "mount_cartridge"):
             return super().call(name, args)
         FakeMcp.calls.append((name, args))
         how = self.fail.get(name)
@@ -78,8 +86,13 @@ class FakeMembot(FakeMcp):
         if how == "isError":
             return {"result": {"content": [{"type": "text", "text": f"Error calling tool {name}"}],
                                "isError": True}}
+        if how == "soft":
+            t = self.SOFT[name]
+            return {"result": {"content": [{"type": "text", "text": t}],
+                               "structuredContent": {"result": t}}}
         text = {"memory_search": "1. something remembered",
-                "memory_store": "Stored memory abc",
+                "memory_store": "Stored memory #7 (12ms)",
+                "mount_cartridge": f"Mounted '{args.get('name')}': 223 memories",
                 "save_cartridge": f"Saved cartridge {args.get('name')}"}[name]
         return {"result": {"content": [{"type": "text", "text": text}],
                            "structuredContent": {"result": text}}}
@@ -312,6 +325,7 @@ def test_remember_stores_then_saves_the_seat_fixed_cartridge():
                                      "name": "someone-elses-cartridge"}), _ALLOW)
     assert env.ok and env.witness_id, env
     assert _mb_calls("memory_store") == [{"content": "lesson one", "tags": "a,b"}]
+    assert _mb_calls("mount_cartridge") == [{"name": "sprout-being"}]     # mounted before storing
     assert _mb_calls("save_cartridge") == [{"name": "sprout-being"}]
     order = [n for n, _ in FakeMcp.calls if n in ("memory_store", "save_cartridge")]
     assert order == ["memory_store", "save_cartridge"]
@@ -554,3 +568,131 @@ def test_instance_config_peer_aliases_reach_the_dispatcher(tmp_path=None):
     assert instance_config(inst / "missing") == {}
     d = HestiaF1aDispatcher("legion-being", memory_root=str(inst), peer_aliases=cfg["peer_aliases"])
     assert d.peer_aliases["sprout-being"] == "2e175714-id"
+
+
+# -- the cartridge-destroying path, reproduced (legion-being, 2026-09-08) ---------------
+#
+# 223 memories stood at 21:36:20Z. Every beat after that reported ok and left a 0-memory
+# cart. membot says "No cartridge mounted" as ORDINARY TEXT, so the store looked like a
+# success; save_cartridge then serialised the empty session over the populated file, and
+# the empty file fails membot's next integrity check, so the loop sustains itself.
+def test_a_store_that_did_not_store_never_triggers_a_save():
+    """THE LOAD-BEARING GUARD. The save is the destructive act: it writes the session over
+    the file. A store that membot did not confirm must leave the cartridge untouched."""
+    d, _ = _mdisp(fail={"memory_store": "soft"})
+    env = d(BeingIntent("remember", {"content": "a lesson worth keeping"}), _ALLOW)
+    assert not env.ok, env
+    assert env.witness_id is None, "an unstored memory is not witnessed as kept"
+    assert "did not store" in env.error and "NOT saved" in env.error
+    assert "overwrite it with an empty one" in env.error
+    assert _mb_calls("save_cartridge") == [], "the file must be left exactly as it was"
+
+
+def test_a_refused_mount_fails_the_act_and_is_not_cached():
+    """mount_cartridge answers "SECURITY: ... Refusing to mount." in plain text. Unchecked,
+    it leaves a cartridge-less session that stores nothing and saves emptiness."""
+    d, _ = _mdisp(fail={"mount_cartridge": "soft"})
+    env = d(BeingIntent("remember", {"content": "x"}), _ALLOW)
+    assert not env.ok and "refused to mount" in env.error and "integrity check" in env.error
+    assert _mb_calls("memory_store") == [] and _mb_calls("save_cartridge") == []
+    # not cached: the next act tries the mount again rather than inheriting a dead session
+    d(BeingIntent("remember", {"content": "y"}), _ALLOW)
+    assert len(_mb_calls("mount_cartridge")) == 2
+
+
+def test_recall_without_a_cartridge_says_so_instead_of_reporting_an_empty_past():
+    """A silent empty answer would teach the being its past is gone when the store is
+    merely unreachable — the false-absence class, applied to memory.
+
+    ADAPTED from legion's c62fadf0b, which asserted ok=False. Mainline recall now answers
+    from the being's home FIRST and long-term memory second, so a membot outage no longer
+    empties the answer and ok=False would discard a good home result. The invariant that
+    matters is preserved and is asserted here on the text the being actually reads: it is
+    told long-term memory was NOT searched, in those words."""
+    d, _ = _mdisp(fail={"memory_search": "soft"})
+    env = d(BeingIntent("recall", {"query": "what did I learn"}), _ALLOW)
+    assert "NOT searched" in env.result
+    assert "not an empty past" in env.result
+    assert "From long-term memory" not in env.result
+
+
+def test_a_confirmed_store_still_saves():
+    """The guard must not block the working path: a real store is followed by the save,
+    in that order, and is witnessed."""
+    d, _ = _mdisp()
+    env = d(BeingIntent("remember", {"content": "keep me", "tags": "t"}), _ALLOW)
+    assert env.ok and env.witness_id and "Stored memory #7" in env.result
+    order = [n for n, _ in FakeMcp.calls if n in ("mount_cartridge", "memory_store", "save_cartridge")]
+    assert order == ["mount_cartridge", "memory_store", "save_cartridge"]
+
+
+def test_a_duplicate_succeeds_without_running_the_destructive_save():
+    """A duplicate changed nothing, so the serializer must not run over the file.
+
+    Legion's original guard counted a duplicate as "confirmed" and saved anyway. Saving
+    when nothing changed is risk with no benefit, since save_cartridge is precisely the
+    operation that emptied a cartridge in the first place (gpt's review of #65). The act
+    still succeeds and is witnessed: the memory the being wanted kept is kept."""
+    d, _ = _mdisp()
+    d._mb = None
+    class Dup(FakeMembot):
+        def call(self, name, args):
+            if name == "memory_store":
+                FakeMcp.calls.append((name, args))
+                t = 'Duplicate — already stored, skipped: "keep me"'
+                return {"result": {"content": [{"type": "text", "text": t}],
+                                   "structuredContent": {"result": t}}}
+            return super().call(name, args)
+    d._mcp_factory = lambda ep, pid: Dup(ep, pid)
+    FakeMcp.calls = []
+    env = d(BeingIntent("remember", {"content": "keep me"}), _ALLOW)
+    assert env.ok and env.witness_id, env
+    assert "nothing changed" in env.result
+    assert _mb_calls("save_cartridge") == [], "a duplicate must not run the serializer"
+
+
+def test_a_duplicate_still_saves_when_the_session_holds_unpersisted_work():
+    """The failure/retry sequence gpt found on #66.
+
+    A NEW store succeeds, its save then fails, so the memory lives only in membot's
+    volatile session. The retry of the same content is answered "Duplicate — already
+    stored" BY THAT SESSION, which is the one place it exists. Letting a duplicate skip
+    the save there would report ok for a memory that is one crash from gone, which is the
+    same class of lie as the empty-cartridge bug this guard exists to stop, arriving from
+    the other direction. A dirty session always saves."""
+    FakeMcp.calls = []
+    root = tempfile.mkdtemp(prefix="hd-")
+
+    class Flaky(FakeMembot):
+        stores = 0
+        save_fails = True
+
+        def call(self, name, args):
+            if name == "memory_store":
+                FakeMcp.calls.append((name, args))
+                Flaky.stores += 1
+                t = ("Stored memory #7 (12ms)" if Flaky.stores == 1
+                     else 'Duplicate — already stored, skipped: "keep me"')
+                return {"result": {"content": [{"type": "text", "text": t}],
+                                   "structuredContent": {"result": t}}}
+            if name == "save_cartridge" and Flaky.save_fails:
+                FakeMcp.calls.append((name, args))
+                return {"jsonrpc": "2.0", "id": 1,
+                        "error": {"code": -32603, "message": "save_cartridge exploded"}}
+            return super().call(name, args)
+
+    d = HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: Flaky(ep, pid))
+
+    first = d(BeingIntent("remember", {"content": "keep me"}), _ALLOW)
+    assert not first.ok and "save_cartridge exploded" in first.error, first
+    assert d._mb_dirty, "a failed save must leave the session marked unpersisted"
+
+    Flaky.save_fails = False
+    FakeMcp.calls = []
+    retry = d(BeingIntent("remember", {"content": "keep me"}), _ALLOW)
+    assert retry.ok and retry.witness_id, retry
+    assert "nothing changed" not in (retry.result or ""), \
+        "this duplicate DID have something to change: the disk did not have it"
+    assert _mb_calls("save_cartridge") == [{"name": "sprout-being"}], \
+        "a duplicate on a dirty session must still persist"
+    assert not d._mb_dirty, "a successful save clears the flag"
