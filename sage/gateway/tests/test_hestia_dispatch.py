@@ -597,6 +597,12 @@ def test_pr_open_commits_with_the_beings_trailers_and_runs_the_judged_gh_command
     from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
     from sage.gateway.being_gate_client import BeingIntent
 
+    # pr_base_branch now REFUSES rather than guessing "main" when legion-being/work has no
+    # upstream (the defect that mis-based #63). This fixture has no upstream, and it is
+    # testing pr_open's commit/trailer/gh behaviour rather than base resolution, so name the
+    # base explicitly — which is the same escape hatch the refusal message points at.
+    monkeypatch.setenv("SAGE_PR_BASE", "legion/mission-artifact")
+
     origin = tmp_path / "origin.git"
     subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
     wt = tmp_path / "wt"

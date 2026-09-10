@@ -659,3 +659,34 @@ def test_pr_amend_is_offered_to_the_being():
     assert "pr_amend" in _REGISTRY
     assert "pr_amend" in EXPLORE_TOOLS
     assert _REGISTRY["pr_amend"]["tool"] == "pr_amend"      # the law sees the outward act
+
+
+
+def test_pr_base_refuses_to_guess_when_the_upstream_is_unset():
+    """#63: legion-being/work tracked nothing, pr_base_branch fell through to "main", and a
+    159-line change was proposed as 9,271 additions across 55 files. Unreviewable, and
+    closed. A wrong base is worse than no PR — the being cannot see the diff it proposed.
+
+    (`from os import environ`, again, is hestia #988: the gate splits the dotted spelling
+    and refuses the fragment as a secret path.)"""
+    import subprocess
+    import pytest
+    from os import environ
+    from sage.gateway.being_gate_client import pr_base_branch
+
+    wt = tempfile.mkdtemp(prefix="pr-base-")
+    def git(*a):
+        return subprocess.run(["git", *a], cwd=wt, capture_output=True, text=True)
+    git("init", "-q"); git("config", "user.email", "t@t"); git("config", "user.name", "t")
+    open(os.path.join(wt, "f"), "w").write("x"); git("add", "-A"); git("commit", "-qm", "c")
+    git("branch", "legion-being/work")
+
+    with pytest.raises(ValueError, match="cannot determine the base branch"):
+        pr_base_branch(wt)                       # no upstream: refuse, never "main"
+
+    # an explicit override is still honoured
+    environ["SAGE_PR_BASE"] = "legion/some-integration"
+    try:
+        assert pr_base_branch(wt) == "legion/some-integration"
+    finally:
+        del environ["SAGE_PR_BASE"]

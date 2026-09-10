@@ -43,6 +43,12 @@ if [ "$BR" != "legion-being/work" ]; then
   exit 4
 fi
 git fetch -q origin "$REF"
+# The upstream is what pr_open reads to choose a PR's base branch. It was never set, so
+# pr_base_branch fell through to "main" and the being's first PR (#63) proposed a 159-line
+# change against a tree that shares almost nothing with it: 9,271 additions across 55 files,
+# unreviewable, closed. Set it every sync, so the base is whatever the seat last synced to.
+git branch --set-upstream-to="origin/$REF" legion-being/work >/dev/null 2>&1 || \
+  echo "WARNING: could not set upstream to origin/$REF; pr_open will refuse to guess a base" >&2
 if [ "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)" ]; then
   echo "already at $(git log --oneline -1)"
   exit 0

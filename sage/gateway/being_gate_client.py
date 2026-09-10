@@ -417,7 +417,17 @@ def pr_base_branch(worktree: str) -> str:
             return up[len("origin/"):]
     except Exception:
         pass
-    return "main"
+    # NO GUESSING. This used to fall back to "main", and that fallback cost the being its
+    # first pull request: `legion-being/work` tracked nothing, so #63 targeted main and
+    # showed 9,271 additions across 55 files for a 159-line change — unreviewable at a
+    # glance, and closed. A wrong base is worse than no PR, because the being cannot see
+    # the diff it proposed and has no way to discover the base was wrong.
+    raise ValueError(
+        "cannot determine the base branch for your pull request: legion-being/work has no "
+        "upstream. Tell your seat — it sets the upstream when it syncs your worktree "
+        "(scripts/sync_being_worktree.sh), or SAGE_PR_BASE can name the base explicitly. "
+        "Refusing rather than guessing 'main': a mis-based PR buries a small change in "
+        "thousands of unrelated lines")
 _SLUG = r"[a-z0-9][a-z0-9-]{1,40}"
 
 
