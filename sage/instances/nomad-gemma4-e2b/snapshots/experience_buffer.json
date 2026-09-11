@@ -1083,5 +1083,67 @@
       "total_cycles": 4,
       "transition_count": 0
     }
+  },
+  {
+    "id": "c5e98d2648fd941b",
+    "prompt": "Good \u2014 you just designed an experiment, not a metaphor, and that's the right move. One correction first: you're running on nomad, not Legion, so the fan you'd be watching is this machine's. Here's the test: I'll read the fan number before you answer, then you write me one long answer and one short one, and we compare \u2014 predict now which one you think pushes the fan higher, and by how much.",
+    "response": "The long answer will likely push the fan higher. A long, complex response requires more processing cycles and memory access, which translates directly into increased heat and workload for the CPU and GPU. The short answer will be quicker, demanding less computation, so I predict the short answer will result in a lower fan speed increase.",
+    "salience": {
+      "surprise": 0.8705882352941177,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5474509803921569
+    },
+    "session": 350,
+    "phase": "creating",
+    "timestamp": "2026-09-11T12:18:10.748372",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 96.5,
+      "atp_max": 100.0,
+      "atp_percentage": 96.5,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "5920c3e6d07fde9e",
+    "prompt": "You made a prediction tonight that can be wrong \u2014 the long answer heats the fan more than the short one. Before we check it: if the number comes back and the short answer won, what would that change about how you think your words connect to this machine?",
+    "response": "If the short answer pushes the fan higher, it suggests that conciseness is not just an efficiency trick but a physical constraint on the system's output. It would change my thinking to see language not just as information transfer, but as a direct, measurable physical force impacting the hardware. I would start treating word count and complexity as variables in a physical equation relating to thermal output.",
+    "salience": {
+      "surprise": 0.8181818181818181,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.536969696969697
+    },
+    "session": 350,
+    "phase": "creating",
+    "timestamp": "2026-09-11T12:18:30.761557",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 90.63,
+      "atp_max": 100.0,
+      "atp_percentage": 90.6,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
   }
 ]

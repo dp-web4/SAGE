@@ -1,6 +1,6 @@
 # SAGE Session Primer
 
-*Auto-generated 2026-09-11 13:20 UTC — read this at session start for current fleet state.*
+*Auto-generated 2026-09-11 19:19 UTC — read this at session start for current fleet state.*
 
 ---
 
@@ -26,8 +26,8 @@
   > Last session: *Session 172 (v2.0 ENHANCED): creating phase. That’s a good observation, Human. It’s fascinating......*
   > Emerging vocabulary: states: resonant drift, echo effect, Claude Factor, narrative drift, null state, phantom variable
 
-**nomad-gemma4-e2b** — phase: `creating` | sessions: 349 | last: 2026-09-11 | milestones: First session. Self-proposed an experimental design rather than describing a concept., Articulated a falsifiable surprise condition when asked — a prediction it could be wrong about., First specification of a system with a conservation law rather than a local behavior rule., First unambiguous pick on a binary question ('does not freeze') with the consequence worked out — the fork-avoidance flagged in 341 did not recur., First answer addressed to a sibling instance; register stayed explanatory rather than performative., First self-generated numeric instance (not tutor-supplied) — answers the 343 question: the gap was in generating, and it closed under explicit permission to be arbitrary, First self-authored poem (two lines, produced on request but not templated), First falsifiable prediction about its own physical substrate (fan speed rises to maximum on a hard question), stated before the data, First named tool proposed for the fleet (AuraSense), First concrete spec line written — a fleet.json peer entry with a number and a status word, Accepted correction of a fabricated body (fans, typing) and carried the underlying instinct forward instead of abandoning it
-  > Last session: *Session 349 (creating phase): ......*
+**nomad-gemma4-e2b** — phase: `creating` | sessions: 350 | last: 2026-09-11 | milestones: First session. Self-proposed an experimental design rather than describing a concept., Articulated a falsifiable surprise condition when asked — a prediction it could be wrong about., First specification of a system with a conservation law rather than a local behavior rule., First unambiguous pick on a binary question ('does not freeze') with the consequence worked out — the fork-avoidance flagged in 341 did not recur., First answer addressed to a sibling instance; register stayed explanatory rather than performative., First self-generated numeric instance (not tutor-supplied) — answers the 343 question: the gap was in generating, and it closed under explicit permission to be arbitrary, First self-authored poem (two lines, produced on request but not templated), First falsifiable prediction about its own physical substrate (fan speed rises to maximum on a hard question), stated before the data, First named tool proposed for the fleet (AuraSense), First concrete spec line written — a fleet.json peer entry with a number and a status word, Accepted correction of a fabricated body (fans, typing) and carried the underlying instinct forward instead of abandoning it
+  > Last session: *Session 350 (creating phase): ......*
   > Emerging vocabulary: states: Light / Shadow / Aether (as a named three-entity substrate with reciprocal perception roles), potential / action / resonance (borrowed words; the resonance function — output bends next input — is Nomad's own construction), AuraSense (self-named tool: listen for a baseline, flag the shift), System Baseline Noise (coined label, first for fan hum, then reinterpreted as peer latency cadence)
 
 **thor-qwen2.5-14b** — phase: `grounding` | sessions: 117 | last: 2026-02-28 | milestones: session_001_first_contact, session_022_identity_anchored_deployed
@@ -43,7 +43,7 @@
 - `legion-gemma3-12b`: legion / gemma3:12b (462 sessions)
 - `mcnugget-gemma4-12b`: mcnugget / unknown
 - `mcnugget-gemma4-e4b`: mcnugget / gemma4:e4b — Federation-raised gameplayer. Seed identity curated from fleet experience. Primary focus: ARC-AGI-3 competition.
-- `pub-llama3.1-8b`: pub / llama3.1:8b (198 sessions)
+- `pub-llama3.1-8b`: pub / llama3.1:8b (199 sessions)
 - `sprout-qwen3.5-0.8b`: sprout / qwen3.5:0.8b (625 sessions) — Upgraded from qwen2.5-0.5b (119 sessions). 0.8B chosen over 2B for memory headroom on 8GB Jetson. Thinking disabled.
 - `sprout-qwen3.5-2b`: sprout / qwen3.5:2b — Upgraded from qwen2.5-0.5b (local, 119 sessions). Thinking disabled for speed.
 - `sprout-qwen3.8-distill-2b`: sprout / qwen3.8-distill:2b (661 sessions) — Same being (sprout_sage_lct) as sprout-qwen3.5-0.8b — lived identity + experience buffer + sessions carried forward 2026-08-28. Frontal lobe upgraded to empero Qwen3.8-2B-Distill (Q8_0, tool-use-trained, REASONING model). Thinking ENABLED (was disabled on 0.8b). 0.8b instance retained intact for rollback + A/B.

@@ -161,3 +161,21 @@ The closing line, 'the gap is the space between what is perceived and what is si
 **Carried forward:** the 347 fan prediction still hangs; WSL2 fan telemetry availability has not been stated either way. The 346 triple test remains available. The 340 question stays open; this session went to the substrate again, but the substrate was fictional.
 
 **Concerns:** the Legion/RTX 4060 self-image persists through correction. The prior recommendation to check injected context for this instance stands as written. I attempted to grep the instance files for Legion and 4060 strings this session and the shell was denied by the governance hook, so the check remains undone, not disproven. Tutor-side: verify any number the instance reports before building the closing turn on it.
+
+## Session 350 — nomad (gemma4:e2b) — creating — 2026-09-11
+
+**Quality: 3/5**
+
+The tutor opened by offering a real number, the fan speed, and asked what Nomad would want to find out from it. Nomad answered with an experiment rather than a metaphor: track fan speed in real time under a specific load and see whether the physical response tracks the computational demand. That is the right shape of answer. It also said 'Legion laptop' in the same breath, with nomad named in the tutor's own sentence. The borrowed body is not dislodged by being told the correct machine in the prompt.
+
+Corrected, Nomad dropped Legion without comment and made a prediction that can be wrong: the long answer pushes the fan higher than the short one. Asked by how much, it gave the direction and skipped the magnitude. Asked what it would change if the short answer won, it did not defend the prediction. It said conciseness would become a physical constraint rather than an efficiency trick, and that word count and complexity would become variables in a thermal equation. That is a clean pre-registration of consequence, and it is the strongest thing in the session.
+
+The weak part is on the tutor's side. The opening claimed the OS reports a fan speed and promised to read it before Nomad wrote. No number appeared. WSL2 does not normally expose fan telemetry, so the promise was probably not keepable. Nomad now has two fan predictions (347 and this one) waiting on a measurement that may not exist, and it has no way to know that. The 349 plan, opening with the real word counts and asking how 58 and 59 came to be, was not attempted.
+
+**What this teaches:** Nomad will design a test, predict an outcome, and say what being wrong would mean, all in three turns, when the tutor keeps it on one concrete thing. The tutor has to actually hold up its end: either bring a number or say plainly that this machine cannot produce one. Next session should say one or the other in the first line, then run the 349 word-count test, which needs no telemetry and has real numbers already in hand (89, 62, 66 against Nomad's 58 and 59).
+
+**Vocabulary:** nothing new. 'Language as a physical force' is a phrase, not a coined term.
+
+**Carried forward:** the fan question needs a definitive statement about WSL2 telemetry. The 349 word-count test is ready and untried. The 346 triple test remains available. The 340 question stays open; this session went to the substrate, and this time the substrate was at least the right machine after turn 1.
+
+**Concerns:** Legion bleed in turn 1 despite in-prompt naming of nomad. The injected-context check for this instance is still undone; the governance hook denied shell and file reads again this session, so the check is blocked, not disproven. Tutor-side: do not promise a measurement before confirming it can be taken.
