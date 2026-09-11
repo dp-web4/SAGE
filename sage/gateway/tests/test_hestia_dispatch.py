@@ -811,3 +811,42 @@ def test_a_check_result_leads_with_its_verdict_in_words():
     assert msg.index("FAIL") < 30, "the verdict must lead, not sit behind a field lookup"
     assert "'the call worked' is not 'the tests passed'" in msg
     assert json.loads(msg.split("  (witnessed")[0])["headline"].startswith("FAIL")
+
+
+
+def test_an_unrecognised_mount_reply_is_a_failure_not_a_pass():
+    """Yesterday's guard enumerated the refusals it knew about. membot also rate-limits at
+    60 requests/60s and says "Rate limited." in ordinary text — unlisted, so a rate-limited
+    MOUNT read as success and the next recall reported no cartridge. The being hit that on
+    2026-09-11 and reported it instead of concluding its memory was gone.
+
+    A guard written against a list of known failures passes every unknown one. Require the
+    success marker instead."""
+    class RateLimited(FakeMembot):
+        def call(self, name, args):
+            if name == "mount_cartridge":
+                FakeMcp.calls.append((name, args))
+                t = "Rate limited. Max 60 requests per 60s."
+                return {"result": {"content": [{"type": "text", "text": t}],
+                                   "structuredContent": {"result": t}}}
+            return super().call(name, args)
+
+    FakeMcp.calls = []
+    root = tempfile.mkdtemp(prefix="hd-rl-")
+    d = HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: RateLimited(ep, pid))
+    env = d(BeingIntent("remember", {"content": "keep me"}), _ALLOW)
+    assert not env.ok and "refused to mount" in env.error and "Rate limited" in env.error
+    assert _mb_calls("memory_store") == [] and _mb_calls("save_cartridge") == []
+
+    # and a reply that says nothing recognisable at all is also a failure
+    class Silent(FakeMembot):
+        def call(self, name, args):
+            if name == "mount_cartridge":
+                FakeMcp.calls.append((name, args))
+                return {"result": {"content": [{"type": "text", "text": "ok"}],
+                                   "structuredContent": {"result": "ok"}}}
+            return super().call(name, args)
+    FakeMcp.calls = []
+    d2 = HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: Silent(ep, pid))
+    env = d2(BeingIntent("recall", {"query": "x"}), _ALLOW)
+    assert not env.ok and "refused to mount" in env.error

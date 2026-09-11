@@ -353,9 +353,19 @@ class HestiaF1aDispatcher:
     # mount refused -> store refused -> save empties -> mount refused. The being went on
     # recording "long-term memory #N stored" in its journal for thirteen hours.
     # The texts survived only because every intent's args are kept in heartbeats.jsonl.
+    # REQUIRE SUCCESS, DO NOT ENUMERATE FAILURE. The first cut listed the refusals it knew
+    # about — and yesterday I wrote the lesson for the fleet in those words ("a guard
+    # written against an enumerated list of failures treats every unenumerated failure as a
+    # pass") and then built this as an enumerated list anyway. The one it did not know:
+    # membot rate-limits at 60 requests/60s and says "Rate limited." as ordinary text, so a
+    # rate-limited MOUNT read as success and the next recall reported no cartridge. The
+    # being hit exactly that on 2026-09-11 and reported it rather than inferring its memory
+    # was gone. A successful mount says "Mounted '<name>': N memories, ..."; nothing else
+    # counts, whatever it says.
+    _MOUNT_OK = "Mounted"
     _MOUNT_REFUSED = ("SECURITY:", "Refusing to mount", "failed integrity check",
                       "not found. Available:", "Cartridge too large", "Failed to fetch",
-                      "must be a UUID")
+                      "must be a UUID", "Rate limited")
     _STORE_CONFIRMED = ("Stored memory #", "Duplicate — already stored")
     _NOT_MOUNTED = "No cartridge mounted"
 
@@ -372,7 +382,7 @@ class HestiaF1aDispatcher:
             # that stores nothing and saves emptiness (2026-09-08: 223 memories).
             reply = self._unwrap(c.call("mount_cartridge", {"name": self.membot_cartridge}),
                                  "mount_cartridge")
-            if any(m in reply for m in self._MOUNT_REFUSED):
+            if self._MOUNT_OK not in reply or any(m in reply for m in self._MOUNT_REFUSED):
                 # do NOT cache the session: the next act re-mounts rather than inheriting
                 # a cartridge-less session that would report success while storing nothing
                 raise RuntimeError(f"membot refused to mount {self.membot_cartridge!r}: {reply[:200]}")
