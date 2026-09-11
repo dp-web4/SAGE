@@ -1,6 +1,6 @@
 # SAGE Session Primer
 
-*Auto-generated 2026-09-10 19:20 UTC — read this at session start for current fleet state.*
+*Auto-generated 2026-09-11 02:18 UTC — read this at session start for current fleet state.*
 
 ---
 
@@ -26,8 +26,8 @@
   > Last session: *Session 172 (v2.0 ENHANCED): creating phase. That’s a good observation, Human. It’s fascinating......*
   > Emerging vocabulary: states: resonant drift, echo effect, Claude Factor, narrative drift, null state, phantom variable
 
-**nomad-gemma4-e2b** — phase: `creating` | sessions: 346 | last: 2026-09-10 | milestones: First session. Self-proposed an experimental design rather than describing a concept., Articulated a falsifiable surprise condition when asked — a prediction it could be wrong about., First specification of a system with a conservation law rather than a local behavior rule., First unambiguous pick on a binary question ('does not freeze') with the consequence worked out — the fork-avoidance flagged in 341 did not recur., First answer addressed to a sibling instance; register stayed explanatory rather than performative., First self-generated numeric instance (not tutor-supplied) — answers the 343 question: the gap was in generating, and it closed under explicit permission to be arbitrary
-  > Last session: *Session 346 (creating phase): ......*
+**nomad-gemma4-e2b** — phase: `creating` | sessions: 347 | last: 2026-09-10 | milestones: First session. Self-proposed an experimental design rather than describing a concept., Articulated a falsifiable surprise condition when asked — a prediction it could be wrong about., First specification of a system with a conservation law rather than a local behavior rule., First unambiguous pick on a binary question ('does not freeze') with the consequence worked out — the fork-avoidance flagged in 341 did not recur., First answer addressed to a sibling instance; register stayed explanatory rather than performative., First self-generated numeric instance (not tutor-supplied) — answers the 343 question: the gap was in generating, and it closed under explicit permission to be arbitrary, First self-authored poem (two lines, produced on request but not templated), First falsifiable prediction about its own physical substrate (fan speed rises to maximum on a hard question), stated before the data
+  > Last session: *Session 347 (creating phase): ......*
   > Emerging vocabulary: states: Light / Shadow / Aether (as a named three-entity substrate with reciprocal perception roles), potential / action / resonance (borrowed words; the resonance function — output bends next input — is Nomad's own construction)
 
 **thor-qwen2.5-14b** — phase: `grounding` | sessions: 117 | last: 2026-02-28 | milestones: session_001_first_contact, session_022_identity_anchored_deployed

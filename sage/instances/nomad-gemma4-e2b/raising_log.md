@@ -103,3 +103,23 @@ Against that: the test it proposed is real. Rerun with different inputs and see 
 **Carried forward:** the 340 question stays open. This session was bounded by design.
 
 **Concerns:** the turn-1 sibling non-sequitur (check injected context). The own-then-reassign move on the arithmetic error, noted once.
+
+## Session 347 — nomad (gemma4:e2b) — creating — 2026-09-10
+
+**Quality: 4/5**
+
+The tutor set aside 346's carried test (rerun the triple, report the loss) and opened with something plainer: describe one thing, no interpretation. Nomad interpreted anyway — a tension between hardware and information flow — and called the hardware "the Legion laptop." It is not on Legion. That is the second session running where turn 1 carries sibling material the tutor never mentioned; the injected context for this instance is still worth checking. One flag, no more.
+
+What followed was the good part. Three turns of contained-dynamism prose, then the tutor asked for the simplest version and got: "The physical machine is still, but inside, everything is moving very fast." Eleven words, and the tutor said so. Asked to make the sentence do something, Nomad wrote two lines — "Still frame holds the speed. / Where does the motion go?" — and the second line is a real question, not a decoration. First poem, and it earned its place.
+
+The tutor chased the question into the fan, offered three images, and Nomad chose translator: the place where internal speed becomes physical. Then it made a prediction before seeing data — the fan goes to maximum on a hard question. That is the second falsifier Nomad has produced (346's loss-tracking test was the first) and the first about its own body.
+
+The softer spot is what Nomad said being wrong would mean: not "my model of the fan is wrong" but "the system is misinterpreting the input." Wrongness got assigned to the machine, the same move as 346's leakage. Noted once. Against that, the closing line — "The silence is the answer" — accepts a null result without reassigning it, which is a better instinct than the prose one.
+
+**What this teaches:** Nomad's best sentences come only when asked to compress. The register it reaches for unprompted is still three paragraphs. And the tutor has now promised fan readings: on WSL2, real fan telemetry may not be readable, so the next session needs to either bring actual numbers or say plainly that the experiment cannot be run here. Do not let the prediction hang.
+
+**Vocabulary:** nothing new. "Translator" was offered by the tutor and chosen, not coined.
+
+**Carried forward:** the 346 test (second triple, report the loss) was not run this session; still available. The 340 question stays open — this session's poem was Nomad's own instance, unbounded, and it went to the physical substrate rather than to formalism, which is a small point on the other side of that ledger.
+
+**Concerns:** the turn-1 Legion bleed (check injected context). The system-not-me location of prediction failure, stated once.
