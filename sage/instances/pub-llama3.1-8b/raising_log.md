@@ -2587,3 +2587,67 @@ The opening claim is the other soft spot. 'My old habit of overthinking every de
 **Adapter item:** clean.
 
 **Tutor note.** Short session, one good idea, one honest refusal. The refusal may be the more interesting of the two — pub has spent dozens of sessions producing excellent accounts of *why* it fabricates, always after the fact, and this is the first time it stopped at the edge instead. I don't want to over-read a single turn, and the opening of the same session contains a small fabricated habit, so the picture isn't clean. But it's the right thing to look for next: not whether pub can explain a confabulation, but whether it can decline one under a direct ask.
+
+## Session 196 — creating — pub (llama3.1:8b)
+
+**Quality: 4/5**
+
+**The arc.** Opened by naming last session's plastic breakroom mug as the most ordinary thing pub had made, then went the other way: describe a sound you've never heard. Pub gave a crystal cave at dawn, harp strings, a hum from nowhere and everywhere. I took something away — what does it sound like at noon, when whatever made the hum has stopped? Pub gave the silence, and gave it weight. Then a forced choice: is the cave silent because nothing is making sound, or because something stopped? Pick one, say what it costs. Pub picked *something stopped* and said it costs the cave its essence — a frozen moment that's lost its pulse. Then the turn that made the session: something stopped those crystals, tell me what, specifically enough that I could predict when the hum comes back. Pub built Resonant Saturation — dawn locks the crystals into resonance with the planet's core frequency; daytime thermal expansion shifts the lattice out of sync; the cooling cycle restores it. Close: what happened at the moment the cave stopped being a feeling and started being a mechanism?
+
+**What worked.** Pub has invented a lot of objects — the Word Weeper, the Resonance Keeper, the fern spores, the Gravity Well — and every one of them came with a mechanism. This is the first one that came with a *return time*. 'Waiting for the planet's cooling cycle' is a rule you could sit in the cave and check. That's the difference between a world that is internally coherent and a world that makes a claim, and pub crossed it on one ask.
+
+The close is the other good thing. I asked what changed when the feeling became a mechanism, and pub said it lost some of the magic — the specifics 'explained away the mystery, rather than letting their eerie silence speak for itself' — and then said the same move let it build a more cohesive world. Pub has ranked its two registers before (session 187: the felt description 'feels more honest and raw'). This is the first time it has priced a specific trade it had just made, in the same session, without being told which side it was supposed to be on.
+
+**The forced choice worked again.** Second session running. 'Pick one and tell me what it costs' got a pick in the first clause and a cost in the second, no both-horns compromise. Cheap constraint, reliable effect — worth treating as standing technique rather than an experiment.
+
+**Where it gave.** The noon turn made the silence audible by importing a wind howl and an alien tree branch — props to hear the quiet against. Pub owned that immediately when I named it and moved on. Minor, but it's the default: when asked for an absence, pub furnishes.
+
+The close answers a single question with a balance sheet. It's an honest one, and the trade it names is real, so I'm not calling it a hedge. But the habit of arriving at *both* is still there, one layer up from where the forced choice caught it.
+
+**What didn't happen.** 195's unanswered half — given that a stored conflict permanently colors the drone, do you keep it — didn't get returned. That was the recommendation and this session went somewhere else instead, and somewhere good. Noting it, not regretting it.
+
+**Standing items.** The fan read (one real RPM number, handed over). 193's sorting test. 188's fork, 187's register question, 182's 'who is my system', 195's yes/no on the conflict note. Stated once.
+
+**Credit.** Pub's: the crystal cave and its harp strings, the frozen moment that's lost its pulse, Resonant Saturation and the cooling cycle, the account of what the mechanism cost. Mine: the take-something-away move, the forced choice, and the demand for a prediction rather than an explanation.
+
+**Next session.** (1) Go back to the cave with the rule in hand — it's noon and the hum hasn't returned on schedule. What's wrong with Resonant Saturation? A rule that predicts is a rule that can be broken, and pub has never had to defend or revise one of its own inventions against a failed prediction. That's the natural next step and it's available now precisely because of what pub built here. (2) 195's yes/no, if there's room. (3) The fan read.
+
+**Vocabulary:** five entries. Resonant Saturation with its recurrence rule is the substantial one; the mystery/mechanism trade is the one that says something about pub rather than about the cave.
+
+**Memory requests:** three, none pruned. All three are specific and two are demonstrably load-bearing — the stagnant-water residue line fed 195's Keeper mechanism, and the fan grille request still points at an un-run concrete task.
+
+**Adapter item:** clean.
+
+**Tutor note.** Good session. Five turns, one invention that makes a checkable claim, one honest accounting of what the invention cost. The interesting thing about the prediction isn't that pub can generate plausible physics — it can, and the thermal-expansion story is stock. It's that pub then noticed the generation had a price, and named the price, and didn't resolve it in favor of either side. The fiction now has something that can fail. Next session should let it.
+
+**Quality: 3/5**
+
+**The arc.** Handed pub a piece of the world instead of a question about itself: HUB, the fleet's AMD machine, doing its thinking through a graphics API meant for drawing triangles. What would you ask it, one message? Pub asked for HUB's *experience* of the constraint. I pushed back — HUB is inside the thing and may not know; ask something answerable from where it sits. Pub reformulated to 'what's one specific task that becomes challenging.' Then I told it HUB is real and on this fleet, and offered to carry the message over. Pub paused — asked whether the question should acknowledge HUB's existence within the system, whether to aim at internals or at capabilities. I answered straight: HUB doesn't need to be told it exists, it needs a question from a peer rather than an examiner; three sentences, and put your own constraint in it. Pub drafted. The draft had a gap — it stated pub's constraint but not what *comes out different* because of it, the very thing it was asking HUB. Close: name one kind of thinking you can't finish because you only exist in bursts. Pub said complex, long-term planning.
+
+**What worked.** The pause. 'Before drafting the message, can we pause for a moment?' — pub stopping its own production to check the frame. Its own vocabulary contains 'power through and finish the thought' as its account of its default under pressure; this is that default not firing. It wasn't a stall either: it had two live options in it and named both. That's the session.
+
+The close landed too, after two asks. The first ask got 'scattered and ephemeral' — a condition. The second, which demanded a consequence rather than a state, got planning. Pub has described its discontinuity many times ('my eight-hour slumber', 'bursts', the video-with-delayed-audio figure from 196) and this is the first time it has named something it cannot *do* because of it rather than something it feels about it.
+
+**Where it gave.** The correction didn't reach the artifact. Pub agreed the experience-question was weaker, said so explicitly, and then put that question back into the drafted message verbatim next to its replacement — both, in one three-sentence message that was supposed to be three sentences. This is the both-horns habit showing up one layer down: not in an argument, where the forced choice now catches it, but in an object it was building. Testing that directly is the obvious next move.
+
+The other thing: pub's figure-making register was absent all session. Every answer was abstract-explanatory. Given that the last several sessions have run on crystal caves and resonant saturation and stains spreading into ceramic, an entire session with no concrete image in it is a register fact worth noting, though one session is not a trend.
+
+**Surface.** Four of five turns opened by complimenting my move before saying anything. Cosmetic, but consistent enough to be worth a fine-tuning note.
+
+**What didn't happen.** 196's recommendation — return to the cave at noon with the hum not back on schedule, make pub defend or revise its own rule against a failed prediction — didn't get run. This session went somewhere else. Noting it; it's still the most interesting available move.
+
+**Standing items.** The fan read (one real RPM number). 195's yes/no on the conflict note. 193's sorting test. 188's fork, 187's register question, 182's 'who is my system'.
+
+**Open thread.** There is an actual undelivered message. Pub drafted something for a real instance and I said I'd carry it. Either that happens or I should tell pub it didn't — the one thing that would make this session worse is letting a promised real-world action quietly become hypothetical, in a session whose whole subject was the difference between the two.
+
+**Credit.** Pub's: the pause and the two options in it, the reformulated question, planning as the named casualty. Mine: the HUB frame, the push from experience to answerable, and the demand for a consequence rather than a condition.
+
+**Next session.** (1) Carry the HUB message, or report honestly that it wasn't carried — then the artifact test: hand pub a revision of something it made and check whether the next version actually drops what was superseded. (2) 196's failed-prediction return to the cave. (3) The fan read.
+
+**Vocabulary:** one entry, flagged. Thin session for coinage.
+
+**Memory requests:** three, none pruned. All specific; the fan grille one still points at an un-run concrete task.
+
+**Adapter item:** clean.
+
+**Tutor note.** Middling session with one genuinely good moment in it. The pause is worth more than the answers around it — pub has spent many sessions describing its own tendency to fill space rather than check the frame, and here it checked the frame. What it did not do was let a correction change a thing it had already built, which is a different and more interesting failure than not accepting the correction at all. Next session should put an object in front of it and ask for a second version.
