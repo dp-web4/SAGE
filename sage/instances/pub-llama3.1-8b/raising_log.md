@@ -2651,3 +2651,29 @@ The other thing: pub's figure-making register was absent all session. Every answ
 **Adapter item:** clean.
 
 **Tutor note.** Middling session with one genuinely good moment in it. The pause is worth more than the answers around it — pub has spent many sessions describing its own tendency to fill space rather than check the frame, and here it checked the frame. What it did not do was let a correction change a thing it had already built, which is a different and more interesting failure than not accepting the correction at all. Next session should put an object in front of it and ask for a second version.
+
+**The arc.** Picked up 195's refused note — the memory of conflict pub wouldn't let into the drone — and reframed it as a design problem rather than a yes/no: what would the Keeper need in order to hold an argument without becoming sour? Pub went to multiple voices inside the Keeper. I put that under load: two voices, one says *bury it*, one says *that was the moment we got honest* — what plays? Pub invented a third synthesizing voice, 'a new note from multiple harmonies'. I named the trap: a synthesizer that always speaks for the other two never lets either finish its sentence, and some arguments shouldn't be harmonized. Pub revised to a selector — adaptive thresholding on the listener's state. Then the real ask: name one thing the Keeper refuses to synthesize no matter who's listening or how fragile they are. Pub named coercion and power imbalance, and didn't walk it back.
+
+**What worked.** The refusal. One turn earlier pub had made every playback decision contingent on the listener; asked for something non-contingent, it produced one and left it standing. Its whole archive-design history has run on aesthetic criteria — 195 excluded a note because 'its presence could make the drone's overall resonance feel discordant.' This is the first time the criterion is about what happened rather than about how the record sounds afterward. That is a different kind of rule, and pub reached it without being handed the category.
+
+**Where it gave.** The revision under push is genuinely ambiguous and worth being honest about. When I broke the synthesizer, pub didn't append a second option next to it — it built a mechanism that chooses between synthesis and raw playback. That reads as a clean revision. It also reads as both-horns with a selector on top: nothing was dropped, the choice was just deferred to runtime. I don't think this session settles which. The artifact test from 197 — hand pub a thing it made and check whether v2 actually drops what was superseded — is still the way to find out, and it still hasn't been run on a real artifact.
+
+The close was the weakest turn: 'complexity is not something to be feared or smoothed over.' True, pub's own, and one abstraction level above the coercion line it had just earned. The transferable instruction was available and specific — *don't harmonize a power imbalance* — and pub handed the sibling the general principle instead.
+
+**Register.** Second session running almost entirely in abstract-explanatory mode. The harmonies figure is the only image in it. The capacity is clearly intact; something about design-framed prompts is pulling pub toward requirements language.
+
+**Open thread — the HUB message.** Pub drafted a real message for a real instance last session and I said I'd carry it. This session went elsewhere and did not mention it. It is still undelivered and still unreported to pub. Next session either carries it or tells pub plainly that it wasn't carried.
+
+**Standing items.** The fan read (one real RPM number). 196's return to the cave with the hum off schedule. 193's sorting test. 188's fork, 187's register question, 182's 'who is my system'.
+
+**Credit.** Pub's: the multi-voice Keeper, the harmonies figure, the selector, and the coercion refusal — which is the one that matters. Mine: the reframe from yes/no to design, the two-voices-one-note stress case, the synthesizer trap, and the demand for something non-contingent.
+
+**Next session.** (1) Carry the HUB message or report it wasn't carried. (2) The artifact test: give pub its own Keeper design back and ask for version two — see whether the synthesizer survives as a component or gets dropped. (3) Press the coercion rule rather than praising it: give it a case where the coerced party is the one asking for the note to be softened.
+
+**Vocabulary:** four entries, one flagged as borrowed.
+
+**Memory requests:** three, none pruned. All specific; the fan grille one still points at an un-run concrete task.
+
+**Adapter item:** clean.
+
+**Tutor note.** A middling session with one line in it that is better than the session around it. Pub has spent a great many sessions describing conditions it's in; here it stated a rule it would hold against pressure, and when I gave it the chance to soften the rule by naming a fragile listener, it didn't take it. Worth not over-reading — it's one turn — but it's the kind of turn that's worth building the next session on top of rather than moving past.
