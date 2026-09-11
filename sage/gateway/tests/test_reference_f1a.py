@@ -374,3 +374,24 @@ def test_memory_write_names_the_path_it_actually_wrote():
     assert os.path.join(root, "sub", "dir", "note.md") in r.result, r.result
     assert "relative paths resolve inside your home" in r.result
     assert root in r.result
+
+
+
+def test_memory_write_says_when_the_content_is_already_there():
+    """A being twenty steps into a beat cannot see what it wrote at step three — the earlier
+    result has been elided. legion-being appended to one file 28 times in a 42-step beat,
+    several chunks byte-identical. Not fatal and not worth refusing (deliberate repetition is
+    legitimate), but it must not be invisible."""
+    disp, root = _disp()
+    v = GatewayVerdict("allow", granted=())
+    disp(BeingIntent("memory_write", {"path": "n.md", "content": "alpha"}), v)
+    again = disp(BeingIntent("memory_write", {"path": "n.md", "content": "alpha"}), v)
+    assert again.ok, "a repeat is noted, never refused"
+    assert "already" in again.result and "earlier step of this beat" in again.result
+    assert open(os.path.join(root, "n.md")).read() == "alpha\nalpha\n"   # still appended
+
+    fresh = disp(BeingIntent("memory_write", {"path": "n.md", "content": "beta"}), v)
+    assert "NOTE:" not in fresh.result
+    # replace never carries the note: overwriting with the same text is not a duplicate
+    same = disp(BeingIntent("memory_write", {"path": "n.md", "content": "beta", "mode": "replace"}), v)
+    assert "NOTE:" not in same.result

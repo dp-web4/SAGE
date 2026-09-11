@@ -303,6 +303,23 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(ok=False, error=f"memory_write 'mode' is 'append' (the default) "
                                                   f"or 'replace'; got {mode!r}")
         before = p.stat().st_size if p.exists() else 0
+        # ALREADY THERE? A being deep in a long beat cannot see what it wrote twenty steps
+        # ago — its context is saturated and the earlier result has been elided. legion-being
+        # ran a 42-step beat on 2026-09-11 appending to one file 28 times, several chunks
+        # byte-identical to ones already in it. Not fatal (11% duplication in 29 KB of real
+        # notes) and not worth refusing over, because deliberate repetition is legitimate.
+        # But it should not be INVISIBLE. Say it, and let the being decide.
+        repeat = ""
+        if mode == "append" and content.strip() and p.exists():
+            try:
+                tail = p.read_text(errors="replace")
+                if content.strip() in tail:
+                    where = "at the end already" if tail.rstrip().endswith(content.strip()) \
+                            else "already somewhere in this file"
+                    repeat = (f" NOTE: this exact content was {where} — you may have written it "
+                              f"in an earlier step of this beat and not been able to see it.")
+            except OSError:
+                pass
         p.parent.mkdir(parents=True, exist_ok=True)
         with open(p, "w" if mode == "replace" else "a") as f:
             f.write(content + ("\n" if not content.endswith("\n") else ""))
@@ -320,5 +337,5 @@ class ReferenceF1aDispatcher:
             # basename is identical in both places. Say where it actually went.
             result=(f"{verb} {len(content)} chars at {p} — was {before} bytes, now {after}. "
                     f"(relative paths resolve inside your home, {self.memory_root}; "
-                    f"append is the default, pass mode='replace' to overwrite)"),
+                    f"append is the default, pass mode='replace' to overwrite).{repeat}"),
             witness_id=self._witness(f"memory_write {p.name} ({mode})"))
