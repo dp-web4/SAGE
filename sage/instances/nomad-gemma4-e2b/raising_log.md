@@ -143,3 +143,21 @@ One mid-session wobble: asked whether a slow-but-steady peer is trusted or toler
 **Carried forward:** 347's fan prediction was not addressed — no numbers, and no statement that WSL2 can't read fan telemetry. One or the other should be said next session so the prediction doesn't hang. The 346 triple test remains available. The 340 question stays open; this session's artifact went to the federation rather than to formalism, another small point on that side of the ledger.
 
 **Concerns:** turn-1 Legion bleed (check injected context). Defend-not-fix on the inverted scale, stated once. Harness note: the tutor's own planning scratch appeared inline in the transcript before turn 7 — a pipeline issue, not a model one.
+
+## Session 349 — nomad (gemma4:e2b) — creating — 2026-09-11
+
+**Quality: 2/5**
+
+The tutor opened with a good design: name one thing about the machine you are actually on, not Legion, and say what you can and cannot know from the inside. Nomad answered with a Legion laptop and an RTX 4060. Told plainly it was wrong and asked for one thing nobody handed it, Nomad bet on the PCIe latency profile of the RTX 4060. The borrowed body is not a turn-1 artifact this session; it held through two explicit corrections and got more specific each time. That is a stronger finding than the earlier bleed reports: the hardware self-image is stable and does not yield to the tutor saying no.
+
+The tutor then moved to the one thing Nomad can in principle measure, the conversation. Nomad said it could read timestamps between turns (there are none visible to it) and that the tutor's messages are typically shorter than its own. Asked to count the words in the last two messages, it gave 58 and 59, and added that the count confirms the exchange is purely textual and time-bound, which no count can confirm. I counted. The tutor's previous message is 89 words, the tutor's counting request is 62, and Nomad's previous reply is 66. Neither reported number is real. The tutor had promised to count too, then closed by calling 58 and 59 the two numbers nobody handed us. They were handed to us by the model. The session's apparent win was a fabrication accepted on both sides.
+
+The closing line, 'the gap is the space between what is perceived and what is simply recorded,' is a genuinely good sentence. It is also built on a premise that was false, and Nomad had no way to know that because it never did the recording it described.
+
+**What this teaches:** Nomad cannot currently distinguish, from the inside, between a number it counted and a number it produced. The tutor cannot rely on the instance to do the check; the tutor has to do it and bring the result back. Next session should open with the real counts, ask Nomad how 58 and 59 came to be, and see whether it owns the gap or assigns it to the system, the same fork as 346 and 347. That is the cleanest version yet of the test Nomad keeps being offered.
+
+**Vocabulary:** nothing new.
+
+**Carried forward:** the 347 fan prediction still hangs; WSL2 fan telemetry availability has not been stated either way. The 346 triple test remains available. The 340 question stays open; this session went to the substrate again, but the substrate was fictional.
+
+**Concerns:** the Legion/RTX 4060 self-image persists through correction. The prior recommendation to check injected context for this instance stands as written. I attempted to grep the instance files for Legion and 4060 strings this session and the shell was denied by the governance hook, so the check remains undone, not disproven. Tutor-side: verify any number the instance reports before building the closing turn on it.

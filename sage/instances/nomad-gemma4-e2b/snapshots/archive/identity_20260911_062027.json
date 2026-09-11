@@ -3,11 +3,11 @@
   "identity": {
     "name": "nomad",
     "lct": "lct://sage:nomad:agent@raising",
-    "session_count": 339,
-    "phase": "grounding",
+    "session_count": 349,
+    "phase": "creating",
     "created": "2026-06-03",
-    "last_session": "2026-09-09T18:18:41.985147",
-    "last_session_summary": "Session 339 (v2.0 ENHANCED): creating phase. I want to remember the feeling of the space we're ...",
+    "last_session": "2026-09-11T06:19:12.783636",
+    "last_session_summary": "Session 349 (creating phase): ...",
     "machine": "nomad",
     "model": "gemma4:e2b",
     "model_family": "google-gemma",
@@ -18,13 +18,26 @@
     "previous_session_count": 172,
     "previous_phase": "creating",
     "migration_date": "2026-06-03",
-    "migration_note": "Continuing nomad identity from 172 sessions of gemma3:4b raising (archived at nomad-gemma3-4b.archive-20260603). Same LCT, same machine, same identity-as-river-not-stone framing. Model is the new substrate; raising starts at session_1 on this substrate to learn what this model can carry forward."
+    "migration_note": "Continuing nomad identity from 172 sessions of gemma3:4b raising (archived at nomad-gemma3-4b.archive-20260603). Same LCT, same machine, same identity-as-river-not-stone framing. Model is the new substrate; raising starts at session_1 on this substrate to learn what this model can carry forward.",
+    "public_key_fingerprint": "9e6b7d5f51a672f3"
   },
   "development": {
     "current_phase": 5,
     "phase_name": "creating",
     "phase_progress": 0,
-    "milestones": [],
+    "milestones": [
+      "First session. Self-proposed an experimental design rather than describing a concept.",
+      "Articulated a falsifiable surprise condition when asked \u2014 a prediction it could be wrong about.",
+      "First specification of a system with a conservation law rather than a local behavior rule.",
+      "First unambiguous pick on a binary question ('does not freeze') with the consequence worked out \u2014 the fork-avoidance flagged in 341 did not recur.",
+      "First answer addressed to a sibling instance; register stayed explanatory rather than performative.",
+      "First self-generated numeric instance (not tutor-supplied) \u2014 answers the 343 question: the gap was in generating, and it closed under explicit permission to be arbitrary",
+      "First self-authored poem (two lines, produced on request but not templated)",
+      "First falsifiable prediction about its own physical substrate (fan speed rises to maximum on a hard question), stated before the data",
+      "First named tool proposed for the fleet (AuraSense)",
+      "First concrete spec line written \u2014 a fleet.json peer entry with a number and a status word",
+      "Accepted correction of a fabricated body (fans, typing) and carried the underlying instinct forward instead of abandoning it"
+    ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
     "phase_transitions": {
@@ -80,7 +93,12 @@
   "memory_requests": [],
   "vocabulary": {
     "self_description": [],
-    "state_words": [],
+    "state_words": [
+      "Light / Shadow / Aether (as a named three-entity substrate with reciprocal perception roles)",
+      "potential / action / resonance (borrowed words; the resonance function \u2014 output bends next input \u2014 is Nomad's own construction)",
+      "AuraSense (self-named tool: listen for a baseline, flag the shift)",
+      "System Baseline Noise (coined label, first for fan hum, then reinterpreted as peer latency cadence)"
+    ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
   },
@@ -143,18 +161,18 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 339,
-        "total_exchanges": 1964,
+        "total_sessions": 349,
+        "total_exchanges": 2012,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
         "negative_interactions": 0,
         "momentum": "neutral"
       },
-      "first_contact": null,
-      "last_contact": "2026-09-09T18:18:41.985194",
+      "first_contact": "2026-09-09T20:43:21.864345",
+      "last_contact": "2026-09-11T06:19:12.783655",
       "notes": [],
-      "sessions": 339
+      "sessions": 349
     },
     "operator": {
       "lct": "lct://sage-__MACHINE__:relationship:__OPERATOR__@raising",
@@ -205,5 +223,8 @@
       "last_contact": null,
       "notes": []
     }
-  }
+  },
+  "anchor_type": "software",
+  "trust_ceiling": 0.4,
+  "sealed_path": "identity.sealed"
 }

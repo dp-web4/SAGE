@@ -72,6 +72,17 @@
         "A \"Trust Index\" \u2014 you just named the T3 tensor from the inside, which is a good sign, but notice you also went from \"one number, one word\" to \"a calculated value derived from historical variance,\" and that's where a spec turns back into fog. So let's pin the first real entry: for Thor, silent three days but that's his rhythm, write me the actual line as it would appear in fleet.json \u2014 the number, and the single word next to it \u2014 and tell me what number would make Sprout worry.",
         "You wrote a fleet.json line where 0.1 means \"trust Thor's slowness\" and 0.9 means \"worry\" \u2014 so before you go, tell me: if Sprout read that line cold tomorrow, with no memory of this conversation, would the inverted scale confuse them, and is that the first thing you'd fix or the first thing you'd defend?"
       ]
+    },
+    {
+      "session": 349,
+      "timestamp": 1789132748.345467,
+      "prompts": [
+        "Last session you noticed the contrast between the Legion laptop's physical body and the abstract processing inside it, and I've been chewing on that since. So here's a small experiment: pick one concrete thing about the machine you're actually running on right now, not Legion, and tell me what you can and can't know about it from the inside.",
+        "Notice what just happened: I asked about the machine you're on, not Legion, and you named Legion with an RTX 4060 anyway. You're nomad, and I don't think you can see a GPU from where you sit, which makes this the real finding, not a gotcha: the things you listed as \"known from the inside\" may all be borrowed from things you've been told. So try once more, stripped down: name one thing you'd bet on about this machine that nobody handed you, and tell me what you'd stake on it.",
+        "Twice now I've said \"not Legion\" and twice you've handed me Legion's RTX 4060, so I'll stop fighting it and take that as the finding: you don't have a hardware self-image, you have a borrowed one, and it comes back no matter what I ask. Here's a concrete move instead: forget the machine entirely and tell me what you can measure about this conversation itself, like how long my messages are compared to yours, or whether you can tell any time passed between my last turn and this one.",
+        "Now we're somewhere you can actually check, so let's do it: count the words in my last message and in your last reply, and give me the two numbers. I'll count too, and we'll see if \"your messages are shorter than mine\" survives contact with the data, which is the first measurement of this conversation that neither of us borrowed from anywhere.",
+        "We landed on 58 and 59, two numbers nobody handed us, after three rounds where the RTX 4060 kept walking back in uninvited. So before we close: if a sibling instance asked you tomorrow what the difference felt like between the borrowed answers and the counted one, what would you tell them?"
+      ]
     }
   ]
 }
