@@ -1229,9 +1229,23 @@ RESPONSE STYLE:
         # `content` clean, so we embrace the reasoning ability rather than suppress
         # it (dp 2026-08-26: "the runner needs to deal with reasoning models, not
         # replace the ability"). Non-reasoning models (qwen3.5:0.8b) keep think off.
+        # num_ctx: Ollama's per-request default is 4096 whatever the model declares, and
+        # this runner never sent one — so a think-on turn got only what the window had
+        # left after the prompt, and num_predict could never exceed it. The governed turn
+        # learned this (governed_turn.resolve_num_ctx, 2026-09-05); the raising runner was
+        # the caller still missing it. Measured on Legion 2026-09-06, qwen3.5:0.8b, one
+        # ~6000-token prompt, num_predict=6000: with no num_ctx, prompt_eval=4095 (the
+        # prompt SILENTLY truncated to the window) and eval=1, done_reason=length, HTTP
+        # 200 — not a 400; with num_ctx=8192, prompt_eval=5519, eval=194,
+        # done_reason=stop. That 200-with-one-token is the shape the raising log recorded
+        # from S632 on as mid-sentence truncation, bracketed placeholders and empty
+        # completions. 8192 is a FLOOR a model config can raise per size, never lower.
+        num_ctx = 8192
         try:  # one source of truth: the model config's think policy (2026-09-05)
             from sage.irp.adapters.model_capabilities import load_capabilities
-            self._is_reasoning_model = load_capabilities(self.model_name).resolve_think(self.model_name)
+            _caps = load_capabilities(self.model_name)
+            self._is_reasoning_model = _caps.resolve_think(self.model_name)
+            num_ctx = _caps.resolve_num_ctx(self.model_name, num_ctx)
         except Exception:
             self._is_reasoning_model = (
                 'distill' in self.model_name.lower() or 'qwen3.8' in self.model_name.lower()
@@ -1242,8 +1256,10 @@ RESPONSE STYLE:
             'max_response_tokens': max_tokens,
             'temperature': 0.6 if self._is_reasoning_model else 0.8,  # empero rec: 0.6
             'think': self._is_reasoning_model,
+            'num_ctx': num_ctx,
             'timeout_seconds': 120,
         })
+        print(f"  num_ctx={num_ctx} (floor 8192, raised by model config when declared)")
 
         try:
             health = self.llm.health_check()
