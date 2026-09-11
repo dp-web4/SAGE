@@ -107,7 +107,11 @@ def test_run_ollama_tool_turn_with_fake_llm():
     # the `gh` command it runs), + recall / remember (membot long-term memory) + request_scope
     # (the sanctioned answer to a deny) for the heartbeat (2026-09-03, dp: "it needs a reason
     # to look for things to do"). Widening this number is a registry decision, not a typo.
-    assert len(ollama_tools()) == 11   # + appeal (S4, 2026-09-05)
+    # + check (M0, 2026-09-07): the being RUNS a test in its own worktree and reads the
+    # result. Argued from measurement, not taste — given only a diff this being asserted
+    # a compile error that did not exist; given the same diff plus a real test result it
+    # made zero false claims (PRD_BEINGS_IMPROVE_THEIR_HARNESS §2).
+    assert len(ollama_tools()) == 12   # + check (M0, 2026-09-07)
 
     calls = {"n": 0}
 

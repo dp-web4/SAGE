@@ -13,5 +13,6 @@
   "encryption_enabled": false,
   "peer_aliases": {
     "sprout-being": "2e175714-4b01-4063-a997-27a6dade7044"
-  }
+  },
+  "worktree": "/home/dp/ai-workspace/being-worktrees/legion-being"
 }

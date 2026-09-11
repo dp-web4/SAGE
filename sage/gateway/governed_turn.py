@@ -165,16 +165,33 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
     publish_fn = None
     if forum_dir and os.path.isdir(forum_dir):
         publish_fn = make_forum_publisher(forum_dir, member)
+    cfg = instance_config(instance)
+    declared_embodiment = cfg.get("active_embodiment") or {}
+    embodiment = {
+        # The model argument is what this process actually asked the runner to load. Keep
+        # it even when an older instance lacks the canonical declaration, and say whether
+        # the declaration agrees instead of silently substituting one for the other.
+        "running_tag": model,
+        "declared_running_tag": declared_embodiment.get("running_tag"),
+        "declaration_as_of": declared_embodiment.get("as_of"),
+        "source": declared_embodiment.get("source"),
+        "matches_declaration": (declared_embodiment.get("running_tag") == model
+                                if declared_embodiment.get("running_tag") else None),
+    }
     # gate_only: the law still judges every intent; an allowed one comes back
     # `pending` instead of executing. For seeing verdicts before anything leaves.
     dispatcher = None if gate_only else HestiaF1aDispatcher(
         member, memory_root=str(instance), publish_fn=publish_fn,
         host_session_id=host_session_id, being_lct=being_lct_for(member, workspace),
-        peer_aliases=instance_config(instance).get("peer_aliases") or None)
+        peer_aliases=cfg.get("peer_aliases") or None,
+        # The being's own git worktree, for `check` and (M1) for editing code. Read from
+        # instance.json so it is a per-being fact beside the being, not a launcher flag.
+        worktree=cfg.get("worktree") or None, embodiment=embodiment)
     client = BeingGateClient(member_id=member,
                              identity_path=str(instance / "identity.json"),
                              workspace=workspace, dispatcher=dispatcher,
-                             host_session_id=host_session_id)
+                             host_session_id=host_session_id,
+                             worktree=cfg.get("worktree") or None)
     # Reasoning models (empero Qwen3.8 distills etc.) only emit structured tool calls
     # with `think` on — off, they narrate a bracketed placeholder instead of acting
     # (measured on Sprout 2026-08-28 and again on the first governed turn, 2026-09-03:

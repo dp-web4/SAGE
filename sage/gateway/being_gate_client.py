@@ -125,6 +125,79 @@ def pr_review_signature(member_id: str, action_id: Optional[str], being_lct: Opt
     return "\n".join(lines)
 
 
+# The test targets a being may name, and the command each one becomes (#M0, PRD
+# "Beings improve their own harness"). An ALLOW-LIST, not a grammar: `check` exists so a
+# being can verify a claim about its own harness, and the smallest thing that does that is
+# a fixed set of suites plus a single node id inside them. Anything wider is a shell with a
+# friendly name, which is the one thing the bounded registry exists to prevent.
+CHECK_TARGETS = {
+    "gateway": "sage/gateway/tests/",
+    "irp": "sage/irp/tests/",
+}
+
+
+def _takes_ctx(fn) -> bool:
+    """Whether a registry `compose` accepts the client's context as a second argument.
+    Older composes (pr_review_command) take args alone and must keep working."""
+    import inspect
+    try:
+        return len(inspect.signature(fn).parameters) >= 2
+    except (TypeError, ValueError):
+        return False
+
+
+def check_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """The canonical argv for ``check`` after validating its bounded target."""
+    import re
+    import os
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError(
+            "check needs a worktree of your own: there is nothing to run tests in, and a "
+            "relative path would be judged against a tree you do not hold (PRD M1)")
+    worktree = os.path.realpath(os.path.expanduser(str(worktree)))
+    target = str(args.get("target", "")).strip()
+    node = None
+    if target in CHECK_TARGETS:
+        suite = target
+    else:
+        # A single node id INSIDE a declared suite: "gateway::test_name". Nothing else.
+        suite, sep, node = target.partition("::")
+        if not sep or suite not in CHECK_TARGETS:
+            raise ValueError(
+                f"check 'target' must be one of {sorted(CHECK_TARGETS)} or "
+                f"'<suite>::<test_name>'; got {target!r}")
+        if not re.fullmatch(r"[A-Za-z0-9_]+", node):
+            raise ValueError(f"check test name must be a bare identifier; got {node!r}")
+    path = os.path.join(worktree, CHECK_TARGETS[suite])
+    argv = ["python3", "-m", "pytest", "-q", "-c", "/dev/null",
+            f"--rootdir={worktree}", path]
+    if node is not None:
+        argv.extend(("-k", node))
+    return argv
+
+
+def check_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a `check` intent, built from validated args.
+
+    Raises ValueError on anything the allow-list cannot represent, so a malformed target is
+    a `gate.raised` deny rather than a silent pass. `-c /dev/null` because the repo's
+    pytest.ini declares an asyncio_mode this interpreter does not have (measured: bare
+    pytest errors before collecting), and a checking organ that reports an infrastructure
+    error as a test failure would teach the being the opposite of what it asked.
+
+    THE PATHS ARE ABSOLUTE, AND THAT IS THE WHOLE POINT (measured 2026-09-07). The command
+    runs with cwd = the being's worktree, but the gate resolves a RELATIVE path against the
+    workspace it was handed — the shared checkout. So `sage/gateway/tests/` was judged at
+    `<shared>/sage/gateway/tests/`, which the being has no grant for, while the command
+    would have touched the worktree it does. The law must judge the path the command will
+    actually touch; anything else is the `_safe_path` defect again, one layer over. No
+    worktree means no check: fail closed, and say which affordance is missing.
+    """
+    import shlex
+    return shlex.join(check_argv(args, ctx))
+
+
 _REGISTRY = {
     "peer_ask":       dict(tool="peer_ask",     path_args=(),       cmd_arg=None),
     "witness":        dict(tool="witness",      path_args=(),       cmd_arg=None),
@@ -138,6 +211,14 @@ _REGISTRY = {
     # a being holds no reviewer role, so the comment never counts toward merge.
     "pr_review":      dict(tool="pr_review",    path_args=(),       cmd_arg=None,
                            compose=pr_review_command),
+    # check: RUN a test suite in the being's own worktree and read the result. The first
+    # organ, and the ordering is argued from measurement (PRD §2): given only a diff this
+    # being asserted a compile error that did not exist; given the same diff plus a real
+    # test result it made zero false claims. Composed like pr_review — the being names a
+    # target from an allow-list, the SEAT builds the command, the law judges THAT, and the
+    # being never holds a shell. A failing check is a first-class result, not an error.
+    "check":          dict(tool="check",       path_args=(),       cmd_arg=None,
+                           compose=check_command),
     # Long-term semantic memory (membot brain cartridge, the being's own): recall is
     # observational; remember is consequential but passes local law under ANY grant
     # (paths=()), and that is not because it is "classed with memory_write" (which the
@@ -166,7 +247,7 @@ _REGISTRY = {
 # consequential acts must not proceed without it (fail-closed).
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
-                            "remember", "request_scope"})
+                            "remember", "request_scope", "check"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -190,6 +271,12 @@ _TOOL_SCHEMAS = {
                   "would change, with file and line references where you can.",
                   {"repo": "owner/name, e.g. dp-web4/SAGE", "number": "the PR number",
                    "body": "your review, in markdown"}, ["repo", "number", "body"]),
+    "check": ("Run a test suite in your own worktree and read the result. This is how you "
+              "find out whether something you believe about your harness is true, instead of "
+              "asserting it. A failure is a real answer, not a problem.",
+              {"target": "'gateway' or 'irp' for a whole suite, or '<suite>::<test_name>' "
+                         "for one test, e.g. 'gateway::test_relative_memory_path'"},
+              ["target"]),
     "recall": ("Search your long-term memory (semantic search over everything you have "
                "remembered). Use it before deciding what to do; use it when something "
                "feels familiar.",
@@ -203,8 +290,9 @@ _TOOL_SCHEMAS = {
     # the daemon reads plugin_id/role/path/reason only, and a grant is a `path:<p>` entry
     # in in_scope that rules mrh.path for reads and writes alike. Offering a mode would be
     # a choice the law cannot honour.
-    "request_scope": ("Ask the operator for reach you do not have, after a refusal. A grant "
-                      "is reach on that path, read and write alike. Say why. A human decides; "
+    "request_scope": ("Ask the operator for reach you do not have, after a refusal. SAGE "
+                      "can read an external granted path, but keeps external writes disabled "
+                      "until being-code execution has its own principal. Say why. A human decides; "
                       "no answer within the window is a refusal. A live grant dies with the "
                       "daemon; only a standing grant persists.",
                       {"path": "absolute path you want reach to",
@@ -282,20 +370,30 @@ def _home_hint(intent: "BeingIntent", dispatcher) -> str:
 
 
 def _granted_roots(core, policy, workspace: str) -> tuple:
-    """The absolute path roots a resolved policy grants ("path:<abs>" scopes), via the
-    core's own resolver when it has one. () when there is no policy or no path scope."""
+    """``((abs_root, recursive), ...)`` for every `path:` scope a resolved policy grants.
+
+    REACH TRAVELS WITH THE ROOT (hestia #1002; GPT review of #55/#56). This used to return
+    bare roots via `_scope_parts(...)[1]`, and the dispatcher then admitted `p == root OR
+    root in p.parents` — so an EXACT hestia grant on /x became recursive /x/** inside SAGE's
+    own defense-in-depth layer, wider than the law that produced it. Now the pair is kept:
+    the core's `_scope_roots_with_reach` when it has one (post-#1002), else parsed here from
+    the `/**` spelling, so an older core still yields exact-by-default rather than a guess."""
     if policy is None:
         return ()
     try:
         scopes = list(getattr(policy, "scope", ()) or ())
-        parts = getattr(core, "_scope_parts", None)
-        if parts is not None:
-            return tuple(parts(scopes, workspace)[1])
-        roots = []
+        with_reach = getattr(core, "_scope_roots_with_reach", None)
+        if with_reach is not None:
+            return tuple((str(r), bool(rec)) for r, rec in with_reach(scopes, workspace))
+        out = []
         for sc in scopes:
             if isinstance(sc, str) and sc.startswith("path:"):
-                roots.append(os.path.realpath(os.path.expanduser(sc[5:])))
-        return tuple(roots)
+                raw = sc[5:]
+                rec = raw.endswith("/**")
+                if rec:
+                    raw = raw[:-3]
+                out.append((os.path.realpath(os.path.expanduser(raw)), rec))
+        return tuple(out)
     except Exception:
         return ()
 
@@ -313,6 +411,9 @@ class GatewayVerdict:
     # 2026-09-05 that a shared-context read grant "cannot be used at all" because the local
     # dispatcher confined memory_read to the instance dir before hestia's gate was consulted.
     granted: tuple = ()
+    # For a composed effector, this is the exact command the law judged. Dispatch executes
+    # this value rather than independently rebuilding a lookalike command.
+    command: Optional[str] = None
 
     @property
     def blocks(self) -> bool:
@@ -356,10 +457,14 @@ class BeingGateClient:
     """One per being. Governs every intent through the real hestia law, fail-closed."""
 
     def __init__(self, member_id: str, identity_path: str, workspace: str,
+                 worktree: Optional[str] = None,
                  dispatcher: "Optional[Dispatcher]" = None,
                  host_session_id: Optional[str] = None):
         self.member_id = member_id
         self.workspace = workspace
+        # the being's own worktree; composed commands name paths inside it
+        self.worktree = (os.path.realpath(os.path.expanduser(str(worktree)))
+                         if worktree else None)
         # The being's memory root: the instance dir that holds its identity. Relative
         # memory paths the being emits are rooted here (see _normalize).
         self.memory_root = os.path.dirname(os.path.abspath(os.path.expanduser(identity_path)))
@@ -438,14 +543,21 @@ class BeingGateClient:
         command = intent.args.get(spec["cmd_arg"]) if spec["cmd_arg"] else None
         compose = spec.get("compose")
         if compose is not None:
+            ctx = {"worktree": getattr(self, "worktree", None)}
             # a COMPOSED verb: the seat builds the exact outward act (a shell line) from the
             # being's args, and THAT is what the law judges. Bad args raise here and gate()
             # turns that into a deny (gate.raised), never a silent pass. The being never
             # fills a command; the registry never carries a cmd_arg for a composed verb.
-            command = compose(intent.args)
+            command = compose(intent.args, ctx) if _takes_ctx(compose) else compose(intent.args)
+        raw = {"effector": intent.effector, **intent.args}
+        if command is not None:
+            # Society safety consumes raw/tool_input rather than NormalizedEvent.command.
+            # Carry the composed act there too; otherwise stage 1 and stage 2 judge
+            # different objects.
+            raw["command"] = command
         return self._core.NormalizedEvent(
             tool=spec["tool"], paths=paths, command=command,
-            cwd=self.workspace, raw={"effector": intent.effector, **intent.args},
+            cwd=self.workspace, raw=raw,
         )
 
     # -- gate one intent (intent -> verdict), fail-closed --------------------
@@ -465,7 +577,13 @@ class BeingGateClient:
                                     default_role="role:constellation:member",
                                     host_agent=getattr(self, "_host_agent", "sage-raising"),
                                     client_name=f"sage-{self.member_id}-gate")
-                ge = sg.GateEvent(tool=tool, tool_input=dict(intent.args), cwd=self.workspace,
+                tool_input = dict(intent.args)
+                if getattr(ev, "command", None) is not None:
+                    # The single gate derives NormalizedEvent.command from tool_input. Merely
+                    # calling _normalize above validates the compose but does not make the
+                    # gate judge it; the composed command must cross this seam explicitly.
+                    tool_input["command"] = ev.command
+                ge = sg.GateEvent(tool=tool, tool_input=tool_input, cwd=self.workspace,
                                   session_id=getattr(self, "host_session_id", None),
                                   raw={"effector": intent.effector, **intent.args})
                 d = sg.decide(ge, gp)
@@ -473,7 +591,8 @@ class BeingGateClient:
                 dec = d.decision if (available and d.decision in ("allow", "warn", "deny")) else "deny"
                 rule = d.rule or ("" if available else "gate.no_verdict")
                 return GatewayVerdict(dec, rule, getattr(d, "reason", "") or ("ok" if dec != "deny" else ""),
-                                      innate=False, stage="single-gate")
+                                      innate=False, stage="single-gate",
+                                      command=getattr(ev, "command", None))
             except Exception as e:  # a gate that raises is a refused act, never an ungoverned one
                 return GatewayVerdict("deny", "gate.raised", innate=True, stage="single-gate",
                                       reason=f"{type(e).__name__}: {e}")
@@ -540,7 +659,7 @@ class BeingGateClient:
                                           reason=f"society-safety failed ({type(e).__name__}); consequential act denied")
                 # observational: local law already allowed, soft-pass
         return GatewayVerdict(v.decision, v.rule, v.reason or "ok", v.innate, stage="local-law",
-                              granted=granted)
+                              granted=granted, command=getattr(ev, "command", None))
 
     # -- the F1a seam: gate, then dispatch, then consume the result ----------
     def dispatch(self, intent: BeingIntent) -> ResultEnvelope:

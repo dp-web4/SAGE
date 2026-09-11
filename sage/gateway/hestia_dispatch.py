@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope
@@ -86,8 +87,17 @@ class HestiaF1aDispatcher:
                  membot_endpoint: str = "http://127.0.0.1:8010/mcp",
                  membot_cartridge: Optional[str] = None,
                  seed_path: Optional[str] = None,
-                 peer_aliases: Optional[Dict[str, str]] = None):
+                 peer_aliases: Optional[Dict[str, str]] = None,
+                 # the being's OWN git worktree: where `check` runs and where it may
+                 # edit code. Never the shared checkout (PRD M1).
+                 worktree: Optional[str] = None,
+                 embodiment: Optional[dict] = None):
         self.plugin_id = plugin_id
+        self.worktree = (os.path.realpath(os.path.expanduser(str(worktree)))
+                         if worktree else None)
+        # Runtime provenance supplied by the launcher. This is deliberately a compact
+        # public identity for the active substrate, not host/infrastructure inventory.
+        self.embodiment = dict(embodiment or {})
         # the being's names for peers -> hub roster names (e.g. legion-being -> legion-sage,
         # the name legion-being joined under on 2026-09-05); env SAGE_PEER_ALIASES="a=b,c=d"
         self.peer_aliases = dict(peer_aliases or {})
@@ -515,9 +525,9 @@ class HestiaF1aDispatcher:
 
     def _do_request_scope(self, intent: BeingIntent) -> ResultEnvelope:
         """The daemon (handler.rs::tool_request_scope @a5e18af) reads plugin_id, role, path,
-        reason; a grant is reach on the path, read AND write. There is no mode to carry: an
-        earlier `permits_read` was dropped silently by the daemon while the operator read
-        "[.., read]" on a request that, granted, gave write."""
+        reason; its law grant has no read/write mode. SAGE deliberately executes external
+        roots read-only until being-authored code has a principal isolated from the seat,
+        so the being-facing contract must describe that narrower effective affordance."""
         path = str(intent.args.get("path", "")).strip()
         reason = str(intent.args.get("reason", "")).strip()
         if not path.startswith("/"):
@@ -533,7 +543,7 @@ class HestiaF1aDispatcher:
             r = _os.path.realpath(str(root))
             if rp == r or rp.startswith(r + "/"):
                 return ResultEnvelope(ok=True, result={"status": "already_granted", "path": path, "within": r,
-                                                       "next": "you already hold reach here; read or write it directly"})
+                                                       "next": "you already hold read reach here; external writes stay disabled until principal isolation"})
         args: Dict[str, Any] = {"plugin_id": self.plugin_id, "path": path,
                                 "reason": f"[{self.plugin_id}] {reason}"}
         out = self._call("hestia_request_scope", args)
@@ -544,6 +554,170 @@ class HestiaF1aDispatcher:
                               result={"request_id": out.get("request_id"), "status": out.get("status"),
                                       "path": path,
                                       "next": out.get("next"), "on_timeout": out.get("on_timeout")})
+
+    # -- check: the being runs a test and reads the answer (PRD M0) --------------
+    def _do_check(self, intent: BeingIntent) -> ResultEnvelope:
+        """Run a declared test target in the being's OWN worktree and return the result.
+
+        Only ever reached on an intent the gate ALLOWED as the exact pytest command below.
+        A FAILING SUITE IS ok=True: the act succeeded and the answer is "it fails". Making
+        a red suite an error envelope would teach the being that checking is dangerous,
+        which is the opposite of what this organ is for — so `passed` carries the verdict
+        and `ok` carries only whether the check ran.
+        """
+        import hashlib
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import check_argv, check_command
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="check needs a worktree of your own; none is configured "
+                                       "on this seat (PRD M1)")
+        # Execute the command carried by the verdict, not a separately built lookalike.
+        # Recomposition below is an invariant check; it is not the execution authority.
+        try:
+            expected = check_command(intent.args, {"worktree": self.worktree})
+            argv = check_argv(intent.args, {"worktree": self.worktree})
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        cmd = getattr(getattr(self, "_verdict", None), "command", None)
+        if not cmd:
+            return ResultEnvelope(ok=False, error="check refused: the allow verdict did not bind "
+                                  "the composed command")
+        if cmd != expected or shlex.split(cmd) != argv:
+            return ResultEnvelope(ok=False, error="check refused: the command judged by the law "
+                                  "does not equal the command this dispatcher would execute")
+        target = str(intent.args.get("target", "")).strip()
+
+        tree_before, status_before = self._worktree_revision()
+        if not tree_before.get("head") or status_before is None:
+            return ResultEnvelope(ok=False, error="check refused: the worktree revision could "
+                                  "not be established")
+        if tree_before["dirty"]:
+            return ResultEnvelope(ok=False, error="check refused: the worktree has uncommitted "
+                                  "changes, so HEAD does not identify the bytes that would run")
+        try:
+            source_before = self._test_source_identity(target, tree_before["head"])
+        except Exception as e:
+            return ResultEnvelope(ok=False, error=f"check refused: test-source identity could "
+                                  f"not be established ({type(e).__name__}: {e})")
+
+        begin = self._call("hestia_begin_action", {"tool_name": "check", "target": target})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        try:
+            proc = subprocess.run(argv, cwd=self.worktree,
+                                  capture_output=True, timeout=600)
+            passed = proc.returncode == 0
+            output_bytes = (proc.stdout or b"") + (proc.stderr or b"")
+            output_sha256 = hashlib.sha256(output_bytes).hexdigest()
+            out = output_bytes.decode("utf-8", errors="replace").strip()
+            # The tail is where pytest puts the verdict and the failure detail; the head is
+            # progress dots. Truncate from the FRONT so a failure is never the part cut.
+            if len(out) > 3000:
+                out = "[…truncated…]\n" + out[-3000:]
+            ran, detail = True, out
+        except Exception as e:
+            ran, passed, detail = False, False, f"{type(e).__name__}: {e}"
+        try:
+            self._call("hestia_record_outcome",
+                       {"action_id": action_id, "success": ran, "magnitude": 0.0})
+        except Exception:
+            pass
+        if not ran:
+            return ResultEnvelope(ok=False, error=f"check could not run: {detail[:400]}",
+                                  witness_id=action_id)
+
+        tree_after, _status_after = self._worktree_revision()
+        try:
+            source_after = self._test_source_identity(target, tree_after.get("head"))
+        except Exception:
+            source_after = None
+        stable = tree_after == tree_before and source_after == source_before
+        return ResultEnvelope(ok=True, witness_id=action_id,
+                              result={"target": target, "passed": passed,
+                                      "verdict": "PASS" if passed else "FAIL",
+                                      "output": detail, "worktree": self.worktree,
+                                      "evidence": {
+                                          "tree": tree_before,
+                                          "command": cmd,
+                                          "argv": argv,
+                                          "test_source": source_before,
+                                          "exit_status": proc.returncode,
+                                          "output_sha256": output_sha256,
+                                          "output_bytes": len(output_bytes),
+                                          "class": "independent",
+                                          "embodiment": self.embodiment,
+                                          "stable": stable,
+                                          "state": ("pinned" if stable else
+                                                    "tree_changed_during_check"),
+                                      },
+                                      "action_id": action_id})
+
+    def _git(self, *args: str) -> Optional[str]:
+        """Run one read-only git query in the check worktree."""
+        import subprocess
+        try:
+            proc = subprocess.run(("git", *args), cwd=self.worktree, text=True,
+                                  capture_output=True, timeout=15)
+            return proc.stdout.strip() if proc.returncode == 0 else None
+        except Exception:
+            return None
+
+    def _worktree_revision(self) -> tuple[dict, Optional[str]]:
+        """Return the exact committed revision and whether other bytes are present."""
+        head = self._git("rev-parse", "HEAD")
+        status = self._git("status", "--porcelain", "--untracked-files=all")
+        top = self._git("rev-parse", "--show-toplevel")
+        canonical_top = os.path.realpath(top) if top else None
+        if canonical_top != self.worktree:
+            head, status = None, None
+        return ({"head": head, "short": (head or "")[:9] or None,
+                 "dirty": None if status is None else bool(status)}, status)
+
+    def _test_source_identity(self, target: str, head: Optional[str]) -> dict:
+        """Digest the selected acceptance bar, separately from the production tree SHA.
+
+        The bar is every tracked file below the declared suite plus each tracked
+        ``conftest.py`` pytest loads on the path from the worktree root to that suite.
+        Paths and byte lengths are framed into the digest so concatenation is unambiguous.
+        """
+        import hashlib
+        from sage.gateway.being_gate_client import CHECK_TARGETS
+
+        if not head:
+            raise ValueError("missing HEAD")
+        suite = target.partition("::")[0]
+        rel_root = CHECK_TARGETS[suite].rstrip("/")
+        listed = self._git("ls-tree", "-r", "--name-only", head, "--", rel_root)
+        if listed is None:
+            raise ValueError("git could not enumerate the test source")
+        paths = [p for p in listed.splitlines() if p]
+
+        parent = Path(rel_root)
+        for ancestor in (Path("."), *parent.parents, parent):
+            candidate = (ancestor / "conftest.py").as_posix()
+            if candidate.startswith("./"):
+                candidate = candidate[2:]
+            if candidate and self._git("cat-file", "-e", f"{head}:{candidate}") is not None:
+                paths.append(candidate)
+
+        paths = sorted(set(paths))
+        if not paths:
+            raise ValueError("the selected suite has no tracked test source")
+        digest = hashlib.sha256()
+        for rel in paths:
+            data = (Path(self.worktree) / rel).read_bytes()
+            name = rel.encode("utf-8")
+            digest.update(len(name).to_bytes(8, "big")); digest.update(name)
+            digest.update(len(data).to_bytes(8, "big")); digest.update(data)
+        git_tree = self._git("rev-parse", f"{head}:{rel_root}")
+        if not git_tree:
+            raise ValueError("git could not identify the test-source tree")
+        return {"sha256": digest.hexdigest(), "git_tree": git_tree,
+                "root": rel_root, "files": len(paths)}
 
     # -- channel_egress: not built on the daemon ----------------------------
     def _do_channel_egress(self, intent: BeingIntent) -> ResultEnvelope:

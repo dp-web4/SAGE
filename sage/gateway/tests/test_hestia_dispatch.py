@@ -2,8 +2,11 @@
 see, so the three measured contract deltas (pointer_uri, kind enum, live session_id) and the
 r1 envelope (hestia.<code> error keys) are pinned without a running daemon."""
 import os
+import re
+import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict  # noqa: E402
@@ -118,6 +121,22 @@ def _disp(**kw):
 
 def _notify_args():
     return [a for n, a in FakeMcp.calls if n == "hestia_member_notify"][-1]
+
+
+def _clean_check_tree(test_body="def test_bar():\n    assert True\n"):
+    """A minimal committed SAGE-shaped tree for exercising the real pytest subprocess."""
+    root = Path(tempfile.mkdtemp(prefix="hd-check-"))
+    tests = root / "sage" / "gateway" / "tests"
+    tests.mkdir(parents=True)
+    (root / ".gitignore").write_text("__pycache__/\n*.pyc\n.pytest_cache/\n")
+    (root / "conftest.py").write_text("# acceptance fixture root\n")
+    (tests / "test_bar.py").write_text(test_body)
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "SAGE test"], cwd=root, check=True)
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", "bar"], cwd=root, check=True)
+    return root
 
 
 def test_mesh_routes_remote_with_pointer_uri_and_session():
@@ -547,6 +566,53 @@ def test_recall_answers_from_the_home_first_then_long_term_memory():
     assert env.ok and "From your own journal" in env.result and "unreachable" in env.result
     env = d2(BeingIntent("recall", {"query": "zebra"}), GatewayVerdict("allow"))
     assert not env.ok and "membot" in env.error
+
+
+def test_check_result_binds_command_tree_bar_output_exit_class_and_embodiment():
+    from sage.gateway.being_gate_client import check_command
+    root = _clean_check_tree()
+    embodiment = {"running_tag": "test:model", "matches_declaration": True}
+    d, _ = _disp(worktree=str(root), embodiment=embodiment)
+    intent = BeingIntent("check", {"target": "gateway::test_bar"})
+    command = check_command(intent.args, {"worktree": str(root)})
+    env = d(intent, GatewayVerdict("allow", command=command))
+    assert env.ok and env.result["passed"] and env.result["verdict"] == "PASS", env
+    evidence = env.result["evidence"]
+    assert evidence["command"] == command
+    assert evidence["argv"][-2:] == ["-k", "test_bar"]
+    assert evidence["exit_status"] == 0
+    assert re.fullmatch(r"[0-9a-f]{64}", evidence["output_sha256"])
+    assert evidence["output_bytes"] > 0
+    assert evidence["tree"]["head"] == subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, check=True,
+        text=True, capture_output=True).stdout.strip()
+    assert evidence["tree"]["dirty"] is False
+    assert evidence["test_source"]["files"] == 2  # selected test + loaded root conftest
+    assert re.fullmatch(r"[0-9a-f]{64}", evidence["test_source"]["sha256"])
+    assert evidence["class"] == "independent"
+    assert evidence["embodiment"] == embodiment
+    assert evidence["stable"] and evidence["state"] == "pinned"
+
+
+def test_check_refuses_unbound_command_and_dirty_tree_before_execution():
+    from sage.gateway.being_gate_client import check_command
+    root = _clean_check_tree()
+    d, _ = _disp(worktree=str(root))
+    intent = BeingIntent("check", {"target": "gateway"})
+
+    env = d(intent, GatewayVerdict("allow"))
+    assert not env.ok and "did not bind" in env.error
+
+    command = check_command(intent.args, {"worktree": str(root)})
+    env = d(intent, GatewayVerdict("allow", command=command + " --maxfail=1"))
+    assert not env.ok and "does not equal" in env.error
+
+    (root / "sage" / "gateway" / "tests" / "test_bar.py").write_text(
+        "def test_bar():\n    assert False\n")
+    FakeMcp.calls.clear()
+    env = d(intent, GatewayVerdict("allow", command=command))
+    assert not env.ok and "uncommitted changes" in env.error
+    assert not [name for name, _args in FakeMcp.calls if name == "hestia_begin_action"]
 
 
 if __name__ == "__main__":

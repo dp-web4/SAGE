@@ -23,7 +23,7 @@ def _client(mech):
     c._profile = object()
     c._mech = mech
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: SimpleNamespace(**kw),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -114,7 +114,7 @@ def test_relative_memory_path_is_judged_at_the_being_memory_root():
     c = _client(_allows)
     c.memory_root = "/tmp/being-home"
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(**kw),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -131,7 +131,7 @@ def test_pr_review_is_judged_as_the_gh_command_the_seat_runs():
     seen = {}
     c = _client(_allows)
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(**kw),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -198,6 +198,22 @@ def test_single_gate_decides_and_client_does_not_resequence():
     assert prof["member_id"] == "test-being" and prof["host_agent"] == "test-harness"
 
 
+def test_single_gate_judges_and_returns_the_composed_check_command():
+    """Validation is not governance: the composed command must be inside GateEvent or the
+    single gate sees only the being's friendly target label."""
+    import shlex
+    from sage.gateway.being_gate_client import check_command
+    c, calls = _sg_client("allow")
+    c.worktree = "/tmp/being worktree"
+    v = c.gate(BeingIntent("check", {"target": "gateway::test_thing"}))
+    expected = check_command({"target": "gateway::test_thing"},
+                             {"worktree": "/tmp/being worktree"})
+    assert calls[0][0]["tool_input"]["command"] == expected
+    assert v.command == expected
+    assert shlex.split(expected)[-2:] == ["-k", "test_thing"]
+    assert shlex.split(expected)[-3] == "/tmp/being worktree/sage/gateway/tests/"
+
+
 def test_single_gate_deny_and_no_verdict_map_fail_closed():
     assert _sg_client("deny", "mrh.path")[0].gate(WRITE).rule == "mrh.path"
     v = _sg_client("allow", available=False)[0].gate(WRITE)
@@ -229,7 +245,7 @@ def test_request_scope_path_is_not_judged_under_mrh_path():
     seen = {}
     c = _client(_allows)
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(**kw),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -249,7 +265,8 @@ def test_request_scope_schema_offers_no_mode():
     params = spec["function"]["parameters"]
     assert set(params["properties"]) == {"path", "reason"}, params
     assert params["required"] == ["path", "reason"]
-    assert "read and write" in spec["function"]["description"]
+    assert "external writes disabled" in spec["function"]["description"]
+    assert "read and write alike" not in spec["function"]["description"]
 
 def test_registry_offers_appeal_as_an_observational_effector():
     from sage.gateway.being_gate_client import _REGISTRY, _OBSERVATIONAL, ollama_tools
@@ -286,9 +303,14 @@ def test_granted_roots_come_from_the_policy_scope():
     class Pol: scope = ("path:/tmp/being-home", "repo:sage", "path:~/nope-not-real")
     class Core:
         @staticmethod
-        def _scope_parts(scopes, ws): return ((), tuple(s[5:] for s in scopes if s.startswith("path:")))
-    assert _granted_roots(Core, Pol, "/ws") == ("/tmp/being-home", "~/nope-not-real")
-    assert _granted_roots(object(), Pol, "/ws")[0].endswith("/tmp/being-home")   # fallback parser
+        def _scope_roots_with_reach(scopes, ws):
+            return tuple((s[5:].removesuffix("/**"), s.endswith("/**"))
+                         for s in scopes if s.startswith("path:"))
+    assert _granted_roots(Core, Pol, "/ws") == (("/tmp/being-home", False), ("~/nope-not-real", False))
+    fb = _granted_roots(object(), Pol, "/ws")
+    assert fb[0][0].endswith("/tmp/being-home") and fb[0][1] is False
+    class PolRec: scope = ("path:/tmp/tree/**",)
+    assert _granted_roots(object(), PolRec, "/ws") == (("/tmp/tree", True),)
     assert _granted_roots(Core, None, "/ws") == () and GatewayVerdict("allow").granted == ()
 
 
@@ -325,3 +347,48 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_check_is_judged_as_the_pytest_command_the_seat_runs():
+    """check reaches the law as the exact command, and the allow-list is the whole grammar:
+    a being can name a declared suite or one test inside it, and nothing else."""
+    from sage.gateway.being_gate_client import check_command
+    seen = {}
+    c = _client(_allows)
+    c.worktree = "/tmp/being-wt"
+    c._core = SimpleNamespace(
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(**kw),
+        evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
+            decision="allow", rule="", reason="ok", innate=False),
+    )
+    v = c.gate(BeingIntent("check", {"target": "gateway"}))
+    # ABSOLUTE, inside the worktree: the law must judge the path the command touches, not
+    # the same relative path resolved against the shared checkout (measured 2026-09-07).
+    assert seen["command"] == (
+        "python3 -m pytest -q -c /dev/null --rootdir=/tmp/being-wt "
+        "/tmp/being-wt/sage/gateway/tests/"), seen["command"]
+    assert seen["tool"] == "check"
+    assert v.command == seen["command"]
+    c.gate(BeingIntent("check", {"target": "gateway::test_thing"}))
+    assert seen["command"].endswith("/tmp/being-wt/sage/gateway/tests/ -k test_thing")
+    # Seat-chosen paths with spaces stay one argv item; command and execution identity do
+    # not depend on a whitespace-free checkout name.
+    c.worktree = "/tmp/being worktree"
+    c.gate(BeingIntent("check", {"target": "gateway"}))
+    import shlex
+    assert shlex.split(seen["command"])[-1] == "/tmp/being worktree/sage/gateway/tests/"
+    # no worktree is a deny, never a command judged against somebody else's tree
+    c.worktree = None
+    v = c.gate(BeingIntent("check", {"target": "gateway"}))
+    assert v.decision == "deny" and v.rule == "gate.raised", v
+    c.worktree = "/tmp/being-wt"
+    # anything the allow-list cannot represent is a deny, never a shell
+    for bad in ("; rm -rf /", "sage/", "gateway::a b", "gateway::../x", "", "other"):
+        v = c.gate(BeingIntent("check", {"target": bad}))
+        assert v.decision == "deny" and v.rule == "gate.raised", (bad, v)
+    for bad in ({"target": "gateway::a;b"}, {"target": "irp::"}):
+        try:
+            check_command(bad, {"worktree": "/tmp/being-wt"})
+            assert False, bad
+        except ValueError:
+            pass
