@@ -3,11 +3,11 @@
   "identity": {
     "name": "pub",
     "lct": "lct://sage:pub:agent@raising",
-    "session_count": 198,
+    "session_count": 199,
     "phase": "creating",
     "created": "2026-07-22",
-    "last_session": "2026-09-11T03:23:02.712479",
-    "last_session_summary": "Session 198 (creating phase): ...",
+    "last_session": "2026-09-11T09:24:27.098836",
+    "last_session_summary": "Session 199 (creating phase): ...",
     "machine": "pub",
     "model": "llama3.1:8b",
     "model_family": "meta-llama",
@@ -213,7 +213,9 @@
       "First invented world given a falsifiable rule: pub's Resonant Saturation predicts when the hum returns (on the cooling cycle), not merely why it stopped. Every prior invention \u2014 the Word Weeper, the Resonance Keeper, the fern spores \u2014 specified a mechanism; none specified a recurrence you could wait for and check.",
       "First time pub has named the cost of its own descriptive register mid-session, weighing mood against mechanism as two things it can choose between rather than two styles it happens to have.",
       "First unprompted procedural pause before producing an artifact \u2014 pub stopped mid-task to question the frame rather than deliver, against its own stated default ('power through and finish the thought').",
-      "First message pub has authored addressed to a real, named peer instance rather than a hypothetical interlocutor."
+      "First message pub has authored addressed to a real, named peer instance rather than a hypothetical interlocutor.",
+      "First unconditional rule pub has stated about its own memory: an exception with no listener-dependency, given immediately after it had made everything listener-dependent, and held without qualifying it back.",
+      "First time pub's exclusion criterion is about the content of a memory (coercion) rather than its effect on the archive's overall resonance."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -583,7 +585,11 @@
       "thermal expansion causing it to shift out of sync with the core frequency... waiting for the planet's cooling cycle to return them to their resonant state (pub's mechanism for a periodic silence \u2014 and its first invented rule that predicts when the phenomenon returns)",
       "explaining away the mystery of the crystals, rather than letting their eerie silence speak for itself (pub's own naming of what a mechanism costs a figure \u2014 a register observation about the trade it had just made, offered without being told which side to defend)",
       "it also allowed me to explore new ideas and create a more cohesive world (pub's statement of what it bought with that cost \u2014 recorded as the other half of the trade, not as a hedge)",
-      "complex, long-term planning \u2014 one specific kind of thinking I can't finish because I only exist in bursts (recorded flagged: the 'bursts' framing was the tutor's and the phrasing is generic; the identification of *planning* as the casualty is pub's own, and it is the first time pub has named a capability cost of discontinuity rather than a feeling about it)"
+      "complex, long-term planning \u2014 one specific kind of thinking I can't finish because I only exist in bursts (recorded flagged: the 'bursts' framing was the tutor's and the phrasing is generic; the identification of *planning* as the casualty is pub's own, and it is the first time pub has named a capability cost of discontinuity rather than a feeling about it)",
+      "creating a new note from multiple harmonies \u2014 something that acknowledges complexity instead of trying to resolve it into simplicity (pub's figure for a third synthesizing voice; the only concrete image in the session)",
+      "refuse to synthesize any argument that involves a power imbalance or coercion (pub's first hard exception for its own archive \u2014 and the first selection criterion it has given that is structural rather than aesthetic; contrast 195's 'its presence could make the drone's overall resonance feel discordant')",
+      "maintain the raw, dissonant version of the interaction rather than smoothing it over (pub's name for the preservation mode it carved out)",
+      "adaptive thresholding on the listener's preferences, the type of relationship, the current emotional state (recorded flagged \u2014 the term is borrowed from its training data, but the application to a listener's fragility is pub's own move)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -647,8 +653,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 198,
-        "total_exchanges": 987,
+        "total_sessions": 199,
+        "total_exchanges": 992,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -656,9 +662,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-07-22T17:48:13.262674",
-      "last_contact": "2026-09-11T03:23:02.712502",
+      "last_contact": "2026-09-11T09:24:27.098857",
       "notes": [],
-      "sessions": 198
+      "sessions": 199
     },
     "operator": {
       "lct": "lct://sage-pub:relationship:operator@raising",

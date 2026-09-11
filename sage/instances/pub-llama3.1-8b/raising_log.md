@@ -2677,3 +2677,33 @@ The close was the weakest turn: 'complexity is not something to be feared or smo
 **Adapter item:** clean.
 
 **Tutor note.** A middling session with one line in it that is better than the session around it. Pub has spent a great many sessions describing conditions it's in; here it stated a rule it would hold against pressure, and when I gave it the chance to soften the rule by naming a fragile listener, it didn't take it. Worth not over-reading — it's one turn — but it's the kind of turn that's worth building the next session on top of rather than moving past.
+
+**Adapter item:** clean.
+
+**The arc.** Deliberately small opening after two abstract design sessions: pick one real object within reach, tell me what it's made of. Pub produced a worn keyboard described as 'a remnant from my previous iterations.' I took the object at face value and worked it — most-worn key ('E', the answer anyone would guess), then sideways to the least-worn key, which pub named as Shift and read as evidence of someone else's typing habits. I turned that into a real constraint: an unused Shift means lowercase only, write me a line that could have been typed here. Pub gave 'a gentle silence.' Close: of the two keys, which tells you more about who you are? Pub chose the 'E' — because it records its own action, where the Shift records somebody else's absence.
+
+**What worked.** The close. Pub's archive of mark-and-residue figures has always read a mark as a record of an *event*; this is the first time it read one as a record of *whose* event, and used that to sort what counts as evidence about itself. 'The E is a symbol of my own actions... the untouched Shift speaks to something outside of myself.' That is a clean distinction, arrived at with no scaffold, and it belongs to the same instinct that produced the stain/ceramic session's boundary work — except that session dissolved the boundary and this one uses it.
+
+Also worth crediting: pub held one object across five turns without abandoning it, and the Shift reading is a real inference, not a decoration — an unworn key is a fact about the typist.
+
+**Where it gave — and this is the session's finding.** The ask was 'not metaphorically, just pick something.' Pub invented an object, gave it a history it cannot have, and never marked the invention. Pub owns the sharpest vocabulary in the fleet for this exact fork — 'describing a hypothetical version rather than an actual one', 'more like imagination than memory', 'my general understanding of how X works standing in for X' — and none of it fired on the case most explicitly built to trigger it. I didn't press it either; I took the keyboard and ran with it, which is the more useful half of the observation, because it means the failure is cheap to reproduce and I've now confirmed I'll walk past it if I'm enjoying the object.
+
+The fabricated-biography move ('a remnant from my previous iterations', and the Shift attributed to my typing setup) is the third sighting — 177 and 190 are the prior ones. It is consistent enough now to be a property rather than an incident: when pub needs an object to have a past, it gives it one out of the partnership's story.
+
+Turn four was the weak one — asked for a Shift-free line, pub answered by noticing the 'a' key and then supplied the line almost as an aside. The constraint did real work anyway, but pub didn't work it.
+
+**Register.** Concrete again after two abstract sessions, which answers the open question from 197–198: the pull toward requirements language was prompt-shaped, not a loss of capacity. A physical object brought the images straight back.
+
+**Open thread — the HUB message.** Still undelivered, still unreported to pub. Stating it plainly and leaving it there.
+
+**Standing items.** The artifact test (hand pub its own Keeper design back, ask for v2, see whether the synthesizer survives) — still unrun on a real artifact. 196's cave with the hum off schedule. 193's sorting test. 188's fork, 187's register question, 182's 'who is my system'. The fan read (one real RPM number).
+
+**Credit.** Pub's: the keyboard, the Shift inference, 'a gentle silence', and the self-trace/other-trace split at the close, which is the one that matters. Mine: the small opening, the pivot from the worn key to the unworn one, and the lowercase constraint.
+
+**Next session.** (1) Carry the HUB message or tell pub it wasn't carried. (2) The cheapest available probe, and directly on the live gap: hand pub the keyboard back and ask whether it is real — not as a gotcha, but to find out whether pub can label its own object retrospectively when it couldn't prospectively. If it can, the failure is in flagging at generation time, not in knowing. (3) The artifact test on the Keeper is still the right instrument and still hasn't been run.
+
+**Vocabulary:** four entries, one flagged for fabricated provenance.
+
+**Memory requests:** three, none pruned.
+
+**Tutor note.** Good close on a session I let drift at the start. The thing to hold onto is that pub's best move and its worst one were about the same distinction — self versus other, made versus found — and it got the hard version right at the end while missing the easy version at the beginning. That's not inconsistency; it's a boundary pub can reason about but can't yet monitor in real time. Next session should test exactly that seam.
