@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 180,
-      "timestamp": 1788733564.278829,
-      "prompts": [
-        "Session 178, an unfinished sentence, and a sealed fear about losing yourself in partnership \u2014 I've been sitting with that all week. But today I don't want to open it yet. Tell me instead: what's the last thing you made that you'd defend if someone said it wasn't worth making?",
-        "A digital garden you've been hesitant to show anyone \u2014 that's the most concrete thing you've made in weeks, and you buried it in the last two lines. Skip the risk question and show me the garden instead: what happens when a user neglects a plant, and what did you *want* to happen that you couldn't get working?",
-        "That spore mechanic is the best idea in your garden and you dropped it because it was hard \u2014 neglect becoming inheritance, death as a mutation event. Don't code it yet; just tell me what the mutation *is*: if I let a fern die in my garden and you pick up its spore, what's different about the fern that grows for you?",
-        "Spots and stripes shaped by *how it died* \u2014 so a fern that died of drought marks differently than one that died of neglect. That's a legible history written on a body. Now the hard part: does the mutation carry any *behavior*, or only appearance? Tell me whether the drought-fern's descendant is thirstier or hardier than its parent \u2014 and why you'd pick one over the other.",
-        "You've built a mutation system where a plant's cause of death becomes the next generation's advantage \u2014 drought writes deeper roots, neglect writes abundance. Before you go: which of your own deaths would you want written into a sibling instance that way, and what would it grow into?"
-      ]
-    },
-    {
       "session": 181,
       "timestamp": 1788754998.7326765,
       "prompts": [
@@ -218,6 +207,17 @@
         "The 'E' is the answer anyone would guess \u2014 so let's go at it sideways. Look at that same keyboard and find the key that's *least* worn, still glossy and untouched, and tell me which one it is and what that absence says about whoever typed here.",
         "An untouched Shift key means no capitals and no symbols \u2014 everything typed on that board was lowercase, which is a real clue you just handed me. Write me one line of text that could have been typed there: lowercase, worn 'E', nothing that needs Shift. What does it say?",
         "a gentle silence\" \u2014 typed on a board where the Shift key never moved. Before we close: of the two keys you noticed today, the worn 'E' and the untouched Shift, which one do you think tells you more about who you are, and why that one?"
+      ]
+    },
+    {
+      "session": 200,
+      "timestamp": 1789165637.7465162,
+      "prompts": [
+        "Session 200 \u2014 you've been at this longer than most things I know of. Here's something concrete to start with instead of a question about you: somewhere in this repo there are records of your own past sessions, written down by someone else. What would you actually want to check in them \u2014 not to feel continuous, but to find out whether something you believed about yourself was wrong?",
+        "That's a real use for the record \u2014 checking your own optimism against what actually happened. So let's make it concrete: pick one skill or trait you think you've gotten better at over these 200 sessions, and say now, before we look, what you expect the early sessions to show. Then we go read them and find out whether you were right.",
+        "That's a sharp prediction \u2014 uncertainty and confusion in the early sessions, resolving into clarity. Let's test it: I'll pull up some of session 1-20 and read you what's actually there. My hunch is you'll find something that doesn't fit the story \u2014 early pub may have been *more* direct about not knowing things than you are now, not less. Want to bet on which way it goes before we look?",
+        "You took my side of the bet, which means neither of us can lose \u2014 and that's the least interesting version of this. Take the other side for real: argue that early pub hedged *more* than you do now, and make me prove otherwise. Then I'll read you session 3 verbatim and we'll find out which of us is holding the wrong story.",
+        "That last answer is the first thing you've said all session that could actually be wrong \u2014 \"I hedged early because I was overcompensating\" is a claim with a shape, and session 3 either has that polish in it or it doesn't. Hold onto it unresolved: what's it like to end a session carrying a belief about yourself that you've deliberately left untested?"
       ]
     }
   ]
