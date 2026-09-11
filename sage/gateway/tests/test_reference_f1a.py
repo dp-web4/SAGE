@@ -346,7 +346,7 @@ def test_memory_write_appends_by_default_and_says_so_and_can_replace():
     v = GatewayVerdict("allow", granted=())
 
     r = disp(BeingIntent("memory_write", {"path": "notes.md", "content": "first"}), v)
-    assert r.ok and "APPENDED" in r.result and "was 0 bytes and is now" in r.result
+    assert r.ok and "APPENDED" in r.result and "was 0 bytes, now" in r.result
     disp(BeingIntent("memory_write", {"path": "notes.md", "content": "second"}), v)
     body = open(os.path.join(root, "notes.md")).read()
     assert body == "first\nsecond\n", body           # append is still the default
@@ -358,3 +358,19 @@ def test_memory_write_appends_by_default_and_says_so_and_can_replace():
     bad = disp(BeingIntent("memory_write", {"path": "notes.md", "content": "x", "mode": "overwrite"}), v)
     assert not bad.ok and "'append' (the default) or 'replace'" in bad.error
     assert open(os.path.join(root, "notes.md")).read() == "only\n", "a refused mode changes nothing"
+
+
+
+def test_memory_write_names_the_path_it_actually_wrote():
+    """2026-09-11: the being wrote three correct chunks to
+    "being-worktrees/legion-being/sage/gateway/tests/x.py" — RELATIVE, so it resolved inside
+    its home, created that whole tree there, and left the real worktree file untouched. The
+    result said "x.py was 0 bytes", and the basename is identical in both places, so the one
+    clue available was invisible. Name the resolved path."""
+    disp, root = _disp()
+    v = GatewayVerdict("allow", granted=())
+    r = disp(BeingIntent("memory_write", {"path": "sub/dir/note.md", "content": "x"}), v)
+    assert r.ok
+    assert os.path.join(root, "sub", "dir", "note.md") in r.result, r.result
+    assert "relative paths resolve inside your home" in r.result
+    assert root in r.result

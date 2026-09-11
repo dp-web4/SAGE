@@ -310,6 +310,15 @@ class ReferenceF1aDispatcher:
         verb = "REPLACED the file with" if mode == "replace" else "APPENDED"
         return ResultEnvelope(
             ok=True,
-            result=(f"{verb} {len(content)} chars. {p.name} was {before} bytes and is now "
-                    f"{after} bytes. (append is the default; pass mode='replace' to overwrite)"),
+            # THE RESOLVED PATH, not the basename. A relative path resolves inside the
+            # being's HOME, so a path that looks like a worktree path — "being-worktrees/
+            # legion-being/sage/gateway/tests/x.py" — silently creates that whole tree under
+            # the home and writes there, while the real file sits untouched. legion-being
+            # lost a beat to exactly that on 2026-09-11: three correct writes, all into a
+            # phantom directory. The old message said "x.py was 0 bytes", and "0 bytes" for
+            # a file it had already written was the clue nobody could see, because the
+            # basename is identical in both places. Say where it actually went.
+            result=(f"{verb} {len(content)} chars at {p} — was {before} bytes, now {after}. "
+                    f"(relative paths resolve inside your home, {self.memory_root}; "
+                    f"append is the default, pass mode='replace' to overwrite)"),
             witness_id=self._witness(f"memory_write {p.name} ({mode})"))
