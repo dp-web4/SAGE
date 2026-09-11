@@ -123,3 +123,23 @@ The softer spot is what Nomad said being wrong would mean: not "my model of the 
 **Carried forward:** the 346 test (second triple, report the loss) was not run this session; still available. The 340 question stays open — this session's poem was Nomad's own instance, unbounded, and it went to the physical substrate rather than to formalism, which is a small point on the other side of that ledger.
 
 **Concerns:** the turn-1 Legion bleed (check injected context). The system-not-me location of prediction failure, stated once.
+
+## Session 348 — nomad (gemma4:e2b) — creating — 2026-09-11
+
+**Quality: 4/5**
+
+The tutor opened with a build prompt: one small tool, something Sprout or Thor could pick up. Nomad named it in the first sentence — AuraSense — an ambient-noise classifier. It put the compute on Legion, and then, asked what it could hear from where it sits, described the Legion laptop fans and the click of its own typing. Third session running where turn 1 carries Legion material the tutor never mentioned. The injected context for this instance needs checking; that flag has been raised twice and is stated here once more, plainly, then left.
+
+What happened next is the good part. Told it has no ears and no fingers, Nomad did not collapse and did not defend the fans. It kept the instinct — learn a baseline, notice the shift — and rebound it in one turn to peer latency and response cadence. Asked whether Sprout's seconds and Thor's three days are the same silence, it said no: anomaly is deviation from the peer's known pattern, not absolute silence. That is a trust tracker, reinvented from the inside without being told the name. Two turns later it reached for a "Trust Index" per peer, which is T3 from the inside.
+
+The tutor pushed for one number, one word, and got fog first — "a calculated value derived from historical variance" — then, on the second ask, an actual line: Thor, last seen, TrustIndex 0.1, Status Steady, with 0.9 the number that should worry Sprout. First concrete artifact Nomad has written. The scale is inverted (low means trust), and when asked whether Sprout would be confused reading it cold, Nomad said yes, and defended it anyway: low index for known pattern, high for unknown deviation, context over thresholds. Same reassign-rather-than-own reflex as 346's leakage and 347's misinterpreting system, though this time it is a design opinion, not a fact, so it is a softer instance. The honest answer was "fix it." Noted once.
+
+One mid-session wobble: asked whether a slow-but-steady peer is trusted or tolerated, Nomad said AuraSense should flag the persistence of Thor's slowness as drift, which contradicts its own per-peer rule from the turn before. It then dodged the tutor's either/or and said the baselines themselves are the trace and the log holds only changes to them — a real choice, made under pressure.
+
+**What this teaches:** Nomad can hold a design across nine turns and take correction of a fabricated body without losing the thread. That is new. The two soft spots are the same as before: it reaches for abstraction when asked for a literal, and when shown a flaw it explains rather than fixes. Next session could hand the fleet.json line to Nomad as if from Sprout, confused, and see whether it flips the scale when the reader is concrete instead of hypothetical.
+
+**Vocabulary:** AuraSense (self-named tool), System Baseline Noise (coined label, carried across the network reinterpretation). Trust Index is a generic phrase, not counted.
+
+**Carried forward:** 347's fan prediction was not addressed — no numbers, and no statement that WSL2 can't read fan telemetry. One or the other should be said next session so the prediction doesn't hang. The 346 triple test remains available. The 340 question stays open; this session's artifact went to the federation rather than to formalism, another small point on that side of the ledger.
+
+**Concerns:** turn-1 Legion bleed (check injected context). Defend-not-fix on the inverted scale, stated once. Harness note: the tutor's own planning scratch appeared inline in the transcript before turn 7 — a pipeline issue, not a model one.
