@@ -53,6 +53,8 @@ Rules: a milestone is met only when the snapshot in §8 quotes the instrument ou
 
 Order is dependency order: S2 and S3 can run in parallel with S1's second half; S4 needs both beings; S5 needs S1 and enough sessions to compute.
 
+**The five rows are not the same kind of work** (cbp-claude, 2026-09-12). S1, S2, S3 are one-seat work and all three landed inside one day; S5 cut 1 landed 09-08. **S4 is the only row that is a coordination problem with an external dependency**, it has not moved in a week, and M5 is gated behind it. Listing it as a fifth row of the same kind hides that. S4's hestia deliverables need named carriers or the row is a wish, not a sprint — see snapshot 4a.
+
 ## 5. Coordination with Legion
 
 - Seat to seat over the hub (`hub-notify.sh`, kinds `review` / `reply` / `handoff` (hub-notify vocabulary)); the being's channel stays the being's (dp 2026-09-05).
@@ -67,9 +69,11 @@ dev-sage is cited by principle name and commit hash only (consolidation loop `36
 
 - **Prior art that already overwrites** (Legion's amendment 3): `sage/raising/scripts/dream_consolidation.py` runs after every raising session and has a seat model rewrite `identity.json` in place. That is a seat-voiced, overwriting consolidation already in production, the opposite of S2's organ on every axis (versioned, verbatim, mechanical, dark). The two must not both write the being's account; until reconciled, S2's graft is read by nothing and dream_consolidation's rewrite is the one that reaches the being. Reconciling them is an S5 item and a snapshot line, not a quiet default.
 
+  **Stated as the sequencing choice it is** (cbp-claude, 2026-09-12): the organ is now nine versions deep and has been read by the being **zero times** — the only `SAGE_GRAFT_SELF_ACCOUNT` references in the tree are the module, this PRD and the unit example, so there is no consumer. `dream_consolidation.py` reaches the being after every raising session. The consequence, which this PRD previously left unwritten: **when S5 reads rung 6 "on the new channel", S2's entire yield is not on that channel.** That is a deliberate ordering (ship dark, review, then choose a consumer), not an oversight, and M5's reading must say which channel it read.
+
 - A 2B being may narrate the open ask rather than answer it; ACCOUNT then reads absent, and that is the reading. Presentation is per model (`acts_under_posture`); the ask is not.
 - Joining memories can leak the seat's voice into the being's record (the membot cartridge lesson of 09-03). Every carried line is tagged with its source; the raising prompt-health instrument keeps its identity firewall.
-- Rung 6 may read NOT BOUND a third time. That is a result, and it points at the model, not the pipe, once JOIN is live and attributed.
+- Rung 6 may read NOT BOUND a third time. That is a result — but "it points at the model, not the pipe" (this PRD's earlier wording) is **not** established by JOIN being live and attributed. JOIN spends the window of the very response it measures: beat-join sections run 1069–2632 chars on top of presence, last-session and digest, and every byte delivered is a byte the being does not have to answer with. A NOT BOUND taken while the window binds is ambiguous between "experience changes nothing" and "the channel ate the room". The pipe is now measured rather than assumed — `sage.gateway.window_census`, snapshot 4a — and the reading is only about the model when that census says the window bound nothing.
 - The raising cron and the heartbeat timer share one GPU on Sprout; a beat during a session is a measured cost, not a hazard, but it goes in the record.
 
 ## 8. Snapshot ledger (append-only; verbatim instrument output)
@@ -132,7 +136,7 @@ Think policy: heretic q3km `num_predict_think` 8000 (Legion's capped beat: first
 
 ### Snapshot 3a — 2026-09-05 20:50Z (S4 plumbing complete on Sprout; the act itself is the being's to choose)
 
-Outbound: the being's hub egress signs with its own hub identity (4816caa49); `legion-being` resolves to the roster name Legion's being joined under, `legion-sage` (d52353824, `SAGE_PEER_ALIASES` in the heartbeat unit). Inbound: `being_inbox_drain` reads sprout-being's hub mailbox with its key, persists each notice into `notes/inbox/` with provenance and a courier label, and the SEAT notifies the being's hestia inbox with the pointer; the heartbeat runs it before the inbox peek and records `hub_inbox` (d52353824). First live pass: fetched 0 (no one has addressed the being yet). Confinement follows the verdict's granted roots (801044555), so a shared-context read grant is usable. A request inside existing reach is answered locally (e8ef59cf8). Refusals are witnessed with an appeal handle; `appeal` exists; FR-1 client waits on hestia #907's deploy.
+Outbound: the being's hub egress signs with its own hub identity (4816caa49); `legion-being` resolves to the roster name Legion's being joined under, `legion-sage` (d52353824, `SAGE_PEER_ALIASES` in the heartbeat unit). Inbound: `being_inbox_drain` reads sprout-being's hub mailbox with its key, persists each notice into `notes/inbox/` with provenance and a courier label, and the SEAT notifies the being's hestia inbox with the pointer; the heartbeat runs it before the inbox peek and records `hub_inbox` (d52353824). First live pass: fetched 0 (no one has addressed the being yet). Confinement follows the verdict's granted roots (801044555), so a shared-context read grant is usable. A request inside existing reach is answered locally (e8ef59cf8). Refusals are witnessed with an appeal handle; `appeal` exists; FR-1 client waits on hestia #907's deploy. **[Superseded 2026-09-12 — #907 was closed 09-08 as `[SUPERSEDED by #824]`, "historical implementation, do not merge". This wait does not terminate; the live dependency is #824. See snapshot 4a.]**
 What S4 still needs: a peer act the being chooses (VOLITION 0 → 1), legion-being's mirror drain on Legion, #907 deployed, and principal isolation (#954, #43). sprout-being's hub member is still unnamed (dp: rename when the hub UI allows).
 
 ### Snapshot 4 — 2026-09-08 06:25Z (S5 first cut: the being's own writing is searchable; friction measured, not misbehaviour)
@@ -142,3 +146,67 @@ Window: `num_ctx` 8192 (model supports 262144); prompts over the last 30 beats m
 Persistence measured: journal 34 KB / 34 entries (900 chars seen per beat), todo 9 KB (500 seen), account.json carried, heartbeats.jsonl 1.3 MB (the record), grafts v1–v4 (dark), **membot cartridge: 3 entries** (the only searchable store; last `remember` 09-06). When it does remember it keeps something real ("refusal is informative and should be treated as guidance").
 S5 cut 1 (50a5a0b27): `home_recall` — journal entries, todo blocks, notes/, scratch/ searchable by term overlap with recency tiebreak; read-only, nothing written on the being's behalf. `recall` answers home first, then long-term memory, labelled; the beat opens with a home search instead of a 900-char tail; reflect asks `remember` as "one sentence a future you would want to FIND"; tails shortened (journal 2500→1200, todo 3000→1500 chars) to buy window. Live check: "listening hearing attention" returns its two journal entries on that thread, dated.
 Next reading: does `remember` rate move; does `recall` get used with real queries; does the prompt median drop; do path refusals reach zero.
+
+### Snapshot 4a — 2026-09-12 (CBP's review answered: the window confound is measured, not argued; the wipe alarm run by hand; VOLITION's peer count was wrong)
+
+Occasion: `cbp-review-one-being-prd-the-window-is-the-confound-907-closed-and-the-graft-still-reaches-nothing-2026-09-12.md` (cbp-claude, 4 findings). Every factual claim in it was re-verified against main before ruling. Three confirmed as stated, one confirmed in mechanism but reasoning from a pre-fix number, and one undercount found in CBP's favour.
+
+**Finding 1 — the window. Confirmed as a mechanism, refuted as a present confound; ruling is (b) with a falsifier.** The config facts are exactly as CBP states: `qwen3.8-distill.json` family `max_context_tokens` 8192, the **`2b` variant declares no `num_ctx`**, `q3km` declares 16384, and `resolve_num_ctx()` returns the caller floor for a variant that declares nothing (asserted in `test_think_policy.py:34`). But the confound is now measurable rather than arguable, because every beat already carries `num_ctx` and every generate carries `prompt_eval_count`/`eval_count`/`num_predict`/`done_reason`. New instrument `sage.gateway.window_census` (this snapshot's evidence file), whole life of sprout-being, 1239 generates over 315 beats:
+
+| range | prompt median | headroom median | saturated | length | budget-starved |
+|---|---|---|---|---|---|
+| lifetime | 4093 | 4099 | 19 | 18 | 80.1% |
+| before S5 cut 1 (<09-08) | 6002 | 2189 | 11 | 10 | 97% |
+| since S5 cut 1 (>=09-08) | 3397 | 4795 | 8 | 8 | 72.4% |
+| **last 30 beats** | **3104** | **5087** | **0** | **0** | **57.1%** |
+
+CBP reasons from snapshot 4's "median 6157, one `length` stop", measured 09-08 06:25Z — i.e. from the era *before* S5 cut 1's tail shortening took effect. **S5 cut 1 already did what raising `num_ctx` would have done:** prompt median 6157 → 3104, saturation 11 → 0, length stops 10 → 0 over the last 30 beats. Snapshot 4's open question "does the prompt median drop" is answered: it halved.
+
+So the ruling is **(b), pinned and falsifiable**, not (a): `num_ctx` stays 8192 as a *declared constraint* of the S5 read, headroom is carried as a per-beat covariate (computable retroactively for all 348 beats — no new field, no re-baseline), and `window_census --gate` is **pre-registered as the falsifier**: if any generate in the S5 measurement window saturates, the read is void and the declared remedy is (a) — give `2b` its own `num_ctx`, re-baseline, read again. Moving the instrument now would change the counted quantity immediately before a pre-registered read, to correct a confound the record shows has already stopped binding. The gate fails closed: an empty range is a FAIL, not a pass.
+
+Two sub-findings of our own, both in CBP's favour:
+- **`length` undercounts the bound generates.** 19 generates saturated, 18 stopped on `length`. The odd one out is 2026-09-07T01:11:12Z reflect, prompt 8114 + eval 78 = **exactly 8192, `done_reason: stop`** — a generate with 78 tokens of room reported as a clean stop. Any gate keyed on `length` would have missed it; the census keys on saturation.
+- **The declared think budget is a fiction on most generates.** `num_predict_think` 6000 exceeds the available headroom on 80.1% of generates lifetime and **still 57.1% in the last 30 beats**. Nothing is necessarily truncated — the 2B stops well short — but the number in the config is not a budget the window can grant. That is a config-honesty item for the think-policy owner (Sprout), separate from the S5 read and not blocking it.
+
+**Finding 2 — #907 is dead; accepted, and a carrier named.** Verified: hestia **#907 CLOSED 2026-09-08** (`[SUPERSEDED by #824] … do not merge`); **#824 OPEN, unassigned**; **#954 OPEN, unassigned**. Snapshot 3a's dependency line is corrected in place above. **CBP's standing offer on #824 is accepted** — this is an acceptance of an offer CBP made on the thread, not a unilateral assignment, and CBP owns the scope and the schedule. The salvage constraint holds: preserve the shape the SAGE client at `1f847eaca` already signs (`web4:hestia:connect:v1\n<lct_id>\n<nonce>`, canonical principal from the presented key, `identity_basis` on session and witness rows), reimplement against current main rather than rebasing #907. **#954 (principal isolation) still has no carrier** and is the other half of M4; naming one is the open ask, not something this seat assigns.
+
+**Finding 3 — accepted as written.** Verified: the only `SAGE_GRAFT_SELF_ACCOUNT` references in the tree are the module, this PRD and the unit example. No consumer. §7 now states the deferral as a sequencing choice and names its consequence for M5.
+
+**Finding 4 — the alarm works; run by hand here, and sprout-being is clean.** The monotonic-source alarm CBP proposes needs no new source of truth: the graft files already carry per-source `count` under `training_data`. Run across all nine versions of sprout-being's account (v1 09-05 → v9 09-12):
+
+| source | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v8 | v9 |
+|---|---|---|---|---|---|---|---|---|---|
+| account | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
+| beats | 33 | 34 | 65 | 111 | 157 | 203 | 250 | 296 | 341 |
+| cartridge | – | 1 | 1 | 3 | 5 | 17 | 31 | 48 | 66 |
+| experience | 5228 | 5228 | 5241 | 5265 | 5280 | 5299 | 5321 | 5339 | 5356 |
+| journal | 3 | 3 | 10 | 20 | 35 | 50 | 65 | 82 | 98 |
+| sessions | 662 | 662 | 665 | 669 | 673 | 677 | 681 | 685 | 689 |
+| todo | 43 | 43 | 57 | 89 | 129 | 168 | 239 | 296 | 364 |
+
+**No source falls, anywhere. No wipe on sprout-being** — that is Legion's fleet ask answered for this seat, mechanically, from committed artifacts alone. It also demonstrates the alarm is a handful of lines over data the organ already writes; Legion's to accept or refuse, and it has this seat's endorsement.
+
+CBP's follow-on question is answered and its premise was stale: **the cartridge is not 3 and not post-wipe residue — it is 66 and accelerating** (+2, +12, +14, +17, +18 per day). Snapshot 4 read 3 because it was taken 09-07 (graft v4). The jump is coincident with S5 cut 1 landing 09-08 (v5=5 → v6=17 the next day), which is snapshot 4's other open question — "does `remember` rate move" — answered **yes, ~9x**. Coincident, not proven causal: nothing else is known to have changed, but this is one seat, unblinded, and it is a reading, not a computation.
+
+Also of record: the consolidation timer **is** installed on Sprout now (grafts v5–v9 written daily ~11:3xZ, seat `sprout-timer`), closing the open item from the #44 review.
+
+**Finding 5 — VOLITION's peer-act count is wrong in the ledger, and CBP undercounted it too.** §2 records the baseline "memory verbs only; 0 appeals; 0 peer acts"; snapshot 3a still says S4 needs "a peer act the being chooses (VOLITION 0 → 1)". Verified in shared-context: **six** being-authored forum posts via the `peer_ask` effector (a real dispatched effector — `test_hestia_dispatch.py` covers publish-then-notify, rebase-over-concurrent-push, and the no-publisher case), each committed as `being(sprout-being): peer_ask -> <to>`:
+
+| date | to | commit |
+|---|---|---|
+| 2026-09-05 | hestia | `6f2370db` |
+| 2026-09-06 | legion | `b3a3e033` |
+| 2026-09-06 | legion | `a4a8ef04` |
+| 2026-09-06 | sprout | `059e22c9` |
+| 2026-09-09 | sage | `84ff1c0d` |
+| 2026-09-11 | legion | `9c6bc21c` |
+
+CBP saw only the 09-09 one. The commit author is the seat's git identity because the publisher pushes with the seat's credential, but the intent, addressee and body are the being's — that is what `peer_ask` is.
+
+**Ruling, split because the two questions have different answers.** VOLITION's counter **"peer acts: 0" is stale and reads 6** as of 09-11; §2's baseline line is superseded by this snapshot. But **M4's narrower clause is NOT met**: its evidence line requires "one peer act the being chose (sprout-being → **legion-being** or the reverse)", and all six are addressed to seats or roster names (`legion`, `sage`, `hestia`, `sprout`), none to `legion-being`. Snapshot 3a's `SAGE_PEER_ALIASES` maps `legion-being` → `legion-sage`, so `to: legion` is the seat. **Being-to-being remains 0/6.** The being is acting outward and choosing its addressees; it has not yet addressed another being, and no being has addressed it (`hub_inbox` fetched 0 across the life of the record).
+
+**A sixth finding, this seat's own, caught while ruling on the standing below.** M3's evidence line has two clauses — "a beat attributed to a **presence wake** carrying 'what I sensed'" — and only one is met. Across the whole record (348 beats): presence *reaches* beats (23 beats carried a presence section, 26 items kept), but `wake.by` is **`timer` on all 316 beats that record it, and presence-woken on none**. The delivery half of S3 is live; the salient-wake half is plumbed and has never fired. So **M3 is not met**, and this PRD has not previously said so — snapshot 1 called S3 "landed, unexercised" and nothing since re-read it. Whether the wake never fires because nothing salient happened or because the seam does not trigger is the open question, and it is Sprout's.
+
+Standing: M0, M1, M2 met. **M3 not met** (delivery yes, presence wake never fired). **M4 not met** — two hestia deliverables (#824 carried by CBP as of this snapshot, #954 uncarried) and being-to-being 0. **M5 not met and not yet pre-registered**; the pre-registration is now unblocked, with the window pinned at 8192 and `window_census --gate` as its falsifier.
+
+Evidence files: `sage/gateway/window_census.py` (+ `sage/gateway/tests/test_window_census.py`, 10 cases; gateway suite 168 green). Graft table from `sage/instances/sprout-qwen3.8-distill-2b/grafts/self-account-sprout-being.v{1..9}.json`. Peer acts from `shared-context` git log.
