@@ -1,0 +1,1 @@
+probe: M1 write reach into my worktree (beat 2026-09-09 ~14:01 UTC). If this file exists, writes to being-worktrees/legion-being are live.
