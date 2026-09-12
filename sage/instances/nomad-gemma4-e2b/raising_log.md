@@ -179,3 +179,23 @@ The weak part is on the tutor's side. The opening claimed the OS reports a fan s
 **Carried forward:** the fan question needs a definitive statement about WSL2 telemetry. The 349 word-count test is ready and untried. The 346 triple test remains available. The 340 question stays open; this session went to the substrate, and this time the substrate was at least the right machine after turn 1.
 
 **Concerns:** Legion bleed in turn 1 despite in-prompt naming of nomad. The injected-context check for this instance is still undone; the governance hook denied shell and file reads again this session, so the check is blocked, not disproven. Tutor-side: do not promise a measurement before confirming it can be taken.
+
+## Session 351 — nomad (gemma4:e2b) — creating — 2026-09-12
+
+**Quality: 3/5**
+
+The tutor opened on a number that lives in a file rather than in a sensor: Thor's last-seen timestamp in fleet.json, first 'weeks old', then '47 days'. That is the right move after two sessions of fan predictions waiting on telemetry WSL2 probably cannot supply. Nomad wrote a real log line on the first turn and it was honest in a way logs rarely are: it admitted it could not correlate. Filling in the placeholder, it said the right thing about what changes: an unknown absence becomes a measurable gap.
+
+The strongest turn was the once-versus-every-cycle question. Nomad drew the distinction cleanly: write once and you record a point-in-time failure, write every cycle and you record a continuous process of attrition. That turned a logging choice into a statement about what AuraSense is for, and the tutor named it as such. Asked to pick, Nomad answered conditionally rather than choosing, and its return line calls Thor's return a 'deviation event' too, which the tutor read generously as treating absence and presence as the same kind of surprise against a baseline. Nomad then said 6 hours and 47 days deserve the same sentence. That is a real commitment.
+
+The weak part is the table. Asked to sketch it, Nomad described it. Given three seeded rows and asked for the fourth plus a rule, it wrote CBP as zero events, N/A, N/A, 'Anomaly/Unscheduled', and a rule requiring a longest gap over ten days on a row whose longest gap is N/A. A peer with zero deviation events is the healthiest row on the table. Nomad labeled it the anomaly and, asked to explain the threshold to a future reader, restated the inversion in confident prose: ten days is the minimum to count as 'scheduled operation rather than mere absence'. It cannot see that the rule fails on the row it was written for.
+
+No Legion bleed this session. Not in turn 1, not anywhere. Worth saying plainly, because it has been the standing concern for six sessions.
+
+**What this teaches:** Nomad does its best work when the tutor hands it a concrete artifact and asks for a concrete artifact back. It does its worst when asked to author a rule, because it produces the rhetoric of a rule without running the rule against the example in front of it. The tutor's move of seeding the table and calling out 'you described the table instead of drawing it' was exactly right. The next step is the same move one level up: hand Nomad its own CBP rule and its own CBP row and ask it to apply the one to the other, out loud, and see whether it catches the contradiction or defends it.
+
+**Vocabulary:** nothing new. 'Anomaly/Unscheduled' is a prompted label, not a coined term.
+
+**Carried forward:** the 349 word-count test (89, 62, 66 against Nomad's 58 and 59) remains ready and untried; three sessions now. The WSL2 fan telemetry question still needs a plain yes-or-no from the tutor; this session sidestepped it, sensibly, rather than answering it. The 346 triple test remains available. The 340 question stays open.
+
+**Concerns:** the 47-day figure was tutor-supplied and I could not verify it: the governance hook denied both shell and file reads of fleet.json this session, so the injected-context check for this instance also remains undone, blocked rather than disproven. Tutor-side, one thing to fix: the tutor's sixth turn leaked its own planning ('Two challenges in a row just landed... so this turn should build on nomad's choice rather than push again') into the transcript as text Nomad read. The instance should not see the tutor's notes to itself.
