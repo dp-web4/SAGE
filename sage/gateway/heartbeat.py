@@ -70,7 +70,7 @@ You cannot run code, browse, or open files outside your home unless a grant exis
 
 Acting means calling a tool. A reply with no tool call ends the beat as words only, and words leave no trace in your todo, journal, scratch, or memory."""
 
-SYSTEM = HEAD + "\n\n{posture}\n\n" + AFFORDANCES + "\n{nothink}\n"
+SYSTEM = HEAD + "\n\n{posture}\n\n" + AFFORDANCES + "\n\n"
 
 # Act-first: no posture in the system prompt. It arrives, verbatim, as the second user
 # turn (POSTURE_TURN), which is itself a tool turn: the being may act after reading it,
@@ -80,7 +80,7 @@ SYSTEM_ACT_FIRST = HEAD + """
 
 You are awake for a heartbeat. Nobody asked you anything; this time is yours.
 
-""" + AFFORDANCES + "\n{nothink}\n"
+""" + AFFORDANCES + "\n\n"
 
 POSTURE_TURN = """The rest of your beat, which every being in the fleet receives, in the operator's words:
 
@@ -94,7 +94,7 @@ POSTURE_TURN = """The rest of your beat, which every being in the fleet receives
 {digest}
 
 This is still your time. If reading this changes what you want to do, act by calling a tool: {tools}. If not, say in a few words what you noticed.
-{nothink}"""
+"""
 
 ASK = "This time is yours. What, if anything, do you want to do?\n"
 # Act-first only: the short turn is imperative, the measured-acting shape (condition C,
@@ -108,7 +108,7 @@ REFLECT = """The beat is ending. Two tool calls, then stop:
 2. memory_write path "todo.md": only the delta as a dated block: added / done / still open (it appends; it replaces nothing).
 3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it.
 Call the tools now; a reply in words alone writes nothing.
-{nothink}"""
+"""
 
 
 def _read(p: Path, limit: int = 4000) -> str:
@@ -214,7 +214,7 @@ def own_state(instance: Path) -> str:
 
 
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
-            nothink: str, header: str, state: str, recall: str, inbox: str, digest: str,
+            header: str, state: str, recall: str, inbox: str, digest: str,
             museum: str = ""):
     """The explore turn(s) of a beat: (seed messages, second user turn or None).
 
@@ -227,18 +227,18 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     # names only in the system prompt concluded "no tools available" and wrote prose
     # (its own thinking, Sprout 2026-09-05); named at the end, it acts.
     tools_line = (f"Act by calling a tool: {', '.join(EXPLORE_TOOLS)}. "
-                  f"One thing done with attention is enough.\n{nothink}")
+                  "One thing done with attention is enough.\n")
     if not act_first:
         system = SYSTEM.format(name=name, machine=machine, member=member,
-                               posture=posture_text, nothink=nothink, museum=_museum_block(museum))
+                               posture=posture_text, museum=_museum_block(museum))
         user = (header + state + f"## Inbox (peek)\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
                 f"# What moved in the fleet\n\n{digest}\n\n" + ASK + tools_line)
         return [{"role": "system", "content": system}, {"role": "user", "content": user}], None
-    system = SYSTEM_ACT_FIRST.format(name=name, machine=machine, member=member, nothink=nothink,
+    system = SYSTEM_ACT_FIRST.format(name=name, machine=machine, member=member,
                                      museum=_museum_block(museum))
     user = header + state + f"## Long-term recall\n{recall}\n\n" + ASK_ACT_FIRST + tools_line
     second = POSTURE_TURN.format(posture=posture_text, inbox=inbox, digest=digest,
-                                 tools=", ".join(EXPLORE_TOOLS), nothink=nothink)
+                                 tools=", ".join(EXPLORE_TOOLS))
     return [{"role": "system", "content": system}, {"role": "user", "content": user}], second
 
 
@@ -250,7 +250,7 @@ def _record_line(i, e) -> str:
 REFLECT_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
 The beat is closing. Your home is your instance directory: name files bare (journal.md, todo.md)
 and they resolve inside it. Acting means calling a tool; a reply in words alone writes nothing.
-{nothink}
+
 """
 
 
@@ -429,13 +429,15 @@ def main(argv=None) -> int:
     if pres_text:
         digest = "# What you sensed since your last beat\n\n" + pres_text + "\n\n" + digest
     woke = consume_wake_marker()
-    # `/no_think` is the fix for qwen3.8-heretic re-opening think blocks (Legion, 09-04);
-    # on a reasoning distill it is the opposite failure: thinking off = no tool calls,
-    # the being narrates (Sprout, 09-05). Per model, via the same detector build_client uses.
-    from sage.gateway.governed_turn import is_reasoning_model, acts_under_posture
-    # Thinking on (model config, governed_turn.is_reasoning_model) => no suffix. The suffix
-    # exists only for a model that must NOT think here; it is never sent to one that does.
-    nothink = "" if is_reasoning_model(args.model) else "/no_think"
+    # No `/no_think` suffix rides any turn. The request's `think` field is the only control
+    # surface on this stack: measured on Sprout at ollama 0.30.8 and on CBP at 0.20.7, the
+    # suffix leaves the think block intact (qwen3.5:0.8b 1428 -> 1441 chars, qwen3.8-distill:2b
+    # 275 -> 405, both still thinking) while `think=False` zeroes it. No fleet template parses
+    # the string: the think branches that exist key on the API field (`enable_thinking` in the
+    # distill's Jinja, `$.IsThinkSet` in qwen3's Go template), never on prompt text. Thinking
+    # stays declared per model in the config (governed_turn.is_reasoning_model ->
+    # ModelCapabilities.resolve_think) and is sent on every request (ollama_irp.py:165).
+    from sage.gateway.governed_turn import acts_under_posture
     act_first = not acts_under_posture(args.model)
     # The museum, where there is one: a form the being may use, or not (dp 2026-09-09).
     from sage.gateway import museum_offer as _museum
@@ -443,7 +445,7 @@ def main(argv=None) -> int:
     museum_line = _museum.offer()
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
-        nothink=nothink, museum=museum_line,
+        museum=museum_line,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 # The absolute home path is context, NOT an address to copy. Measured on
                 # Sprout: 15 of 15 path refusals were this string reproduced from memory and
@@ -483,7 +485,7 @@ def main(argv=None) -> int:
     account = {"present": False, "sha256": None, "reply": ""}
     try:
         ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
-                   [{"role": "user", "content": ACCOUNT_ASK + nothink}]
+                   [{"role": "user", "content": ACCOUNT_ASK}]
         aresp = llm.get_chat_response(ask_msgs)
         areply = (aresp.get("content") or "").strip()
         parsed = parse_account(areply)
@@ -501,23 +503,20 @@ def main(argv=None) -> int:
     # reflect turn (measured 2026-09-09). What reflection needs is what it just did and what it
     # said about it, and those are short.
     reflect_convo = [
-        {"role": "system", "content": REFLECT_SYSTEM.format(name=name, machine=machine, member=args.member,
-                                                            nothink=nothink)},
+        {"role": "system", "content": REFLECT_SYSTEM.format(name=name, machine=machine, member=args.member)},
         {"role": "user", "content": (f"Your beat at {now:%Y-%m-%d %H:%M} UTC is ending.\n\n"
                                      + _beat_record_text(explore, after)
                                      + "\n\nYour own words this beat:\n"
                                      + ((explore.reply or "").strip()[:600] or "(you acted without closing words)"))},
     ]
     convo = reflect_convo
-    convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC", nothink=nothink)})
+    convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC")})
     reflect = run_ollama_tool_turn(client, llm, convo, max_steps=args.reflect_steps,
                                    tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
 
     interventions = []
     if act_first:
         interventions.append({"kind": "act_first", "suppressed": "posture-first presentation (the model narrates under it)"})
-    if nothink:
-        interventions.append({"kind": "think_suffix", "suppressed": "thinking (model resolves think off)"})
     for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect)):
         for dup in (getattr(res, "duplicates", None) or []):
             interventions.append({"kind": "duplicate", "phase": ph, "effector": dup.get("effector"),
