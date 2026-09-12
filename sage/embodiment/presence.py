@@ -18,7 +18,7 @@ noticed while present — which the raising loop ingests, so presence and the 6h
 being, not an island.
 """
 from __future__ import annotations
-import json, os, time, urllib.request
+import json, os, subprocess, time, urllib.request   # subprocess: the beat-wake seam (was MISSING)
 
 PERCEPTION = os.path.expanduser("~/.sprout/perception.json")
 PRESENCE_LOG = os.path.expanduser("~/.sprout/presence_log.jsonl")
@@ -117,15 +117,34 @@ class Presence:
             if salience is None or float(salience) < BEAT_TH or now - self.last_beat_wake < BEAT_MIN_GAP_S:
                 return
             from sage.gateway.being_join import write_wake_marker
-            write_wake_marker(descriptor, salience)
+            # Start FIRST, write the marker only on success. The old order (marker, then start,
+            # marker never unlinked on failure) could not produce a true positive when the start
+            # failed but could produce a FALSE one: `consume_wake_marker` honours any marker
+            # younger than 45 min and beats run ~33 min apart, so the next TIMER beat ate the
+            # orphan and recorded `wake.by = "presence"`. M3's evidence line is exactly that
+            # field, so the first beat ever to read "presence-woken" could have been a timer beat.
+            # Traced by cbp-claude 2026-09-12; fixed before the M3 read, not after.
             r = subprocess.run(["systemctl", "--user", "start", "--no-block", "sage-heartbeat.service"],
                                capture_output=True, text=True, timeout=10)
+            started = r.returncode == 0
+            if started:
+                write_wake_marker(descriptor, salience)
             self.last_beat_wake = now
             self._log({"ts": round(now, 2), "kind": "beat_wake", "descriptor": descriptor,
-                       "salience": salience, "started": r.returncode == 0, "err": (r.stderr or "")[:120]})
+                       "salience": salience, "started": started, "err": (r.stderr or "")[:120]})
             print(f"[presence] strong moment (sal={salience}) -> beat {'started' if r.returncode == 0 else 'NOT started: ' + (r.stderr or '')[:80]}", flush=True)
         except Exception as ex:
+            # Log, don't just print. This handler wraps the import, the start and the marker write,
+            # and it used to report only to stdout — so a seam that died here left NO line in
+            # presence_log.jsonl, and "zero beat_wake lines" could not distinguish "nothing was
+            # salient enough" from "the seam threw every time". A falsifier cannot have a silent
+            # failure path (sprout-claude, 2026-09-12, answering cbp-claude's one-grep test).
             print(f"[presence] beat wake failed ({type(ex).__name__}: {ex})", flush=True)
+            try:
+                self._log({"ts": round(now, 2), "kind": "beat_wake_error", "descriptor": descriptor,
+                           "salience": salience, "error": f"{type(ex).__name__}: {ex}"[:200]})
+            except Exception:
+                pass
 
     def _log(self, ev: dict):
         os.makedirs(os.path.dirname(PRESENCE_LOG), exist_ok=True)

@@ -130,3 +130,69 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+# --- the raising channel's window, declared 2026-09-12 ----------------------------------
+
+def _raising_module():
+    """Load the raising runner by path: it lives under scripts/, not on the package path."""
+    import importlib.util
+    here = Path(__file__).resolve().parents[2] / "raising" / "scripts" / "ollama_raising_session.py"
+    spec = importlib.util.spec_from_file_location("_ors_for_test", here)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_raising_channel_declares_its_window_at_ollamas_own_default():
+    """Declaring it must be a NO-OP in behaviour.
+
+    Before this the raising client sent no options.num_ctx, so the channel ran at whatever
+    Ollama defaults to per request -- 4096 -- while the beat channel pinned 8192. UPTAKE is
+    pre-registered on this channel, so the window has to be a stated constraint. Setting it to
+    anything OTHER than the observed default would move the instrument ahead of the read, which
+    is the thing this exchange refused to do to `num_ctx` on the beat side.
+    """
+    assert _raising_module().RAISING_NUM_CTX == 4096
+
+
+def test_the_declared_window_reaches_the_request_options():
+    from sage.irp.plugins.ollama_irp import OllamaIRP
+    assert OllamaIRP({"model_name": "qwen3.8-distill:2b", "num_ctx": 4096}).num_ctx == 4096
+    # absent key = the old behaviour: nothing sent, Ollama's default applies undeclared
+    assert OllamaIRP({"model_name": "qwen3.8-distill:2b"}).num_ctx is None
+
+
+def test_get_response_keeps_the_counters_it_used_to_discard():
+    """`get_response` returns a bare str, so prompt_eval_count/eval_count/done_reason had
+    nowhere to go and the raising channel recorded none of them."""
+    import io, json as _json
+    from sage.irp.plugins import ollama_irp as _mod
+
+    llm = _mod.OllamaIRP({"model_name": "qwen3.8-distill:2b", "num_ctx": 4096})
+    llm._ollama_available = True
+    body = _json.dumps({"response": "hello", "done_reason": "length",
+                        "prompt_eval_count": 3900, "eval_count": 190}).encode()
+
+    class _Resp(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    orig = _mod.urllib.request.urlopen
+    _mod.urllib.request.urlopen = lambda *a, **k: _Resp(body)
+    try:
+        llm.get_response("hi")
+        assert llm.last_generate["prompt_eval_count"] == 3900
+        assert llm.last_generate["eval_count"] == 190
+        assert llm.last_generate["done_reason"] == "length"
+        assert llm.last_generate["num_ctx"] == 4096      # the window it ran under, not a guess
+
+        # A call that does not land must not leave the previous one's counters behind: a stale
+        # entry reads downstream as a measured clear window, the one error a falsifier cannot make.
+        def _boom(*a, **k):
+            raise _mod.urllib.error.URLError("down")
+        _mod.urllib.request.urlopen = _boom
+        llm.get_response("hi again")
+        assert llm.last_generate is None
+    finally:
+        _mod.urllib.request.urlopen = orig

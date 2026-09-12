@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from sage.gateway.governed_turn import acts_under_posture, needs_think_to_act  # noqa: E402
-from sage.gateway.heartbeat import EXPLORE_TOOLS, compose  # noqa: E402
+from sage.gateway.heartbeat import EXPLORE_TOOLS, account_generate, compose  # noqa: E402
 
 POSTURE = "## Why you are awake\n\nA heartbeat is not a question. Nobody asked you anything."
 TOOLS = ", ".join(EXPLORE_TOOLS)
@@ -82,3 +82,39 @@ if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):
             f(); print("ok", n)
+
+
+# --- the account turn's counters (2026-09-12) ------------------------------------------
+
+class _LLM:
+    """Enough of OllamaIRP for _sent_budget: the adapter-resolved budget wins."""
+    max_response_tokens = 1024
+
+    def resolve_num_predict(self):
+        return 6000
+
+
+def test_the_account_turn_records_the_counters_its_own_response_carried():
+    """It takes no tools, so it never ran through the tool loop and had no on_generate --
+    the beat's largest generate was written into no section at all."""
+    aresp = {"content": "PLACE: here", "raw": {"done_reason": "stop",
+                                               "prompt_eval_count": 7762, "eval_count": 300}}
+    entry = account_generate(aresp, _LLM())
+    assert entry == {"done_reason": "stop", "prompt_eval_count": 7762, "eval_count": 300,
+                     "retried": 0, "num_predict": 6000}
+
+
+def test_an_account_turn_that_did_not_land_records_nothing_rather_than_zeroes():
+    """A zero counter reads downstream as a free window; absence is a counted skip."""
+    assert account_generate({"content": "[OllamaIRP: Error: ...]", "raw": {}}, _LLM()) is None
+    assert account_generate({}, _LLM()) is None
+    assert account_generate(None, _LLM()) is None
+
+
+def test_the_entry_carries_the_same_five_keys_the_tool_loop_writes():
+    """Shape discovery and the census read one shape; a sixth key or a missing one would make
+    the account rows sort differently from every other generate in the beat."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn  # noqa: F401
+    entry = account_generate({"raw": {"done_reason": "stop", "prompt_eval_count": 1,
+                                      "eval_count": 2}}, _LLM())
+    assert set(entry) == {"done_reason", "prompt_eval_count", "eval_count", "retried", "num_predict"}
