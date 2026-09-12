@@ -9,7 +9,7 @@ from sage.gateway.heartbeat import EXPLORE_TOOLS, compose  # noqa: E402
 
 POSTURE = "## Why you are awake\n\nA heartbeat is not a question. Nobody asked you anything."
 TOOLS = ", ".join(EXPLORE_TOOLS)
-KW = dict(name="sprout", machine="sprout", member="sprout-being", posture_text=POSTURE, nothink="",
+KW = dict(name="sprout", machine="sprout", member="sprout-being", posture_text=POSTURE,
           header="HEADER\n", state="STATE\n", recall="RECALL", inbox="INBOX", digest="DIGEST")
 
 
@@ -35,11 +35,19 @@ def test_act_first_moves_the_posture_verbatim_to_a_second_tool_turn():
     assert "DIGEST" in second and "INBOX" in second and TOOLS in second, "the posture turn is a tool turn"
 
 
-def test_nothink_suffix_rides_every_turn_when_set():
-    seed, second = compose(True, **{**KW, "nothink": "/no_think"})
-    assert seed[0]["content"].rstrip().endswith("/no_think")
-    assert seed[1]["content"].rstrip().endswith("/no_think")
-    assert second.rstrip().endswith("/no_think")
+def test_no_turn_carries_a_think_suffix():
+    """The `/no_think` suffix is retired: it was never a control surface on this stack.
+    Measured 2026-09-12 -- Sprout at ollama 0.30.8, CBP at 0.20.7 -- appending it leaves the
+    think block intact (qwen3.5:0.8b 1428 -> 1441 chars, qwen3.8-distill:2b 275 -> 405, both
+    still thinking) while `think=False` zeroes it. No fleet template parses the string; the
+    think branches that exist key on the API field, not on prompt text. Thinking is declared
+    per model in the config and sent as the request's `think` field (irp/plugins/ollama_irp.py:165)."""
+    from sage.gateway.heartbeat import REFLECT
+    for act_first in (False, True):
+        seed, second = compose(act_first, **KW)
+        for turn in [m["content"] for m in seed] + ([second] if second else []):
+            assert "/no_think" not in turn
+    assert "/no_think" not in REFLECT
 
 
 def test_predicates_are_per_model_not_size():
@@ -72,7 +80,7 @@ def test_the_reflect_context_is_its_own_record_not_the_whole_beat():
 
     class T:
         def __init__(self, trace): self.trace = trace
-    sysmsg = REFLECT_SYSTEM.format(name="sprout", machine="sprout", member="sprout-being", nothink="")
+    sysmsg = REFLECT_SYSTEM.format(name="sprout", machine="sprout", member="sprout-being")
     assert "name files bare" in sysmsg and "BEING_POSTURE" not in sysmsg
     assert len(sysmsg) < 500                                  # compact by construction
     assert _beat_record_text(T([]), None) == "You called no tools this beat."

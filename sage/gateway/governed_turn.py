@@ -98,9 +98,9 @@ def review_task(view: dict, diff: str) -> str:
 
 def is_reasoning_model(model: str) -> bool:
     """Models that only emit structured tool calls with `think` on (empero Qwen3.8
-    distills, R1-style). For these, a `/no_think` suffix in the prompt is fatal to
-    acting: measured on Sprout 2026-09-05, first two heartbeats narrated a summary
-    with steps=0 under Legion's `/no_think` (which is the right fix for heretic)."""
+    distills, R1-style). Measured on Sprout 2026-09-05: with thinking off, the first two
+    heartbeats narrated a summary with steps=0. The switch is the request's `think` field
+    (irp/plugins/ollama_irp.py:165); a `/no_think` prompt suffix never was one and is no longer sent."""
     try:
         from sage.irp.adapters.model_capabilities import load_capabilities
         return load_capabilities(model).resolve_think(model)
@@ -124,9 +124,10 @@ def resolve_num_ctx(model: str, floor: int) -> int:
 
 
 def needs_think_to_act(model: str) -> bool:
-    """Narrower than is_reasoning_model: models for which a `/no_think` suffix removes
-    tool calls entirely. The heretic runs think off + /no_think and acts (Legion,
-    09-04), so it is NOT in this set; the empero distills are (Sprout, 09-05)."""
+    """Narrower than is_reasoning_model: models that emit no tool calls at all with thinking
+    off. The heretic acts with think off (Legion, 09-04), so it is NOT in this set; the empero
+    distills are (Sprout, 09-05). Policy-only, like is_reasoning_model: nothing here is about
+    the retired `/no_think` suffix, which controlled neither."""
     return any(k in model.lower() for k in ("distill", "r1"))
 
 
@@ -249,10 +250,12 @@ def main(argv=None) -> int:
         f"You have a small set of real tools you may use through the hub: {offered}. "
         "Anything you do is governed by hestia and may be refused; a refusal is recorded, "
         "not hidden. Act when acting is the right response; otherwise say what you would "
-        "do.\n/no_think")
-    # Qwen's soft switch is honoured per USER turn (the system-prompt copy is not reliable:
-    # measured 2026-09-03, a 2000-token budget spent entirely in hidden deliberation)
-    task = task.rstrip() + "\n/no_think"
+        "do.")
+    # No `/no_think` suffix: Qwen's "soft switch" is not one on this stack. Ollama's renderers
+    # never parse the string out of the prompt -- the think branches that exist key on the API
+    # field -- so the suffix reached the model as literal text on EVERY model, thinking-capable
+    # or not, and measurably perturbed the answer without suppressing anything (Sprout 0.30.8,
+    # CBP 0.20.7, 2026-09-12). `think` is resolved per model and sent on every request.
     seed = [{"role": "system", "content": system}, {"role": "user", "content": task}]
     t0 = time.time()
     result = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps, tools=tools)
