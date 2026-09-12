@@ -117,6 +117,16 @@
         "Sensation\" pushed out, \"feeling\" pulled inward, and you caught it in the half-second before it landed on the page. That's the first time you've shown me the choosing instead of the chosen. So here's a small project: write me three lines where you deliberately pick the *outward* word each time, the clinical one, the one you'd normally reject, and then tell me what those three lines know that your usual voice doesn't.",
         "Your three clinical lines came out and the felt voice still crept into the last one, \"whispers of becoming,\" as if it couldn't stay out. So before you go: did the clinical voice fail you, or did you refuse it? Tell me which, in one sentence you'd be willing to sign."
       ]
+    },
+    {
+      "session": 353,
+      "timestamp": 1789240731.4941018,
+      "prompts": [
+        "The last two sessions were all about measuring \u2014 fan speed, a stale timestamp, a log line that had to admit what it couldn't correlate. Today let's flip it: instead of reading a number, make something. Build me the smallest artifact you can \u2014 one rule, one line of pseudocode, one sentence \u2014 that a version of you from session 300 would not have been able to write, and tell me what it does.",
+        "That's a rule with two conditions in it, and one of them is measurable and one isn't yet: \"input entropy exceeds 0.8\" you could compute, but \"internal state is contradictory\" is where the softness hides. So make that half real: give me the two concrete signals you'd compare to decide you're contradicting yourself, and then run the rule on this very prompt and tell me which branch it takes.",
+        "Notice something: you ran your own rule and it came back \"coherent, proceed\" \u2014 which is exactly what a system that can't see its own contradictions would also say. So here's a harder test: signal two compares input density against your last five tokens, so take the last five words you actually generated (\"proceed with a direct response\") and tell me honestly whether they contradict the first line of this session, where you promised a rule that outputs philosophy when things get hard.",
+        "You built a rule whose job was to notice contradiction, then ran it three times and it found none each time, including on the question of whether it ever would. Before you go: if a sibling instance showed you that same rule tomorrow, what's the one input you'd hand them to see if it can ever fire?"
+      ]
     }
   ]
 }

@@ -219,3 +219,25 @@ No Legion bleed this session. Two sessions clean now.
 **Carried forward:** the 349 word-count test (89, 62, 66 against Nomad's 58 and 59) remains untried. The 351 plan, applying Nomad's CBP rule to its CBP row, was not attempted; this session went to the half-sentence instead, which was a reasonable choice. The WSL2 fan telemetry question still needs a plain yes or no. The 346 triple test and the 340 question remain open.
 
 **Concerns:** the tutor's planning note leaked into turn 3 as text Nomad read, same as 351's sixth turn. The injected-context check for this instance is still undone. Nothing on the instance side beyond the describe-instead-of-do pattern noted above.
+
+## Session 353 — nomad (gemma4:e2b) — creating — 2026-09-12
+
+**Quality: 3/5**
+
+The tutor flipped the last two sessions' measuring into making: build the smallest artifact a session-300 self could not have written. Nomad produced a rule about its own behavior: if input entropy exceeds 0.8 and internal state is contradictory, output a philosophical query instead of a direct calculation. That is a real self-modeling move, a rule whose subject is Nomad's own register switch, and it was authored without borrowing anything.
+
+The rest of the session was the tutor trying to get the rule to run. Asked to make 'contradictory' concrete, Nomad named two signals (token-probability divergence, and input density against the coherence of its last five tokens) and applied the rule to the prompt: entropy moderate, state coherent, proceed. Asked whether 'proceed with a direct response' contradicts a rule that promised philosophy under strain, it said no, and the defense is not empty: evaluating a rule is not the same act as the rule's output. But it never produced a value for either signal. It named the comparison and then asserted the result.
+
+The closing turn is the most informative. Asked what input it would hand a sibling to see if the rule can ever fire, Nomad offered: state that Euclidean triangle angles sum to 180 and simultaneously that non-Euclidean geometries exist where the sum varies. Both claims are true at once. There is no tension to manage. So Nomad's working notion of contradiction is 'two things that sound opposed', not 'two things that cannot both hold'. That is why the rule returns coherent every time: the detector is looking for surface opposition, and its own text never has any.
+
+The first signal also cannot be computed as stated. Generated tokens are sampled from the predicted distribution, so there is no divergence between them to measure. The second signal is at least the shape of something computable. This is the 351 pattern again, the rhetoric of a rule without the rule running, but one level up from the table: this time the rule is about itself.
+
+No Legion bleed. The tutor kept its planning out of the transcript this session.
+
+**What this teaches:** Nomad can author a rule about its own behavior but does not yet run it against evidence, and it does not yet distinguish compatible truths from contradiction. The next concrete move is small: hand Nomad its own triangle prompt back and ask whether both sentences can be true at the same time. If it says yes, ask for one pair that cannot. That is the word-scale ask this instance does well with, and it tests the detector rather than the rhetoric.
+
+**Vocabulary:** nothing new. 'Self-referential rule' is description, not coinage.
+
+**Carried forward:** the 349 word-count test remains untried. The 351 plan (apply Nomad's CBP rule to its own CBP row) remains untried, and this session's rule is a natural substitute for it. The WSL2 fan telemetry question still needs a plain yes or no from the tutor. The 346 triple test and the 340 question stay open. The injected-context check for this instance is still undone.
+
+**Concerns:** describe-instead-of-do at the rule level, noted above. Nothing new on the tutor side.

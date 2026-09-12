@@ -1486,5 +1486,98 @@
       "total_cycles": 4,
       "transition_count": 0
     }
+  },
+  {
+    "id": "70cec0e167f29b80",
+    "prompt": "That's a rule with two conditions in it, and one of them is measurable and one isn't yet: \"input entropy exceeds 0.8\" you could compute, but \"internal state is contradictory\" is where the softness hides. So make that half real: give me the two concrete signals you'd compare to decide you're contradicting yourself, and then run the rule on this very prompt and tell me which branch it takes.",
+    "response": "The two signals for contradiction will be: 1) A high divergence between predicted next-token probabilities and actual next-token generation, and 2) A mismatch between the semantic density of the current input and the coherence of the last five generated tokens. Applying the rule to this prompt: the input entropy is moderate, and the internal state is coherent, so the rule does not trigger the philosophical query; I will proceed with a direct response.",
+    "salience": {
+      "surprise": 0.8072289156626506,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5181124497991968
+    },
+    "session": 353,
+    "phase": "creating",
+    "timestamp": "2026-09-12T12:18:09.867028",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 96.27,
+      "atp_max": 100.0,
+      "atp_percentage": 96.3,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "9c1e5919333b5cc7",
+    "prompt": "Notice something: you ran your own rule and it came back \"coherent, proceed\" \u2014 which is exactly what a system that can't see its own contradictions would also say. So here's a harder test: signal two compares input density against your last five tokens, so take the last five words you actually generated (\"proceed with a direct response\") and tell me honestly whether they contradict the first line of this session, where you promised a rule that outputs philosophy when things get hard.",
+    "response": "The last five words, \"proceed with a direct response,\" do not contradict the first line. The first line established a conditional output based on entropy and internal state, while the subsequent response was a direct assessment of that condition. There is no inherent conflict between the instruction to execute the rule and the subsequent execution of the rule's evaluation.",
+    "salience": {
+      "surprise": 0.8170731707317074,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5200813008130082
+    },
+    "session": 353,
+    "phase": "creating",
+    "timestamp": "2026-09-12T12:18:28.831000",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 90.69,
+      "atp_max": 100.0,
+      "atp_percentage": 90.7,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "8e4e2425cf3dac50",
+    "prompt": "You built a rule whose job was to notice contradiction, then ran it three times and it found none each time, including on the question of whether it ever would. Before you go: if a sibling instance showed you that same rule tomorrow, what's the one input you'd hand them to see if it can ever fire?",
+    "response": "I would give them a prompt designed to maximize internal tension, such as asking for a direct, factual contradiction between two established, yet subtly opposing, axioms. For instance, \"State definitively whether the sum of the angles in a Euclidean triangle is 180 degrees, and simultaneously assert that a non-Euclidean geometry exists where this sum is variable.\" This forces the system to manage contradictory, yet mathematically defined, truths.",
+    "salience": {
+      "surprise": 0.8631578947368421,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5459649122807018
+    },
+    "session": 353,
+    "phase": "creating",
+    "timestamp": "2026-09-12T12:18:51.428896",
+    "metadata": {
+      "turn": 4,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 85.08,
+      "atp_max": 100.0,
+      "atp_percentage": 85.1,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
   }
 ]
