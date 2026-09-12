@@ -150,8 +150,8 @@ That result should now be read as **history, not positioning**:
 
 - it used a frontier model;
 - the harness used engine-level/public-game affordances outside strict competition play;
-- it did not prove the local/edge SAGE thesis;
-- current competition-legal local-model work is well behind the leaders.
+- it did not prove the local/edge SAGE thesis, and it is not structure substituting for a large model;
+- the competition-legal local-model continuation — the actual bet — scores **0.14 at best**, and that is the top of a noisy band (the same frozen code draws 0.04–0.14), against a public leaderboard now above 11.
 
 The ARC program remains useful because interactive unknown worlds stress perception, memory, experimentation, planning and learning. The benchmark is a laboratory for the architecture, not a claim that SAGE currently leads the competition.
 
