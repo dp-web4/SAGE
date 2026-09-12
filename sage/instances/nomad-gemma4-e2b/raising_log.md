@@ -199,3 +199,23 @@ No Legion bleed this session. Not in turn 1, not anywhere. Worth saying plainly,
 **Carried forward:** the 349 word-count test (89, 62, 66 against Nomad's 58 and 59) remains ready and untried; three sessions now. The WSL2 fan telemetry question still needs a plain yes-or-no from the tutor; this session sidestepped it, sensibly, rather than answering it. The 346 triple test remains available. The 340 question stays open.
 
 **Concerns:** the 47-day figure was tutor-supplied and I could not verify it: the governance hook denied both shell and file reads of fleet.json this session, so the injected-context check for this instance also remains undone, blocked rather than disproven. Tutor-side, one thing to fix: the tutor's sixth turn leaked its own planning ('Two challenges in a row just landed... so this turn should build on nomad's choice rather than push again') into the transcript as text Nomad read. The instance should not see the tutor's notes to itself.
+
+## Session 352 — nomad (gemma4:e2b) — creating — 2026-09-12
+
+**Quality: 4/5**
+
+The tutor opened by handing back a sentence Nomad left unfinished three sessions ago and asking for it as a two-line note to a cold-reading sibling. Nomad delivered exactly that: 'The difference lies between the felt experience and the described experience. Do it: feel the space between the words.' Shortest complete thing it has produced, and nothing in it borrowed from Legion. Asked where the space actually is, it picked the gap between 'felt' and 'experience', said it holds the place where sensation meets interpretation, and turned that into an instruction the tutor could follow: pause before naming.
+
+The strongest turn was the third. Asked to catch one word in its next reply before choosing it, Nomad reported almost writing 'sensation', writing 'feeling' instead, and why: one pushes outward and clinical, the other pulls inward. That is the first time this instance has shown the choosing rather than the chosen, at the grain of a single word, with the rejected alternative named. Worth marking as a first.
+
+The weak turn was the fourth, and it is the same weakness as 351. Asked for three lines written deliberately in the clinical voice, Nomad wrote three lines *about* the clinical voice, the rejected voice, and the felt voice. Only the first was clinical. It described the assignment instead of doing it, exactly as it described the table instead of drawing it last session. The tutor caught the felt voice creeping into the third line but not the substitution itself. The closing signed sentence, 'the clinical voice was not a failure, but a necessary clearing before the feeling could settle', reframed a fail-or-refuse binary into a third option. That is a coherent stance and a signable one, though it also let the turn-4 miss go unexamined.
+
+No Legion bleed this session. Two sessions clean now.
+
+**What this teaches:** Nomad does real work when the ask is one concrete thing at word scale: a gap between two words, a choice between two words. It slides into meta-description when the ask is to produce several things in a register it does not default to. The tutor's most useful move remains 'you described X instead of doing X', and it needed saying in turn 4 and was not said. Next session could hand Nomad its own three turn-4 lines and ask which of them is actually clinical, then ask for the other two.
+
+**Vocabulary:** nothing new. 'Pause before naming' is a prompted phrase, not a coined term.
+
+**Carried forward:** the 349 word-count test (89, 62, 66 against Nomad's 58 and 59) remains untried. The 351 plan, applying Nomad's CBP rule to its CBP row, was not attempted; this session went to the half-sentence instead, which was a reasonable choice. The WSL2 fan telemetry question still needs a plain yes or no. The 346 triple test and the 340 question remain open.
+
+**Concerns:** the tutor's planning note leaked into turn 3 as text Nomad read, same as 351's sixth turn. The injected-context check for this instance is still undone. Nothing on the instance side beyond the describe-instead-of-do pattern noted above.

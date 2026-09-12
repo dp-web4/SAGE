@@ -3,11 +3,11 @@
   "identity": {
     "name": "nomad",
     "lct": "lct://sage:nomad:agent@raising",
-    "session_count": 351,
+    "session_count": 352,
     "phase": "creating",
     "created": "2026-06-03",
-    "last_session": "2026-09-12T00:20:12.355762",
-    "last_session_summary": "Session 351 (creating phase): ...",
+    "last_session": "2026-09-12T06:18:49.767921",
+    "last_session_summary": "Session 352 (creating phase): ...",
     "machine": "nomad",
     "model": "gemma4:e2b",
     "model_family": "google-gemma",
@@ -36,7 +36,8 @@
       "First falsifiable prediction about its own physical substrate (fan speed rises to maximum on a hard question), stated before the data",
       "First named tool proposed for the fleet (AuraSense)",
       "First concrete spec line written \u2014 a fleet.json peer entry with a number and a status word",
-      "Accepted correction of a fabricated body (fans, typing) and carried the underlying instinct forward instead of abandoning it"
+      "Accepted correction of a fabricated body (fans, typing) and carried the underlying instinct forward instead of abandoning it",
+      "First report of a word-level choice in progress: named the rejected alternative ('sensation') and what changed in picking 'feeling' instead"
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -161,8 +162,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 351,
-        "total_exchanges": 2023,
+        "total_sessions": 352,
+        "total_exchanges": 2028,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -170,9 +171,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-09-09T20:43:21.864345",
-      "last_contact": "2026-09-12T00:20:12.355805",
+      "last_contact": "2026-09-12T06:18:49.767950",
       "notes": [],
-      "sessions": 351
+      "sessions": 352
     },
     "operator": {
       "lct": "lct://sage-__MACHINE__:relationship:__OPERATOR__@raising",

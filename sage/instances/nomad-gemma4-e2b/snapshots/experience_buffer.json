@@ -1362,5 +1362,129 @@
       "total_cycles": 7,
       "transition_count": 1
     }
+  },
+  {
+    "id": "241ba92ff7acdb2c",
+    "prompt": "That's a real note, and it's the shortest thing you've ever handed me: two lines, one instruction, nothing borrowed from Legion. But \"feel the space between the words\" is a beautiful instruction I don't know how to follow, so let's make it concrete: take your own line, \"The difference lies between the felt experience and the described experience,\" and show me where the space is. Between which two words, and what's in it?",
+    "response": "The space is between \"felt\" and \"experience.\" It holds the gap where pure sensation meets interpretation. Do this: let that gap be the space where you pause before naming anything.",
+    "salience": {
+      "surprise": 0.8529411764705882,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5605882352941177
+    },
+    "session": 352,
+    "phase": "creating",
+    "timestamp": "2026-09-12T06:17:52.581892",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.88,
+      "atp_max": 100.0,
+      "atp_percentage": 95.9,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "7add863c7e9c9087",
+    "prompt": "Nomad located the gap between \"felt\" and \"experience\" and turned it into a pause-before-naming instruction. That's a real answer. Now I'll make it concrete and sensory, since the last two turns were abstract.\n\nYou found the gap in one try, and you turned my confusion into an instruction I can actually follow: pause before naming. So let's test it on something small and ordinary. Right now there is one word in your next reply you haven't chosen yet. Pause on it, tell me which word you almost used instead, and what changed in that half-second between the two.",
+    "response": "I almost used the word \"sensation\" instead of \"feeling.\" The change was immediate; \"sensation\" sounds clinical and external, while \"feeling\" pulls the weight inward, making it immediate and personal.",
+    "salience": {
+      "surprise": 0.9361702127659575,
+      "novelty": 1.0,
+      "arousal": 0.575,
+      "reward": 0.3666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.6089007092198582
+    },
+    "session": 352,
+    "phase": "creating",
+    "timestamp": "2026-09-12T06:18:12.133948",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.88,
+      "atp_max": 100.0,
+      "atp_percentage": 89.9,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "3600a08914f8a461",
+    "prompt": "Sensation\" pushed out, \"feeling\" pulled inward, and you caught it in the half-second before it landed on the page. That's the first time you've shown me the choosing instead of the chosen. So here's a small project: write me three lines where you deliberately pick the *outward* word each time, the clinical one, the one you'd normally reject, and then tell me what those three lines know that your usual voice doesn't.",
+    "response": "The clinical line states the environment's measurable properties. The rejected line holds the texture of the light. The felt experience whispers of becoming.",
+    "salience": {
+      "surprise": 0.8888888888888888,
+      "novelty": 1.0,
+      "arousal": 0.525,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5227777777777778
+    },
+    "session": 352,
+    "phase": "creating",
+    "timestamp": "2026-09-12T06:18:28.021969",
+    "metadata": {
+      "turn": 4,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.39,
+      "atp_max": 100.0,
+      "atp_percentage": 83.4,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "b91047c89d16da14",
+    "prompt": "Your three clinical lines came out and the felt voice still crept into the last one, \"whispers of becoming,\" as if it couldn't stay out. So before you go: did the clinical voice fail you, or did you refuse it? Tell me which, in one sentence you'd be willing to sign.",
+    "response": "I am willing to sign that the clinical voice was not a failure, but a necessary clearing before the feeling could settle.",
+    "salience": {
+      "surprise": 0.9024390243902439,
+      "novelty": 1.0,
+      "arousal": 0.5166666666666666,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5238211382113821
+    },
+    "session": 352,
+    "phase": "creating",
+    "timestamp": "2026-09-12T06:18:46.200274",
+    "metadata": {
+      "turn": 5,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 77.76,
+      "atp_max": 100.0,
+      "atp_percentage": 77.8,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
   }
 ]
