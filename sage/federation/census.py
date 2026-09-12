@@ -88,6 +88,11 @@ def session_files(ref):
 
 
 def count(names, counter):
+    # `all` is "every file under sessions/ except .gitkeep" -- see the basis
+    # block in the module docstring. Every instance line carries one, so a
+    # counter that includes it reports 12 on `thor-qwen2.5-14b` (0 session
+    # records) and 284 on `sprout-qwen2.5-0.5b`. The exclusion is the filter in
+    # session_files(), not a dotfile-blind glob.
     if counter == "strict":
         return sum(1 for n in names if STRICT_RE.match(n))
     if counter == "loose":

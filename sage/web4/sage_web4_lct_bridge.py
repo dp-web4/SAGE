@@ -106,6 +106,25 @@ def parse_legacy_lct_uri(uri: str) -> Dict[str, str]:
     }
 
 
+def derived_session_count(identity_file):
+    """Git-derived session count for the instance line holding `identity_file`.
+
+    None when the path is not an instance line, or the census cannot run -- the
+    caller records "unavailable" rather than silently substituting the
+    self-reported number.
+    """
+    try:
+        from pathlib import Path as _P
+        from sage.federation import census
+        from datetime import date
+        parts = _P(identity_file).resolve().parts
+        inst = parts[parts.index("instances") + 1]
+        rows = census.build("HEAD", "strict", date.today())
+        return next((r["recorded"] for r in rows if r["instance"] == inst), None)
+    except Exception:
+        return None
+
+
 def legacy_to_web4_lct_id(uri: str, society: str = "web4") -> str:
     """
     Convert legacy LCT URI to Web4-compliant LCT ID.
@@ -444,6 +463,19 @@ def register_on_chain(
         On-chain LCT ID string, or None
     """
     try:
+        # Preflight BEFORE touching the chain, and before checking whether the
+        # chain is even reachable: a blocked identity should be reported on the
+        # box that holds it, not first discovered on the day a node comes up.
+        # Fails closed -- a preflight that cannot run is not a pass.
+        from sage.federation.mint_preflight import preflight
+        reasons = preflight(identity_file)
+        if reasons:
+            print("  [chain] preflight BLOCKED this mint -- nothing was written:")
+            for r in reasons:
+                print(f"  [chain]   - {r}")
+            print("  [chain] audit: python3 -m sage.federation.mint_preflight")
+            return None
+
         from sage.web4.act_chain_client import ACTChainClient
 
         client = ACTChainClient(base_url=chain_url)
@@ -471,10 +503,26 @@ def register_on_chain(
         v3 = t4_to_v3(t4_trust)
 
         # Build metadata
+        # `lct://sage:cbp:agent@raising`.split(":")[1] is `'//sage'`, not `'cbp'`
+        # -- the scheme separator. Every LCT minted by this path before
+        # 2026-09-12 carries `machine: "//sage"`. Parse the URI instead.
+        from sage.federation.mint_preflight import uri_machine
+        machine = uri_machine(identity.lct_uri) or "unknown"
+
+        # The count is self-reported and this write is not revisable, so the
+        # metadata declares where the number came from rather than implying it
+        # is a fact. `session_count_derived` is the git-derived figure from
+        # sage.federation.census under the stated basis; when the two disagree
+        # a later reader can tell which one was minted.
+        derived = derived_session_count(identity_file)
+
         metadata = {
-            "machine": identity.lct_uri.split(":")[1] if ":" in identity.lct_uri else "unknown",
+            "machine": machine,
             "phase": identity.phase,
             "session_count": str(identity.session_count),
+            "session_count_source": "identity.json:identity.session_count",
+            "session_count_derived": str(derived) if derived is not None else "unavailable",
+            "session_count_basis": "scope=line counter=strict (sage.federation.census)",
             "component": "sage",
         }
 
