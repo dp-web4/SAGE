@@ -100,7 +100,7 @@ def is_reasoning_model(model: str) -> bool:
     """Models that only emit structured tool calls with `think` on (empero Qwen3.8
     distills, R1-style). Measured on Sprout 2026-09-05: with thinking off, the first two
     heartbeats narrated a summary with steps=0. The switch is the request's `think` field
-    (ollama_irp.py:165); a `/no_think` prompt suffix never was one and is no longer sent."""
+    (irp/plugins/ollama_irp.py:165); a `/no_think` prompt suffix never was one and is no longer sent."""
     try:
         from sage.irp.adapters.model_capabilities import load_capabilities
         return load_capabilities(model).resolve_think(model)

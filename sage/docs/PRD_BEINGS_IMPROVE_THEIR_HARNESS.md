@@ -84,7 +84,7 @@ came from is named.
 | | **legion-being** (`legion-sage`) | **sprout-being** (`sprout-sage`) |
 |---|---|---|
 | substrate | Qwen3.5-arch 26.9B abliterated, Q3_K_M, 100% GPU on a 16GB RTX 4090 laptop | Qwen3.8-distill 2B, Jetson |
-| declared capabilities | `tools`, `thinking`, `completion`, **`vision`** | `tools`, `thinking` (distill); `/no_think` removes tool calls entirely |
+| declared capabilities | `tools`, `thinking`, `completion`, **`vision`** | `tools`, `thinking` (distill); thinking off (`think: false`) removes tool calls entirely |
 | context | 262144 native, **run at 16384** (VRAM) | small; prompt size is a live constraint |
 | throughput | ~20 tok/s | faster per token, far less capacity per token |
 | cameras | **one**, UVC at `/dev/video0`,`/dev/video1` — natively readable, no capture stack | **two**, CSI via `nvarguscamerasrc` (GPU ISP), plus a `BinocularCorrelator` over an uncalibrated rig |
@@ -143,9 +143,17 @@ the source repo, the projector, the resolved context window, the runner, and an
 **kept**, because deleting them would erase the transplant. Every finding in §6
 names the embodiment it came from by reading that block, not by reading a path.
 
-**What the asymmetry buys us.** Sprout-being is the reason we know `/no_think`
-removes tool calls on a distill while it is the correct fix on the heretic — a
-fact legion-being could not have discovered, because it does not have that body.
+**What the asymmetry buys us.** Sprout-being is the reason we know that turning
+thinking off removes tool calls on a distill — a fact legion-being could not have
+discovered, because it does not have that body. Note what happened to the
+*explanation*: for a week the fleet attributed that detection to the `/no_think`
+prompt suffix, and on 2026-09-12 measurement on three seats refuted both halves —
+the suffix suppresses nothing (`think: false` is what removes the tool calls), and
+it was never the correct fix on the heretic, which thought anyway under
+`think: false` + `/no_think`. The finding outlived the mechanism built on it, which
+is the stronger version of this section's claim: an independent instrument is
+valuable because it detects, not because the first story told about the detection
+is right.
 Capability is not rank. A weaker being on different hardware is an independent
 instrument, and the fleet has already been paid by it.
 

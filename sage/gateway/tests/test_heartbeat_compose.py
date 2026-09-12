@@ -41,7 +41,7 @@ def test_no_turn_carries_a_think_suffix():
     think block intact (qwen3.5:0.8b 1428 -> 1441 chars, qwen3.8-distill:2b 275 -> 405, both
     still thinking) while `think=False` zeroes it. No fleet template parses the string; the
     think branches that exist key on the API field, not on prompt text. Thinking is declared
-    per model in the config and sent as the request's `think` field (ollama_irp.py:165)."""
+    per model in the config and sent as the request's `think` field (irp/plugins/ollama_irp.py:165)."""
     from sage.gateway.heartbeat import REFLECT
     for act_first in (False, True):
         seed, second = compose(act_first, **KW)
