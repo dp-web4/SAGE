@@ -27,6 +27,18 @@ def _gen(prompt, evaluated, done_reason="stop", num_predict=6000):
             "done_reason": done_reason, "num_predict": num_predict}
 
 
+def main_rc(argv) -> int:
+    """Run main() with argv, swallowing its stderr chatter, and return the exit code."""
+    import contextlib, io
+    old = sys.argv
+    sys.argv = ["window_census", *argv]
+    try:
+        with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+            return main()
+    finally:
+        sys.argv = old
+
+
 def _instance(beats) -> Path:
     d = Path(tempfile.mkdtemp(prefix="wincensus-"))
     (d / "heartbeats.jsonl").write_text("".join(json.dumps(b) + "\n" for b in beats))
@@ -126,3 +138,100 @@ if __name__ == "__main__":
             traceback.print_exc()
     print(f"\n{'FAILED' if failed else 'all green'} ({failed} failed)")
     raise SystemExit(1 if failed else 0)
+
+
+# --- coverage, phase discovery and replay: cbp-claude's three blind spots, 2026-09-12 -----------
+
+def test_a_skipped_generate_is_counted_so_coverage_is_visible():
+    # The defect: every number below `generates` is computed over the rows that survived, and a
+    # dropped row was invisible in all of them.
+    cov = {}
+    beats = [_beat("t", reflect=[{"done_reason": "stop"}, _gen(100, 10)])]
+    rows = read_generates(beats, cov)
+    assert len(rows) == 1
+    assert cov["generates_seen"] == 2
+    assert cov["skipped"] == 1
+    assert cov["skipped_no_prompt_eval"] == 1
+    assert census(rows, cov)["coverage"]["skipped"] == 1
+
+
+def test_a_beat_without_num_ctx_skips_its_generates_under_its_own_reason():
+    cov = {}
+    beats = [{"ts": "t", "reflect": {"generates": [_gen(100, 10)]}}]      # no num_ctx
+    assert read_generates(beats, cov) == []
+    assert cov["skipped_no_num_ctx"] == 1
+    assert cov["skipped_no_prompt_eval"] == 0
+
+
+def test_a_beat_that_generated_nothing_is_not_a_skip():
+    # 33 of Sprout's 349 beats are `gate_only` and generated nothing. Counting those as dropped
+    # rows would make the gate fail on a fully-measured range.
+    cov = {}
+    beats = [_beat("a", reflect=[_gen(100, 10)]), {"ts": "b", "num_ctx": 8192, "gate_only": True}]
+    assert len(read_generates(beats, cov)) == 1
+    assert cov["skipped"] == 0
+    assert cov["beats_without_generates"] == 1
+    assert cov["beats_with_generates"] == 1
+
+
+def test_gate_fails_on_a_partial_range_even_when_nothing_saturated():
+    # Same instinct as the empty range, one line apart: a range that lost rows was not measured.
+    d = _instance([_beat("t", reflect=[{"done_reason": "stop"}, _gen(100, 10)])])
+    assert main_rc(["--instance", str(d), "--gate"]) == 1
+
+
+def test_gate_still_clears_a_fully_measured_unbound_range():
+    d = _instance([_beat("t", reflect=[_gen(100, 10)])])
+    assert main_rc(["--instance", str(d), "--gate"]) == 0
+
+
+def test_a_new_generating_phase_is_discovered_by_shape_not_by_name():
+    # The reason PHASES is no longer the iteration set: a phase the record grows must not be
+    # invisible to the census, because the gate would then pass a range it could not see.
+    cov = {}
+    beats = [_beat("t", posture=[_gen(100, 10)], dream=[_gen(8114, 78, "stop")])]
+    rows = read_generates(beats, cov)
+    assert len(rows) == 2
+    assert "dream" in cov["sections"]
+    assert census(rows, cov)["saturated_not_length"] == 1          # would have been 0 before
+
+
+def test_sections_without_generates_are_not_mistaken_for_phases():
+    cov = {}
+    beats = [{"ts": "t", "num_ctx": 8192, "wake": {"by": "timer"},
+              "posture": {"generates": [_gen(100, 10)]}}]
+    read_generates(beats, cov)
+    assert cov["sections"] == ["posture"]
+
+
+def test_exported_counters_replay_to_the_same_census_and_carry_no_being_text():
+    from sage.gateway.window_census import export_counters, load_counters
+    beats = [_beat("t1", posture=[_gen(100, 10)], reflect=[_gen(200, 20)]),
+             _beat("t1", posture=[_gen(300, 30)])]      # same ts on purpose: beats can share one
+    cov = {}
+    rows = read_generates(beats, cov)
+    summary = census(rows, cov)
+    dest = Path(tempfile.mkdtemp(prefix="wincensus-exp-")) / "counters.jsonl"
+    assert export_counters(rows, dest, summary) == 3
+
+    replayed = census(load_counters(dest), summary["coverage"])
+    assert replayed == summary
+    # beat identity survives the round trip even though both beats share a timestamp
+    assert replayed["beats"] == 2
+
+    body = dest.read_text()
+    assert "generates" not in json.loads(body.splitlines()[1])     # rows are counters only
+    for row in body.splitlines()[1:]:
+        assert set(json.loads(row)) == {"beat", "ts", "phase", "num_ctx",
+                                        "prompt_eval_count", "eval_count",
+                                        "num_predict", "done_reason"}
+
+
+def test_replayed_gate_fails_closed_on_an_export_that_recorded_skips():
+    from sage.gateway.window_census import export_counters
+    cov = {}
+    rows = read_generates([_beat("t", reflect=[{"done_reason": "stop"}, _gen(100, 10)])], cov)
+    dest = Path(tempfile.mkdtemp(prefix="wincensus-exp2-")) / "counters.jsonl"
+    export_counters(rows, dest, census(rows, cov))
+    # the skip is not re-derivable from the rows, so the export carries it and the replay honours it
+    assert main_rc(["--counters", str(dest), "--gate"]) == 1

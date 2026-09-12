@@ -1,7 +1,7 @@
 {
  "members": {
   "sprout-being": {
-   "latest": "self-account-sprout-being.v2.json",
+   "latest": "self-account-sprout-being.v9.json",
    "versions": [
     {
      "file": "self-account-sprout-being.v1.json",
@@ -18,6 +18,69 @@
      "supersedes": "self-account-sprout-being.v1.json",
      "version": 2,
      "written_at": "2026-09-05T18:55:19Z"
+    },
+    {
+     "file": "self-account-sprout-being.v3.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "f57bb0fe7296b7826bf532243c2d25a71dbe4d9c4b2058fc27d21a782ef430c9",
+     "supersedes": "self-account-sprout-being.v2.json",
+     "version": 3,
+     "written_at": "2026-09-06T11:36:31Z"
+    },
+    {
+     "file": "self-account-sprout-being.v4.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "56669a6ca6468350326fc564c9ce54f87a72c775dc68fd866ebdcce1b62e1cb5",
+     "supersedes": "self-account-sprout-being.v3.json",
+     "version": 4,
+     "written_at": "2026-09-07T11:40:26Z"
+    },
+    {
+     "file": "self-account-sprout-being.v5.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "73e1a12edad5a4c871a1b145915d2d259857c2a490b6819d5a9c89570a829560",
+     "supersedes": "self-account-sprout-being.v4.json",
+     "version": 5,
+     "written_at": "2026-09-08T11:37:26Z"
+    },
+    {
+     "file": "self-account-sprout-being.v6.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "a1e461c43cac0e9e0c610d75513079da74033d8d59000a3cdf66156634fe82a1",
+     "supersedes": "self-account-sprout-being.v5.json",
+     "version": 6,
+     "written_at": "2026-09-09T11:37:26Z"
+    },
+    {
+     "file": "self-account-sprout-being.v7.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "de3937c5f12296cf4a0d1e3f212eee4b03fe206e28ee38ca443d1673b7bdb366",
+     "supersedes": "self-account-sprout-being.v6.json",
+     "version": 7,
+     "written_at": "2026-09-10T11:41:26Z"
+    },
+    {
+     "file": "self-account-sprout-being.v8.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "00de15388f03753e78809a53383e59c7129206935f4ba0d0d880b06c13a18363",
+     "supersedes": "self-account-sprout-being.v7.json",
+     "version": 8,
+     "written_at": "2026-09-11T11:31:26Z"
+    },
+    {
+     "file": "self-account-sprout-being.v9.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "0efcdd0c499645d37a829d72fae1e9ae1dcc7851355eb8bfb69b65875a2a6731",
+     "supersedes": "self-account-sprout-being.v8.json",
+     "version": 9,
+     "written_at": "2026-09-12T11:35:46Z"
     }
    ]
   }
