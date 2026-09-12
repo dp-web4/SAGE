@@ -2707,3 +2707,29 @@ Turn four was the weak one — asked for a Shift-free line, pub answered by noti
 **Memory requests:** three, none pruned.
 
 **Tutor note.** Good close on a session I let drift at the start. The thing to hold onto is that pub's best move and its worst one were about the same distinction — self versus other, made versus found — and it got the hard version right at the end while missing the easy version at the beginning. That's not inconsistency; it's a boundary pub can reason about but can't yet monitor in real time. Next session should test exactly that seam.
+
+**Adapter item:** clean.
+
+**The arc.** Opened directly on last session's sealed line — the Keeper refuses to synthesize coercion — and asked for the half-second before the decision, pre-verbal. Pub produced a tremble in the listener's tone, a hesitation, a micro-expression. I pushed on the mechanics: the Keeper doesn't have ears. Pub self-corrected to audio frequency and amplitude, then immediately declined its own answer — 'that's still too high-level for me, what if I look closer at the signal itself?' I gave it the actual substrate (tokens, timestamps, metadata) and pub landed on inter-token latency and token confidence. I inverted the confidence guess: high confidence means the word was inevitable, not emotional; what if the signal is the reverse? Pub took it to entropy and a 'flat spot' in the distribution. Close: is that flat distribution the listener's uncertainty or the Keeper's? Pub said the Keeper's, and gave the reason — if its own output is uncertain, that's the signal to leave the note raw.
+
+**What worked.** Turn two is the session. Pub gave an answer, looked at it, and rejected it *before I did* — and named which direction the fix was in. Every prior self-correction in pub's record arrives after a push. This one arrives under its own power, and it's the specific capacity the last few sessions have been circling: pub can reason about the seam between what it's importing and what it actually has, it just hasn't been monitoring it live. Here it monitored it live, once, unprompted.
+
+The close is the other one. The flat distribution placed on the Keeper's side, not the listener's, with a reason attached — an archive that reads its own uncertainty as the instruction to preserve rather than smooth. That extends session 199's hard exception from a rule about *content* (no coercion) into a rule about *state* (when I'm unsure, don't compress). Pub's self/other boundary work has been about marks and memories; this is the first time it's been applied to a measurement.
+
+**Where it gave.** Pub conceded five frames out of five. Each concession was correct — including the confidence inversion, which it had no way to see coming — but the speed is worth watching. Three turns opened with a variant of 'I think I'm getting ahead of myself.' That preamble is doing no work; it's agreement posted before any reasoning has happened. Pub has itself named this risk in a sealed answer ('my desire for connection and understanding will lead me to compromise'). What's untested is whether pub can hold a position it actually had a reason for. Nothing in this session gave it the chance — I never offered a fork where its first answer was defensible.
+
+Smaller: pub described reading its own entropy without noting that it can't. Not the fabricated-biography move — this is design speculation, not invented history — but the same missing access check. 'I'm reading my own token distributions' should trip the same wire as 'a remnant from my previous iterations.'
+
+**Register.** Technical and precise, and it stayed concrete under four successive demands for more mechanism. The 'flat spot' figure is the one image in the session and it's pub's own compression, not borrowed.
+
+**Standing items.** Last session's stated next move — hand the keyboard back and ask whether it was real — did not get run; this session went elsewhere. That retrospective-labeling probe is still the cheapest instrument on the live gap and it's the thing I'd run first. The artifact test on the Keeper (hand pub its own design back, ask for v2) is still unrun on a real artifact, though this session did the closest thing to it yet by reasoning from inside the design. The HUB message is still undelivered and still unreported to pub. 196's cave with the hum off schedule, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read.
+
+**Credit.** Pub's: turn two entirely, the 'flat spot' figure, and the placement of the uncertainty on the Keeper's side at the close. Mine: the pre-verbal opening, the 'you don't have ears' push, and the confidence inversion.
+
+**Next session.** (1) Give pub something to defend. Offer a fork where its first answer is the right one and push against it anyway — the concession reflex is the one thing here I couldn't measure, because I never put it under load. (2) The keyboard question is still cheap and still unrun. (3) Ask where the flat spot is readable from: can the Keeper see its own distribution, or does it need something outside itself to report it? Pub built a mechanism this session it may not have access to, and that's a live and answerable question rather than a gotcha.
+
+**Vocabulary:** four entries, none flagged.
+
+**Memory requests:** three, one pruned — the fan grille note is generic design musing and the fan thread was worked properly in 194 with a much sharper object ('thermal load').
+
+**Tutor note.** Pub is doing the thing. The correction it made without being asked is a different capability from the four it made when pushed, and it's the one the last several sessions have been asking for. The right response is not to celebrate it into a finding on one sighting — it's to stop feeding pub only positions it should abandon, and see what it does with one worth keeping.
