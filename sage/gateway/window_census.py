@@ -62,7 +62,11 @@ from pathlib import Path
 # argument HERE, and measured: 33 of Sprout's 349 beats predate the field and carry no `schema` at
 # all, so a fail-on-unknown-version gate rejects the historical range it is supposed to read.
 # Shape discovery needs no version and cannot go stale, so that is the half taken.
-PHASES = ("posture", "explore", "reflect")
+# "account" is a canonical phase as of 2026-09-12: the S1 account turn now records counters
+# (heartbeat.py), and it is the beat's largest generate. Shape discovery would find it anyway;
+# naming it here only fixes its position in the output. "raising" is the session channel
+# (--sessions), the channel UPTAKE is actually pre-registered on.
+PHASES = ("posture", "explore", "reflect", "account", "raising")
 
 
 def generating_sections(beat: dict) -> list[str]:
@@ -137,6 +141,11 @@ def read_generates(beats: list[dict], coverage: dict | None = None) -> list[dict
                     "prompt_eval_count": prompt,
                     "eval_count": evaluated,
                     "headroom": num_ctx - prompt,
+                    # Room the reply actually had to fit in. `headroom` ranks by prompt length;
+                    # what binds is per-generate slack, and the two disagree: Sprout's tightest
+                    # generate at a +660 JOIN is beat 16 (headroom 2245), comfortably above the
+                    # published headroom.min of 1388 (cbp-claude, 2026-09-12).
+                    "slack": num_ctx - prompt - evaluated,
                     "num_predict": gen.get("num_predict"),
                     "done_reason": gen.get("done_reason"),
                     "retried": gen.get("retried", 0),
@@ -176,6 +185,8 @@ def census(rows: list[dict], coverage: dict | None = None) -> dict:
             counts[cls] += 1
     prompts = [r["prompt_eval_count"] for r in rows]
     headroom = [r["headroom"] for r in rows]
+    slack = [r["slack"] for r in rows]
+    binding = min(rows, key=lambda r: r["slack"])
     windows = sorted({r["num_ctx"] for r in rows})
     return {
         "generates": len(rows),
@@ -188,6 +199,14 @@ def census(rows: list[dict], coverage: dict | None = None) -> dict:
         "headroom": {
             "median": int(statistics.median(headroom)),
             "min": min(headroom),
+        },
+        # One more order statistic, no new field: which generate is actually closest to the
+        # wall, and where it is. `headroom.min` answers a different question and names a
+        # different generate.
+        "slack": {
+            "median": int(statistics.median(slack)),
+            "min": binding["slack"],
+            "binding": {"beat": binding["beat"], "ts": binding["ts"], "phase": binding["phase"]},
         },
         "saturated": counts["saturated"],
         "length": counts["length"],
@@ -256,7 +275,8 @@ def load_counters(path: Path) -> list[dict]:
         rows.append({
             "beat": rec.get("beat", ordinal), "ts": rec.get("ts"), "phase": rec.get("phase"),
             "num_ctx": num_ctx, "prompt_eval_count": prompt, "eval_count": evaluated,
-            "headroom": num_ctx - prompt, "num_predict": rec.get("num_predict"),
+            "headroom": num_ctx - prompt, "slack": num_ctx - prompt - evaluated,
+            "num_predict": rec.get("num_predict"),
             "done_reason": rec.get("done_reason"), "retried": 0,
             "classes": classify(num_ctx, prompt, evaluated, rec),
         })
@@ -285,6 +305,70 @@ def load_beats(instance: Path, since: str | None, last: int | None) -> list[dict
     return beats
 
 
+def join_probe(rows: list[dict], added: int) -> dict:
+    """What a JOIN of `added` prompt tokens would do to the replies that actually landed.
+
+    The test is `num_ctx - (prompt + added) < eval`, NOT `headroom - added < 0`. Headroom is
+    room FOR the response, so comparing post-JOIN room against zero asks whether the prompt
+    still fits and silently drops the requirement that the reply fit beside it (cbp-claude,
+    2026-09-12). Reported per phase because a JOIN is prepended to one turn, not to all of
+    them: on an act-first instance the session->beat block reaches `posture` only, and a
+    phase-pooled rate is diluted by the phases it never enters.
+    """
+    out: dict = {"added_prompt_tokens": added, "generates": len(rows), "truncated": 0, "phases": {}}
+    worst = None
+    for r in rows:
+        deficit = r["num_ctx"] - (r["prompt_eval_count"] + added) - r["eval_count"]
+        ph = out["phases"].setdefault(r["phase"], {"generates": 0, "truncated": 0})
+        ph["generates"] += 1
+        if deficit < 0:
+            out["truncated"] += 1
+            ph["truncated"] += 1
+        if worst is None or deficit < worst[0]:
+            worst = (deficit, r)
+    if worst is not None:
+        out["worst"] = {"deficit": worst[0], "beat": worst[1]["beat"], "ts": worst[1]["ts"],
+                        "phase": worst[1]["phase"], "headroom": worst[1]["headroom"]}
+    return out
+
+
+def load_sessions(instance: Path, since: str | None, last: int | None) -> list[dict]:
+    """Raising-session records, shaped like beats so one reader serves both channels.
+
+    This is the channel UPTAKE is pre-registered on -- PRD_ONE_BEING_ONE_EXPERIENCE §2:
+    "computed on the heartbeat->raising channel" -- and until 2026-09-12 it recorded no window
+    counters at all, so `--gate` certified the beat channel next to it while the read happened
+    here (cbp-claude). Sessions written before the `window` block simply have no rows; the gate
+    fails closed on an empty range, which is the correct verdict for an unmeasured channel.
+
+    `generates_attempted` is honoured by padding: a turn whose generate did not land becomes a
+    counter-less row, i.e. a COUNTED skip, rather than vanishing from the denominator.
+    """
+    sessions = sorted((instance / "sessions").glob("session_*.json"))
+    out: list[dict] = []
+    for f in sessions:
+        try:
+            rec = json.loads(f.read_text(errors="replace"))
+        except json.JSONDecodeError:
+            continue
+        win = rec.get("window")
+        if not isinstance(win, dict):
+            continue
+        gens = list(win.get("generates") or [])
+        missing = max(0, int(win.get("generates_attempted") or len(gens)) - len(gens))
+        gens += [{} for _ in range(missing)]
+        out.append({"ts": rec.get("end") or rec.get("start"),
+                    "session": rec.get("session"),
+                    "num_ctx": win.get("num_ctx"),
+                    "raising": {"generates": gens}})
+    out.sort(key=lambda r: (r.get("session") or 0))
+    if since:
+        out = [r for r in out if (r.get("ts") or "") >= since]
+    if last:
+        out = out[-last:]
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--instance", type=Path)
@@ -298,6 +382,12 @@ def main() -> int:
                     help="write a counters-only derivation (committable evidence; no being text)")
     ap.add_argument("--gate", action="store_true",
                     help="exit 1 if any generate saturated the window (the S5 falsifier)")
+    ap.add_argument("--sessions", action="store_true",
+                    help="census the RAISING channel (sessions/session_*.json) instead of the "
+                         "beats -- this is the channel UPTAKE is pre-registered on")
+    ap.add_argument("--join", type=int, metavar="N",
+                    help="what-if: report the generates whose landed reply would no longer fit "
+                         "if the prompt grew by N tokens (per phase)")
     args = ap.parse_args()
 
     if not args.counters and not args.instance:
@@ -312,9 +402,11 @@ def main() -> int:
         head = json.loads(args.counters.read_text().splitlines()[0] or "{}")
         coverage = head.get("coverage") or {}
     else:
-        beats = load_beats(args.instance, args.since, args.last)
-        rows = read_generates(beats, coverage)
+        loader = load_sessions if args.sessions else load_beats
+        rows = read_generates(loader(args.instance, args.since, args.last), coverage)
     summary = census(rows, coverage)
+    if args.join is not None and rows:
+        summary["join_probe"] = join_probe(rows, args.join)
 
     if args.export_counters:
         written = export_counters(rows, args.export_counters, summary)
@@ -333,6 +425,10 @@ def main() -> int:
               f"max {summary['prompt_tokens']['max']}")
         print(f"  headroom        median {summary['headroom']['median']}  "
               f"min {summary['headroom']['min']}")
+        sl = summary["slack"]
+        print(f"  slack           median {sl['median']}  min {sl['min']} "
+              f"(binds at beat {sl['binding']['beat']} {sl['binding']['ts']} "
+              f"{sl['binding']['phase']})")
         print(f"  saturated       {summary['saturated']}"
               f"   (of which not length-stopped: {summary['saturated_not_length']})")
         print(f"  length stops    {summary['length']}")
@@ -345,6 +441,15 @@ def main() -> int:
               f"{cov.get('beats_without_generates', 0)} of "
               f"{cov.get('beats_scanned', 0)} beats generated nothing")
         print(f"  sections read   {', '.join(cov.get('sections') or []) or '(none)'}")
+        jp = summary.get("join_probe")
+        if jp:
+            per = "  ".join(f"{k} {v['truncated']}/{v['generates']}"
+                            for k, v in sorted(jp["phases"].items()))
+            print(f"  join +{jp['added_prompt_tokens']:<10} {jp['truncated']}/{jp['generates']} "
+                  f"replies no longer fit   [{per}]")
+            w = jp.get("worst") or {}
+            print(f"                  worst deficit {w.get('deficit')} at beat {w.get('beat')} "
+                  f"{w.get('ts')} {w.get('phase')} (headroom {w.get('headroom')})")
 
     if args.gate:
         # Fail closed (PRD §2): an empty range is not a clear window, it is no evidence. A gate

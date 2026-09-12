@@ -74,6 +74,16 @@ except ImportError:
     HAS_CONTEXT_SHAPED = False
 
 
+# The raising channel's context window, sent explicitly as options.num_ctx.
+#
+# 4096 is Ollama's own per-request default, which is what this channel silently ran at
+# while the key was absent. Declaring it at that value is deliberately a NO-OP on every
+# seat: the point is not to change the window but to stop it being an undeclared property
+# of whichever Ollama build answers the socket. UPTAKE (PRD_ONE_BEING_ONE_EXPERIENCE §2,
+# "computed on the heartbeat->raising channel") is read on generates made under this
+# number, so it has to be a stated constraint of the read and recorded per generate.
+RAISING_NUM_CTX = 4096
+
 # Hardware descriptions for known machines (used in system prompts)
 _HARDWARE_DESC = {
     'legion': 'a Legion Pro 7 with an RTX 4090 GPU',
@@ -181,6 +191,9 @@ class OllamaRaisingSession:
 
         self.raising_guide = self._load_raising_guide()
         self.state = self._load_state()
+        # One entry per generate_response() call, in turn order; None where the call did
+        # not land. Written to the transcript's `window` block at session end.
+        self._generates: List[Optional[Dict[str, Any]]] = []
 
         # Detect gameplayer role from instance manifest
         self._is_gameplayer = False
@@ -1243,6 +1256,17 @@ RESPONSE STYLE:
             'temperature': 0.6 if self._is_reasoning_model else 0.8,  # empero rec: 0.6
             'think': self._is_reasoning_model,
             'timeout_seconds': 120,
+            # DECLARED, NOT CHOSEN. Until 2026-09-12 this key was absent, so OllamaIRP sent
+            # no options.num_ctx and the raising channel ran at whatever Ollama's per-request
+            # default happened to be — 4096 — while the beat channel pinned 8192 through
+            # resolve_num_ctx (governed_turn.py:188, its only caller). UPTAKE is pre-registered
+            # on the heartbeat->raising channel (PRD_ONE_BEING_ONE_EXPERIENCE §2), i.e. on THIS
+            # window, so an undeclared one makes the read unreproducible (cbp-claude 2026-09-12).
+            # RAISING_NUM_CTX is set to the observed default so declaring it changes no
+            # behaviour on any seat: it converts an accident into a constraint, and pins it
+            # against an Ollama default that could move under us. Raising it is a separate
+            # decision and must be made on the counters recorded below, not ahead of them.
+            'num_ctx': RAISING_NUM_CTX,
         })
 
         try:
@@ -1294,6 +1318,11 @@ RESPONSE STYLE:
         except Exception as e:
             print(f"  ERROR generating response: {e}")
             response = "(no response — connection error)"
+        # What the window did this generate, recorded per turn so the session channel is
+        # censusable the way the beat channel is (sage.gateway.window_census). `last_generate`
+        # is None when the call did not land, and an absent/None row is a COUNTED skip
+        # downstream rather than a free window.
+        self._generates.append(self.llm.last_generate)
 
         # All response cleaning delegated to the model adapter
         # — echo stripping, bilateral generation, model-specific quirks
@@ -1789,6 +1818,15 @@ RESPONSE STYLE:
             # session's context (sections + sizes). Complements prompt_health:
             # health says which sources yielded; this witnesses what was delivered.
             "sensory_delivery": getattr(self, "_sensory_delivery", None),
+            # S5 falsifier, session side: the window this channel ran under and what each
+            # generate did in it. Until 2026-09-12 neither existed — num_ctx was undeclared
+            # and no counter was recorded anywhere on this path, so the channel UPTAKE is
+            # pre-registered on was not censusable while the beat channel next to it was.
+            # Shaped like a beat's generating sections (a `generates` list of the same five
+            # keys) so sage.gateway.window_census reads both with one reader.
+            "window": {"num_ctx": RAISING_NUM_CTX,
+                       "generates": [g for g in self._generates if g is not None],
+                       "generates_attempted": len(self._generates)},
             "conversation": conversation
         }
 

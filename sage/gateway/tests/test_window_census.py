@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from sage.gateway.window_census import (  # noqa: E402
-    census, classify, load_beats, main, read_generates,
+    census, classify, join_probe, load_beats, load_sessions, main, read_generates,
 )
 
 
@@ -235,3 +235,135 @@ def test_replayed_gate_fails_closed_on_an_export_that_recorded_skips():
     export_counters(rows, dest, census(rows, cov))
     # the skip is not re-derivable from the rows, so the export carries it and the replay honours it
     assert main_rc(["--counters", str(dest), "--gate"]) == 1
+
+
+# --- the binding generate is not the one with the least headroom -----------------------
+
+def test_slack_and_headroom_name_different_generates():
+    """headroom ranks by prompt length; what binds is the room the reply had to fit in.
+
+    Both rows are real Sprout posture generates (2026-09-12). The long-prompt one publishes
+    the smaller headroom, but the other one is closer to the wall, and a +660 JOIN truncates
+    it first. Ranking by headroom.min reports the wrong generate as the tightest.
+    """
+    rows = read_generates([_beat("t1", posture=[_gen(6804, 865)]),
+                           _beat("t2", posture=[_gen(5947, 1755)])])
+    summary = census(rows)
+    assert summary["headroom"]["min"] == 8192 - 6804      # the long prompt wins on headroom
+    assert summary["slack"]["min"] == 8192 - 5947 - 1755  # but the other one binds
+    assert summary["slack"]["binding"]["beat"] == 1       # the SECOND beat, not the first
+    assert summary["slack"]["binding"]["phase"] == "posture"
+
+
+def test_join_probe_asks_whether_the_reply_still_fits_not_whether_the_prompt_does():
+    """`headroom - added >= 0` is the wrong test: it drops the reply from the comparison.
+
+    Sprout's beat-9 posture generate has headroom 1388 and a landed reply of 865. A +660 JOIN
+    leaves 728 of prompt room -- "still spare" by the headroom test -- while the reply that
+    actually landed no longer fits. The probe counts the second thing.
+    """
+    rows = read_generates([_beat("t", posture=[_gen(6804, 865)])])
+    assert 8192 - 6804 - 660 > 0                       # the prompt still fits
+    probe = join_probe(rows, 660)
+    assert probe["truncated"] == 1                     # the reply does not
+    assert probe["worst"]["deficit"] == 8192 - (6804 + 660) - 865
+    assert join_probe(rows, 465)["truncated"] == 0     # and it is not truncated at the midpoint
+
+
+def test_join_probe_reports_per_phase_because_a_join_reaches_one_turn():
+    """On an act-first instance the session->beat block is prepended to `posture` only, so a
+    pooled rate is diluted by the phases the JOIN never enters."""
+    rows = read_generates([_beat("t", posture=[_gen(6804, 865)],
+                                 reflect=[_gen(900, 200)], explore=[_gen(3300, 400)])])
+    probe = join_probe(rows, 660)
+    assert probe["phases"]["posture"] == {"generates": 1, "truncated": 1}
+    assert probe["phases"]["reflect"]["truncated"] == 0
+    assert probe["phases"]["explore"]["truncated"] == 0
+    assert probe["truncated"] == 1 and probe["generates"] == 3   # 1/3 pooled, 1/1 where it lands
+
+
+# --- the raising channel, which is the one UPTAKE is read on ---------------------------
+
+def _session_instance(sessions) -> Path:
+    d = Path(tempfile.mkdtemp(prefix="wincensus-sess-"))
+    (d / "sessions").mkdir()
+    for rec in sessions:
+        (d / "sessions" / f"session_{rec['session']:03d}.json").write_text(json.dumps(rec))
+    return d
+
+
+def _session(n, num_ctx=4096, generates=(), attempted=None, end="2026-09-12T10:00:00"):
+    return {"session": n, "end": end,
+            "window": {"num_ctx": num_ctx, "generates": list(generates),
+                       "generates_attempted": len(generates) if attempted is None else attempted}}
+
+
+def test_the_raising_channel_reads_through_the_same_reader_as_the_beats():
+    d = _session_instance([_session(1, generates=[_gen(1200, 300), _gen(2400, 400)])])
+    rows = read_generates(load_sessions(d, None, None))
+    assert [r["phase"] for r in rows] == ["raising", "raising"]
+    assert census(rows)["num_ctx"] == 4096          # not the beat channel's 8192
+
+
+def test_a_session_written_before_the_window_block_yields_no_rows_and_fails_the_gate():
+    """690 of Sprout's sessions are of this shape: the channel UPTAKE is pre-registered on had
+    no counters at all. An unmeasured channel is not a cleared one."""
+    d = _session_instance([{"session": 1, "end": "2026-09-12T10:00:00"}])
+    assert load_sessions(d, None, None) == []
+    assert main_rc(["--instance", str(d), "--sessions", "--gate"]) == 1
+
+
+def test_a_raising_turn_whose_generate_did_not_land_is_a_counted_skip_not_a_free_window():
+    """`generates_attempted` is padded out, so a dropped turn stays in the denominator and the
+    gate fails on the partial range rather than clearing the rows that happened to survive."""
+    d = _session_instance([_session(1, generates=[_gen(1200, 300)], attempted=3)])
+    cov = {}
+    rows = read_generates(load_sessions(d, None, None), cov)
+    assert len(rows) == 1 and cov["generates_seen"] == 3 and cov["skipped"] == 2
+    assert main_rc(["--instance", str(d), "--sessions", "--gate"]) == 1
+
+
+def test_the_raising_gate_clears_a_measured_unbound_range():
+    d = _session_instance([_session(1, generates=[_gen(1200, 300)])])
+    assert main_rc(["--instance", str(d), "--sessions", "--gate"]) == 0
+
+
+def test_the_raising_gate_fails_when_the_smaller_window_saturates():
+    """The same prompt that is comfortable at 8192 saturates at the raising channel's 4096 --
+    which is why censusing the beat channel cannot answer for this one."""
+    beat_ok = read_generates([_beat("t", posture=[_gen(3900, 190)])])
+    assert census(beat_ok)["saturated"] == 0          # 4090 of 8192: half the window spare
+    d = _session_instance([_session(1, generates=[_gen(3900, 190)])])
+    assert main_rc(["--instance", str(d), "--sessions", "--gate"]) == 1
+
+
+# --- the account turn, which used to be written into no section at all -----------------
+
+def test_the_account_turn_is_read_now_that_it_carries_counters():
+    """Before 2026-09-12 the account generate had no `on_generate` and the record stored no
+    `generates` for it, so the beat's LARGEST generate was invisible to the census, to shape
+    discovery and to coverage.skipped alike -- not a skipped row, a row never written."""
+    without = {"ts": "t", "num_ctx": 8192,
+               "account": {"present": True, "sha256": "x", "reply": "..."},
+               "posture": {"generates": [_gen(5947, 1755)]}}
+    cov = {}
+    assert len(read_generates([without], cov)) == 1
+    assert cov["skipped"] == 0 and "account" not in cov["sections"]   # invisible, not skipped
+
+    with_counters = dict(without, account={"present": True, "sha256": "x", "reply": "...",
+                                           "generates": [_gen(7762, 300)]})
+    cov2 = {}
+    rows = read_generates([with_counters], cov2)
+    assert len(rows) == 2 and "account" in cov2["sections"]
+    assert census(rows)["slack"]["binding"]["phase"] == "account"     # and it is the tight one
+
+
+def test_an_account_turn_that_produced_no_counters_is_an_empty_list_not_a_missing_key():
+    """A reached-but-empty phase is already handled: it is not a skip and not a free window."""
+    beat = {"ts": "t", "num_ctx": 8192,
+            "account": {"present": False, "sha256": None, "reply": "", "generates": []},
+            "posture": {"generates": [_gen(1000, 100)]}}
+    cov = {}
+    rows = read_generates([beat], cov)
+    assert len(rows) == 1 and cov["skipped"] == 0
+    assert "account" in cov["sections"]
