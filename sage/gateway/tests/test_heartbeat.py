@@ -13,7 +13,7 @@ def test_the_resume_wake_is_additive_and_can_only_make_the_next_beat_sooner():
 
     def fake_run(args, **kw):
         calls.append(list(args))
-        if args[:3] == ["systemctl", "--user", "show"]:
+        if list(args)[:3] == ["systemctl", "--user", "show"]:
             return subprocess.CompletedProcess(args, 0, "waiting\n", "")
         return subprocess.CompletedProcess(args, 0, "", "")
 
@@ -48,7 +48,7 @@ def test_a_failed_resume_wake_costs_promptness_not_silence():
     from sage.gateway import heartbeat as hb
 
     def boom(args, **kw):
-        if args[:3] == ["systemctl", "--user", "show"]:
+        if list(args)[:3] == ["systemctl", "--user", "show"]:
             return subprocess.CompletedProcess(args, 0, "waiting\n", "")
         raise subprocess.CalledProcessError(1, args, stderr="nope")
 
@@ -61,3 +61,37 @@ def test_a_failed_resume_wake_costs_promptness_not_silence():
 
     assert d["armed"] is False
     assert "idle interval still stands" in d["why"]
+
+
+def test_clearing_a_stale_resume_unit_touches_only_that_unit():
+    """The stale-clear branch runs ONLY when the timer's SubState is not `waiting`, so a
+    fake that reports `waiting` never reaches it — which is how a mutation that cleared
+    the stale unit by stopping `sage-heartbeat.timer` passed twice on 2026-09-13. A pin
+    that cannot reach the line it claims to guard is not a pin. This drives SubState to a
+    fired state so the branch actually executes."""
+    import subprocess
+    from sage.gateway import heartbeat as hb
+
+    calls = []
+
+    def fake_run(args, **kw):
+        calls.append(list(args))
+        if list(args)[:3] == ["systemctl", "--user", "show"]:
+            return subprocess.CompletedProcess(args, 0, "running\n", "")   # FIRED, not waiting
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    real = hb.subprocess.run
+    hb.subprocess.run = fake_run
+    try:
+        d = hb.arm_resume_wake(180)
+    finally:
+        hb.subprocess.run = real
+
+    assert d["armed"] is True
+    cleared = [c for c in calls if "stop" in c or "reset-failed" in c]
+    assert cleared, "a fired unit must actually be cleared before re-arming"
+    for c in cleared:
+        target = c[-1]
+        assert target.startswith(hb.RESUME_UNIT), (
+            f"the stale-clear may only touch {hb.RESUME_UNIT}; it touched {target!r} — "
+            "stopping the persistent timer here would trade 'sooner' for 'never'")
