@@ -138,15 +138,15 @@
       "pool": "infra",
       "lct_id": "hub_sage_lct",
       "mdns_name": "hub.local",
-      "gateway_host": "100.65.206.122",
-      "last_seen_ip": "100.65.206.122",
+      "gateway_host": "hub",
+      "last_seen_ip": "hub",
       "last_seen_at": null,
       "gateway_port": 8750,
       "federation_port": 0,
       "model_default": "granite4:h-tiny",
       "device": "vulkan",
       "hardware": "AMD Radeon Pro W5500 8GB, WSL2",
-      "note": "Fleet's only AMD GPU. Cross-network (tailnet 100.65.x, LAN 192.168.50.x \u2014 not on 10.0.0.x). GPU compute via Mesa Dozen (Vulkan-on-D3D12); ROCm unavailable on WSL2. LLM = llama.cpp-Vulkan behind an Ollama-API shim. Also the web4 community-hub host."
+      "note": "Fleet's only AMD GPU. Cross-network (reached over the tailnet by host name \u2014 not on 10.0.0.x). GPU compute via Mesa Dozen (Vulkan-on-D3D12); ROCm unavailable on WSL2. LLM = llama.cpp-Vulkan behind an Ollama-API shim. Also the web4 community-hub host."
     },
     "pub": {
       "pool": "infra",
