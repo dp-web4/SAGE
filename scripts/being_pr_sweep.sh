@@ -48,8 +48,13 @@ for p in json.load(sys.stdin): print(p['number'])"); do
     # jq errored, 2>/dev/null ate the error, every PR was skipped, and the sweep reported
     # "0 being-authored open PRs" — a true-sounding zero from a broken query. Verified by
     # running the same expression against a PR known to carry a trailer.
+    # THE TIP COMMIT, not any commit. Once a being's PR merges into an integration branch,
+    # every later seat PR from that branch carries the being's commits in its history — and
+    # the first sweep after #69 merged flagged the seat's own #56 as being-authored. A
+    # being's PR is one it opened: its HEAD is its commit, stamped with its trailer. A
+    # carry-forward has a seat's commit on top.
     trailer="$(gh pr view "$num" -R "$REPO" --json commits \
-               --jq '[.commits[].messageBody] | join("\n")' 2>/dev/null | grep -m1 '^Being:' || true)"
+               --jq '.commits[-1].messageBody' 2>/dev/null | grep -m1 '^Being:' || true)"
     [ -z "$trailer" ] && continue
     checked=$((checked + 1))
     being="$(echo "$trailer" | sed 's/^Being:[[:space:]]*//')"
