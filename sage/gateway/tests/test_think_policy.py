@@ -130,3 +130,21 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_last_counters_is_cleared_when_no_reply_stands():
+    """Every failure path of get_response RETURNS a string rather than raising, so a caller
+    that records last_counters after the call would otherwise copy the previous reply's
+    counters under a generate that never happened (CBP's review of 98688aef7, 2026-09-13).
+    A failed call must leave {} — "no reply stood" — not turn N-1's real-looking record."""
+    from sage.irp.plugins.ollama_irp import OllamaIRP
+    keep = OllamaIRP._check_ollama
+    OllamaIRP._check_ollama = lambda self: False      # hermetic: no server
+    try:
+        llm = OllamaIRP({"model_name": "qwen3.8-distill:2b", "num_ctx": 8192})
+        llm.last_counters = {"prompt_eval_count": 5100, "eval_count": 300, "done_reason": "stop", "num_ctx": 8192}
+        out = llm.get_response("hello")
+    finally:
+        OllamaIRP._check_ollama = keep
+    assert out.startswith("[OllamaIRP:")
+    assert llm.last_counters == {}
