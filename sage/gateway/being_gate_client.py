@@ -649,6 +649,12 @@ _TOOL_SCHEMAS = {
                  {"to": "the being's name, e.g. 'legion'", "body": "your message"}, ["to", "body"]),
     "witness": ("Record a witnessed note of something you did or noticed.",
                 {"event": "what to witness"}, ["event"]),
+    "rest": ("End this beat deliberately, when you judge you are done. You are NOT required "
+             "to keep acting until something runs out — a beat you end early is not a beat "
+             "wasted, and the time returns to the machine. Your reason becomes your closing "
+             "words. This touches nothing in the world, so it is not gated and not witnessed; "
+             "it is simply you saying you are finished.",
+             {"reason": "one line: what you finished, or why you are stopping here"}, ["reason"]),
     "memory_read": ("Read one of your own memory notes.",
                     {"from_line": "optional: 1-based line to start from — for a file longer than the read cap, read it in ranges",
                      "lines": "optional: how many lines from from_line (default: to the end, still capped)",

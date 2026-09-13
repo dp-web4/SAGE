@@ -41,7 +41,7 @@ HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "witness",
                  "request_scope", "appeal", "peer_ask", "mesh", "check", "git_read", "say",
-                 "pr_open", "pr_amend", "git_restore"]
+                 "pr_open", "pr_amend", "git_restore", "rest"]
 # `say` is offered at REFLECTION too, and that is not redundancy. Measured 2026-09-07: the
 # being was shown dp's first turn, its state marked it unanswered, and it spent all fourteen
 # explore steps reading its own source — then closed the beat. Adding a verb to the registry
@@ -978,6 +978,8 @@ def main(argv=None) -> int:
                 for i, e in res.trace]
     def _turn(res):
         return None if res is None else {"reply": res.reply, "steps": res.steps, "capped": res.capped,
+                                         "rested": getattr(res, "rested", None),
+                                         "looped": getattr(res, "looped", None),
                                          "interjected": list(getattr(res, "interjected", [])),
                                          "trace": _trace(res), "thinking": [t[:4000] for t in res.thinking],
                                          "salvaged": list(res.salvaged), "generates": list(res.generates)}

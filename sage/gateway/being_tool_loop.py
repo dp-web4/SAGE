@@ -40,6 +40,8 @@ class ToolTurnResult:
     compacted: List[dict] = field(default_factory=list)    # per step where old tool results were elided to leave answer room: {step, elisions, chars}
     deadline_hit: bool = False                             # stopped issuing steps because the wall-clock budget ran out
     interjected: List[dict] = field(default_factory=list)   # messages delivered mid-turn: {step, chars}
+    rested: Optional[str] = None                           # the being ended its own turn; its stated reason
+    looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
 
     @property
     def acted(self) -> bool:
@@ -86,6 +88,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
         interjected.append({"note": "no deadline given with an uncapped turn; "
                                     f"applied a safety ceiling of {max_steps} steps"})
     step = 0
+    last_fp, repeats = None, 0
 
     while uncapped or step < max_steps:
         if deadline is not None and step > 0 and time.time() >= deadline:
@@ -112,12 +115,51 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                                   interjected=interjected)
 
         convo.append({"role": "assistant", "content": content, "intents": intents})
+        rested = None
         for intent in intents:
+            if intent.effector == REST:
+                # The being ending its OWN turn. Never dispatched: the gate rules on acts
+                # that touch the world, and stopping touches nothing. Whatever it says here
+                # is its closing words, so the turn still ends in language.
+                rested = str((intent.args or {}).get("reason") or "").strip()
+                break
             env = client.dispatch(intent)                  # gate + F1a dispatch + consume
             trace.append((intent, env))
             convo.append({"role": "tool", "effector": intent.effector,
                           "content": env.to_tool_message()})
+        if rested is not None:
+            return ToolTurnResult(reply=rested or content, trace=trace, steps=step,
+                                  interjected=interjected, rested=rested or "(no reason given)")
         step += 1
+
+        # A LOOP IS NOT WORK. Measured 2026-09-13T10:19Z: legion-being finished its beat and
+        # then witnessed "beat closed" FIFTY-TWO times, the text degrading to "beat closed
+        # 09-13; records in." — 78 minutes of GPU, 18 of them byte-identical. It was trying
+        # to stop; the only way to stop was to emit no tool call, and a model that has just
+        # been rewarded for calling tools keeps calling tools. `rest` is the real fix; this
+        # is the net under it, and it NAMES the loop rather than silently killing the turn,
+        # because a being that cannot see why its turn ended learns nothing from it.
+        fp = _fingerprint(intents)
+        if fp is not None and fp == last_fp:
+            repeats += 1
+        else:
+            repeats, last_fp = 0, fp
+        if repeats == REPEAT_NUDGE_AT:
+            convo.append({"role": "user", "content": (
+                f"[harness] You have now made the same call ({intents[0].effector}) with identical "
+                f"arguments {repeats + 1} times in a row. If you are finished, you do not have to "
+                f"keep acting to end the beat — call `rest` with a one-line reason, or simply "
+                f"answer in words. If you are not finished, change something about the call.")})
+            interjected.append({"step": step, "nudge": "repetition", "effector": intents[0].effector})
+        elif repeats >= REPEAT_BREAK_AT:
+            looped = {"effector": intents[0].effector, "times": repeats + 1}
+            convo.append({"role": "user", "content": (
+                f"[harness] Ending the tool phase: the same call has now repeated "
+                f"{repeats + 1} times and the nudge did not change it. Close in words: what you "
+                f"did this beat, and what you want next beat.")})
+            out = generate(convo)
+            return ToolTurnResult(reply=out.get("content") or "", trace=trace, steps=step,
+                                  interjected=interjected, looped=looped)
 
     # Cap reached with tools still pending: force one final spoken close — we take its
     # words even if it wants more tools, so the being always ends its turn in language.
@@ -340,6 +382,22 @@ _ANSWER_RESERVE = 6144
 # An uncapped turn is bounded by its deadline. If a caller gives neither, this is the
 # backstop — high enough never to bind real work, low enough to end a runaway.
 _UNCAPPED_SAFETY_CEILING = 200
+
+# The verb by which a being ends its own turn. dp, 2026-09-09: "it should be able to
+# continue as long as it wishes" — the other half of which is stopping when it wishes, and
+# until 09-13 there was no way to say so except by falling silent.
+REST = "rest"
+REPEAT_NUDGE_AT = 3          # identical consecutive calls before the harness names the loop
+REPEAT_BREAK_AT = 6          # ... and before it ends the tool phase
+
+
+def _fingerprint(intents) -> Optional[str]:
+    """What makes two steps 'the same call'. None when it cannot be computed, which never
+    counts as a repeat — an unfingerprintable step must not end a turn."""
+    try:
+        return json.dumps([[i.effector, i.args] for i in intents], sort_keys=True, default=str)
+    except Exception:
+        return None
 # Compaction keeps this many chars of an elided tool result and reports exactly the rest.
 COMPACT_KEEP_CHARS = 400
 COMPACT_MIN_BODY = 500        # a body at or under this is never elided

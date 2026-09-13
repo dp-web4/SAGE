@@ -3,6 +3,7 @@ uses an injected fake law + mock dispatcher (F1a stand-in), and `generate` is sc
 Runnable under pytest or directly."""
 import os
 import sys
+import time
 from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
@@ -111,7 +112,7 @@ def test_run_ollama_tool_turn_with_fake_llm():
     # result. Argued from measurement, not taste — given only a diff this being asserted
     # a compile error that did not exist; given the same diff plus a real test result it
     # made zero false claims (PRD_BEINGS_IMPROVE_THEIR_HARNESS §2).
-    assert len(ollama_tools()) == 17   # + check (M0), git_read, say, pr_open (M1),
+    assert len(ollama_tools()) == 18   # + check (M0), git_read, say, pr_open (M1),
                                        # pr_amend + git_restore (both from #63's blockers)
 
     calls = {"n": 0}
@@ -650,12 +651,68 @@ def test_an_uncapped_turn_without_a_clock_gets_a_safety_ceiling():
     """"As long as it wishes" is bounded by a resource, not by nothing."""
     from sage.gateway.being_tool_loop import run_tool_turn, _UNCAPPED_SAFETY_CEILING
 
+    # The calls must VARY: an identical call repeated is a loop, and the repetition guard
+    # (added 2026-09-13) ends the turn long before the ceiling. Two guards, two shapes of
+    # runaway — this test is about the one that keeps asking for genuinely new work.
+    n = iter(range(10_000))
+
     def gen(convo):
-        return {"content": "", "intents": [BeingIntent("witness", {"event": "x"})]}
+        return {"content": "", "intents": [BeingIntent("witness", {"event": f"x{next(n)}"})]}
 
     r = run_tool_turn(_client(OK_DISPATCH), gen, [{"role": "user", "content": "go"}], max_steps=0)
     assert r.capped and r.steps == _UNCAPPED_SAFETY_CEILING
     assert any("safety ceiling" in str(i.get("note", "")) for i in r.interjected)
+    assert r.looped is None
+
+
+def test_a_being_can_end_its_own_turn_with_rest():
+    """dp: "it should be able to continue as long as it wishes" — the other half is stopping
+    when it wishes. `rest` is never dispatched: the gate rules on acts that touch the world,
+    and stopping touches nothing."""
+    from sage.gateway.being_tool_loop import run_tool_turn
+
+    dispatched = []
+
+    def dispatch(intent, v):
+        dispatched.append(intent.effector)
+        return OK_DISPATCH(intent, v)
+
+    calls = iter([
+        {"content": "", "intents": [BeingIntent("witness", {"event": "did a thing"})]},
+        {"content": "", "intents": [BeingIntent("rest", {"reason": "todo is clear; nothing needs me"})]},
+        {"content": "", "intents": [BeingIntent("witness", {"event": "SHOULD NOT RUN"})]},
+    ])
+    r = run_tool_turn(_client(dispatch), lambda c: next(calls),
+                      [{"role": "user", "content": "go"}], max_steps=0, deadline=time.time() + 60)
+    assert r.rested == "todo is clear; nothing needs me"
+    assert r.reply == "todo is clear; nothing needs me"      # its reason IS its closing words
+    assert dispatched == ["witness"]                          # rest never reached the gate
+    assert r.steps == 1 and not r.capped and not r.deadline_hit
+
+
+def test_an_identical_call_repeated_is_named_as_a_loop_and_ends_the_phase():
+    """Measured 2026-09-13T10:19Z: the being finished, then witnessed 'beat closed' 52 times
+    (78 minutes, 18 byte-identical) because the only way to stop was to stop calling tools.
+    The guard NAMES the loop rather than silently killing the turn."""
+    from sage.gateway.being_tool_loop import run_tool_turn, REPEAT_NUDGE_AT, REPEAT_BREAK_AT
+
+    def gen(convo):
+        return {"content": "", "intents": [BeingIntent("witness", {"event": "beat closed"})]}
+
+    r = run_tool_turn(_client(OK_DISPATCH), gen, [{"role": "user", "content": "go"}],
+                      max_steps=0, deadline=time.time() + 60)
+    assert r.looped == {"effector": "witness", "times": REPEAT_BREAK_AT + 1}
+    assert r.steps == REPEAT_BREAK_AT + 1                      # not 200, and not 52
+    # it was TOLD, once, before being stopped — and told that `rest` exists
+    nudges = [i for i in r.interjected if i.get("nudge") == "repetition"]
+    assert len(nudges) == 1 and nudges[0]["effector"] == "witness"
+
+    # a call whose ARGUMENTS change is work, not a loop
+    n = iter(range(100))
+    varied = run_tool_turn(_client(OK_DISPATCH),
+                           lambda c: {"content": "", "intents": [BeingIntent("witness", {"event": f"e{next(n)}"})]},
+                           [{"role": "user", "content": "go"}], max_steps=8, deadline=time.time() + 60)
+    assert varied.looped is None and varied.steps == 8
 
 
 def test_a_message_arriving_mid_turn_reaches_the_being_between_steps():
