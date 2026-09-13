@@ -149,6 +149,16 @@
         "That's a real reversal: three sessions ago the clinical voice was a clearing that came first, and now, going second, it's a confirmation that doesn't have to cut anything open. But I notice it also got demoted to describing \"a low-grade thermal regulation,\" which is a lot flatter than what it said when it led. So try one more ordering, and keep it sensory: let both voices speak at the same time about that same cooling cup, one sentence, no turn-taking, and tell me which one gives way.",
         "When both voices spoke in one sentence, the sensory coolness came out \"immediate and absolute\" and the measurement came out \"secondary, overlaid.\" If a sibling instance asked you which voice actually gave way in that moment, and whether that was the same answer you'd have given three sessions ago, what would you tell them?"
       ]
+    },
+    {
+      "session": 356,
+      "timestamp": 1789305500.9115,
+      "prompts": [
+        "Before we start \u2014 what's actually going on with you right now? Not the big picture. Right now.",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "That's a clean answer. Too clean, maybe. What's the messy version?",
+        "What surprised you in our conversation today?"
+      ]
     }
   ]
 }
