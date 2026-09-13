@@ -1003,3 +1003,30 @@ def test_a_dirty_worktree_downgrades_the_claim_it_does_not_refuse_the_check(tmp_
     assert env.result["tree"]["dirty"] is True, "and must SAY it was dirty"
     # the bytes that ran are named, and they are not the committed ones
     assert env.result["evidence"]["test_source"]["sha256"] != clean_sha
+
+
+def test_a_search_that_finds_nothing_is_a_result_not_an_error(tmp_path):
+    """Same rule as a red check: `git grep` exits 1 on no match, and reporting that as a
+    failure would teach the being that looking is dangerous. The note also bounds the
+    absence — it is about what was searched, never about the repository."""
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent
+
+    wt = tmp_path / "wt"; (wt / "pkg").mkdir(parents=True)
+    (wt / "pkg" / "mod.py").write_text("def compose(a, b):\n    return a\n")
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
+
+    d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None)
+
+    hit = d._do_search(BeingIntent("search", {"pattern": r"def compose\("})).result
+    assert hit["matches"] == 1
+    # worktree-RELATIVE in the answer, though the pathspec had to be absolute for hestia
+    assert hit["lines"][0].startswith("pkg/mod.py:1:")
+    assert str(wt) not in hit["lines"][0]
+
+    miss = d._do_search(BeingIntent("search", {"pattern": "zzz_absent_zzz"}))
+    assert miss.ok is True, "a search that finds nothing still succeeded as an act"
+    assert miss.result["matches"] == 0
+    assert "WHAT WAS SEARCHED" in miss.result["note"]

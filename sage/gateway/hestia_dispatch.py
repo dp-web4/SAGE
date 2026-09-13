@@ -69,6 +69,11 @@ def _hestia_error(env: dict) -> Optional[str]:
     return str(err)
 
 
+# Matches a search shows. A search is a POINTER at lines to read, not a way to read a
+# file sideways; past this the being should narrow rather than scroll.
+SEARCH_LINES_SHOWN = 40
+
+
 class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
     live daemon. Wraps ReferenceF1aDispatcher for the local verbs (witness / memory)."""
@@ -579,6 +584,60 @@ class HestiaF1aDispatcher:
             return False
         except Exception:
             return True              # an unexpected failure is not evidence of a boundary
+
+    # -- search: find a symbol without reading the file it is in -----------------
+    def _do_search(self, intent: BeingIntent) -> ResultEnvelope:
+        """Run the composed `git grep` and return file:line:text.
+
+        A SEARCH THAT FINDS NOTHING IS A RESULT, not an error — same rule as a red check.
+        `git grep` exits 1 on no match, and reporting that as a failure would teach the
+        being that looking is dangerous. The result says plainly that the pattern is absent
+        from what was searched, and names WHAT was searched, so absence is bounded rather
+        than universal."""
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import search_command
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="search needs a worktree of your own; none is configured")
+        try:
+            cmd = search_command(intent.args, {"worktree": self.worktree})
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "search refused: the command the law judged is not the command this "
+                "dispatcher would execute."))
+        pattern = str(intent.args.get("pattern", ""))
+        where = str(intent.args.get("path", "") or "your whole worktree")
+        try:
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+                                  capture_output=True, timeout=60)
+        except Exception as e:
+            return ResultEnvelope(ok=False, error=f"search could not run: {type(e).__name__}: {e}")
+        lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip()]
+        # Paths come back absolute because the pathspec is absolute (hestia matches command
+        # tokens against absolute granted prefixes). The being thinks in worktree-relative
+        # paths, and every other verb speaks them, so translate rather than leak the seat's
+        # layout into its head.
+        root = os.path.realpath(self.worktree) + os.sep
+        lines = [ln.replace(root, "") for ln in lines]
+        truncated = len(lines) > SEARCH_LINES_SHOWN
+        shown = lines[:SEARCH_LINES_SHOWN]
+        if not shown:
+            return ResultEnvelope(ok=True, result={
+                "pattern": pattern, "searched": where, "matches": 0,
+                "note": (f"no line matches {pattern!r} in {where}. That is an answer about "
+                         f"WHAT WAS SEARCHED, not about the repository: widen the path, or "
+                         f"check the pattern (it is an extended regex, so ( ) | + are "
+                         f"special — searching for a literal one needs a backslash)")})
+        return ResultEnvelope(ok=True, result={
+            "pattern": pattern, "searched": where, "matches": len(lines),
+            "shown": len(shown),
+            "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "
+                          f"path or the pattern" if truncated else None),
+            "lines": shown})
 
     # -- check: the being runs a test and reads the answer (PRD M0) --------------
     def _do_check(self, intent: BeingIntent) -> ResultEnvelope:

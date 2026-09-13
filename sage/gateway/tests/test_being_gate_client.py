@@ -742,3 +742,56 @@ def test_git_restore_takes_its_content_from_history_and_no_flags():
 
     assert "git_restore" in _REGISTRY and "git_restore" in _CONSEQUENTIAL
     assert "git_restore" in EXPLORE_TOOLS
+
+
+def test_search_quotes_its_pattern_so_judged_equals_executed():
+    """The judged string must shlex.split into exactly the argv that runs (GPT on #56, #6).
+
+    The earlier verbs bought that invariant by REJECTING whitespace, which would make a
+    search verb useless — a being looking for `def compose(` needs spaces. shlex.quote
+    round-trips instead, so the pattern is one argv element on both sides."""
+    import shlex
+    from sage.gateway.being_gate_client import search_command
+
+    ctx = {"worktree": "/wt"}
+    cmd = search_command({"pattern": "seed, posture_turn = compose"}, ctx)
+    argv = shlex.split(cmd)
+    assert argv[argv.index("-e") + 1] == "seed, posture_turn = compose"
+    assert argv[-1] == "/wt"          # absolute pathspec: hestia matches absolute prefixes
+
+    # a path narrows it, and is absolute-ised for the same reason
+    cmd2 = search_command({"pattern": "x", "path": "sage/gateway"}, ctx)
+    assert shlex.split(cmd2)[-1] == "/wt/sage/gateway"
+
+
+def test_search_refuses_what_its_grammar_cannot_represent():
+    """A refusal that names its own valid set is one the being can correct without asking."""
+    from sage.gateway.being_gate_client import search_command, SEARCH_MAX_N
+    ctx = {"worktree": "/wt"}
+
+    for bad, expect in [
+        ({}, "pattern"),
+        ({"pattern": "   "}, "pattern"),
+        ({"pattern": "a\nb"}, "single line"),
+        ({"pattern": "x" * 201}, "under 200"),
+        ({"pattern": "x", "path": "../escape"}, "plain path"),
+        ({"pattern": "x", "path": "/etc/passwd"}, "escapes your worktree"),
+        ({"pattern": "x", "path": "has space"}, "whitespace"),
+        ({"pattern": "x", "path": "-rf"}, "plain path"),
+    ]:
+        try:
+            search_command(bad, ctx)
+            assert False, f"should have refused {bad!r}"
+        except ValueError as e:
+            assert expect in str(e), f"{bad!r} -> {e}"
+
+    # n is clamped, never trusted
+    assert f"--max-count={SEARCH_MAX_N}" in search_command({"pattern": "x", "n": 10_000}, ctx)
+    assert "--max-count=1" in search_command({"pattern": "x", "n": -5}, ctx)
+
+    # no worktree is a missing affordance, named
+    try:
+        search_command({"pattern": "x"}, {})
+        assert False, "should have refused without a worktree"
+    except ValueError as e:
+        assert "worktree" in str(e)
