@@ -52,7 +52,7 @@ class SAGEMachineConfig:
                                 # below ROCm floor — pub's Radeon Pro W5500).
                                 # Manifest refresh 2026-07-24, pub device report.
     max_memory_gb: float        # GPU/unified memory budget
-    gateway_port: int           # HTTP port (default 8750)
+    gateway_port: int           # HTTP port (default 8760 since the 2026-06 Rust cutover)
     workspace_path: str         # Root workspace directory
     instance_dir: str           # Resolved instance directory path
     irp_iterations: int         # IRP refinement iterations (3 for Sprout, 5 for Thor)
@@ -163,7 +163,11 @@ def get_config(machine_name: Optional[str] = None) -> SAGEMachineConfig:
     if machine_name is None:
         machine_name = detect_machine()
 
-    port = int(os.environ.get('SAGE_PORT', '8750'))
+    # 8760, not 8750: the June 2026 Python->Rust cutover moved the gateway port
+    # (sage-rs/sage-daemon/src/main.rs: `const PORT: u16 = 8760`) and both this default and fleet.json kept
+    # the old one, so every peer address the fleet handed out pointed at a dead port. Measured 2026-09-13:
+    # thor and sprout answer /health on 8760 and refuse 8750.
+    port = int(os.environ.get('SAGE_PORT', '8760'))
 
     # ── Per-machine configs ──────────────────────────────────────────
     # SAGE_MODEL env var overrides the default model on ANY machine.
