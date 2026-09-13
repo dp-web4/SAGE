@@ -339,7 +339,7 @@ def main(argv=None) -> int:
 
     from sage.gateway.governed_turn import build_client
     from sage.gateway.being_gate_client import ollama_tools
-    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn, _sent_budget
     workspace = str(Path(__file__).resolve().parents[2])
     host_session_id = f"heartbeat-{uuid.uuid4().hex[:12]}"
     client, llm = build_client(args.member, instance, args.model, workspace, args.forum_dir,
@@ -483,11 +483,22 @@ def main(argv=None) -> int:
                                      tools=ollama_tools(EXPLORE_TOOLS), on_generate=_on_generate("posture"))
         convo = _carry(convo, after)
     # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
-    account = {"present": False, "sha256": None, "reply": ""}
+    # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
+    # carries the whole explore(+posture) conversation and is usually the beat's largest
+    # prompt, and until 2026-09-13 it was invisible to the window census (CBP, 09-12).
+    account = {"present": False, "sha256": None, "reply": "", "generates": []}
     try:
         ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
                    [{"role": "user", "content": ACCOUNT_ASK}]
         aresp = llm.get_chat_response(ask_msgs)
+        _raw = aresp.get("raw") or {}
+        _gen = {"done_reason": _raw.get("done_reason"), "prompt_eval_count": _raw.get("prompt_eval_count"),
+                "eval_count": _raw.get("eval_count"), "retried": 0, "num_predict": _sent_budget(llm)}
+        account["generates"].append(_gen)
+        try:
+            _on_generate("account")(dict(_gen))   # the partial trace, same as the tool turns
+        except Exception as _e:
+            print(f"[heartbeat] on_generate(account) failed: {type(_e).__name__}: {_e}", file=sys.stderr)
         areply = (aresp.get("content") or "").strip()
         parsed = parse_account(areply)
         account["reply"] = areply[:1200]

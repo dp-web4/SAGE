@@ -1257,7 +1257,9 @@ RESPONSE STYLE:
             'timeout_seconds': 120,
             'num_ctx': _num_ctx,
         })
-        self._turn_counters: list = []
+        # the window counters of the reply that stood for the most recent generate_response,
+        # copied onto the history entry the caller appends (see generate_response)
+        self._last_turn_counters: dict = {}
 
         try:
             health = self.llm.health_check()
@@ -1309,11 +1311,13 @@ RESPONSE STYLE:
             print(f"  ERROR generating response: {e}")
             response = "(no response — connection error)"
         # window counters for this turn, recorded whatever happened (a length stop is the
-        # finding, not a failure to log)
+        # finding, not a failure to log; a failed call leaves {} because get_response clears
+        # last_counters at entry). They ride the history entry the caller appends, so the
+        # alignment of counters to turns is structural, not positional (CBP, 2026-09-13).
         try:
-            self._turn_counters.append(dict(getattr(self.llm, "last_counters", {}) or {}))
+            self._last_turn_counters = dict(getattr(self.llm, "last_counters", {}) or {})
         except Exception:
-            pass
+            self._last_turn_counters = {}
 
         # All response cleaning delegated to the model adapter
         # — echo stripping, bilateral generation, model-specific quirks
@@ -1408,7 +1412,8 @@ RESPONSE STYLE:
             self.conversation_history.append({
                 "claude": prompt,
                 "sage": response,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "window": dict(self._last_turn_counters),
             })
 
             # Get metabolic snapshot for ATP logging (Thor Session #61)
@@ -1658,7 +1663,8 @@ RESPONSE STYLE:
             pass
         self.conversation_history.append({"claude": prompt, "sage": response,
                                           "timestamp": datetime.now().isoformat(),
-                                          "gaze_choice": mode})
+                                          "gaze_choice": mode,
+                                          "window": dict(self._last_turn_counters)})
 
     def close_session(self):
         """Save session state, transcript, and update identity."""
@@ -1806,9 +1812,11 @@ RESPONSE STYLE:
             # percept-free session from a working pipe (system prompt is not saved).
             "prompt_health": getattr(self, "_prompt_health", None),
             # per-turn window counters (num_ctx, prompt_eval_count, eval_count, done_reason):
-            # the raising channel's own window census, in the record where UPTAKE is read
+            # the raising channel's own window census, in the record where UPTAKE is read.
+            # Each entry lives on its conversation turn ("window" beside claude/sage); this
+            # list is derived from those, so it cannot drift from the turns it describes.
             "window": {"num_ctx": getattr(self.llm, "num_ctx", None),
-                       "turns": list(getattr(self, "_turn_counters", []) or [])},
+                       "turns": [dict(t.get("window") or {}) for t in self.conversation_history]},
             # F-M2' D1: delivery receipt — what sensory content entered this
             # session's context (sections + sizes). Complements prompt_health:
             # health says which sources yielded; this witnesses what was delivered.

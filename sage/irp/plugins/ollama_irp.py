@@ -144,6 +144,11 @@ class OllamaIRP(IRPPlugin):
         Uses the model-specific adapter to select prompt format, stop sequences,
         and API endpoint (/api/generate or /api/chat).
         """
+        # Cleared before anything can fail: every failure path below RETURNS a string rather
+        # than raising, so a caller that records last_counters after a failed call would
+        # otherwise copy the previous reply's counters under a generate that never happened
+        # (CBP's review of 98688aef7, 2026-09-13). {} means "no reply stood".
+        self.last_counters = {}
         if not self._ollama_available:
             self._ollama_available = self._check_ollama()
             if not self._ollama_available:
