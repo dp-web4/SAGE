@@ -370,8 +370,17 @@ def own_state(instance: Path, entrusted: str = "", member: str = "",
     parts.append("## journal.md (tail)\n" + (journal.strip() or "(empty: this is your first beat)"))
     for d in ("scratch", "notes"):
         p = instance / d
-        names = sorted(x.name for x in p.iterdir()) if p.is_dir() else []
-        parts.append(f"## {d}/\n" + ("\n".join(f"- {n}" for n in names[:30]) if names else "(empty)"))
+        # NEWEST FIRST, and say how many are not shown. This was the first 30 names in
+        # alphabetical order: with 84 scratch files the being's own draft from the previous
+        # beat (test_ollama_irp_payload.py, 't') was not in its listing (2026-09-13).
+        entries = sorted((x for x in p.iterdir()), key=lambda x: x.stat().st_mtime,
+                         reverse=True) if p.is_dir() else []
+        names = [x.name for x in entries]
+        shown = names[:30]
+        more = f"\n- (… {len(names) - 30} older not listed; memory_read the directory for all)" \
+            if len(names) > 30 else ""
+        parts.append(f"## {d}/ (newest first)\n"
+                     + ("\n".join(f"- {n}" for n in shown) + more if names else "(empty)"))
     return "\n\n".join(parts)
 
 

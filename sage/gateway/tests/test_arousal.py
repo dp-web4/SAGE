@@ -38,10 +38,15 @@ def setup_function(_):
     # live path); the first run of the deferral test stamped the being's next beat with
     # descriptor "t2" (heartbeats.jsonl, 2026-09-13T07:46:30Z). Tests must not touch it.
     from sage.gateway import being_join
+    global _real_write_wake_marker
+    _real_write_wake_marker = being_join.write_wake_marker
     being_join.write_wake_marker = lambda *a, **k: None
 
 
 def teardown_function(_):
+    # restore, or test_being_join's wake-marker test (which runs after this file) sees a no-op
+    from sage.gateway import being_join
+    being_join.write_wake_marker = _real_write_wake_marker
     import importlib
     importlib.reload(arousal)
 
