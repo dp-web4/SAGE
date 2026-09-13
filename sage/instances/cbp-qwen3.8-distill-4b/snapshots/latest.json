@@ -1,6 +1,6 @@
 {
-  "timestamp": "20260806_130348",
-  "slug": "cbp-gemma3-4b",
+  "timestamp": "20260912_180232",
+  "slug": "cbp-qwen3.8-distill-4b",
   "files": [
     "identity",
     "experience_buffer",
