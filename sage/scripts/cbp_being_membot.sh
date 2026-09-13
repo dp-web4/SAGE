@@ -12,7 +12,11 @@ PORT=8010
 MOUNT="cbp-being"
 LOG="/home/dp/ai-workspace/SAGE/sage/instances/cbp-qwen3.8-distill-4b/membot.log"
 export HOME=/home/dp
-export MEMBOT_EMBED_BACKEND=auto
+# Embedder: on this box the being's 4B model holds ~6 GB of the 8 GB card at 16k context, so
+# ollama cannot also hold nomic-embed-text during a beat; the swap made the first remember
+# time out (2026-09-12). `st` = sentence-transformers in the membot venv, CPU, ~2 GB RAM of
+# the 32 GB here, no GPU contention. Needs `pip install sentence-transformers` in that venv.
+export MEMBOT_EMBED_BACKEND="${MEMBOT_EMBED_BACKEND:-st}"
 export PYTHONUNBUFFERED=1
 pid=$(lsof -t -i :$PORT 2>/dev/null | head -1)
 case "${1:-start}" in
