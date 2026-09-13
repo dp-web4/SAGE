@@ -1239,6 +1239,15 @@ RESPONSE STYLE:
             self._is_reasoning_model = (
                 'distill' in self.model_name.lower() or 'qwen3.8' in self.model_name.lower()
             )
+        # The window: the same per-size resolution the governed beat uses (an 8192 floor the
+        # model config may raise). Until 2026-09-13 the raising session sent no num_ctx at all
+        # and ran on Ollama's 4096 default — one window on the beat channel, another on the
+        # raising channel, and the PRD's UPTAKE read pinned to the one nobody measured (CBP).
+        try:
+            from sage.gateway.governed_turn import resolve_num_ctx
+            _num_ctx = resolve_num_ctx(self.model_name, 8192)
+        except Exception:
+            _num_ctx = 8192
         self.llm = OllamaIRP({
             'model_name': self.model_name,
             'ollama_host': self.ollama_host,
@@ -1246,7 +1255,9 @@ RESPONSE STYLE:
             'temperature': 0.6 if self._is_reasoning_model else 0.8,  # empero rec: 0.6
             'think': self._is_reasoning_model,
             'timeout_seconds': 120,
+            'num_ctx': _num_ctx,
         })
+        self._turn_counters: list = []
 
         try:
             health = self.llm.health_check()
@@ -1297,6 +1308,12 @@ RESPONSE STYLE:
         except Exception as e:
             print(f"  ERROR generating response: {e}")
             response = "(no response — connection error)"
+        # window counters for this turn, recorded whatever happened (a length stop is the
+        # finding, not a failure to log)
+        try:
+            self._turn_counters.append(dict(getattr(self.llm, "last_counters", {}) or {}))
+        except Exception:
+            pass
 
         # All response cleaning delegated to the model adapter
         # — echo stripping, bilateral generation, model-specific quirks
@@ -1788,6 +1805,10 @@ RESPONSE STYLE:
             # yielded content — without this the record cannot distinguish a
             # percept-free session from a working pipe (system prompt is not saved).
             "prompt_health": getattr(self, "_prompt_health", None),
+            # per-turn window counters (num_ctx, prompt_eval_count, eval_count, done_reason):
+            # the raising channel's own window census, in the record where UPTAKE is read
+            "window": {"num_ctx": getattr(self.llm, "num_ctx", None),
+                       "turns": list(getattr(self, "_turn_counters", []) or [])},
             # F-M2' D1: delivery receipt — what sensory content entered this
             # session's context (sections + sizes). Complements prompt_health:
             # health says which sources yielded; this witnesses what was delivered.

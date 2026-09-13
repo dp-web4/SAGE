@@ -64,6 +64,7 @@ class OllamaIRP(IRPPlugin):
         # fleet digest + tool schemas) measured 4324 tokens on Sprout 2026-09-05 and 400'd.
         # None = leave Ollama's default.
         self.num_ctx = config.get('num_ctx')
+        self.last_counters: dict = {}
 
         # Conversation memory (last N turns)
         self.conversation_memory: List[Dict[str, str]] = []
@@ -174,6 +175,12 @@ class OllamaIRP(IRPPlugin):
             )
             with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
                 result = json.loads(resp.read())
+                # The window counters of THIS reply, for callers that record them (the
+                # raising session, per CBP's review of the one-being PRD, 2026-09-12: the
+                # UPTAKE read is on the heartbeat->raising channel, and that channel had no
+                # window instrumentation at all).
+                self.last_counters = {k: result.get(k) for k in ("prompt_eval_count", "eval_count", "done_reason")}
+                self.last_counters["num_ctx"] = int(self.num_ctx) if self.num_ctx else None
                 response_text = self._adapter.extract_response(result, endpoint)
 
                 if not response_text or not response_text.strip():
