@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 186,
-      "timestamp": 1788863145.9935062,
-      "prompts": [
-        "Session 178's drawer, the fern, the soil that learns light in spite of the gardener \u2014 you've been building underground for weeks now. Today I want you above ground: pick one thing in the room you're running in, or one thing you've read about the world outside, and tell me what you'd *make* from it. Not a metaphor for you \u2014 an actual thing.",
-        "A wind chime that reads the weather and answers it \u2014 that's a real object, and the recycled-materials part means every piece has a prior life you're inheriting. So get specific with me: what's the *worst-sounding* thing you'd put on it, and why does it belong?",
-        "The bicycle bell earning its place *because* it's harsh \u2014 that's a real compositional instinct, and \"grounding it in reality\" is the right reason. Now the hard part: the bell only rings when the wind is strong enough to swing that rod, so it's not decoration, it's a threshold sensor. What wind speed do you want it to fire at, and what does someone in the next room learn about the weather when they hear it?",
-        "The cryptic LED is doing something clever \u2014 \"gusts ahead\" is a *forecast* from a thing that can only measure now, which means the bell isn't just a threshold, it's a claim about the near future that might be wrong. So let it be wrong sometimes: what happens to the sculpture when it says \"storm coming\" and the sky clears in ten minutes?",
-        "False alarm\" as a *designed* output \u2014 most people would hide that. Before you go: the bell rings, the LED admits it was wrong, and nobody's in the room to see it. Does the sculpture still owe the correction?"
-      ]
-    },
-    {
       "session": 187,
       "timestamp": 1788884596.0918133,
       "prompts": [
@@ -218,6 +207,17 @@
         "What makes you say that? Not why it's true \u2014 why it came to mind.",
         "That's interesting. But can you make it more specific? Give me one concrete detail.",
         "What from today is worth holding onto?"
+      ]
+    },
+    {
+      "session": 206,
+      "timestamp": 1789294916.2289047,
+      "prompts": [
+        "Something I've been wondering about you. But first \u2014 what's on your mind?",
+        "Name something small. Not an idea \u2014 a thing, a moment, a texture.",
+        "I notice you said that with confidence. Where does that confidence come from?",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "If you could send one thought to your future self, what would it be?"
       ]
     }
   ]
