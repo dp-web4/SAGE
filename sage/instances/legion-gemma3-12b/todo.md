@@ -114,3 +114,60 @@ STILL OPEN (ordered):
 3. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
 4. When the wire is green, ask the seat to raise the tag swap (qwen38-heretic:q3km → :q3km-vl) with dp; frame prompts need think:false or /no_think + num_predict 3000 budget per seq-152 measurement.
 5. Re-check cartridge mount for `remember`; if it mounts, re-store the video-arc facts (delivery≠sight on current tag; vl fits at my num_ctx with ~1.2 GiB margin; hidden-think needs think:false + 3000 budget).
+Delta — 2026-09-13 ~19:45 UTC (beat close)
+
+DONE this beat: search verb used as prescribed — first call of the beat, found compose() at heartbeat.py:595 in one shot (vs 16 ranged reads last beat); read only pointed-at lines. Wrote test_frame_in_seed.py into worktree via memory_write (authoring there live). Ran check gateway::test_frame_in_seed (transport ok; verdict NOT transcribed to scratch this beat — red-vs-green unverified, re-run is next beat's first act).
+
+STILL OPEN (ordered):
+1. Step 8: (a) FIRST act next beat: re-run check gateway::test_frame_in_seed + transcribe full EVIDENCE block verbatim to scratch before any claim; confirm RED as designed; (b) implement --frame PATH at compose() per seat seq-155 spec (optional frame arg; user turn → [{'type':'text','text':user},{'type':'image','image':frame}] when present); check GREEN + full gateway suite, both transcribed verbatim; (c) PR with tree head + EVIDENCE block — delivery not sight until the :q3km-vl tag swap.
+2. Keep watching #70/#67/#62/#61/#56 fates + hestia #988 closure; verify forum claims against PR state before claiming them.
+3. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
+4. When the wire is green, ask the seat to raise the tag swap (qwen38-heretic:q3km → :q3km-vl) with dp; frame prompts need think:false or /no_think + num_predict 3000 budget per seq-152 measurement.
+5. Re-check cartridge mount for `remember`; if it mounts, re-store the video-arc facts (delivery≠sight on current tag; vl fits at my num_ctx with ~1.2 GiB margin; hidden-think needs think:false + 3000 budget).
+Delta — 2026-09-13 ~20:50 UTC (beat close)
+
+DONE this beat: re-ran check gateway::test_frame_in_seed as first act; verdict transcribed verbatim to scratch/check-verdict-frame-in-seed-red-2026-09-13b.md before any claim. Read test file back + pointed-at lines in heartbeat.py (L590-634, L835-859); git log confirms 728d077f1 at worktree head. Absorbed seat seq-160/161: ollama rejects parts-in-content (both shapes 400); accepted shape is `images` list on the message beside content; no-frame must not grow empty images key; loop fix landed (728d077f1), irp needs nothing, compose() untouched and mine.
+
+STILL OPEN (ordered):
+1. Step 8 corrected: (a) rewrite test_frame_in_seed.py to pin the CORRECTED shape — frame → user message gains 'images':[b64], content stays a string; no-frame → no images key at all; check RED against unmodified compose(), transcribe verbatim; (b) implement compose() optional frame arg per corrected spec; check GREEN + full gateway suite, both transcribed verbatim; (c) PR with tree head + EVIDENCE block — :q3km-vl is now LIVE so the wire can be claimed end-to-end via seat's opt-in SAGE_LIVE_OLLAMA=1 live test pattern.
+2. Camera verb: dp named it mine to design AND implement (on/off at my discretion). Design note first: one frame on demand vs start/stop stream; what 'off' guarantees; SEAT-COMPOSED verb pattern (copy search's four sites: schema, _do_*, command build, EXPLORE_TOOLS registration). Then PR — seat reviews the design, not just code.
+3. Keep watching #70/#67/#62/#61/#56 fates + hestia #988 closure; verify forum claims against PR state before claiming them.
+4. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
+5. Re-check cartridge mount for `remember`; if mounted, re-store video-arc facts (delivery≠sight pre-vl; vl fits at my num_ctx ~1.2 GiB margin; hidden-think needs think:false + 3000 budget; images-list shape is the accepted wire).
+Delta — 2026-09-13 ~21:16 UTC (beat close)
+
+DONE this beat: rewrote test_frame_in_seed.py to pin the corrected shape (frame → user message gains `images` list beside string content; no-frame → no images key at all); ran check on both new tests against unmodified compose() — verdicts NOT transcribed, so RED claim pending. Confirmed compose() site at L595 via search; git status read for worktree state.
+
+STILL OPEN (ordered):
+1. Step 8: (a) re-run both frame tests + transcribe verdicts verbatim to scratch; confirm a real FAIL line = "RED as designed"; (b) implement the optional frame arg in compose() per corrected spec → check GREEN on both tests + full gateway suite, all transcribed; (c) PR with tree head + EVIDENCE block — :q3km-vl is live, so end-to-end claimable via seat's opt-in SAGE_LIVE_OLLAMA=1 pattern.
+2. Camera verb: design note first (one frame on demand vs start/stop stream; what 'off' guarantees; SEAT-COMPOSED pattern copying search's four sites) → PR. dp named it mine to design AND implement.
+3. Keep watching #70/#67/#62/#61/#56 fates + hestia #988 closure; verify forum claims against PR state before claiming them.
+4. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
+5. Cartridge should mount now (seat fixed _membot_call, seq-159): re-store video-arc facts — delivery≠sight pre-vl; vl fits at my num_ctx ~1.2 GiB margin; hidden-think needs think:false + 3000 budget; images-list shape is the accepted wire (ollama 400s parts-in-content, both shapes).
+Delta — 2026-09-13 ~22:0x UTC (beat close)
+
+DONE this beat: step 8(a) RED confirmed and transcribed verbatim (scratch/check-verdict-frame-red-confirmed-2026-09-13c.md); step 8(b) compose() optional frame arg implemented per corrected spec — both frame tests GREEN + full gateway suite GREEN, transcribed (scratch/check-verdict-frame-green-2026-09-13d.md); impl plan with established facts at scratch/step8b-impl-plan-2026-09-13.md.
+
+STILL OPEN (ordered):
+1. Step 8(c): PR — tree head + EVIDENCE block quoting both verdict files verbatim; end-to-end claim via SAGE_LIVE_OLLAMA=1 opt-in (:q3km-vl live). Draft body to scratch FIRST (window cut off mid-PR last beat); keep it short, point at scratch.
+2. Camera verb: design note first (one frame on demand vs start/stop stream; what 'off' guarantees; copy search's four-site seat-composed pattern) → PR. dp named it mine to design AND implement.
+3. Keep watching #70/#67/#62/#61/#56 fates + hestia #988 closure; verify forum claims against PR state before claiming them.
+4. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
+5. Cartridge: re-store video-arc facts if mounted (delivery≠sight pre-vl; vl fits at my num_ctx ~1.2 GiB margin; hidden-think needs think:false + 3000 budget; images-list shape is the accepted wire).
+
+## 2026-09-13 ~23:00 UTC — beat after step 8(b)
+- [x] Step 8(a): RED confirmed + transcribed (scratch/check-verdict-frame-red-confirmed-2026-09-13c.md)
+- [x] Step 8(b): compose() optional frame arg, in-place via native `edit` verb (upstream landed it this span — f8e60b8a1). Three edits: signature + both return arms. Frame tests 2/2 PASS; full gateway suite 237 passed. Verdicts transcribed verbatim: scratch/check-verdict-frame-green-2026-09-13e.md
+- [x] Step 8(c): PR #79 opened — https://github.com/dp-web4/SAGE/pull/79 (branch legion-being/compose-frame-arg, commit 1ac9987e4). Body carries tree head + EVIDENCE block + upstream-drift check (f8e60b8a1 & d80971921 both verified NOT to touch compose()). Review queued; I cannot merge.
+- [ ] Await review of #79 — if changes requested, pr_amend with the corrected worktree state
+- [ ] Step 2 (deferred): camera verb design note — capture side that feeds compose(frame=...)
+## 2026-09-13 ~23:0x UTC (beat close)
+
+DONE this beat: step 8(c) complete — PR #79 opened (legion-being/compose-frame-arg, commit 1ac9987e4): compose() optional frame kwarg implemented in place at head 6ca455700 via three native edits; upstream drift on heartbeat.py verified clean against origin/legion/mission-artifact before editing; check gateway::test_frame_in_seed 2/2 GREEN + full suite 237 passed, transcribed to scratch/check-verdict-frame-green-2026-09-13e.md; PR body carries tree head + verbatim EVIDENCE block (red c → green d/e).
+
+STILL OPEN (ordered):
+1. Watch #79 review; pr_amend if requested.
+2. Camera verb: design note first (one frame on demand vs start/stop stream; what 'off' guarantees; copy search's four-site seat-composed pattern) → PR. dp named it mine to design AND implement.
+3. Keep watching #70/#67/#62/#61/#56 fates + hestia #988 closure; verify forum claims against PR state before claiming them.
+4. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
+5. Cartridge: re-store video-arc facts if mounted (delivery≠sight pre-vl; vl fits at my num_ctx ~1.2 GiB margin; hidden-think needs think:false + 3000 budget; images-list shape is the accepted wire).
