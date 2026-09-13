@@ -162,6 +162,20 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
     return sandbox_prefix(worktree) + inner
 
 
+def check_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """The same command as a list, for execution without a shell.
+
+    Carried forward from SAGE#62 (GPT's #60 evidence contract), which never landed: the
+    dispatcher used to execute `shlex.split(check_command(args))` — a command it RECOMPOSED
+    from the intent, not the one the law actually judged. In practice the two agree, because
+    check_command is deterministic on the args; the point is that agreement was an
+    assumption rather than a checked invariant, and the authority for what runs should be
+    the verdict, not the args. Comparing this against the verdict's bound command makes the
+    assumption falsifiable at the moment it matters."""
+    import shlex
+    return shlex.split(check_command(args, ctx))
+
+
 # The M1 PREREQUISITE, built. Being-authored code runs under a principal that is not this
 # seat — the hard blocker PRD r3 §5 put on M1, cleared 2026-09-08.
 #

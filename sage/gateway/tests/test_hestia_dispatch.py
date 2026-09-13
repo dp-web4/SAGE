@@ -883,3 +883,110 @@ def test_already_granted_says_whether_the_grant_is_actually_writable():
     # cannot tell != refuse. A dispatcher with no local F1a must not manufacture a boundary.
     blind = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
     assert blind._writable_by_harness(str(elsewhere)) is True
+
+
+def _check_tree(tmp_path, body="def test_real():\n    assert True\n"):
+    """A git worktree with one gateway test, committed, for exercising the check organ."""
+    import subprocess
+    wt = tmp_path / "wt"; (wt / "sage" / "gateway" / "tests").mkdir(parents=True)
+    (wt / "sage" / "gateway" / "tests" / "test_real.py").write_text(body)
+    for args in (["init", "-q"], ["add", "-A"],
+                 ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "t"]):
+        subprocess.run(["git", "-C", str(wt), *args], check=True,
+                       capture_output=True)
+    return wt
+
+
+def _dispatcher(wt, judged=None):
+    import types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    d = D.__new__(D)
+    d.worktree = str(wt); d.plugin_id = "b"; d.being_lct = None
+    d.embodiment = {"running_tag": "test-tag"}
+    d._verdict = types.SimpleNamespace(command=judged)
+    d._call = lambda name, args: {"actionId": "act-e"} if name == "hestia_begin_action" else {}
+    return d
+
+
+def test_a_check_result_carries_the_evidence_a_reviewer_would_reconstruct_by_hand(tmp_path):
+    """GPT's #60 evidence contract, carried forward from the #62 slice that never landed.
+
+    The being pastes check output into PR bodies and a reviewer re-runs it. Every field
+    here is one the reviewer would otherwise reconstruct by hand: which command ran, against
+    which bytes, how much output, what exit status, on which substrate, and whether the tree
+    moved underneath while it ran."""
+    from sage.gateway.being_gate_client import BeingIntent
+    import sage.gateway.being_gate_client as bgc
+
+    wt = _check_tree(tmp_path)
+    d = _dispatcher(wt)
+    saved = bgc.SANDBOX_REQUIRED, bgc.sandbox_available
+    bgc.SANDBOX_REQUIRED, bgc.sandbox_available = False, (lambda: False)
+    try:
+        env = d._do_check(BeingIntent("check", {"target": "gateway"}))
+    finally:
+        bgc.SANDBOX_REQUIRED, bgc.sandbox_available = saved
+
+    assert env.ok and env.result["verdict"] == "PASS"
+    e = env.result["evidence"]
+    assert e["exit_status"] == 0
+    assert e["output_bytes"] > 0 and len(e["output_sha256"]) == 64
+    assert e["embodiment"] == {"running_tag": "test-tag"}
+    assert e["test_source"]["files"] == 1 and len(e["test_source"]["sha256"]) == 64
+    assert e["test_source"]["at_head"] == env.result["tree"]["head"]
+    assert e["stable"] is True and e["state"] == "pinned"
+    assert e["argv"][0] and e["command"].endswith(e["argv"][-1])
+
+
+def test_the_command_executed_must_be_the_command_the_law_judged(tmp_path):
+    """The authority for what runs is the verdict, not the intent's args. The dispatcher
+    used to execute a command it RECOMPOSED from the args; they agree by construction, and
+    that agreement was an assumption rather than a checked invariant."""
+    from sage.gateway.being_gate_client import BeingIntent, check_command
+    import sage.gateway.being_gate_client as bgc
+
+    wt = _check_tree(tmp_path)
+    saved = bgc.SANDBOX_REQUIRED, bgc.sandbox_available
+    bgc.SANDBOX_REQUIRED, bgc.sandbox_available = False, (lambda: False)
+    try:
+        # a verdict that bound a DIFFERENT command: refused before anything runs
+        env = _dispatcher(wt, judged="python3 -m pytest /etc")._do_check(
+            BeingIntent("check", {"target": "gateway"}))
+        assert env.ok is False and "the law is the authority" in env.error.lower()
+
+        # the matching command runs, and the result says the law bound it
+        real = check_command({"target": "gateway"}, {"worktree": str(wt)})
+        ok = _dispatcher(wt, judged=real)._do_check(BeingIntent("check", {"target": "gateway"}))
+        assert ok.ok and ok.result["evidence"]["law_bound_command"] is True
+    finally:
+        bgc.SANDBOX_REQUIRED, bgc.sandbox_available = saved
+
+
+def test_a_dirty_worktree_downgrades_the_claim_it_does_not_refuse_the_check(tmp_path):
+    """#62 REFUSED on a dirty tree — sound when the being could not write to its worktree,
+    and wrong now. Its loop is write a test -> check -> propose; refusing there would mean
+    it could never check its own uncommitted work, which is the capability M1 exists to
+    give it. Dirtiness is reported, and test_source names the bytes that actually ran."""
+    from sage.gateway.being_gate_client import BeingIntent
+    import sage.gateway.being_gate_client as bgc
+
+    wt = _check_tree(tmp_path)
+    clean_sha = None
+    saved = bgc.SANDBOX_REQUIRED, bgc.sandbox_available
+    bgc.SANDBOX_REQUIRED, bgc.sandbox_available = False, (lambda: False)
+    try:
+        first = _dispatcher(wt)._do_check(BeingIntent("check", {"target": "gateway"}))
+        clean_sha = first.result["evidence"]["test_source"]["sha256"]
+        assert first.result["tree"]["dirty"] is False
+
+        # uncommitted work, exactly as the being leaves it before proposing
+        (wt / "sage" / "gateway" / "tests" / "test_real.py").write_text(
+            "def test_real():\n    assert True\n\n\ndef test_new():\n    assert True\n")
+        env = _dispatcher(wt)._do_check(BeingIntent("check", {"target": "gateway"}))
+    finally:
+        bgc.SANDBOX_REQUIRED, bgc.sandbox_available = saved
+
+    assert env.ok and env.result["verdict"] == "PASS", "a dirty tree must still be checkable"
+    assert env.result["tree"]["dirty"] is True, "and must SAY it was dirty"
+    # the bytes that ran are named, and they are not the committed ones
+    assert env.result["evidence"]["test_source"]["sha256"] != clean_sha

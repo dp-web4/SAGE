@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope
@@ -589,9 +590,10 @@ class HestiaF1aDispatcher:
         which is the opposite of what this organ is for — so `passed` carries the verdict
         and `ok` carries only whether the check ran.
         """
+        import hashlib
         import shlex
         import subprocess
-        from sage.gateway.being_gate_client import check_command
+        from sage.gateway.being_gate_client import check_argv, check_command
         if not self.worktree or not os.path.isdir(self.worktree):
             return ResultEnvelope(ok=False, pending=True,
                                   note="check needs a worktree of your own; none is configured "
@@ -601,9 +603,23 @@ class HestiaF1aDispatcher:
         # another, which is the whole failure this organ exists to make impossible.
         try:
             cmd = check_command(intent.args, {"worktree": self.worktree})
+            argv = check_argv(intent.args, {"worktree": self.worktree})
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
+        # EXECUTE WHAT THE LAW JUDGED, not a lookalike rebuilt from the same args. Carried
+        # forward from SAGE#62 (GPT's #60 evidence contract), which never landed and sat
+        # conflicting for five days. The two agree by construction today — check_command is
+        # deterministic on the intent — so this asserts an invariant rather than fixing a
+        # live divergence, and it will be the thing that notices if that ever stops being
+        # true. A verdict that bound no command is not an authority to run one.
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "check refused: the command the law judged is not the command this "
+                "dispatcher would execute. The law is the authority for what runs."))
         target = str(intent.args.get("target", "")).strip()
+        tree_before = self._worktree_revision()
+        source_before = self._test_source_identity(target, tree_before.get("head"))
         # UNVERIFIED IS A RESULT. The being's own design answer (2026-09-07, its Q1): keep
         # `check` gated and witnessed, do not build an unwitnessed local fallback — "two
         # verification paths can diverge, and the unwitnessed one becomes the one people
@@ -625,10 +641,13 @@ class HestiaF1aDispatcher:
                         "tree": self._worktree_revision(), "worktree": self.worktree})
         action_id = begin.get("actionId")
         try:
-            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+            proc = subprocess.run(argv, cwd=self.worktree, text=True,
                                   capture_output=True, timeout=600)
             passed = proc.returncode == 0
-            out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+            raw_out = (proc.stdout or "") + (proc.stderr or "")
+            output_sha256 = hashlib.sha256(raw_out.encode("utf-8", "replace")).hexdigest()
+            output_len = len(raw_out.encode("utf-8", "replace"))
+            out = raw_out.strip()
             # A TEST THAT DOES NOT EXIST IS NOT A FAILING TEST. pytest exits 5 when nothing
             # was collected — "167 deselected" — and the first cut reported that as FAIL.
             # Measured 2026-09-08 11:34Z: the being asked for
@@ -684,13 +703,78 @@ class HestiaF1aDispatcher:
         headline = (f"{'PASS' if passed else 'FAIL'} — {summary}. "
                     f"This is the answer. A check that RAN and FAILED still returns "
                     f"successfully as an act: 'the call worked' is not 'the tests passed'.")
+        # THE EVIDENCE CONTRACT (GPT on SAGE#60, carried forward from the #62 slice that
+        # never landed). A verdict is only as transferable as what it can name: which
+        # command ran, against which bytes, producing how much output, exiting how — and
+        # whether the tree moved underneath while it ran. The being pastes check output
+        # into PR bodies and a reviewer re-runs it; every field here is one the reviewer
+        # would otherwise have to reconstruct by hand.
+        #
+        # ONE THING FROM #62 IS DELIBERATELY NOT CARRIED: it REFUSED on a dirty worktree,
+        # on the sound argument that HEAD does not name the bytes that ran. That was right
+        # for a being that could not write to its tree; it would now break the being's
+        # whole loop, which is write a test -> check -> propose. Refusing there would mean
+        # it could never check its own uncommitted work — a guard that punishes the exact
+        # capability M1 exists to give it. So dirtiness DOWNGRADES the claim instead of
+        # blocking it: `tree.dirty` is already reported, and `test_source.sha256` names the
+        # bytes that actually ran whether or not they are committed.
+        # STABLE MEANS THE SOURCE HELD, not that nothing in the directory moved. Comparing
+        # the whole tree block made this False whenever the run itself left an artifact:
+        # pytest writes __pycache__, which flips `dirty`, so an unsandboxed check always
+        # reported "tree_changed_during_check" for a benign reason. (Invisible on the real
+        # path only because the sandbox sets PYTHONDONTWRITEBYTECODE — a field that is
+        # right by accident is not right.) HEAD and the test-source hash are what a verdict
+        # rests on, and test_source covers test_*.py only, so artifacts cannot flip it.
+        tree_after = self._worktree_revision()
+        source_after = self._test_source_identity(target, tree_after.get("head"))
+        stable = (tree_after.get("head") == tree_before.get("head")
+                  and source_after == source_before)
         return ResultEnvelope(ok=True, witness_id=action_id,
                               result={"headline": headline,
                                       "target": target, "passed": passed,
                                       "verdict": "PASS" if passed else "FAIL",
                                       "output": detail, "worktree": self.worktree,
-                                      "tree": self._worktree_revision(),
+                                      "tree": tree_before,
+                                      "evidence": {
+                                          "command": cmd,
+                                          "argv": argv,
+                                          "law_bound_command": judged is not None,
+                                          "test_source": source_before,
+                                          "exit_status": proc.returncode,
+                                          "output_sha256": output_sha256,
+                                          "output_bytes": output_len,
+                                          "embodiment": getattr(self, "embodiment", None) or {},
+                                          "stable": stable,
+                                          "state": "pinned" if stable else "tree_changed_during_check",
+                                      },
                                       "action_id": action_id})
+
+    def _test_source_identity(self, target: str, head: Optional[str]) -> Optional[dict]:
+        """WHICH TEST FILE the verdict is about, by content hash at the tree that ran.
+
+        Carried forward from SAGE#62 (GPT's #60 evidence contract). The tree block says
+        which commit; this says which BYTES the named target actually resolves to, so a
+        PASS cannot be silently transferred to a file that has since changed. Returns None
+        rather than raising: evidence that cannot be gathered must degrade the claim, never
+        fail the check the being was waiting on."""
+        import hashlib
+        from sage.gateway.being_gate_client import CHECK_TARGETS
+        suite = target.partition("::")[0].strip()
+        rel = CHECK_TARGETS.get(suite)
+        if not rel or not self.worktree:
+            return None
+        root = Path(self.worktree) / rel
+        try:
+            paths = sorted(p for p in root.rglob("test_*.py")) if root.is_dir() else (
+                [root] if root.exists() else [])
+            h = hashlib.sha256()
+            for p in paths:
+                h.update(p.relative_to(self.worktree).as_posix().encode())
+                h.update(p.read_bytes())
+            return {"root": rel, "files": len(paths), "sha256": h.hexdigest(),
+                    "at_head": head}
+        except Exception:
+            return None
 
     def _worktree_revision(self) -> dict:
         """WHICH TREE THE ANSWER IS ABOUT. A check result without this is not evidence: the
