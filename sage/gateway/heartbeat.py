@@ -21,7 +21,7 @@ measured on Sprout 2026-09-05): a short turn with own state and the tool names, 
 same posture, verbatim, as a second tool turn together with the fleet digest, then
 reflect. Same words, same tools, different order; a presentation, not a fork (Legion).
 
-    python3 -m sage.gateway.heartbeat --member legion-being --model qwen38-heretic:q3km \
+    python3 -m sage.gateway.heartbeat --member legion-being --model qwen38-heretic:q3km-vl \
         --instance sage/instances/legion-gemma3-12b [--max-steps 8] [--gate-only]
 """
 from __future__ import annotations

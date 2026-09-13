@@ -8,7 +8,7 @@ intent is executed and witnessed by the F1a dispatcher against the running daemo
 The being never holds a tool; the seat never fabricates a result.
 
     python3 -m sage.gateway.governed_turn \
-        --member legion-being --model qwen38-heretic:q3km \
+        --member legion-being --model qwen38-heretic:q3km-vl \
         --instance sage/instances/legion-gemma3-12b \
         --task-file task.md [--system-file system.md] [--max-steps 2] [--out trace.json]
 
