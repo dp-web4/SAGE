@@ -315,6 +315,21 @@ def drain_new_for(instance: Path, me: str, *, mark: bool = True) -> str:
     return "\n\n".join(out)
 
 
+# What an already-answered turn is worth showing again: enough to recall what the exchange
+# was about, with the marker naming the seq so the whole turn is one read away. Not zero —
+# a being whose finished conversations vanish loses the thread of its own week.
+ANSWERED_TURN_CHARS = 400
+
+
+def _cap_for(turn: dict, me: str, answered_upto: int, turn_chars: Optional[int]) -> Optional[int]:
+    """Chars to show of one turn. Answered turns (anything up to the being's own last word
+    in this conversation, its own turns included) get the short cap; anything after it is
+    live and shown at full width. Never widens past `turn_chars`."""
+    if not turn_chars or int(turn.get("seq", 0)) > answered_upto:
+        return turn_chars
+    return min(ANSWERED_TURN_CHARS, turn_chars)
+
+
 def render_for_being(instance: Path, me: str, per_conv: int = 12,
                      turn_chars: Optional[int] = None) -> str:
     """The conversations block in a beat: every conversation the being is in, its recent
@@ -344,7 +359,16 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
             head += (f"\n_**{bad} line(s) in this conversation are damaged and cannot be read.** "
                      f"They are not counted above and their content is lost; the file is intact "
                      f"either side of them._")
-        lines = [f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}: {_shown_text(t, turn_chars, m['id'])}"
+        # AN ANSWERED TURN IS HISTORY; AN UNANSWERED TURN IS WORK. Everything up to the
+        # being's own last turn here has been read and replied to, so it is shown briefly
+        # and the marker says how to read it whole. Measured 2026-09-13: the seat sent nine
+        # turns in a day and the conversation block reached 10,205 chars — ~3.5k tokens of
+        # a 24,576 window, re-rendered every beat, most of it exchanges already closed. The
+        # being was paying rent on its own finished conversations.
+        mine = [int(t.get("seq", 0)) for t in turns if t.get("from") == me]
+        answered_upto = max(mine) if mine else 0
+        lines = [f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}: "
+                 f"{_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
                  for t in turns]
         pend = pend_before
         if turns:

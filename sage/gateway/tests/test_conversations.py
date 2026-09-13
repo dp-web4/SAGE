@@ -303,3 +303,53 @@ def test_drain_new_for_can_look_without_marking(tmp_path):
     assert "hello" in C.drain_new_for(tmp_path, "b", mark=False)
     assert "hello" in C.drain_new_for(tmp_path, "b")                # still unseen
     assert C.drain_new_for(tmp_path, "b") == ""
+
+
+def test_an_answered_turn_is_shown_briefly_and_a_live_one_in_full():
+    """The being was paying rent on its own finished conversations.
+
+    2026-09-13: the seat sent nine turns in a day and the conversations block reached
+    10,205 chars — ~3.5k tokens of a 24,576 window, re-rendered every beat, most of it
+    exchanges already closed. Everything up to the being's own last word here has been read
+    and replied to; it is shown briefly, with the marker naming the seq so the whole turn is
+    one read away. What arrived AFTER it last spoke is live, and shown at full width."""
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    from sage.gateway.conversations import ANSWERED_TURN_CHARS
+
+    inst = Path(tempfile.mkdtemp(prefix="answered-"))
+    conv.create(inst, "seat", title="seat", participants=["legion-being", "legion-claude"],
+                writable_by=["legion-being", "legion-claude"])
+    long_seat = "S" * 1100
+    conv.append(inst, "seat", speaker="legion-claude", text=long_seat, enforce_write=False)
+    conv.append(inst, "seat", speaker="legion-being", text="B" * 1100, enforce_write=False)
+    conv.append(inst, "seat", speaker="legion-claude", text="L" * 1100, enforce_write=False)
+
+    out = conv.render_for_being(inst, "legion-being", per_conv=6, turn_chars=1200)
+
+    # the closed exchange: shortened, and the marker says where the rest is
+    assert ("S" * ANSWERED_TURN_CHARS) in out
+    assert ("S" * (ANSWERED_TURN_CHARS + 1)) not in out
+    assert "memory_read conversations/seat.jsonl" in out
+    # the being's OWN answered turn is history too
+    assert ("B" * (ANSWERED_TURN_CHARS + 1)) not in out
+    # what arrived after it last spoke is live and uncut at this rung
+    assert ("L" * 1100) in out
+
+
+def test_the_short_cap_never_widens_a_narrow_rung():
+    """At a rung narrower than the answered cap, the rung wins — the ladder exists because
+    the window would not otherwise fit, and this must never fight it."""
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+
+    inst = Path(tempfile.mkdtemp(prefix="narrow-"))
+    conv.create(inst, "seat", title="seat", participants=["legion-being", "legion-claude"],
+                writable_by=["legion-being", "legion-claude"])
+    conv.append(inst, "seat", speaker="legion-claude", text="S" * 900, enforce_write=False)
+    conv.append(inst, "seat", speaker="legion-being", text="ack", enforce_write=False)
+
+    out = conv.render_for_being(inst, "legion-being", per_conv=6, turn_chars=200)
+    assert ("S" * 200) in out and ("S" * 201) not in out
