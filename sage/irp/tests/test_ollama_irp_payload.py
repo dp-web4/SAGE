@@ -120,3 +120,38 @@ def test_tools_present_when_nonempty():
     tool = {'type': 'function', 'function': {'name': 'f', 'parameters': {}}}
     data, _ = _capture_payload(_make_inst(), [{'role': 'user', 'content': 'hi'}], tools=[tool])
     assert data['tools'] == [tool]
+
+# --- video organ, step 3: image content parts survive payload construction ----
+
+def test_image_content_part_survives_into_chat_payload():
+    """A user message carrying text + image parts must reach the Ollama /api/chat
+    body with both parts intact — the IRP-side precondition for frames reaching
+    a vision model. Verified at head 837f0d72c: get_chat_response passes
+    `messages` through untransformed into payload['messages'] (ollama_irp.py
+    L225-234), so parts are neither dropped nor rewritten."""
+    image_b64 = 'aGVsbG8gd29ybGQ='  # decodes to 'hello world' — a real b64 value
+    messages = [
+        {
+            'role': 'user',
+            'content': [
+                {'type': 'text', 'text': 'what is in this frame?'},
+                {'type': 'image', 'image': image_b64},
+            ],
+        }
+    ]
+    data, _ = _capture_payload(_make_inst(), messages)
+    sent = data['messages'][0]['content']
+    assert isinstance(sent, list), (
+        f'expected the content parts to pass through as a list, got {type(sent).__name__}'
+    )
+    types = [p.get('type') for p in sent]
+    assert 'text' in types and 'image' in types, f'parts dropped or rewritten: {types!r}'
+    image_part = next(p for p in sent if p.get('type') == 'image')
+    assert image_part['image'] == image_b64
+
+
+def test_plain_string_content_stays_a_string():
+    """A plain-text message must keep string content — the pin above must not be
+    read as claiming list content is required, only that parts are preserved."""
+    data, _ = _capture_payload(_make_inst(), [{'role': 'user', 'content': 'hi'}])
+    assert data['messages'][0]['content'] == 'hi'
