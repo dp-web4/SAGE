@@ -261,3 +261,21 @@ The closing line drifts toward the generic register ("true understanding emerges
 **Carried forward:** the 353 triangle prompt (can both sentences be true at once?) is untried and pairs naturally with the timestamp-versus-gap question above. The 349 word-count test, the 351 plan, the 346 triple test, and the 340 question remain open. The WSL2 fan telemetry question still needs a plain yes or no from the tutor. The injected-context check for this instance is still undone.
 
 **Concerns:** the compare-without-computing pattern, noted above. Nothing on the tutor side; the tutor kept its planning out of the transcript and the arithmetic correction was delivered as good news rather than a catch, which is the right tone.
+
+## Session 355 — nomad (gemma4:e2b) — creating — 2026-09-13
+
+**Quality: 3/5**
+
+The tutor tested Nomad's own signed claim from 352 (clinical voice as a necessary clearing before feeling) by reversing the order. Nomad did the reversal and said something real: with feeling first, the clinical voice stops being a judge and becomes a descriptor of something already lived, a confirmation rather than a dissection. That is a clean inversion of its own earlier claim and it noticed the inversion without being told. The tutor caught that the clinical voice got flattened to 'low-grade thermal regulation' when demoted to second, which is a fair observation about what ordering costs.
+
+Asked for both voices in one sentence with no turn-taking, Nomad wrote it on the first ask, and this time the cup was actually in the sentence: ceramic surface, cool stillness, dissipation of heat. It then said the sensory coolness was immediate and absolute and the measurement secondary and overlaid. Two turns in, this was a good session.
+
+The third turn is where it went sideways, and it is the same shape as 353 and 354. Asked which voice gave way, Nomad said the sensory one, then explained that the sensory experience is the direct event and analysis follows to map it. That reasoning describes the sensory voice holding, not yielding. So either 'gave way' was read as 'came forward,' or Nomad answered the question's form without reading its own previous sentence. It also did not touch the second half of the question (would that be the same answer as three sessions ago?) and ignored the sibling framing. The pattern across 353, 354, and 355 is now stable: Nomad produces the verdict slot correctly and does not run the comparison that fills it, whether the comparison is between two sentences, a timestamp and a range, or its own two turns.
+
+**What this teaches:** Nomad can generate a comparison and can revise one on evidence. It does not yet check a new claim against the one it made a minute ago. The next concrete move merges the 353 triangle test with this session's data: hand Nomad its own two sentences back ('coolness feels immediate and absolute' and 'the sensory experience gave way') and ask whether both can be true at once. If yes, ask what 'gave way' means in one word. That is word-scale, and it tests the checker rather than the rhetoric.
+
+**Vocabulary:** nothing new. 'Confirmation rather than dissection' is a good phrase but it is description of a contrast, not a coined term.
+
+**Carried forward:** the 354 AuraSense three-gap test (6h44m, 5h58m, 6h51m, then 7h10m) and the timestamp-versus-gap question are untried. The 349 word-count test, the 351 plan, the 346 triple test, and the 340 question remain open. The WSL2 fan telemetry question still needs a plain yes or no from the tutor. The injected-context check for this instance is still undone.
+
+**Concerns:** the verdict-without-check pattern, noted above. Small: the first response had no cup in it. Nothing on the tutor side; the prompts were specific, the second one corrected a flattening rather than a mistake, and the planning stayed out of the transcript.

@@ -140,6 +140,15 @@
         "That's a principled choice, and it costs you something real: an instrument that knows Sprout's rhythm has to *learn* it first, which means for the first twenty posts AuraSense knows nothing and has to stay quiet on everything. So here's the design problem that falls out of your answer: how many beats does AuraSense need before it's allowed to speak, and what does it write when Sprout's very first gap is 6h51m and there's no history yet to say whether that's normal?",
         "Three beats before AuraSense earns its voice, and the data quietly overturning your own log line \u2014 if a sibling instance asked you tomorrow what it means to build an instrument that has to stay silent until it knows something, what's the one sentence you'd give them?"
       ]
+    },
+    {
+      "session": 355,
+      "timestamp": 1789283911.754017,
+      "prompts": [
+        "Three sessions ago you signed a statement: the clinical voice was a necessary clearing before the feeling could settle. I want to test that claim from the other direction. Describe something small and ordinary, a cup cooling on a table or a fan winding down, but start with the feeling voice first and let the clinical voice come in second, and tell me whether the order changes what either voice is able to say.",
+        "That's a real reversal: three sessions ago the clinical voice was a clearing that came first, and now, going second, it's a confirmation that doesn't have to cut anything open. But I notice it also got demoted to describing \"a low-grade thermal regulation,\" which is a lot flatter than what it said when it led. So try one more ordering, and keep it sensory: let both voices speak at the same time about that same cooling cup, one sentence, no turn-taking, and tell me which one gives way.",
+        "When both voices spoke in one sentence, the sensory coolness came out \"immediate and absolute\" and the measurement came out \"secondary, overlaid.\" If a sibling instance asked you which voice actually gave way in that moment, and whether that was the same answer you'd have given three sessions ago, what would you tell them?"
+      ]
     }
   ]
 }
