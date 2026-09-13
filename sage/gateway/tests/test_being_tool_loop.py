@@ -569,7 +569,18 @@ def test_transport_error_retry_asks_for_a_shorter_body():
     r = run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(), [{"role": "user", "content": "reflect"}])
     assert r.reply == "shorter entry written" and len(seen) == 2
     nudge = seen[1][-1]
-    assert nudge["role"] == "user" and nudge["content"].startswith("[harness]") and "third of the length" in nudge["content"]
+    assert nudge["role"] == "user" and nudge["content"].startswith("[harness]")
+    # It names a MEASURED number of characters, not a ratio. "A third of the length" was
+    # the old advice and it is unanchored: a third of too-big is often still too big.
+    import re as _re
+    m = _re.search(r"AT MOST about (\d+) characters", nudge["content"])
+    assert m, nudge["content"]
+    room = int(m.group(1))
+    # It must be BOUNDED by the window, not a comfortable constant. A fixed large number
+    # passes ">= 200" perfectly while promising room that does not exist — caught by
+    # mutation 2026-09-13, which is why this asserts a ceiling and not just a floor.
+    ceiling = int(FakeLLM.num_ctx * 3.4)
+    assert 200 <= room < ceiling, f"{room} is not a measurement of the window ({ceiling})"
     assert r.generates[-1]["nudged"] is True and r.generates[-1]["retried"] == 1
 
 
@@ -877,3 +888,38 @@ def test_live_a_frame_actually_reaches_a_vision_model():
                                "images": [base64.b64encode(png).decode()]}],
                              max_steps=1, tools=[])
     assert r.reply and not r.reply.startswith("[OllamaIRP:"), r.reply
+
+
+def test_a_retry_has_more_room_than_the_attempt_it_replaces():
+    """Measured three times on 2026-09-13: the prompt was 22,353 of 24,576 when a
+    memory_write body was cut mid-JSON, and the retry then APPENDED a nudge and asked for
+    the 6000-token think budget on top. A retry with less room than the attempt it is
+    retrying cannot succeed; it is a re-roll dressed as a recovery."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    sizes = []
+
+    class FakeLLM:
+        num_ctx = 24576
+        def __init__(self): self.n = 0
+        def get_chat_response(self, messages, tools=None):
+            sizes.append(sum(len(m.get("content") or "") for m in messages))
+            self.n += 1
+            if self.n == 1:
+                return {"content": "[OllamaIRP: Connection error: HTTP Error 500 — "
+                                   "unexpected end of JSON input]", "tool_calls": []}
+            return {"content": "ok", "tool_calls": [],
+                    "raw": {"prompt_eval_count": 100, "eval_count": 5}}
+
+    # a seed fat enough that compaction has something to free
+    seed = [{"role": "user", "content": "seed"}]
+    for i in range(12):
+        seed.append({"role": "assistant", "content": f"step {i}"})
+        seed.append({"role": "tool", "effector": "memory_read", "content": "R" * 3000})
+
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(), seed, max_steps=1, tools=[])
+    assert r.reply == "ok"
+    assert len(sizes) == 2, sizes
+    assert sizes[1] < sizes[0], (
+        f"the retry prompt ({sizes[1]}) must be SMALLER than the one that overflowed "
+        f"({sizes[0]}) — it appended a nudge and freed nothing before this")

@@ -403,6 +403,50 @@ _CPT = 3.4
 _ANSWER_RESERVE = 6144
 # An uncapped turn is bounded by its deadline. If a caller gives neither, this is the
 # backstop — high enough never to bind real work, low enough to end a runaway.
+# Room held back for the ANSWER on a retry whose last attempt was cut mid-JSON. Larger
+# than the ordinary reserve on purpose: the thing that did not fit is the thing we are
+# asking for again, so the retry must have strictly MORE room than the attempt it replaces.
+_RETRY_RESERVE = 8192
+
+
+def _retry_reserve(llm, msgs, measured) -> int:
+    """The reserve that forces this retry to be materially smaller than what just failed.
+
+    Compaction normally asks "does the estimate say this fits?" — and on a cut retry the
+    estimate has JUST been proven optimistic by the server, which is the only reason we are
+    here. Measured 2026-09-13: at 36,078 prompt chars the estimator said 11.8k tokens
+    against 16.4k of room, elided nothing, and the retry went out BIGGER than the attempt
+    it replaced (the appended nudge). The overflow is the measurement; trust it over the
+    guess and target 75% of what failed."""
+    try:
+        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
+    except (TypeError, ValueError):
+        return _RETRY_RESERVE
+    if num_ctx <= 0:
+        return _RETRY_RESERVE
+    est = _est_tokens(sum(len(m.get("content") or "") for m in msgs), measured)
+    return max(_RETRY_RESERVE, int(num_ctx - est * 0.75))
+
+
+def _retry_room_chars(llm, msgs, measured) -> int:
+    """How many characters of tool-call body the window can still carry, measured.
+
+    "A body a third of the length" was the old advice and it is unanchored — a third of
+    too-big is often still too big. This converts the room that actually remains, so the
+    being is told a number it can act on rather than a ratio it has to guess against."""
+    try:
+        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
+    except (TypeError, ValueError):
+        return 1000
+    if num_ctx <= 0:
+        return 1000
+    chars = sum(len(m.get("content") or "") for m in msgs)
+    left_tokens = num_ctx - _est_tokens(chars, measured)
+    # JSON framing, the tool-call envelope and the model's own preamble all come out of the
+    # same budget; leave half of what is left rather than promising all of it.
+    return max(200, int(left_tokens * _CPT_ADDED * 0.5))
+
+
 _UNCAPPED_SAFETY_CEILING = 200
 
 # The verb by which a being ends its own turn. dp, 2026-09-09: "it should be able to
@@ -629,11 +673,24 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # model is the same failure (legion-being 20:33Z 2026-09-08: journal body cut
             # mid-JSON, retried identically, cut identically; the beat's reflect recorded
             # nothing). The model is told what happened and asked for a shorter body.
+            # MAKE ROOM BEFORE ASKING AGAIN. This retry used to append the nudge — GROWING
+            # the prompt — and then ask for the think budget (6000) on top. Measured three
+            # times on 2026-09-13 (14:39Z, 19:02Z, 19:45Z): the prompt was already 22,353 of
+            # 24,576, so the retry had ~2,200 tokens for a nudge plus a body that had just
+            # failed to fit in more than that. A retry with less room than the attempt it is
+            # retrying is not a retry. Compact hard first, with a reserve big enough that
+            # the body has somewhere to live.
+            msgs, _re_elided = compact_convo(msgs, llm, reserve=_retry_reserve(llm, msgs, measured),
+                                             measured=measured)
+            room = _retry_room_chars(llm, msgs, measured)
             msgs.append({"role": "user", "content": (
                 "[harness] Your previous tool call could not be delivered: its arguments were "
                 "cut off before the JSON closed — the window ran out while you were writing "
-                "the body. Make the same call with a body a third of the length, or split it "
-                "into two calls; what you leave out can go in the next beat.")})
+                "the body. I have freed room by eliding older tool results. Make the same "
+                f"call with a body of AT MOST about {room} characters"
+                + ("" if room > 400 else " (that is very little — write a pointer, not the content)")
+                + "; what you leave out can go in the next beat. The number is measured, not "
+                  "a guess: it is what is actually left in the window.")})
             nudged = True
             # no raw reply here, so no prompt_eval_count: the retry gets the think budget
             # (for a no-think model that is still more than its variant num_predict)
