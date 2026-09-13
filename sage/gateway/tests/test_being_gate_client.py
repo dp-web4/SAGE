@@ -325,3 +325,21 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_granted_reach_reads_the_cores_reach_resolver_and_an_older_core_is_recursive():
+    from sage.gateway.being_gate_client import _granted_reach, GatewayVerdict
+    class Pol:
+        scope = ("path:/tmp/being-home", "path:/tmp/shared/**", "repo:x")
+    class Core:
+        @staticmethod
+        def _scope_roots_with_reach(scopes, ws):
+            return (("/tmp/being-home", False), ("/tmp/shared", True))
+        @staticmethod
+        def _scope_parts(scopes, ws):
+            return ((), ("/tmp/being-home", "/tmp/shared"))
+    assert _granted_reach(Core, Pol, "/ws") == (("/tmp/being-home", False), ("/tmp/shared", True))
+    # a core without the resolver matches every grant as a prefix: that reach is reported, not exact
+    older = _granted_reach(object(), Pol, "/ws")
+    assert older and all(rec for _, rec in older)
+    assert _granted_reach(Core, None, "/ws") == () and GatewayVerdict("allow").granted_reach == ()

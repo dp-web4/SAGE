@@ -696,3 +696,23 @@ def test_a_duplicate_still_saves_when_the_session_holds_unpersisted_work():
     assert _mb_calls("save_cartridge") == [{"name": "sprout-being"}], \
         "a duplicate on a dirty session must still persist"
     assert not d._mb_dirty, "a successful save clears the flag"
+
+
+def test_request_scope_beneath_an_exact_grant_is_not_already_granted_and_files_nothing():
+    # cbp-being 2026-09-12: home granted bare after hestia #1002, journal.md refused, and this
+    # dedup said "you already hold reach here" 22 times in one beat, filing nothing.
+    from sage.gateway.being_gate_client import GatewayVerdict
+    d, root = _disp()
+    FakeMcp.calls.clear()
+    exact = GatewayVerdict("allow", granted=(root,), granted_reach=((root, False),))
+    env = d(BeingIntent("request_scope", {"path": root + "/journal.md", "reason": "to write my journal entry"}), exact)
+    assert env.ok and env.result["status"] == "beneath_exact_grant", env
+    assert env.result["root"] == os.path.realpath(root) and "/**" in env.result["next"]
+    assert not [n for n, _ in FakeMcp.calls if n == "hestia_request_scope"]
+    # the root itself IS held, exactly
+    env = d(BeingIntent("request_scope", {"path": root, "reason": "to reach my own home dir"}), exact)
+    assert env.ok and env.result["status"] == "already_granted"
+    # a recursive grant still answers the child locally
+    env = d(BeingIntent("request_scope", {"path": root + "/journal.md", "reason": "to write my journal entry"}),
+            GatewayVerdict("allow", granted=(root,), granted_reach=((root, True),)))
+    assert env.ok and env.result["status"] == "already_granted"

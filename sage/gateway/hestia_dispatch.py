@@ -529,11 +529,24 @@ class HestiaF1aDispatcher:
         # <home>/config.json, inside the standing home grant, and dp granted it again).
         import os as _os
         rp = _os.path.realpath(_os.path.expanduser(path))
-        for root in (getattr(getattr(self, "_verdict", None), "granted", ()) or ()):
-            r = _os.path.realpath(str(root))
-            if rp == r or rp.startswith(r + "/"):
+        exact_above = None
+        for r, recursive in _granted_reach_of(getattr(self, "_verdict", None)):
+            r = _os.path.realpath(str(r))
+            if rp == r or (recursive and rp.startswith(r + "/")):
                 return ResultEnvelope(ok=True, result={"status": "already_granted", "path": path, "within": r,
                                                        "next": "you already hold reach here; read or write it directly"})
+            if rp.startswith(r + "/") and (exact_above is None or len(r) > len(exact_above)):
+                exact_above = r
+        # Beneath a grant that is EXACT (hestia #1002: a bare grant reaches its path and nothing
+        # under it). "already granted" here is false — the gate just refused — and filing a
+        # child row is what exact-by-default exists to stop (Legion, 2026-09-08). The honest
+        # answer names the operator's act and tells the being to stop retrying.
+        if exact_above is not None:
+            return ResultEnvelope(ok=True, result={
+                "status": "beneath_exact_grant", "path": path, "root": exact_above,
+                "next": (f"your grant on {exact_above} is EXACT: it reaches that path and nothing beneath it. "
+                         f"Only the operator can make it recursive (path:{exact_above}/**). No request was filed; "
+                         f"your seat has been told. Do not retry this write in this beat.")})
         args: Dict[str, Any] = {"plugin_id": self.plugin_id, "path": path,
                                 "reason": f"[{self.plugin_id}] {reason}"}
         out = self._call("hestia_request_scope", args)
@@ -550,6 +563,15 @@ class HestiaF1aDispatcher:
         return ResultEnvelope(ok=False, pending=True,
                               note="channel_egress awaits hestia's send-side tool (hestia_egress_pending is "
                                    "read-only; F5 enforcement gated on rate-governor calibration, PRD §12)")
+
+
+def _granted_reach_of(verdict) -> tuple:
+    """((root, recursive), ...) from a verdict. A verdict built without reach (older client,
+    hand-made in tests) keeps the pre-#1002 prefix reading of its bare `granted` roots."""
+    reach = tuple(getattr(verdict, "granted_reach", ()) or ())
+    if reach:
+        return reach
+    return tuple((r, True) for r in (getattr(verdict, "granted", ()) or ()))
 
 
 # --------------------------------------------------------------------------
