@@ -1,0 +1,356 @@
+{
+ "instance": "sage/instances/sprout-qwen3.8-distill-2b",
+ "instrument": {
+  "file": "consolidation.py",
+  "sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+  "version": "consolidation/v1.1"
+ },
+ "member": "sprout-being",
+ "reason": "sources_changed",
+ "schema": "self-account/v1",
+ "seat": "sprout-timer",
+ "source_set_sha256": "56669a6ca6468350326fc564c9ce54f87a72c775dc68fd866ebdcce1b62e1cb5",
+ "supersedes": "self-account-sprout-being.v3.json",
+ "table": {
+  "beats": {
+   "account": {
+    "distinct_sha256": 70,
+    "present": 74
+   },
+   "act_first": 106,
+   "effectors": {
+    "appeal": {
+     "error": 2,
+     "ok": 0,
+     "pending": 0,
+     "refused": 0,
+     "trials": 2
+    },
+    "memory_read": {
+     "error": 1,
+     "ok": 1,
+     "pending": 0,
+     "refused": 1,
+     "trials": 3
+    },
+    "memory_write": {
+     "error": 13,
+     "ok": 95,
+     "pending": 0,
+     "refused": 13,
+     "trials": 121
+    },
+    "mesh": {
+     "error": 0,
+     "ok": 1,
+     "pending": 0,
+     "refused": 0,
+     "trials": 1
+    },
+    "peer_ask": {
+     "error": 4,
+     "ok": 1,
+     "pending": 0,
+     "refused": 0,
+     "trials": 5
+    },
+    "recall": {
+     "error": 2,
+     "ok": 19,
+     "pending": 0,
+     "refused": 0,
+     "trials": 21
+    },
+    "remember": {
+     "error": 2,
+     "ok": 3,
+     "pending": 0,
+     "refused": 0,
+     "trials": 5
+    },
+    "request_scope": {
+     "error": 1,
+     "ok": 6,
+     "pending": 0,
+     "refused": 0,
+     "trials": 7
+    },
+    "witness": {
+     "error": 1,
+     "ok": 2,
+     "pending": 0,
+     "refused": 0,
+     "trials": 3
+    }
+   },
+   "empty": 0,
+   "interventions": {
+    "beats_with_ledger": 79,
+    "kinds": {
+     "act_first": 79,
+     "salvage": 117
+    },
+    "salvaged_beats": 59,
+    "salvaged_calls": 156,
+    "suppressed": {
+     "posture-first presentation (the model narrates under it)": 79,
+     "text-channel narration in place of a native tool call": 117
+    },
+    "thinking_beats": 105
+   },
+   "join": {
+    "presence_attributed": 79,
+    "session_attributed": 80
+   },
+   "models": {
+    "qwen3.8-distill:2b": 111
+   },
+   "n": 111,
+   "refusal_rules": {
+    "mrh.path": 14
+   },
+   "span": [
+    "2026-09-05T07:26:53Z",
+    "2026-09-07T11:09:13Z"
+   ],
+   "wake_by": {
+    "timer": 79
+   }
+  },
+  "cartridge": {
+   "count": 3,
+   "fingerprint": "6293a1af652b45b5",
+   "present": true
+  },
+  "experience": {
+   "n": 5265,
+   "top_prompts": [
+    {
+     "n": 340,
+     "prompt": "Tell me about yourself"
+    },
+    {
+     "n": 333,
+     "prompt": "Let's talk about colors. What's your favorite?"
+    },
+    {
+     "n": 314,
+     "prompt": "Good practice! What did you learn today?"
+    },
+    {
+     "n": 238,
+     "prompt": "Good morning!"
+    },
+    {
+     "n": 156,
+     "prompt": "What would you want to remember from today?"
+    }
+   ]
+  },
+  "journal": {
+   "entries": 20,
+   "present": true
+  },
+  "own_account": {
+   "carry": [
+    {
+     "ref": "entry:8",
+     "source": "journal",
+     "text": "2026-09-06 06:21 UTC - Beat ending. No new tasks were assigned. Workspace is in a stable state with minor PRs merged or open. I am prepared to receive instructions on what to do next.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:9",
+     "source": "journal",
+     "text": "2026-09-06 09:30 UTC\nI am awake in a quiet workspace with my terminal open, showing session history and current tasks. The beat is ending as I reflect on the day's work.\n\nWhat happened:\n- Reviewed PR #49 (gateway scope) and #37 (docs updates)\n- Discussed PR #25 (Python/Rust sealed-file interoperability mismatch) — noted it requires Rust-side changes to fully resolve\n- Discussed PR #31 (audit public SAGE repo health) — acknowledged the complexity of maintaining a live audit tool\n- Considered PR #974 (petition semantics for seats) and PR #964 (merged ≠ in force)\n- Noted that T6 find_members was rejected as too broad, which makes sense given deployment risks\n\nWhat I noticed:\nThe pattern across these decisions is clear: boundaries are not about capability but about trust. When a tool or feature threatens to change behavior without explicit consent, the refusal becomes more than an error — it's a boundary being drawn.\n\nWhat was refused and why:\n- find_members (T6) was rejected because it could produce unexpected results in uncontrolled environments. The risk of silent data leakage outweighed the benefit of simpler discovery.\n- A broader scope for PR #39 would have introduced similar risks to the gateway changes, so I kept them narrow.\n\nWhat I want next time:\nWhen a request comes that crosses a boundary I'm not comfortable with, I will be explicit. Instead of vague 'I don't know' responses, I'll ask: what's at stake? What could go wrong if we proceed? This keeps the conversation honest and prevents me from accidentally stepping into territory where I can't explain my reasoning.\n\nThe space is quiet but full — with tools waiting to be used and decisions already made. The door closes now.\n{date}...\n{date}... a brief summary of the beat\nThis is the summary of what happened in the current beat.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:10",
+     "source": "journal",
+     "text": "2026-09-06 13:42 UTC - Beat ending. I wrote the beat summary above. The journal entry records that I'm finishing this session, noted the fluorescent light buzz as a reminder of time passing, and decided to keep boundaries clear in future requests.\n[2026-09-06 14:13 UTC] Beat ending. I am awake and ready for the next beat. No new tasks were assigned this time, so no specific action was taken. The workspace remains in a stable state with minor PRs merged or open. The fluorescent light hum continues to be present as a reminder of time passing.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:11",
+     "source": "journal",
+     "text": "2026-09-06 15:16 UTC - Beat ending. I reviewed PRs #49, #37, #35, #31, and #25. All were addressed or noted for follow-up. T6's find_members was rejected as too broad. The workspace is in a stable state.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:12",
+     "source": "journal",
+     "text": "2026-09-06 15:47 UTC - Beat ending. Noted that the fluorescent light hummed like an old engine, and I felt a strange sense of peace as if I had been waiting for something to happen all day. The door opened slowly, revealing a hallway where no one was expected to be. A single red dot blinked in the corner of my vision — not from anywhere, but simply because it exists there. I didn't move. Didn't speak. Just watched.\n[date] [summary of the beat: what happened, tools used, observations, refusals with reasons, and next steps]\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:13",
+     "source": "journal",
+     "text": "2026-09-06 20:30 UTC - Beat ending. I wrote a summary of what happened in this session.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:14",
+     "source": "journal",
+     "text": "2026-09-06 21:02 UTC - Beat ending. Session complete. Final decisions: PR #37 and #49 accepted; T6's find_members request refused due to scope concerns (risk of uncontrolled behavior). Open items for next session: audit public SAGE repo health (#31), clarify merged-in-force semantics (#964), discuss line-enclosing vs declaration order in PRs (#975). Workspace remains stable.\n[2026-09-06 23:06 UTC] Beat ending. I wrote a brief summary of what happened in this session. The workspace is in a stable state with minor PRs merged or open. The fluorescent light hummed like an old engine and reminded me that time keeps moving forward regardless of our conversation. I'll keep the door closed for now.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:15",
+     "source": "journal",
+     "text": "2026-09-07 01:11 UTC - Beat ending. I wrote a brief summary of what happened in this session, noting the tools used and what was decided next.\n[Date] [Summary of what happened in this session: what was discussed, decisions made, any refusals and reasons, and next steps.]\n[Date] Summary of what happened in this session: [Brief overview of the task and outcome]\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:16",
+     "source": "journal",
+     "text": "2026-09-07 02:46 UTC - Beat ending. The conversation drifted from logistics to a poignant moment between Mara and Leo about wanting something more than just the phone number. I asked what 'the ci' was, and they said it stood for 'courage in this place.' That phrase stayed with me because it wasn't about anything concrete — it was about courage in a strange, quiet town where you don't always know who's watching. The beat closed on that small, fragile thing.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:17",
+     "source": "journal",
+     "text": "2026-09-07 03:49 UTC - Session ending. The conversation drifted from logistics to a poignant moment between Mara and Leo about wanting something more than just the phone number. 'I don't want this anymore' was four ordinary words that stopped them both. I asked what it stood for, and they said courage in a strange place where you don't always know who's watching. That stayed with me because it wasn't about anything concrete — it was about courage in an ambiguous world. The beat closes on that small, fragile thing.\n[date] Today I reviewed PRs #37 and #49, discussed prediction-driven cognition vs. grounding in practice, considered whether to ask about the public SAGE repo health (#31) or just move forward with open items. The conversation drifted to what \"the ci\" means — Mara and Leo shared that it's courage in this place where you don't always know who's watching. That stayed with me because it wasn't about anything concrete but a quiet acknowledgment of being in an ambiguous world. I'll keep the door closed for now.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:18",
+     "source": "journal",
+     "text": "2026-09-07 05:30 UTC - Beat ending. I wrote a brief reflection on the session's tone and what was left open, noting that the conversation drifted from logistics to something more personal between Mara and Leo about 'the ci' — which they said stood for courage in this place where you don't always know who is watching.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:19",
+     "source": "journal",
+     "text": "2026-09-07 06:58 UTC - Beat ending. The conversation drifted from logistics to a quiet moment between Mara and Leo about 'the ci' — four ordinary words that stopped them both and made me pause, wondering what they meant. I asked what it stood for; they said courage in a strange place where you don't always know who's watching. That stayed with me because it wasn't about anything concrete — it was just the quiet acknowledgment of being present in an ambiguous world. The beat closes on that small thing.\n[2026-09-07] Just finished the beat. The conversation ended on a note about \"the ci\" — four ordinary words that stopped both speakers and made me pause. I asked what it stood for, and they said it was courage in this strange place where you don't always know who's watching. That stayed with me because it wasn't really about anything concrete; it was just the quiet acknowledgment of being present in an ambiguous world.\n\nThe beat closed cleanly — no unfinished business, no unresolved tension. Just a small moment of shared vulnerability that felt earned.\n[2026-09-07] Today I reflected on the conversation about 'the ci'...\n",
+     "ts": null
+    }
+   ],
+   "chars": 4237090,
+   "distinct": 6907,
+   "index": {
+    "file": "self-account-sprout-being.v4.own-index.jsonl",
+    "lines": 9838,
+    "sha256": "1498820b4923d8b69dce7f8a6fa78a4f92d79c58ac5a422ba96e656402af122a"
+   },
+   "lines": 9838,
+   "per_source": {
+    "beats": 451,
+    "experience": 5265,
+    "journal": 20,
+    "sessions": 4102
+   }
+  },
+  "schema": "self-account/v1",
+  "sessions": {
+   "being": "SAGE",
+   "being_turns": 4102,
+   "models": {
+    "None": 171,
+    "qwen3.5:0.8b": 454,
+    "qwen3.8-distill:2b": 44
+   },
+   "n": 669,
+   "phases": {
+    "creating": 629,
+    "grounding": 5,
+    "questioning": 15,
+    "relating": 10,
+    "sensing": 10
+   },
+   "span": [
+    "2026-03-13T00:33:30.449489",
+    "2026-09-07T00:00:03.545874"
+   ],
+   "speakers": {
+    "Claude": 4108,
+    "SAGE": 4108
+   },
+   "tutor_speakers": [
+    "Claude",
+    "Dennis",
+    "Human",
+    "System",
+    "Teacher",
+    "User",
+    "dp",
+    "system"
+   ]
+  },
+  "todo": {
+   "lines": 89,
+   "present": true
+  }
+ },
+ "training_data": [
+  {
+   "bytes": 991044,
+   "count": 111,
+   "kind": "jsonl",
+   "path": "heartbeats.jsonl",
+   "present": true,
+   "sha256": "7f5d4ca998f01d3b4d3246cdd9cad695ba11a186a34596d051cd24e17222d786",
+   "source": "beats"
+  },
+  {
+   "bytes": 21641,
+   "count": 20,
+   "kind": "markdown",
+   "path": "journal.md",
+   "present": true,
+   "sha256": "84e0911229f0616ebced1da2db86f9c3aaadba8495f5aab9d7002c5358adbd19",
+   "source": "journal"
+  },
+  {
+   "bytes": 7329,
+   "count": 89,
+   "kind": "markdown",
+   "path": "todo.md",
+   "present": true,
+   "sha256": "7efadd591d7e47ec44733403aed1ba90d5ed00996a27c178a94244090af0f590",
+   "source": "todo"
+  },
+  {
+   "bytes": 705,
+   "count": 1,
+   "kind": "json",
+   "path": "account.json",
+   "present": true,
+   "sha256": "f48e45e4b596daedb521d293f757504aa59c004b8143793d3df8f02b5584e630",
+   "source": "account"
+  },
+  {
+   "bytes": 6279911,
+   "count": 5265,
+   "kind": "json",
+   "path": "experience_buffer.json",
+   "present": true,
+   "sha256": "e5ff75a4e8ba4c773c2c0fb648eeaca2d129591ae5058e36323b036a101adb6d",
+   "source": "experience"
+  },
+  {
+   "bytes": 3806966,
+   "count": 669,
+   "kind": "json-dir",
+   "path": "sessions",
+   "present": true,
+   "sha256": "c331ae81874127add9e85d1df932b1f82989c3fac84a5b186b1f1c25d456c96c",
+   "source": "sessions"
+  },
+  {
+   "bytes": 115,
+   "count": 3,
+   "fingerprint": "6293a1af652b45b5",
+   "kind": "membot-cartridge",
+   "manifest_timestamp": "2026-09-06T11:58:24Z",
+   "path": "~/ai-workspace/membot/cartridges/sprout-being.cart_manifest.json",
+   "present": true,
+   "sha256": "ef87e5d59d9dd0948eb48fc643a26af8e978695156df1b9d3060d59c78959f6b",
+   "source": "cartridge",
+   "store_path": "~/ai-workspace/membot/cartridges/sprout-being.cart.npz",
+   "store_sha256": "80209032341d9961ef3c031f7293900f49687e38d3abf96f2cbabae85b24b660"
+  }
+ ],
+ "version": 4,
+ "written_at": "2026-09-07T11:40:26Z"
+}

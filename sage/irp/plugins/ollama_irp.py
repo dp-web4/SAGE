@@ -64,6 +64,13 @@ class OllamaIRP(IRPPlugin):
         # fleet digest + tool schemas) measured 4324 tokens on Sprout 2026-09-05 and 400'd.
         # None = leave Ollama's default.
         self.num_ctx = config.get('num_ctx')
+        # Counters of the most recent get_response() generate, or None when that call did
+        # not land. `get_chat_response` already returns them under 'raw'; `get_response`
+        # returns a bare str, so the window counters had nowhere to go and the raising
+        # channel recorded none (cbp-claude 2026-09-12). Set to None at the TOP of each
+        # call: a stale entry left behind by a failed generate reads downstream as a
+        # measured clear window, which is the one error a falsifier must not make.
+        self.last_generate: Optional[Dict[str, Any]] = None
 
         # Conversation memory (last N turns)
         self.conversation_memory: List[Dict[str, str]] = []
@@ -151,6 +158,7 @@ class OllamaIRP(IRPPlugin):
         # Resolve num_predict per (family, size, think). The 27B needs the full
         # think+response envelope even with think disabled; the 0.8B/2B need a
         # tight response budget. Per-size resolution keeps these independent.
+        self.last_generate = None
         num_predict = self.resolve_num_predict()
 
         base_options = {
@@ -174,6 +182,13 @@ class OllamaIRP(IRPPlugin):
             )
             with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
                 result = json.loads(resp.read())
+                self.last_generate = {
+                    'done_reason': result.get('done_reason'),
+                    'prompt_eval_count': result.get('prompt_eval_count'),
+                    'eval_count': result.get('eval_count'),
+                    'num_ctx': int(self.num_ctx) if self.num_ctx else None,
+                    'num_predict': num_predict,
+                }
                 response_text = self._adapter.extract_response(result, endpoint)
 
                 if not response_text or not response_text.strip():

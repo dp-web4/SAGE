@@ -13,7 +13,20 @@
 # nothing reads one unless SAGE_GRAFT_SELF_ACCOUNT=on, and this unit does not set it.
 # A quiet day is a logged no-op, not silence: the log line is the evidence the timer ran.
 # The graft, index and log are tracked in git; the per-line own-index sidecar is gitignored and
-# named in the graft by sha. Committing the new version is a seat's act, not this unit's.
+# named in the graft by sha.
+#
+# COMMITTING. This line used to read "Committing the new version is a seat's act, not this unit's."
+# That was a deliberate design and it silently failed: measured 2026-09-12 (cbp-claude, confirmed on
+# Sprout), main carried <machine>-being v2 of 09-05 while both beings were at v9 of 09-12 — last
+# graft commit 45978aa12, seven days, on BOTH seats. No seat ever did the act the unit delegated.
+# It matters because the monotonic-source WIPE ALARM reads committed artifacts: run today it reports
+# clean over two versions from one day, not because no source fell but because it cannot see six
+# days. An alarm with no input is not an alarm.
+# So ExecStartPost now makes the evidence durable, and the split moves one step later: the unit
+# COMMITS (locally, to a `graft-evidence/<member>` branch, through its own detached worktree so it
+# never touches a checkout a session is holding), and PUBLISHING stays a seat's act. A timer that
+# pushes to main unattended is an outward-facing act; `--push` exists and is deliberately not used
+# here. Only the three evidence paths are ever staged, by allowlist.
 # --member is the being's id (what the heartbeat writes as `member`); --seat names who ran it.
 # The cartridge manifest is the being's OWN membot mount (membot-being.service.example); naming
 # the seat sessions' cartridge here would put the seat's memories in the being's account.
@@ -28,6 +41,7 @@ Environment=HOME=/home/dp
 Environment="PATH=/home/dp/.local/bin:/usr/local/bin:/usr/bin:/bin"
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 -m sage.memory.consolidation --instance sage/instances/<instance-dir> --member <machine>-being --seat <machine>-timer --cartridge-manifest /home/dp/ai-workspace/membot/cartridges/<machine>-being.cart_manifest.json
+ExecStartPost=/usr/bin/env bash /home/dp/ai-workspace/SAGE/sage/memory/commit_graft_evidence.sh --repo /home/dp/ai-workspace/SAGE --instance sage/instances/<instance-dir> --member <machine>-being
 TimeoutStartSec=600
 StandardOutput=append:/home/dp/ai-workspace/SAGE/sage/instances/<instance-dir>/consolidation.log
 StandardError=inherit

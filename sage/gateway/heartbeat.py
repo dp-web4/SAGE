@@ -265,6 +265,26 @@ def _beat_record_text(*results) -> str:
         "You called no tools this beat."
 
 
+def account_generate(aresp: dict, llm) -> dict | None:
+    """The account turn's window counters, shaped like a tool-loop `generates[]` entry.
+
+    The account turn takes no tools, so it does not run through `run_ollama_tool_turn` and has
+    no `on_generate`; before 2026-09-12 its counters were therefore recorded nowhere, which made
+    the beat's largest generate invisible to `window_census` (cbp-claude). `None` when the call
+    did not land -- an empty `generates` list is a phase reached and not run, which the census
+    already distinguishes from both a skip and a clear window.
+    """
+    raw = (aresp or {}).get("raw") or {}
+    if not raw:
+        return None
+    from sage.gateway.being_tool_loop import _sent_budget
+    return {"done_reason": raw.get("done_reason"),
+            "prompt_eval_count": raw.get("prompt_eval_count"),
+            "eval_count": raw.get("eval_count"),
+            "retried": 0,                      # the account turn has no retry path
+            "num_predict": _sent_budget(llm)}  # same resolution the tool-loop records
+
+
 def _carry(convo: list, res) -> list:
     """Carry a finished tool turn forward. The loop does not return its own tool
     messages, so the next turn sees the record of what was done (before the being's
@@ -480,11 +500,25 @@ def main(argv=None) -> int:
                                      tools=ollama_tools(EXPLORE_TOOLS), on_generate=_on_generate("posture"))
         convo = _carry(convo, after)
     # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
-    account = {"present": False, "sha256": None, "reply": ""}
+    #
+    # `generates` is here because this turn is not run through run_ollama_tool_turn (it takes
+    # no tools), so it had no `on_generate` and the record stored no counters for it at all —
+    # not a skipped row, a row never written. It was therefore invisible to window_census's
+    # shape discovery AND to coverage.skipped, while being the LARGEST generate in the beat:
+    # ask_msgs is the whole posture conversation plus the ask, measured on Sprout at a median
+    # >= 6626 and a max >= 7762 of 8192 (cbp-claude, 2026-09-12). Nothing was truncated, but a
+    # falsifier that certifies "the window bound nothing" cannot be structurally unable to see
+    # one of the two S1 instruments it is certifying. Empty list = the turn was reached and
+    # produced no counters, which is a counted skip downstream, not a clear window.
+    account = {"present": False, "sha256": None, "reply": "", "generates": []}
     try:
         ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
                    [{"role": "user", "content": ACCOUNT_ASK + nothink}]
         aresp = llm.get_chat_response(ask_msgs)
+        aentry = account_generate(aresp, llm)
+        if aentry is not None:
+            account["generates"].append(aentry)
+            _on_generate("account")(dict(aentry))
         areply = (aresp.get("content") or "").strip()
         parsed = parse_account(areply)
         account["reply"] = areply[:1200]

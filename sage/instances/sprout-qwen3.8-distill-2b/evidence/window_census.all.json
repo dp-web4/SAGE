@@ -1,0 +1,33 @@
+{
+  "beats": 316,
+  "budget_starved": 994,
+  "budget_starved_pct": 80.0,
+  "clear": 246,
+  "coverage": {
+    "beats_scanned": 349,
+    "beats_with_generates": 316,
+    "beats_without_generates": 33,
+    "generates_seen": 1243,
+    "sections": [
+      "explore",
+      "posture",
+      "reflect"
+    ],
+    "skipped": 1,
+    "skipped_no_num_ctx": 0,
+    "skipped_no_prompt_eval": 1
+  },
+  "generates": 1242,
+  "headroom": {
+    "median": 4110,
+    "min": 21
+  },
+  "length": 18,
+  "num_ctx": 8192,
+  "prompt_tokens": {
+    "max": 8171,
+    "median": 4082
+  },
+  "saturated": 19,
+  "saturated_not_length": 1
+}
