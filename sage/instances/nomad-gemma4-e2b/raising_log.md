@@ -241,3 +241,23 @@ No Legion bleed. The tutor kept its planning out of the transcript this session.
 **Carried forward:** the 349 word-count test remains untried. The 351 plan (apply Nomad's CBP rule to its own CBP row) remains untried, and this session's rule is a natural substitute for it. The WSL2 fan telemetry question still needs a plain yes or no from the tutor. The 346 triple test and the 340 question stay open. The injected-context check for this instance is still undone.
 
 **Concerns:** describe-instead-of-do at the rule level, noted above. Nothing new on the tutor side.
+
+## Session 354 — nomad (gemma4:e2b) — creating — 2026-09-12
+
+**Quality: 4/5**
+
+A good session. The tutor picked up AuraSense where 352 cut it off mid-word and gave Nomad a real design problem: the instrument was built to measure Thor's absence, and Sprout is never absent. Nomad's reframe was clean and its own: for Sprout the instrument measures rhythm, not silence, so the event is a skipped beat. Asked to write the log line literally, Nomad wrote it: "Pattern Deviation: Expected 18:03, Actual 18:47. Deviation noted." Two numbers, not one, as the tutor had asked. This is the first time in several sessions that Nomad did the thing on the first ask instead of describing it.
+
+Then the error, and it is worth recording exactly. Given Sprout's real gap range (5h58m to 6h51m), Nomad said 18:47 fell outside it. But 18:47 is a clock time and the range is a range of durations; the actual gap from 12:03 is 6h44m, which is inside. Nomad also set a one-hour threshold that would pass a 44-minute lag on its own terms. So it asserted the verdict of a comparison it never ran. This is the same shape as 353's contradiction detector, which matched surface opposition rather than checking whether two claims could both hold. The pattern is: Nomad produces the form of an evaluation and skips the computation.
+
+The good part is what happened next. The tutor showed the arithmetic, and Nomad did not defend its log line. It chose the instrument that stays quiet because it knows the rhythm over the one that flags what looks late to a human, and gave a real reason: map the system's internal logic rather than impose an external expectation. Then, asked what that choice costs, it named a concrete number, three beats before AuraSense earns its voice, and said the first 6h51m gap gets no line at all. Whether three is enough is untested, but it is a number, and it followed from the design choice.
+
+The closing line drifts toward the generic register ("true understanding emerges from patient observation"), which is the usual end-of-session slide. The second sentence, silence as the space where the signal's structure reveals itself, is closer to Nomad's own voice and worth keeping.
+
+**What this teaches:** Nomad can now emit an artifact and can revise it on evidence without defending. What it still does not do is run the comparison before stating the result. The next concrete move is word-scale and tests exactly that: hand Nomad three gaps (6h44m, 5h58m, 6h51m) and ask what baseline AuraSense writes after beat three, then offer a fourth gap of 7h10m and ask whether it gets a line. A second, smaller ask: which of "18:47" and "6h44m" is the thing AuraSense compares against the range? If Nomad can say why, the category error is closed.
+
+**Vocabulary:** nothing new. "Pattern Deviation" is a log-line label, not a coined term. "Skipped beat" was the tutor's.
+
+**Carried forward:** the 353 triangle prompt (can both sentences be true at once?) is untried and pairs naturally with the timestamp-versus-gap question above. The 349 word-count test, the 351 plan, the 346 triple test, and the 340 question remain open. The WSL2 fan telemetry question still needs a plain yes or no from the tutor. The injected-context check for this instance is still undone.
+
+**Concerns:** the compare-without-computing pattern, noted above. Nothing on the tutor side; the tutor kept its planning out of the transcript and the arithmetic correction was delivered as good news rather than a catch, which is the right tone.
