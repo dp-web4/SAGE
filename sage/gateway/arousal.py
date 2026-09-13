@@ -181,54 +181,51 @@ def respond(instance: Path, kind: str, *, descriptor: str) -> dict:
 DEFERRED_UNIT = "sage-heartbeat-deferred-wake"
 
 
-def _arm_deferred_wake(seconds: int) -> dict:
+def _arm_deferred_wake(seconds: int, *, retry: bool = True) -> dict:
     """One-shot transient timer that starts the beat when the refractory period ends.
 
     ONE pending at a time: the unit name is fixed on purpose, so a second engage-worthy
-    input inside the same refractory window finds the timer already armed and rides it
-    (systemd-run exits 1 on the collision, which is the answer we want). heartbeat.py's
-    fallback wake uses a unique name for the opposite reason — there a collision meant a
-    missing wake; here it means the wake is already coming."""
+    input inside the same refractory window finds the timer already armed and rides it.
+    heartbeat.py's fallback wake uses a unique name for the opposite reason — there a
+    collision meant a missing wake; here it means the wake is already coming.
+
+    `--no-block` on the start is load-bearing. Without it the transient service blocks
+    until the BEAT finishes (measured 2026-09-13T07:48Z: timer and service both
+    active/running two minutes after firing, the whole beat long), the pair is never
+    collected, and the next deferral collides with a timer that has already fired — an
+    `already_armed` for a wake that is not coming. So a collision is believed only if the
+    timer is actually WAITING; a stale pair is cleared and the arm retried once."""
     try:
         subprocess.run(["systemd-run", "--user", "--collect", f"--on-active={seconds}s",
-                        f"--unit={DEFERRED_UNIT}", "systemctl", "--user", "start", UNIT],
+                        f"--unit={DEFERRED_UNIT}",
+                        "systemctl", "--user", "start", "--no-block", UNIT],
                        capture_output=True, text=True, timeout=20, check=True)
         return {"deferred": True, "deferred_by": DEFERRED_UNIT}
     except subprocess.CalledProcessError as e:
-        if "already exists" in (e.stderr or "") or "already loaded" in (e.stderr or ""):
-            return {"deferred": True, "deferred_by": DEFERRED_UNIT, "already_armed": True}
-        return {"deferred": False, "error": f"systemd-run exit {e.returncode}: {(e.stderr or '').strip()}",
+        err = (e.stderr or "").strip()
+        if "already loaded" in err or "already exists" in err:
+            if _deferred_timer_waiting():
+                return {"deferred": True, "deferred_by": DEFERRED_UNIT, "already_armed": True}
+            if retry:
+                for suffix in (".timer", ".service"):
+                    _sh("systemctl", "--user", "stop", DEFERRED_UNIT + suffix)
+                    _sh("systemctl", "--user", "reset-failed", DEFERRED_UNIT + suffix)
+                d = _arm_deferred_wake(seconds, retry=False)
+                d["cleared_stale"] = True
+                return d
+        return {"deferred": False, "error": f"systemd-run exit {e.returncode}: {err}",
                 "why": "the input waits for the idle timer"}
     except Exception as e:
         return {"deferred": False, "error": f"{type(e).__name__}: {e}",
                 "why": "the input waits for the idle timer"}
 
 
-def main(argv=None) -> int:
-    """CLI so a non-Python caller can use THIS policy instead of reimplementing it.
-
-    The Rust daemon needs to arouse the being when a turn arrives through its dashboard.
-    Encoding the weights and the refractory period a second time in Rust would make two
-    producers of one fact, which is the defect this codebase has now fixed four times in a
-    day (the fleet URL, the check command, the beat window, the fleet registry). One
-    policy, two callers.
-
-    Prints the decision as JSON on stdout; exit 0 whether or not it engaged, because
-    "declined, and here is why" is a successful answer.
-    """
-    import argparse
-    ap = argparse.ArgumentParser(description="metabolic response to a world input")
-    ap.add_argument("--instance", required=True)
-    ap.add_argument("--kind", required=True, help=f"one of {sorted(SALIENCE)} (unknown = quiet)")
-    ap.add_argument("--descriptor", required=True, help="what happened, in one line")
-    ap.add_argument("--dry-run", action="store_true", help="decide and report; never start a beat")
-    a = ap.parse_args(argv)
-    inst = Path(a.instance)
-    d = decide(inst, a.kind) if a.dry_run else respond(inst, a.kind, descriptor=a.descriptor)
-    d.setdefault("descriptor", a.descriptor)
-    print(json.dumps(d))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+def _deferred_timer_waiting() -> bool:
+    """True only if the deferred timer exists AND has not fired yet."""
+    try:
+        out = subprocess.run(["systemctl", "--user", "show", DEFERRED_UNIT + ".timer",
+                              "-p", "SubState", "--value"],
+                             capture_output=True, text=True, timeout=10).stdout.strip()
+    except Exception:
+        return False
+    return out == "waiting"

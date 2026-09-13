@@ -120,13 +120,17 @@ def test_refractory_defers_rather_than_drops():
 
     import subprocess
     calls = []
+    timer_state = {"sub": "waiting"}
     def fake_run(args, **kw):
+        if args[:3] == ["systemctl", "--user", "show"]:
+            return subprocess.CompletedProcess(args, 0, timer_state["sub"] + "\n", "")
         calls.append(args)
         if len(calls) > 1:
-            raise subprocess.CalledProcessError(1, args, stderr="Unit sage-heartbeat-deferred-wake.timer already exists.")
+            raise subprocess.CalledProcessError(1, args, stderr="Unit sage-heartbeat-deferred-wake.timer was already loaded or has a fragment file.")
         return subprocess.CompletedProcess(args, 0, "", "")
     real = arousal.subprocess.run
     arousal.subprocess.run = fake_run
+    arousal._sh = lambda *a: ""
     try:
         first = arousal.respond(inst, "dp_turn", descriptor="t")
         second = arousal.respond(inst, "seat_turn", descriptor="t2")
@@ -135,4 +139,29 @@ def test_refractory_defers_rather_than_drops():
     assert first["deferred"] is True and "already_armed" not in first
     assert second["deferred"] is True and second["already_armed"] is True
     assert all("systemd-run" in c[0] and f"--on-active={d['deferred_s']}s" in c for c in calls)
-    assert all(c[-1] == arousal.UNIT for c in calls)
+    # --no-block or the transient service blocks for the whole beat and is never collected
+    assert all(c[-1] == arousal.UNIT and c[-2] == "--no-block" for c in calls)
+
+
+def test_a_fired_deferred_timer_is_not_mistaken_for_an_armed_one():
+    """The unit name is fixed, so a pair left over from a wake that already fired collides
+    exactly like a pending one. Only a timer that is WAITING is believed; a stale pair is
+    cleared and the arm retried, and the result says so."""
+    import subprocess
+    calls, stops = [], []
+    def fake_run(args, **kw):
+        if args[:3] == ["systemctl", "--user", "show"]:
+            return subprocess.CompletedProcess(args, 0, "running\n", "")   # fired, not waiting
+        calls.append(args)
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(1, args, stderr="Unit sage-heartbeat-deferred-wake.timer was already loaded or has a fragment file.")
+        return subprocess.CompletedProcess(args, 0, "", "")
+    real, real_sh = arousal.subprocess.run, arousal._sh
+    arousal.subprocess.run = fake_run
+    arousal._sh = lambda *a: (stops.append(a), "")[1]
+    try:
+        d = arousal._arm_deferred_wake(30)
+    finally:
+        arousal.subprocess.run, arousal._sh = real, real_sh
+    assert d["deferred"] is True and d.get("cleared_stale") is True and "already_armed" not in d
+    assert len(calls) == 2 and any("stop" in a for a in stops)
