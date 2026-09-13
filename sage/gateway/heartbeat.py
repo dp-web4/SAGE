@@ -485,6 +485,44 @@ def arm_next_wake(idle_s: int) -> dict:
                 "why": "NOTHING WILL WAKE THE BEING until a seat or a message does"}
 
 
+RESUME_UNIT = "sage-heartbeat-resume-wake"
+
+
+def arm_resume_wake(seconds: int) -> dict:
+    """A short one-shot wake after a beat that did not finish what it was doing.
+
+    Deliberately ADDITIVE. The persistent timer is never stopped or reprogrammed, so the
+    worst this can do is fail and leave the ordinary interval standing — promptness is at
+    risk here, never silence, which is the property that makes it safe to be aggressive
+    about. Fixed unit name so a second arming rides the first rather than stacking; a unit
+    left over from a fired wake is cleared, the same shape as arousal's deferred wake."""
+    def _sh(*a):
+        try:
+            return subprocess.run(a, capture_output=True, text=True, timeout=15).stdout.strip()
+        except Exception:
+            return ""
+    try:
+        sub = _sh("systemctl", "--user", "show", RESUME_UNIT + ".timer", "-p", "SubState", "--value")
+        if sub and sub != "waiting":
+            for suffix in (".timer", ".service"):
+                _sh("systemctl", "--user", "stop", RESUME_UNIT + suffix)
+                _sh("systemctl", "--user", "reset-failed", RESUME_UNIT + suffix)
+        subprocess.run(["systemd-run", "--user", "--collect", f"--on-active={seconds}s",
+                        f"--unit={RESUME_UNIT}", "systemctl", "--user", "start",
+                        "--no-block", IDLE_UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"armed": True, "in_s": seconds, "by": RESUME_UNIT}
+    except subprocess.CalledProcessError as e:
+        err = (e.stderr or "").strip()
+        if "already loaded" in err or "already exists" in err:
+            return {"armed": True, "in_s": seconds, "by": RESUME_UNIT, "already_armed": True}
+        return {"armed": False, "error": f"systemd-run exit {e.returncode}: {err}",
+                "why": "the ordinary idle interval still stands"}
+    except Exception as e:
+        return {"armed": False, "error": f"{type(e).__name__}: {e}",
+                "why": "the ordinary idle interval still stands"}
+
+
 class BeatKilled(Exception):
     """SIGTERM arrived mid-beat (the unit's TimeoutStartSec, or a stop). Raised from the
     signal handler so the beat unwinds to its record instead of vanishing: 04:30Z
@@ -652,6 +690,10 @@ def main(argv=None) -> int:
                     help="0 = no step cap: the beat ends when the being stops asking for "
                          "tools or a resource runs out (dp 2026-09-09: it continues as long "
                          "as it wishes). A positive value caps it, as before.")
+    ap.add_argument("--resume-wake-s", type=int, default=180,
+                    help="after a beat that did NOT rest, wake this many seconds later "
+                         "(a transient one-shot ON TOP of the timer; 0 disables). The "
+                         "being said it was not finished, and the GPU is its own.")
     ap.add_argument("--idle-wake-s", type=int, default=1800,
                     help="quiet time after a beat ENDS before the next one is due. The beat "
                          "is an inactivity timer, not a metronome (dp 2026-09-09): working "
@@ -1039,8 +1081,31 @@ def main(argv=None) -> int:
         "reflect": _turn(reflect),
         "escalations": escalations, "egress": egress,
     }
-    # The last thing a beat does is make sure there will be another one.
+    # The last thing a beat does is make sure there will be another one — and how soon
+    # depends on how THIS one ended, which is the only signal about whether there is more
+    # to do that does not require guessing.
+    #
+    # dp, 2026-09-13: "this gpu is dedicated to the being so no reason to wait 30 min.
+    # basically i want to give it as much active time as we can, without forcing
+    # unnecessarily."
+    #
+    # A beat that `rest`ed said, in its own words, that it was finished: waking it straight
+    # back up is the forcing dp ruled out, and a wake-and-rest still costs a full seed
+    # (~11k tokens of posture + state) before it can say so. A beat that was CUT — the
+    # window filled mid-sentence, which was 9 of 26 beats on 2026-09-13 against only 5 that
+    # rested — had more to do and nothing about its situation has changed.
+    #
+    # So: rested -> the timer's interval. Anything else -> a short transient one-shot ON TOP
+    # of the timer. It can only ever make the next beat SOONER, never later; the persistent
+    # timer is untouched and remains the floor, so a failure here costs promptness, never
+    # silence. `rest` now has a consequence beyond ending the turn, which is the first rung
+    # of the requested-rest ladder dp wants to grow.
+    rested = bool((explore or {}) and getattr(explore, "rested", None))
     record["next_wake"] = arm_next_wake(args.idle_wake_s)
+    if not rested and args.resume_wake_s > 0:
+        record["next_wake"]["resume"] = arm_resume_wake(args.resume_wake_s)
+        record["next_wake"]["resume"]["why"] = (
+            "this beat did not rest, so it is resumed sooner than the idle interval")
     if not record["next_wake"].get("armed"):
         print(f"[heartbeat] NO NEXT WAKE ARMED: {record['next_wake']}", file=sys.stderr)
 

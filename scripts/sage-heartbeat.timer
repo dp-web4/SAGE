@@ -10,7 +10,7 @@ Description=SAGE being heartbeat (legion-being): wake after quiet, not on a metr
 # pushes the next one out by itself and a message-driven beat resets the clock. There is no
 # fixed cadence any more; 30 minutes is how long the being is left alone, not how often it
 # is interrupted.
-OnUnitInactiveSec=30min
+OnUnitInactiveSec=10min
 OnBootSec=5min
 RandomizedDelaySec=1min
 # A beat missed while the machine was off is not caught up: the being wakes to now.
