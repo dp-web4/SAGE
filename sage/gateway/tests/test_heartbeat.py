@@ -28,10 +28,18 @@ def test_the_resume_wake_is_additive_and_can_only_make_the_next_beat_sooner():
     run = [c for c in calls if c and c[0] == "systemd-run"][0]
     assert "--on-active=180s" in run
     assert f"--unit={hb.RESUME_UNIT}" in run
-    # it STARTS the ordinary beat unit; it does not touch the persistent timer
-    assert run[-1] == hb.IDLE_UNIT and "--no-block" in run
-    assert not any("stop" in c and "sage-heartbeat.timer" in c for c in calls), \
-        "the persistent timer must never be stopped: that is the floor under everything"
+    # It STARTS the ordinary beat unit. Asserting only that IDLE_UNIT is the last argv
+    # element was too weak — `systemctl --user stop --no-block sage-heartbeat.service`
+    # satisfies it, and a mutation to `stop` passed the pin (caught 2026-09-13 by running
+    # the mutation rather than trusting the assertion).
+    tail = run[run.index("systemctl"):]
+    assert tail == ["systemctl", "--user", "start", "--no-block", hb.IDLE_UNIT], tail
+    # and nothing anywhere in this call path may stop or disable the persistent timer:
+    # that timer is the floor under everything, and a resume wake that removed it would
+    # trade "sooner" for "never".
+    forbidden = {"stop", "disable", "mask", "kill"}
+    for c in calls:
+        assert not (forbidden & set(c)), f"resume wake must not run {c}"
 
 
 def test_a_failed_resume_wake_costs_promptness_not_silence():
