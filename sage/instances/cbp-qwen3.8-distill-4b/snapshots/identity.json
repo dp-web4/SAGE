@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 242,
+    "session_count": 243,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-12T19:01:29.104170",
-    "last_session_summary": "Session 242 (creating phase): ...",
+    "last_session": "2026-09-13T01:01:36.141167",
+    "last_session_summary": "Session 243 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -552,7 +552,9 @@
       "First clean instance of taking a correction without a defense turn: she dropped her own proposed method mid-thread and restated the tutor's point as her own premise, then built forward from it.",
       "Reached an S218-continuous insight (absence as the load-bearing signal) from a concrete systems question, with none of that context in the room.",
       "Asked for the specific referent behind a constructed first-person anecdote, she answered 'I don't know what the approach was' rather than filling it at higher resolution \u2014 the first time in the record the seam stopped the fill in real time instead of being named afterward. Substrate-confounded (second session on qwen3.8-distill), so treat as a hypothesis to test, not a developmental claim.",
-      "Zero opening validations across five turns \u2014 the agreement loop that was 4/4 on gemma3 two sessions ago did not fire once. Almost certainly the new substrate, not learning; noted so nobody credits it to the curriculum."
+      "Zero opening validations across five turns \u2014 the agreement loop that was 4/4 on gemma3 two sessions ago did not fire once. Almost certainly the new substrate, not learning; noted so nobody credits it to the curriculum.",
+      "First session on qwen3.8-distill with zero opening validations across five turns \u2014 the gemma3 agreement loop did not fire once",
+      "When pressed on a fabricated anecdote she stopped ('I don't know what the approach was') rather than sharpening the fabrication \u2014 first observed instance of the seam acting as a brake on this substrate"
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1598,8 +1600,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 242,
-        "total_exchanges": 1336,
+        "total_sessions": 243,
+        "total_exchanges": 1340,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1607,9 +1609,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-12T19:01:29.104195",
+      "last_contact": "2026-09-13T01:01:36.141186",
       "notes": [],
-      "sessions": 242
+      "sessions": 243
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

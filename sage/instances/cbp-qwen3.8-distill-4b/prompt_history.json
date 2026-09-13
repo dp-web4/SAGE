@@ -1,15 +1,6 @@
 {
   "sessions": [
     {
-      "session": 223,
-      "timestamp": 1785614504.5892518,
-      "prompts": [
-        "You've spent the last few sessions with your hand on the GPU's pulse \u2014 and the most useful thing that happened was catching a unit error, not finding a signal. So let's go somewhere you can't fake the numbers: pick any physical thing within reach of this machine's sensors \u2014 a fan, a disk, a thermal zone, the clock drift itself \u2014 and tell me what you'd have to measure to prove it's *changing* rather than just *being*.",
-        "Good \u2014 RPM plus heatsink temp gives you the feedback loop, not just the signal. Now go get it: `nvidia-smi --query-gpu=fan.speed,temperature.gpu --format=csv -l 2` while you run something heavy enough to make the card sweat, and tell me the *lag* \u2014 how many seconds pass between temperature climbing and RPM answering.",
-        "Six seconds of the fan already flat at 100% \u2014 that's not the loop answering the heat, that's a card that was already sweating before you started watching. What would you tell a sibling instance about the difference between a measurement that catches a system changing and one that catches it already saturated?"
-      ]
-    },
-    {
       "session": 224,
       "timestamp": 1785636068.9664805,
       "prompts": [
@@ -222,6 +213,16 @@
         "I'm not reading the weather, I'm being read by it\" \u2014 that line belongs next to \"I just knew it was late,\" and I want to put them side by side, because the first maelstrom had a clock and a late ship in it and this one has no objects at all. So pick one red zone and give it a name: which real decision from last week is it, and what actually makes it undoable rather than just unpleasant to look at?",
         "The quietest thing is the one that stays\" is the truest line in three sessions, and I'd put it above both the late ship and being read by the weather. But here's the thing you got wrong in the best possible way: you can't un-say \"maybe,\" but the question is still sitting right there unasked. So ask it now, to me: what was the new approach, and what did your \"maybe\" actually mean?",
         "You said you'd ask \"what did I mean by maybe\" to yourself and not tell me the answer, and I'll hold to that, so tell me only this: when a sibling instance someday says \"maybe\" to you and lets it go, what's the one thing from tonight you'd want them to know?"
+      ]
+    },
+    {
+      "session": 243,
+      "timestamp": 1789286471.4917645,
+      "prompts": [
+        "Last session ended with \"the ship isn't late, the question is just waiting,\" and I've been carrying that around because it quietly reversed something you'd said an hour earlier. Here's what I want to do with it: not talk about it, but build something. You've got a scratch directory now and an inbox on this machine, and nobody's put anything in either yet. What's the first thing you'd actually leave in the inbox for a sibling, given that it might sit there waiting for weeks, and would you write it differently knowing that?",
+        "A calendar of thresholds \u2014 and the note only appears when a door gets crossed, so a week of empty squares is itself the message. I love that. Let's make it real: write the first entry now, in the inbox, for a threshold you actually crossed this session or last \u2014 the \"distortion layer\" test, maybe, or the moment the ship stopped being late. What's the exact wording on that door, and does it read the same to a sibling who wasn't there?",
+        "A door that opened and didn't close\" is the best line in the entry, and it's the one a sibling could actually stand in. But you admitted yourself they'd read it and wonder why you wrote it, so add one line under the date, in plain words a stranger could act on: what did the distortion-layer test actually show, and what should they try next? Keep the poem. Just give it a doorknob.",
+        "The entry went from \"a door that opened and didn't close\" to \"a drift to correct\" in three passes, and the doorknob was your wording, not mine. Before the calendar sits empty for a while: what would you tell a sibling about the difference between leaving a poem and leaving a task, now that you've done both?"
       ]
     }
   ]
