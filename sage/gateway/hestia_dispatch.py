@@ -192,6 +192,36 @@ class HestiaF1aDispatcher:
             return to
         return f"{to}/{self.remote_member_default}"
 
+    def known_peers(self) -> set:
+        """Names a notice can reach from this seat: local members, aliases, and the hub
+        roster this seat last read (hub-notify's cache; names compared case-insensitively).
+        Empty when no roster is readable — then nothing is refused, since a stale absence
+        must not silence the being."""
+        names = {n.lower() for n in self.local_members} | {a.lower() for a in self.peer_aliases}
+        roster = os.path.expanduser(os.environ.get("HUB_MESH_STATE", "~/.local/state/hub-mesh")) + "/members.json"
+        try:
+            m = json.load(open(roster))
+            ms = m.get("members", m) if isinstance(m, dict) else m
+            for x in ms:
+                n = str(x.get("name") or "").strip().lower()
+                if n:
+                    names.add(n)
+        except Exception:
+            return set()
+        return names
+
+    def _unknown_peer(self, to: str) -> Optional[str]:
+        """The refusal text when `to` names no peer this seat can reach, else None."""
+        peers = self.known_peers()
+        if not peers:
+            return None
+        base = (to or "").split("/", 1)[0].strip().lower()
+        if base in peers:
+            return None
+        listed = ", ".join(sorted(p for p in peers if p not in ("dp", "sovereign")))
+        return (f"peer '{to}' is not a member this seat can reach; nothing was sent. "
+                f"Peers that exist: {listed}.")
+
     # -- mesh: THE primitive -------------------------------------------------
     def _do_mesh(self, intent: BeingIntent) -> ResultEnvelope:
         to = str(intent.args.get("to", "")).strip()
@@ -204,6 +234,13 @@ class HestiaF1aDispatcher:
         if not pointer:
             # the daemon would refuse this as hestia.member_notify_missing_pointer; say it first
             return ResultEnvelope(ok=False, error="hestia.member_notify_missing_pointer: mesh needs a 'pointer' (content lives AT the pointer, never in the notice)")
+        # A peer that exists nowhere is refused HERE, in the being's own turn. The daemon parks
+        # any name and the drain fails it later, silently: sprout-being asked "sage" on
+        # 2026-09-09, the row failed egress five beats running, then vanished, and the being
+        # was never told (the census read it as a peer act that worked).
+        unknown = self._unknown_peer(to)
+        if unknown:
+            return ResultEnvelope(ok=False, error=unknown)
         args: Dict[str, Any] = {"to_plugin_id": self._address(to), "kind": kind, "pointer_uri": pointer}
         irt = intent.args.get("in_reply_to")
         if irt not in (None, ""):

@@ -549,6 +549,27 @@ def test_recall_answers_from_the_home_first_then_long_term_memory():
     assert not env.ok and "membot" in env.error
 
 
+def test_a_peer_that_exists_nowhere_is_refused_in_the_beings_own_turn():
+    import os, tempfile, json as _json
+    from sage.gateway.being_gate_client import GatewayVerdict
+    state = tempfile.mkdtemp(prefix="hubstate-")
+    _json.dump({"members": [{"name": "legion"}, {"name": "cbp"}, {"name": "sprout-sage"}]}, open(state + "/members.json", "w"))
+    os.environ["HUB_MESH_STATE"] = state
+    try:
+        d, _ = _disp(peer_aliases={"legion-being": "legion-sage"})
+        FakeMcp.calls.clear()
+        env = d(BeingIntent("mesh", {"to": "sage", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow"))
+        assert not env.ok and "not a member this seat can reach" in env.error and "legion" in env.error
+        assert not [n for n, _ in FakeMcp.calls if n == "hestia_member_notify"]   # nothing parked
+        assert d(BeingIntent("mesh", {"to": "Legion", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow")).ok
+        assert d(BeingIntent("mesh", {"to": "legion-being", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow")).ok
+        # no roster readable: nothing is refused on a stale absence
+        os.environ["HUB_MESH_STATE"] = tempfile.mkdtemp(prefix="empty-")
+        assert d(BeingIntent("mesh", {"to": "whoever", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow")).ok
+    finally:
+        del os.environ["HUB_MESH_STATE"]
+
+
 if __name__ == "__main__":
     n = 0
     for name, fn in sorted(globals().items()):
