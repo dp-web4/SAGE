@@ -5,7 +5,8 @@
         "qwen38",
         "qwen38-heretic",
         "qwen3.8-heretic",
-        "hf.co/empero-ai/qwen3.8-2b-distill-gguf"
+        "hf.co/empero-ai/qwen3.8-2b-distill-gguf",
+        "hf.co/empero-ai/qwen3.8-4b-distill-gguf"
     ],
     "api_mode": "chat",
     "bilateral_prone": false,
@@ -34,6 +35,12 @@
             "num_predict": 1024,
             "num_predict_think": 6000,
             "think_default": true
+        },
+        "4b": {
+            "num_predict": 1024,
+            "num_predict_think": 6000,
+            "think_default": true,
+            "num_ctx": 16384
         },
         "q3km": {
             "num_predict": 1024,
