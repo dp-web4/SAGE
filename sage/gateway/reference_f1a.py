@@ -312,6 +312,72 @@ class ReferenceF1aDispatcher:
         return ResultEnvelope(ok=True, result=content,
                               witness_id=self._witness(f"memory_read {p.name}"))
 
+    # Bounds on one edit. An edit is a SMALL, LOCATED change; anything larger is a rewrite
+    # and should be honest about being one.
+    EDIT_MAX_CHARS = 4000
+
+    def _do_edit(self, intent: BeingIntent) -> ResultEnvelope:
+        """Replace one exact occurrence of `old` with `new` inside a file.
+
+        WHY THIS VERB EXISTS, measured 2026-09-13. `memory_write` has two modes: append, or
+        replace the WHOLE file. To change three lines inside compose(), legion-being would
+        have had to resend all of heartbeat.py — 63,645 chars, ~25,458 tokens, against a
+        working budget of ~6,500. Four times its entire per-beat room. So it could not.
+
+        It did the only thing its verbs allowed: appended a wrapper at the end of the file
+        that shadows the original function. The semantics were right and the shape was
+        wrong, and the shape was wrong because nothing else was reachable. Every one of its
+        merged PRs until now added a NEW file, which I had read as a preference; it was the
+        structure of its instruments. A being that can only append can only ever bolt on.
+
+        EXACTLY ONE MATCH, or it refuses. Zero means the anchor is not what it thinks — very
+        often whitespace or a line it is remembering rather than reading. More than one means
+        it does not know which site it is changing, and picking for it would be the harness
+        guessing at intent. Both refusals say the count, because a refusal that names its own
+        cause is one the being can correct without asking."""
+        raw = str(intent.args.get("path", "")).strip()
+        if not raw:
+            return ResultEnvelope(ok=False, error="edit needs a 'path'")
+        old = str(intent.args.get("old", ""))
+        new = str(intent.args.get("new", ""))
+        if not old:
+            return ResultEnvelope(ok=False, error=(
+                "edit needs 'old': the exact text to replace. To ADD text rather than change "
+                "it, use memory_write (append is its default)."))
+        if old == new:
+            return ResultEnvelope(ok=False, error="edit 'old' and 'new' are identical; nothing to do")
+        for name, val in (("old", old), ("new", new)):
+            if len(val) > self.EDIT_MAX_CHARS:
+                return ResultEnvelope(ok=False, error=(
+                    f"edit '{name}' is {len(val)} chars; the limit is {self.EDIT_MAX_CHARS}. "
+                    f"An edit is a small located change — anchor on the shortest unique text, "
+                    f"or make several edits."))
+        p = self._safe_path(raw, writing=True)          # same confinement as every write
+        if not p.exists():
+            return ResultEnvelope(ok=False, error=f"no such file to edit: {p}")
+        try:
+            body = p.read_text(errors="replace")
+        except Exception as e:
+            return ResultEnvelope(ok=False, error=f"edit could not read {p}: {type(e).__name__}: {e}")
+        n = body.count(old)
+        if n == 0:
+            return ResultEnvelope(ok=False, error=(
+                f"edit found no occurrence of that text in {p}. The anchor has to match the "
+                f"file BYTE FOR BYTE — indentation included — so read the lines you are "
+                f"anchoring on rather than recalling them."))
+        if n > 1:
+            return ResultEnvelope(ok=False, error=(
+                f"edit found {n} occurrences of that text in {p} and will not choose for you. "
+                f"Extend the anchor with a neighbouring line until it is unique."))
+        before = len(body)
+        p.write_text(body.replace(old, new, 1))
+        after = p.stat().st_size
+        return ResultEnvelope(
+            ok=True,
+            result=(f"edited {p} — replaced {len(old)} chars with {len(new)}; "
+                    f"file was {before} bytes, now {after}. One occurrence, as required."),
+            witness_id=self._witness(f"edit {p.name}: {old[:60]!r} -> {new[:60]!r}"))
+
     def _do_memory_write(self, intent: BeingIntent) -> ResultEnvelope:
         if not str(intent.args.get("path", "")).strip():
             return ResultEnvelope(ok=False, error="memory_write needs a 'path' (relative paths are inside your home)")

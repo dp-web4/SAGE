@@ -637,6 +637,11 @@ _REGISTRY = {
     "witness":        dict(tool="witness",      path_args=(),       cmd_arg=None),
     "memory_read":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
     "memory_write":   dict(tool="write_note",   path_args=("path",), cmd_arg=None),
+    # edit: change ONE located occurrence inside a file. Registered as the same gate tool
+    # as memory_write and judged on the same path, because an edit IS a write — no more and
+    # no less — and giving it a softer name would be the law ruling on a friendly word
+    # instead of an act.
+    "edit":           dict(tool="write_note",   path_args=("path",), cmd_arg=None),
     "channel_egress": dict(tool="channel_send", path_args=(),       cmd_arg=None),
     "mesh":           dict(tool="mesh_notify",  path_args=(),       cmd_arg=None),  # §7.2 5th verb
     # pr_review: the being reviews a pull request. The seat posts the comment; the gate
@@ -713,7 +718,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "check", "git_read", "say", "pr_open",
-                            "pr_amend", "git_restore", "search"})
+                            "pr_amend", "git_restore", "search", "edit"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -750,6 +755,19 @@ _TOOL_SCHEMAS = {
                       "content": "what to write",
                       "mode": "'append' (default) or 'replace' — replace overwrites the whole file"},
                      ["path", "content"]),
+    "edit": ("Change ONE exact piece of text inside a file you already have. Give the "
+             "text to replace ('old') and what to replace it with ('new'); everything else "
+             "in the file is untouched. This is how you change code you did not just "
+             "write — memory_write can only append to a file or replace the whole of it, "
+             "and a whole file is usually larger than your entire working room. "
+             "The anchor must match BYTE FOR BYTE including indentation, and must appear "
+             "EXACTLY ONCE: no match means you are recalling the line instead of reading "
+             "it, and several matches mean you have not said which site you mean. Read the "
+             "lines first, anchor on the shortest text that is unique.",
+             {"path": "the file to change",
+              "old": "the exact text to replace — must occur exactly once",
+              "new": "what to put there instead (empty string deletes it)"},
+             ["path", "old", "new"]),
     "channel_egress": ("Send a message out through a sealed channel.",
                        {"to": "recipient", "body": "your message"}, ["to", "body"]),
     "mesh": ("Wake another member through the fractal mesh with a pointer-based notice "

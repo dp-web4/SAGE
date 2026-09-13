@@ -431,3 +431,83 @@ def test_a_write_refusal_names_the_verb_that_does_reach_the_forum():
         other = str(e)
     assert "peer_ask" not in other and "none of those" not in other
     assert "appeal for the affordance" in other
+
+
+def _edit_tree(tmp_path, body):
+    """A being home + worktree with one file, wired as the dispatcher sees them."""
+    from pathlib import Path
+    from sage.gateway.reference_f1a import ReferenceF1aDispatcher
+    home = tmp_path / "home"; home.mkdir()
+    wt = tmp_path / "wt"; (wt / "pkg").mkdir(parents=True)
+    f = wt / "pkg" / "mod.py"; f.write_text(body)
+    d = ReferenceF1aDispatcher(memory_root=home, worktree=str(wt), witness_fn=lambda e: "w")
+    d._extra_roots = [(wt, True)]
+    d._wt_writable = True
+    return d, f
+
+
+def test_edit_changes_one_located_occurrence_inside_a_file(tmp_path):
+    """The verb that made production code reachable at all.
+
+    2026-09-13: `memory_write` had two modes — append, or replace the WHOLE file. To change
+    three lines inside compose(), legion-being would have had to resend all 63,645 chars of
+    heartbeat.py: ~25,458 tokens against ~6,500 of working room. So it appended a wrapper
+    that shadowed the function instead. The semantics were right; the shape was the only one
+    its instruments allowed. Every merged PR it had until then added a NEW file — which read
+    as preference and was structure."""
+    from sage.gateway.being_gate_client import BeingIntent
+
+    d, f = _edit_tree(tmp_path, "def a():\n    return 1\n\n\ndef b():\n    return 2\n")
+    env = d._do_edit(BeingIntent("edit", {"path": str(f),
+                                          "old": "def a():\n    return 1",
+                                          "new": "def a():\n    return 99"}))
+    assert env.ok, env.error
+    assert f.read_text() == "def a():\n    return 99\n\n\ndef b():\n    return 2\n"
+    assert "one occurrence" in env.result.lower()
+    assert env.witness_id, "an edit is a write and must be witnessed"
+
+    # an empty `new` is a deletion, not a refusal
+    env2 = d._do_edit(BeingIntent("edit", {"path": str(f), "old": "\n\n\ndef b():\n    return 2\n", "new": ""}))
+    assert env2.ok and f.read_text() == "def a():\n    return 99"
+
+
+def test_edit_refuses_zero_and_multiple_matches_and_says_the_count(tmp_path):
+    """Zero means the anchor is remembered rather than read. Several means it has not said
+    which site it means, and choosing for it would be the harness guessing at intent."""
+    from sage.gateway.being_gate_client import BeingIntent
+
+    d, f = _edit_tree(tmp_path, "x = 1\ny = 1\nz = 1\n")
+    before = f.read_text()
+
+    miss = d._do_edit(BeingIntent("edit", {"path": str(f), "old": "q = 9", "new": "q = 8"}))
+    assert miss.ok is False and "no occurrence" in miss.error and "BYTE FOR BYTE" in miss.error
+
+    many = d._do_edit(BeingIntent("edit", {"path": str(f), "old": " = 1", "new": " = 2"}))
+    assert many.ok is False and "3 occurrences" in many.error, many.error
+    assert "unique" in many.error                      # it says HOW to fix it
+
+    assert f.read_text() == before, "a refused edit must not touch the file"
+
+    same = d._do_edit(BeingIntent("edit", {"path": str(f), "old": "x = 1", "new": "x = 1"}))
+    assert same.ok is False and "identical" in same.error
+
+    gone = d._do_edit(BeingIntent("edit", {"path": str(f.parent / "nope.py"), "old": "a", "new": "b"}))
+    assert gone.ok is False and "no such file" in gone.error
+
+
+def test_edit_obeys_the_same_write_confinement_as_every_other_write(tmp_path):
+    """An edit IS a write. It is registered as the same gate tool and it goes through
+    _safe_path(writing=True), so it cannot reach anywhere memory_write cannot."""
+    from pathlib import Path
+    from sage.gateway.being_gate_client import BeingIntent
+
+    d, f = _edit_tree(tmp_path, "hello\n")
+    outside = tmp_path / "elsewhere.py"; outside.write_text("hello\n")
+    d._extra_roots = list(d._extra_roots) + [(tmp_path, True)]   # readable, not writable
+
+    try:
+        d._do_edit(BeingIntent("edit", {"path": str(outside), "old": "hello", "new": "bye"}))
+        assert False, "an edit outside the writable roots must be refused"
+    except ValueError as e:
+        assert "not writable" in str(e) or "stay inside" in str(e), e
+    assert outside.read_text() == "hello\n"
