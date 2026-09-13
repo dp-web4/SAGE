@@ -95,6 +95,32 @@ def _scope_path(intent: BeingIntent, memory_root: str) -> str:
     return os.path.dirname(p) if os.path.splitext(p)[1] else p
 
 
+_EXACT_HINT = re.compile(r"your grant path:(\S+) is EXACT")
+
+
+def exact_root_above(env: ResultEnvelope, path: str) -> Optional[str]:
+    """The EXACT-granted root the refused path lies beneath, or None. Read from the verdict's
+    reach when the client carried it, else from the gate's own hint in the deny text
+    (hestia_gate_core._exact_grant_hint, 2026-09-08). Measured 2026-09-12: cbp-being's home was
+    granted bare after #1002, its journal.md refused, and this module asked the daemon for the
+    home root — which the being already held, exactly — so the answer was `already_granted`,
+    request_id null, and nothing anyone could rule on."""
+    v = env.verdict
+    p = os.path.realpath(os.path.expanduser(path))
+    best = None
+    for r, recursive in ((getattr(v, "granted_reach", ()) or ()) if v else ()):
+        r = os.path.realpath(str(r))
+        if recursive and (p == r or p.startswith(r + "/")):
+            return None                                   # reachable after all; not this case
+        if not recursive and p.startswith(r + "/") and (best is None or len(r) > len(best)):
+            best = r
+    if best is None and v and v.reason:
+        m = _EXACT_HINT.search(v.reason)
+        if m:
+            best = m.group(1).rstrip("/")
+    return best
+
+
 def _file_scope_request(member: str, path: str, why: str, endpoint: str) -> Dict[str, Any]:
     m = _Mcp(endpoint, member); m.init()
     conn = _unwrap(m.call("hestia_connect", {"plugin_id": member, "host_agent": "sage-escalate",
@@ -143,6 +169,17 @@ def write_note(member: str, intent: BeingIntent, env: ResultEnvelope, kind: str,
                        "  `hestia gate approve|deny <id> --as claude-code --reason '<why>'`. No delegation needed (NOT-SAME peer).\n"),
         "society": ("## What the seat can do now\n- A law verdict. If plainly wrong, open an appeal on the being's behalf and corroborate; never override.\n"),
     }.get(kind, "")
+    if kind == "scope" and (extra.get("scope_request") or {}).get("status") == "exact_grant":
+        root = str((extra.get("scope_request") or {}).get("root"))
+        how = ("## What the seat can do now\n"
+               "- There is NO request_id to arbitrate: the being already holds `" + root + "`, EXACT, and the\n"
+               "  refused path lies beneath it (hestia #1002: a bare grant reaches its path and nothing under it).\n"
+               "  The remedy is the operator's: make that standing grant recursive — dashboard 'make recursive'\n"
+               "  on the row, or POST /api/scope/standing/recursive with\n"
+               '  {"plugin_id": "' + member + '", "path": "' + root + '", "recursive": true, "reason": "<why>"}\n'
+               "  under an operator session. A seat cannot do this; leave it for dp with your recommendation and\n"
+               "  say so in the thread. Do not file a child-path request (a fresh row is what exact-by-default\n"
+               "  exists to stop; Legion 2026-09-08).\n")
     p.write_text(body + how + "\n" + protocol)
     # Land it. An UNCOMMITTED note in a shared checkout is not just untidy: the same name
     # arriving from upstream makes every later `git rebase` in that repo fail add/add, and
@@ -221,10 +258,19 @@ def escalate(member: str, intent: BeingIntent, env: ResultEnvelope, memory_root:
     try:
         if kind == "scope":
             path = _scope_path(intent, memory_root)
-            why = (f"{member} was refused {intent.effector} at {path} ({env.verdict.rule if env.verdict else ''}). "
-                   f"Its seat's auto session will rule it under delegation if it holds one (hestia #952), "
-                   f"else please rule as STANDING if it is the being's own memory.")
-            out["scope_request"] = _file_scope_request(member, path, why, endpoint)
+            raw = str(intent.args.get("path") or "")
+            target = raw if os.path.isabs(os.path.expanduser(raw)) else os.path.join(memory_root, raw)
+            exact = exact_root_above(env, target)
+            if exact:
+                # The daemon answers `already_granted` for a root the being holds exactly, and a
+                # request for the child would stack a row: neither is an ask anyone can rule on.
+                out["scope_request"] = {"request_id": None, "status": "exact_grant", "root": exact,
+                                        "needs": "operator: make the standing grant recursive"}
+            else:
+                why = (f"{member} was refused {intent.effector} at {path} ({env.verdict.rule if env.verdict else ''}). "
+                       f"Its seat's auto session will rule it under delegation if it holds one (hestia #952), "
+                       f"else please rule as STANDING if it is the being's own memory.")
+                out["scope_request"] = _file_scope_request(member, path, why, endpoint)
         # The note exists to be pointed at by the wake. Without a wake there is no reader, and a
         # beat with nine refused home writes would leave nine near-identical notes (Sprout, #38
         # review); the scope request above is still filed (the daemon dedups it on the path).

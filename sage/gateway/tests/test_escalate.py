@@ -133,3 +133,36 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_refusal_beneath_an_exact_home_grant_routes_to_the_operator_and_files_nothing():
+    # cbp-being 2026-09-12 (first beat on the new mind): home granted bare after hestia #1002,
+    # journal.md refused, and this module asked the daemon for the home root the being already
+    # held — `already_granted`, request_id null, 22 escalations in one beat, nothing to rule on.
+    root = tempfile.mkdtemp(); d = tempfile.mkdtemp(); e.NOTE_DIR = d
+    real = os.path.realpath(root)
+    i = BeingIntent("memory_write", {"path": "journal.md", "content": "x"})
+    hint = (f"'sage' is not granted (granted: path:{real}); note: your grant path:{real} is EXACT — "
+            f"it reaches that path itself and nothing beneath it.")
+    env = ResultEnvelope(ok=False, refused=True, error=hint,
+                         verdict=GatewayVerdict("deny", "mrh.path", hint, stage="local-law",
+                                                granted=(real,), granted_reach=((real, False),)))
+    assert e.exact_root_above(env, os.path.join(real, "journal.md")) == real
+    # reach absent from the verdict: the gate's own hint names the root
+    assert e.exact_root_above(_ref("mrh.path", hint), os.path.join(real, "journal.md")) == real
+    # a recursive grant is not this case
+    rec = ResultEnvelope(ok=False, refused=True, error="x",
+                         verdict=GatewayVerdict("deny", "mrh.path", "x", granted_reach=((real, True),)))
+    assert e.exact_root_above(rec, os.path.join(real, "journal.md")) is None
+    filed = []
+    orig = e._file_scope_request
+    e._file_scope_request = lambda *a: (filed.append(a) or {"request_id": "scope-x", "status": "pending"})
+    try:
+        r = e.escalate("cbp-being", i, env, root, wake=False)
+    finally:
+        e._file_scope_request = orig
+    assert r["escalated"] is True and not filed, r
+    assert r["scope_request"] == {"request_id": None, "status": "exact_grant", "root": real,
+                                  "needs": "operator: make the standing grant recursive"}
+    t = open(e.write_note("cbp-being", i, env, "scope", r)).read()
+    assert "NO request_id" in t and "standing/recursive" in t and real in t and "Arbiter protocol" in t

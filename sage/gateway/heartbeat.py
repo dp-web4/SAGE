@@ -369,8 +369,9 @@ def main(argv=None) -> int:
     if disp is not None and hasattr(disp, "_call"):
         try:
             st = disp._call("hestia_scope_status", {"plugin_id": args.member})
-            grants = [g.get("path") for g in (st.get("live_grants") or [])] + \
-                     [g.get("path") for g in (st.get("standing_grants") or [])]
+            # spelled with the gate's own suffix: `<root>/**` reaches the subtree, bare is EXACT
+            grants = [f"{g.get('path')}{'/**' if g.get('recursive') else ''}"
+                      for g in (st.get("live_grants") or []) + (st.get("standing_grants") or [])]
             reqs = [(r.get("request_id"), r.get("path"), r.get("decision") or r.get("status"))
                     for r in (st.get("requests") or [])]
             who_ruled = {r.get("request_id"): r.get("decided_by") for r in (st.get("requests") or [])

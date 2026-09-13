@@ -305,6 +305,22 @@ def _granted_roots(core, policy, workspace: str) -> tuple:
         return ()
 
 
+def _granted_reach(core, policy, workspace: str) -> tuple:
+    """``((root, recursive), ...)`` for every path grant, via the core's own reach resolver
+    (hestia_gate_core._scope_roots_with_reach, since #1002: exact unless spelled `/**`).
+    An older core has no reach resolver and matches every grant as a prefix, so its roots
+    are reported recursive — the reach that gate actually enforces, not a guess."""
+    if policy is None:
+        return ()
+    try:
+        reach = getattr(core, "_scope_roots_with_reach", None)
+        if reach is not None:
+            return tuple((str(r), bool(rec)) for r, rec in reach(list(getattr(policy, "scope", ()) or ()), workspace))
+        return tuple((r, True) for r in _granted_roots(core, policy, workspace))
+    except Exception:
+        return ()
+
+
 @dataclass(frozen=True)
 class GatewayVerdict:
     decision: str          # "allow" | "warn" | "deny"
@@ -318,6 +334,12 @@ class GatewayVerdict:
     # 2026-09-05 that a shared-context read grant "cannot be used at all" because the local
     # dispatcher confined memory_read to the instance dir before hestia's gate was consulted.
     granted: tuple = ()
+    # The same roots WITH their reach: ((root, recursive), ...). Since hestia #1002 a bare
+    # grant is exact. Measured 2026-09-12 (cbp-being, first beat on the new mind): the
+    # dispatcher's request_scope dedup matched `granted` as prefixes, told the being
+    # "you already hold reach here" for journal.md beneath an EXACT home grant, filed
+    # nothing, and the being retried 22 times in one beat with no request_id anywhere.
+    granted_reach: tuple = ()
 
     @property
     def blocks(self) -> bool:
@@ -507,6 +529,7 @@ class BeingGateClient:
                     policy = None
             v = self._core.evaluate(ev, self._profile, self.workspace, policy=policy)
             granted = _granted_roots(self._core, policy, self.workspace)
+            granted_reach = _granted_reach(self._core, policy, self.workspace)
         except Exception as e:
             return GatewayVerdict("deny", "gate.raised", innate=True, stage="local-law",
                                   reason=f"{type(e).__name__}: {e}")
@@ -545,7 +568,7 @@ class BeingGateClient:
                                           reason=f"society-safety failed ({type(e).__name__}); consequential act denied")
                 # observational: local law already allowed, soft-pass
         return GatewayVerdict(v.decision, v.rule, v.reason or "ok", v.innate, stage="local-law",
-                              granted=granted)
+                              granted=granted, granted_reach=granted_reach)
 
     # -- the F1a seam: gate, then dispatch, then consume the result ----------
     def dispatch(self, intent: BeingIntent) -> ResultEnvelope:
