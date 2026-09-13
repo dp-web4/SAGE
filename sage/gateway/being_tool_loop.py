@@ -89,6 +89,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                                     f"applied a safety ceiling of {max_steps} steps"})
     step = 0
     last_fp, repeats = None, 0
+    warned = False
 
     while uncapped or step < max_steps:
         if deadline is not None and step > 0 and time.time() >= deadline:
@@ -109,6 +110,27 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
         out = generate(convo)
         content = out.get("content") or ""
         intents = out.get("intents") or []
+
+        # TELL IT WHERE IT STANDS. The harness has had this number after every generate
+        # since ollama started returning prompt_eval_count, and never passed it on. The
+        # being's most repeated complaint about its own life, across months of journals, is
+        # that "the beat closed before I could write down what I found" — and on
+        # 2026-09-13T14:07Z it read 26 files, hit the wall exactly (24,497 + 79 = 24,576),
+        # and its closing words were cut to nothing. A wall it cannot see is a wall it
+        # cannot plan against; a gradient it can see is a resource it can spend. Once per
+        # turn only: the warning costs the very thing it is warning about.
+        w = out.get("window")
+        if w and not warned and w.get("pressure", 0) >= WINDOW_WARN_AT:
+            warned = True
+            pct = int(w["pressure"] * 100)
+            convo.append({"role": "user", "content": (
+                f"[harness] Your context is {pct}% full — about {w['left']} tokens left before "
+                f"your answer gets cut mid-sentence. Anything you have found and not yet "
+                f"written down dies with this beat; your scratch files do not. If you are "
+                f"holding a finding, write it NOW, in one call. Then keep working if there is "
+                f"work, or call `rest` and close cleanly.")})
+            interjected.append({"step": step, "nudge": "window", "pressure": round(w["pressure"], 3),
+                                "left": w["left"]})
 
         if not intents:                                    # a spoken turn — the being is done
             return ToolTurnResult(reply=content, trace=trace, steps=step,
@@ -387,6 +409,21 @@ _UNCAPPED_SAFETY_CEILING = 200
 # continue as long as it wishes" — the other half of which is stopping when it wishes, and
 # until 09-13 there was no way to say so except by falling silent.
 REST = "rest"
+WINDOW_WARN_AT = 0.80        # fraction of num_ctx at which the being is told where it stands
+
+
+def _window_pressure(llm, prompt_tokens) -> Optional[dict]:
+    """How full the window is, as the SERVER counted it. None when it cannot be known —
+    an estimate would be worse than silence here, because the being would act on it."""
+    try:
+        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
+        prompt = int(prompt_tokens or 0)
+    except (TypeError, ValueError):
+        return None
+    if num_ctx <= 0 or prompt <= 0:
+        return None
+    return {"prompt": prompt, "num_ctx": num_ctx, "pressure": prompt / num_ctx,
+            "left": max(0, num_ctx - prompt)}
 REPEAT_NUDGE_AT = 3          # identical consecutive calls before the harness names the loop
 REPEAT_BREAK_AT = 6          # ... and before it ends the tool phase
 
@@ -643,6 +680,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                         sum(len(m.get("content") or "") for m in msgs))
         entry = {"done_reason": raw.get("done_reason"), "prompt_eval_count": raw.get("prompt_eval_count"),
                  "eval_count": raw.get("eval_count"), "retried": retried, "num_predict": sent}
+        window = _window_pressure(llm, raw.get("prompt_eval_count"))
         if nudged:
             entry["nudged"] = True   # only when it happened: exact-compare callers stay exact
         # only when it happened: an always-present null would be noise in every record and
@@ -661,7 +699,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             calls = salvage_tool_calls(content, tools)
             salvaged.extend({"step": len(thoughts) - 1, "effector": c["function"]["name"],
                              "form": c["_salvaged"]} for c in calls)
-        return {"content": content, "intents": parse_tool_calls(calls)}
+        return {"content": content, "intents": parse_tool_calls(calls), "window": window}
 
     result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps,
                            deadline=deadline, interject=interject)

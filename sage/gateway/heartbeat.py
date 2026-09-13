@@ -979,6 +979,9 @@ def main(argv=None) -> int:
     def _turn(res):
         return None if res is None else {"reply": res.reply, "steps": res.steps, "capped": res.capped,
                                          "rested": getattr(res, "rested", None),
+                                         "window_warned": next(
+                                             (i for i in getattr(res, "interjected", [])
+                                              if i.get("nudge") == "window"), None),
                                          "looped": getattr(res, "looped", None),
                                          "interjected": list(getattr(res, "interjected", [])),
                                          "trace": _trace(res), "thinking": [t[:4000] for t in res.thinking],

@@ -758,3 +758,63 @@ def test_a_broken_mailbox_does_not_end_the_beat():
                       max_steps=0, deadline=time.time() + 3600, interject=interject)
     assert r.reply == "still fine"
     assert any("RuntimeError" in str(i.get("error", "")) for i in r.interjected)
+
+
+def test_the_being_is_told_when_its_window_is_filling():
+    """A wall it cannot see is a wall it cannot plan against.
+
+    2026-09-13T14:07Z: legion-being read 26 files researching the video organ, hit the wall
+    exactly (prompt 24,497 + eval 79 = num_ctx 24,576) and its closing words were cut to
+    nothing. The harness had `prompt_eval_count` after every generate and never passed it
+    on. Warned ONCE — the warning costs the very resource it is warning about."""
+    from sage.gateway.being_tool_loop import run_tool_turn, WINDOW_WARN_AT
+
+    pressures = iter([0.40, 0.85, 0.93, 0.99])
+    seen = []
+
+    def gen(convo):
+        seen.append([m for m in convo if str(m.get("content", "")).startswith("[harness] Your context")])
+        try:
+            p = next(pressures)
+        except StopIteration:
+            return {"content": "done", "intents": []}
+        return {"content": "", "intents": [BeingIntent("memory_read", {"path": f"f{p}"})],
+                "window": {"prompt": int(24576 * p), "num_ctx": 24576, "pressure": p,
+                           "left": 24576 - int(24576 * p)}}
+
+    r = run_tool_turn(_client(OK_DISPATCH), gen, [{"role": "user", "content": "go"}],
+                      max_steps=0, deadline=time.time() + 60)
+
+    nudges = [i for i in r.interjected if i.get("nudge") == "window"]
+    assert len(nudges) == 1, "warned once, not once per step past the threshold"
+    assert nudges[0]["pressure"] == 0.85 and nudges[0]["left"] == 24576 - int(24576 * 0.85)
+    # the being was actually TOLD — the turn is in the conversation it next sees
+    warnings = seen[-1]
+    assert len(warnings) == 1
+    msg = warnings[0]["content"]
+    assert "85% full" in msg and "3687 tokens left" in msg
+    assert "write it NOW" in msg and "`rest`" in msg      # what to do, and the clean exit
+
+    # below the threshold nobody is interrupted
+    quiet = run_tool_turn(_client(OK_DISPATCH),
+                          lambda c: {"content": "done", "intents": [],
+                                     "window": {"prompt": 100, "num_ctx": 24576,
+                                                "pressure": 0.004, "left": 24476}},
+                          [{"role": "user", "content": "go"}], max_steps=4)
+    assert not [i for i in quiet.interjected if i.get("nudge") == "window"]
+    assert WINDOW_WARN_AT < 1.0
+
+
+def test_window_pressure_is_measured_never_estimated():
+    """None when it cannot be known: the being would ACT on this number, and an estimate
+    that says 70% when the truth is 95% is worse than saying nothing."""
+    from sage.gateway.being_tool_loop import _window_pressure
+    from types import SimpleNamespace
+
+    llm = SimpleNamespace(num_ctx=24576)
+    assert _window_pressure(llm, 12288)["pressure"] == 0.5
+    assert _window_pressure(llm, 12288)["left"] == 12288
+    assert _window_pressure(llm, None) is None          # server returned no count
+    assert _window_pressure(llm, 0) is None
+    assert _window_pressure(SimpleNamespace(num_ctx=None), 12288) is None
+    assert _window_pressure(SimpleNamespace(), 12288) is None
