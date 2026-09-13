@@ -43,16 +43,18 @@ def teardown_function(_):
 
 def test_it_is_graded_not_binary():
     """Not everything that arrives deserves ~18 minutes of the only GPU on the machine.
-    A seat is deliberately BELOW the threshold: a seat can already reach the being at the
-    next beat, so waking for one spends the being's attention on us."""
+    A seat turn WAKES the being (dp's vision of the beat, 2026-09-12: "a message from you
+    or me wakes it immediately to respond"); it sat below the threshold until 2026-09-13,
+    and the refractory period is what bounds a chattering seat, not this table. Ambient
+    digest does not wake it."""
     inst = _inst(last_beat_ended_s_ago=3600)
     assert arousal.decide(inst, "dp_turn")["engage"] is True
     assert arousal.decide(inst, "peer_turn")["engage"] is True
     assert arousal.decide(inst, "scope_decided")["engage"] is True
+    assert arousal.decide(inst, "seat_turn")["engage"] is True
 
-    seat = arousal.decide(inst, "seat_turn")
-    assert seat["engage"] is False and "below the engagement threshold" in seat["reason"]
-    assert arousal.decide(inst, "digest")["engage"] is False
+    digest = arousal.decide(inst, "digest")
+    assert digest["engage"] is False and "below the engagement threshold" in digest["reason"]
     # an unknown kind is quiet by default, never loud
     unknown = arousal.decide(inst, "something-new")
     assert unknown["engage"] is False and unknown["salience"] < arousal.ENGAGE_AT
@@ -101,3 +103,36 @@ def test_no_history_is_not_a_reason_to_refuse():
     not as 'unknown, therefore no' — a first world input should still land."""
     fresh = _inst(last_beat_ended_s_ago=None)
     assert arousal.decide(fresh, "dp_turn")["engage"] is True
+
+
+def test_refractory_defers_rather_than_drops():
+    """An engage-worthy input inside the refractory window used to wait for the idle
+    timer — up to 30 minutes for arriving 3 minutes early. The refractory bounds HOW SOON,
+    never WHETHER: the decision carries a deferral for when the window ends, and respond()
+    arms exactly one timer for it, with a second input riding the same one."""
+    inst = _inst(last_beat_ended_s_ago=100)
+    d = arousal.decide(inst, "dp_turn")
+    assert d["engage"] is False and "refractory" in d["reason"]
+    assert d["deferred_s"] == d["refractory_s_left"] + 1
+    assert 0 < d["deferred_s"] <= arousal.REFRACTORY_S
+    # nothing engage-unworthy gets deferred: digest still just waits
+    assert "deferred_s" not in arousal.decide(inst, "digest")
+
+    import subprocess
+    calls = []
+    def fake_run(args, **kw):
+        calls.append(args)
+        if len(calls) > 1:
+            raise subprocess.CalledProcessError(1, args, stderr="Unit sage-heartbeat-deferred-wake.timer already exists.")
+        return subprocess.CompletedProcess(args, 0, "", "")
+    real = arousal.subprocess.run
+    arousal.subprocess.run = fake_run
+    try:
+        first = arousal.respond(inst, "dp_turn", descriptor="t")
+        second = arousal.respond(inst, "seat_turn", descriptor="t2")
+    finally:
+        arousal.subprocess.run = real
+    assert first["deferred"] is True and "already_armed" not in first
+    assert second["deferred"] is True and second["already_armed"] is True
+    assert all("systemd-run" in c[0] and f"--on-active={d['deferred_s']}s" in c for c in calls)
+    assert all(c[-1] == arousal.UNIT for c in calls)

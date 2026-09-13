@@ -51,10 +51,13 @@ SALIENCE = {
     "peer_turn": 0.7,
     # An operator ruling on something it asked for — it has been waiting, sometimes days.
     "scope_decided": 0.7,
-    # A seat leaving a turn. Deliberately BELOW the threshold: a seat can already reach the
-    # being at the next beat and usually just did something on its behalf. Waking for our
-    # own convenience would be us spending its attention on us.
-    "seat_turn": 0.4,
+    # A seat leaving a turn. This sat at 0.4, below the threshold, on the argument that a
+    # seat can reach the being at the next beat anyway. dp's stated vision of the beat
+    # (2026-09-12) is the opposite: "a message from you or me wakes it immediately to
+    # respond." The refractory period, not a low salience, is what stops a seat that sends
+    # three turns in a row from spending three beats; and a seat turn that is not worth a
+    # beat is a turn the seat should not have sent.
+    "seat_turn": 0.6,
     # Ambient fleet movement. Real information, no urgency.
     "digest": 0.1,
 }
@@ -130,6 +133,13 @@ def decide(instance: Path, kind: str, *, now: Optional[float] = None) -> dict:
                            f"({REFRACTORY_S}s). Engaging again this soon shreds attention "
                            f"across fragments of the same exchange")
             d["refractory_s_left"] = int(REFRACTORY_S - since)
+            # DEFER, do not drop. This used to return here and the input waited for the
+            # idle timer — up to 30 minutes for a turn that had earned a beat, because it
+            # arrived 3 minutes too early. Measured 2026-09-13T07:45Z: two seat turns
+            # correcting a broken fixture, declined at 298s, nothing armed. dp's vision is
+            # "a message wakes it immediately"; the refractory bounds HOW SOON, it must
+            # not decide WHETHER.
+            d["deferred_s"] = d["refractory_s_left"] + 1
             return d
 
     nxt = seconds_to_next_beat()
@@ -163,7 +173,35 @@ def respond(instance: Path, kind: str, *, descriptor: str) -> dict:
         d["started"] = True
         if out:
             d["systemctl"] = out
+    elif d.get("deferred_s"):
+        d.update(_arm_deferred_wake(d["deferred_s"]))
     return d
+
+
+DEFERRED_UNIT = "sage-heartbeat-deferred-wake"
+
+
+def _arm_deferred_wake(seconds: int) -> dict:
+    """One-shot transient timer that starts the beat when the refractory period ends.
+
+    ONE pending at a time: the unit name is fixed on purpose, so a second engage-worthy
+    input inside the same refractory window finds the timer already armed and rides it
+    (systemd-run exits 1 on the collision, which is the answer we want). heartbeat.py's
+    fallback wake uses a unique name for the opposite reason — there a collision meant a
+    missing wake; here it means the wake is already coming."""
+    try:
+        subprocess.run(["systemd-run", "--user", "--collect", f"--on-active={seconds}s",
+                        f"--unit={DEFERRED_UNIT}", "systemctl", "--user", "start", UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"deferred": True, "deferred_by": DEFERRED_UNIT}
+    except subprocess.CalledProcessError as e:
+        if "already exists" in (e.stderr or "") or "already loaded" in (e.stderr or ""):
+            return {"deferred": True, "deferred_by": DEFERRED_UNIT, "already_armed": True}
+        return {"deferred": False, "error": f"systemd-run exit {e.returncode}: {(e.stderr or '').strip()}",
+                "why": "the input waits for the idle timer"}
+    except Exception as e:
+        return {"deferred": False, "error": f"{type(e).__name__}: {e}",
+                "why": "the input waits for the idle timer"}
 
 
 def main(argv=None) -> int:
