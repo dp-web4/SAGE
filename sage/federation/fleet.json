@@ -130,8 +130,8 @@
       "last_seen_at": null,
       "gateway_port": 8750,
       "federation_port": 0,
-      "model_default": "tinyllama:latest",
-      "device": "cpu",
+      "model_default": "qwen3.8-distill:4b",
+      "device": "cuda",
       "hardware": "RTX 2060S WSL2"
     },
     "hub": {

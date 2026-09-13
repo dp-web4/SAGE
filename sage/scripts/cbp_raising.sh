@@ -51,7 +51,7 @@ SAGE_DAEMON_BIN="$SAGE_DIR/sage-rs/target/release/sage-daemon"
 DAEMON_PID=$(lsof -t -i :$SAGE_PORT 2>/dev/null || true)
 if [ -z "$DAEMON_PID" ]; then
     echo "[CBP-Raising] Starting Rust SAGE daemon (sage-rs)..."
-    SAGE_MACHINE=cbp SAGE_MODEL=gemma3:4b \
+    SAGE_MACHINE=cbp SAGE_MODEL=qwen3.8-distill:4b \
         nohup "$SAGE_DAEMON_BIN" > /tmp/sage-daemon.log 2>&1 &
     sleep 5
 fi
@@ -65,23 +65,21 @@ echo "[CBP-Raising] Daemon PID: $(lsof -t -i :$SAGE_PORT 2>/dev/null || echo 'no
 echo "[CBP-Raising] Running raising session..."
 python3 -m sage.raising.scripts.ollama_raising_session \
     --machine cbp \
-    --model gemma3:4b \
+    --model qwen3.8-distill:4b \
     -c 2>&1
 
 # --- Step 5: Snapshot state ---
-# Canonical CBP raising model = gemma3:4b (per private-context/machines/fleet/cbp.json
-# as of 2026-06-03). Why not gemma4:e2b? CBP runs WSL2 on a single-GPU machine where
-# Windows uses the RTX 2060 SUPER for display/compositor (~2.2GB baseline VRAM hold).
-# That leaves ~5.9GB for Ollama, and gemma4:e2b's 7.8GB working set spills ~24% to CPU.
-# gemma3:4b's 3.1GB fits cleanly. Nomad runs e2b GPU-only because it has a separate
-# integrated GPU handling display, so its full 8GB RTX 4060 is available.
-# Sweep default matches raising per fleetwide policy.
-# Prior arcs: qwen3.5:0.8b raised through session 122 (April 29). gemma4:e2b attempted
-# 2026-06-03 (planning artifact; never the right fit for this hardware).
-INSTANCE_DIR="sage/instances/cbp-gemma3-4b"
+# Canonical CBP raising model = qwen3.8-distill:4b since 2026-09-12: empero Qwen3.8-4B-Distill
+# (Q6_K, MTP head stripped, RENDERER/PARSER qwen3.5), built per sage/scripts/models/README.md.
+# Same being as cbp-gemma3-4b (cbp_sage_lct, 240 sessions carried); see that instance's
+# MIGRATION.md. 6.0 GB at num_ctx 16384, 100% GPU under the Windows host's ~2.5 GB hold,
+# ~40 tok/s, native tools + thinking. gemma3-4b instance retained for rollback + A/B.
+# Prior arcs: qwen3.5:0.8b through session 122 (April 29); gemma3:4b sessions 123-240
+# (2026-04-18 to 2026-08-06); gemma4:e2b attempted 2026-06-03 (spills ~73% to CPU here).
+INSTANCE_DIR="sage/instances/cbp-qwen3.8-distill-4b"
 
 echo "[CBP-Raising] Snapshotting state..."
-python3 -m sage.scripts.snapshot_state --machine cbp --model gemma3:4b 2>&1 || {
+python3 -m sage.scripts.snapshot_state --machine cbp --model qwen3.8-distill:4b 2>&1 || {
     echo "[CBP-Raising] WARNING: snapshot_state failed, continuing"
 }
 
@@ -134,7 +132,7 @@ git commit -m "[CBP-Raising] Session $SESSION_NUM ($PHASE) — $(date -u +'%Y-%m
 
 Automated SAGE-CBP raising session via OllamaIRP
 Machine: CBP (Desktop RTX 2060 SUPER, WSL2 — single-GPU host)
-Model: gemma3:4b
+Model: qwen3.8-distill:4b
 Phase: $PHASE
 AI-Instance: OllamaIRP (automated)
 Human-Supervised: no"

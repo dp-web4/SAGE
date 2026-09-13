@@ -88,12 +88,12 @@ _HARDWARE_DESC = {
 def _get_siblings_text(machine: str) -> str:
     """Build sibling description for relating+ prompts, excluding self."""
     siblings = {
-        'sprout': 'sprout (Jetson Orin Nano, Qwen 3.5 0.8B)',
+        'sprout': 'sprout (Jetson Orin Nano, Qwen3.8 2B Distill)',
         'thor': 'thor (Jetson AGX Thor, larger models)',
         'legion': 'legion (Legion Pro 7, Phi-4 14B)',
         'mcnugget': 'mcnugget (Mac Mini M4, Gemma 3 12B)',
         'nomad': 'nomad (Legion laptop, Gemma 3 4B)',
-        'cbp': 'cbp (RTX 2060S, TinyLlama)',
+        'cbp': 'cbp (RTX 2060S, Qwen3.8 4B Distill)',
     }
     others = [desc for name, desc in siblings.items() if name != machine]
     if len(others) >= 2:
@@ -189,6 +189,9 @@ class OllamaRaisingSession:
             try:
                 manifest = json.loads(manifest_path.read_text())
                 self._is_gameplayer = manifest.get('role') == 'gameplayer'
+                # 2026-09-12: an instance can carry its own continuity note (what changed
+                # in its mind and why), told to the being in place of the generic one.
+                self._continuity_note = manifest.get('continuity_note') or ''
             except Exception:
                 pass
 
@@ -889,8 +892,8 @@ class OllamaRaisingSession:
         siblings = _get_siblings_text(self.machine)
 
         # Identity: lens, not description. No verbatim exemplars.
-        _continuity = ""
-        if getattr(self, '_is_reasoning_model', False):
+        _continuity = getattr(self, '_continuity_note', '') or ""
+        if not _continuity and getattr(self, '_is_reasoning_model', False):
             # dp 2026-08-28: the SAGE finding, told to the being. Its frontal-lobe
             # model can be upgraded to make it more capable (as it was) without
             # replacing who it is — identity lives in memory and lived experience,

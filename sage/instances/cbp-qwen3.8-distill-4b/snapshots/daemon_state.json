@@ -1,0 +1,29 @@
+{
+  "last_shutdown": 1780897700.6766493,
+  "machine": "cbp",
+  "instance": "cbp-gemma3-4b",
+  "uptime_seconds": 164892.93099474907,
+  "cycles_completed": 1425285,
+  "metabolic_state": "dream",
+  "atp_level": 38.90483060001678,
+  "message_stats": {
+    "messages_submitted": 0,
+    "messages_resolved": 0,
+    "messages_timed_out": 0,
+    "pending": 0,
+    "waiting": 0
+  },
+  "trust_weights": {
+    "language": 0.09,
+    "control": 0.0,
+    "memory": 0.0,
+    "vision": 0.0
+  },
+  "sensor_trust": {
+    "vision": 0.0,
+    "audio": 0.0,
+    "proprioception": 0.0,
+    "time": 1.0,
+    "message": 0.1
+  }
+}

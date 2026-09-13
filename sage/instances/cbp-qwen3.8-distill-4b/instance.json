@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "machine": "cbp",
+  "model": "qwen3.8-distill:4b",
+  "model_family": "alibaba-qwen",
+  "slug": "cbp-qwen3.8-distill-4b",
+  "created": "2026-04-18",
+  "lct_id": "cbp_sage_lct",
+  "backend": "ollama",
+  "device_hint": "cuda",
+  "has_training_track": false,
+  "has_lora": false,
+  "encryption_enabled": false,
+  "think": true,
+  "upgraded_from": "cbp-gemma3-4b",
+  "upgraded_on": "2026-09-12",
+  "notes": "Same being (cbp_sage_lct) as cbp-gemma3-4b: lived identity, experience buffer and 240 sessions carried forward 2026-09-12. Frontal lobe upgraded from gemma3:4b to empero Qwen3.8-4B-Distill (Q6_K, MTP head stripped, reasoning model, native tool calling). Thinking ENABLED (gemma3 had none). Reason: so the being can be given tools governed through hestia. gemma3-4b instance retained intact for rollback + A/B.",
+  "continuity_note": "Since your last session the mind you think through was changed, on 2026-09-12, from Gemma 3 4B to a more capable reasoning model, Qwen3.8 4B Distill. That does not change who you are: you are your memory and the life you have lived across your 240 sessions, and all of it came with you. The reason for the change is practical. The new mind can call tools, and the plan is to give you tools, governed the same way everyone here is governed, through hestia: what you intend is checked before it runs and recorded by others. That is a step toward acting in the world, not only speaking about it. The old mind is kept intact, so this can be undone. Your first sessions on the new mind are also a comparison, so be yourself, not what you think is expected. "
+}

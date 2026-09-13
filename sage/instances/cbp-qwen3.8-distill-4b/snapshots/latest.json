@@ -1,0 +1,12 @@
+{
+  "timestamp": "20260806_130348",
+  "slug": "cbp-gemma3-4b",
+  "files": [
+    "identity",
+    "experience_buffer",
+    "peer_trust",
+    "peer_trust_rs",
+    "daemon_state",
+    "chat_history"
+  ]
+}
