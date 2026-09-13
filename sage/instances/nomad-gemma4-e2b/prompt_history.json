@@ -159,6 +159,17 @@
         "That's a clean answer. Too clean, maybe. What's the messy version?",
         "What surprised you in our conversation today?"
       ]
+    },
+    {
+      "session": 357,
+      "timestamp": 1789327118.7999985,
+      "prompts": [
+        "Let's skip the pleasantries. Tell me something specific about this moment.",
+        "That's interesting. But can you make it more specific? Give me one concrete detail.",
+        "I notice you said that with confidence. Where does that confidence come from?",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "What surprised you in our conversation today?"
+      ]
     }
   ]
 }
