@@ -60,6 +60,22 @@ def test_frame_lands_as_images_list():
         f"'images' must be exactly [b64], got {user_msg['images']!r}")
 
 
+def test_frame_lands_as_images_list_posture_first():
+    # Same pin on the posture-first arm (act_first=False): BOTH arms of compose()
+    # grow images=[b64] on the user message. Pins the second return, which
+    # test_frame_lands_as_images_list never exercised (it calls act_first=True).
+    seed, second = heartbeat.compose(
+        False, frame=B64_FRAME, **_compose_kwargs())
+    user_msg = seed[1]
+    assert isinstance(user_msg["content"], str), (
+        f"with-frame content must stay a plain str, got "
+        f"{type(user_msg['content']).__name__}")
+    assert "images" in user_msg, (
+        "frame present but no 'images' key on the user message (posture-first arm)")
+    assert user_msg["images"] == [B64_FRAME], (
+        f"'images' must be exactly [b64] on posture-first arm, got {user_msg['images']!r}")
+
+
 def test_no_frame_grows_no_images_key():
     # The common path: no frame -> plain str content and NO images key at all.
     seed, second = heartbeat.compose(
