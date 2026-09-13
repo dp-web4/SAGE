@@ -530,8 +530,27 @@ class HestiaF1aDispatcher:
         for root in (getattr(getattr(self, "_verdict", None), "granted", ()) or ()):
             r = _os.path.realpath(str(root))
             if rp == r or rp.startswith(r + "/"):
-                return ResultEnvelope(ok=True, result={"status": "already_granted", "path": path, "within": r,
-                                                       "next": "you already hold reach here; read or write it directly"})
+                # "You already hold reach here; read or write it directly" was TRUE at the
+                # gate and FALSE in practice for every path outside the being's home: the
+                # harness confines writes regardless of any grant, because write + execute
+                # compose into arbitrary code as the seat (reference_f1a._safe_path). On
+                # 2026-09-13 legion-being asked for the fleet forum to answer a peer, was
+                # told already_granted, and was then refused the write — it had to read the
+                # harness source to find out which of the two answers was real. A grant
+                # that is live at one layer and inert at the next must SAY so.
+                return ResultEnvelope(ok=True, result={
+                    "status": "already_granted", "path": path, "within": r,
+                    "writable": self._writable_by_harness(rp),
+                    "next": ("you already hold reach here; read or write it directly"
+                             if self._writable_by_harness(rp) else
+                             "you already hold READ reach here. Writes are a separate "
+                             "boundary and this path is outside it: the harness confines "
+                             "every write to your own home and worktree whatever the gate "
+                             "grants, because a tree you can write and `check` can execute "
+                             "is arbitrary code running as the seat. To put something in a "
+                             "shared place, use the verb built for it — `peer_ask` and "
+                             "`mesh` file to the forum on your behalf — or appeal for the "
+                             "affordance, naming what you would write")})
         args: Dict[str, Any] = {"plugin_id": self.plugin_id, "path": path,
                                 "reason": f"[{self.plugin_id}] {reason}"}
         out = self._call("hestia_request_scope", args)
@@ -542,6 +561,23 @@ class HestiaF1aDispatcher:
                               result={"request_id": out.get("request_id"), "status": out.get("status"),
                                       "path": path,
                                       "next": out.get("next"), "on_timeout": out.get("on_timeout")})
+
+    def _writable_by_harness(self, real_path: str) -> bool:
+        """Would a `memory_write` to this path survive the harness's own confinement?
+
+        Deliberately asks the SAME question `_safe_path(writing=True)` answers, rather than
+        re-deriving the rule: two copies of a security boundary drift, and the copy that
+        drifts is always the one in the friendly message."""
+        try:
+            f1a = getattr(self, "_local", None)
+            if f1a is None or not hasattr(f1a, "_safe_path"):
+                return True          # cannot tell: do not manufacture a refusal
+            f1a._safe_path(real_path, writing=True)
+            return True
+        except ValueError:
+            return False
+        except Exception:
+            return True              # an unexpected failure is not evidence of a boundary
 
     # -- check: the being runs a test and reads the answer (PRD M0) --------------
     def _do_check(self, intent: BeingIntent) -> ResultEnvelope:

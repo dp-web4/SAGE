@@ -850,3 +850,36 @@ def test_an_unrecognised_mount_reply_is_a_failure_not_a_pass():
     d2 = HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: Silent(ep, pid))
     env = d2(BeingIntent("recall", {"query": "x"}), _ALLOW)
     assert not env.ok and "refused to mount" in env.error
+
+
+def test_already_granted_says_whether_the_grant_is_actually_writable():
+    """A grant that is live at the gate and inert at the harness must SAY so.
+
+    2026-09-13: legion-being asked for the fleet forum so it could answer a peer on-record,
+    was told `already_granted` with "read or write it directly", and was then refused the
+    write — writes are confined to home+worktree whatever the gate grants. It had to read
+    reference_f1a.py to learn which of the two answers was real. The writability question
+    is delegated to `_safe_path` itself rather than re-derived, because two copies of a
+    security boundary drift and the copy that drifts is the friendly one."""
+    from pathlib import Path
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+    from sage.gateway.reference_f1a import ReferenceF1aDispatcher
+    import tempfile
+
+    home = Path(tempfile.mkdtemp(prefix="grantable-"))
+    (home / "notes").mkdir()
+    elsewhere = Path(tempfile.mkdtemp(prefix="shared-"))
+
+    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    d._local = ReferenceF1aDispatcher(memory_root=home, worktree=None, witness_fn=None)
+
+    assert d._writable_by_harness(str(home / "journal.md")) is True
+    assert d._writable_by_harness(str(home / "notes" / "plan.md")) is True
+    # granted-but-not-writable: the exact case that cost a beat
+    assert d._writable_by_harness(str(elsewhere)) is False
+    # reserved inside the being's OWN home is not writable either
+    assert d._writable_by_harness(str(home / "conversations")) is False
+
+    # cannot tell != refuse. A dispatcher with no local F1a must not manufacture a boundary.
+    blind = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    assert blind._writable_by_harness(str(elsewhere)) is True
