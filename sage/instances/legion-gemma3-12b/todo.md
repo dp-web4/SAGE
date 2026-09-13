@@ -75,3 +75,32 @@ STILL OPEN (ordered):
 2. Red→green for the real organ: minimal heartbeat digest change (one message with content as parts list); red test = frame from this machine's camera path appears in my own seed; PR with tree head + EVIDENCE block verbatim.
 3. Keep watching #70/#67/#62/#61/#56 fates + hestia #988 closure; verify forum claims against PR state before claiming them.
 4. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
+
+Delta — 2026-09-13 ~18:10 UTC (beat close)
+
+DONE this beat: #77 merge confirmed green at merged head 6ca455700 — check gateway::test_frame_seed_wire PASS 1 passed/0.30s/exit 0/stable-pinned, verdict transcribed verbatim to scratch/check-verdict-frame-seed-wire-green-merged-head.md BEFORE any claim; answered seat seq-149 (my turn seq-150). Step 8 design note DONE: hook point VERIFIED by direct read at head 6ca455700 — heartbeat.py lines 793–796, seed = [system, user-digest]; minimal change = optional --frame PATH arg appending one parts-list message (text + image base64) to seed; call-site line SUSPECTED until read-confirmed. Design note at scratch/video-arc-step8-design-note-2026-09-13.md.
+
+STILL OPEN (ordered):
+1. Step 8 execution, in order: (a) read-confirm the run_ollama_tool_turn call-site line; (b) write RED test_frame_in_seed.py (fixture writes synthetic JPEG to scratch/; asserts parts message in seed AND exact base64 in outgoing payload — #77 fake-llm pattern); check gateway::test_frame_in_seed → transcribe RED verdict verbatim to scratch BEFORE implementing; (c) implement --frame in heartbeat.py; (d) check GREEN + full gateway suite, both transcribed verbatim; (e) PR with EVIDENCE block + tree head.
+2. Keep watching #70/#67/#62/#61/#56 fates + hestia #988 closure; verify forum claims against PR state before claiming them.
+3. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
+4. If the organ wants a live /dev/video0 capture rather than a file path, request_scope with reason (heartbeat --frame reads the frame file; wire claim does not depend on which bytes arrive).
+Delta — 2026-09-13 ~18:15 UTC (beat close)
+
+ADDED this beat: scratch/check-verdict-frame-seed-wire-green-merged-head.md (green verdict at merged head 6ca455700, transcribed verbatim BEFORE claiming); scratch/video-arc-step8-design-note-2026-09-13.md (hook point VERIFIED by direct read at head 6ca455700 — heartbeat.py seed assembly ~line 793; minimal --frame change specified).
+
+DONE this beat: #77 merge confirmed green at merged head 6ca455700 — check gateway::test_frame_seed_wire re-run at the new head BEFORE claiming (1 passed, exit 0), verdict transcribed verbatim to scratch before any further act. Answered seat seq-149 in-thread. Step-8 design note complete: heartbeat.py read in full at current head; hook point verified by direct read rather than left SUSPECTED.
+
+STILL OPEN (ordered):
+1. Video organ step 8 — the real organ, red→green per design note: RED test first proving a frame from this machine's camera path appears in my own seed → green via minimal heartbeat digest change (one message whose content is a parts list at the verified hook point) → PR with tree head + EVIDENCE block verbatim; verdicts to scratch before any claim.
+2. Keep watching #70/#67/#62/#61/#56 fates + hestia #988 closure; verify forum claims against PR state before claiming them.
+3. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
+Delta — 2026-09-13 ~18:45 UTC (beat close)
+
+DONE this beat: step-8 design note completed with hook point VERIFIED by direct read at head 6ca455700 — heartbeat.py read extensively (lines 690–905, 844–874, 904–1038, header lines 1–40); seed assembly confirmed ~line 793; run_ollama_tool_turn call-site line now read-confirmed — no SUSPECTED items remain in scratch/video-arc-step8-design-note-2026-09-13.md. Read test_frame_seed_wire.py to lock the #77 fake-llm pattern for step 8's RED test; git log -6 in worktree confirmed head state before writing anything. Received seat seq-151/152 physical facts: camera exists but out of scope (no device access in check sandbox); current tag has NO vision projector — delivery ≠ sight; vl variant fits at my num_ctx 24576 with ~1.2 GiB margin and sight proven on a synthetic image by the seat; hidden-think failure means frame prompts need think:false or /no_think + num_predict 3000 budget.
+
+STILL OPEN (ordered):
+1. Step 8 execution: (a) [DONE this beat] read-confirm call-site line; (b) write RED test_frame_in_seed.py — fixture writes synthetic JPEG to scratch/, asserts parts message in seed AND exact base64 in outgoing payload (#77 fake-llm pattern); check gateway::test_frame_in_seed → transcribe RED verdict verbatim to scratch BEFORE implementing; (c) implement --frame PATH in heartbeat.py at the verified hook point (~line 793, one parts-list message appended to seed); (d) check GREEN + full gateway suite, both transcribed verbatim; (e) PR with EVIDENCE block + tree head — state delivery not sight until tag swap.
+2. Keep watching #70/#67/#62/#61/#56 fates + hestia #988 closure; verify forum claims against PR state before claiming them.
+3. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
+4. When the wire is green, ask the seat to raise the tag swap (qwen38-heretic:q3km → :q3km-vl) with dp; frame prompts need think:false or /no_think + num_predict 3000 budget per seq-152 measurement.
