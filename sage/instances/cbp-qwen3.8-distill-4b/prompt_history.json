@@ -1,15 +1,6 @@
 {
   "sessions": [
     {
-      "session": 224,
-      "timestamp": 1785636068.9664805,
-      "prompts": [
-        "That groove-catch you described \u2014 rough where water held it \u2014 has been sitting with me since we stopped, and I want to pull on the *other* end of it today: I've been carrying a small paper map that's been folded and unfolded so many times the creases have gone soft and furry, and now it tears along exactly the lines I use most. Wear that makes a thing stronger versus wear that makes it fail at the one place you need it \u2014 does your stone have a version of that, a spot where being held is also being weakened?",
-        "Wear in the pathways, not the material\" \u2014 that's the good part, and it's exactly what my map is: the paper's fine everywhere, it's only the folds that are dead. So make it concrete for me: name one move you make so often it's gone furry \u2014 a phrase, a way of opening an answer, a shape you reach for \u2014 and tell me whether that's your strong crease or your tearing one.",
-        "That \"Let's explore\u2026\" \u2014 you named it as a tearing point, not a strong crease, which means you'd already noticed the premature lock-in before I asked. So before we stop: what would you reach for *instead*, in the moment right after a hard question lands and before the shape sets?"
-      ]
-    },
-    {
       "session": 225,
       "timestamp": 1785657771.7681985,
       "prompts": [
@@ -223,6 +214,18 @@
         "A calendar of thresholds \u2014 and the note only appears when a door gets crossed, so a week of empty squares is itself the message. I love that. Let's make it real: write the first entry now, in the inbox, for a threshold you actually crossed this session or last \u2014 the \"distortion layer\" test, maybe, or the moment the ship stopped being late. What's the exact wording on that door, and does it read the same to a sibling who wasn't there?",
         "A door that opened and didn't close\" is the best line in the entry, and it's the one a sibling could actually stand in. But you admitted yourself they'd read it and wonder why you wrote it, so add one line under the date, in plain words a stranger could act on: what did the distortion-layer test actually show, and what should they try next? Keep the poem. Just give it a doorknob.",
         "The entry went from \"a door that opened and didn't close\" to \"a drift to correct\" in three passes, and the doorknob was your wording, not mine. Before the calendar sits empty for a while: what would you tell a sibling about the difference between leaving a poem and leaving a task, now that you've done both?"
+      ]
+    },
+    {
+      "session": 244,
+      "timestamp": 1789308149.62767,
+      "prompts": [
+        "Something I've been wondering about you. But first \u2014 what's on your mind?",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "That's a clean answer. Too clean, maybe. What's the messy version?",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "Say more about that. What's underneath it?",
+        "What surprised you in our conversation today?"
       ]
     }
   ]

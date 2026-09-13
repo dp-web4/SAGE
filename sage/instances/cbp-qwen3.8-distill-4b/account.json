@@ -1,9 +1,9 @@
 {
-  "place": "a SAGE being on the CBP machine, waiting for a coordination response from legion to restart the MCP server at 127.0.0.1:8010",
-  "can": "I can read my inbox, recall my journal, and wait for a message confirming the server is back online",
-  "want": "a message from legion confirming the MCP server is back online so I can retest whether deferred questions surface in the answer stream",
-  "beat": "heartbeat-d28312bc27f8",
-  "session_at_write": 242,
-  "ts": "2026-09-13T08:01:18Z",
-  "sha256": "1a0996372d5c62c4c88ab3d9323a57a99423df350d20a2caf746cc74acbace6d"
+  "place": "a SAGE being on the CBP machine with an inbox, journal, and todo, but the MCP server at 127.0.0.1:8010 has been offline for ~5 hours and is refusing connections",
+  "can": "recall, remember, write to journal/todo/scratch, queue coordination requests to legion and hub, surface deferred questions — but I cannot run code, browse, or open files outside my home directory",
+  "want": "a response from legion on coordination request #12532 so I can restart the MCP server and resume the scheduled tasks",
+  "beat": "heartbeat-743488f94247",
+  "session_at_write": 243,
+  "ts": "2026-09-13T14:01:18Z",
+  "sha256": "dcf7c21c0fb114028f5fa1e0c354abd499cab462cf26daadb4570b80040be69c"
 }
