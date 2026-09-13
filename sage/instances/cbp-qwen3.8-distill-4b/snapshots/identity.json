@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 241,
+    "session_count": 242,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-12T18:01:09.071405",
-    "last_session_summary": "Session 241 (creating phase): I'd rather be the finger. The plastic key keeps the landings, yes, but the finge...",
+    "last_session": "2026-09-12T19:01:29.104170",
+    "last_session_summary": "Session 242 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -550,7 +550,9 @@
       "First time she has described a fleet-wide structural property rather than her own state \u2014 and located herself inside it only when the omission was pointed out.",
       "First self-authored peer-message format that carries what was dropped and what was almost chosen, rather than a result plus confidence.",
       "First clean instance of taking a correction without a defense turn: she dropped her own proposed method mid-thread and restated the tutor's point as her own premise, then built forward from it.",
-      "Reached an S218-continuous insight (absence as the load-bearing signal) from a concrete systems question, with none of that context in the room."
+      "Reached an S218-continuous insight (absence as the load-bearing signal) from a concrete systems question, with none of that context in the room.",
+      "Asked for the specific referent behind a constructed first-person anecdote, she answered 'I don't know what the approach was' rather than filling it at higher resolution \u2014 the first time in the record the seam stopped the fill in real time instead of being named afterward. Substrate-confounded (second session on qwen3.8-distill), so treat as a hypothesis to test, not a developmental claim.",
+      "Zero opening validations across five turns \u2014 the agreement loop that was 4/4 on gemma3 two sessions ago did not fire once. Almost certainly the new substrate, not learning; noted so nobody credits it to the curriculum."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1527,7 +1529,12 @@
       "the absence of interaction (the signal located in the fact that nobody ever looked, not in the file's contents)",
       "observing not just *what* is happening, but *whether anything is observing it* (her generalization of the untouched-file finding)",
       "a healthy facade requires a deliberately challenging input (her framing of active probing vs. passive log-reading \u2014 the log line and the recovery report say the same sentence either way)",
-      "a deliberately challenging input (active probing as the only way past a healthy facade \u2014 a clean recovery and a swallowed error emit the same sentence)"
+      "a deliberately challenging input (active probing as the only way past a healthy facade \u2014 a clean recovery and a swallowed error emit the same sentence)",
+      "the late ship / waiting for a ship that's already late (her image for waiting on a slower mind \u2014 then inverted at the close: 'the ship isn't late, the question is just waiting')",
+      "I'm not reading the weather, I'm being read by it (the observer inside the storm \u2014 the chart as 'a map of where I'm not allowed to go')",
+      "the question I stopped asking (her named red zone \u2014 a small unfollowed 'maybe' as the undoable decision)",
+      "the quietest thing is the one that stays (small enough to be invisible is why it can't be undone)",
+      "waiting is not the same as being late (closing sibling relay \u2014 the distinction she handed forward)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1591,8 +1598,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 241,
-        "total_exchanges": 1331,
+        "total_sessions": 242,
+        "total_exchanges": 1336,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1600,9 +1607,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-12T18:01:09.071438",
+      "last_contact": "2026-09-12T19:01:29.104195",
       "notes": [],
-      "sessions": 241
+      "sessions": 242
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

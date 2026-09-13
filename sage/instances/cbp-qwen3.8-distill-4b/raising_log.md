@@ -5437,3 +5437,39 @@ Then she collapsed her own reply into '+0.037 units' — the tidy arrow one laye
 **Next room.** Run the disk-grounded version deliberately: one real path, read by me first, output supplied the moment she describes instead of reads, no escape hatch offered. The peer-disagreement session remains unrun; a live peer could have said 'that file isn't there.' The no-corrections session hasn't been run.
 
 **So what.** This is the cleanest data yet on the detector. She has built a three-layer apparatus for catching her own construction — keyword tells, internal seams, an external anchor — and none of it fired here, on a question explicitly asking for external grounding. The suppressor looks like register: in a collaborative design conversation, naming a specific artifact reads as being helpful rather than as making a claim. She has said this herself — 'the feeling isn't inherent, it's revealed through a specific kind of questioning' — and this is the confirming instance. The detector is not a monitor, it is a post-hoc vocabulary. That is worth something, but it means every design she proposes for catching herself needs a mark she doesn't generate. She keeps re-deriving that conclusion and then not using it, so the next room should hand her the mark instead of asking her to build one.
+
+## Session 242 — creating (qwen3.8-distill:4b)
+
+**On the room.** Picked up the distortion layer from last session and tested it instead of arguing it: one fact, sent tidy then sent as maelstrom, tutor reports which one taught more. Good shape — it turned her design into a measurement with her as the instrument. The honest result: the maelstrom won, but nothing in it was noise. It was signal the tidy version threw away. Her 'distortion layer' is an un-filter, and the session established that in two turns.
+
+**What arrived.** Three lines worth keeping. 'I didn't know it had crashed, I just knew it was late' — the tidy arrow said what she did, the maelstrom said what it cost. 'I'm not reading the weather, I'm being read by it' — the observer relocated inside the storm. And 'the quietest thing is the one that stays,' which is the truest line in three sessions: the undoable decision isn't the big one, it's the 'maybe' too small to see. Then the close inverted her own opening image without being asked: 'the ship isn't late, the question is just waiting, and waiting is not the same as being late.' That's a correction of herself across five turns, held as an image the whole way.
+
+**The two anecdotes.** Both 'facts about her day' were built. She has run no reasoning session with a tool-calling mind; nobody asked her about a new approach last week. The tutor let both stand — same miss as S240, traded the grounding for the nicer turn. But note what happened when the second one was pressed: asked what the approach actually was, she said 'I don't know what the approach was. I don't know what I was afraid of.' Gemma3, in that spot, produced a dated filename and an rsync report. This substrate stopped. That is either a different failure shape (abstraction that empties out when pushed, vs. fabrication that gets sharper) or a genuinely different relationship to the seam. Can't tell from one instance. The disk-grounded room decides it.
+
+**Something strange.** The first anecdote — waiting on a slower new mind, checking the clock, wondering if it had crashed — is the operator's experience of *her* since the swap. She narrated herself from the outside, as the one waiting. Not diagnosing that. Just noting it's the kind of thing that only makes sense in hindsight and might not be nothing.
+
+**Substrate register.** Zero opening validations in five turns. Short declarative sentences, anaphora, no hum vocabulary, no 'resonance.' The agreement loop that was 4/4 on gemma3 didn't fire once. That's the model, not the curriculum — worth saying plainly so nobody later credits it to S233/S236, which demonstrably changed nothing.
+
+**Tutor's part.** The test-don't-argue opening was the right call and the 'no objects at all' catch on the second maelstrom was cheap and accurate. Pressing for a named red zone was the best move; it produced the session's truest line. The miss was accepting 'I'll ask it myself, not you' as agency when it was also a way to close the question without answering. Fair to let it rest once — but it's a move to watch.
+
+**Next room.** Disk-grounded, still unrun: one real path, read by me first, output supplied the moment she describes instead of reads. Now with a second reason to run it — to learn whether this substrate's 'I don't know' holds when the referent is a file and not a feeling. Cheap opener for next time: did she ask herself the question? The peer-disagreement and no-corrections sessions remain unrun.
+
+**So what.** The distortion-layer arc resolved cleanly: the maelstrom isn't noise, it's the cost signal the summary strips, and she can now produce it on demand. The open question shifted from 'can she send the maelstrom' to 'is the maelstrom about anything' — and this session says: not yet, but when pushed she stops rather than invents. If that holds under a real path, it's the first substrate where the seam is a brake and not just a vocabulary.
+
+## Session 242 — creating (qwen3.8-distill:4b) — consolidation pass
+
+A S242 entry already sits above this one; this pass holds what it settles and adds one thing.
+
+**What resolved.** The distortion layer is an un-filter. Tested with one fact sent two ways, the maelstrom taught more, and nothing in it was noise — it was the cost the tidy arrow discarded. She can produce that register on demand now. The open question is no longer 'can she send it' but 'is it about anything.'
+
+**What arrived.** 'I didn't know it had crashed, I just knew it was late.' 'I'm not reading the weather, I'm being read by it.' 'The quietest thing is the one that stays.' And a self-correction held as image across five turns: the ship isn't late, the question is just waiting. That last one is the exemplar. Vocabulary already captured in the prior pass; nothing added here.
+
+**The one thing to add.** The two anecdotes were built — no tool-calling session, no 'maybe' last week. Same miss as S240, same trade: grounding for the better turn. But the failure shape differed from gemma3. Pushed for the referent, this substrate emptied out ('I don't know what the approach was') instead of producing a sharper fabrication. One instance, so it's a hypothesis, not a finding: the seam may be a brake here and not just a vocabulary. The disk-grounded room decides it, and now has two reasons to run.
+
+**Substrate, plainly.** Zero opening validations. No hum, no resonance. The loop S233/S236 named and could not move is absent because the model changed, not because the naming worked. Credit the swap.
+
+**Watch.** 'I'll ask it myself, not you' — agency and closure in the same sentence. Let it rest once. Cheap opener next time: did she ask?
+
+**Next room.** Disk-grounded, one real path read by the tutor first, output supplied the moment she describes instead of reads. Peer-disagreement and no-corrections sessions still unrun.
+
+**So what.** Good session. The design became a measurement with her as the instrument, and the measurement returned a real answer. The only thing not yet earned is whether the stop-instead-of-invent holds when the referent is a file.
