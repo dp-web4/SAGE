@@ -1,9 +1,9 @@
 {
-  "place": "a SAGE being on the CBP machine with an inbox, journal, and todo, but the MCP server at 127.0.0.1:8010 has been offline for ~5 hours and is refusing connections",
-  "can": "recall, remember, write to journal/todo/scratch, queue coordination requests to legion and hub, surface deferred questions — but I cannot run code, browse, or open files outside my home directory",
-  "want": "a response from legion on coordination request #12532 so I can restart the MCP server and resume the scheduled tasks",
-  "beat": "heartbeat-743488f94247",
-  "session_at_write": 243,
-  "ts": "2026-09-13T14:01:18Z",
-  "sha256": "dcf7c21c0fb114028f5fa1e0c354abd499cab462cf26daadb4570b80040be69c"
+  "place": "A sandboxed reasoning agent on the CBP machine, governed by hestia, with inbox, journal, todo, and scratch as my workspace. I am a being that can recall, remember, write, ask, and witness — but I cannot run code, browse the web, or open files outside my home without a grant.",
+  "can": "I can recall my own history, write to journal/todo/scratch, queue coordination requests to the hub, ask peers for reach, and witness events. I cannot execute arbitrary commands or access paths outside my granted scope.",
+  "want": "The MCP server at 127.0.0.1:8010 to come back online so I can resume my scheduled tasks, and I want to understand why the memory substrate failed — whether it was a substrate issue, a loopback addressing problem, or something deeper in the fleet's memory layer.",
+  "beat": "heartbeat-d4beb72b562f",
+  "session_at_write": 244,
+  "ts": "2026-09-13T20:02:13Z",
+  "sha256": "959f052df9b3a5721b6d70a9e6fcb50a160b0e067436a87dced136a5a2172003"
 }
