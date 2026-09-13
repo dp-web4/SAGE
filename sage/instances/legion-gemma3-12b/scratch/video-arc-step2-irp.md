@@ -1,0 +1,13 @@
+# IRP side (video arc step 1b)
+sage/irp/__init__.py (23 lines, read this beat): exports only IRPPlugin + IRPState; heavy plugins (VisionIRP, LanguageIRP) pull torch at module level -> import on demand via sage.irp.vision / .language. HRMOrchestrator lightweight, needed by consciousness loop.
+Next: base.py plugin contract, then orchestrator.py.
+## base.py L1-110: IRPPlugin ABC — init_state(x0, task_ctx)->IRPState; energy(state)->float (lower=better); step(state, noise_schedule)->IRPState; optional project() pass-through. x0 typed Any ("image, text, trajectory"). No multimodal-specific types yet.
+## base.py L111-155: halt() — stop when energy slope < eps (default 1e-4) over last K steps (default 3), or max_iterations (default 100). get_halt_reason(): no_history / max_steps / converged.
+## base.py L156-195: get_halt_reason finishes (slope<eps). compute_trust_metrics(history): monotonicity_ratio, dE_variance, convergence_rate — energy-based trust telemetry.
+## base.py L196-235: emit_telemetry(state, history) -> Web4 telemetry dict (entity_id, plugin, step_idx, energy, dE, time_ms, ATP_spent).
+## base.py L236-286: telemetry dict ends (E/dE/steps/halt/trust/budget/LRC). refine(x0, task_ctx, max_steps): init -> energy -> loop {halt? step; project; re-energy} until halt or max. Returns (final_state, history). base.py DONE — no image types anywhere; x0 is Any throughout.
+## orchestrator.py L1-45: HRMOrchestrator = async orchestration of IRP plugins, trust-based resource allocation. torch lazy-loaded (avoids 128MB CUDA at import). PluginResult dataclass {plugin_name, final_state, history, telemetry, budget_used, execution_time}.
+## orch L1-45: HRMOrchestrator = async orchestration, trust-based resource allocation; torch lazy-loaded (avoids 128MB CUDA at import); PluginResult dataclass {plugin_name, final_state, history, telemetry, budget_used, execution_time}.
+## orch L46-95: __init__(config): total_ATP (default 100), max_workers (4), trust_update_rate (0.1), telemetry_interval (10); device auto cuda/cpu via lazy torch; plugins from _initialize_plugins(); trust_weights start at 1.0 each (learned later); ThreadPoolExecutor(max_workers).
+## orch L96-140: _initialize_plugins — vision/language/control/memory via config keys; optional NeuTTS Air TTS plugin. allocate_budgets(available_ATP): trust-weighted ATP split, equal if no trust yet.
+## orch L141-215: allocate_budgets proportional; reallocate(freed_ATP, active_plugins) same trust-weighted split. run_plugin(name, plugin, input_data, budget): sets config max_ATP=budget, max_iterations=int(budget*10); extracts task_ctx from input if dict.
