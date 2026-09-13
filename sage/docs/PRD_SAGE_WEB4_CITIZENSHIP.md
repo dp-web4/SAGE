@@ -536,6 +536,8 @@ and hub-checkable.
 | M-CIT-4 instruments + readings | Sprout | after 2a |
 | SAGE-side wiring (`connect-hub`/`join` as the being, #26-29 provenance) | Sprout | unblocked |
 
+**Goal, stated 2026-09-12 (dp): joining a hub is a tool a being should eventually hold.** Today M-CIT-3a is a seat-run ritual (`sage/gateway/hub/join_being.rs`, `sage/scripts/cbp_being_hub_join.sh` for cbp-being as `cbp-sage`): the seed is minted on the being's host, the relay opens the seat vault, the join is two attended curls, and the admit is dp's admin plane. The goal is a `join_hub` effector in the being's bounded registry (`sage/gateway/being_gate_client.py` `_REGISTRY`), judged by the same law as every other act: the being states the hub, the roster name and its one-line message, the gate rules, an allowed join is signed with the being's own key (1b, once #25 lands; the seed file until then) and witnessed, and the 202 still resolves only at dp's admit. Not now: it needs the being to hold its key (1b), a non-interactive relay (the vault passphrase is the seat's, not the being's), and a law clause for a member widening its own membership. Sequence: cbp-sage joined by ritual first, then the effector, so the tool is built against a join that has already been watched end to end.
+
 **The pilot, re-cut honestly.** One being end-to-end — Sprout — but the first
 milestone is *"Sprout has a voice"*, not *"Sprout has a certificate"*: 1a + 3a +
 2a (#35 landed) + the being draining its own inbox = Sprout has a real LCT in
