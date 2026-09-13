@@ -395,3 +395,39 @@ def test_memory_write_says_when_the_content_is_already_there():
     # replace never carries the note: overwriting with the same text is not a duplicate
     same = disp(BeingIntent("memory_write", {"path": "n.md", "content": "beta", "mode": "replace"}), v)
     assert "NOTE:" not in same.result
+
+
+def test_a_write_refusal_names_the_verb_that_does_reach_the_forum():
+    """A boundary that says only what is forbidden makes the being guess at what is allowed.
+
+    legion-being hit this refusal twice on 2026-09-13 trying to answer a peer on the fleet
+    forum — `memory_write` is the intuitive verb, and the message named no other. It already
+    had `peer_ask`, which files to the forum in its name, and reached for it only after
+    spending a step on the refusal each time."""
+    import tempfile
+    from pathlib import Path
+    from sage.gateway.reference_f1a import ReferenceF1aDispatcher
+
+    home = Path(tempfile.mkdtemp(prefix="hint-home-"))
+    shared = Path("/home/dp/ai-workspace/shared-context")
+    d = ReferenceF1aDispatcher(memory_root=home, worktree=None, witness_fn=None)
+    d._extra_roots = [(shared, True)]
+
+    try:
+        d._safe_path(str(shared / "forum" / "x.md"), writing=True)
+        assert False, "a write into the forum must be refused"
+    except ValueError as e:
+        msg = str(e)
+    assert "peer_ask" in msg and "mesh" in msg          # the doors that work, by name
+    assert "not a workaround" in msg                     # ... and that they are not second best
+    assert "not a missing grant" in msg                  # the grant is not the thing missing
+
+    # a shared path that is NOT the forum gets no forum hint, and does not dangle a
+    # "none of those" clause referring to options it never listed
+    try:
+        d._safe_path(str(shared / "plans" / "y.md"), writing=True)
+        assert False, "a write into shared plans must be refused"
+    except ValueError as e:
+        other = str(e)
+    assert "peer_ask" not in other and "none of those" not in other
+    assert "appeal for the affordance" in other

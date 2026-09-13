@@ -52,6 +52,25 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 RESERVED_SUBTREES = ("conversations",)
 
 
+SHARED_FORUM = "/ai-workspace/shared-context/forum"
+
+
+def _shared_destination_hint(p) -> str:
+    """Name the verb that DOES reach where the being was trying to write.
+
+    legion-being hit this refusal twice on 2026-09-13 trying to answer a peer on the fleet
+    forum, because `memory_write` is the intuitive verb and the refusal named no other. It
+    already had a working path — `peer_ask` and `mesh` file to the forum through the
+    gateway — and used it both times only after spending a step on the refusal. A boundary
+    that says only what is forbidden makes the being guess at what is allowed."""
+    if SHARED_FORUM in str(p).replace("\\", "/"):
+        return (" To reach the forum, use `peer_ask` (it files your message there, in your "
+                "name, and wakes the being you addressed) or `mesh` (a pointer at something "
+                "already posted). Those are the sanctioned doors to shared space; they are "
+                "not a workaround, they are the verb for this.")
+    return ""
+
+
 class ReferenceF1aDispatcher:
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
 
@@ -182,8 +201,17 @@ class ReferenceF1aDispatcher:
                         "is allowed — M1 is not withheld, it is waiting on the box")
                 raise ValueError(
                     f"writes stay inside your own home ({self.memory_root}) and your worktree; "
-                    f"{p} is readable to you but not writable. Ask for the affordance rather "
-                    "than the path")
+                    f"{p} is readable to you but not writable. This is not a missing grant "
+                    "— the gate may well grant this path, and the write would still be "
+                    "refused here, because a tree you can write and `check` can execute is "
+                    "arbitrary code running as the seat."
+                    + _shared_destination_hint(p) +
+                    (" If none of those is what you wanted, appeal for the affordance and "
+                     "name what you would write, rather than asking for the path."
+                     if _shared_destination_hint(p) else
+                     " If you need this written, appeal for the affordance and name what "
+                     "you would write, rather than asking for the path — a seat can also "
+                     "carry it for you if you say what and where."))
             raise ValueError(f"path escapes the being's memory root and its grants: {p}")
         return p
 
