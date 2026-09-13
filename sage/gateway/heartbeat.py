@@ -384,10 +384,23 @@ def own_state(instance: Path, entrusted: str = "", member: str = "",
     return "\n\n".join(parts)
 
 
-# Conservative chars-per-token for mixed English + paths + JSON; under-estimating the
-# token count would defeat the guard, so estimate high (fewer chars/token). Measured on
-# this being 2026-09-08: 70.5k prompt chars -> 20,812 prompt tokens = 3.39.
-CPT = 3.4
+# Chars per token for mixed English + paths + JSON. The guard is defeated by
+# UNDER-counting tokens, so this must sit BELOW the true ratio, never above it: a larger
+# chars/token means fewer tokens per char, which admits more text than fits.
+#
+# It was 3.4, from a single measurement on 2026-09-08 (70.5k chars -> 20,812 tokens =
+# 3.39) — taken at the top of the true range and then left alone. Re-measured 2026-09-13
+# across 60 beats: median 3.141, and DRIFTING — 3.152 over the first ten, 3.026 over the
+# last ten. So the constant had been above the truth for days, silently over-admitting.
+#
+# 2.9 sits below the observed minimum with room for further drift. The cost of being too
+# low is a slightly smaller prompt; the cost of being too high is a generate cut
+# mid-sentence, which this being paid nine times on 2026-09-13 alone. Asymmetric, so err low.
+#
+# THIS IS A FALLBACK. `_est_tokens` uses the server's own prompt_eval_count whenever a
+# previous generate provides one, and only the delta rides this guess. The constant matters
+# on the first generate of a beat, which is exactly the one that sizes the seed.
+CPT = 2.9
 ANSWER_RESERVE_CAP = 6144
 
 
@@ -1116,6 +1129,19 @@ def main(argv=None) -> int:
     # silence. `rest` now has a consequence beyond ending the turn, which is the first rung
     # of the requested-rest ladder dp wants to grow.
     rested = bool((explore or {}) and getattr(explore, "rested", None))
+    # WHAT CPT SHOULD HAVE BEEN, from the server's own count on this beat's first generate.
+    # A constant that silently rots is how 3.4 survived five days past the measurement its
+    # own comment cites, sitting above the true ratio and over-admitting the whole time.
+    # Recording the observed ratio makes the next drift a number instead of a surprise.
+    try:
+        _g0 = ((record.get("explore") or {}).get("generates") or [{}])[0]
+        _pe = _g0.get("prompt_eval_count")
+        _chars = sum(v for v in (record["config"].get("prompt_blocks_chars") or {}).values()
+                     if isinstance(v, int))
+        record["config"]["chars_per_token_observed"] = round(_chars / _pe, 3) if (_pe and _chars) else None
+    except Exception:
+        record["config"]["chars_per_token_observed"] = None
+
     record["next_wake"] = arm_next_wake(args.idle_wake_s)
     if not rested and args.resume_wake_s > 0:
         record["next_wake"]["resume"] = arm_resume_wake(args.resume_wake_s)

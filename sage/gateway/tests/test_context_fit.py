@@ -31,18 +31,35 @@ def test_full_display_when_it_fits():
 
 
 def test_steps_down_until_it_fits_and_says_what_it_suppressed():
-    """The measured case: 30.9k of conversations, 38k of everything else, 60.9k budget."""
+    """The measured case: 30.9k of conversations, 38k of everything else.
+
+    ASSERTS THE INVARIANT, NOT AN INDEX. This pinned `rung == CONV_LADDER[2]` and a literal
+    "16900 chars" — both of which are arithmetic on CPT, not statements about the ladder.
+    When CPT moved 3.4 -> 2.9 on 2026-09-13 (it had been sitting ABOVE the true ratio for
+    five days, over-admitting) the budget tightened, the fitter correctly stepped one rung
+    further, and this test went red for doing the right thing. A pin that fails when a
+    constant is corrected is measuring the constant."""
     budget = window_budget_chars(24576, 8000)
     sizes = {CONV_LADDER[0]: 30_900, CONV_LADDER[1]: 24_000, CONV_LADDER[2]: 14_000,
              CONV_LADDER[3]: 9_000, CONV_LADDER[4]: 6_000}
     build, calls = _build_factory(sizes)
     text, rung, iv = fit_state(build, num_ctx=24576, num_predict=8000, other_chars=38_000)
+
+    # it fits
     assert 38_000 + len(text) <= budget
-    assert rung == CONV_LADDER[2]                        # first rung that fits, not the sparsest
-    assert calls == list(CONV_LADDER[:3])
+    # and it is the FIRST rung that fits — every rung above it would not have
+    idx = CONV_LADDER.index(rung)
+    assert 38_000 + sizes[rung] <= budget
+    for earlier in CONV_LADDER[:idx]:
+        assert 38_000 + sizes[earlier] > budget, f"{earlier} fits; the fitter should have stopped there"
+    # it tried them in order and stopped at the first success
+    assert calls == list(CONV_LADDER[:idx + 1])
+
+    # and it says what it gave up, in the ladder's own terms
     assert iv["kind"] == "context_fit" and iv["block"] == "conversations"
-    assert "16900 chars of conversations" in iv["suppressed"] and "last 6 turns" in iv["suppressed"]
-    assert "fits now" in iv["reason"] and "68900 chars" in iv["reason"]
+    assert f"{sizes[CONV_LADDER[0]] - sizes[rung]} chars of conversations" in iv["suppressed"]
+    assert f"last {rung[0]} turns" in iv["suppressed"]
+    assert "fits now" in iv["reason"]
 
 
 def test_sparsest_rung_is_used_and_named_when_nothing_fits():
