@@ -193,7 +193,10 @@ def home_hint(intent: BeingIntent, memory_root: str) -> Optional[str]:
     if name not in HOME_FILENAMES:
         return None
     correct = os.path.join(os.path.realpath(memory_root), name)
-    if os.path.realpath(raw) == correct:
+    # a relative path is rooted in the home by the gate and the dispatcher; judge that path,
+    # not the process cwd (a bare 'journal.md' under an EMPTY grant is a real ask, 2026-09-12)
+    cand = raw if os.path.isabs(os.path.expanduser(raw)) else os.path.join(memory_root, raw)
+    if os.path.realpath(os.path.expanduser(cand)) == correct:
         return None                                   # already the home file; a real refusal
     return correct
 

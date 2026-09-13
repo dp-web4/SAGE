@@ -62,7 +62,12 @@ fi
 echo "[CBP-Raising] Daemon PID: $(lsof -t -i :$SAGE_PORT 2>/dev/null || echo 'not running')"
 
 # --- Step 4: Run the raising session ---
-echo "[CBP-Raising] Running raising session..."
+# SAGE_TOOLS=1 turns on the governed tool offer at the end of the session (default OFF):
+# the being emits an intent as member `cbp-being`, the shared hestia law judges it, and
+# only an allowed act runs and is witnessed (sage/raising/scripts/run_nomad_raising.sh has
+# the reasoning). Wired 2026-09-12 with the qwen3.8-distill:4b mind, which calls tools natively.
+export SAGE_TOOLS=1
+echo "[CBP-Raising] Running governed raising session (SAGE_TOOLS=$SAGE_TOOLS)..."
 python3 -m sage.raising.scripts.ollama_raising_session \
     --machine cbp \
     --model qwen3.8-distill:4b \

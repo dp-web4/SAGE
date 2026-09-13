@@ -273,7 +273,12 @@ def _home_hint(intent: "BeingIntent", dispatcher) -> str:
         if not root:
             return ""
         correct = os.path.join(os.path.realpath(str(root)), name)
-        if os.path.realpath(raw) == correct:
+        # A relative path is rooted in the being's home by _normalize and the dispatcher,
+        # so judge the same path they touch. realpath(raw) alone resolved a bare
+        # 'journal.md' against the process cwd and told a member with NO grant at all that
+        # no grant was needed (cbp-being's first beat, 2026-09-12: 9 refusals, 0 escalated).
+        cand = raw if os.path.isabs(os.path.expanduser(raw)) else os.path.join(str(root), raw)
+        if os.path.realpath(os.path.expanduser(cand)) == correct:
             return ""
         return (f" — no grant is needed for this: your own '{name}' is at {correct}, "
                 f"and a bare '{name}' is resolved inside your home.")

@@ -93,6 +93,40 @@ def test_home_file_mis_rooted_gets_a_hint_not_an_operator_request():
     assert home_hint(BeingIntent("memory_read", {"path": "/repo/shared/notes.txt"}), root) is None
 
 
+def test_bare_home_filename_is_the_home_file_and_a_real_ask(monkeypatch=None):
+    # cbp-being's first beat (2026-09-12): every write was `path: "journal.md"`, the gate rooted
+    # it in the home and refused on an EMPTY grant, and the router read the bare name against
+    # the process cwd, called it mis-rooted, and filed nothing. A bare home filename IS the
+    # home file: no hint, and the refusal escalates as a scope ask on the home dir.
+    import os, tempfile
+    import sage.gateway.escalate as esc
+    from sage.gateway.escalate import escalate, home_hint
+    from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope, _home_hint
+    from sage.gateway import block_census
+    root = tempfile.mkdtemp(prefix="home-")
+    for rel in ("journal.md", "./todo.md", "notes/../journal.md"):
+        assert home_hint(BeingIntent("memory_write", {"path": rel, "content": "x"}), root) is None, rel
+    class _D:  # what the client's hint sees: a dispatcher that knows the memory root
+        memory_root = root
+    assert _home_hint(BeingIntent("memory_write", {"path": "journal.md", "content": "x"}), _D()) == ""
+    assert "no grant is needed" in _home_hint(BeingIntent("memory_write", {"path": "/repo/sage/journal.md", "content": "x"}), _D())
+    from pathlib import Path
+    assert block_census.classify("memory_write", "mrh.path", "journal.md", Path(root)) != "mis-rooted-home"
+    assert block_census.classify("memory_write", "mrh.path", "/repo/sage/journal.md", Path(root)) == "mis-rooted-home"
+    filed = {}
+    def _fake_file(member, path, why, endpoint):
+        filed.update({"member": member, "path": path}); return {"request_id": "scope-test", "status": "filed"}
+    orig = esc._file_scope_request; esc._file_scope_request = _fake_file
+    try:
+        deny = ResultEnvelope(ok=False, refused=True, verdict=GatewayVerdict("deny", "mrh.path", "outside"),
+                              error="mrh.path: outside your granted scope: 'sage' is not granted (granted: )")
+        r = escalate("cbp-being", BeingIntent("memory_write", {"path": "journal.md", "content": "x"}), deny, root, wake=False)
+    finally:
+        esc._file_scope_request = orig
+    assert filed.get("path") == os.path.abspath(root), (filed, r)
+    assert r.get("escalated") is not False or "hint" not in r, r
+
+
 if __name__ == "__main__":
     n = 0
     for name, fn in sorted(globals().items()):

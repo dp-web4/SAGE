@@ -57,7 +57,10 @@ def classify(effector: str, rule: str, path: str, memory_root: Path) -> str:
         return "placeholder"
     if name in HOME_FILENAMES:
         try:
-            if os.path.realpath(p) != os.path.join(os.path.realpath(memory_root), name):
+            # relative targets are rooted in the home by the gate; a bare 'journal.md' is the
+            # home file itself, not a mis-rooting (it was counted as one until 2026-09-12)
+            cand = p if os.path.isabs(os.path.expanduser(p)) else os.path.join(memory_root, p)
+            if os.path.realpath(os.path.expanduser(cand)) != os.path.join(os.path.realpath(memory_root), name):
                 return "mis-rooted-home"
         except Exception:
             return "mis-rooted-home"
