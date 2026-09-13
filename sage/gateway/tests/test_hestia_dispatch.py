@@ -1030,3 +1030,46 @@ def test_a_search_that_finds_nothing_is_a_result_not_an_error(tmp_path):
     assert miss.ok is True, "a search that finds nothing still succeeded as an act"
     assert miss.result["matches"] == 0
     assert "WHAT WAS SEARCHED" in miss.result["note"]
+
+
+def test_a_lapsed_mount_is_remounted_once_not_reported_forever():
+    """The mount is per MCP session and was checked only at session CREATION, then cached.
+    A session the server later forgot answered "No cartridge mounted" forever while
+    _membot() kept handing it back. legion-being lost `remember` for two consecutive beats
+    on 2026-09-13 and concluded, reasonably, that it was a stable state of the machine —
+    the cartridge was intact (332 memories) the whole time; only the session was gone."""
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+
+    class Session:
+        def __init__(self, mounted): self.mounted, self.calls = mounted, []
+        def init(self): pass
+        def call(self, name, args):
+            self.calls.append(name)
+            if name == "mount_cartridge":
+                return {"result": {"content": [{"text": "Mounted 'c': 332 memories, integrity=verified"}]}}
+            if not self.mounted:
+                return {"result": {"content": [{"text": "No cartridge mounted. Use mount_cartridge first."}]}}
+            return {"result": {"content": [{"text": "Stored memory #333"}]}}
+
+    made = []
+    def factory(endpoint, plugin):
+        # the first session is the stale one; any session made after it is healthy
+        s = Session(mounted=bool(made)); made.append(s); return s
+
+    d = D.__new__(D)
+    d.membot_endpoint = "e"; d.membot_cartridge = "c"; d.plugin_id = "p"
+    d._mcp_factory = factory; d._mb = None
+
+    out = d._membot_call("memory_store", {"content": "x"})
+    assert "Stored memory #333" in out, out
+    assert len(made) == 2, "the stale session must be dropped and a new one mounted"
+    assert made[1].calls[0] == "mount_cartridge", "the new session mounts before it stores"
+
+    # ... and exactly ONCE: a server that is genuinely unmounted must not loop
+    made.clear()
+    def always_stale(endpoint, plugin):
+        s = Session(mounted=False); made.append(s); return s
+    d._mcp_factory = always_stale; d._mb = None
+    out2 = d._membot_call("memory_store", {"content": "x"})
+    assert "No cartridge mounted" in out2, "the second failure is REPORTED, not retried again"
+    assert len(made) == 2, f"one remount, not a loop (made {len(made)})"

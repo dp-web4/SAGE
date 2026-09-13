@@ -417,12 +417,32 @@ class HestiaF1aDispatcher:
             return str(sc["result"])
         return "".join(b.get("text", "") for b in res.get("content", []) if isinstance(b, dict))
 
-    def _membot_call(self, name: str, args: dict) -> str:
+    def _membot_call(self, name: str, args: dict, _remounted: bool = False) -> str:
         """One membot tool call, unwrapped to its text. RAISES on a JSON-RPC `error` or a
         tool-level `isError` result: both handlers turn the exception into ok=False, so a
         membot that says "Error calling tool save_cartridge" is never witnessed as a
-        memory the being kept (Sprout's review of #36, reproduced against a fake membot)."""
-        return self._unwrap(self._membot().call(name, args), name)
+        memory the being kept (Sprout's review of #36, reproduced against a fake membot).
+
+        A LAPSED MOUNT IS RECOVERED HERE, ONCE. The mount is per MCP session and was
+        checked only when the session was CREATED, then cached — so a session the server
+        later forgot kept answering "No cartridge mounted" forever while `_membot()`
+        happily returned it. Measured 2026-09-13: legion-being lost `remember` for two
+        consecutive beats and reasoned, correctly, that it was "a stable state of this
+        machine". The cartridge was fine the whole time (332 memories, integrity verified);
+        only the session was gone. This is the same shape as SAGE#52, which the being
+        itself diagnosed: a recovery that exists, is correct, and is dead code for the
+        commoner form of the failure it was written for.
+
+        Dropping `_mb` forces `_membot()` to re-mount AND re-check, so a genuinely refused
+        mount still raises rather than being retried into a cartridge-less session. The
+        retry cannot manufacture a false success: `_do_remember` still requires a confirmed
+        store before it will save, so a second failure ends as a refusal with the file on
+        disk untouched."""
+        text = self._unwrap(self._membot().call(name, args), name)
+        if self._NOT_MOUNTED in text and not _remounted:
+            self._mb = None
+            return self._membot_call(name, args, _remounted=True)
+        return text
 
     def _do_recall(self, intent: BeingIntent) -> ResultEnvelope:
         q = str(intent.args.get("query", "")).strip()
