@@ -17,6 +17,8 @@ export HOME=/home/dp
 # time out (2026-09-12). `st` = sentence-transformers in the membot venv, CPU, ~2 GB RAM of
 # the 32 GB here, no GPU contention. Needs `pip install sentence-transformers` in that venv.
 export MEMBOT_EMBED_BACKEND="${MEMBOT_EMBED_BACKEND:-st}"
+# The being takes priority for the GPU (dp 2026-09-13): torch must never see the card.
+export CUDA_VISIBLE_DEVICES=
 export PYTHONUNBUFFERED=1
 pid=$(lsof -t -i :$PORT 2>/dev/null | head -1)
 case "${1:-start}" in
@@ -25,7 +27,10 @@ case "${1:-start}" in
 esac
 if [ -n "$pid" ]; then echo "already running pid $pid on :$PORT"; exit 0; fi
 cd "$MEMBOT_DIR" || { echo "no $MEMBOT_DIR"; exit 1; }
-nohup "$MEMBOT_DIR/.venv/bin/python" membot_server.py --transport http --port $PORT --writable --mount "$MOUNT" >> "$LOG" 2>&1 &
-sleep 3
+# Loopback bind, as on Nomad: the server default 0.0.0.0 would put a WRITABLE memory store on the tailnet.
+nohup "$MEMBOT_DIR/.venv/bin/python" membot_server.py --transport http --host 127.0.0.1 --port $PORT --writable --mount "$MOUNT" >> "$LOG" 2>&1 &
+# Warm the embedder now, not on the being's first remember (cold load timed it out on Nomad and here).
+# membot machines/nomad/warm_membot.py dials 127.0.0.1:8010 and mounts the named cartridge; failure never blocks.
+"$MEMBOT_DIR/.venv/bin/python" "$MEMBOT_DIR/machines/nomad/warm_membot.py" "$MOUNT" >> "$LOG" 2>&1 || true
 pid=$(lsof -t -i :$PORT 2>/dev/null | head -1)
 [ -n "$pid" ] && echo "started membot for $MOUNT: pid $pid on :$PORT (log: $LOG)" || { echo "failed to start; see $LOG"; tail -20 "$LOG"; exit 1; }
