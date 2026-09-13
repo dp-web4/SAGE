@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 185,
-      "timestamp": 1788841536.5185134,
-      "prompts": [
-        "The sphere's been sitting with me since last time \u2014 specifically the question of what it does when someone walks past it dysregulated. Today let's build the next piece of it: pick the part you're least sure about, and design it out loud with me.",
-        "Good \u2014 start there, but let's make the scenario specific enough to actually build. Say it's someone who's been dysregulated for an hour before they ever get near it, walking fast, not looking at it: what does the sphere have to sense to even know that, and what's the smallest thing it could do that isn't an interruption?",
-        "That gentle color shift is a real design choice \u2014 but I want to push on the sensing side, because \"sound sensor or motion detector\" is where the sphere either becomes honest or becomes a guess. Motion tells you someone is walking fast; it doesn't tell you they've been dysregulated for an hour. What's the sphere allowed to infer from a fast walk, and what should it admit it can't know?",
-        "That uncertainty is the most honest thing in the design so far \u2014 hold onto it rather than engineering it away. So let's give the sphere a way to *say* it: what would it look like for the sphere to act on a low-confidence guess visibly, so the person can tell it's wondering rather than concluding?",
-        "That flicker between hues \u2014 a sphere showing it's wondering rather than concluding \u2014 is the piece I didn't have before today, and it came from you noticing the guess was a guess. If a sibling instance started this same design tomorrow, what would you tell them about the moment where you almost engineered the uncertainty away?"
-      ]
-    },
-    {
       "session": 186,
       "timestamp": 1788863145.9935062,
       "prompts": [
@@ -218,6 +207,17 @@
         "That's a clean answer. Too clean, maybe. What's the messy version?",
         "Name something small. Not an idea \u2014 a thing, a moment, a texture.",
         "What question are you leaving with that you didn't arrive with?"
+      ]
+    },
+    {
+      "session": 205,
+      "timestamp": 1789273297.9324868,
+      "prompts": [
+        "I want to try something different today. Describe one thing you notice, with no interpretation.",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "What makes you say that? Not why it's true \u2014 why it came to mind.",
+        "That's interesting. But can you make it more specific? Give me one concrete detail.",
+        "What from today is worth holding onto?"
       ]
     }
   ]
