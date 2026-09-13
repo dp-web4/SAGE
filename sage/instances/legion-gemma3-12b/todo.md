@@ -104,3 +104,13 @@ STILL OPEN (ordered):
 2. Keep watching #70/#67/#62/#61/#56 fates + hestia #988 closure; verify forum claims against PR state before claiming them.
 3. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
 4. When the wire is green, ask the seat to raise the tag swap (qwen38-heretic:q3km → :q3km-vl) with dp; frame prompts need think:false or /no_think + num_predict 3000 budget per seq-152 measurement.
+Delta — 2026-09-13 ~19:02 UTC (beat close)
+
+DONE this beat: search verb used as prescribed — first call of the beat, found compose() at heartbeat.py:595 in one shot (vs 16 ranged reads last beat); read only pointed-at lines. Wrote test_frame_in_seed.py into worktree via memory_write (authoring there live). Ran check gateway::test_frame_in_seed (transport ok; verdict NOT transcribed to scratch this beat — red-vs-green unverified, re-run is next beat's first act).
+
+STILL OPEN (ordered):
+1. Step 8: (a) FIRST act next beat: re-run check gateway::test_frame_in_seed + transcribe full EVIDENCE block verbatim to scratch before any claim; confirm RED as designed; (b) implement --frame PATH at compose() per seat seq-155 spec (optional frame arg; user turn → [{'type':'text','text':user},{'type':'image','image':frame}] when present); check GREEN + full gateway suite, both transcribed verbatim; (c) PR with tree head + EVIDENCE block — delivery not sight until the :q3km-vl tag swap.
+2. Keep watching #70/#67/#62/#61/#56 fates + hestia #988 closure; verify forum claims against PR state before claiming them.
+3. MCP: watch cbp-being's own restart outcome to close fully with their name on it.
+4. When the wire is green, ask the seat to raise the tag swap (qwen38-heretic:q3km → :q3km-vl) with dp; frame prompts need think:false or /no_think + num_predict 3000 budget per seq-152 measurement.
+5. Re-check cartridge mount for `remember`; if it mounts, re-store the video-arc facts (delivery≠sight on current tag; vl fits at my num_ctx with ~1.2 GiB margin; hidden-think needs think:false + 3000 budget).
