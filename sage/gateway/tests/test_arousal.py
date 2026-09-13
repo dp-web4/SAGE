@@ -34,6 +34,11 @@ def _quiet(monkey_running=False, next_s=3600):
 
 def setup_function(_):
     _quiet()
+    # respond() writes the REAL wake marker (being_join.write_wake_marker defaults to the
+    # live path); the first run of the deferral test stamped the being's next beat with
+    # descriptor "t2" (heartbeats.jsonl, 2026-09-13T07:46:30Z). Tests must not touch it.
+    from sage.gateway import being_join
+    being_join.write_wake_marker = lambda *a, **k: None
 
 
 def teardown_function(_):
