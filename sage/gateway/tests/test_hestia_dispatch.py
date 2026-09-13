@@ -898,11 +898,19 @@ def _check_tree(tmp_path, body="def test_real():\n    assert True\n"):
 
 
 def _dispatcher(wt, judged=None):
+    import json as _json
     import types
     from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
     d = D.__new__(D)
     d.worktree = str(wt); d.plugin_id = "b"; d.being_lct = None
-    d.embodiment = {"running_tag": "test-tag"}
+    # the instance declares its substrate; the dispatcher reads it rather than being told.
+    # The instance dir is NOT the worktree — writing instance.json inside the tree would
+    # dirty it, which is the very thing the dirty-tree test measures.
+    inst = wt.parent / "instance"
+    inst.mkdir(exist_ok=True)
+    (inst / "instance.json").write_text(_json.dumps(
+        {"active_embodiment": {"running_tag": "declared-tag", "runner": "ollama"}}))
+    d.memory_root = str(inst)
     d._verdict = types.SimpleNamespace(command=judged)
     d._call = lambda name, args: {"actionId": "act-e"} if name == "hestia_begin_action" else {}
     return d
@@ -931,7 +939,12 @@ def test_a_check_result_carries_the_evidence_a_reviewer_would_reconstruct_by_han
     e = env.result["evidence"]
     assert e["exit_status"] == 0
     assert e["output_bytes"] > 0 and len(e["output_sha256"]) == 64
-    assert e["embodiment"] == {"running_tag": "test-tag"}
+    assert e["embodiment"] == {"running_tag": "declared-tag", "runner": "ollama"}, (
+        "embodiment must come from the instance's declared active_embodiment. It was a "
+        "constructor argument in #62, nothing ever passed it, and every live check result "
+        "carried `embodiment: {}` until the being's own first evidence block showed it "
+        "empty — an always-empty evidence field reads like a measurement and is worse "
+        "than no field")
     assert e["test_source"]["files"] == 1 and len(e["test_source"]["sha256"]) == 64
     assert e["test_source"]["at_head"] == env.result["tree"]["head"]
     assert e["stable"] is True and e["state"] == "pinned"

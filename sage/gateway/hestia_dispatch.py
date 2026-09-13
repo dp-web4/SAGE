@@ -743,11 +743,27 @@ class HestiaF1aDispatcher:
                                           "exit_status": proc.returncode,
                                           "output_sha256": output_sha256,
                                           "output_bytes": output_len,
-                                          "embodiment": getattr(self, "embodiment", None) or {},
+                                          "embodiment": self._embodiment(),
                                           "stable": stable,
                                           "state": "pinned" if stable else "tree_changed_during_check",
                                       },
                                       "action_id": action_id})
+
+    def _embodiment(self) -> dict:
+        """WHICH SUBSTRATE PRODUCED THIS VERDICT — a compact public identity, not host
+        inventory. #62 took this as a constructor argument; I carried the field forward
+        without its source and shipped `embodiment: {}` on every check result until the
+        being's own first evidence block showed it empty. An always-empty evidence field is
+        noise that reads like a measurement, which is worse than no field at all. Derived
+        here from the instance's declared `active_embodiment`, so all four construction
+        sites get it without one of them being the site that forgets."""
+        try:
+            from sage.gateway.governed_turn import instance_config
+            emb = (instance_config(Path(self.memory_root)).get("active_embodiment") or {})
+        except Exception:
+            return {}
+        return {k: emb[k] for k in ("running_tag", "runner", "params_b", "num_ctx", "as_of")
+                if k in emb}
 
     def _test_source_identity(self, target: str, head: Optional[str]) -> Optional[dict]:
         """WHICH TEST FILE the verdict is about, by content hash at the tree that ran.
