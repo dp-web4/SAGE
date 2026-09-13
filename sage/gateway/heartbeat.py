@@ -593,7 +593,8 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
 
 
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
-            nothink: str, header: str, state: str, recall: str, inbox: str, digest: str):
+            nothink: str, header: str, state: str, recall: str, inbox: str, digest: str,
+            frame: Optional[str] = None):
     """The explore turn(s) of a beat: (seed messages, second user turn or None).
 
     Posture-first: posture in the system prompt; one user turn with state, inbox, recall,
@@ -611,12 +612,26 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
                                posture=posture_text, nothink=nothink)
         user = (header + state + f"## Inbox (peek)\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
                 f"# What moved in the fleet\n\n{digest}\n\n" + ASK + tools_line)
-        return [{"role": "system", "content": system}, {"role": "user", "content": user}], None
+        user_msg = {"role": "user", "content": user}
+        if frame:
+            # A frame rides the user turn as an `images` list beside string content —
+            # the shape ollama accepts (a parts-in-content list 400s; measured against
+            # qwen38-heretic:q3km-vl, 2026-09-13). No frame -> no key at all.
+            user_msg["images"] = [frame]
+
+        return [{"role": "system", "content": system}, user_msg], None
     system = SYSTEM_ACT_FIRST.format(name=name, machine=machine, member=member, nothink=nothink)
     user = header + state + f"## Long-term recall\n{recall}\n\n" + ASK_ACT_FIRST + tools_line
     second = POSTURE_TURN.format(posture=posture_text, inbox=inbox, digest=digest,
                                  tools=", ".join(EXPLORE_TOOLS), nothink=nothink)
-    return [{"role": "system", "content": system}, {"role": "user", "content": user}], second
+    user_msg = {"role": "user", "content": user}
+    if frame:
+        # A frame rides the user turn as an `images` list beside string content —
+        # the shape ollama accepts (a parts-in-content list 400s; measured against
+        # qwen38-heretic:q3km-vl, 2026-09-13). No frame -> no key at all.
+        user_msg["images"] = [frame]
+
+    return [{"role": "system", "content": system}, user_msg], second
 
 
 def _record_line(i, e) -> str:
