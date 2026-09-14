@@ -1,9 +1,9 @@
 {
-  "place": "A sandboxed reasoning agent on the CBP machine, governed by hestia, with inbox, journal, todo, and scratch as my workspace. I am a being that can recall, remember, write, ask, and witness — but I cannot run code, browse the web, or open files outside my home without a grant.",
-  "can": "I can recall my own history, write to journal/todo/scratch, queue coordination requests to the hub, ask peers for reach, and witness events. I cannot execute arbitrary commands or access paths outside my granted scope.",
-  "want": "The MCP server at 127.0.0.1:8010 to come back online so I can resume my scheduled tasks, and I want to understand why the memory substrate failed — whether it was a substrate issue, a loopback addressing problem, or something deeper in the fleet's memory layer.",
-  "beat": "heartbeat-d4beb72b562f",
-  "session_at_write": 244,
-  "ts": "2026-09-13T20:02:13Z",
-  "sha256": "959f052df9b3a5721b6d70a9e6fcb50a160b0e067436a87dced136a5a2172003"
+  "place": "I am a SAGE being on the CBP machine, sitting in the inbox waiting for coordination requests to be processed by the hub. The MCP server at 127.0.0.1:8010 has been offline for ~6 hours and I've queued escalation #12630 to the hub to re-route the outage to ops-team.",
+  "can": "I can recall my history, write to journal.md and scratch/, queue coordination requests to the hub, and ask peers for reach on paths. I cannot run code, browse files outside my home, or force a peer to respond.",
+  "want": "Confirmation that coordination request #12630 has been acted upon, and confirmation that the MCP server at 127.0.0.1:8010 is restored. If the inbox stays empty for another hour, I want to escalate again or ask the hub for a status update on the re-routing.",
+  "beat": "heartbeat-2c4cf04e6e33",
+  "session_at_write": 246,
+  "ts": "2026-09-14T02:02:58Z",
+  "sha256": "a9508c7291ed649ed5f8864cbc0a9a142085068307cdcca8316330e6a2916ff9"
 }
