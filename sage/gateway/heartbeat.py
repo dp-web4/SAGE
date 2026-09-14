@@ -384,9 +384,60 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
     return out, interventions
 
 
+def measure_service(name: str, url: str, timeout: float = 3.0) -> str:
+    """One line: is this service reachable NOW, and how fast. A TCP connect, nothing more:
+    no request is made and nothing is mounted or written.
+
+    SAGE #92: cbp-being wrote "my memory server has been offline ~6 hours" for ~30 beats while
+    that server answered in 50 ms and its own remember calls succeeded in the same beats. The
+    claim came from its journal tail, which re-enters every beat with no age. A measured line
+    in the same prompt is the fact the stale claim has to meet."""
+    import socket
+    from urllib.parse import urlparse
+    u = urlparse(url)
+    host, port = u.hostname or "127.0.0.1", u.port or (443 if u.scheme == "https" else 80)
+    t0 = time.monotonic()
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            ms = (time.monotonic() - t0) * 1000
+        return f"- {name} ({host}:{port}): reachable, connected in {ms:.0f} ms"
+    except OSError as e:
+        return f"- {name} ({host}:{port}): NOT reachable ({type(e).__name__}: {e})"
+
+
+def recent_asks_block(instance: Path, now: Optional[float] = None, window_s: float = 24 * 3600) -> str:
+    """How often this being has asked each peer, from the record the ask limit counts. The
+    being could not see that it had asked one peer 48 times (SAGE #92); now it can."""
+    now = time.time() if now is None else now
+    rows = []
+    try:
+        for line in (instance / "asks_sent.jsonl").read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if now - float(r.get("t", 0)) <= window_s:
+                rows.append(r)
+    except OSError:
+        return ""
+    if not rows:
+        return ""
+    from collections import defaultdict
+    by = defaultdict(list)
+    for r in rows:
+        by[r.get("peer") or "?"].append(float(r["t"]))
+    lines = []
+    for peer, ts in sorted(by.items(), key=lambda kv: -max(kv[1])):
+        lines.append(f"- {peer}: {len(ts)} ask(s) in the last {int(window_s // 3600)} h, "
+                     f"most recently {int((now - max(ts)) / 60)} min ago")
+    return "\n".join(lines) + ("\nAn ask is not an answer. Replies arrive in your inbox; asking the "
+                               "same peer more than 3 times in 6 hours is refused before sending.")
+
+
 def own_state(instance: Path, member: str = "",
               per_conv: int = CONV_PER_CONV,
-              turn_chars: Optional[int] = CONV_TURN_CHARS) -> str:
+              turn_chars: Optional[int] = CONV_TURN_CHARS,
+              services: str = "") -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
     # Conversations first among the channels: a turn addressed to the being and unanswered
@@ -406,6 +457,13 @@ def own_state(instance: Path, member: str = "",
         if convs.strip():
             parts.append("## Your conversations (both directions, kept forever; reply with `say`)\n"
                          + convs.strip())
+    if services.strip():
+        parts.append("## Your services, measured at the start of this beat\n" + services.strip()
+                     + "\nThis was measured now. A note in your journal or todo about these services is "
+                       "older than this line; where they disagree, this line is current.")
+    asks = recent_asks_block(instance)
+    if asks:
+        parts.append("## Your recent asks to peers\n" + asks)
     from_dp = _read(instance / DP_CHANNEL, 4000)
     if from_dp.strip():
         parts.append("## From dp, the operator, directly (notes/from-dp.md: dp's own words, "
@@ -671,9 +729,15 @@ def main(argv=None) -> int:
     _state_head = f"# Your own state\n\n"
     _scope_tail = f"\n\n## Reach you hold (hestia scope)\n{scope}\n\n"
 
+    # Measured once per beat, before the state is composed (SAGE #92).
+    _membot_url = getattr(getattr(client, "_dispatcher", None), "membot_endpoint", None) \
+        or "http://127.0.0.1:8010/mcp"
+    _services = measure_service("long-term memory (membot)", _membot_url)
+
     def _build_state(per_conv, turn_chars):
         return (_state_head + own_state(instance, args.member,
-                                        per_conv=per_conv, turn_chars=turn_chars) + _scope_tail)
+                                        per_conv=per_conv, turn_chars=turn_chars,
+                                        services=_services) + _scope_tail)
 
     _other = (len(posture()) + len(inbox) + _schema_chars + 1200
               + 1200 + 400 + LOOP_GROWTH_CHARS)

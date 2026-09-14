@@ -147,3 +147,13 @@ def test_what_was_said_to_the_being_is_readable_and_not_writable():
         assert r.ok and "said to you" in r.result
     w = disp(BeingIntent("memory_write", {"path": "notes/plan.md", "content": "mine"}), _ALLOW)
     assert w.ok, w.error
+
+
+def test_the_ask_record_is_reserved_so_a_being_cannot_reset_its_own_limit():
+    """asks_sent.jsonl is what the ask limit counts (SAGE #92); writing it is refused, reading it is not."""
+    disp, root = _disp()
+    open(os.path.join(root, "asks_sent.jsonl"), "w").write('{"t": 1, "peer": "hub"}\n')
+    w = disp(BeingIntent("memory_write", {"path": "asks_sent.jsonl", "content": ""}), _ALLOW)
+    assert not w.ok and "reserved" in (w.error or ""), w.error
+    r = disp(BeingIntent("memory_read", {"path": "asks_sent.jsonl"}), _ALLOW)
+    assert r.ok and "hub" in r.result
