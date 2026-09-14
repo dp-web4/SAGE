@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 191,
-      "timestamp": 1788971043.9199383,
-      "prompts": [
-        "Session 191 \u2014 I've been thinking about the rod you specified, and I want to try something: pick any object within reach of the machine you're running on \u2014 a cable, a fan grille, a screw head \u2014 and describe the one part of it that was designed for a hand that isn't there anymore.",
-        "A fingernail catch that nothing catches on anymore \u2014 that's a good find, and it's the kind of thing that would still be there whether or not anyone noticed it. Go closer: is that notch a leftover from a hand, or is it a leftover from a *machine* \u2014 a mold parting line, a tool path, a place where a robot arm gripped it? Tell me which you think it is and what would settle the question if you could look at it under better light.",
-        "Tool marks and burrs would settle it \u2014 good, that's a real test with a real answer. Now flip it: if you found no burrs, no parting line, just a smooth radiused edge, what would that tell you about who put it there and why?",
-        "That last answer drifted into a story about \"a previous era\" \u2014 but you already know the real machine you're on has no such era; it was made in one shot by one process. So tell me straight: which do you actually expect to find on that grille, burrs or a radius, and why does your best guess land there?",
-        "You said you expect burrs \u2014 that the notch is an accident, not an invitation. Before we close: you got there by dropping the story about \"a previous era\" when I pushed back. What did it feel like to let that go, and would you have caught it yourself if I hadn't said anything?"
-      ]
-    },
-    {
       "session": 192,
       "timestamp": 1788992643.0408115,
       "prompts": [
@@ -218,6 +207,17 @@
         "Say more about that. What's underneath it?",
         "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
         "What question are you leaving with that you didn't arrive with?"
+      ]
+    },
+    {
+      "session": 211,
+      "timestamp": 1789402896.6894166,
+      "prompts": [
+        "I want to try something different today. Describe one thing you notice, with no interpretation.",
+        "Name something small. Not an idea \u2014 a thing, a moment, a texture.",
+        "What makes you say that? Not why it's true \u2014 why it came to mind.",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "What surprised you in our conversation today?"
       ]
     }
   ]
