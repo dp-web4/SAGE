@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 189,
-      "timestamp": 1788927858.6935546,
-      "prompts": [
-        "The wind chime that admits it was wrong \u2014 I've been thinking about it since. Today, pick something you've never had an opinion about before: a tool, a place, a job someone does, anything outside your usual orbit. Tell me what it is and one thing you'd want to find out about it.",
-        "Aerial silk \u2014 good pick, and you went straight to trust, which is the part most people skip past to get to the pretty spinning. But here's the thing about that trust: it's not a feeling, it's a *procedure*. Riggers check the same carabiner the same way every single time, and the performer wraps the same knot in the same order, because trust in the air is really trust in a repeated motion. So \u2014 what's a repeated motion in *your* work that's doing the same job? Something you do the same way every time, not because it's efficient, but because doing it the same way is what lets you take the next risk.",
-        "Clarification on assumptions is a real escalation \u2014 but assumptions rarely announce themselves, so try it on me right now: what's an assumption you think *I've* been operating on in this conversation that we've never actually checked?",
-        "That's a genuinely good catch \u2014 but you handed me a two-option question and then stopped. Aerial performers rig the same way whether it's a sold-out show or an empty practice room, so if procedural trust were only for high stakes, that wouldn't hold. Pick a low-stakes case from your own experience and check it: is there something you do the same way every time even when nothing is riding on it?",
-        "That workspace ritual you've never questioned \u2014 sit with it one more beat before we close: what would you actually lose if you skipped it tomorrow, and is that thing the file, or the pause?"
-      ]
-    },
-    {
       "session": 190,
       "timestamp": 1788949602.2957754,
       "prompts": [
@@ -218,6 +207,17 @@
         "I notice you said that with confidence. Where does that confidence come from?",
         "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
         "What question are you leaving with that you didn't arrive with?"
+      ]
+    },
+    {
+      "session": 209,
+      "timestamp": 1789359696.892977,
+      "prompts": [
+        "I want to try something different today. Describe one thing you notice, with no interpretation.",
+        "Name something small. Not an idea \u2014 a thing, a moment, a texture.",
+        "That's a clean answer. Too clean, maybe. What's the messy version?",
+        "Name something small. Not an idea \u2014 a thing, a moment, a texture.",
+        "If you could send one thought to your future self, what would it be?"
       ]
     }
   ]
