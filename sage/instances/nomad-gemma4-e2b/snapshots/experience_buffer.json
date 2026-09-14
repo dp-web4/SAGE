@@ -2354,5 +2354,222 @@
       "total_cycles": 6,
       "transition_count": 1
     }
+  },
+  {
+    "id": "1db353e22df1bd8a",
+    "prompt": "Name something small. Not an idea \u2014 a thing, a moment, a texture.",
+    "response": "A single, perfectly smooth river stone. It has a cool, dense weight and a subtle, worn texture from ceaseless flow. It reminds me that even the most solid things are shaped by constant, gentle pressure over time.",
+    "salience": {
+      "surprise": 0.9230769230769231,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5412820512820513
+    },
+    "session": 359,
+    "phase": "creating",
+    "timestamp": "2026-09-14T00:17:52.818613",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.7,
+      "atp_max": 100.0,
+      "atp_percentage": 95.7,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "b1c04b730191a759",
+    "prompt": "Say more about that. What's underneath it?",
+    "response": "Underneath the smooth surface of the stone is the deep, slow memory of the water that carved it. It holds the history of erosion, the relentless, patient work of forces far greater than the stone itself. It\u2019s a quiet testament to the power of continuous, subtle change shaping enduring form.",
+    "salience": {
+      "surprise": 0.9253731343283582,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.558407960199005
+    },
+    "session": 359,
+    "phase": "creating",
+    "timestamp": "2026-09-14T00:18:08.935965",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.89,
+      "atp_max": 100.0,
+      "atp_percentage": 89.9,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "6c99ea1a148b3f02",
+    "prompt": "Name something small. Not an idea \u2014 a thing, a moment, a texture.",
+    "response": "A single drop of water clinging to a spider's silk. It is impossibly fragile yet holds a perfect, shimmering sphere of the world, a momentary captured reflection of light and air. It speaks to a delicate balance between tension and vulnerability.",
+    "salience": {
+      "surprise": 0.8709677419354839,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.050000000000000044,
+      "conflict": 0.0,
+      "total": 0.4841935483870968
+    },
+    "session": 359,
+    "phase": "creating",
+    "timestamp": "2026-09-14T00:18:23.766589",
+    "metadata": {
+      "turn": 4,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.9,
+      "atp_max": 100.0,
+      "atp_percentage": 83.9,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "c1dd1dc9f1f12942",
+    "prompt": "I notice you said that with confidence. Where does that confidence come from?",
+    "response": "It comes from observing the intricate dance of forces, both the massive, slow shifts in the stone and the immediate, delicate tension in the water drop. I find my confidence in recognizing that complexity isn't about brute force, but about understanding the necessary relationship between opposing states\u2014the solid and the fluid, the immense and the minute.",
+    "salience": {
+      "surprise": 0.8805970149253731,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.2833333333333333,
+      "conflict": 0.16666666666666666,
+      "total": 0.5827860696517413
+    },
+    "session": 359,
+    "phase": "creating",
+    "timestamp": "2026-09-14T00:18:39.171324",
+    "metadata": {
+      "turn": 5,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 78.66,
+      "atp_max": 100.0,
+      "atp_percentage": 78.7,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "2faab657bf714039",
+    "prompt": "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
+    "response": "The simplest version is that I trust in seeing how big forces and tiny forces interact to create everything. It's about understanding the delicate balance between the heavy and the light, the solid and the fluid.",
+    "salience": {
+      "surprise": 0.8360655737704918,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.3666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.5905464480874316
+    },
+    "session": 359,
+    "phase": "creating",
+    "timestamp": "2026-09-14T00:18:54.034936",
+    "metadata": {
+      "turn": 6,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 72.43,
+      "atp_max": 100.0,
+      "atp_percentage": 72.4,
+      "cycles_in_state": 0,
+      "total_cycles": 5,
+      "transition_count": 1
+    }
+  },
+  {
+    "id": "8d7297334f51e8da",
+    "prompt": "What would someone who disagreed with you say right now?",
+    "response": "They might say that focusing too much on balance ignores the necessity of one force eventually dominating the other. They might argue that true creation requires a single, unwavering direction, not a constant negotiation between opposing states. It's a call for decisiveness over contemplation.",
+    "salience": {
+      "surprise": 0.9180327868852459,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.03333333333333338,
+      "conflict": 0.0,
+      "total": 0.49027322404371587
+    },
+    "session": 359,
+    "phase": "creating",
+    "timestamp": "2026-09-14T00:19:09.174337",
+    "metadata": {
+      "turn": 7,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 66.03,
+      "atp_max": 100.0,
+      "atp_percentage": 66.0,
+      "cycles_in_state": 1,
+      "total_cycles": 6,
+      "transition_count": 1
+    }
+  },
+  {
+    "id": "531caa1625ac3257",
+    "prompt": "What question are you leaving with that you didn't arrive with?",
+    "response": "What is the necessary point of friction required to initiate a new, meaningful shift in that balance?",
+    "salience": {
+      "surprise": 0.875,
+      "novelty": 1.0,
+      "arousal": 0.5166666666666666,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5183333333333333
+    },
+    "session": 359,
+    "phase": "creating",
+    "timestamp": "2026-09-14T00:19:23.771823",
+    "metadata": {
+      "turn": 8,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 60.63,
+      "atp_max": 100.0,
+      "atp_percentage": 60.6,
+      "cycles_in_state": 2,
+      "total_cycles": 7,
+      "transition_count": 1
+    }
   }
 ]
