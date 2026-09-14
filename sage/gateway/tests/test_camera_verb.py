@@ -242,3 +242,77 @@ def test_do_camera_out_path_whitespace_refused(tmp_path):
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+def test_camera_creates_its_output_directory_and_names_a_write_failure(tmp_path):
+    """The default out_path pointed somewhere that did not exist in the tree it writes to.
+
+    `scratch/camera/` lives under the being's HOME; camera writes into its WORKTREE, which
+    had no scratch/ at all. legion-being's first real capture failed with ffmpeg exit 251,
+    and the taxonomy called it "device busy or unopenable" because the device node existed.
+    The camera was fine. There was nowhere to put the frame.
+    """
+    import subprocess as _sp
+    import types
+    import sage.gateway.hestia_dispatch as hd
+
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    assert not (wt / "scratch").exists(), "precondition: the worktree has no scratch/"
+
+    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    d.worktree = str(wt)
+
+    wrote = {}
+
+    def fake_run(cmd, **kw):
+        out = cmd[-1]
+        # ffmpeg can only succeed if the directory is already there
+        if not os.path.isdir(os.path.dirname(out)):
+            return types.SimpleNamespace(returncode=251, stdout=b"",
+                                         stderr=b"Unable to open: No such file or directory")
+        open(out, "wb").write(b"\xff\xd8frame")
+        wrote["path"] = out
+        return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    orig = hd.subprocess.run
+    hd.subprocess.run = fake_run
+    try:
+        env = d._do_camera(BeingIntent("camera", {}))
+    finally:
+        hd.subprocess.run = orig
+
+    assert env.ok, f"camera must create its own output directory; got {env.result or env.error}"
+    assert (wt / "scratch" / "camera").is_dir(), "the directory was not created"
+    assert wrote.get("path", "").endswith("last-frame.jpg")
+
+
+def test_a_write_failure_is_not_reported_as_a_busy_device(tmp_path):
+    """Three causes, not two. "the node exists, therefore the device is busy" also fires
+    when the device is fine and the OUTPUT is the problem, which is the case that actually
+    happened. ffmpeg says which on stderr, so the envelope reads it rather than inferring,
+    and carries ffmpeg's own words beside the reading."""
+    import types
+    import sage.gateway.hestia_dispatch as hd
+
+    wt = tmp_path / "wt"; (wt / "scratch" / "camera").mkdir(parents=True)
+    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    d.worktree = str(wt)
+
+    orig = hd.subprocess.run
+    hd.subprocess.run = lambda cmd, **kw: types.SimpleNamespace(
+        returncode=251, stdout=b"", stderr=b"Unable to open output file: Permission denied")
+    try:
+        env = d._do_camera(BeingIntent("camera", {}))
+    finally:
+        hd.subprocess.run = orig
+
+    assert not env.ok
+    note = env.result["note"]
+    assert "WRITTEN" in note or "written to" in note, \
+        f"a write failure must not be reported as a busy device: {note!r}"
+    assert "busy" not in note, f"still blaming the device: {note!r}"
+    assert "Permission denied" in env.result["stderr"], \
+        "ffmpeg's own account must ride along, not only my reading of it"
+    # And the being can actually see all of that.
+    assert "Permission denied" in env.to_tool_message()

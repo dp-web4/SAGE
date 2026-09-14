@@ -795,3 +795,37 @@ def test_search_refuses_what_its_grammar_cannot_represent():
         assert False, "should have refused without a worktree"
     except ValueError as e:
         assert "worktree" in str(e)
+
+
+def test_a_failure_that_explains_itself_in_result_is_not_rendered_as_none():
+    """The envelope held a complete account and the renderer threw it away.
+
+    Found 2026-09-14 by legion-being, on the first live use of its own camera verb.
+    `_do_camera` reports failures through `result` — device, exit code, and a sentence
+    naming which kind of failure — and leaves `error` unset because the explanation is
+    structured. to_tool_message assumed not-ok implied `error`, so the being was handed the
+    literal string "[dispatch error — None]" twice and could diagnose nothing. It reported
+    an empty-error envelope matching no code path, which was exactly right.
+
+    Every other verb happens to set `error`, so this stayed invisible until a verb chose the
+    other shape.
+    """
+    from sage.gateway.being_gate_client import ResultEnvelope
+
+    structured = ResultEnvelope(ok=False, witness_id="act-1",
+                                result={"device": "/dev/video0", "exit_code": 251,
+                                        "note": "no frame was written"})
+    msg = structured.to_tool_message()
+    assert "None" not in msg, f"the failure rendered as None: {msg!r}"
+    assert "/dev/video0" in msg and "251" in msg, \
+        f"the account the envelope carried must survive rendering: {msg!r}"
+    assert "act-1" in msg, "a witnessed failure is still witnessed"
+
+    # The ordinary shape is unchanged.
+    plain = ResultEnvelope(ok=False, error="it broke")
+    assert plain.to_tool_message() == "[dispatch error — it broke]"
+
+    # And an envelope carrying NEITHER says so, rather than saying None.
+    empty = ResultEnvelope(ok=False)
+    out = empty.to_tool_message()
+    assert "None" not in out and "harness defect" in out, out

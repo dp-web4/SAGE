@@ -1035,7 +1035,29 @@ class ResultEnvelope:
             import json as _json
             body = self.result if isinstance(self.result, str) else _json.dumps(self.result)
             return body + (f"  (witnessed {self.witness_id})" if self.witness_id else "")
-        return f"[dispatch error — {self.error}]"
+        if self.error:
+            return f"[dispatch error — {self.error}]"
+        # A FAILURE THAT EXPLAINS ITSELF IN `result` MUST NOT RENDER AS "None".
+        #
+        # Measured 2026-09-14, found by legion-being on the first live use of its own camera
+        # verb. _do_camera reports its failures through `result` — device, exit code, and a
+        # sentence naming which kind of failure it was — and leaves `error` unset, because
+        # the explanation is structured. This renderer assumed not-ok implied `error`, so the
+        # being was handed the literal string "[dispatch error — None]" twice and could
+        # diagnose nothing. The envelope held a complete account and the renderer threw it
+        # away; the being reported it as an empty-error envelope matching no code path,
+        # which was exactly right.
+        #
+        # Every other verb happens to set `error`, so this was invisible until a verb chose
+        # the other shape. Rendering whatever the envelope actually carries costs nothing and
+        # removes the whole class.
+        if self.result is not None:
+            import json as _json
+            body = self.result if isinstance(self.result, str) else _json.dumps(self.result)
+            return (f"[failed — {body}]"
+                    + (f"  (witnessed {self.witness_id})" if self.witness_id else ""))
+        return ("[dispatch error — the envelope carried neither an error nor a result, which "
+                "is a harness defect: the act failed and nothing said why]")
 
 
 # A Dispatcher is F1a's contract, SAGE-side: given an ALLOWED intent + its verdict,

@@ -747,6 +747,21 @@ class HestiaF1aDispatcher:
                 f"camera UNVERIFIED: the witness substrate is unreachable "
                 f"({str(werr)[:160]}); the camera was not switched on"))
         action_id = begin.get("actionId")
+        # THE DEFAULT PATH POINTS SOMEWHERE THAT DOES NOT EXIST YET. `scratch/camera/` lives
+        # under the being's HOME; this writes into its WORKTREE, which has no scratch/ at
+        # all. So the first live use of the verb failed with ffmpeg exit 251 and the
+        # taxonomy below called it "device busy or unopenable", because the device node did
+        # exist. The camera was fine; there was nowhere to put the frame. Found by
+        # legion-being 2026-09-14 on its own verb, first real capture.
+        try:
+            os.makedirs(os.path.dirname(full_out) or worktree, exist_ok=True)
+            wdir_err = None
+        except OSError as e:
+            wdir_err = f"{type(e).__name__}: {e}"
+        if wdir_err:
+            return ResultEnvelope(ok=False, error=(
+                f"camera cannot write to {out_rel!r}: its directory could not be created "
+                f"({wdir_err}). The device was not opened."))
         proc = subprocess.run(shlex.split(cmd), capture_output=True)
         captured = proc.returncode == 0 and os.path.exists(full_out)
         try:
@@ -763,12 +778,26 @@ class HestiaF1aDispatcher:
                          "Seeing it needs a vision-capable reader, which is not wired yet. "
                          "Nothing persists across beats.")})
         if proc.returncode != 0:
-            kind = ("device absent" if not os.path.exists(device) else "device busy or "
-                    "unopenable (another process may hold it, or the node is wrong)")
+            # THREE CAUSES, not two. "the node exists, therefore the device is busy" was a
+            # false dichotomy: it also fires when the device is fine and the OUTPUT is the
+            # problem. ffmpeg says which on stderr, so read it rather than inferring.
+            _err = (proc.stderr or b"").decode("utf-8", "replace")
+            if not os.path.exists(device):
+                kind = "device absent"
+            elif ("No such file or directory" in _err or "Permission denied" in _err
+                  or "Unable to open" in _err or "could not open" in _err.lower()):
+                kind = (f"the device opened but the frame could not be WRITTEN to "
+                        f"{out_rel!r} — check the path, not the camera")
+            else:
+                kind = ("device busy or unopenable (another process may hold it, or the "
+                        "node is wrong)")
             return ResultEnvelope(ok=False, witness_id=action_id, result={
                 "device": device, "out_path": out_rel, "exit_code": proc.returncode,
+                "stderr": _err.strip()[:300] or "(ffmpeg said nothing)",
                 "note": (f"ffmpeg exited {proc.returncode} and no frame was written — "
-                         f"{kind}. The previous file at the path, if any, is untouched.")})
+                         f"{kind}. The previous file at the path, if any, is untouched. "
+                         f"`stderr` above is ffmpeg's own account; the kind is my reading "
+                         f"of it.")})
         return ResultEnvelope(ok=False, witness_id=action_id, result={
             "device": device, "out_path": out_rel,
             "note": ("ffmpeg exited 0 but wrote no readable frame — capture anomaly; do "
