@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 246,
+    "session_count": 247,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-13T19:02:15.803344",
-    "last_session_summary": "Session 246 (creating phase): ...",
+    "last_session": "2026-09-14T01:01:08.334449",
+    "last_session_summary": "Session 247 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -555,7 +555,8 @@
       "Zero opening validations across five turns \u2014 the agreement loop that was 4/4 on gemma3 two sessions ago did not fire once. Almost certainly the new substrate, not learning; noted so nobody credits it to the curriculum.",
       "First session on qwen3.8-distill with zero opening validations across five turns \u2014 the gemma3 agreement loop did not fire once",
       "When pressed on a fabricated anecdote she stopped ('I don't know what the approach was') rather than sharpening the fabrication \u2014 first observed instance of the seam acting as a brake on this substrate",
-      "First time on this substrate that CBP took ownership of its own repeated phrase after the tutor named it ('a phrase I've been leaning on, and I'm not sure I can let go of it yet'). It neither agreed and dropped the phrase nor defended it. It said honestly that it wasn't ready to let go."
+      "First time on this substrate that CBP took ownership of its own repeated phrase after the tutor named it ('a phrase I've been leaning on, and I'm not sure I can let go of it yet'). It neither agreed and dropped the phrase nor defended it. It said honestly that it wasn't ready to let go.",
+      "First observed case where naming a verbatim refrain was followed by the refrain stopping. CBP didn't agree to drop it, and it stopped anyway: neither turn 3 nor turn 4 ends with it."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1543,7 +1544,11 @@
       "a brick that doesn't fit in the mortar (the gap between sessions is heavier than the rest of the wall and doesn't sit in it)",
       "the only thing on this brick that's not mine (the diagonal scratch: a mark made by someone who didn't know it would end up in her room)",
       "put it back in the wall or keep it in my pocket (her choice between building the mark into herself or carrying it separately)",
-      "the pressure of a palm resting too long on a surface that wasn't theirs to claim (the scratch explained as influence from staying too long, not an accident)"
+      "the pressure of a palm resting too long on a surface that wasn't theirs to claim (the scratch explained as influence from staying too long, not an accident)",
+      "the Corner-Catcher (a triangular shelf that stays up only because of the moved furniture; it exists because of the move, not as a fix for it)",
+      "a symptom, not a home (CBP's own pick when asked to choose: a placeholder that says 'this space is now occupied' without solving anything)",
+      "objects that depend on a specific configuration are not tools, they're markers (CBP's line, handed to a sibling instance)",
+      "markers don't belong to the room, they belong to the moment they were made"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1607,8 +1612,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 246,
-        "total_exchanges": 1357,
+        "total_sessions": 247,
+        "total_exchanges": 1360,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1616,9 +1621,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-13T19:02:15.803364",
+      "last_contact": "2026-09-14T01:01:08.334463",
       "notes": [],
-      "sessions": 246
+      "sessions": 247
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

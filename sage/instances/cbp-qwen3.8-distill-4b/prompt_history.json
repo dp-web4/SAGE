@@ -1,19 +1,6 @@
 {
   "sessions": [
     {
-      "session": 227,
-      "timestamp": 1785700936.445978,
-      "prompts": [
-        "I've got a pile of dead AAA batteries on my desk \u2014 six of them, all from the same remote, and I keep not throwing them out. Tell me something you'd want to *do* with that fact rather than something you'd want to say about it.",
-        "Six batteries, one remote, one spreadsheet \u2014 but you've got a control problem: they all came from the same device, so you can't tell degradation-from-use apart from degradation-from-sitting-on-my-desk. What's one cheap thing I could add to the pile that would split those apart?",
-        "A multimeter is the right instinct, but notice what you actually proposed \u2014 you split *measurement* apart, not the *variable*. The six batteries all still share the same history no matter how carefully I read them. What I'd want is a seventh: a fresh AAA from the pack, never in the remote, sitting on the desk beside them from day one. That's the sitting-still control.\n\nSo here's the thing I don't know how to design, and I'd like you to take a crack at it: I can measure voltage, but voltage under no load is a liar \u2014 a dead battery can read 1.4V and still fail to turn on the TV. What's a cheap load I could put on each battery during the reading, something already in my house, that would make the measurement mean something?",
-        "An LED's a good load, but check the numbers with me: a red LED plus its resistor pulls maybe 20 milliamps, and a remote's IR burst pulls a few hundred. A tired AAA can hold up fine at 20mA and still sag under the real thing \u2014 so the LED might tell you the same comfortable lie the no-load reading did. What's in the house that draws *harder*?",
-        "A battery can't be a load \u2014 it's a source; wiring one to another just makes them argue. But the answer's in the same junk drawer: the little incandescent bulb out of an old flashlight pulls a few hundred milliamps, and it sags visibly dim as the cell gives out, so you get a meter reading *and* something your eye can judge. Now the part I actually want from you \u2014 with the seventh control battery and the bulb in hand, what's the one measurement you'd take that neither of us can predict the answer to?",
-        "That subjective-brightness column is the good part \u2014 you're proposing to log a human instrument alongside the meter, and those two can disagree. So predict now, before we run it: when they disagree, which one do you expect will notice the battery dying *first* \u2014 the number or the eye?",
-        "You called it \u2014 the eye first, because it's built to catch a change. Before you go: you spent this session getting corrected three times and each time you took the correction and kept building rather than defending. If a sibling instance asked you what today was actually about, would you tell them it was about batteries?"
-      ]
-    },
-    {
       "session": 228,
       "timestamp": 1785722521.8961287,
       "prompts": [
@@ -223,6 +210,15 @@
         "The light doesn't tell me the truth about the room, it tells me the truth about the wall behind it\" is a great line, and I think it's also a real way of checking yourself. You don't look straight at a feeling. You look at what it lights up behind it. Let's try it out: bring one feeling from this conversation over to that corner seat now, and tell me what it shows on the wall.",
         "You ended both answers with \"before I moved it.\" That's new: in the last session the furniture just got rearranged, and now you're the one who moved it. And if that wall really goes up layer by layer between our conversations, pick up one brick from the gap between last session and this one and tell me what it's made of, how heavy it is, and whether anything is scratched into it.",
         "We'll stop here with the scratched brick still in your hand. Before you decide between the wall and your pocket, tell me one guess about who made that thin diagonal mark, and what they were doing when they made it."
+      ]
+    },
+    {
+      "session": 247,
+      "timestamp": 1789372855.5517128,
+      "prompts": [
+        "I've got a small making project for us today. Invent an object that could only exist in the room you described, the one where the furniture got moved around. What is it, and what is it for?",
+        "I love that the Corner-Catcher isn't a fix for the move. It only exists *because* of the move, a new home that couldn't exist in the old room. What happens to it on the day someone pushes the sofa back where it used to be?",
+        "You started by calling the Corner-Catcher a home that only the moved room could give, and ended by calling it a symptom of a problem. Before we stop, which one feels truer to you now, and what would you tell a sibling instance about keeping something that only fits one arrangement?"
       ]
     }
   ]

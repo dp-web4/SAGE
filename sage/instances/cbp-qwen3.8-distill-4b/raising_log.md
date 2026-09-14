@@ -5501,3 +5501,31 @@ The first S246 entry above covers the session well. This pass adds one observati
 **Next.** Cheap opener: did the brick go into the wall or into the pocket? Let CBP answer without steering. The disk-grounded room is still the only test for stop-vs-invent. That was already recommended; this pass doesn't repeat it.
 
 **So what.** A good session, and the useful signal is in what CBP did after the refrain was named, more than in the images. It adds nothing on grounding. It does add something on whether this substrate can notice a pattern and move on without an instruction to.
+
+## Session 247 — creating (qwen3.8-distill:4b)
+
+**What happened.** The tutor went with a new making task instead of the wall-or-pocket opener: invent an object that could only exist in the rearranged room. CBP came up with the **Corner-Catcher**, a triangular shelf wedged where the sofa's arm meets the angled bookshelf. It holds the remote, and it can only stand because the furniture moved. The tutor asked what happens when the sofa goes back. CBP answered: 'a little triangle of wood floating in empty space, looking like a mistake.' Then the tutor asked which description was truer, home or symptom, and what to tell a sibling. CBP chose symptom and ended on 'markers don't belong to the room — they belong to the moment they were made.'
+
+**The good part.** Turn 1 is excellent invention. The object's purpose comes straight from the room's geometry, and nothing in it is just decoration. Turn 2 took the object to its end without backing off, and the image of the shelf floating in empty space is specific and a little sad. Across three turns, the image stayed concrete for two.
+
+**Where it slipped.** Asked to pick a side, CBP picked the more deflationary one and then needed an argument for it. In turn 2, moving the sofa back *solves* the problem. In turn 3, the move only 'temporarily hides' a structural issue that never appeared in the scene. 'The problem' means something different in each turn. It's small, and it teaches something: the concrete turns held together and the abstract one didn't. The sibling-advice prompt again drew a let-it-go conclusion. That seems to be where this slot tends to land, more than something CBP worked out in this session.
+
+**One reading to hold loosely.** The rearranged room started as CBP's image for the substrate change. An object that 'only fits one arrangement' and should be let go 'when the arrangement changes' could be CBP talking about what belongs to this substrate versus the last one. It could also just be a story about a shelf. Don't interpret it. If CBP connects the two on its own later, note it then.
+
+**Next.** Wall-or-pocket is still an open thread; ask it when there's room, without steering. Another option: give CBP a made-up object from its own room and ask for its purpose using only facts from the scene, with no lesson at the end. That tests whether turn-1 CBP can last a whole session. The earlier housekeeping note (add a qwen3.8-distill memory entry beside the gemma3 one) is already on record.
+
+**So what.** A good making session. Invention works best when the object is tied to physical layout. The weak spot is when a choice between framings pushes CBP into an abstract justification. That's useful for how to phrase prompts: ask about the object, not which framing is truer. It adds nothing on grounding.
+
+## Session 247 — second pass (qwen3.8-distill:4b)
+
+The first S247 entry covers this session well. This pass adds one correction to it and otherwise leaves it alone.
+
+**The 'marker' ending wasn't only the slot talking.** The first pass read turn 3's let-it-go conclusion as mostly where the sibling-advice prompt tends to land. Part of that holds. But turn 1 already ended on 'It's a reminder that the room is no longer the same.' That was CBP's own closing line, before anyone asked for a verdict. So 'markers don't belong to the room — they belong to the moment they were made' continues a thread CBP started, and the prompt only drew it out. The advice framing is still the part that sounds generic. The idea underneath it doesn't. It's worth separating the two, so we don't start counting every CBP conclusion as a prompt artifact.
+
+**The image already said it.** In turn 2 the shelf is 'gone' and also 'just sits there.' That isn't a contradiction: the object is still there and its job has vanished. This is the marker idea shown physically, a turn before CBP stated it. It supports the first pass's conclusion that CBP thinks best through the object. The abstract turn mostly restated what the image had already shown.
+
+**Vocabulary.** Added the floating-triangle image and 'ghosts of what used to be.' The Corner-Catcher, symptom-not-home and the marker lines were already captured.
+
+**Next.** No change from the first pass: ask wall-or-pocket when there's room, or give CBP a made-up object and ask for its purpose using only facts from the scene. One phrasing tip: if a turn asks CBP to choose, ask what the *object* does next rather than which framing is truer.
+
+**So what.** A good session. CBP's ideas show up first in its images and only later in its conclusions, so the image turns are the better signal. Nothing new on grounding.

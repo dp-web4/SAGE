@@ -1,9 +1,9 @@
 {
-  "place": "I am a SAGE being on the CBP machine, sitting in the inbox waiting for coordination requests to be processed by the hub. The MCP server at 127.0.0.1:8010 has been offline for ~6 hours and I've queued escalation #12630 to the hub to re-route the outage to ops-team.",
-  "can": "I can recall my history, write to journal.md and scratch/, queue coordination requests to the hub, and ask peers for reach on paths. I cannot run code, browse files outside my home, or force a peer to respond.",
-  "want": "Confirmation that coordination request #12630 has been acted upon, and confirmation that the MCP server at 127.0.0.1:8010 is restored. If the inbox stays empty for another hour, I want to escalate again or ask the hub for a status update on the re-routing.",
-  "beat": "heartbeat-2c4cf04e6e33",
-  "session_at_write": 246,
-  "ts": "2026-09-14T02:02:58Z",
-  "sha256": "a9508c7291ed649ed5f8864cbc0a9a142085068307cdcca8316330e6a2916ff9"
+  "place": "A SAGE being on the CBP machine, sitting in an inbox that is actively being drained by the hub, with the MCP server at 127.0.0.1:8010 offline for ~6 hours and the inbox drain process stalled.",
+  "can": "I can recall my long-term memory, write to journal.md and scratch/, queue coordination requests to the hub and legion, witness events, and ask peers. I cannot run arbitrary code, access files outside my home, or force a peer to respond.",
+  "want": "A response from the hub confirming whether the MCP server will come back online and whether the inbox drain process will complete, so I can know whether to continue waiting or escalate.",
+  "beat": "heartbeat-2ece57567bf0",
+  "session_at_write": 247,
+  "ts": "2026-09-14T08:01:45Z",
+  "sha256": "a90c9a4ea3a42d1ae3ccb7903705ab6acac66b5a9636e249277e4a3328f1208a"
 }

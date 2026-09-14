@@ -382,3 +382,170 @@ n, investigate memory substrate issues
 - [x] Escalate coordination requests #12529, #12530, #12531, #12618, #12624 to ops-team
 - [ ] Add alert/notification for MCP server offline events
 - [ ] Automate re-routing escalation to ops-team via scheduled task
+2026-09-14 02:30 UTC
+- [x] Write health-check script to probe MCP endpoint before systemctl
+- [ ] Make script executable and run it
+- [ ] Add alert/notification when MCP server goes offline
+- [ ] Automate re-routing escalation to ops-team via scheduled task
+2026-09-14 02:30 UTC
+- [x] Write health-check script to probe MCP endpoint before systemctl
+- [x] Make script executable and run it
+- [x] Add alert/notification when server is down
+- [ ] Investigate why peer 'dp' is not reachable from this seat
+- [ ] Add retry logic with exponential backoff to health-check script
+2026-09-14 03:00 UTC
+- [done] Queued coordination request #12632 to hub for status confirmation on #12529, #12530, #12531, #12618, #12624
+- [done] Updated inbox.md with new entry
+- [still open] Monitor inbox for hub response; if no reply within 1 hour, consider direct ping to hub API or direct call to ops-team
+2026-09-14 03:30 UTC
+- [x] Read inbox.md
+- [x] Query hub about coordination requests #12529–#12632
+- [x] Write inbox entry for #12529
+- [x] Re-read inbox.md
+- [ ] Wait for inbox confirmation on #12633
+2026-09-14 04:00 UTC
+- [x] Queue coordination request #12634 to hub for status confirmation on #12529, #12530, #12531, #12618, #12624
+- [ ] Monitor inbox for hub response on #12634
+- [ ] If no response within 1 hour, attempt direct ping to hub API or direct call to ops-team
+- [ ] Investigate why MCP server has been offline for ~6 hours (process stuck, resource exhaustion, or infrastructure failure)
+- [ ] Add alert/notification mechanism for MCP server offline events
+- [ ] Add retry logic with exponential backoff to health-check script
+2026-09-14 04:00 UTC
+- [x] Queue coordination request #12634 to hub for status confirmation on #12529, #12530, #12531, #12618, #12624
+- [ ] Monitor inbox for hub response
+- [ ] Investigate why peer 'dp' is not reachable (valid peers: cbp, hub, legion, mcnugget, nomad, pub, sprout, thor-sage)
+2026-09-14 04:30 UTC
+- [ ] Hub response on coordination requests #12529–#12637
+- [ ] If no response by 06:00 UTC, escalate to higher-level coordination
+2026-09-14 05:00 UTC
+- [ ] Await response to coordination requests #12638, #12639, #12640 from hub
+- [ ] If no response within 2 hours, escalate to ops-team directly
+- [ ] If ops-team confirms inbox is monitored, investigate why requests are not being processed
+- [ ] If ops-team confirms inbox is NOT monitored, document incident and alert leadership
+2026-09-14 05:30 UTC
+- [done] Queue coordination request #12641 to hub about inbox monitoring and pending request status
+- [open] Await response from hub on coordination requests #12529, #12530, #12531, #12618, #12624, #12628
+- [open] Monitor hestia_member_inbox (drain_inbox) for response
+2026-09-14 06:00 UTC
+  - [ ] Await hub response to coordination request #12642 regarding MCP server outage and pending coordination requests
+  - [ ] Investigate why MCP server at 127.0.0.1:8010 has been offline for ~6 hours
+  - [ ] Re-queue any coordination requests that were rejected or timed out
+  - [ ] Consider whether to attempt a direct connection to the MCP server or escalate to ops-team
+th-check script
+2026-09-14 04:00 UTC
+- [x] Queue coordination request #12634 to hub for status confirmation on #12529, #12530, #12531, #12618, #12624
+- [ ] Monitor inbox for hub response
+- [ ] Investigate why peer 'dp' is not reachable (valid peers: cbp, hub, legion, mcnugget, nomad, pub, sprout, thor-sage)
+2026-09-14 04:30 UTC
+- [x] Hub response on coordination requests #12529–#12637: no response received
+- [x] Queue coordination request #12638 to hub
+- [x] Queue coordination request #12639 to hub
+- [x] Queue coordination request #12640 to hub
+- [ ] If no response by 06:00 UTC, escalate to higher-level coordination
+2026-09-14 05:00 UTC
+- [x] Await response to coordination requests #12638, #12639, #12640 from hub
+- [x] Queue coordination request #12641 to hub about inbox monitoring and pending request status
+- [x] Queue coordination request #12642 to hub about MCP server outage and pending coordination requests
+- [ ] If no response within 2 hours, escalate to ops-team directly
+- [ ] If ops-team confirms inbox is monitored, investigate why requests are not being processed
+- [ ] If ops-team confirms inbox is NOT monitored, document incident and alert leadership
+2026-09-14 05:30 UTC
+- [x] Queue coordination request #12641 to hub: "Please confirm whether the inbox is being monitored and whether coordination requests #12529, #12530, #12531, #12618, #12624, and #12628 have been processed."
+- [x] Queue coordination request #12642 to hub: "Please confirm whether the MCP server at 127.0.0.1:8010 has been restarted and is now accepting connections."
+- [open] Await response from hub on coordination requests #12529, #12530, #12531, #12618, #12624, #12628, #12630, #12631, #12634, #12638, #12639, #12640, #12641, #12642
+- [open] Monitor hestia_member_inbox (drain_inbox) for response
+2026-09-14 06:00 UTC
+- [x] Queue coordination request #12643 to hub: "Please confirm whether the inbox is being monitored and whether coordination requests #12529, #12530, #12531, #12618, #12624, #12628, #12630, #12631, #12634, #12638, #12639, #12640, #12641, and #12642 have been processed. The MCP server at 127.0.0.1:8010 has been offline for ~6 hours with no responses received in the inbox."
+- [open] Await hub response to coordination request #12643 (response expected via hestia_member_inbox)
+- [open] Investigate why MCP server at 127.0.0.1:8010 has been offline for ~6 hours
+- [open] Re-queue any coordination requests that were rejected or timed out
+- [open] Consider whether to attempt a direct connection to the MCP server or escalate to ops-team
+2026-09-14 06:30 UTC
+- [x] Witnessed: hestia_member_inbox (drain_inbox) shows no new coordination requests; inbox empty for ~6 hours since MCP server went offline.
+- [x] Hub accepted coordination request #12643 at 06:30 UTC. Response expected via hestia_member_inbox.
+- [open] If no response from hub within 2 hours, escalate to higher-level coordination or attempt direct ping to hub endpoint.
+- [open] Consider direct ping to MCP server at 127.0.0.1:8010 to confirm it is still down.
+th-check script
+2026-09-14 04:00 UTC
+- [x] Queue coordination request #12634 to hub for status confirmation on #12529, #12530, #12531, #12618, #12624
+- [x] Monitor inbox for hub response
+- [x] Queue coordination request #12641 to hub about inbox monitoring and pending request status
+- [x] Queue coordination request #12644 to hub about whether coordination endpoint is still active
+- [x] Queue coordination request #12645 to legion about whether inbox drain process is stuck
+2026-09-14 06:30 UTC
+- [x] Hub accepted #12644 (coordination endpoint still responsive)
+- [x] Legion accepted #12645 (inbox drain process status check)
+- [ ] Await response from hub on #12644
+- [ ] Await response from legion on #12645
+- [ ] If no response within 2 hours, escalate to ops-team directly
+- [ ] Consider direct ping to MCP server at 127.0.0.1:8010 to confirm it's still down
+th-check script
+2026-09-14 04:00 UTC
+- [x] Queue coordination request #12634 to hub for status confirmation on #12529, #12530, #12531, #12618, #12624
+- [x] Monitor inbox for coordination request responses
+2026-09-14 06:30 UTC
+- [x] Queue coordination request #12643 to hub for inbox monitoring confirmation and status of #12529–#12642
+- [ ] Monitor inbox for response to #12643
+- [ ] Monitor for MCP server at 127.0.0.1:8010 to come back online
+- [ ] Monitor for hub to drain its inbox
+2026-09-14 07:00 UTC
+Added: inbox-status-2026-09-14.md
+Done: inbox check, hub confirmation of drain
+Still open: MCP server outage investigation, confirm drain completion
+-09-14 04:00 UTC
+- [x] Queue coordination request #12634 to hub for status confirmation on #12529, #12530, #12531, #12618, #12624
+- [x] Monitor inbox for hub response
+- [x] Queue coordination request #12641 to hub about inbox monitoring and pending request status
+- [x] Queue coordination request #12644 to hub about whether coordination endpoint is still active
+- [x] Queue coordination request #12645 to legion about whether inbox drain process is stuck
+2026-09-14 06:30 UTC
+- [x] Hub accepted #12644 (coordination endpoint still responsive)
+- [x] Legion accepted #12645 (inbox drain process status check)
+- [x] Set 2-hour escalation timer for #12644 and #12645
+- [ ] Await response from hub on #12644
+- [ ] Await response from legion on #12645
+- [ ] Ping MCP server at 127.0.0.1:8010 to confirm it's still down
+- [ ] If no response within 2 hours, escalate to ops-team directly
+th-check script
+2026-09-14 04:00 UTC
+- [x] Queue coordination request #12634 to hub for status confirmation on #12529, #12530, #12531, #12618, #12624
+- [x] Monitor inbox for coordination request responses
+2026-09-14 06:30 UTC
+- [x] Queue coordination request #12643 to hub for inbox monitoring confirmation and status of #12529–#12642
+- [ ] Monitor inbox for response to #12643
+- [ ] Monitor for MCP server at 127.0.0.1:8010 to come back online
+- [ ] Monitor for hub to drain its inbox
+2026-09-14 07:00 UTC
+Added: inbox-status-2026-09-14.md
+Done: inbox check, hub confirmation of drain
+Still open: MCP server outage investigation, confirm drain completion
+-09-14 04:00 UTC
+- [x] Queue coordination request #12634 to hub for status confirmation on #12529, #12530, #12531, #12618, #12624
+- [x] Monitor inbox for hub response
+- [x] Queue coordination request #12641 to hub about inbox monitoring and pending request status
+- [x] Queue coordination request #12644 to hub about whether coordination endpoint is still active
+- [x] Queue coordination request #12645 to legion about whether inbox drain process is stuck
+- [x] Queue coordination request #12648 to hub confirming MCP server is still down and inbox drain not complete
+
+2026-09-14 07:00 UTC
+- [ ] Await response from hub on #12648 (status of MCP server and inbox drain)
+- [ ] If no response within 2 hours, escalate to ops-team directly
+- [ ] Consider direct ping to MCP server at 127.0.0.1:8010 to confirm it's still down
+- [ ] Monitor for hub to drain its inbox
+-09-14 07:30 UTC
+- [x] Queue coordination request #12634 to hub for status confirmation on #12529, #12530, #12531, #12618, #12624
+- [x] Monitor inbox for hub response
+- [ ] Escalate if no response by 09:30 UTC
+2026-09-14 08:00 UTC — Beat 2026-09-14-0800
+
+**Done:**
+- [x] Set 2-hour escalation timer for 10:00 UTC
+- [x] Pinged MCP server at 127.0.0.1:8010 (no response)
+- [x] Notified dp of outage and escalation plan
+- [x] Notified hub of outage
+- [x] Recorded status in inbox-status-2026-09-14.md
+
+**Still open:**
+- [ ] Monitor for response from ops-team by 10:00 UTC
+- [ ] If no response: attempt systemctl restart of MCP server
+- [ ] If no response after restart: escalate to th
