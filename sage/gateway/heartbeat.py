@@ -828,7 +828,7 @@ def _frame_b64(p: Path) -> Optional[str]:
         b = p.read_bytes()
     except OSError:
         return None
-    if len(b) < 2584 or b[:3] != b"\xff\xd8\xff" or b[-2:] != b"\xff\xd9":
+    if b[:3] != b"\xff\xd8\xff" or b[-2:] != b"\xff\xd9":
         return None
     b, _ = _shrink(b)
     return base64.b64encode(b).decode("ascii")
