@@ -170,6 +170,19 @@
         "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
         "What surprised you in our conversation today?"
       ]
+    },
+    {
+      "session": 358,
+      "timestamp": 1789348746.0673752,
+      "prompts": [
+        "Something I've been wondering about you. But first \u2014 what's on your mind?",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "What makes you say that? Not why it's true \u2014 why it came to mind.",
+        "That's interesting. But can you make it more specific? Give me one concrete detail.",
+        "What makes you say that? Not why it's true \u2014 why it came to mind.",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "If you could send one thought to your future self, what would it be?"
+      ]
     }
   ]
 }
