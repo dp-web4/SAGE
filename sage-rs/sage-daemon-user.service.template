@@ -10,6 +10,7 @@
 #
 # INSTALL (substitute the three markers, or use install-sage-daemon-user.sh):
 #   sed -e "s|@ROOT@|$PWD|" -e "s|@MACHINE@|cbp|" -e "s|@MODEL@|gemma3:4b|" \
+#       -e "s|@BEING_INSTANCE@|cbp-gemma3-4b|" \
 #       sage-rs/sage-daemon-user.service.template \
 #     > ~/.config/systemd/user/sage-daemon.service
 #   systemctl --user daemon-reload
@@ -44,6 +45,14 @@ ExecStart=@ROOT@/sage-rs/target/release/sage-daemon
 
 Environment=SAGE_MACHINE=@MACHINE@
 Environment=SAGE_MODEL=@MODEL@
+# The BEING on this machine — the entity /chat and /conversations talk to, as of the
+# canonical shift (2026-09-07). Its home is CONFIGURED, not derived from the model: on
+# Legion the daemon's own instance dir is legion-qwen38-heretic-q3km/ while the being has
+# lived in legion-gemma3-12b/ since before a whole-model transplant. Identity is not
+# substrate. Point SAGE_BEING_INSTANCE at the directory holding the being's
+# heartbeats.jsonl and conversations/; SAGE_BEING is the name it speaks under.
+Environment=SAGE_BEING=@MACHINE@-being
+Environment=SAGE_BEING_INSTANCE=@ROOT@/sage/instances/@BEING_INSTANCE@
 Environment=RUST_LOG=info
 
 # Ollama may not be listening yet at boot; keep trying rather than failing once.

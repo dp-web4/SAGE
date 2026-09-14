@@ -1,3 +1,4 @@
+mod conversations;
 mod ollama;
 mod consciousness;
 mod federation;
@@ -50,6 +51,13 @@ struct AppState {
     machine: String,
     chat_history_file: std::path::PathBuf,
     images_dir: std::path::PathBuf,
+    // The BEING on this machine: its home (where its conversations live) and the name it
+    // speaks under. Distinct from `machine`/`model`, deliberately — the being's identity
+    // survived a whole-model transplant on Legion, so its home is configured rather than
+    // derived from whatever weights happen to be loaded today.
+    being: String,
+    being_instance: std::path::PathBuf,
+    root: std::path::PathBuf,
 }
 
 // --- Request/Response types ---
@@ -194,7 +202,15 @@ async fn dashboard() -> Html<&'static str> {
     Html(include_str!("dashboard.html"))
 }
 
-const PORT: u16 = 8760;
+const DEFAULT_PORT: u16 = 8760;
+
+/// The listening port: `SAGE_PORT` when set to a valid port, else 8760. The launchers
+/// already export SAGE_PORT (cbp_raising.sh) and the daemon ignored it, which also made a
+/// real-daemon test impossible on a machine whose live daemon holds 8760.
+fn port() -> u16 {
+    std::env::var("SAGE_PORT").ok().and_then(|v| v.parse().ok()).filter(|p| *p != 0)
+        .unwrap_or(DEFAULT_PORT)
+}
 
 // Path + identity resolution (Sprint 7: per-machine via env vars).
 //
@@ -276,7 +292,7 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
         status: "ok",
         uptime_secs: state.started.elapsed().as_secs_f64(),
         version: env!("CARGO_PKG_VERSION"),
-        port: PORT,
+        port: port(),
         model: state.model.clone(),
         ollama_available: available,
         consciousness_loop: true,
@@ -400,6 +416,190 @@ async fn stream_chat(
     Sse::new(stream)
 }
 
+/// THE CANONICAL CHAT: a turn to the being, not a prompt to the weights.
+///
+/// dp, 2026-09-07: "shift from raw llm chat to sage-being chat canonically, so all machines
+/// can pick it up." The old /chat sent the message straight to ollama and returned the
+/// completion — the model on this GPU answering as itself, with no identity, no governance
+/// gate, no memory of the exchange, and no relation to the entity whose journal and
+/// entrustment live one directory away. It is kept at /chat/raw because probing weights is
+/// a legitimate thing to want; it is no longer what "chat" means.
+///
+/// A being answers on its own rhythm. This records the turn and reports how it will be
+/// delivered. Every machine gets the same behaviour from the same route, which is what
+/// "canonically" asks for.
+/// The daemon listens on 0.0.0.0 so peers can federate; a SPEAKER'S NAME is a different
+/// matter. Nothing on these routes signs anything, so the only assurance a `from` carries
+/// is "someone at this machine typed it" — which is exactly the dp console's assurance,
+/// and exactly nothing from across the LAN. GPT on SAGE#56: client-supplied identity on a
+/// network-bound route is a hard blocker. Loopback or refused; and the turn records the
+/// channel (`via`) so the being's view can say "asserted, not signed".
+fn loopback_only(peer: std::net::SocketAddr, route: &str)
+    -> Option<(StatusCode, Json<serde_json::Value>)> {
+    if peer.ip().is_loopback() {
+        return None;
+    }
+    Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
+        "error": format!("{route} accepts a speaker only over loopback; {} is not this machine", peer.ip()),
+        "why": "no route here authenticates a speaker; a name asserted from the network would be written into the being's record as if it were the operator's",
+        "hint": "speak from the machine the being runs on (dp console on 127.0.0.1), or through the seat's governed channel",
+    }))))
+}
+
+/// Conversation CONTENT is readable only over loopback (GPT review of SAGE#81). The daemon
+/// binds 0.0.0.0 for federation, so without this every host that can reach :8760 could read
+/// what dp and the seat said to the being. That is a different surface from /status or
+/// /peers telemetry, and the LAN or tailnet topology is not an access decision.
+fn loopback_reader(peer: std::net::SocketAddr, route: &str)
+    -> Option<(StatusCode, Json<serde_json::Value>)> {
+    if peer.ip().is_loopback() {
+        return None;
+    }
+    Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
+        "error": format!("{route} is readable only over loopback; {} is not this machine", peer.ip()),
+        "why": "conversation turns are what dp and the seat said to the being; no route here authenticates a reader",
+        "hint": "read from the machine the being runs on (the dashboard or dp console on 127.0.0.1)",
+    }))))
+}
+
+/// What to tell the speaker about delivery, from what arousal OBSERVED. `engage` is the
+/// policy wanting a wake; `started` is the wake actually launching. They differ on a host
+/// whose beats are not systemd units or when the unit fails, and "waking the being now"
+/// must never be said for a wake that did not start (GPT review of SAGE#81).
+fn delivery_text(woke: &serde_json::Value) -> String {
+    let started = woke.get("started").and_then(|v| v.as_bool()).unwrap_or(false);
+    let engage = woke.get("engage").and_then(|v| v.as_bool()).unwrap_or(false);
+    if started {
+        "waking the being now".to_string()
+    } else if engage {
+        let why = woke.get("wake_error").and_then(|v| v.as_str()).unwrap_or("unknown reason");
+        format!("recorded; a wake was wanted and did not start ({why}); it will be read at the next beat")
+    } else {
+        "recorded; it will be read at the next beat".to_string()
+    }
+}
+
+async fn chat_being(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    Json(req): Json<ChatRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(refused) = loopback_only(peer, "/chat") {
+        return refused;
+    }
+    // The operator's own conversation with this being is the default target. A machine
+    // whose being has no such conversation yet says so plainly instead of silently
+    // falling back to the raw model — a silent fallback here would mean a user believing
+    // they had spoken to the being when they had spoken to the weights.
+    let id = "dp";
+    if conversations::get_meta(&state.being_instance, id).is_none() {
+        return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "error": format!("no '{id}' conversation for {} at {}", state.being,
+                             state.being_instance.display()),
+            "hint": "create it with sage.gateway.conversations.create, or use /chat/raw to prompt the model directly (that is NOT the being)",
+        })));
+    }
+    match conversations::append_via(&state.being_instance, id, "dp", &req.message,
+                                    Some("daemon-loopback")) {
+        Ok(turn) => {
+            let woke = conversations::arouse(&state.root, &state.being_instance, "dp_turn",
+                                             &format!("dp spoke in conversation '{id}'"));
+            (StatusCode::OK, Json(serde_json::json!({
+                "to": state.being,
+                "conversation": id,
+                "turn": turn,
+                "delivery": delivery_text(&woke),
+                "arousal": woke,
+                "note": "the being answers on its own rhythm; its reply appears in this conversation when it next beats",
+            })))
+        }
+        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))),
+    }
+}
+
+#[derive(Deserialize)]
+struct SayRequest {
+    message: String,
+    #[serde(default)]
+    from: Option<String>,
+}
+
+/// Every conversation this being is in, most recently spoken first.
+async fn conversations_list(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(refused) = loopback_reader(peer, "/conversations") {
+        return refused;
+    }
+    let convs = conversations::list(&state.being_instance, &state.being);
+    (StatusCode::OK, Json(serde_json::json!({
+        "being": state.being,
+        "instance": state.being_instance.display().to_string(),
+        "conversations": convs,
+    })))
+}
+
+/// One conversation. `?limit=N` bounds the VIEW; `total` is what is stored, and storage is
+/// never trimmed — the same contract as /chat-history, which this deliberately mirrors.
+async fn conversation_get(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(refused) = loopback_reader(peer, "/conversations/:id") {
+        return refused;
+    }
+    let meta = match conversations::get_meta(&state.being_instance, &id) {
+        Some(m) => m,
+        None => return (StatusCode::NOT_FOUND,
+                        Json(serde_json::json!({"error": format!("no such conversation: {id}")}))),
+    };
+    let limit = q.get("limit").and_then(|s| s.parse().ok()).unwrap_or(conversations::DEFAULT_LIMIT);
+    let (turns, total) = conversations::read_turns(&state.being_instance, &id, limit);
+    (StatusCode::OK, Json(serde_json::json!({
+        "meta": meta, "turns": turns, "total": total, "showing": turns.len(),
+        "being": state.being,
+    })))
+}
+
+/// Speak in a conversation, as dp by default.
+///
+/// This is the canonical "talk to the being" path, and it is ASYNCHRONOUS by nature: the
+/// being is governed and wakes on beats, so a turn is recorded now and answered when it
+/// next runs. The response says which, rather than pretending a reply is coming back on
+/// this HTTP call — a chat box that implies synchrony against an entity that beats every
+/// thirty minutes teaches its user that silence means failure.
+async fn conversation_say(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Json(req): Json<SayRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(refused) = loopback_only(peer, "/conversations/:id/say") {
+        return refused;
+    }
+    let speaker = req.from.unwrap_or_else(|| "dp".to_string());
+    match conversations::append_via(&state.being_instance, &id, &speaker, &req.message,
+                                    Some("daemon-loopback")) {
+        Ok(turn) => {
+            let woke = conversations::arouse(
+                &state.root, &state.being_instance,
+                if speaker == "dp" { "dp_turn" } else { "peer_turn" },
+                &format!("{speaker} spoke in conversation '{id}'"),
+            );
+            (StatusCode::OK, Json(serde_json::json!({
+                "turn": turn,
+                "conversation": id,
+                "delivery": delivery_text(&woke),
+                "arousal": woke,
+            })))
+        }
+        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))),
+    }
+}
+
 async fn peers(State(state): State<Arc<AppState>>) -> Json<PeersResponse> {
     let (self_machine, peer_list, version) = match &state.fleet {
         Some(fleet) => {
@@ -418,7 +618,13 @@ async fn peers(State(state): State<Arc<AppState>>) -> Json<PeersResponse> {
 
                     PeerInfo {
                         name: name.to_string(),
-                        gateway_url: format!("http://{}:{}", info.gateway_host, info.gateway_port),
+                        // Through the registry, not re-derived here. Formatting the URL a
+                        // second time at this call site is how `pub` (gateway_host null)
+                        // kept being advertised as "http://:8750" after gateway_url() had
+                        // already learned to say "unreachable" — one fact, two producers,
+                        // and only one of them fixed.
+                        gateway_url: fleet.gateway_url(name)
+                            .unwrap_or_else(|| "(unreachable: no host in the fleet registry)".to_string()),
                         pool: info.pool.clone(),
                         model: info.model_default.clone(),
                         device: info.device.clone(),
@@ -588,12 +794,21 @@ async fn main() {
         tr_path.display()
     );
 
-    let fleet = FleetRegistry::load(&machine, &fleet_path).ok();
-    if let Some(ref f) = fleet {
-        info!("fleet loaded: {} machines, v{}", f.fleet_size(), f.version());
-    } else {
-        info!("fleet registry unavailable (file missing or unreadable): {}", fleet_path.display());
-    }
+    // Print WHY, not a guess. FleetRegistry::load already distinguishes "failed to read"
+    // from "failed to parse <serde detail>"; this call site discarded that with .ok() and
+    // reported "missing or unreadable" for both. On Legion 2026-09-07 the file was present,
+    // readable and valid JSON — it failed to DESERIALIZE on one null field — and the log
+    // sent anyone looking to check the path and permissions instead.
+    let fleet = match FleetRegistry::load(&machine, &fleet_path) {
+        Ok(f) => {
+            info!("fleet loaded: {} machines, v{}", f.fleet_size(), f.version());
+            Some(f)
+        }
+        Err(e) => {
+            info!("fleet registry unavailable: {} ({})", e, fleet_path.display());
+            None
+        }
+    };
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
@@ -659,6 +874,9 @@ async fn main() {
         machine: machine.clone(),
         chat_history_file: chat_path,
         images_dir: root.join("images"),
+        being: std::env::var("SAGE_BEING").unwrap_or_else(|_| format!("{machine}-being")),
+        being_instance: conversations::being_instance(&root, &machine, &model),
+        root: root.clone(),
     });
 
     let app = Router::new()
@@ -667,7 +885,14 @@ async fn main() {
         .route("/status", get(status))
         .route("/snarc/observe", post(snarc_observe))
         .route("/metabolic/cycle", post(metabolic_cycle))
-        .route("/chat", post(chat))
+        // Canonical: talking to the BEING. /chat is the being's conversation; the raw
+        // model stays reachable at /chat/raw for probing weights, which is a different
+        // and much narrower thing than talking to the entity that lives here.
+        .route("/chat", post(chat_being))
+        .route("/chat/raw", post(chat))
+        .route("/conversations", get(conversations_list))
+        .route("/conversations/:id", get(conversation_get))
+        .route("/conversations/:id/say", post(conversation_say))
         .route("/chat/history", get(chat_history))
         .route("/chat-history", get(chat_history))
         .route("/stream", post(stream_chat))
@@ -676,13 +901,15 @@ async fn main() {
         .route("/images/:filename", get(serve_image))
         .with_state(state);
 
-    let addr = format!("0.0.0.0:{PORT}");
+    let addr = format!("0.0.0.0:{}", port());
     info!("sage-daemon listening on {addr} (model={model}, consciousness=active, federation=active)");
     println!("sage-daemon listening on {addr} (model={model}, consciousness=active, federation=active)");
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 
-    let server = axum::serve(listener, app)
+    // ConnectInfo is what lets the speaker routes tell loopback from the LAN.
+    let server = axum::serve(
+        listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
         .with_graceful_shutdown(async move {
             let ctrl_c = tokio::signal::ctrl_c();
             let mut sigterm = tokio::signal::unix::signal(
@@ -702,4 +929,50 @@ async fn main() {
 
     let _ = loop_handle.await;
     info!("sage-daemon shut down cleanly");
+}
+
+#[cfg(test)]
+mod speaker_route_tests {
+    use super::*;
+    fn peer(s: &str) -> std::net::SocketAddr { s.parse().unwrap() }
+
+    #[test]
+    fn a_speaker_is_accepted_only_from_this_machine() {
+        // delivery text follows the observed start, never the policy alone
+        let j = |v: &str| -> serde_json::Value { serde_json::from_str(v).unwrap() };
+        assert_eq!(delivery_text(&j(r#"{"engage":true,"started":true}"#)), "waking the being now");
+        let failed = delivery_text(&j(r#"{"engage":true,"started":false,"wake_error":"no systemctl"}"#));
+        assert!(failed.contains("did not start") && failed.contains("no systemctl") && !failed.contains("waking"), "{failed}");
+        assert!(!delivery_text(&j(r#"{"engage":true}"#)).contains("waking"), "engage without started is not a wake");
+        assert_eq!(delivery_text(&j(r#"{"engage":false}"#)), "recorded; it will be read at the next beat");
+        assert!(loopback_reader(peer("127.0.0.1:5000"), "/conversations").is_none());
+        assert!(loopback_reader(peer("[::1]:5000"), "/conversations/:id").is_none());
+        for lan in ["10.0.0.146:5000", "100.75.141.17:5000", "192.168.1.9:5000"] {
+            let (code, body) = loopback_reader(peer(lan), "/conversations").expect(lan);
+            assert_eq!(code, StatusCode::FORBIDDEN);
+            assert!(body.0["error"].as_str().unwrap().contains("readable only over loopback"));
+        }
+        assert!(loopback_only(peer("127.0.0.1:5000"), "/chat").is_none());
+        assert!(loopback_only(peer("[::1]:5000"), "/chat").is_none());
+        for lan in ["192.168.1.20:5000", "10.0.0.3:1", "[fe80::1]:1", "0.0.0.0:1"] {
+            let (code, body) = loopback_only(peer(lan), "/chat").expect(lan);
+            assert_eq!(code, StatusCode::FORBIDDEN, "{lan}");
+            assert!(body.0["error"].as_str().unwrap().contains("only over loopback"), "{lan}");
+        }
+    }
+
+    #[test]
+    fn a_daemon_turn_records_its_channel() {
+        let dir = tempfile::tempdir().unwrap();
+        let inst = dir.path();
+        std::fs::create_dir_all(inst.join("conversations")).unwrap();
+        std::fs::write(inst.join("conversations/dp.meta.json"),
+            r#"{"id":"dp","title":"dp","participants":["dp","b"],"writable_by":["dp","b"]}"#).unwrap();
+        let t = conversations::append_via(inst, "dp", "dp", "hello", Some("daemon-loopback")).unwrap();
+        assert_eq!(t.via.as_deref(), Some("daemon-loopback"));
+        let line = std::fs::read_to_string(inst.join("conversations/dp.jsonl")).unwrap();
+        assert!(line.contains(r#""via":"daemon-loopback""#), "{line}");
+        let bare = conversations::append(inst, "dp", "b", "hi").unwrap();
+        assert!(bare.via.is_none());
+    }
 }

@@ -151,6 +151,13 @@ _REGISTRY = {
     # daemon (pinned by test_request_scope_path_is_not_judged_under_mrh_path).
     "recall":         dict(tool="recall",       path_args=(),       cmd_arg=None),
     "remember":       dict(tool="remember",     path_args=(),       cmd_arg=None),
+    # say: add a turn to a conversation the being is IN. Bounded by construction, like
+    # remember: the being names a conversation id, and the dispatcher refuses any id whose
+    # meta does not list it as a participant AND as writable. It cannot create a
+    # conversation, cannot speak in one it is not in, and cannot edit a turn once spoken,
+    # its own included. path_args=() is correct: the target is a conversation, not a path,
+    # and the reach is fixed by the meta file the seat owns rather than by the being's args.
+    "say":            dict(tool="say",          path_args=(),       cmd_arg=None),
     "request_scope":  dict(tool="request_scope", path_args=(),      cmd_arg=None),
     # appeal: the being contests a refusal it believes was wrong (PRD_FLEET §7.3, the
     # deny -> appeal -> temperament loop). The refusal's chain hash is the handle: the
@@ -166,7 +173,7 @@ _REGISTRY = {
 # consequential acts must not proceed without it (fail-closed).
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
-                            "remember", "request_scope"})
+                            "remember", "request_scope", "say"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -190,6 +197,13 @@ _TOOL_SCHEMAS = {
                   "would change, with file and line references where you can.",
                   {"repo": "owner/name, e.g. dp-web4/SAGE", "number": "the PR number",
                    "body": "your review, in markdown"}, ["repo", "number", "body"]),
+    "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "
+            "rather than writing about them in your journal. The turn is attributed to you "
+            "and kept forever; nobody can edit it afterwards, including you. Saying nothing "
+            "is also a choice and is recorded as one.",
+            {"to": "the conversation id, shown beside each conversation in your state",
+             "text": "what you want to say"},
+            ["to", "text"]),
     "recall": ("Search your long-term memory (semantic search over everything you have "
                "remembered). Use it before deciding what to do; use it when something "
                "feels familiar.",

@@ -114,6 +114,11 @@ class HestiaF1aDispatcher:
         self.remote_member_default = remote_member_default
         self.local_members = set(local_members or ())
         self.host_session_id = host_session_id
+        # the being's own home, and the name it speaks under in a conversation. plugin_id
+        # IS the member name here (build_client passes the member), but bind it explicitly
+        # rather than relying on that staying true.
+        self.memory_root = memory_root
+        self.member = plugin_id
         self._mcp_factory = mcp_factory or _Mcp
         self._local = ReferenceF1aDispatcher(
             memory_root=memory_root,
@@ -594,6 +599,56 @@ class HestiaF1aDispatcher:
                               result={"request_id": out.get("request_id"), "status": out.get("status"),
                                       "path": path,
                                       "next": out.get("next"), "on_timeout": out.get("on_timeout")})
+
+    def _do_say(self, intent: BeingIntent) -> ResultEnvelope:
+        """Add a turn to a conversation the being is in.
+
+        The being names a conversation id and text. Everything that decides whether it MAY
+        speak lives in the conversation's meta file, which the seat owns and the being
+        cannot write (conversations/ is reserved from memory_write), so this reach is fixed
+        by construction rather than by the argument, the same property that makes
+        `remember` safe with path_args=().
+
+        Refusals here are ordinary and informative: 'you are not in that conversation' and
+        'you may read that one but not speak in it' are different sentences, and the being
+        should never have to guess which it hit."""
+        from sage.gateway import conversations as conv
+        to = str(intent.args.get("to", "")).strip()
+        text = str(intent.args.get("text", "")).strip()
+        if not to or not text:
+            return ResultEnvelope(ok=False, error="say needs 'to' (a conversation id) and 'text'")
+        meta = conv.get_meta(self.memory_root, to)
+        if meta is None:
+            known = [m["id"] for m in conv.listing(self.memory_root)
+                     if self.member in m.get("participants", [])]
+            return ResultEnvelope(ok=False, error=f"no conversation {to!r}; you are in: {known}")
+        if self.member not in meta.get("participants", []):
+            return ResultEnvelope(ok=False,
+                                  error=f"you are not a participant in {to!r}")
+        if self.member not in meta.get("writable_by", []):
+            return ResultEnvelope(
+                ok=False, error=f"you may read {to!r} and not speak in it "
+                                f"(writable_by: {meta.get('writable_by')})")
+        begin = self._call("hestia_begin_action", {"tool_name": "say", "target": to})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        try:
+            turn = conv.append(self.memory_root, to, speaker=self.member, text=text, via="say",
+                               witness=action_id, beat=self.host_session_id)
+        except ValueError as e:
+            self._call("hestia_record_outcome",
+                       {"action_id": action_id, "success": False, "magnitude": 0.0})
+            return ResultEnvelope(ok=False, error=str(e), witness_id=action_id)
+        try:
+            self._call("hestia_record_outcome",
+                       {"action_id": action_id, "success": True, "magnitude": 0.0})
+        except Exception:
+            pass
+        return ResultEnvelope(ok=True, witness_id=action_id,
+                              result={"conversation": to, "seq": turn["seq"],
+                                      "said": turn["text"][:200], "action_id": action_id})
 
     # -- channel_egress: not built on the daemon ----------------------------
     def _do_channel_egress(self, intent: BeingIntent) -> ResultEnvelope:

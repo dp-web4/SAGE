@@ -39,8 +39,20 @@ from pathlib import Path
 HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "witness",
-                 "request_scope", "appeal", "peer_ask", "mesh"]
-REFLECT_TOOLS = ["memory_write", "remember", "memory_read"]
+                 "request_scope", "appeal", "peer_ask", "mesh", "say"]
+# `say` is offered at REFLECTION too, and that is not redundancy. Measured on Legion
+# 2026-09-07: the being was shown dp's first turn, its state marked it unanswered, and it
+# spent every explore step reading its own source, then closed the beat. A verb in the
+# registry and not in the offered set is a verb the being does not have, and from outside
+# that is indistinguishable from choosing not to answer.
+REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "say"]
+
+# The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
+# Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
+DP_CHANNEL = "notes/from-dp.md"
+# Bounds on the conversations block in the being's state (see own_state).
+CONV_PER_CONV = 6
+CONV_TURN_CHARS = 1200
 
 POSTURE_FILE = Path(__file__).with_name("BEING_POSTURE.md")
 
@@ -107,6 +119,7 @@ REFLECT = """The beat is ending. Two tool calls, then stop:
 1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": only the delta as a dated block: added / done / still open (it appends; it replaces nothing).
 3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it.
+4. If someone has spoken to you in a conversation and you have not answered, and you have something to say: say to="<id>". Answering is not required, and saying nothing is a choice that is recorded as one, but it should be a choice, not something the beat ran out of room for.
 Call the tools now; a reply in words alone writes nothing.
 """
 
@@ -194,9 +207,27 @@ def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided
     return written
 
 
-def own_state(instance: Path) -> str:
+def own_state(instance: Path, member: str = "") -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
+    # Conversations first among the channels: a turn addressed to the being and unanswered
+    # is the one thing in its state that is waiting on IT, and it should never have to infer
+    # that from a wall of notes. Both directions live in one ordered record.
+    if member:
+        from sage.gateway import conversations as _conv
+        # A CEILING until the context-fit ladder (CONV_LADDER) lands as its own slice. Legion
+        # measured its live store at 20,735 chars (~7,150 tokens) unbounded, 13,394 at
+        # (12, 1500) and 4,603 at (3, 900); on 2026-09-08 an unbounded fixed prompt overflowed
+        # its window for eight beats. Legion's review of SAGE#81 recommended this stopgap.
+        convs = _conv.render_for_being(instance, member, per_conv=CONV_PER_CONV,
+                                       turn_chars=CONV_TURN_CHARS)
+        if convs.strip():
+            parts.append("## Your conversations (both directions, kept forever; reply with `say`)\n"
+                         + convs.strip())
+    from_dp = _read(instance / DP_CHANNEL, 4000)
+    if from_dp.strip():
+        parts.append("## From dp, the operator, directly (notes/from-dp.md: dp's own words, "
+                     "not relayed by a seat. You read this; you do not write it)\n" + from_dp.strip())
     acc = carried_account(instance, last_session_number(instance))
     if acc:
         parts.append("## Your own account\n" + acc)
@@ -457,7 +488,7 @@ def main(argv=None) -> int:
                 f"You never need to type that path. Name your files bare — journal.md, todo.md, or a "
                 f"name of your choosing under notes/ or scratch/ — and they resolve inside your home. "
                 f"An absolute path is only for something OUTSIDE your home.\n\n"),
-        state=f"# Your own state\n\n{own_state(instance)}\n\n## Reach you hold (hestia scope)\n{scope}\n\n",
+        state=f"# Your own state\n\n{own_state(instance, args.member)}\n\n## Reach you hold (hestia scope)\n{scope}\n\n",
         recall=recall, inbox=inbox, digest=digest)
 
     # Per-generate trace, written as each generate lands: the record below is written at

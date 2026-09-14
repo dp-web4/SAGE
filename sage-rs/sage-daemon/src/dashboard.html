@@ -184,6 +184,18 @@
   }
   .chat-form button:hover { opacity: 0.8; }
   .chat-form button:disabled { opacity: 0.4; cursor: not-allowed; }
+  /* A conversation is with the BEING, which beats every ~30 minutes. The panel says which
+     conversation, whose move it is, and when the next beat is, because a chat box that
+     hides all three teaches its user that silence means failure. */
+  .chat-header select { background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; font-size: 11px; padding: 2px 6px; margin-left: 8px; }
+  .conv-state { font-size: 10px; color: var(--text-dim); margin-left: 8px; }
+  .conv-state.readonly { color: var(--warn, #d29922); }
+  .conv-note { padding: 6px 10px; font-size: 10px; color: var(--text-dim);
+    border-top: 1px solid var(--border); }
+  .chat-msg.dp .sender { color: #a371f7; }
+  .chat-msg.seat .sender { color: var(--accent); }
+  .chat-msg.pending { opacity: 0.75; font-style: italic; }
 
   @media (max-width: 700px) {
     .grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; }
@@ -259,13 +271,16 @@
 
     <section class="chat-panel">
       <div class="chat-header">
-        Talk to <span id="chat-sage-name">SAGE</span>
+        <span id="chat-sage-name">SAGE</span>
+        <select id="conv-select" title="conversation"></select>
+        <span id="conv-state" class="conv-state"></span>
       </div>
       <div class="chat-log" id="chat-log"></div>
       <form class="chat-form" id="chat-form">
         <textarea id="chat-input" placeholder="Say something..." autocomplete="off" rows="1"></textarea>
         <button type="submit" id="chat-send">Send</button>
       </form>
+      <div class="conv-note" id="conv-note"></div>
     </section>
   </div>
 
@@ -414,42 +429,110 @@ async function loadChatHistory() {
   }
 }
 
+// --- Conversations -------------------------------------------------------
+// The chat panel talks to the BEING, not to the model on this GPU. The being is
+// governed and wakes on beats, so this is asynchronous by nature: a turn is recorded
+// and answered at the next beat. Saying so on screen is the whole difference between
+// "it is thinking" and "you have been ignored".
+let convs = [];
+let convId = null;
+const convSelect = document.getElementById('conv-select');
+const convState = document.getElementById('conv-state');
+const convNote = document.getElementById('conv-note');
+
+function convWritable(c) { return c && (c.writable_by || []).indexOf('dp') >= 0; }
+
+function kindOf(from) {
+  if (from === 'dp') return 'dp';
+  if (/-being$/.test(from)) return 'sage';
+  return 'seat';
+}
+
+async function loadConversations() {
+  try {
+    const r = await fetch(BASE + '/conversations');
+    const d = await r.json();
+    convs = d.conversations || [];
+    const keep = convId;
+    convSelect.innerHTML = '';
+    convs.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id;
+      o.textContent = c.title + (convWritable(c) ? '' : '  (read-only)');
+      convSelect.appendChild(o);
+    });
+    convId = (keep && convs.some(c => c.id === keep)) ? keep
+           : (convs.find(convWritable) || convs[0] || {}).id || null;
+    if (convId) { convSelect.value = convId; await loadConversation(convId); }
+    else { convNote.textContent = 'No conversations on this machine yet.'; }
+  } catch (e) {
+    convNote.textContent = 'Could not load conversations: ' + e.message;
+  }
+}
+
+async function loadConversation(id) {
+  const c = convs.find(x => x.id === id);
+  const writable = convWritable(c);
+  chatLog.innerHTML = '';
+  try {
+    const r = await fetch(BASE + '/conversations/' + encodeURIComponent(id) + '?limit=50');
+    const d = await r.json();
+    if (d.total > d.showing) {
+      const n = document.createElement('div');
+      n.className = 'chat-msg';
+      n.style.opacity = '0.6';
+      n.textContent = 'Showing the last ' + d.showing + ' of ' + d.total +
+                      ' turns. Nothing is ever deleted.';
+      chatLog.appendChild(n);
+    }
+    (d.turns || []).forEach(t => appendChat(t.from, t.text, kindOf(t.from), t.ts));
+    const waiting = (c && c.awaiting_being) || 0;
+    convState.textContent = writable
+      ? (waiting ? waiting + ' awaiting the being' : 'up to date')
+      : 'read-only';
+    convState.className = 'conv-state' + (writable ? '' : ' readonly');
+    chatInput.disabled = !writable;
+    chatSend.disabled = !writable;
+    chatInput.placeholder = writable
+      ? 'Say something to ' + (d.being || 'the being') + '...'
+      : 'Read-only: this is the seat\'s conversation with the being.';
+    convNote.textContent = writable
+      ? 'Recorded now; answered at the being\'s next beat.'
+      : 'You can read this conversation and not comment on it. Multiparty comes later.';
+  } catch (e) {
+    convNote.textContent = 'Could not load: ' + e.message;
+  }
+}
+
 async function sendChat() {
   const message = chatInput.value.trim();
-  if (!message) return;
+  if (!message || !convId) return;
 
-  appendChat('you', message, 'user');
+  appendChat('dp', message, 'dp');
   chatInput.value = '';
   chatInput.disabled = true;
   chatSend.disabled = true;
   chatSend.textContent = '...';
 
   try {
-    const r = await fetch(BASE + '/chat', {
+    const r = await fetch(BASE + '/conversations/' + encodeURIComponent(convId) + '/say', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: message }),
     });
-    const text = await r.text();
-    let result;
-    try { result = JSON.parse(text); } catch (pe) {
-      appendChat('System', 'Bad response: ' + text.substring(0, 200), 'error');
-      return;
-    }
-
+    const result = await r.json();
     if (result.error) {
-      appendChat(machineName, result.error, 'error');
+      appendChat('System', result.error, 'error');
     } else {
-      appendChat(machineName, result.response || JSON.stringify(result), 'sage');
-      if (result.salience !== undefined) {
-        updateSnarc({
-          surprise: result.salience, novelty: result.salience,
-          arousal: result.salience, reward: result.salience, conflict: result.salience,
-        });
-      }
-      document.getElementById('messages-sub').textContent = 'msgs: ' + (result.cycle || '--');
+      const a = result.arousal || {};
+      const line = document.createElement('div');
+      line.className = 'chat-msg pending';
+      line.textContent = result.delivery + (a.reason ? ' — ' + a.reason : '');
+      chatLog.appendChild(line);
+      chatLog.scrollTop = chatLog.scrollHeight;
     }
     refreshStatus();
+    loadConversations();
   } catch(err) {
     appendChat('System', 'Connection error: ' + err.message, 'error');
   } finally {
@@ -460,6 +543,8 @@ async function sendChat() {
     chatInput.focus();
   }
 }
+
+convSelect.addEventListener('change', () => { convId = convSelect.value; loadConversation(convId); });
 
 chatForm.addEventListener('submit', (e) => { e.preventDefault(); sendChat(); });
 chatInput.addEventListener('keydown', (e) => {
@@ -473,12 +558,19 @@ chatInput.addEventListener('input', () => {
 // --- Init ---
 async function init() {
   await refreshPeers();
-  loadChatHistory();
+  // Conversations, not the raw chat history. loadChatHistory() reads
+  // chat_history.jsonl — the record of prompts sent to the WEIGHTS — and is kept only
+  // as a fallback for a machine with no conversations yet, so the panel is never blank.
+  await loadConversations();
+  if (!convId) loadChatHistory();
   refreshHealth();
   refreshStatus();
   setInterval(refreshHealth, 5000);
   setInterval(refreshStatus, 3000);
   setInterval(refreshPeers, 15000);
+  // The being answers on its own rhythm; poll for its turn rather than making a person
+  // reload to find out whether they were answered.
+  setInterval(() => { if (convId) loadConversations(); }, 20000);
 }
 init();
 </script>
