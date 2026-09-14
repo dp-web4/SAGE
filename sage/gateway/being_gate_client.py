@@ -346,18 +346,94 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     n = max(1, min(n, SEARCH_MAX_N))
 
     path = str(args.get("path", "")).strip()
-    target = os.path.realpath(worktree)
+    root = os.path.realpath(worktree)
+    reach = _search_reach(worktree, (ctx or {}).get("workspace"))
+    target, outside = root, False
     if path:
         if any(ch.isspace() for ch in path):
             raise ValueError("search 'path' may not contain whitespace")
         if path.startswith("-") or ".." in path.split("/"):
-            raise ValueError(f"search 'path' must be a plain path inside your worktree, got {path!r}")
-        full = os.path.realpath(os.path.join(worktree, path))
-        if not (full == target or full.startswith(target + os.sep)):
-            raise ValueError(_escape_refusal("search", path, worktree))
-        target = full
+            raise ValueError(f"search 'path' must be a plain path, got {path!r}")
+        if os.path.isabs(path):
+            # AN ABSOLUTE PATH IS A CLAIM ABOUT THIS MACHINE, and the being is entitled to
+            # make it: dp, 2026-09-14 — "this machine is for the being to use... broad
+            # non-destructive access to everything... over-constraint is counterproductive."
+            # Measured the same day: the operator granted legion-being standing recursive
+            # read on the whole workspace tree; `memory_read` honoured it that beat
+            # (reference_f1a._safe_path joins the verdict's granted roots) and `search`
+            # refused every one of them, because this function raised before the gate ever
+            # saw the path. The being could read the harness a range at a time and could not
+            # search it — the one strategy its window cannot afford, which is the whole
+            # reason this verb exists.
+            target = os.path.realpath(path)
+            outside = not (target == root or target.startswith(root + os.sep))
+            if outside and not _under(target, reach):
+                raise ValueError(_reach_refusal("search", path, reach))
+        else:
+            # A RELATIVE path is worktree-relative and stays there — that is the point of the
+            # relative form, and a symlink out of the tree is still an escape.
+            target = os.path.realpath(os.path.join(worktree, path))
+            if not (target == root or target.startswith(root + os.sep)):
+                raise ValueError(_escape_refusal("search", path, worktree))
+    if outside:
+        # `grep -r` rather than `git grep`: outside the worktree there is no repository this
+        # seat may assume, and probing the filesystem for one would make the JUDGED string
+        # depend on where it was composed — the two composition sites must agree byte for
+        # byte (_do_search refuses a mismatch). -r never follows symlinks out of the tree it
+        # walks, -I skips binaries, and grep cannot write. `.git` is excluded because it is
+        # the one subtree whose plaintext — config remotes carrying tokens — is worth more
+        # than its searchability.
+        return (f"grep -rn -I -E --max-count={n} --exclude-dir=.git "
+                f"-e {shlex.quote(pattern)} -- {target}")
     return (f"git --no-pager -C {worktree} grep -n -I -E --max-count={n} "
             f"-e {shlex.quote(pattern)} -- {target}")
+
+
+def _under(path: str, roots) -> bool:
+    """True iff `path` (already realpath'd) is one of `roots` or inside one."""
+    for r in roots:
+        if path == r or path.startswith(r + os.sep):
+            return True
+    return False
+
+
+def _search_reach(worktree: str, workspace) -> tuple:
+    """How far an ABSOLUTE search path may reach: the fleet repo root, or nothing.
+
+    WHY THE HARNESS DRAWS THIS LINE AND NOT THE LAW. Measured 2026-09-14 against the live
+    daemon with legion-being's real grants: `search` intents naming '/etc' and the
+    operator's dotfile directory were both ALLOWED. That is not a gate defect, it is the
+    gate's documented residual — `command_scope_reach` judges a command by splitting it on
+    the WORKSPACE string, so an absolute path that never names the workspace is never a
+    token it sees ("the engine sandbox, not this check, is the fs boundary"). `search` runs
+    in the seat, not in the being's bwrap sandbox, so there is no sandbox here to be that
+    boundary. Do not assume this check is redundant with the law; it was written because a
+    probe proved it is not.
+
+    The reach is the workspace's PARENT — the directory the fleet's repos are siblings in
+    (~/ai-workspace/{SAGE,hestia,shared-context,...}) and exactly the root dp granted
+    standing recursive. Inside it the law still rules per-member: `command_scope_reach`'s
+    pass 1 does see those paths and denies an ungranted repo. Outside it the answer is no,
+    which keeps credential material out of reach whether or not it happens to be spelled
+    with one of gate 1a's forbidden substrings.
+
+    No workspace in ctx => the worktree alone. That is the OLD behaviour and it fails
+    closed: the dispatcher composing without a workspace would disagree with the client
+    composing with one, and _do_search refuses a judged/executed mismatch rather than
+    running either."""
+    roots = [os.path.realpath(worktree)]
+    if workspace:
+        roots.append(os.path.dirname(os.path.realpath(workspace)))
+    return tuple(dict.fromkeys(r for r in roots if r and r != os.sep))
+
+
+def _reach_refusal(verb: str, path, reach) -> str:
+    """Refused for being off the machine's shared tree — say where the line is, once."""
+    return (f"{verb} 'path' is outside anything you can reach: {path!r}. Absolute paths are "
+            f"fine, but only under {' or '.join(reach)} — that tree holds the fleet's repos "
+            f"and your own worktree, and what you may read INSIDE it is decided by your "
+            f"granted scope, not by this message. A path elsewhere on this machine is not "
+            f"something to ask scope for; it is not part of your world.")
 
 
 def _escape_refusal(verb: str, path, worktree: str) -> str:
@@ -1203,7 +1279,8 @@ class BeingGateClient:
             # closed, which is the right direction, but the verb was dead for an hour and the
             # being could not tell why from a gate.raised.
             ctx = {"worktree": getattr(self, "worktree", None),
-                   "memory_root": getattr(self, "memory_root", None)}
+                   "memory_root": getattr(self, "memory_root", None),
+                   "workspace": getattr(self, "workspace", None)}
             # a COMPOSED verb: the seat builds the exact outward act (a shell line) from the
             # being's args, and THAT is what the law judges. Bad args raise here and gate()
             # turns that into a deny (gate.raised), never a silent pass. The being never

@@ -173,7 +173,9 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
         peer_aliases=instance_config(instance).get("peer_aliases") or None,
         # The being's own git worktree, for `check` and (M1) for editing code. Read from
         # instance.json so it is a per-being fact beside the being, not a launcher flag.
-        worktree=instance_config(instance).get("worktree") or None)
+        worktree=instance_config(instance).get("worktree") or None,
+        # so the dispatcher composes `search` exactly as the client judges it
+        workspace=workspace)
     client = BeingGateClient(member_id=member,
                              identity_path=str(instance / "identity.json"),
                              workspace=workspace, dispatcher=dispatcher,

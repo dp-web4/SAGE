@@ -75,6 +75,12 @@ def _hestia_error(env: dict) -> Optional[str]:
 # Matches a search shows. A search is a POINTER at lines to read, not a way to read a
 # file sideways; past this the being should narrow rather than scroll.
 SEARCH_LINES_SHOWN = 40
+# A MATCH IS A POINTER, NOT A READ, and a line has no length limit. `-I` skips binaries but
+# not a text file holding one long line: the first search of the harness tree matched
+# `base64` inside a 4KB data: URI in dashboard_html.py, and forty of those is more than this
+# being's entire working room (num_ctx 24,576, ~6,100 tokens of it free). Cut the line, keep
+# the file:line — which is the part a search is for.
+SEARCH_LINE_CHARS = 220
 
 
 def _session_lost(exc: Exception) -> bool:
@@ -108,9 +114,16 @@ class HestiaF1aDispatcher:
                  peer_aliases: Optional[Dict[str, str]] = None,
                  # the being's OWN git worktree: where `check` runs and where it may
                  # edit code. Never the shared checkout (PRD M1).
-                 worktree: Optional[str] = None):
+                 worktree: Optional[str] = None,
+                 # The gate workspace root, carried ONLY so this site composes `search` the
+                 # same way the client does (search_command reaches the fleet repo root from
+                 # it). Absent, absolute-path search composes worktree-only here and
+                 # workspace-wide there, and the judged/executed mismatch guard refuses the
+                 # act — a clean refusal rather than a divergence, but a dead verb.
+                 workspace: Optional[str] = None):
         self.plugin_id = plugin_id
         self.worktree = worktree
+        self.workspace = workspace
         # the being's own home, and the name it speaks under in a conversation. plugin_id
         # IS the member name here (build_client passes the member), but bind it explicitly
         # rather than relying on that staying true.
@@ -676,7 +689,11 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, pending=True,
                                   note="search needs a worktree of your own; none is configured")
         try:
-            cmd = search_command(intent.args, {"worktree": self.worktree})
+            # getattr, not attribute access: this method is reached on dispatchers built by
+            # __new__ in the suite, and a missing workspace must narrow the reach, never
+            # raise inside the one try that only catches ValueError.
+            cmd = search_command(intent.args, {"worktree": self.worktree,
+                                               "workspace": getattr(self, "workspace", None)})
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         judged = getattr(getattr(self, "_verdict", None), "command", None)
@@ -691,6 +708,15 @@ class HestiaF1aDispatcher:
                                   capture_output=True, timeout=60)
         except Exception as e:
             return ResultEnvelope(ok=False, error=f"search could not run: {type(e).__name__}: {e}")
+        if proc.returncode > 1:
+            # rc>1 IS A FAILURE, NOT AN ABSENCE. `grep` exits 2 for an unreadable or
+            # missing path; reporting that as "no matches" would be a bounded absence
+            # claimed about something that was never read.
+            why = (proc.stderr or "").strip().splitlines()
+            return ResultEnvelope(ok=False, error=(
+                f"search could not read {where}: "
+                f"{why[0] if why else f'exit {proc.returncode}'}. Nothing was searched, so "
+                f"this is not an absence of {pattern!r}."))
         lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip()]
         # Paths come back absolute because the pathspec is absolute (hestia matches command
         # tokens against absolute granted prefixes). The being thinks in worktree-relative
@@ -699,7 +725,9 @@ class HestiaF1aDispatcher:
         root = os.path.realpath(self.worktree) + os.sep
         lines = [ln.replace(root, "") for ln in lines]
         truncated = len(lines) > SEARCH_LINES_SHOWN
-        shown = lines[:SEARCH_LINES_SHOWN]
+        shown = [ln if len(ln) <= SEARCH_LINE_CHARS
+                 else ln[:SEARCH_LINE_CHARS] + f"  ...[{len(ln) - SEARCH_LINE_CHARS} more chars on this line]"
+                 for ln in lines[:SEARCH_LINES_SHOWN]]
         if not shown:
             # "NOT IN THAT FILE" AND "NO SUCH FILE" ARE THE SAME EXIT CODE (SAGE#89). git
             # grep returns 1 for both, so a search whose pathspec matched nothing came back
@@ -708,7 +736,11 @@ class HestiaF1aDispatcher:
             # worktree search runs inside. ls-files answers over the same universe git grep
             # searches (tracked files), using the pathspec the law actually judged.
             missing = None
-            if intent.args.get("path"):
+            if intent.args.get("path") and cmd.startswith("git "):
+                # ONLY FOR THE GIT COMPOSITION. A search of a granted path outside the
+                # worktree composes `grep -r` (see search_command), and `ls-files` would
+                # answer "not tracked here" about every one of them — turning a real
+                # absence into a confident false "no such file" about a file that exists.
                 argv_probe = shlex.split(cmd)
                 spec = argv_probe[argv_probe.index("--") + 1] if "--" in argv_probe else None
                 if spec:

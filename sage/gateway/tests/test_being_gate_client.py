@@ -775,7 +775,10 @@ def test_search_refuses_what_its_grammar_cannot_represent():
         ({"pattern": "a\nb"}, "single line"),
         ({"pattern": "x" * 201}, "under 200"),
         ({"pattern": "x", "path": "../escape"}, "plain path"),
-        ({"pattern": "x", "path": "/etc/passwd"}, "escapes your worktree"),
+        # absolute and off the tree: refused for REACH now, not for escaping the worktree
+        # (search_command grew a workspace-wide reach; see the reach test below)
+        ({"pattern": "x", "path": "/etc/passwd"}, "outside anything you can reach"),
+        ({"pattern": "x", "path": "/etc/../etc/passwd"}, "plain path"),
         ({"pattern": "x", "path": "has space"}, "whitespace"),
         ({"pattern": "x", "path": "-rf"}, "plain path"),
     ]:
@@ -929,3 +932,84 @@ def test_a_search_refused_for_a_word_in_its_pattern_says_so():
     assert _pattern_collision_hint(
         BeingIntent("search", {"pattern": "q", "path": "/etc/x"}),
         "'/etc/x' is not granted") == "", "a token with a separator is a path, not a pattern word"
+
+
+def test_search_reaches_the_granted_tree_and_stops_at_the_machine(tmp_path):
+    """An absolute path inside the fleet repo root composes; one outside it is refused HERE.
+
+    Both halves are load-bearing and neither is redundant with the law. Measured against
+    the live daemon 2026-09-14 with legion-being's real standing grant: `search` intents
+    naming '/etc' and the operator's dotfile directory were ALLOWED by the gate, because
+    command_scope_reach judges a command by splitting it on the workspace string and an
+    absolute path that never names the workspace is not a token it ever sees. The gate
+    says so itself ("the engine sandbox, not this check, is the fs boundary") and `search`
+    does not run in the being's sandbox. So this refusal is the only one there is.
+
+    The other half is the defect this fix exists for: the being was granted standing
+    recursive read on the whole tree, `memory_read` honoured it that beat, and `search`
+    refused it — not at the gate, at THIS function, before the gate ever saw the path.
+    """
+    from sage.gateway.being_gate_client import search_command
+
+    root = tmp_path / "ws"                      # stands in for ~/ai-workspace
+    wt = root / "being-worktrees" / "b"         # the being's own tree
+    ws = root / "SAGE"                          # the gate workspace
+    peer = root / "hestia"                      # a sibling repo it was granted
+    for d in (wt, ws, peer):
+        d.mkdir(parents=True)
+    ctx = {"worktree": str(wt), "workspace": str(ws)}
+
+    # the shape that was refused: an absolute path in a sibling repo under the same root
+    for inside in (ws, peer, root):
+        cmd = search_command({"pattern": "needle", "path": str(inside)}, ctx)
+        assert cmd.startswith("grep -rn -I -E "), cmd
+        assert cmd.endswith(f"-- {inside}"), cmd
+        assert "--exclude-dir=.git" in cmd          # .git/config carries remote tokens
+        assert " -e needle " in cmd
+
+    # and the boundary: outside that tree is not a scope question, it is a no
+    for outside in ("/etc", str(tmp_path / "elsewhere"), "/"):
+        try:
+            search_command({"pattern": "x", "path": outside}, ctx)
+            assert False, f"{outside} should not be reachable"
+        except ValueError as e:
+            assert "outside anything you can reach" in str(e)
+            assert str(root) in str(e), "the refusal must name where the line IS"
+
+    # the being's own tree still composes `git grep`, absolutely or relatively — unchanged
+    (wt / "f.py").write_text("needle\n")
+    for p_ in ("f.py", str(wt / "f.py")):
+        assert search_command({"pattern": "needle", "path": p_}, ctx).startswith(
+            f"git --no-pager -C {wt} grep ")
+
+    # NO WORKSPACE IN CTX IS THE OLD, CLOSED BEHAVIOUR. It matters because the dispatcher
+    # composes from its own ctx: if it lacked the workspace it would build the worktree-only
+    # string while the client judged the wide one, and _do_search refuses a mismatch.
+    try:
+        search_command({"pattern": "x", "path": str(peer)}, {"worktree": str(wt)})
+        assert False, "without a workspace the reach must close, not open"
+    except ValueError as e:
+        assert "outside anything you can reach" in str(e)
+
+
+def test_both_composition_sites_build_the_same_search(tmp_path, monkeypatch):
+    """The judged string and the executed string, for an absolute path. SAGE#90.
+
+    _do_search refuses when they differ, so a disagreement is a dead verb rather than an
+    ungoverned act — which is why this is a test and not a comment. The workspace had to
+    be threaded to the dispatcher for this to hold; before that it composed worktree-only.
+    """
+    from sage.gateway.being_gate_client import search_command
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+
+    root = tmp_path / "ws"
+    wt, ws = root / "wt", root / "SAGE"
+    (ws / "sub").mkdir(parents=True)
+    wt.mkdir(parents=True)
+    args = {"pattern": "needle", "path": str(ws / "sub")}
+
+    judged = search_command(args, {"worktree": str(wt), "memory_root": str(wt),
+                                   "workspace": str(ws)})
+    d = HestiaF1aDispatcher("t", memory_root=str(wt), worktree=str(wt), workspace=str(ws))
+    executed = search_command(args, {"worktree": d.worktree, "workspace": d.workspace})
+    assert judged == executed

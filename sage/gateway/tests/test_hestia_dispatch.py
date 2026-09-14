@@ -1170,3 +1170,70 @@ def test_scope_on_a_path_that_does_not_exist_is_refused_before_it_is_filed(tmp_p
              GatewayVerdict("allow", granted=(root,)))
     assert env2.ok and env2.result["request_id"] == "scope-1", \
         "an existing path must still reach the operator"
+
+
+def test_search_reaches_a_granted_sibling_repo_and_answers_about_it(tmp_path):
+    """The whole point of the change: a path the being can READ it can now SEARCH.
+
+    legion-being, 2026-09-14 19:29:39Z, one beat: `memory_read` returned ranges out of the
+    live harness under a fresh standing grant, and two searches of the same directory came
+    back `gate.raised: search 'path' escapes your worktree`. Reading a 1434-line file a
+    range at a time is the strategy this verb exists to replace, and it is the one its
+    window cannot afford. The refusal was the harness's, not the law's."""
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent
+
+    root = tmp_path / "ws"
+    wt, ws, peer = root / "wt", root / "SAGE", root / "hestia"
+    for d_ in (wt, ws, peer):
+        d_.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    (peer / "law.py").write_text("FORBIDDEN_DEFAULT = ('a',)\n")
+
+    d = D.__new__(D)
+    d.worktree, d.workspace = str(wt), str(ws)
+    d._verdict = types.SimpleNamespace(command=None)
+
+    r = d._do_search(BeingIntent("search", {"pattern": "FORBIDDEN_DEFAULT", "path": str(peer)}))
+    assert r.ok, r.error
+    assert r.result["matches"] == 1
+    assert r.result["lines"][0] == f"{peer}/law.py:1:FORBIDDEN_DEFAULT = ('a',)"
+
+    # A PATH THAT ISN'T THERE IS A FAILURE, NOT AN ABSENCE. `grep` exits 2 and would
+    # otherwise land in the no-match arm as a confident bounded absence about a file that
+    # was never opened — and the ls-files probe that catches this for `git grep` answers
+    # "not tracked here" about every out-of-worktree path, so it must not run on this one.
+    gone = d._do_search(BeingIntent("search", {"pattern": "x", "path": str(peer / "nope.py")}))
+    assert gone.ok is False
+    assert "could not read" in gone.error and "No such file" in gone.error
+    assert "not an absence" in gone.error
+
+    # and a real absence in a real out-of-tree file is still a result, not an error
+    miss = d._do_search(BeingIntent("search", {"pattern": "zzz_absent", "path": str(peer)}))
+    assert miss.ok is True and miss.result["matches"] == 0
+
+
+def test_one_long_match_line_cannot_eat_the_beings_window(tmp_path):
+    """`-I` skips binaries, not a text file with one 6KB line in it.
+
+    Measured on the first search of the harness tree: `base64` matched inside a data: URI
+    in dashboard_html.py at 6,472 characters. Forty of those is ~64,000 characters against
+    roughly 6,100 tokens of working room — the verb would have cost more than the read it
+    replaces. A match is a pointer; the file:line is the part that is."""
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D, SEARCH_LINE_CHARS
+    from sage.gateway.being_gate_client import BeingIntent
+
+    wt = tmp_path / "wt"; wt.mkdir()
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    (wt / "big.py").write_text("blob = '" + "A" * 6000 + "needle'\n")
+    subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
+
+    d = D.__new__(D); d.worktree = str(wt); d.workspace = None
+    d._verdict = types.SimpleNamespace(command=None)
+    line = d._do_search(BeingIntent("search", {"pattern": "blob"})).result["lines"][0]
+
+    assert len(line) < SEARCH_LINE_CHARS + 80, f"line was {len(line)} chars"
+    assert line.startswith("big.py:1:"), "the pointer survives the cut"
+    assert "more chars on this line" in line, "and the being is told it was cut"
