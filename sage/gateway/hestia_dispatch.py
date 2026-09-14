@@ -666,11 +666,50 @@ class HestiaF1aDispatcher:
                 "dispatcher would execute."))
         pattern = str(intent.args.get("pattern", ""))
         where = str(intent.args.get("path", "") or "your whole worktree")
+        # WITNESSED LIKE git_read, because it is the same kind of act. Both are classed
+        # _CONSEQUENTIAL — they run a seat-side subprocess judged under mrh.command — and
+        # git_read opened an action, recorded its outcome and returned the witness id while
+        # search did neither. Policy classification and executor semantics must not disagree
+        # (GPT review of #83): a verb the law treats as consequential leaves a record.
+        begin = self._call("hestia_begin_action", {"tool_name": "search", "target": pattern[:80]})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=f"search UNVERIFIED: the witness substrate "
+                                                  f"is unreachable ({str(err)[:160]})")
+        action_id = begin.get("actionId")
         try:
             proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
                                   capture_output=True, timeout=60)
+            ran = True
         except Exception as e:
-            return ResultEnvelope(ok=False, error=f"search could not run: {type(e).__name__}: {e}")
+            ran = False
+            proc = None
+            error = f"search could not run: {type(e).__name__}: {e}"
+        # GIT GREP HAS THREE OUTCOMES AND ONLY TWO OF THEM ARE ANSWERS: rc=0 matched, rc=1
+        # searched and found nothing, rc>1 FAILED — an invalid extended regex, an unreadable
+        # pathspec, a bad revision. Treating every completed subprocess as an answer reported
+        # rc=2 as `matches: 0` with the bounded-absence note attached, which is the single
+        # worst shape a search result can have: a confident absence produced by a pattern
+        # that was never applied. The being would have read "not in this repo" from a typo
+        # in a regex. (GPT, second pass on #83.) An unanswered search is also an unsuccessful
+        # action, so the witness records it as one.
+        answered = ran and proc is not None and proc.returncode in (0, 1)
+        try:
+            self._call("hestia_record_outcome",
+                       {"action_id": action_id, "success": answered, "magnitude": 0.0})
+        except Exception:
+            pass
+        if not ran:
+            return ResultEnvelope(ok=False, error=error, witness_id=action_id)
+        if not answered:
+            stderr_first = ((proc.stderr or "").strip().splitlines() or ["no stderr"])[0]
+            return ResultEnvelope(ok=False, witness_id=action_id, error=(
+                f"search FAILED and this is not an absence: git grep exited "
+                f"{proc.returncode}, so {pattern!r} was never applied to {where}. "
+                f"git said: {stderr_first[:200]}. "
+                f"The pattern is an EXTENDED regex — ( ) | + ? {{ }} are operators, and "
+                f"matching one literally needs a backslash. Fix the pattern and search "
+                f"again; do not conclude the text is absent."))
         lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip()]
         # Paths come back absolute because the pathspec is absolute (hestia matches command
         # tokens against absolute granted prefixes). The being thinks in worktree-relative
@@ -681,13 +720,13 @@ class HestiaF1aDispatcher:
         truncated = len(lines) > SEARCH_LINES_SHOWN
         shown = lines[:SEARCH_LINES_SHOWN]
         if not shown:
-            return ResultEnvelope(ok=True, result={
+            return ResultEnvelope(ok=True, witness_id=action_id, result={
                 "pattern": pattern, "searched": where, "matches": 0,
                 "note": (f"no line matches {pattern!r} in {where}. That is an answer about "
                          f"WHAT WAS SEARCHED, not about the repository: widen the path, or "
                          f"check the pattern (it is an extended regex, so ( ) | + are "
                          f"special — searching for a literal one needs a backslash)")})
-        return ResultEnvelope(ok=True, result={
+        return ResultEnvelope(ok=True, witness_id=action_id, result={
             "pattern": pattern, "searched": where, "matches": len(lines),
             "shown": len(shown),
             "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "

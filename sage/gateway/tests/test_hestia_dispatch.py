@@ -795,6 +795,8 @@ def test_a_search_that_finds_nothing_is_a_result_not_an_error(tmp_path):
     subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
 
     d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None)
+    # search is _CONSEQUENTIAL and now witnesses like git_read, so the chain must answer
+    d._call = lambda name, args: {"actionId": "act-s"} if name == "hestia_begin_action" else {}
 
     hit = d._do_search(BeingIntent("search", {"pattern": r"def compose\("})).result
     assert hit["matches"] == 1
@@ -805,6 +807,7 @@ def test_a_search_that_finds_nothing_is_a_result_not_an_error(tmp_path):
     miss = d._do_search(BeingIntent("search", {"pattern": "zzz_absent_zzz"}))
     assert miss.ok is True, "a search that finds nothing still succeeded as an act"
     assert miss.result["matches"] == 0
+    assert miss.witness_id == "act-s", "a consequential verb leaves a record"
     assert "WHAT WAS SEARCHED" in miss.result["note"]
 
 
@@ -1160,3 +1163,54 @@ def _run_check_capturing(d, argv0):
     finally:
         subprocess.run = o_run
         bgc.check_command, bgc.check_argv = o_cmd, o_argv
+def test_a_broken_pattern_is_a_failure_not_an_absence(tmp_path):
+    """git grep's rc>1 must never be reported as `matches: 0`.
+
+    GPT's second pass on SAGE#83: `_do_search` set ran=True for any completed subprocess and
+    then read empty stdout as a true absence. An invalid extended regex exits 2 having
+    searched nothing, so the being would have been handed a confident, bounded-sounding
+    "no line matches" for a pattern that was never applied — and would have concluded the
+    text is not in its own tree. The three outcomes are distinct: 0 matched, 1 searched and
+    found nothing, >1 failed.
+    """
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent
+
+    wt = tmp_path / "wt"; (wt / "pkg").mkdir(parents=True)
+    (wt / "pkg" / "mod.py").write_text("def compose(a, b):\n    return a\n")
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
+
+    outcomes = {}
+    d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None)
+
+    def _call(name, args):
+        if name == "hestia_begin_action":
+            return {"actionId": "act-s"}
+        if name == "hestia_record_outcome":
+            outcomes[args["action_id"]] = args["success"]
+        return {}
+    d._call = _call
+
+    # An unmatched paren: valid as a literal, invalid as the extended regex git applies.
+    broken = d._do_search(BeingIntent("search", {"pattern": "def compose("}))
+
+    assert broken.ok is False, (
+        f"a pattern that never ran must not succeed; got result={broken.result!r}")
+    assert not (broken.result or {}).get("matches") == 0, \
+        "a failed search must not report a match count at all"
+    assert "not an absence" in (broken.error or "").lower(), \
+        f"the error must say plainly that this is not an absence: {broken.error!r}"
+    assert broken.witness_id == "act-s", "a consequential verb leaves a record either way"
+    assert outcomes.get("act-s") is False, \
+        "an unanswered search is an unsuccessful action in the witness record"
+
+    # The two real answers are unaffected and still distinguishable from each other.
+    hit = d._do_search(BeingIntent("search", {"pattern": r"def compose\("}))
+    assert hit.ok is True and hit.result["matches"] == 1
+    assert outcomes.get("act-s") is True, "a search that answered is a successful action"
+
+    miss = d._do_search(BeingIntent("search", {"pattern": "zzz_absent_zzz"}))
+    assert miss.ok is True and miss.result["matches"] == 0, \
+        "rc=1 is still a true absence, not an error"
