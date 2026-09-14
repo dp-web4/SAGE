@@ -141,10 +141,26 @@ class Presence:
                     descriptor = d.get("descriptor", "")
                     wake, resting = self._should_wake(sal, gaze, descriptor, now)
                     if wake:
-                        out = _wake(descriptor, resting, sal.get("salience"), d.get("coherence"))
-                        noticing = out.get("response", "")
+                        # BACKOFF ON FAILURE. `last_wake` used to be set only after a SUCCESSFUL wake, so a wake
+                        # that raised left the cooldown un-armed and the next salient tick retried at once. On a
+                        # being that answers in a second that is invisible; on thor's 27B each retry is another
+                        # 420 s wait against something already not answering. Mark the attempt BEFORE the call:
+                        # the cooldown then applies to attempts, not only to successes. `last_desc` is left alone
+                        # so the moment can still be noticed later rather than written off.
                         self.last_wake = now
                         self.wake_times.append(now)
+                        try:
+                            out = _wake(descriptor, resting, sal.get("salience"), d.get("coherence"))
+                        except Exception as exc:
+                            self._log({"ts": round(now, 2), "kind": "wake_failed",
+                                       "error": type(exc).__name__, "detail": str(exc)[:200],
+                                       "salience": sal.get("salience"),
+                                       "note": "attempt recorded; cooldown now applies so this does not hammer"})
+                            print(f"[presence] WAKE FAILED ({type(exc).__name__}) — backing off "
+                                  f"{COOLDOWN_S}s: {str(exc)[:120]}", flush=True)
+                            time.sleep(POLL_S)
+                            continue
+                        noticing = out.get("response", "")
                         self.last_desc = descriptor
                         self._log({
                             "ts": round(now, 2), "kind": "noticed", "descriptor": descriptor,
@@ -156,15 +172,14 @@ class Presence:
                         print(f"[presence] noticed ({'rest' if resting else 'awake'}, "
                               f"sal={sal.get('salience')}): {noticing[:90]}", flush=True)
             except Exception as exc:
-                # A WAKE THAT FAILED IS NOT A QUIET WORLD. The old bare `pass` made a timing-out wake
-                # indistinguishable from nothing being salient — on thor that hid a 27B cold-load exceeding the
-                # timeout, so the being stayed asleep with no error anywhere. Record it and say it.
+                # NOT a wake failure — the wake has its own handler above. This is the perception read: a missing
+                # or half-written file, a absent key. Logged as its own kind, because calling it a wake failure
+                # would blame the being for a sensor problem.
                 try:
-                    self._log({"ts": round(time.time(), 2), "kind": "wake_failed",
-                               "error": type(exc).__name__, "detail": str(exc)[:200]})
+                    self._log({"ts": round(time.time(), 2), "kind": "perception_unreadable",
+                               "error": type(exc).__name__, "detail": str(exc)[:160]})
                 except Exception:
                     pass
-                print(f"[presence] WAKE FAILED ({type(exc).__name__}): {str(exc)[:160]}", flush=True)
             time.sleep(POLL_S)
 
 
