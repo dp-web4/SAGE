@@ -523,3 +523,35 @@ def test_an_escape_refusal_names_the_worktree_and_the_relative_form():
         {"pattern": "x", "path": "sage/gateway/hestia_dispatch.py"}, {"worktree": WT})
     assert "hestia_dispatch.py" in search_command(
         {"pattern": "x", "path": f"{WT}/sage/gateway/hestia_dispatch.py"}, {"worktree": WT})
+
+
+def test_a_failure_that_explains_itself_in_result_is_not_rendered_as_none():
+    """The envelope held a complete account and the renderer threw it away.
+
+    Found 2026-09-14 by legion-being, on the first live use of a verb it wrote itself. That
+    verb reports failures through `result` — device, exit code, a sentence naming the kind
+    of failure — and leaves `error` unset because the explanation is structured. This
+    renderer assumed not-ok implied `error`, so the being was handed the literal string
+    "[dispatch error — None]" twice. It reported an empty-error envelope matching no code
+    path, which was exactly right and as far as it could get.
+
+    Latent on this branch, since every verb here sets `error`. Pinned anyway: the envelope
+    is the contract, and a contract that silently drops one of its own fields will be
+    rediscovered by whoever next writes a verb that fills the other one.
+    """
+    from sage.gateway.being_gate_client import ResultEnvelope
+
+    structured = ResultEnvelope(ok=False, witness_id="act-1",
+                                result={"device": "/dev/video0", "exit_code": 251,
+                                        "note": "no frame was written"})
+    msg = structured.to_tool_message()
+    assert "None" not in msg, f"the failure rendered as None: {msg!r}"
+    assert "/dev/video0" in msg and "251" in msg, \
+        f"the account the envelope carried must survive rendering: {msg!r}"
+    assert "act-1" in msg, "a witnessed failure is still witnessed"
+
+    assert ResultEnvelope(ok=False, error="it broke").to_tool_message() == \
+        "[dispatch error — it broke]"
+
+    out = ResultEnvelope(ok=False).to_tool_message()
+    assert "None" not in out and "harness defect" in out, out
