@@ -350,3 +350,53 @@ def test_fresh_frames_encodes_every_frame_it_carries(tmp_path):
 
     # And with a boundary the normal paths are unchanged.
     assert fresh_frame(tmp_path, None, time.time() - 60)[1]["carried"] is True
+
+
+def test_fresh_frames_refuses_a_stale_frame_and_says_why(tmp_path):
+    """The PLURAL path's fail-closed rule, which nothing tested until now.
+
+    Found by mutation at the merge of SAGE#94: dropping the boundary check entirely — so
+    every frame on disk rides regardless of age — left the whole suite green. My staleness
+    test covered `fresh_frame`, the singular, and the cadence organ inherited the property
+    without inheriting its guard.
+
+    This is not hypothetical. The fail-open version of exactly this rule shipped this morning
+    and fired within the hour: a beat carried an eight-hour-old capture with a null age and
+    presented it to the being as what it had just asked to see. A stale frame shown as
+    current is a lie about the world, and the being cannot detect it from its side.
+
+    It is also, precisely, one of the five tests SAGE#94's first body claimed and did not
+    have — `test_a_stale_frame_is_dropped_not_sent`. The instinct behind those names was
+    right; only the tests were missing.
+    """
+    import os
+    cam = tmp_path / "scratch" / "camera"
+    cam.mkdir(parents=True)
+    good = b"\xff\xd8\xff" + b"x" * 4000 + b"\xff\xd9"
+
+    fresh = cam / "fresh.jpg"
+    stale = cam / "stale.jpg"
+    fresh.write_bytes(good)
+    stale.write_bytes(good)
+    old = time.time() - 30_000
+    os.utime(stale, (old, old))
+
+    since = time.time() - 60
+    pairs = fresh_frames(tmp_path, None, since)
+    by_name = {Path(m["path"]).name: (b64, m) for b64, m in pairs}
+
+    assert len(by_name) == 2, "both files are reported; refusing one is not hiding it"
+
+    b64_stale, meta_stale = by_name["stale.jpg"]
+    assert b64_stale is None, "a frame from before the boundary must not be encoded or sent"
+    assert meta_stale["carried"] is False
+    assert meta_stale["why"], "a refusal with no reason is a silent zero"
+    assert meta_stale["age_s"] > 1000, "it still reports how old the thing it refused was"
+
+    b64_fresh, meta_fresh = by_name["fresh.jpg"]
+    assert b64_fresh is not None and meta_fresh["carried"] is True, \
+        "the guard must not refuse everything — that passes a mutation test by accident"
+
+    # And the boundary itself: with none, NOTHING rides, however young it looks.
+    assert all(m["carried"] is False for _, m in fresh_frames(tmp_path, None, None)), \
+        "unknown age is unknown, not young"
