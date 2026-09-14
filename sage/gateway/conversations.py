@@ -333,10 +333,18 @@ def _cap_for(turn: dict, me: str, answered_upto: int, turn_chars: Optional[int])
 
 
 def render_for_being(instance: Path, me: str, per_conv: int = 12,
-                     turn_chars: Optional[int] = None) -> str:
+                     turn_chars: Optional[int] = None, *, mark: bool = True) -> str:
     """The conversations block in a beat: every conversation the being is in, its recent
     turns, and what is unanswered — marked, because 'someone spoke and I have not replied'
-    is the single fact that should never require inference."""
+    is the single fact that should never require inference.
+
+    `mark=False` RENDERS WITHOUT CONSUMING, and exists because a seat that inspects this
+    block changes it. Measured 2026-09-14: I called this from a diagnostic to ask what the
+    being could see of a turn, and the call itself marked every pending turn read — so the
+    being's own "unanswered" marker for a message it had not yet been shown was gone, and
+    the record said it had seen something it had not. `drain_new_for` already took this
+    flag; the beat's own render did not, which made the read-only path the dangerous one.
+    Any caller that is looking rather than delivering passes mark=False."""
     convs = [m for m in listing(instance) if me in m.get("participants", [])]
     if not convs:
         return ""
@@ -345,7 +353,7 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
         turns = recent(instance, m["id"], limit=per_conv)
         # what the being is shown NOW is what it has seen; the marker below and the next
         # beat's "unanswered" both key off this, not off whether it spoke afterwards
-        if turns:
+        if turns and mark:
             pend_before = awaiting(instance, m["id"], me)
         else:
             pend_before = []
@@ -373,7 +381,7 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
                  f"{_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
                  for t in turns]
         pend = pend_before
-        if turns:
+        if turns and mark:
             mark_seen(instance, me, m["id"], max(int(t.get("seq", 0)) for t in turns))
         if pend:
             who = ", ".join(sorted({t["from"] for t in pend}))
