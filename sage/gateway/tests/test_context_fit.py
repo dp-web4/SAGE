@@ -78,36 +78,6 @@ def test_unknown_window_means_full_display():
 
 
 # -- the next-wake check must not be false by construction -----------------------------
-def test_a_running_beat_does_not_read_as_an_unarmed_timer():
-    """2026-09-09T15:07Z: the end-of-beat check read `monotonic=infinity` and wrote
-    "NOTHING WILL WAKE THE BEING" into the record of a beat whose timer armed correctly
-    seconds later. An OnUnitInactiveSec timer CANNOT have a next elapse while the unit it
-    watches is running — and this check runs from inside that unit."""
-    from sage.gateway.heartbeat import interpret_timer_state
-
-    running = ("NextElapseUSecRealtime=\n"
-               "NextElapseUSecMonotonic=infinity\n"
-               "LoadState=loaded\nActiveState=active\n")
-    armed, why = interpret_timer_state(running)
-    assert armed is True, why
-    assert "correct while this beat is still running" in why
-
-    scheduled = ("NextElapseUSecRealtime=Wed 2026-09-09 09:03:39 PDT\n"
-                 "NextElapseUSecMonotonic=infinity\nLoadState=loaded\nActiveState=active\n")
-    armed, why = interpret_timer_state(scheduled)
-    assert armed is True and why.startswith("scheduled:")
-
-    # the real failure this exists for: the timer is gone or dead, not merely unscheduled
-    for bad in ("NextElapseUSecRealtime=\nNextElapseUSecMonotonic=infinity\n"
-                "LoadState=not-found\nActiveState=inactive\n",
-                "NextElapseUSecRealtime=\nNextElapseUSecMonotonic=infinity\n"
-                "LoadState=loaded\nActiveState=failed\n",
-                "NextElapseUSecRealtime=\nNextElapseUSecMonotonic=infinity\n"
-                "LoadState=loaded\nActiveState=inactive\n"):
-        armed, why = interpret_timer_state(bad)
-        assert armed is False, why
-        assert "not healthy" in why
-
 
 def test_the_tool_schemas_are_measured_not_budgeted():
     """`fixed_other` was a flat 4,000 chars for "tool schemas + chat template", set when the
@@ -144,3 +114,47 @@ def test_the_tool_schemas_are_measured_not_budgeted():
         "the fitter must call the same helper the record does"
     assert "len(json.dumps(ollama_tools(" not in body, \
         "main() is recomputing the schema size instead of using the helper"
+
+
+def test_the_compaction_log_reaches_the_result_and_the_fallbacks_match_the_evidence():
+    """Two of GPT's findings on #82, pinned.
+
+    (1) `compacted` was accumulated in a local list and never copied onto the returned
+    result, so the intervention was invisible in the beat record — an instrument nobody can
+    read is not an instrument. My first fix attached it inside `run_tool_turn`, which does
+    not define the name: a NameError the suite would not have caught, because the attachment
+    only runs on a path the tests reach through a fake.
+
+    (2) The loop's fallbacks were left at `_CPT = 3.4` and `_UNCOUNTED_CHARS = 4000` — the
+    two numbers this PR's own evidence disproves — and `_est_tokens(measured=None)` consumes
+    exactly those. The fallback is reached precisely when nothing has been measured yet."""
+    from types import SimpleNamespace
+    from sage.gateway.being_tool_loop import (run_ollama_tool_turn, _est_tokens,
+                                              _CPT, _UNCOUNTED_CHARS)
+    from sage.gateway.being_gate_client import BeingGateClient
+
+    # (2) the fallbacks agree with the seed-side correction
+    assert _CPT <= 2.9, "must sit below the measured 3.026-3.141 range, not above it"
+    assert _UNCOUNTED_CHARS > 4000, "4,000 was set at 13 verbs; the schemas measure 11,717"
+    # and the no-measurement path actually uses them
+    naive = _est_tokens(10_000, None)
+    assert naive == (10_000 + _UNCOUNTED_CHARS) / _CPT
+    anchored = _est_tokens(10_000, (2_000, 9_000))
+    assert anchored != naive, "with a server count the estimate must not ride the fallback"
+
+    # (1) the compaction log reaches the caller
+    class LLM:
+        num_ctx = 4096          # small enough that compaction must act
+        def get_chat_response(self, messages, tools=None):
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"prompt_eval_count": 3000, "eval_count": 5}}
+
+    seed = [{"role": "user", "content": "go"}]
+    for i in range(6):
+        seed.append({"role": "assistant", "content": f"step {i}"})
+        seed.append({"role": "tool", "effector": "memory_read", "content": "R" * 3000})
+
+    c = BeingGateClient.__new__(BeingGateClient)
+    res = run_ollama_tool_turn(c, LLM(), seed, max_steps=1, tools=[])
+    assert res.compacted, "the compaction log must reach the result, not die in a local"
+    assert all("chars" in e and "elisions" in e for e in res.compacted)

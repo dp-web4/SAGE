@@ -248,15 +248,22 @@ def _think_budget(llm, floor: int = 6000) -> int:
 # estimate, at 3.4, had it ~1.4k tokens lighter than it was — and the generate was cut.
 _CPT_ADDED = 2.5
 
-# Chars per token, deliberately low (English + paths + JSON): under-estimating tokens here
-# would defeat the guard it feeds.
-_CPT = 3.4
+# Chars per token for the SEED side of the estimate, deliberately low: under-counting tokens
+# defeats the guard this feeds, so it must sit BELOW the true ratio. 3.4 was measured once on
+# 2026-09-08 and left alone; re-measured across 60 beats it is 3.141 and DRIFTING (3.152 over
+# the first ten, 3.026 over the last ten) as the being's content shifts toward paths and JSON.
+# 2.9 sits below the observed minimum with room for further drift. This PR corrects the same
+# constant on the seed side; leaving the loop's copy at the disproven number would be the PR
+# arguing against its own evidence (GPT review of #82).
+_CPT = 2.9
 
 # Chars the prompt carries that are not in any message's content: the tool schemas and the
-# chat template. A FALLBACK only — used when nothing has been measured. heartbeat measures
-# the schemas instead, because a flat constant here was set at 13 verbs and was silently
-# wrong at 18 (measured 2026-09-13: 4,000 assumed, 11,717 real).
-_UNCOUNTED_CHARS = 4000
+# chat template. NOT a budget — heartbeat MEASURES the schemas (`_schema_chars_for`), because
+# a flat constant was set at 13 verbs and was silently wrong at 18 (4,000 assumed, 11,717
+# real). This fallback is reached only before the server has counted anything, and it is set
+# from the same measurement rather than the disproven one: ~11,700 schema chars plus ~1,200
+# of template.
+_UNCOUNTED_CHARS = 12900
 
 
 def _est_tokens(chars_now: int, measured) -> float:
@@ -572,4 +579,10 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     result.thinking = thoughts
     result.salvaged = salvaged
     result.generates = generates
+    # The compaction log belongs to the function that OWNS it. run_tool_turn does not
+    # define `compacted` — attaching it there is a NameError no test would catch, which is
+    # exactly what my first attempt did. Copied here so the intervention is observable in
+    # the beat record (GPT review of #82: a list nobody returns is not an instrument).
+    result.compacted = list(compacted)
+
     return result
