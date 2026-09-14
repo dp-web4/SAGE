@@ -197,6 +197,16 @@
         "What would someone who disagreed with you say right now?",
         "What question are you leaving with that you didn't arrive with?"
       ]
+    },
+    {
+      "session": 360,
+      "timestamp": 1789391905.3902893,
+      "prompts": [
+        "Before we start \u2014 what's actually going on with you right now? Not the big picture. Right now.",
+        "Name something small. Not an idea \u2014 a thing, a moment, a texture.",
+        "That's a clean answer. Too clean, maybe. What's the messy version?",
+        "If you could send one thought to your future self, what would it be?"
+      ]
     }
   ]
 }
