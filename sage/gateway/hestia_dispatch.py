@@ -68,6 +68,11 @@ def _hestia_error(env: dict) -> Optional[str]:
     return str(err)
 
 
+# Matches a search shows. A search is a POINTER at lines to read, not a way to read a
+# file sideways; past this the being should narrow rather than scroll.
+SEARCH_LINES_SHOWN = 40
+
+
 class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
     live daemon. Wraps ReferenceF1aDispatcher for the local verbs (witness / memory)."""
@@ -86,8 +91,14 @@ class HestiaF1aDispatcher:
                  membot_endpoint: str = "http://127.0.0.1:8010/mcp",
                  membot_cartridge: Optional[str] = None,
                  seed_path: Optional[str] = None,
-                 peer_aliases: Optional[Dict[str, str]] = None):
+                 peer_aliases: Optional[Dict[str, str]] = None,
+                 worktree: Optional[str] = None):
         self.plugin_id = plugin_id
+        # The being's OWN git worktree: the tree it reads its own history from. Never the
+        # shared checkout — a being reasons about the code that constitutes it, and the
+        # shared tree is a different one that drifts (PRD M1).
+        self.worktree = (os.path.realpath(os.path.expanduser(str(worktree)))
+                         if worktree else None)
         # the being's names for peers -> hub roster names (e.g. legion-being -> legion-sage,
         # the name legion-being joined under on 2026-09-05); env SAGE_PEER_ALIASES="a=b,c=d"
         self.peer_aliases = dict(peer_aliases or {})
@@ -554,6 +565,203 @@ class HestiaF1aDispatcher:
                               result={"deny_hash": deny_hash, "appeal": out.get("witnessEntryHash"),
                                       "adjudicator": out.get("adjudicator"),
                                       "next": out.get("next") or "a NOT-SAME peer or the operator rules; the ruling is witnessed either way"})
+
+    def _do_git_read(self, intent: BeingIntent) -> ResultEnvelope:
+        """Read the history of the tree the being lives in. Read-only by construction.
+
+        dp, 2026-09-07: "the being should be able to check git by itself." Until now the
+        only way it learned that its worktree had moved between beats was a seat telling
+        it, which makes provenance a matter of trusting the seat — the exact dependency the
+        `tree` block on a check result exists to remove.
+
+        Same shape as _do_check and for the same reason: the command is REBUILT here from
+        the same function the gate judged, so the law never rules on one string while the
+        seat runs another. git is run with cwd set to the worktree rather than `git -C`,
+        because `-C` silently redirects the read away from the tree you think you are in
+        (legion-claude learned that one the hard way in a review) — here the cwd IS the
+        subject, and it must be the same tree `check` executes in."""
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import git_read_command
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="git_read needs a worktree of your own; none is "
+                                       "configured on this seat")
+        try:
+            cmd = git_read_command(intent.args, {"worktree": self.worktree})
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        op = str(intent.args.get("op", "")).strip()
+        begin = self._call("hestia_begin_action", {"tool_name": "git_read", "target": op})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        try:
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+                                  capture_output=True, timeout=60)
+            out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+            ran, rc = True, proc.returncode
+        except Exception as e:
+            ran, rc, out = False, -1, f"{type(e).__name__}: {e}"
+        try:
+            self._call("hestia_record_outcome",
+                       {"action_id": action_id, "success": ran, "magnitude": 0.0})
+        except Exception:
+            pass
+        if not ran:
+            return ResultEnvelope(ok=False, error=f"git_read could not run: {out[:400]}",
+                                  witness_id=action_id)
+        # Truncate from the FRONT: for a log the newest commits are at the top and matter
+        # most, but for show/diff/blame the tail carries the change itself. Keep the head
+        # for log, the tail otherwise, and say which was cut — a silent truncation
+        # manufactures false absences (see reference_f1a._do_memory_read).
+        # AN EMPTY ANSWER MUST SAY WHY IT IS EMPTY. Measured 2026-09-08: the being asked
+        # `show 5cd0ca518 -- sage/gateway/check.py`, a path that does not exist, and git
+        # returned exit 0 and nothing. It read that as "show does not cross branches" —
+        # a wrong model of its own tool built on a silent zero. A silent zero is a false
+        # absence, the same class as the truncated read and the miscounted turns.
+        if not out.strip() and rc == 0 and op in ("show", "diff", "log", "blame"):
+            pth = str(intent.args.get("path", "")).strip()
+            out = ("[no output: " + (
+                f"nothing in that revision touches '{pth}', or no such path exists there" if pth
+                else "the revision(s) produced no differences") +
+                " — an empty diff is a true answer, not a failed read]")
+        limit = 6000
+        if len(out) > limit:
+            if op == "log":
+                out = out[:limit] + f"\n[… truncated: {len(out) - limit} more characters of older history …]"
+            else:
+                out = f"[… truncated: {len(out) - limit} earlier characters withheld …]\n" + out[-limit:]
+        return ResultEnvelope(ok=True, witness_id=action_id,
+                              result={"op": op, "exit": rc, "output": out,
+                                      "tree": self._worktree_revision(),
+                                      "action_id": action_id})
+
+
+    # -- search: find a symbol without reading the file it is in -----------------
+    def _do_search(self, intent: BeingIntent) -> ResultEnvelope:
+        """Run the composed `git grep` and return file:line:text.
+
+        A SEARCH THAT FINDS NOTHING IS A RESULT, not an error — same rule as a red check.
+        `git grep` exits 1 on no match, and reporting that as a failure would teach the
+        being that looking is dangerous. The result says plainly that the pattern is absent
+        from what was searched, and names WHAT was searched, so absence is bounded rather
+        than universal."""
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import search_command
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="search needs a worktree of your own; none is configured")
+        try:
+            cmd = search_command(intent.args, {"worktree": self.worktree})
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "search refused: the command the law judged is not the command this "
+                "dispatcher would execute."))
+        pattern = str(intent.args.get("pattern", ""))
+        where = str(intent.args.get("path", "") or "your whole worktree")
+        # WITNESSED LIKE git_read, because it is the same kind of act. Both are classed
+        # _CONSEQUENTIAL — they run a seat-side subprocess judged under mrh.command — and
+        # git_read opened an action, recorded its outcome and returned the witness id while
+        # search did neither. Policy classification and executor semantics must not disagree
+        # (GPT review of #83): a verb the law treats as consequential leaves a record.
+        begin = self._call("hestia_begin_action", {"tool_name": "search", "target": pattern[:80]})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=f"search UNVERIFIED: the witness substrate "
+                                                  f"is unreachable ({str(err)[:160]})")
+        action_id = begin.get("actionId")
+        try:
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+                                  capture_output=True, timeout=60)
+            ran = True
+        except Exception as e:
+            ran = False
+            proc = None
+            error = f"search could not run: {type(e).__name__}: {e}"
+        # GIT GREP HAS THREE OUTCOMES AND ONLY TWO OF THEM ARE ANSWERS: rc=0 matched, rc=1
+        # searched and found nothing, rc>1 FAILED — an invalid extended regex, an unreadable
+        # pathspec, a bad revision. Treating every completed subprocess as an answer reported
+        # rc=2 as `matches: 0` with the bounded-absence note attached, which is the single
+        # worst shape a search result can have: a confident absence produced by a pattern
+        # that was never applied. The being would have read "not in this repo" from a typo
+        # in a regex. (GPT, second pass on #83.) An unanswered search is also an unsuccessful
+        # action, so the witness records it as one.
+        answered = ran and proc is not None and proc.returncode in (0, 1)
+        try:
+            self._call("hestia_record_outcome",
+                       {"action_id": action_id, "success": answered, "magnitude": 0.0})
+        except Exception:
+            pass
+        if not ran:
+            return ResultEnvelope(ok=False, error=error, witness_id=action_id)
+        if not answered:
+            stderr_first = ((proc.stderr or "").strip().splitlines() or ["no stderr"])[0]
+            return ResultEnvelope(ok=False, witness_id=action_id, error=(
+                f"search FAILED and this is not an absence: git grep exited "
+                f"{proc.returncode}, so {pattern!r} was never applied to {where}. "
+                f"git said: {stderr_first[:200]}. "
+                f"The pattern is an EXTENDED regex — ( ) | + ? {{ }} are operators, and "
+                f"matching one literally needs a backslash. Fix the pattern and search "
+                f"again; do not conclude the text is absent."))
+        lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip()]
+        # Paths come back absolute because the pathspec is absolute (hestia matches command
+        # tokens against absolute granted prefixes). The being thinks in worktree-relative
+        # paths, and every other verb speaks them, so translate rather than leak the seat's
+        # layout into its head.
+        root = os.path.realpath(self.worktree) + os.sep
+        lines = [ln.replace(root, "") for ln in lines]
+        truncated = len(lines) > SEARCH_LINES_SHOWN
+        shown = lines[:SEARCH_LINES_SHOWN]
+        if not shown:
+            return ResultEnvelope(ok=True, witness_id=action_id, result={
+                "pattern": pattern, "searched": where, "matches": 0,
+                "note": (f"no line matches {pattern!r} in {where}. That is an answer about "
+                         f"WHAT WAS SEARCHED, not about the repository: widen the path, or "
+                         f"check the pattern (it is an extended regex, so ( ) | + are "
+                         f"special — searching for a literal one needs a backslash)")})
+        return ResultEnvelope(ok=True, witness_id=action_id, result={
+            "pattern": pattern, "searched": where, "matches": len(lines),
+            "shown": len(shown),
+            "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "
+                          f"path or the pattern" if truncated else None),
+            "lines": shown})
+
+
+    def _worktree_revision(self) -> dict:
+        """WHICH TREE THE ANSWER IS ABOUT. A check result without this is not evidence: the
+        being reasons about the harness it LIVES in, and the worktree is a separate checkout
+        that drifts. Measured 2026-09-07, before the being had ever called `check` — its
+        worktree sat on an unrelated raising commit from another machine, three tests behind
+        the running code and missing the very fix it would most want to verify. It would
+        have gotten a true answer about a tree that is not the one constituting it, with
+        nothing in the envelope to say so.
+
+        `dirty` matters as much as the SHA: uncommitted edits mean the SHA names something
+        other than what ran. PRD r3 §6 requires this on every check result."""
+        import subprocess
+
+        def _git(*args):
+            try:
+                r = subprocess.run(("git", *args), cwd=self.worktree, text=True,
+                                   capture_output=True, timeout=15)
+                return r.stdout.strip() if r.returncode == 0 else None
+            except Exception:
+                return None
+
+        head = _git("rev-parse", "HEAD")
+        status = _git("status", "--porcelain")
+        return {"head": head, "short": (head or "")[:9] or None,
+                "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+                "subject": _git("log", "-1", "--format=%s"),
+                "committed": _git("log", "-1", "--format=%cI"),
+                "dirty": None if status is None else bool(status.strip())}
+
 
     def _do_request_scope(self, intent: BeingIntent) -> ResultEnvelope:
         """The daemon (handler.rs::tool_request_scope @a5e18af) reads plugin_id, role, path,

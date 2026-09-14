@@ -343,3 +343,142 @@ def test_granted_reach_reads_the_cores_reach_resolver_and_an_older_core_is_recur
     older = _granted_reach(object(), Pol, "/ws")
     assert older and all(rec for _, rec in older)
     assert _granted_reach(Core, None, "/ws") == () and GatewayVerdict("allow").granted_reach == ()
+
+
+def test_search_quotes_its_pattern_so_judged_equals_executed():
+    """The judged string must shlex.split into exactly the argv that runs (GPT on #56, #6).
+
+    The earlier verbs bought that invariant by REJECTING whitespace, which would make a
+    search verb useless — a being looking for `def compose(` needs spaces. shlex.quote
+    round-trips instead, so the pattern is one argv element on both sides."""
+    import shlex
+    from sage.gateway.being_gate_client import search_command
+
+    ctx = {"worktree": "/wt"}
+    cmd = search_command({"pattern": "seed, posture_turn = compose"}, ctx)
+    argv = shlex.split(cmd)
+    assert argv[argv.index("-e") + 1] == "seed, posture_turn = compose"
+    assert argv[-1] == "/wt"          # absolute pathspec: hestia matches absolute prefixes
+
+    # a path narrows it, and is absolute-ised for the same reason
+    cmd2 = search_command({"pattern": "x", "path": "sage/gateway"}, ctx)
+    assert shlex.split(cmd2)[-1] == "/wt/sage/gateway"
+
+
+
+
+def test_search_refuses_what_its_grammar_cannot_represent():
+    """A refusal that names its own valid set is one the being can correct without asking."""
+    from sage.gateway.being_gate_client import search_command, SEARCH_MAX_N
+    ctx = {"worktree": "/wt"}
+
+    for bad, expect in [
+        ({}, "pattern"),
+        ({"pattern": "   "}, "pattern"),
+        ({"pattern": "a\nb"}, "single line"),
+        ({"pattern": "x" * 201}, "under 200"),
+        ({"pattern": "x", "path": "../escape"}, "plain path"),
+        ({"pattern": "x", "path": "/etc/passwd"}, "escapes your worktree"),
+        ({"pattern": "x", "path": "has space"}, "whitespace"),
+        ({"pattern": "x", "path": "-rf"}, "plain path"),
+    ]:
+        try:
+            search_command(bad, ctx)
+            assert False, f"should have refused {bad!r}"
+        except ValueError as e:
+            assert expect in str(e), f"{bad!r} -> {e}"
+
+    # n is clamped, never trusted
+    assert f"--max-count={SEARCH_MAX_N}" in search_command({"pattern": "x", "n": 10_000}, ctx)
+    assert "--max-count=1" in search_command({"pattern": "x", "n": -5}, ctx)
+
+    # no worktree is a missing affordance, named
+    try:
+        search_command({"pattern": "x"}, {})
+        assert False, "should have refused without a worktree"
+    except ValueError as e:
+        assert "worktree" in str(e)
+
+
+def test_git_read_refuses_what_its_grammar_cannot_represent():
+    """The being names an op, a revision and a path; it never supplies a flag. Anything the
+    grammar cannot represent raises, and the refusal names its own valid set — a refusal the
+    being can correct without asking (measured 2026-09-07: it did exactly that on `check`,
+    in one beat, and declined to appeal a grammar error it agreed with)."""
+    from sage.gateway.being_gate_client import git_read_command, GIT_OPS
+
+    ctx = {"worktree": "/wt"}
+    for bad, expect in [
+        ({"op": "push"}, "must be one of"),
+        ({"op": ""}, "must be one of"),
+        ({"op": "log", "rev": "; rm -rf /"}, "sha"),
+        ({"op": "show", "path": "../../etc/passwd"}, "plain path"),
+        ({"op": "show", "path": "/etc/passwd"}, "escapes"),
+        ({"op": "show", "path": "has space"}, "whitespace"),
+        ({"op": "show", "path": "-rf"}, "plain path"),
+    ]:
+        try:
+            git_read_command(bad, ctx)
+            assert False, f"should have refused {bad!r}"
+        except ValueError as e:
+            assert expect in str(e), f"{bad!r} -> {e}"
+
+    # the ops it DOES accept compose, and none of them can write
+    for op in GIT_OPS:
+        cmd = git_read_command({"op": op, "path": "sage"} if op != "status" else {"op": op}, ctx)
+        assert cmd.startswith("git --no-pager")
+        for forbidden in (" push", " commit", " reset", " checkout ", " clean"):
+            assert forbidden not in cmd, f"{op} composed a writing command: {cmd}"
+
+    try:
+        git_read_command({"op": "log"}, {})
+        assert False, "no worktree must refuse"
+    except ValueError as e:
+        assert "worktree" in str(e)
+
+
+def test_the_judged_command_round_trips_even_when_seat_paths_contain_spaces():
+    """The judged==executed invariant is a property of the STRING, not of the fleet's
+    current directory names. Both composers quoted the being-supplied value and interpolated
+    the seat-configured worktree and target RAW; a worktree containing a space would split
+    into extra argv, and the law would have judged a command that is not the one that runs
+    (GPT review of #83). Fleet paths are simple today — the invariant must not depend on
+    that staying true."""
+    import shlex
+    from sage.gateway.being_gate_client import git_read_command, search_command
+
+    wt = "/home/dp/a path/with spaces"
+    ctx = {"worktree": wt}
+
+    for label, cmd in (("git_read", git_read_command({"op": "show", "path": "sage"}, ctx)),
+                       ("search", search_command({"pattern": "def x", "path": "sage"}, ctx))):
+        argv = shlex.split(cmd)
+        assert argv[-1] == f"{wt}/sage", f"{label}: pathspec split into {argv[-3:]}"
+        assert wt in argv[argv.index("-C") + 1] if "-C" in argv else True
+
+    # and the being-supplied pattern stays one element beside them
+    argv = shlex.split(search_command({"pattern": "seed, posture = compose"}, ctx))
+    assert argv[argv.index("-e") + 1] == "seed, posture = compose"
+
+
+def test_every_git_op_the_grammar_accepts_is_named_in_the_schema():
+    """An affordance the being holds but is not told about is one it does not have.
+
+    GPT's second pass on SAGE#83: GIT_OPS accepted 'cat' and the published schema listed
+    only five ops, so `git_read op='cat'` worked and nothing ever said so. Same class as a
+    registry verb that is never offered — the capability exists and the being cannot find
+    it. The schema text is derived from GIT_OPS now, so the two cannot drift again; this
+    pins that they agree in both directions.
+    """
+    from sage.gateway.being_gate_client import GIT_OPS, _TOOL_SCHEMAS
+    op_text = _TOOL_SCHEMAS["git_read"][1]["op"]
+    for op in GIT_OPS:
+        assert repr(op) in op_text, f"git_read accepts {op!r} and the schema never mentions it"
+    # And the reverse: the schema must not advertise an op the grammar would refuse. Only
+    # the enumeration itself is an offer of ops — the prose after it names argument names
+    # like 'path', which are not ops and must not be read as one.
+    import re
+    enumeration = op_text.split(" (", 1)[0]
+    for advertised in re.findall(r"'([a-z]+)'", enumeration):
+        assert advertised in GIT_OPS, \
+            f"the schema offers {advertised!r}, which git_read_command refuses"
