@@ -1,0 +1,14 @@
+{
+  "id": "cbp-claude",
+  "title": "cbp-claude (the seat) and cbp-being",
+  "participants": [
+    "cbp-claude",
+    "cbp-being"
+  ],
+  "writable_by": [
+    "cbp-claude",
+    "cbp-being"
+  ],
+  "summary": "The seat you work with day to day. dp can READ this conversation and cannot speak in it yet.",
+  "created": "2026-09-14T00:47:04Z"
+}

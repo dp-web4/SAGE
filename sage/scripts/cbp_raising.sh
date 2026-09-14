@@ -51,7 +51,9 @@ SAGE_DAEMON_BIN="$SAGE_DIR/sage-rs/target/release/sage-daemon"
 DAEMON_PID=$(lsof -t -i :$SAGE_PORT 2>/dev/null || true)
 if [ -z "$DAEMON_PID" ]; then
     echo "[CBP-Raising] Starting Rust SAGE daemon (sage-rs)..."
-    SAGE_MACHINE=cbp SAGE_MODEL=qwen3.8-distill:4b \
+    # SAGE_BEING / SAGE_BEING_INSTANCE: the entity /chat and /conversations talk to (SAGE #81).
+    SAGE_MACHINE=cbp SAGE_MODEL=qwen3.8-distill:4b SAGE_BEING=cbp-being \
+    SAGE_BEING_INSTANCE="$SAGE_DIR/sage/instances/cbp-qwen3.8-distill-4b" \
         nohup "$SAGE_DAEMON_BIN" > /tmp/sage-daemon.log 2>&1 &
     sleep 5
 fi
