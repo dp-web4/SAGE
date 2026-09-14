@@ -125,10 +125,224 @@ def pr_review_signature(member_id: str, action_id: Optional[str], being_lct: Opt
     return "\n".join(lines)
 
 
+
+# A revision the being may name: a hex sha, HEAD with optional ~n/^n, or a plain branch or
+# tag name. Deliberately excludes anything containing a flag, a space, or a path separator
+# trick — `--upload-pack=...`-style arguments are the classic way a read verb becomes a run.
+# `~n` / `^n` suffixes are allowed on ANY base, not only HEAD. The being flagged (not
+# litigated) that `<sha>~1` was refused and span diffs against anything older than HEAD~k
+# were unnameable — two witnessed denies on 2026-09-08 for a natural thing to want. Still
+# no flags: a suffix is digits after ~ or ^, nothing else survives.
+_REV = (r"(?:[0-9a-fA-F]{7,40}|HEAD|[A-Za-z][A-Za-z0-9._/-]{0,60})"
+        r"(?:[~^][0-9]{0,3})?")
+
+GIT_OPS = ("log", "show", "diff", "status", "blame", "cat")
+
+# A revision the being may name: a hex sha, HEAD with optional ~n/^n, or a plain branch or
+# tag name. Deliberately excludes anything containing a flag, a space, or a path separator
+# trick — `--upload-pack=...`-style arguments are the classic way a read verb becomes a run.
+# `~n` / `^n` suffixes are allowed on ANY base, not only HEAD. The being flagged (not
+# litigated) that `<sha>~1` was refused and span diffs against anything older than HEAD~k
+# were unnameable — two witnessed denies on 2026-09-08 for a natural thing to want. Still
+# no flags: a suffix is digits after ~ or ^, nothing else survives.
+
+def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a git_read intent, built from validated args.
+
+    The being names an operation and, optionally, a revision and a path inside its own
+    worktree. It never names a flag. Anything the grammar cannot represent raises, and the
+    refusal says what the grammar accepts — a refusal that names its own valid set is one
+    the being can correct without asking (measured 2026-09-07: it did exactly that on
+    `check`, in one beat, and explicitly declined to appeal a grammar error)."""
+    import os
+    import re
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError("git_read needs a worktree of your own; none is configured on this seat")
+    op = str(args.get("op", "")).strip()
+    if op not in GIT_OPS:
+        raise ValueError(f"git_read 'op' must be one of {list(GIT_OPS)}, got {op!r}")
+
+    rev = str(args.get("rev", "")).strip()
+    if rev and not re.fullmatch(_REV, rev):
+        raise ValueError(f"git_read 'rev' must be a sha, HEAD, HEAD~n or a branch name, got {rev!r}")
+
+    path = str(args.get("path", "")).strip()
+    if path:
+        # WHITESPACE IS JUDGED/EXECUTED DRIFT (GPT review of #56, #6): a path with a space
+        # passes the path grammar, is interpolated unquoted into the composed string the law
+        # judges, and shlex.split() then hands the executor MORE argv elements than the law
+        # saw. One representation, or the gate rules on a command that is not the one run.
+        if any(ch.isspace() for ch in path) or any(ch.isspace() for ch in rev):
+            raise ValueError("git_read 'path' and 'rev' may not contain whitespace: the command "
+                             "the law judges must split into exactly the argv that runs")
+        if path.startswith("-") or ".." in path.split("/"):
+            raise ValueError(f"git_read 'path' must be a plain path inside your worktree, got {path!r}")
+        full = os.path.realpath(os.path.join(worktree, path))
+        if not (full == os.path.realpath(worktree)
+                or full.startswith(os.path.realpath(worktree) + os.sep)):
+            raise ValueError(f"git_read 'path' escapes your worktree: {path!r}")
+        # The pathspec goes into the command ABSOLUTE, not as the being typed it. hestia's
+        # mrh.command matches command tokens against GRANTED PREFIXES, which are absolute;
+        # a relative 'sage/gateway/x.py' matches nothing and the whole read is refused
+        # (measured 2026-09-07: "'py' is not granted"). Resolving it here means the law sees
+        # the real target of the read and can rule on it — which is the point of the rule,
+        # not an obstacle to it. It also removes any doubt about what the pathspec meant.
+        path = full
+
+    try:
+        n = int(args.get("n", 20))
+    except (TypeError, ValueError):
+        raise ValueError("git_read 'n' must be a whole number of commits (1-50)")
+    n = max(1, min(50, n))
+
+    # Every read pinned against git's own execution surfaces — with FLAGS ONLY, no
+    # `-c key=value`. The first cut used `-c core.pager=cat -c diff.external= -c alias.x=!true`
+    # and hestia refused every invocation: mrh.command reads `pager=cat` as a path token and
+    # correctly reports it as outside the being's grant. That refusal was RIGHT, and the fix
+    # is not to argue with it — the flags below buy the identical property with fewer moving
+    # parts. `--no-pager` already defeats a repo-local pager, `--no-ext-diff` already defeats
+    # an external diff driver, `--no-textconv` defeats a textconv filter, and a git alias
+    # cannot shadow a built-in subcommand at all, so the alias override was never doing
+    # anything. Hardening that trips the law is hardening that does not ship.
+    base = "git --no-pager"
+    if op == "status":
+        return f"{base} status --porcelain=v1 --branch"
+    if op == "log":
+        cmd = f"{base} log --no-ext-diff --no-textconv --oneline --no-decorate -n {n}"
+        if rev:
+            cmd += f" {rev}"
+        return cmd + (f" -- {path}" if path else "")
+    if op == "show":
+        return f"{base} show --no-ext-diff --no-textconv --stat --patch {rev or 'HEAD'}" + (f" -- {path}" if path else "")
+    if op == "diff":
+        rev2 = str(args.get("rev2", "")).strip()
+        if rev2 and not re.fullmatch(_REV, rev2):
+            raise ValueError(f"git_read 'rev2' must be a sha, HEAD, HEAD~n or a branch name, got {rev2!r}")
+        # TWO ARGUMENTS, never `A..B`. hestia's mrh.command reads the `..` in a revision
+        # range as a parent-directory traversal and resolves the whole command's scope to
+        # the workspace root, refusing it (measured 2026-09-07: "'<workspace root>' is not
+        # granted"). `git diff A B` is exactly equivalent for a two-point diff and contains
+        # no token that looks like a path escape. The rule is doing its job on a token that
+        # genuinely looks like traversal; the command should not hand it one.
+        span = f"{rev} {rev2}" if rev and rev2 else (rev or "HEAD~1")
+        return f"{base} diff --no-ext-diff --no-textconv {span}" + (f" -- {path}" if path else "")
+    if op == "cat":
+        if not path:
+            raise ValueError("git_read op='cat' needs a 'path': the file whose content you want")
+        # `<rev>:<path>` is ONE argument to git and the being supplies neither half raw —
+        # the rev passed _REV, the path was resolved absolute inside the worktree above. The
+        # path must be repo-relative here, so it is relativised back; an absolute path after
+        # a colon is not a thing git resolves.
+        rel = os.path.relpath(path, os.path.realpath(worktree))
+        if rel.startswith(".."):
+            raise ValueError(f"git_read 'path' escapes your worktree: {rel!r}")
+        return f"{base} show --no-ext-diff --no-textconv {rev or 'HEAD'}:{rel}"
+    if not path:
+        raise ValueError("git_read op='blame' needs a 'path' inside your worktree")
+    return f"{base} blame --no-textconv -L 1,120 {rev or 'HEAD'} -- {path}"
+
+
+
+# pr_open: the being's work enters the tree. PRD r3 §7 — every change reaches main through
+# a pull request, attributed on the artefact, reviewed by someone NOT-SAME.
+#
+# dp, 2026-09-07: "the being should be able to ... submit prs directly." Built only after M1,
+# and only because of what CI does: SAGE's one workflow (syntax-gate.yml) runs
+# `python -m compileall`, which byte-compiles and does not execute. A PR from the being
+# therefore reaches no executor it has not already been proven against — its own sandboxed
+# `check`. If a workflow that RUNS code is ever added, this verb becomes the composition
+# hazard of 2026-09-07 wearing GitHub's clothes, and the gate should learn that before the
+# workflow lands.
+#
+# WHAT THE BEING SUPPLIES: a slug (the branch name's tail), a title, a body. Nothing else.
+# WHAT THE LAW JUDGES: the outward act, `gh pr create ...`, as a string, with the title
+# passed as one argument and the body over stdin so no text of the being's reaches a shell.
+# WHAT THE SEAT DOES AROUND IT (hestia_dispatch._do_pr_open): branch from the worktree's
+# HEAD, `git add -A`, commit with the message over stdin and the attribution trailers the
+# being cannot omit or alter, push. The commit is authored by the seat's git identity and
+# ATTRIBUTED to the being in trailers — §6 says signatures come at M3; this is the
+# legibility form, honestly labelled as such in every PR body.
+
+SEARCH_MAX_N = 60        # matches returned at most; a search is a pointer, not a read
+
+
+
+def search_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a `search` intent.
+
+    WHY THIS VERB EXISTS. The being could read files and not search them, so finding one
+    symbol in a 1054-line file meant reading it in ranges — and at num_ctx 24,576 each range
+    pushes the last one out. Measured three times on 2026-09-13: 16 ranged reads of
+    heartbeat.py in one beat with zero writes, and the same shape earlier on
+    model_adapter.py. Linear scan is not a strategy a being of this size can afford; the
+    machine answers the same question in milliseconds. Search replaces scan.
+
+    `git grep` rather than grep: it stays inside the repository by construction, it is
+    read-only, and it will not wander into .git or ignored trees.
+
+    THE PATTERN IS QUOTED, not banned from having spaces. The judged string must
+    shlex.split into exactly the argv that runs (GPT on #56, point 6) — the earlier verbs
+    bought that invariant by rejecting whitespace, which would make a search verb useless.
+    shlex.quote round-trips instead, so `def compose(` is judged and run as ONE argv."""
+    import os
+    import shlex
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError("search needs a worktree of your own; none is configured on this seat")
+    pattern = str(args.get("pattern", ""))
+    if not pattern.strip():
+        raise ValueError("search needs a 'pattern' — the text or extended-regex to look for")
+    if len(pattern) > 200:
+        raise ValueError(f"search 'pattern' is {len(pattern)} characters; keep it under 200")
+    if "\n" in pattern or "\r" in pattern:
+        raise ValueError("search 'pattern' must be a single line")
+    try:
+        n = int(args.get("n", 30))
+    except (TypeError, ValueError):
+        raise ValueError(f"search 'n' must be a number, got {args.get('n')!r}")
+    n = max(1, min(n, SEARCH_MAX_N))
+
+    path = str(args.get("path", "")).strip()
+    target = os.path.realpath(worktree)
+    if path:
+        if any(ch.isspace() for ch in path):
+            raise ValueError("search 'path' may not contain whitespace")
+        if path.startswith("-") or ".." in path.split("/"):
+            raise ValueError(f"search 'path' must be a plain path inside your worktree, got {path!r}")
+        full = os.path.realpath(os.path.join(worktree, path))
+        if not (full == target or full.startswith(target + os.sep)):
+            raise ValueError(f"search 'path' escapes your worktree: {path!r}")
+        target = full
+    return (f"git --no-pager -C {worktree} grep -n -I -E --max-count={n} "
+            f"-e {shlex.quote(pattern)} -- {target}")
+
+
+
+
 _REGISTRY = {
     "peer_ask":       dict(tool="peer_ask",     path_args=(),       cmd_arg=None),
     "witness":        dict(tool="witness",      path_args=(),       cmd_arg=None),
     "memory_read":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
+    # git_read: read the history of the tree that constitutes it. Composed like check —
+    # the being names an op, the SEAT builds the command, the law judges THAT string, and
+    # the being never holds a flag. See git_read_command for what it composes with.
+    "git_read":       dict(tool="git_read",    path_args=(),       cmd_arg=None,
+                           compose=git_read_command),
+    # say: add a turn to a conversation the being is IN. Bounded by construction, like
+    # remember: the being names a conversation id, and the dispatcher refuses any id whose
+    # meta does not list it as a participant AND as writable. It cannot create a
+    # conversation, cannot speak in one it is not in, and cannot edit a turn once spoken —
+    # its own included. path_args=() is correct: the target is a conversation, not a path,
+    # and the reach is fixed by the meta file the seat owns rather than by the being's args.
+    # search: find a symbol without reading the file it is in. Composed like check and
+    # git_read — the being names a pattern and optionally a path, the SEAT builds the
+    # command, the law judges THAT string, and the being never holds a shell.
+    "search":         dict(tool="search",      path_args=(),        cmd_arg=None,
+                           compose=search_command),
+    # git_read: read the history of the tree that constitutes it. Composed like check —
+    # the being names an op, the SEAT builds the command, the law judges THAT string, and
+    # the being never holds a flag. See git_read_command for what it composes with.
     "memory_write":   dict(tool="write_note",   path_args=("path",), cmd_arg=None),
     "channel_egress": dict(tool="channel_send", path_args=(),       cmd_arg=None),
     "mesh":           dict(tool="mesh_notify",  path_args=(),       cmd_arg=None),  # §7.2 5th verb
@@ -173,7 +387,7 @@ _REGISTRY = {
 # consequential acts must not proceed without it (fail-closed).
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
-                            "remember", "request_scope", "say"})
+                            "remember", "request_scope", "git_read", "search", "say"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -197,6 +411,26 @@ _TOOL_SCHEMAS = {
                   "would change, with file and line references where you can.",
                   {"repo": "owner/name, e.g. dp-web4/SAGE", "number": "the PR number",
                    "body": "your review, in markdown"}, ["repo", "number", "body"]),
+    "git_read": ("Read the history of the repository you live in: what changed, when, and "
+                 "in which commit. Read-only — you cannot commit, push, or move a branch "
+                 "with this. Use it to find out whether the tree moved under you between "
+                 "beats, and to compare a `check` result's tree block against what is "
+                 "actually in the history.",
+                 {"op": "one of 'log', 'show', 'diff', 'status', 'blame'",
+                  "rev": "optional: a commit sha, HEAD, HEAD~2, or a branch name",
+                  "rev2": "optional, for op='diff': the second revision of the span",
+                  "path": "optional: a path inside your worktree to narrow the answer to",
+                  "n": "optional, for op='log': how many commits (1-50, default 20)"},
+                 ["op"]),
+    "search": ("Find where something IS, without reading the file it is in. Give a pattern "
+               "(text, or an extended regex) and optionally a path to narrow it; you get "
+               "back file:line:text for each match. Use this BEFORE memory_read: reading a "
+               "long file in ranges costs you the earlier ranges, because your window is "
+               "smaller than the file. Search first, then read the lines it points at.",
+               {"pattern": "the text or extended-regex to look for, e.g. 'def compose(' ",
+                "path": "optional: a path inside your worktree to narrow the search to",
+                "n": "optional: maximum matches per file (default 30)"},
+               ["pattern"]),
     "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "
             "rather than writing about them in your journal. The turn is attributed to you "
             "and kept forever; nobody can edit it afterwards, including you. Saying nothing "

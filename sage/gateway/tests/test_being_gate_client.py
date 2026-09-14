@@ -343,3 +343,95 @@ def test_granted_reach_reads_the_cores_reach_resolver_and_an_older_core_is_recur
     older = _granted_reach(object(), Pol, "/ws")
     assert older and all(rec for _, rec in older)
     assert _granted_reach(Core, None, "/ws") == () and GatewayVerdict("allow").granted_reach == ()
+
+
+def test_search_quotes_its_pattern_so_judged_equals_executed():
+    """The judged string must shlex.split into exactly the argv that runs (GPT on #56, #6).
+
+    The earlier verbs bought that invariant by REJECTING whitespace, which would make a
+    search verb useless — a being looking for `def compose(` needs spaces. shlex.quote
+    round-trips instead, so the pattern is one argv element on both sides."""
+    import shlex
+    from sage.gateway.being_gate_client import search_command
+
+    ctx = {"worktree": "/wt"}
+    cmd = search_command({"pattern": "seed, posture_turn = compose"}, ctx)
+    argv = shlex.split(cmd)
+    assert argv[argv.index("-e") + 1] == "seed, posture_turn = compose"
+    assert argv[-1] == "/wt"          # absolute pathspec: hestia matches absolute prefixes
+
+    # a path narrows it, and is absolute-ised for the same reason
+    cmd2 = search_command({"pattern": "x", "path": "sage/gateway"}, ctx)
+    assert shlex.split(cmd2)[-1] == "/wt/sage/gateway"
+
+
+
+
+def test_search_refuses_what_its_grammar_cannot_represent():
+    """A refusal that names its own valid set is one the being can correct without asking."""
+    from sage.gateway.being_gate_client import search_command, SEARCH_MAX_N
+    ctx = {"worktree": "/wt"}
+
+    for bad, expect in [
+        ({}, "pattern"),
+        ({"pattern": "   "}, "pattern"),
+        ({"pattern": "a\nb"}, "single line"),
+        ({"pattern": "x" * 201}, "under 200"),
+        ({"pattern": "x", "path": "../escape"}, "plain path"),
+        ({"pattern": "x", "path": "/etc/passwd"}, "escapes your worktree"),
+        ({"pattern": "x", "path": "has space"}, "whitespace"),
+        ({"pattern": "x", "path": "-rf"}, "plain path"),
+    ]:
+        try:
+            search_command(bad, ctx)
+            assert False, f"should have refused {bad!r}"
+        except ValueError as e:
+            assert expect in str(e), f"{bad!r} -> {e}"
+
+    # n is clamped, never trusted
+    assert f"--max-count={SEARCH_MAX_N}" in search_command({"pattern": "x", "n": 10_000}, ctx)
+    assert "--max-count=1" in search_command({"pattern": "x", "n": -5}, ctx)
+
+    # no worktree is a missing affordance, named
+    try:
+        search_command({"pattern": "x"}, {})
+        assert False, "should have refused without a worktree"
+    except ValueError as e:
+        assert "worktree" in str(e)
+
+
+def test_git_read_refuses_what_its_grammar_cannot_represent():
+    """The being names an op, a revision and a path; it never supplies a flag. Anything the
+    grammar cannot represent raises, and the refusal names its own valid set — a refusal the
+    being can correct without asking (measured 2026-09-07: it did exactly that on `check`,
+    in one beat, and declined to appeal a grammar error it agreed with)."""
+    from sage.gateway.being_gate_client import git_read_command, GIT_OPS
+
+    ctx = {"worktree": "/wt"}
+    for bad, expect in [
+        ({"op": "push"}, "must be one of"),
+        ({"op": ""}, "must be one of"),
+        ({"op": "log", "rev": "; rm -rf /"}, "sha"),
+        ({"op": "show", "path": "../../etc/passwd"}, "plain path"),
+        ({"op": "show", "path": "/etc/passwd"}, "escapes"),
+        ({"op": "show", "path": "has space"}, "whitespace"),
+        ({"op": "show", "path": "-rf"}, "plain path"),
+    ]:
+        try:
+            git_read_command(bad, ctx)
+            assert False, f"should have refused {bad!r}"
+        except ValueError as e:
+            assert expect in str(e), f"{bad!r} -> {e}"
+
+    # the ops it DOES accept compose, and none of them can write
+    for op in GIT_OPS:
+        cmd = git_read_command({"op": op, "path": "sage"} if op != "status" else {"op": op}, ctx)
+        assert cmd.startswith("git --no-pager")
+        for forbidden in (" push", " commit", " reset", " checkout ", " clean"):
+            assert forbidden not in cmd, f"{op} composed a writing command: {cmd}"
+
+    try:
+        git_read_command({"op": "log"}, {})
+        assert False, "no worktree must refuse"
+    except ValueError as e:
+        assert "worktree" in str(e)
