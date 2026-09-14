@@ -428,7 +428,8 @@ _TOOL_SCHEMAS = {
                  "with this. Use it to find out whether the tree moved under you between "
                  "beats, and to compare a `check` result's tree block against what is "
                  "actually in the history.",
-                 {"op": "one of 'log', 'show', 'diff', 'status', 'blame'",
+                 {"op": "one of " + ", ".join(repr(o) for o in GIT_OPS)
+                        + " ('cat' reads a file's content at a revision, and needs 'path')",
                   "rev": "optional: a commit sha, HEAD, HEAD~2, or a branch name",
                   "rev2": "optional, for op='diff': the second revision of the span",
                   "path": "optional: a path inside your worktree to narrow the answer to",

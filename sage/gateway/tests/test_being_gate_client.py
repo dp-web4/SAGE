@@ -459,3 +459,26 @@ def test_the_judged_command_round_trips_even_when_seat_paths_contain_spaces():
     # and the being-supplied pattern stays one element beside them
     argv = shlex.split(search_command({"pattern": "seed, posture = compose"}, ctx))
     assert argv[argv.index("-e") + 1] == "seed, posture = compose"
+
+
+def test_every_git_op_the_grammar_accepts_is_named_in_the_schema():
+    """An affordance the being holds but is not told about is one it does not have.
+
+    GPT's second pass on SAGE#83: GIT_OPS accepted 'cat' and the published schema listed
+    only five ops, so `git_read op='cat'` worked and nothing ever said so. Same class as a
+    registry verb that is never offered — the capability exists and the being cannot find
+    it. The schema text is derived from GIT_OPS now, so the two cannot drift again; this
+    pins that they agree in both directions.
+    """
+    from sage.gateway.being_gate_client import GIT_OPS, _TOOL_SCHEMAS
+    op_text = _TOOL_SCHEMAS["git_read"][1]["op"]
+    for op in GIT_OPS:
+        assert repr(op) in op_text, f"git_read accepts {op!r} and the schema never mentions it"
+    # And the reverse: the schema must not advertise an op the grammar would refuse. Only
+    # the enumeration itself is an offer of ops — the prose after it names argument names
+    # like 'path', which are not ops and must not be read as one.
+    import re
+    enumeration = op_text.split(" (", 1)[0]
+    for advertised in re.findall(r"'([a-z]+)'", enumeration):
+        assert advertised in GIT_OPS, \
+            f"the schema offers {advertised!r}, which git_read_command refuses"
