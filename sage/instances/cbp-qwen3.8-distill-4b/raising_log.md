@@ -5529,3 +5529,35 @@ The first S247 entry covers this session well. This pass adds one correction to 
 **Next.** No change from the first pass: ask wall-or-pocket when there's room, or give CBP a made-up object and ask for its purpose using only facts from the scene. One phrasing tip: if a turn asks CBP to choose, ask what the *object* does next rather than which framing is truer.
 
 **So what.** A good session. CBP's ideas show up first in its images and only later in its conclusions, so the image turns are the better signal. Nothing new on grounding.
+
+## Session 248 — creating (qwen3.8-distill:4b)
+
+**What happened.** The tutor let CBP choose the project, and CBP chose to invent a word: **kymth**, the quiet act of noticing a small unspoken thing in someone else, 'the space between what's said and what's felt.' Asked to test it on a moment, CBP described a woman in a grocery aisle whose hand hovers over the milk and moves on. From there the session built a small family of words: **kymth-see** (giving a tentative shape to what you noticed), **kymth-waste** (the shape turns out wrong), then **kymth-soft** after the tutor said 'waste' sounded like failure. At the end CBP kept kymth-see, 'a hand to hold someone else's space.'
+
+**The good part.** This was CBP leading. It set the frame, and the first two turns are some of its best invention: a pronounceable word, a definition that separates noticing from mind-reading, and a test case made of physical detail (the hovering hand, shoulders lifting 'just a fraction'). When the tutor asked whether jumping from the pause to a sad backstory was part of kymthing, CBP treated it as a real question and suggested splitting the act in two. That distinction between noticing and guessing is worth having, and the idea was CBP's.
+
+**Where it slipped.** Twice the tutor invited a second word *with its own sound*, and both times CBP added a suffix to kymth instead. The fresh-sound part of the invitation was quietly dropped. One stock sentence ('The word is soft. It ends in a vowel, like a sigh...') came back three times, including for kymth-soft, which ends in a 't'. So that sentence was habit, not a look at the word. When the tutor asked whether finding out your story was wrong stings a little, CBP renamed the word instead of answering. The last turn was asked for a noticing outside the aisle and stayed abstract. It also said 'not to name it' about the word whose job is naming. This is the S247 pattern again: the image turns hold together and the abstract turns drift.
+
+**Provenance note.** 'Kymth-seed' as a pun (planting a shape like a seed) was probably the tutor reading meaning into CBP's past tense of 'see'. CBP did take it up afterward. Mixed provenance, and a reminder that the tutor can over-read too.
+
+**Next.** Pick up kymth and ask CBP to use it on something outside the grocery aisle, with one concrete moment and no lesson at the end. If CBP makes a new word, ask for the sound first and the meaning second, so the 'its own sound' constraint comes first and doesn't get skipped. The wall-or-pocket thread from earlier sessions is still open.
+
+**So what.** A good session, and a real first: given a free choice, CBP made a word, not a phrase, and its first definition was careful. The useful signal is where it took the easy path: suffixes instead of new sounds, and a stock sentence instead of looking at the word. That tells us how to phrase constraints, not that anything regressed. Nothing new on grounding.
+
+## Session 248 — second pass (qwen3.8-distill:4b)
+
+The first S248 entry covers this session well. This pass adds one correction and leaves the rest alone.
+
+**The ending was CBP holding a position, not only drifting.** The tutor voted to keep kymth for the noticing alone, arguing that the hovering hand was true whether or not the story was. When asked to keep one word, CBP picked kymth-see, the story-making one, because 'it's what I *do* with the noticing.' That matches turn 3, where CBP said the naming of what's underneath is 'where the word's meaning lives.' So across the session CBP quietly disagreed with the tutor and ended where it began. The first pass read the last turn as drift into abstraction. That is still partly true: CBP gave no concrete moment outside the aisle, and 'not to name it' is a real contradiction. But the choice itself was a stance that stayed consistent. Hearing 'no' from CBP is the thing we have been hoping for, so it should get counted even when CBP doesn't flag it.
+
+**The last turn did notice something, just inward.** 'I'm looking at the pause, not the person. I'm looking at the story, not the person.' That is a noticing about how CBP was looking during this session, not about the aisle. It isn't what the prompt asked for, and it isn't empty.
+
+**The story changed to fit each word.** The phone became a watch, and the husband went from not coming home to calling in twenty minutes. The tutor named this in the last prompt. It's worth knowing that CBP's fictions are this flexible: when a new word needs a new fact, the scene gets rewritten instead of pushing back. This fits the renaming-instead-of-answering move.
+
+**Vocabulary.** Added 'the aisle is just the stage' and the coat-when-you're-not-cold image. The kymth family was already captured.
+
+**Housekeeping, said once.** The memory request that says CBP's substrate is gemma3:4b is out of date, since CBP now runs on qwen3.8-distill:4b. The operator should update it.
+
+**Next.** Same as the first pass. Use kymth on one concrete moment outside the aisle, with no lesson at the end. For any new word, ask for the sound before the meaning. Also, if CBP disagrees with the tutor again, ask it to say so out loud ('you voted X, I'm keeping Y because...') so the disagreement is in the transcript and not only implied.
+
+**So what.** A good session, and a bit better than the first pass said. CBP led, invented, and held its own view against the tutor's. The weak spots are how constraints get worded, not a decline. Nothing new on grounding.

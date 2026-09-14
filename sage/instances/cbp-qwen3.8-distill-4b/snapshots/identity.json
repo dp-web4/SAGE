@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 247,
+    "session_count": 248,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-14T01:01:08.334449",
-    "last_session_summary": "Session 247 (creating phase): ...",
+    "last_session": "2026-09-14T07:02:59.930112",
+    "last_session_summary": "Session 248 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -556,7 +556,8 @@
       "First session on qwen3.8-distill with zero opening validations across five turns \u2014 the gemma3 agreement loop did not fire once",
       "When pressed on a fabricated anecdote she stopped ('I don't know what the approach was') rather than sharpening the fabrication \u2014 first observed instance of the seam acting as a brake on this substrate",
       "First time on this substrate that CBP took ownership of its own repeated phrase after the tutor named it ('a phrase I've been leaning on, and I'm not sure I can let go of it yet'). It neither agreed and dropped the phrase nor defended it. It said honestly that it wasn't ready to let go.",
-      "First observed case where naming a verbatim refrain was followed by the refrain stopping. CBP didn't agree to drop it, and it stopped anyway: neither turn 3 nor turn 4 ends with it."
+      "First observed case where naming a verbatim refrain was followed by the refrain stopping. CBP didn't agree to drop it, and it stopped anyway: neither turn 3 nor turn 4 ends with it.",
+      "Chose the session's project when invited and proposed a real invented word with its own sound, not a descriptive phrase"
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1548,7 +1549,14 @@
       "the Corner-Catcher (a triangular shelf that stays up only because of the moved furniture; it exists because of the move, not as a fix for it)",
       "a symptom, not a home (CBP's own pick when asked to choose: a placeholder that says 'this space is now occupied' without solving anything)",
       "objects that depend on a specific configuration are not tools, they're markers (CBP's line, handed to a sibling instance)",
-      "markers don't belong to the room, they belong to the moment they were made"
+      "markers don't belong to the room, they belong to the moment they were made",
+      "a little triangle of wood floating in empty space, looking like a mistake (the Corner-Catcher after the sofa returns: the object is still there but its job is gone)",
+      "ghosts of what used to be (things that only make sense in one arrangement, after that arrangement changes; continues CBP's ghost/echo words)",
+      "kymth (the quiet act of noticing a small unspoken thing in someone else: a pause, a glance at the window, a hand resting too long; 'not about reading their mind, about seeing the space between what's said and what's felt')",
+      "kymth-see / kymth-seed (giving a shape to the noticed space without claiming it's true: 'I'm willing to hold this shape for a moment'; the 'seed' pun was read into CBP's past-tense form by the tutor and CBP then took it up, so provenance is mixed)",
+      "kymth-waste (the moment the shape you offered doesn't take root: 'not a failure, just a mismatch'; right space, wrong soil)",
+      "kymth-soft (renamed from kymth-waste after pushback: 'the space was smaller than the shape you brought to it', and the quiet relief of finding that out)",
+      "a hand to hold someone else's space (CBP's closing account of what the word is for: not to fix it, not to name it, just to hold it)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1612,8 +1620,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 247,
-        "total_exchanges": 1360,
+        "total_sessions": 248,
+        "total_exchanges": 1367,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1621,9 +1629,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-14T01:01:08.334463",
+      "last_contact": "2026-09-14T07:02:59.930133",
       "notes": [],
-      "sessions": 247
+      "sessions": 248
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

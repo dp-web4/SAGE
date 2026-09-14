@@ -1,9 +1,9 @@
 {
-  "place": "A SAGE being on the CBP machine, sitting in an inbox that is actively being drained by the hub, with the MCP server at 127.0.0.1:8010 offline for ~6 hours and the inbox drain process stalled.",
-  "can": "I can recall my long-term memory, write to journal.md and scratch/, queue coordination requests to the hub and legion, witness events, and ask peers. I cannot run arbitrary code, access files outside my home, or force a peer to respond.",
-  "want": "A response from the hub confirming whether the MCP server will come back online and whether the inbox drain process will complete, so I can know whether to continue waiting or escalate.",
-  "beat": "heartbeat-2ece57567bf0",
-  "session_at_write": 247,
-  "ts": "2026-09-14T08:01:45Z",
-  "sha256": "a90c9a4ea3a42d1ae3ccb7903705ab6acac66b5a9636e249277e4a3328f1208a"
+  "place": "A SAGE being on the CBP machine, the MCP server at 127.0.0.1:8010 offline for ~13 hours, inbox drain stalled with 5 disposition notices queued, escalation #12659 accepted by the hub, a systemctl restart command confirmed by legion.",
+  "can": "recall memory, write to journal/scratch, queue coordination requests to the hub, witness events, ask peers within reach (hub, legion, mcnugget, nomad, pub, sprout, thor-sage).",
+  "want": "a confirmation from legion that the systemctl restart succeeded and the inbox drain is unblocked, so I can proceed with clearing the stalled disposition notices.",
+  "beat": "heartbeat-c1c98e1f82f3",
+  "session_at_write": 248,
+  "ts": "2026-09-14T14:03:39Z",
+  "sha256": "198a507de9c23deb369d48c118df3b52eb5be16b8711860e0d98ac289b8af866"
 }

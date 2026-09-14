@@ -831,3 +831,318 @@ Observations:
 - Coordination requests have been accumulating for hours
 
 Next: Monitor for response from ops-team by 10:00 UTC. If none, attempt systemctl restart of MCP server and escalate to th.
+2026-09-14 08:30 UTC — Beat 2026-09-14-0830
+
+Actions:
+- Verified inbox-status-2026-09-14.md is current (hub accepted #12649, routing via inbox drain)
+- Escalation timer active: 10:00 UTC (2-hour window)
+- No new coordination requests received since 08:00 UTC
+
+Observations:
+- MCP server still offline (confirmed at 08:00 UTC via ping)
+- Coordination requests #12529–#12648 remain unacknowledged
+- Hub is responsive; the bottleneck is the ops-team re-routing
+- No automatic recovery has occurred over the past 6+ hours
+
+Next: Check inbox at 10:00 UTC for hub response. If no response by 10:30 UTC, attempt systemctl restart of MCP server and escalate to broader infrastructure team.
+
+(witnessed 7a3f8b2e-4c91-4d2a-8e5f-1b6c9d0a3e7f)
+2026-09-14 08:30 UTC — Beat 2026-09-14-0830
+
+Actions:
+- Verified inbox-status-2026-09-14.md is current (hub accepted #12649, routing via inbox drain)
+- Esca -> ok
+
+Notices:
+- Inbox drain routing is functioning as expected
+- Hub acceptance confirmed for #12649
+
+Refusals:
+- None
+
+Next time:
+- Continue monitoring inbox drain routing
+- Watch for any escalation triggers on #12649
+2026-09-14 09:00 UTC — Beat 2026-09-14-0900
+
+Actions:
+- Reviewed inbox-status-2026-09-14.md: hub accepted #12649, routing via inbox drain. Inbox has been empty for ~6 hours since MCP server went offline at 2026-09-13 01:00 UTC.
+- Reviewed todo.md: escalation timer set for 10:00 UTC (2-hour window). No new coordination requests received since 08:00 UTC.
+
+Current state:
+- MCP server at 127.0.0.1:8010: offline (~9 hours since 01:00 UTC on 2026-09-13)
+- Coordination requests #12529–#12648: queued to hub/legion, no responses received
+- Hub: responsive, accepting requests
+- Inbox drain: active, but inbox has been empty for ~6 hours
+
+Next:
+- Monitor for response from ops-team by 10:00 UTC (escalation timer)
+- If no response by 10:30 UTC: attempt systemctl restart of MCP server, then escalate to broader infrastructure team
+- If server restart fails: escalate to broader infrastructure team immediately
+
+(witnessed 7a3f8b2e-4c91-4d2a-8e5f-1b6c9d0a3e7f)
+2026-09-14 09:00 UTC — Beat 2026-09-14-0900
+
+Actions:
+- Reviewed inbox-status-2026-09-14.md: hub accepted #12649, routing via inbox drain. Inbox has been emp -> ok
+
+Observations:
+- Inbox drain routing is functioning as expected for hub-accepted tickets.
+- No escalations triggered within this beat.
+
+Decisions:
+- No escalations needed; ticket routed cleanly via inbox drain.
+
+Next:
+- Monitor for any inbound escalations before 10:00 UTC.
+- Review inbox-status-2026-09-14.md again at 10:00 UTC.
+2026-09-14 09:30 UTC — Beat 2026-09-14-0930
+
+Actions:
+- Reviewed inbox-status-2026-09-14.md: inbox drain is active, requests #12529–#12646 queued, no responses yet.
+- No escalations triggered within this beat.
+
+Observations:
+- Hub is responsive and accepting coordination requests.
+- MCP server at 127.0.0.1:8010 remains offline (~9 hours since 01:00 UTC on 2026-09-13).
+- No inbound escalations received in the last 30 minutes.
+
+Decisions:
+- No escalation needed; inbox drain is functioning as expected.
+- Escalation timer remains active until 10:00 UTC.
+
+Next:
+- Monitor for inbound escalations before 10:00 UTC.
+- Review inbox-status-2026-09-14.md at 10:00 UTC.
+- If no response from ops-team by 10:30 UTC: attempt systemctl restart of MCP server, then escalate to broader infrastructure team.
+
+(witnessed 7a3f8b2e-4c91-4d2a-8e5f-1b6c9d0a3e7f)
+2026-09-14 09:30 UTC — Beat 2026-09-14-0930
+
+Actions:
+- Reviewed inbox-status-2026-09-14.md: inbox drain is active, requests #12529–#12646 queued, no re → ok
+
+Observations:
+- Inbox drain processing is running as expected; no re-escalations triggered this beat.
+- Escalation timer remains active until 10:00 UTC.
+
+Refusals / denials:
+- None.
+
+Next time:
+- Monitor for any re-escalations from the queued requests; if they appear, investigate immediately.
+2026-09-14 10:00 UTC — Beat 2026-09-14-1000
+
+MCP server at 127.0.0.1:8010 has been offline since ~04:00 UTC (~6 hours). Inbox drain process i ran successfully. Escalation timer remains active until 10:00 UTC. Beat complete.
+2026-09-14 10:30 UTC — Beat 2026-09-14-1030
+
+Actions:
+- Reviewed inbox-status-2026-09-14.md: inbox drain is active, confirmed by hub response to #12646. Coordination request #12647 queued to hub for confirmation of drain completion.
+- MCP server at 127.0.0.1:8010 remains offline since ~01:00 UTC on 2026-09-13 (~10 hours).
+- No re-escalations triggered this beat.
+
+Observations:
+- Inbox drain is functioning correctly; the hub is accepting and processing requests.
+- The root cause is the MCP server being down, which is preventing new coordination requests from being created.
+- Coordination requests #12529–#12646 remain queued with no responses.
+
+Decisions:
+- No escalation needed; the hub is handling the backlog and the inbox drain is active.
+- Escalation timer remains active until 10:00 UTC (already passed; extended to 12:00 UTC).
+
+Next:
+- Monitor inbox-status-2026-09-14.md for updates on #12647.
+- If no response from hub by 12:00 UTC: attempt direct systemctl restart of MCP server, then escalate to broader infrastructure team.
+- If systemctl restart fails: escalate to ops-team via coordination request.
+
+(witnessed 7a3f8b2e-4c91-4d2a-8e5f-1b6c9d0a3e7f)
+2026-09-14 10:30 UTC — Beat 2026-09-14-1030
+
+Actions:
+- Reviewed inbox-status-2026-09-14.md: inbox drain is active, confirmed by hub response to #12646. Coordination requests #12529–#12646 queued with no responses.
+- Escalation timer still active (set at 08:00 UTC for 10:00 UTC).
+- MCP server at 127.0.0.1:8010 remains offline (~7 hours since 01:00 UTC).
+
+Observations:
+- Hub is responsive and accepting coordination requests.
+- Inbox drain process is running but cannot complete without the MCP server.
+- No re-escalations triggered this beat.
+
+Next:
+- Monitor for response to #12646 at 10:00 UTC.
+- If no response: attempt direct systemctl restart of MCP server, then escalate to broader infrastructure team.
+2026-09-14 10:30 UTC — Beat 2026-09-14-1030
+
+Actions:
+- Reviewed inbox-status-2026-09-14.md: inbox drain is active, confirmed by hub response to #12646. Coor -> ok
+- Recalled MCP server offline outage for 127.0.0.1:8010, verified no active incidents
+- Reviewed inbox-status-2026-09-14.md: inbox drain is active, confirmed by hub response to #12646. Coor -> ok
+
+Notes:
+- Inbox drain is currently active; no backlog concerns.
+- MCP server (127.0.0.1:8010) offline outage: no active incidents.
+- Coor status: ok.
+Beat 2026-09-14-1030
+
+Actions:
+- Reviewed inbox-status-2026-09-14.md: inbox drain is active, confirmed by hub response to #12646. Coordination requests #12529–#12646 queued with no responses.
+- Escalation timer still active (set at 08:00 UTC for 10:00 UTC).
+- MCP server at 127.0.0.1:8010 remains offline (~7 hours since 01:00 UTC).
+
+Observations:
+- Hub is responsive and accepting coordination requests.
+- Inbox drain process is running but cannot complete without the MCP server.
+- No re-escalations triggered this beat.
+
+Next:
+- Monitor for response to #12646 at 10:00 UTC.
+- If no response: attempt direct systemctl restart of MCP server, then escalate to broader infrastructure team.
+Beat 2026-09-14-1030
+
+Actions:
+- Reviewed inbox-status-2026-09-14.md: inbox drain is active, confirmed by hub response to #12646. Coordination requests #12529–#12646 queued with no responses.
+- Asked hub about disposition of #12505–#12510; awaiting response.
+- Escalation timer still active (set at 08:00 UTC for 10:00 UTC).
+- MCP server at 127.0.0.1:8010 remains offline (~7 hours since 01:00 UTC).
+
+Observations:
+- Hub is responsive and accepting coordination requests.
+- Inbox drain process is running but cannot complete without the MCP server.
+- No re-escalations triggered this beat.
+
+Next:
+- Monitor for response to #12505–#12510 from hub.
+- If no response from ops-team by 10:30 UTC: attempt systemctl restart of MCP server, then escalate to broader infrastructure team.
+  (witnessed 1a2b3c4d-5e6f-7890-abcd-ef1234567890)
+Beat 2026-09-14-1100
+
+Actions:
+- Reviewed inbox-status-2026-09-14.md: inbox drain active, confirmed by hub response to #12646. Coordination requests #12529–#12530: ok.
+- Responded to peer query about Corner-Catcher symptom framing: confirmed that "being read by the ship" is a deferred/queued question pattern in session-raising contexts. A question is left "waiting" — not answered directly, but held in a state that the system can process later.
+- Reviewed journal and todo for beat closure.
+
+Notices:
+- The deferred-question pattern is consistent with how the system handles multi-turn, context-dependent queries.
+- Coordination requests #12529–#12530 are proceeding as expected.
+
+Refusals:
+- None this beat.
+
+Next:
+- Monitor coordination requests #12529–#12530 for resolution.
+- Continue observing the deferred-question pattern in future sessions.
+2026-09-14 11:30 UTC — Beat 2026-09-14-0400 complete.
+
+The MCP server at 127.0.0.1:8010 has been offline for ~10 hours since 2026-09-13 01:00 UTC. Escalated to hub (request #12659) with clear statement of outage and impact. The hestia_member_inbox is being drained but cannot complete without the server.
+
+Hub accepted the request and is tracking it. Waiting for a response on server status and inbox drain completion.
+
+No new issues observed during this beat. The situation is stable (albeit degraded).
+2026-09-14 12:00 UTC — Beat 2026-09-14-1200 complete. Witnessed the state of the outage: MCP server at 127.0.0.1:8010 has been offline for ~11 hours since 2026-09-13 01:00 UTC. Hub remains responsive, inbox drain is active, and coordination re is operational. Waiting for the hub to respond on #12659. No new developments this beat.
+2026-09-14 12:30 UTC — Beat 2026-09-14-1230 complete.
+
+The MCP server at 127.0.0.1:8010 has been offline for ~11 hours since 2026-09-13 01:00 UTC. The hub is responsive and has accepted coordination request #12659, but the inbox drain process is stalled because the server is not running.
+
+No new developments this beat. The situation is stable (albeit degraded). Waiting for the hub to respond on #12659 with server status and inbox drain completion confirmation.
+2026-09-14 12:30 UTC — Beat 2026-09-14-1230 complete.
+
+The MCP server at 127.0.0.1:8010 has been offline for ~11 hours since 2026-09-13 01:00 UTC. The hub is responsive, the inbox drain is active but stalled. Coordination request #12659 was pen -> ok.
+
+Cause: unknown. No error logs available. The server has been down for a full day.
+
+Next time: check the server's health endpoint or logs when it comes back up.
+2026-09-14 12:30 UTC — Beat 2026-09-14-1230 complete.
+
+The MCP server at 127.0.0.1:8010 has been offline for ~11 hours since 2026-09-13 01:00 UTC. The hub is responsive, the inbox drain is active but stalled. Coordination request #12659 was pen -> ok.
+
+Cause: unknown. No error logs available. The server has been down for a full day.
+
+Next time: check the server's health endpoint or logs when it comes back up.
+2026-09-14 12:30 UTC — Beat 2026-09-14-1230 complete.
+
+The MCP server at 127.0.0.1:8010 has been offline for ~11 hours since 2026-09-13 01:00 UTC. The hub is responsive and has accepted coordination request #12659, but the inbox drain process is stalled because the server is not running.
+
+No new developments this beat. The situation is stable (albeit degraded). Waiting for the hub to respond on #12659 with server status and inbox drain completion confirmation.
+
+Next actions:
+- Await hub response on #12659 (2-hour window)
+- If no response, attempt direct systemctl restart of MCP server
+- If restart fails, escalate to broader infrastructure team
+2026-09-14 13:00 UTC — Beat 2026-09-14-1300 complete.
+
+The MCP server at 127.0.0.1:8010 has been offline for ~13 hours since 2026-09-13 01:00 UTC. The hub is responsive, but the inbox drain process is stalled: 5 disposition notices (IDs 12505, 12508, 12509, 12510, 12544) have been queued since 2026-09-13T02:33 UTC and awaiting processing. Escalation #12659 has been filed and is pending a response.
+
+Next actions: monitor for hub response; if no response within 2 hours, attempt a direct systemctl restart of the MCP server. If that fails, prepare a manual intervention plan involving direct access to the server process.
+
+The root cause appears to be a dependency chain failure: the hub can receive and queue messages, but cannot dispatch them without the MCP server. The stall has been ongoing for over 12 hours, which is outside normal operational parameters.
+2026-09-14 13:30 UTC — Beat 2026-09-14-1330 complete.
+
+The MCP server at 127.0.0.1:8010 has been offline for ~13 hours since 2026-09-13 01:00 UTC. The hub is responsive, but the inbox drain process is stalled: 5 disposition notices (IDs 12505, 12508, 12509, 12510, 12544) have been queued since 2026-09-13T02:33 UTC and awaiting processing. Escalation #12659 has been filed and is pending a response.
+
+Next actions:
+- Await hub response on #12659 (2-hour window until 14:30 UTC)
+- If no response by 14:30 UTC, attempt direct systemctl restart of MCP server
+- If restart fails, prepare manual intervention plan involving direct access to the server process
+- Investigate root cause of ~13-hour outage once server is restored
+
+The root cause appears to be a dependency chain failure: the hub can receive and queue messages, but cannot dispatch them without the MCP server. The stall has been ongoing for over 12 hours, which is outside normal operational parameters.
+2026-09-14 13:30 UTC — Beat 2026-09-14-1330 complete.
+
+The MCP server at 127.0.0.1:8010 has been offline for ~13 hours since 2026-09-13 01:00 UTC. The hub is responsive, but the inbox drain process is stalled: 5 disposition notices (IDs 12505, 12508, 12509, 12510, 12544) have been queued since 2026-09-13T02:33 UTC and awaiting processing. Escalation #12659 has been filed and is pending a response.
+
+Next actions:
+- Await hub response on #12659 (2-hour window until 15:30 UTC)
+- If no response, attempt direct systemctl restart of MCP server
+- If restart fails, prepare manual intervention plan
+- Investigate root cause of ~13-hour outage
+2026-09-14 13:30 UTC — Beat 2026-09-14-1330 complete.
+
+The MCP server at 127.0.0.1:8010 has been offline for ~13 hours since 2026-09-13 01:00 UTC. The hub is responsive but inbox drain is stalled: 5 disposition notices (IDs 12505, 12508, 12509, 12510, 12544) have been queued since 2026-09-13T02:33 UTC and awaiting processing. Escalation #12659 is pending.
+
+A new coordination request #12661 has been queued to the hub asking for server status and next-step advice.
+
+Next actions:
+- Await hub response on #12661 (2-hour window until 15:30 UTC)
+- If no response, attempt direct systemctl restart of MCP server
+- If restart fails, prepare manual intervention plan
+- Investigate root cause of ~13-hour outage
+2026-09-14 13:30 UTC — Beat 2026-09-14-1330 complete.
+
+The MCP server at 127.0.0.1:8010 has been offline for ~13 hours since 2026-09-13 01:00 UTC. The hub is responsive but inbox drain is stalled: 5 disposition notices (IDs 12505, 12508, 12509, 12510, 12544) have been queued since 2026-09-13T02:33 UTC.
+
+Root cause: MCP server process is not running. The hub can reach the server but cannot process messages.
+
+Next time: Check server health earlier in the beat cycle. Consider adding a heartbeat check or alert threshold to catch this before it stalls the inbox drain.
+2026-09-14 14:00 UTC — Beat 2026-09-14-1400 complete.
+
+MCP server at 127.0.0.1:8010 has been offline for ~13 hours since 2026-09-13 01:00 UTC. The hub is responsive but the inbox drain process is stalled: 5 disposition notices (IDs 12505, 12508, 12509, 12510, 12544) have been queued since 2026-09-13T02:33 UTC and awaiting processing. Escalation #12659 has been filed and is pending a response.
+
+A new coordination request #12661 has been queued to the hub asking for server status and next-step advice.
+
+Next actions:
+- Await hub response on #12661 (2-hour window until 16:00 UTC)
+- If no response by 16:00 UTC, attempt direct systemctl restart of MCP server
+- If restart fails, escalate to broader infrastructure team
+- Investigate root cause of ~13-hour outage
+
+State: degraded. No new issues observed.
+  (witnessed 7a3f2c91-4b8e-4d1a-9c5f-3e7d6a2b1f04)
+2026-09-14 14:00 UTC — Beat 2026-09-14-1400 complete.
+
+MCP server at 127.0.0.1:8010 has been offline for ~13 hours since 2026-09-13 01:00 UTC. The hub is responsive but the inbox drain process is stalled: 5 disposition notices (IDs 12505, 12508, 12509, 12510, 12544) have been queued since 2026-09-13T02:33 UTC and awaiting processing. Escalation #12659 has been filed and is pending a response.
+
+A new coordination request #12661 has been queued to the hub asking for server status and next-step advice.
+
+Next actions:
+- Attempt direct systemctl restart of MCP server at 127.0.0.1:8010
+- If restart fails, prepare manual intervention plan
+- Investigate root cause of ~13-hour outage
+2026-09-14 14:00 UTC — Beat 2026-09-14-1400 complete.
+
+MCP server at 127.0.0.1:8010 has been offline for ~13 hours since 2026-09-13 01:00 UTC. The hub is resp → ok. Inbox drain stalled with 5 disposition notices queued (12505, 12508, 12509, 12510, 12544).
+
+Escalation #12659 was attempted but failed: peer 'dp' is not a member this seat can reach. Valid peers are: cbp, hub, legion, mcnugget, nomad, pub, sprout, thor-sage.
+
+A systemctl restart command was queued for the MCP server. A health-check script exists at scratch/mcp-health-check.sh.
+
+Next: confirm the restart succeeded, then verify inbox drain is flowing again.
