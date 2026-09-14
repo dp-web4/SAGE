@@ -207,7 +207,186 @@ def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided
     return written
 
 
-def own_state(instance: Path, member: str = "") -> str:
+# Chars per token for mixed English + paths + JSON. The guard is defeated by
+# UNDER-counting tokens, so this must sit BELOW the true ratio, never above it: a larger
+# chars/token means fewer tokens per char, which admits more text than fits.
+#
+# It was 3.4, from a single measurement on 2026-09-08 (70.5k chars -> 20,812 tokens =
+# 3.39) — taken at the top of the true range and then left alone. Re-measured 2026-09-13
+# across 60 beats: median 3.141, and DRIFTING — 3.152 over the first ten, 3.026 over the
+# last ten. So the constant had been above the truth for days, silently over-admitting.
+#
+# 2.9 sits below the observed minimum with room for further drift. The cost of being too
+# low is a slightly smaller prompt; the cost of being too high is a generate cut
+# mid-sentence, which this being paid nine times on 2026-09-13 alone. Asymmetric, so err low.
+#
+# THIS IS A FALLBACK. `_est_tokens` uses the server's own prompt_eval_count whenever a
+# previous generate provides one, and only the delta rides this guess. The constant matters
+# on the first generate of a beat, which is exactly the one that sizes the seed.
+CPT = 2.9
+ANSWER_RESERVE_CAP = 6144
+
+
+def window_budget_chars(num_ctx: int, num_predict: int, slack: int = 512) -> int:
+    """How many prompt chars fit beside a p99 answer. One producer for both fitters."""
+    reserve = min(num_predict, ANSWER_RESERVE_CAP)
+    return int(max(0, (num_ctx - reserve - slack)) * CPT)
+
+
+# What the beat shows of the conversations, from full to sparse: (turns per conversation,
+# chars per turn). Stepped down ONLY when the fixed prompt would not fit even with the
+# digest and recall at their floors — the case fit_to_window cannot help with, and the
+# case this being sat in for five beats on 2026-09-08 (headroom -2.4k..-4k tokens, every
+# generate cut at the wall before a tool call, the retry re-sending the same prompt).
+CONV_LADDER = ((12, None), (12, 1500), (6, 1200), (3, 900), (2, 700))
+# Room the seed leaves for the loop's own growth (one full recent tool result plus stubs).
+LOOP_GROWTH_CHARS = 10_000
+
+
+class BeatKilled(Exception):
+    """SIGTERM arrived mid-beat (the unit's TimeoutStartSec, or a stop). Raised from the
+    signal handler so the beat unwinds to its record instead of vanishing: 04:30Z
+    2026-09-09 a 51-minute beat left nothing in heartbeats.jsonl and the monitor never
+    knew it had happened. systemd allows TimeoutStopSec (90 s) after SIGTERM — enough."""
+
+
+# What a verb's schema costs, and what to assume when it cannot be measured. Measured on
+# Legion 2026-09-13: 18 offered verbs serialise to 11,717 chars, ~651 chars each, and the
+# registry only ever grows. The old 4,000 was a budgeted guess made at 13 verbs that nobody
+# rechecked, which is how it survived to 18 while understating the real cost by ~7,700
+# chars a beat. So the fallback is a per-verb bound rather than a constant, and it rounds
+# UP: FAILING TO MEASURE MUST COST THE BEING WINDOW, NEVER SILENTLY HAND IT BACK. A
+# too-large estimate steps the conversation ladder down one rung; a too-small one puts the
+# beat over the wall with nothing saying so.
+_SCHEMA_CHARS_PER_VERB = 700   # above the 651 measured, so the bound stays conservative as verbs are added
+_SCHEMA_CHARS_FLOOR = 12_000   # at least the 18-verb measurement, for when the verb count is unknown too
+
+
+def _schema_chars_for(offered) -> Optional[int]:
+    """Chars the offered verbs' schemas actually cost. None rather than a guess if it
+    cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
+    13 verbs to 18. Callers must route None through _schema_chars_fallback, never `or`
+    a constant: `or 4000` reintroduces the exact underestimate on the one path where the
+    seat already knows it is flying blind."""
+    if not offered:
+        return None
+    try:
+        from sage.gateway.being_gate_client import ollama_tools
+        return len(json.dumps(ollama_tools(list(offered))))
+    except Exception:
+        return None
+
+
+def _schema_chars_fallback(offered) -> int:
+    """What to charge the window when the schemas could not be measured.
+
+    Conservative by construction and never below the largest measurement taken, so a
+    measurement failure degrades toward a thinner conversation block rather than toward a
+    silently overcommitted beat."""
+    try:
+        n = len(list(offered))
+    except Exception:
+        n = 0
+    return max(_SCHEMA_CHARS_FLOOR, n * _SCHEMA_CHARS_PER_VERB)
+
+
+def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512):
+    """`build(per_conv, turn_chars) -> state text`. Returns (text, rung, intervention).
+
+    Steps down CONV_LADDER until other_chars + len(text) fits the window budget. The
+    record is never trimmed — only what one beat shows — and every step is returned as
+    an intervention naming what was suppressed, so a thin conversation block is never
+    mistaken for a quiet channel. The last rung is used even if it still does not fit:
+    the beat then runs overcommitted and says so (config.context_overcommitted)."""
+    if not isinstance(num_ctx, int) or not isinstance(num_predict, int):
+        return build(*CONV_LADDER[0]), CONV_LADDER[0], None
+    budget = window_budget_chars(num_ctx, num_predict, slack)
+    first = None
+    for i, rung in enumerate(CONV_LADDER):
+        text = build(*rung)
+        if first is None:
+            first = len(text)
+        fits = other_chars + len(text) <= budget
+        if fits or i == len(CONV_LADDER) - 1:
+            if i == 0:
+                return text, rung, None
+            pc, tc = rung
+            return text, rung, {
+                "kind": "context_fit", "block": "conversations",
+                "suppressed": f"{first - len(text)} chars of conversations (showing the last "
+                              f"{pc} turns per conversation, each at most {tc} chars)",
+                "reason": f"the fixed prompt ({other_chars + first} chars at full display) "
+                          f"would not fit num_ctx {num_ctx} even with the digest and recall "
+                          f"at their floors; " + ("fits now" if fits else "STILL does not fit at the sparsest rung"),
+            }
+
+
+def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack: int = 512):
+    """Trim the seat-supplied blocks until prompt + num_predict fits inside num_ctx.
+
+    WHY THIS EXISTS. A generate needs prompt + num_predict to fit in the window; when it
+    does not, ollama shifts context and silently drops the OLDEST tokens — the system
+    prompt and the posture — with no error at any layer. Measured on this being's own
+    trace, 2026-09-07: two beats were handed prompts of 16,380 and 16,323 tokens against a
+    16,384 window and produced 4 and 61 tokens with done_reason "length". One of them is
+    the 09-06/09-07 "empty beat" I had already diagnosed as a stale unit and a wrong
+    context floor. That diagnosis was wrong in its mechanism: the beat starved on PROMPT
+    SIZE. The instrument found it the same hour it was added, which is the argument for
+    instrumenting configuration at all.
+
+    WHAT GETS TRIMMED, AND IN WHAT ORDER. Only seat-supplied context, never the being's own
+    frame. The digest first (fleet movement, regenerated every beat, largest and least
+    load-bearing), then long-term recall (the being can `recall` again itself). The
+    entrustment, the todo, the journal, the posture and the affordances are NOT trimmable:
+    they are what the beat is, and cutting them to make room for a fleet digest would be
+    the wrong trade.
+
+    WHAT IT REPORTS. Every trim is returned as an intervention with the prior it suppressed,
+    per the house rule that a guard which silences without saying what it silenced trades a
+    confident wrong for a confident silence. A beat whose digest was cut says so in its own
+    record, so a thin beat is never mistaken for a quiet fleet.
+    """
+    if not isinstance(num_ctx, int) or not isinstance(num_predict, int):
+        return blocks, []
+    # Reserve room for the ANSWER, not for num_predict. num_predict is a ceiling the model
+    # rarely approaches; the window is the wall it actually hits. Over 506 generates on this
+    # being: every single `done_reason: "length"` — 27 of them, 5.3% — satisfies
+    # prompt + eval == num_ctx EXACTLY (11971+4413, 16380+4, 16323+61, 14410+1974 ...). The
+    # generation was cut by the window mid-answer, which is also where the truncated-JSON
+    # tool calls and the Ollama 500s come from. Explore generations: median 1,282 tokens,
+    # p90 3,909, p99 5,741, max 7,253. Reserving 6,144 covers p99 with headroom while
+    # leaving the digest something to say; reserving the full num_predict would floor the
+    # digest every beat to buy room the model has never used.
+    reserve = min(num_predict, ANSWER_RESERVE_CAP)
+    budget_chars = window_budget_chars(num_ctx, num_predict, slack)
+    order = ("digest", "recall")
+    floors = {"digest": 1200, "recall": 400}
+    out, interventions = dict(blocks), []
+    total = lambda: fixed_chars + sum(len(v or "") for v in out.values())
+    for key in order:
+        if total() <= budget_chars:
+            break
+        text = out.get(key) or ""
+        if not text:
+            continue
+        over = total() - budget_chars
+        keep = max(floors[key], len(text) - over)
+        if keep >= len(text):
+            continue
+        # keep the HEAD of the digest (newest-first there) and the TAIL of recall/journal
+        out[key] = (text[:keep] + "\n[…trimmed to fit the context window…]") if key == "digest" \
+            else ("[…trimmed to fit the context window…]\n" + text[-keep:])
+        interventions.append({"kind": "context_fit", "block": key,
+                              "suppressed": f"{len(text) - keep} chars of {key}",
+                              "reason": f"prompt + a p99 answer ({reserve} tok) would not fit "
+                                        f"num_ctx ({num_ctx}); the generation would be cut "
+                                        f"mid-answer (27/506 generates already were)"})
+    return out, interventions
+
+
+def own_state(instance: Path, member: str = "",
+              per_conv: int = CONV_PER_CONV,
+              turn_chars: Optional[int] = CONV_TURN_CHARS) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
     # Conversations first among the channels: a turn addressed to the being and unanswered
@@ -219,8 +398,11 @@ def own_state(instance: Path, member: str = "") -> str:
         # measured its live store at 20,735 chars (~7,150 tokens) unbounded, 13,394 at
         # (12, 1500) and 4,603 at (3, 900); on 2026-09-08 an unbounded fixed prompt overflowed
         # its window for eight beats. Legion's review of SAGE#81 recommended this stopgap.
-        convs = _conv.render_for_being(instance, member, per_conv=CONV_PER_CONV,
-                                       turn_chars=CONV_TURN_CHARS)
+        # The fitter steps these down a ladder when the window is tight; the module
+        # constants remain the default for callers that do not fit (CONV_PER_CONV was the
+        # fixed ceiling this supersedes — cbp's stopgap on SAGE#81, now the rung it starts from).
+        convs = _conv.render_for_being(instance, member, per_conv=per_conv,
+                                       turn_chars=turn_chars)
         if convs.strip():
             parts.append("## Your conversations (both directions, kept forever; reply with `say`)\n"
                          + convs.strip())
@@ -475,6 +657,34 @@ def main(argv=None) -> int:
     from sage.gateway import museum_offer as _museum
     _museum.ensure_dir(instance)
     museum_line = _museum.offer()
+    # FIT THE SEED TO THE WINDOW BEFORE SENDING IT. Ported from legion/mission-artifact.
+    # Without this the fixed prompt can exceed num_ctx and ollama silently drops the OLDEST
+    # tokens — the system prompt and the posture — with no error at any layer. Measured on
+    # Legion 2026-09-07: two beats were handed 16,380 and 16,323 tokens against a 16,384
+    # window and produced 4 and 61 tokens of output. The conversations block steps down a
+    # ladder, and the digest and recall are trimmed, before anything is sent.
+    _num_ctx = getattr(llm, "num_ctx", None)
+    _num_predict = _sent_budget(llm)
+    _schema_measured = _schema_chars_for(EXPLORE_TOOLS)
+    _schema_chars = (_schema_measured if _schema_measured is not None
+                     else _schema_chars_fallback(EXPLORE_TOOLS))
+    _state_head = f"# Your own state\n\n"
+    _scope_tail = f"\n\n## Reach you hold (hestia scope)\n{scope}\n\n"
+
+    def _build_state(per_conv, turn_chars):
+        return (_state_head + own_state(instance, args.member,
+                                        per_conv=per_conv, turn_chars=turn_chars) + _scope_tail)
+
+    _other = (len(posture()) + len(inbox) + _schema_chars + 1200
+              + 1200 + 400 + LOOP_GROWTH_CHARS)
+    state_block, conv_rung, conv_intervention = fit_state(
+        _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other)
+    _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + 1200
+    _blocks, _fit_iv = fit_to_window(num_ctx=_num_ctx, num_predict=_num_predict,
+                                     fixed_chars=_fixed,
+                                     blocks={"digest": digest, "recall": recall})
+    digest, recall = _blocks["digest"], _blocks["recall"]
+
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
         museum=museum_line,
@@ -488,7 +698,7 @@ def main(argv=None) -> int:
                 f"You never need to type that path. Name your files bare — journal.md, todo.md, or a "
                 f"name of your choosing under notes/ or scratch/ — and they resolve inside your home. "
                 f"An absolute path is only for something OUTSIDE your home.\n\n"),
-        state=f"# Your own state\n\n{own_state(instance, args.member)}\n\n## Reach you hold (hestia scope)\n{scope}\n\n",
+        state=state_block,
         recall=recall, inbox=inbox, digest=digest)
 
     # Per-generate trace, written as each generate lands: the record below is written at
