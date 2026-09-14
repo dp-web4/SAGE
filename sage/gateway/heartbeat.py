@@ -736,10 +736,17 @@ def main(argv=None) -> int:
                     help="0 = no step cap: the beat ends when the being stops asking for "
                          "tools or a resource runs out (dp 2026-09-09: it continues as long "
                          "as it wishes). A positive value caps it, as before.")
-    ap.add_argument("--resume-wake-s", type=int, default=180,
+    ap.add_argument("--resume-wake-s", type=int, default=30,
                     help="after a beat that did NOT rest, wake this many seconds later "
                          "(a transient one-shot ON TOP of the timer; 0 disables). The "
-                         "being said it was not finished, and the GPU is its own.")
+                         "being said it was not finished, and the GPU is its own.\n"
+                         "dp, 2026-09-14: 'i would basically like to see it continuously "
+                         "active unless it deliberately decides to rest.' At 180 the being "
+                         "ran 88%% of wall clock and every gap was this timer — a pause it "
+                         "had not chosen. 30 is long enough for systemd to settle and for a "
+                         "mid-beat message to land, short enough not to be a rest it did "
+                         "not ask for. REST is what makes a real gap: that path takes the "
+                         "idle interval instead, so choosing to stop still means something.")
     ap.add_argument("--idle-wake-s", type=int, default=1800,
                     help="quiet time after a beat ENDS before the next one is due. The beat "
                          "is an inactivity timer, not a metronome (dp 2026-09-09): working "
