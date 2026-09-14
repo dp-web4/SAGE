@@ -353,6 +353,12 @@ def _config_check(instance: Path, model: str, llm, offered) -> dict:
 # on the left and a blue rectangle on the right, along with the small black text HELLO".
 FRAME_MAX_EDGE = 1024        # longest side, pixels
 FRAME_TOKENS = 591           # what FRAME_MAX_EDGE costs, measured
+
+# How old a capture may be and still ride into the seed. A frame is evidence of
+# NOW; older than this it is history, not perception — and the beat's prompt
+# would spend its room on a picture of yesterday. Measured against the cadence
+# beats actually run (minutes), with headroom for a slow operator: 10 minutes.
+FRAME_MAX_AGE_S = 600
 FRAME_MAX_BYTES = 4_000_000  # a JPEG larger than this is not a webcam frame; refuse to guess
 
 
@@ -809,9 +815,60 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
     return out, interventions
 
 
+def _frame_b64(p: Path) -> Optional[str]:
+    """One captured frame becomes a b64 string for the seed — or None.
+
+    A capture that is not a JPEG (a zero-byte write, a half-flushed file, an
+    error envelope written as text) must not ride into the prompt: it would be
+    decoded by the model as garbage and cost its tokens anyway. The check is on
+    the magic bytes, not the extension — a .jpg that is really text fails here,
+    which is the point.
+    """
+    try:
+        b = p.read_bytes()
+    except OSError:
+        return None
+    if len(b) < 2584 or b[:3] != b"\xff\xd8\xff" or b[-2:] != b"\xff\xd9":
+        return None
+    b, _ = _shrink(b)
+    return base64.b64encode(b).decode("ascii")
+
+
+def fresh_frames(instance: Path, worktree: Optional[str], since: Optional[float]) -> list:
+    """Every (b64, meta) for a frame captured since `since`, oldest first.
+
+    The plural of `fresh_frame`: the cadence organ delivers every frame the being
+    asked to see between beats, not just the newest one — a beat that shows it only
+    the last capture and calls it everything costs it the motion in between. Same
+    fail-closed rule: with no boundary (`since` None) nothing is carried, because
+    unknown age is unknown, not young. `fresh_frame` stays as-is for callers that
+    want exactly one; this returns all of them, so a beat can see a sequence."""
+    out = []
+    for p in _frame_paths(instance, worktree):
+        try:
+            st = p.stat()
+        except OSError:
+            continue  # vanished between listing and stat — skip it, keep the rest
+        age_s = round(time.time() - st.st_mtime, 1)
+        if since is None or st.st_mtime < since or age_s > FRAME_MAX_AGE_S:
+            why = ("no beat boundary to check freshness against" if since is None
+                   else (f"captured before the previous beat's t0 ({age_s}s old)"
+                         if st.st_mtime < since else f"older than {FRAME_MAX_AGE_S}s"))
+            out.append((None, {"path": str(p), "carried": False, "why": why, "age_s": age_s}))
+        else:
+            b64 = _frame_b64(p)
+            if b64 is None:
+                out.append((None, {"path": str(p), "carried": False,
+                                   "why": "unreadable or not a JPEG", "age_s": age_s}))
+            else:
+                out.append((b64, {"path": str(p), "carried": True, "why": None, "age_s": age_s}))
+    out.sort(key=lambda f: f[1]["age_s"], reverse=True)  # F3: oldest first — the docstring promises it; iterdir does not sort
+    return out
+
+
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
             nothink: str, header: str, state: str, recall: str, inbox: str, digest: str,
-            frame: Optional[str] = None):
+            frame: Optional[str] = None, frames: Optional[list] = None):
     """The explore turn(s) of a beat: (seed messages, second user turn or None).
 
     Posture-first: posture in the system prompt; one user turn with state, inbox, recall,
@@ -842,11 +899,15 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     second = POSTURE_TURN.format(posture=posture_text, inbox=inbox, digest=digest,
                                  tools=", ".join(EXPLORE_TOOLS), nothink=nothink)
     user_msg = {"role": "user", "content": user}
-    if frame:
+    _frames = frames if frames else ([frame] if frame else [])
+    if _frames:
         # A frame rides the user turn as an `images` list beside string content —
         # the shape ollama accepts (a parts-in-content list 400s; measured against
-        # qwen38-heretic:q3km-vl, 2026-09-13). No frame -> no key at all.
-        user_msg["images"] = [frame]
+        # qwen38-heretic:q3km-vl, 2026-09-13). No frame -> no key at all. A beat can
+        # now carry several — the cadence organ delivers every capture since the
+        # previous beat's t0, oldest first, so a being that asked to see twice sees
+        # both instead of only the newest.
+        user_msg["images"] = _frames
 
     return [{"role": "system", "content": system}, user_msg], second
 
@@ -950,8 +1011,9 @@ def main(argv=None) -> int:
         _wt = _icfg(instance).get("worktree") or None
     except Exception:
         _wt = None
-    _frame_b64, _frame_meta = fresh_frame(
-        instance, _wt, last.get("t0") if isinstance(last, dict) else None)
+    _frames = fresh_frames(instance, _wt, last.get("t0") if isinstance(last, dict) else None)
+    _frame_b64s = [b for b, m in _frames if b is not None]
+    _frame_metas = [m for _, m in _frames]
 
     scope_record = {}
 
@@ -1098,7 +1160,8 @@ def main(argv=None) -> int:
     # token cost is converted and charged here. Measured 2,042 tokens, about a third of the
     # working room at this window — un-budgeted it would push the beat over the wall and the
     # conversation block would take the blame.
-    _frame_chars = int(FRAME_TOKENS * CPT) if _frame_b64 else 0
+    _frame_b64s = [b for b, m in _frames if b is not None]
+    _frame_chars = sum(int(FRAME_TOKENS * CPT) for _ in _frame_b64s)
     _other = (len(posture()) + len(inbox) + _schema_chars + _template_guess
               + 1200 + 400 + LOOP_GROWTH_CHARS + _frame_chars)
     state_block, conv_rung, conv_intervention = fit_state(
@@ -1121,11 +1184,11 @@ def main(argv=None) -> int:
         # frame is indistinguishable from a beat where the pipe is broken, which is the
         # state the whole vision arc was in until now: both ends present, nothing joining
         # them, and nothing saying so.
-        "frame": _frame_meta,
+        "frames": _frame_metas,
     }
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
-        nothink=nothink, frame=_frame_b64,
+        nothink=nothink, frames=_frame_b64s,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 f"Your home: {instance}\n"
                 f"The harness you are running under: {harness_rev.get('short')} on "
