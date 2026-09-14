@@ -74,6 +74,16 @@ def _hestia_error(env: dict) -> Optional[str]:
 SEARCH_LINES_SHOWN = 40
 
 
+def _session_lost(exc: Exception) -> bool:
+    """Whether this failure means the session is gone rather than the act refused.
+
+    Narrow on purpose: only the shapes a restarted or recycled server produces. A broad
+    match would retry real refusals, and a retried refusal reads as flakiness."""
+    m = str(exc).lower()
+    return ("session not found" in m or "404" in m
+            or "session terminated" in m or "no valid session" in m)
+
+
 class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
     live daemon. Wraps ReferenceF1aDispatcher for the local verbs (witness / memory)."""
@@ -438,7 +448,23 @@ class HestiaF1aDispatcher:
         retry cannot manufacture a false success: `_do_remember` still requires a confirmed
         store before it will save, so a second failure ends as a refusal with the file on
         disk untouched."""
-        text = self._unwrap(self._membot().call(name, args), name)
+        try:
+            text = self._unwrap(self._membot().call(name, args), name)
+        except RuntimeError as e:
+            # A DEAD SESSION IS A HARD FAILURE, NOT A SOFT ONE, and the remount below only
+            # covered the soft shape. When the membot process RESTARTS, the cached session
+            # is gone and the server answers HTTP 404 "Session not found" as a JSON-RPC
+            # error — which `_unwrap` raises, so it never reaches the text check. Measured
+            # 2026-09-14: the seat restarted membot mid-beat and the being lost that beat's
+            # `remember` to exactly this, while the cartridge was intact (344 memories).
+            #
+            # This is the SAGE#52 shape a second time, in code written to fix the first: a
+            # recovery that exists, is correct, and is dead for the commoner form of its own
+            # failure. One retry on a fresh session; a second failure is reported as-is.
+            if _remounted or not _session_lost(e):
+                raise
+            self._mb = None
+            return self._membot_call(name, args, _remounted=True)
         if self._NOT_MOUNTED in text and not _remounted:
             self._mb = None
             return self._membot_call(name, args, _remounted=True)
