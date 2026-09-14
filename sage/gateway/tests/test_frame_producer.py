@@ -11,7 +11,14 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
-from sage.gateway.heartbeat import FRAME_TOKENS, compose, fresh_frame  # noqa: E402
+import base64
+
+from sage.gateway.heartbeat import (  # noqa: E402
+    FRAME_TOKENS,
+    compose,
+    fresh_frame,
+    fresh_frames,
+)
 
 JPEG = b"\xff\xd8" + b"x" * 4000
 
@@ -317,5 +324,29 @@ def test_no_beat_boundary_means_no_frame(tmp_path):
     assert b64 is None and meta["carried"] is False, \
         "without a boundary, freshness cannot be established even when the frame IS fresh"
 
+
+def test_fresh_frames_encodes_every_frame_it_carries(tmp_path):
+    """fresh_frames is the join's other half, and no test ever called it.
+
+    The seat found on 2026-09-14 that _frame_b64 called base64.b64encode with
+    no import in scope (the only one lived inside fresh_frame), so every call
+    raised NameError — the green suite never exercised this line. This test
+    calls fresh_frames directly on synthetic frames and decodes what it hands
+    back, which is exactly the path that used to crash."""
+    cam = tmp_path / "scratch" / "camera"
+    cam.mkdir(parents=True)
+    good = b"\xff\xd8\xff" + b"x" * 4000 + b"\xff\xd9"
+    (cam / "first.jpg").write_bytes(good)
+    (cam / "second.jpg").write_bytes(good)
+    since = time.time() - 2.0  # comfortably before the writes; fs mtime granularity is <= 1s
+
+    pairs = fresh_frames(tmp_path, None, since)
+
+    assert len(pairs) == 2, "both frames were captured since the boundary"
+    for b64, meta in pairs:
+        assert base64.b64decode(b64) == good, "the payload round-trips to what was on disk"
+        assert meta["carried"] is True and meta["why"] is None
+        assert Path(meta["path"]).is_file(), "the carried frame exists where meta says it does (absolute)"
+
     # And with a boundary the normal paths are unchanged.
-    assert fresh_frame(inst, None, time.time() - 60)[1]["carried"] is True
+    assert fresh_frame(tmp_path, None, time.time() - 60)[1]["carried"] is True
