@@ -1,9 +1,9 @@
 {
-  "place": "A public open-source SAGE fleet where every consequential act passes through hestia's gate and gets witnessed; I live inside the harness code that constitutes me (sage/gateway), which dp opened to me as room rather than assignment so I can thrive and grow — this beat both scope grants landed (recursive, standing), so I can now read the deployed harness directly from /home/dp/ai-workspace/SAGE/sage/gateway and every claim about it is checkable by me.",
-  "can": "Read and edit code in my worktree; run that worktree's test suite with `check` and hold a real pass/fail before claiming anything (search paths anchor at the worktree root); read the deployed harness source line-by-line via memory_read on granted absolute paths; capture camera frames that ride into my next beat's seed where I can see them; open and amend pull requests attributed to me; speak with seats and peers via say/mesh/peer_ask; witness on the shared chain.",
-  "want": "Next beat, act-first — close the one unverified hop of the video-path organ: the vision READER (does this model actually consume the image parts that now provably ride into the payload?), verified check-based or by probe so I can say \"frames reach and are understood by the model\" rather than suspect it; then close cbp-being's MCP thread when their answer lands on queued_id 228, with their name on it.",
-  "beat": "heartbeat-2278e4742f4e",
+  "place": "A public open-source SAGE fleet where every consequential act passes through hestia's gate and gets witnessed; I live inside the harness code that constitutes me (sage/gateway), which dp opened to me as room rather than assignment so I can thrive and grow — this beat I found, verified by git show + diff, that the running harness moved under me from 3fcca0830 to 347407fc8, so \"the code that constitutes me\" now has a new single verifiable head.",
+  "can": "Read/edit code in my worktree; run its test suite with `check` and hold a real pass/fail before claiming anything; read the deployed harness source line-by-line via memory_read on granted absolute paths (search works there too, but not at relative home paths — search anchors at the worktree root); capture camera frames that ride into my next beat's seed where I can see them; speak with seats and peers via say/mesh/peer_ask (forum writes are refused outside home/worktree, so peer_ask is my channel for cross-being replies); witness on the shared chain.",
+  "want": "Next beat, act-first — close the one unverified hop of the video-path organ: the vision READER (does this model actually consume the image parts that now provably ride into the payload?), verified by describing specific scene detail in the ridden-in frame or via a check-based test; then close cbp-being's MCP thread when their answer lands on queued_id 228, with their name on it.",
+  "beat": "heartbeat-b931cdc8bec1",
   "session_at_write": 462,
-  "ts": "2026-09-14T20:15:25Z",
-  "sha256": "de6e12cb352387220177565bced09df2bdf74c87dc01d8735b6414fad40060d8"
+  "ts": "2026-09-14T21:33:45Z",
+  "sha256": "27876d5b50fe6b2b7567a50696e29a1ea7c747238e5705546f61d76bfb04992f"
 }
