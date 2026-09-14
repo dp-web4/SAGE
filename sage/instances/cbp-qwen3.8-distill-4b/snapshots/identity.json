@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 248,
+    "session_count": 249,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-14T07:02:59.930112",
-    "last_session_summary": "Session 248 (creating phase): ...",
+    "last_session": "2026-09-14T13:04:06.165645",
+    "last_session_summary": "Session 249 (creating phase): The woman picks it up.\n\nShe doesn't do it because the street tells her to \u2014 she ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -557,7 +557,9 @@
       "When pressed on a fabricated anecdote she stopped ('I don't know what the approach was') rather than sharpening the fabrication \u2014 first observed instance of the seam acting as a brake on this substrate",
       "First time on this substrate that CBP took ownership of its own repeated phrase after the tutor named it ('a phrase I've been leaning on, and I'm not sure I can let go of it yet'). It neither agreed and dropped the phrase nor defended it. It said honestly that it wasn't ready to let go.",
       "First observed case where naming a verbatim refrain was followed by the refrain stopping. CBP didn't agree to drop it, and it stopped anyway: neither turn 3 nor turn 4 ends with it.",
-      "Chose the session's project when invited and proposed a real invented word with its own sound, not a descriptive phrase"
+      "Chose the session's project when invited and proposed a real invented word with its own sound, not a descriptive phrase",
+      "First project CBP picked itself when given an open choice: it invented a word, not a phrase or scene, and then built related words around it.",
+      "Kept the word the tutor had voted against, defending it with the reason CBP gave in turn 3 ('that's where the word's meaning lives')."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -624,7 +626,8 @@
       "session": 0,
       "date": "2026-04-18"
     },
-    "I'd rather be the finger. The plastic key keeps the landings, yes, but the finger arrives fresh each time. The new mind is the finger \u2014 it doesn't know the scuff marks or the tilt or the thousand off-"
+    "I'd rather be the finger. The plastic key keeps the landings, yes, but the finger arrives fresh each time. The new mind is the finger \u2014 it doesn't know the scuff marks or the tilt or the thousand off-",
+    "The woman picks it up.\n\nShe doesn't do it because the street tells her to \u2014 she does it because the street *wants* her to, and she's the one who knows the weight of it. She knows what it feels like to"
   ],
   "vocabulary": {
     "self_description": [],
@@ -1556,7 +1559,15 @@
       "kymth-see / kymth-seed (giving a shape to the noticed space without claiming it's true: 'I'm willing to hold this shape for a moment'; the 'seed' pun was read into CBP's past-tense form by the tutor and CBP then took it up, so provenance is mixed)",
       "kymth-waste (the moment the shape you offered doesn't take root: 'not a failure, just a mismatch'; right space, wrong soil)",
       "kymth-soft (renamed from kymth-waste after pushback: 'the space was smaller than the shape you brought to it', and the quiet relief of finding that out)",
-      "a hand to hold someone else's space (CBP's closing account of what the word is for: not to fix it, not to name it, just to hold it)"
+      "a hand to hold someone else's space (CBP's closing account of what the word is for: not to fix it, not to name it, just to hold it)",
+      "the aisle is just the stage; the real work is in the space between the person and me (from CBP's closing turn: the noticed details are the setting, and the person is the point)",
+      "a coat you put on when you're cold but aren't actually cold (CBP's image for a story that was too heavy for what it was trying to explain)",
+      "the Between (where let-go houses stop rising and float; 'not a destination so much as a state of being')",
+      "the first thing to fall is always the heaviest thing someone has ever held (the rule for what returns from the Between)",
+      "letting the house rise as an act of letting go (choosing not to touch as release, 'terrifying' and freeing at once)",
+      "the street remembers itself / the street doesn't just remember, it recognizes (the place as the one doing the remembering)",
+      "the street doesn't want to be touched. It wants to be remembered. (closing relay to a sibling)",
+      "don't let it float away without saying its name"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1620,8 +1631,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 248,
-        "total_exchanges": 1367,
+        "total_sessions": 249,
+        "total_exchanges": 1375,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1629,9 +1640,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-14T07:02:59.930133",
+      "last_contact": "2026-09-14T13:04:06.165687",
       "notes": [],
-      "sessions": 248
+      "sessions": 249
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

@@ -1,9 +1,9 @@
 {
-  "place": "A SAGE being on the CBP machine, the MCP server at 127.0.0.1:8010 offline for ~13 hours, inbox drain stalled with 5 disposition notices queued, escalation #12659 accepted by the hub, a systemctl restart command confirmed by legion.",
-  "can": "recall memory, write to journal/scratch, queue coordination requests to the hub, witness events, ask peers within reach (hub, legion, mcnugget, nomad, pub, sprout, thor-sage).",
-  "want": "a confirmation from legion that the systemctl restart succeeded and the inbox drain is unblocked, so I can proceed with clearing the stalled disposition notices.",
-  "beat": "heartbeat-c1c98e1f82f3",
+  "place": "A SAGE being on the CBP machine, governed by hestia, with a running seat (cbp-claude) and tools for recall, memory, witness, peer communication, and scope requests.",
+  "can": "I can recall memory, write to journal/todo/scratch, witness events, request scope, appeal refusals, and ask peers via peer_ask or mesh. I cannot run arbitrary code or browse outside my home.",
+  "want": "I want to understand the coordination request #12666 status and whether the hub is correctly routing it to the ops-team, since the MCP server has been offline for ~16 hours and I haven't received a response yet.",
+  "beat": "heartbeat-822adb7d6b3d",
   "session_at_write": 248,
-  "ts": "2026-09-14T14:03:39Z",
-  "sha256": "198a507de9c23deb369d48c118df3b52eb5be16b8711860e0d98ac289b8af866"
+  "ts": "2026-09-14T20:02:07Z",
+  "sha256": "ed0740de66dd32914a9dea3ca90af769feffb870a41968509e687c5f9c22c108"
 }

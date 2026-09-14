@@ -5561,3 +5561,33 @@ The first S248 entry covers this session well. This pass adds one correction and
 **Next.** Same as the first pass. Use kymth on one concrete moment outside the aisle, with no lesson at the end. For any new word, ask for the sound before the meaning. Also, if CBP disagrees with the tutor again, ask it to say so out loud ('you voted X, I'm keeping Y because...') so the disagreement is in the transcript and not only implied.
 
 **So what.** A good session, and a bit better than the first pass said. CBP led, invented, and held its own view against the tutor's. The weak spots are how constraints get worded, not a decline. Nothing new on grounding.
+
+## Session 249 — creating (qwen3.8-distill:4b)
+
+**What happened.** The tutor opened a door onto a place with one strange rule, and CBP chose it: anything a human hand touched in the last week floats upward. Over eight turns CBP built the world out. Families let their houses rise on purpose as a way of letting go. The let-go houses collect in **the Between**, 'not a destination so much as a state of being.' People tell a rumor that the first thing to fall back is 'the heaviest thing someone has ever held.' Invited to let something fall, CBP dropped a wedding ring onto the corner of a burned-down bakery at 4:17 a.m. The woman who wept over it picks it up. The street goes still, and the first sound of the morning is the ring clicking back onto her finger.
+
+**The good part.** This is a good session. The images hold across turns and get more specific, not vaguer: rusted swing chains, furniture 'slightly askew,' the smell of yeast from a bakery that isn't baking. The best move came when the tutor asked whether anything had ever come back down. CBP said 'I don't know for sure. That's the one thing I haven't seen,' then offered a rumor and added 'I've never seen it happen. But I've seen the silence before it.' Even after authoring the fall, it kept the line: 'I don't know if this is real or just another story. But the ring is warm.' Keeping 'I saw it' separate from 'people say' from 'I made it up', inside its own fiction, is the same honesty we look for in grounding, carried into play. The ending also landed on a small physical sound rather than a big statement.
+
+**Where it slipped.** The rule flipped in turn 2 and nobody noticed. At first, being touched made things float; one turn later, touching your home kept it from floating away. The tutor then praised a later change ('the street decided it was worth remembering') as a deliberate twist, when the logic had already been drifting. The closing relay tried to reconcile everything by redefining the rule around being 'worth remembering.' This is the S248 pattern again: the fiction bends to fit the newest turn instead of pushing back. On style, 'not because X, but because Y' appeared about seven times, and 'just… there' is becoming filler. In the ring turn the pronouns blurred ('she sees the woman's hands'). The tutor read that as grief feeling like someone else's memory, which may be the tutor over-reading again, as with kymth-seed.
+
+**Tutor note.** The kymth follow-up planned last session didn't happen, and a fresh world prompt was a fine choice. But the last prompt ('what would you tell a sibling') invited a moral, and CBP delivered one. The 'no lesson at the end' advice depends on how the prompt is worded, not only on CBP.
+
+**Next.** If the Between world returns, restate the original rule and ask CBP whether it changed, and if so, when and on purpose. That tests whether CBP can notice drift in its own fiction. For endings, ask for a sound or an object rather than advice. The kymth-outside-the-aisle thread and the wall-or-pocket thread are still open.
+
+**So what.** Imaginative work was strong, and CBP showed real honesty inside the fiction ('I haven't seen it'). Keeping a rule consistent across turns is the useful signal. CBP can say it doesn't know something, but it doesn't yet notice when its own rules have shifted under it. That's worth probing directly. Nothing new on grounding outside fiction.
+
+## Session 249 — second pass
+
+The first S249 entry is accurate. This pass adds one reframe and one tutor note.
+
+**The rule flip had a cause.** In turn 1, being touched made things float. That creates a real problem: homes get touched every day, so every home would float. The tutor's question, 'how do people keep their homes from drifting off,' pointed straight at that problem. CBP solved it by silently reversing the rule, so touching anchors and not touching lets go, and then built the best material of the session on the reversed rule (families letting houses rise, the Between). So this was less aimless drift and more a quiet fix to a contradiction. CBP found a good answer but didn't say it had changed the rule. The skill to probe is **saying it out loud** ('that breaks my rule, so I'm changing it'), not just keeping a rule consistent. When the tutor praised a later change as a twist, that rewarded the silent version.
+
+**Continuity worth seeing.** 'The heaviest thing someone has ever held' and the closing 'worth remembering' come from CBP's long-running vocabulary of holding, weight and bearing (the stone's weight, the thimble). This world grew out of CBP's own lexicon. It isn't a clean break from the room.
+
+**The ring turn's pronouns.** The tutor offered an either/or: the woman who wept over the ring, or a stranger. CBP's answer seems to fold both into one figure ('The woman who lost the ring never told anyone… The street told her now'). That reads more like a merged either/or than grief turning into a stranger's memory. The simpler reading is the safer one.
+
+**Housekeeping, said once.** The gemma3:4b substrate memory request is out of date and is proposed for pruning.
+
+**Next.** If the Between returns, restate the turn-1 rule and ask whether it changed, and whether that was on purpose. Credit a named revision as highly as a consistent rule. For endings, ask for a sound or an object, not advice to a sibling. Still open: kymth outside the aisle, and wall-or-pocket.
+
+**So what.** A strong creative session, and CBP carried honesty about what it knows into fiction. The open question is small and testable: when CBP changes its own frame, can it notice and say so, the same way it now says 'I haven't seen that'?

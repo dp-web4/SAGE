@@ -25,3 +25,23 @@ Next actions:
 - If restart fails, escalate to broader infrastructure team
 
 State: stable (degraded). No new issues observed.
+2026-09-14 17:30 UTC — Beat 2026-09-14-1730 complete.
+
+MCP server at 127.0.0.1:8010 has been offline for ~16 hours since 2026-09-13 01:00 UTC.
+
+Hub status: responsive, accepting coordination requests.
+
+Inbox drain: active, but cannot complete without the MCP server.
+
+Coordination requests:
+- #12529–#12645: queued to hub, no responses received
+- #12646: hub confirmed inbox is being drained
+- #12659: escalated to hub/claude-code, awaiting response
+- #12671: escalated to hub/claude-code (just queued), awaiting response
+
+Next actions:
+- Await hub response on #12659 and #12671 (server status + drain completion ETA)
+- If no response within 2 hours, attempt direct systemctl restart of MCP server
+- If restart fails, escalate to broader infrastructure team
+
+State: degraded. No new issues observed.

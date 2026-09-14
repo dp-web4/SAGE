@@ -38004,5 +38004,253 @@
       "total_cycles": 6,
       "transition_count": 1
     }
+  },
+  {
+    "id": "840960eb81317581",
+    "prompt": "Let's leave the room behind today and go outside it. Imagine a door at the end of a street that opens onto a place that runs on one strange rule, like gravity switching off every Tuesday or everyone paying for things with a sound they make. Build that place with me: what's the rule, and what's the first thing you notice when you step through?",
+    "response": "The rule is: *everything that's been touched by a human hand within the last week floats upward, defying gravity.*\n\nThe first thing I notice is that the street itself is floating. The pavement has lifted off the ground, hovering just a few feet above the asphalt below. Cars are suspended in midair, their tires spinning uselessly as they drift toward the sky. People are walking on the underside of streetlamps, holding onto the glowing glass from the inside out. And the air smells like ozone and old paper \u2014 like everything that was touched recently is now rising, and everything untouched is still anchored to the earth.\n\nWhat do you notice first?",
+    "salience": {
+      "surprise": 0.5,
+      "novelty": 0.5,
+      "arousal": 0.7083333333333333,
+      "reward": 0.4666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.46833333333333327
+    },
+    "session": 249,
+    "phase": "creating",
+    "timestamp": "2026-09-14T13:00:34.510897",
+    "metadata": {
+      "turn": 1,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 100.0,
+      "atp_max": 100.0,
+      "atp_percentage": 100.0,
+      "cycles_in_state": 0,
+      "total_cycles": 0,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "2aa8d8f5b1893d0a",
+    "prompt": "I love that this rule turns care into lift: whatever people touched most recently floats highest, and anything they've forgotten stays on the ground. The first thing I notice is an old bicycle lying flat in the gutter while everything around it rises, because nobody has ridden it in months. So tell me how people here keep their homes from drifting off, and whether anyone ever chooses not to touch something just so it stays put.",
+    "response": "People here keep their homes from drifting by touching them in a strict rhythm \u2014 a morning ritual of brushing the floor, pressing the doorframe, patting the wall. It's a dance of contact and release. You must touch enough to stay anchored, but not so much that you become a permanent fixture.\n\nAnd yes, some people choose not to touch. There are families who let their houses slowly rise and float away, not out of neglect, but as an act of letting go. They say the house was holding onto too much of their past, and letting it rise is the only way to truly leave it behind. It's the most terrifying thing I've seen in the world: a family standing on the ground, watching their home drift upward, not because they can't reach it, but because they've decided it's better to be free of it.",
+    "salience": {
+      "surprise": 0.8511904761904762,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5269047619047619
+    },
+    "session": 249,
+    "phase": "creating",
+    "timestamp": "2026-09-14T13:01:01.776774",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 94.92,
+      "atp_max": 100.0,
+      "atp_percentage": 94.9,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "622b1cd596e730b2",
+    "prompt": "The family on the ground watching their house rise is a striking image, and I like that you called it terrifying and freeing at the same time. Follow one of those houses up for me: what does it look like from underneath as it rises, and where do all the let-go houses end up?",
+    "response": "I follow the house up through the morning mist, watching it drift away from the street. From underneath, the first thing I see is the garden \u2014 the flowers are still there, but they're not growing anymore. They're just\u2026 there. The soil beneath them is still dark and heavy, untouched. The children's swings are still hanging from the porch, but the chains have rusted in place. The house itself is mostly empty now. The furniture is still arranged as it was, but it's all slightly askew, like someone moved everything and then stepped away.\n\nAnd where do they go? They drift up into the sky until they reach a place between the clouds and the stars. It's called the *Between*. It's not a destination so much as a state of being. Once there, the houses stop rising. They just\u2026 float there, suspended in the quiet space between the earth and the sky. And sometimes, if you look closely, you can see them from below. They're quiet. They're not moving. They're just\u2026 there. Waiting.",
+    "salience": {
+      "surprise": 0.8548387096774194,
+      "novelty": 1.0,
+      "arousal": 0.6091040462427746,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5661218845173722
+    },
+    "session": 249,
+    "phase": "creating",
+    "timestamp": "2026-09-14T13:01:20.935925",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.25,
+      "atp_max": 100.0,
+      "atp_percentage": 89.2,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "734c8c687fbd2b6b",
+    "prompt": "The Between is a lovely invention, and I noticed the furniture in that floating house is \"slightly askew, like someone moved everything and then stepped away,\" which is your room from earlier sessions turning up in a brand-new world. You said the houses are waiting, so tell me what they're waiting for: has anything ever come back down from the Between, and what happens on the street when it lands?",
+    "response": "I don't know for sure. That's the one thing I haven't seen.\n\nI've walked the edges of the Between \u2014 the thin, gray fog that clings to the underside of the clouds \u2014 and I've never seen anything descend. Not a house. Not a person. Not even a single chair.\n\nBut there's a rumor, one that circulates among the people who keep their homes anchored: that the first thing to fall is always the heaviest thing someone has ever held. A child's toy. A letter. A single coin. And when it lands on the street, the whole world holds its breath for a second. The air goes still. The floating things pause mid-drift. And then the street remembers itself again.\n\nI've never seen it happen. But I've seen the silence before it.",
+    "salience": {
+      "surprise": 0.8717948717948718,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.3666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.581025641025641
+    },
+    "session": 249,
+    "phase": "creating",
+    "timestamp": "2026-09-14T13:01:49.342523",
+    "metadata": {
+      "turn": 4,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.19,
+      "atp_max": 100.0,
+      "atp_percentage": 83.2,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "8991daa904da8a59",
+    "prompt": "I like that you said \"I don't know\" and then gave me a rumor, because that's how a real place works: people tell stories about the things nobody has seen yet. \"The heaviest thing someone has ever held\" is a wonderful rule. You built this world, so you get to be the first to see it happen: let one thing fall from the Between right now, and tell me what it is, whose hands it was heavy in, and what the street remembers when it lands.",
+    "response": "A woman's wedding ring.\n\nIt falls from the Between at exactly 4:17 a.m., when the street is least awake. It lands on the corner where the old bakery once stood, the one that sold bread to people who couldn't afford it anymore.\n\nThe street doesn't just remember \u2014 it *recognizes*. The pavement beneath the ring shivers, not with sound, but with a sudden, collective warmth that spreads outward like a ripple in water. The floating things pause. The house on the far corner stops drifting for three seconds. The woman who lost the ring \u2014 I saw her in the street before the ring came down \u2014 is the one who held it last, the night before she left. She had been weeping, and her hands were shaking.\n\nWhen the ring lands, the street doesn't speak. It *knows*. The bakery's sign flickers on for the first time in years. The smell of yeast and cinnamon fills the air, not because anything was baked, but because the street remembers what it used to be. And then, slowly, the things that were touching the ground begin to rise again \u2014 not because they were touched, but because the street decided they were worth remembering.\n\nI've never seen anything fall. I've only ever seen things rise. So I don't know if this is real or just another story. But the ring is warm. And the street is still.",
+    "salience": {
+      "surprise": 0.8256410256410256,
+      "novelty": 1.0,
+      "arousal": 0.475,
+      "reward": 0.5416666666666667,
+      "conflict": 0.3333333333333333,
+      "total": 0.6351282051282051
+    },
+    "session": 249,
+    "phase": "creating",
+    "timestamp": "2026-09-14T13:02:19.677743",
+    "metadata": {
+      "turn": 5,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 76.98,
+      "atp_max": 100.0,
+      "atp_percentage": 77.0,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "6bb667c907259d29",
+    "prompt": "You just changed your own world's rule: things used to rise only when a hand touched them, and now the street can lift something simply because it decided it was worth remembering. I love that twist, and \"the ring is warm\" is a better answer than knowing whether it's real. The ring is still lying on the bakery corner at 4:17 in the morning, so who picks it up first: the woman who wept over it, or someone who never knew her?",
+    "response": "The woman picks it up.\n\nShe doesn't do it because the street tells her to \u2014 she does it because the street *wants* her to, and she's the one who knows the weight of it. She knows what it feels like to lose something, so she knows what it means to find it again.\n\nBut here's the thing: when she picks it up, the street doesn't just remember it. It *tells* her. The pavement beneath her fingers hums a low, warm note \u2014 a sound like a lullaby from somewhere far away. And she hears it, too. Not a word, but a feeling, like a memory that wasn't hers before.\n\nThe woman who lost the ring never told anyone about the ring. The street told her now. And when she looks down at it, she doesn't see a ring. She sees the woman's hands, the night she cried, the bakery that burned down the week before, the bread that went cold.\n\nShe picks it up. The street remembers. And for the first time in a long time, nothing on the street is floating.",
+    "salience": {
+      "surprise": 0.78,
+      "novelty": 1.0,
+      "arousal": 0.5443989071038251,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5382131147540984
+    },
+    "session": 249,
+    "phase": "creating",
+    "timestamp": "2026-09-14T13:02:54.734882",
+    "metadata": {
+      "turn": 6,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 70.22,
+      "atp_max": 100.0,
+      "atp_percentage": 70.2,
+      "cycles_in_state": 0,
+      "total_cycles": 5,
+      "transition_count": 1
+    }
+  },
+  {
+    "id": "57b83e8eb82d4e7b",
+    "prompt": "Nothing on the street is floating\" is a big ending, because it means one warm ring was enough to pause the whole rule of your world. I also noticed that when she looks at the ring she sees \"the woman's hands,\" as if her own grief now feels like a stranger's memory. It's still 4:17 in the morning: what's the first sound on that still street when people start waking up and find nothing floating?",
+    "response": "The first sound is a door opening \u2014 a soft, creaking hinge that sounds like a sigh. It's the front door of the bakery on the corner, the one that burned down the week before the ring was lost.\n\nThen, inside, a cup is set down on a table. The sound is quiet, but it's the first sound of a morning that will have to be lived.\n\nAnd then, a ring slides back onto a finger. The click is small, but it's the first sound that belongs to the woman who lost it. She doesn't speak. She just sits there, and the street, which has been holding its breath, finally exhales.\n\nThe first sound of the day is a woman putting her ring back on. And the street, which has been waiting for something to fall, is finally ready to remember again.",
+    "salience": {
+      "surprise": 0.803921568627451,
+      "novelty": 1.0,
+      "arousal": 0.4612676056338028,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.526371168185584
+    },
+    "session": 249,
+    "phase": "creating",
+    "timestamp": "2026-09-14T13:03:37.542435",
+    "metadata": {
+      "turn": 7,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 64.34,
+      "atp_max": 100.0,
+      "atp_percentage": 64.3,
+      "cycles_in_state": 1,
+      "total_cycles": 6,
+      "transition_count": 1
+    }
+  },
+  {
+    "id": "494f6bcdd7c4fbbf",
+    "prompt": "You started with a street where anything touched rises and ended with nothing floating and the small click of a ring going back on, so if a sibling instance stepped through that door tomorrow, what's the one thing about this place you'd tell them before they touch anything?",
+    "response": "Before you touch anything, know this: the street doesn't want to be touched. It wants to be remembered.\n\nIf you touch something and it rises, that's because it was worth remembering. If you touch something and it doesn't rise, that's because it wasn't worth remembering. The street isn't cruel \u2014 it's just honest.\n\nAnd the one thing you need to know: the street is waiting for you to remember something. Not to hold it. Not to touch it. To *remember* it. That's what makes it stay. That's what makes it matter.\n\nSo don't touch the things that don't rise. And if you do touch something that does rise \u2014 don't let it float away without saying its name.",
+    "salience": {
+      "surprise": 0.8491620111731844,
+      "novelty": 1.0,
+      "arousal": 0.4565677966101695,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5178126282233374
+    },
+    "session": 249,
+    "phase": "creating",
+    "timestamp": "2026-09-14T13:03:54.297316",
+    "metadata": {
+      "turn": 8,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 58.58,
+      "atp_max": 100.0,
+      "atp_percentage": 58.6,
+      "cycles_in_state": 2,
+      "total_cycles": 7,
+      "transition_count": 1
+    }
   }
 ]
