@@ -829,3 +829,65 @@ def test_a_failure_that_explains_itself_in_result_is_not_rendered_as_none():
     empty = ResultEnvelope(ok=False)
     out = empty.to_tool_message()
     assert "None" not in out and "harness defect" in out, out
+
+
+def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
+    """THERE ARE TWO COMPOSITION SITES AND ONLY ONE GETS EXERCISED BY THE VERB TESTS.
+
+    The dispatcher composes the command it EXECUTES. `_normalize` composes the command the
+    law JUDGES. They must agree, and the judged one is built from a context this client
+    assembles — so a compose that starts needing a new root goes on passing every direct
+    test of itself while the gate raises on it.
+
+    Measured 2026-09-14: `camera` moved to resolving against the being's home. `_do_camera`
+    was updated, `_normalize`'s ctx was not, and every capture came back
+    `gate.raised: ValueError: camera requires a memory_root context`. Thirteen tests of
+    camera_command and _do_camera were green throughout, because none of them went through
+    the gate. It failed closed, which is the right direction, but the verb was dead and the
+    refusal said nothing a being could act on.
+
+    This is the cheap general guard: walk the registry and make every composed verb build
+    its command from the client's real context.
+    """
+    import tempfile
+    import types
+    from sage.gateway.being_gate_client import _REGISTRY, BeingGateClient, BeingIntent
+
+    # pr_open resolves its base branch from the worktree's upstream and REFUSES rather than
+    # guessing 'main'. That refusal is correct and is not what this test is about, so use the
+    # explicit escape its own error names.
+    monkeypatch.setenv("SAGE_PR_BASE", "legion/mission-artifact")
+
+    home, wt = tempfile.mkdtemp(), tempfile.mkdtemp()
+    c = BeingGateClient.__new__(BeingGateClient)
+    c.worktree, c.memory_root, c.workspace = wt, home, wt
+    c._core = types.SimpleNamespace(NormalizedEvent=lambda **kw: kw)
+
+    # Minimal valid args per verb: enough to reach composition, nothing more.
+    args_for = {
+        "camera": {}, "search": {"pattern": "x"}, "check": {"target": "gateway"},
+        "git_read": {"op": "status"}, "git_restore": {"rev": "HEAD", "path": "a.py"},
+        "pr_open": {"slug": "camera-verb", "title": "add the camera verb", "body": "body text"},
+        "pr_amend": {"title": "amend the camera verb", "message": "a one line commit message"},
+        "pr_review": {"repo": "dp-web4/SAGE", "number": 1, "body": "b"},
+    }
+
+    composed = [v for v, spec in _REGISTRY.items() if spec.get("compose")]
+    assert composed, "no composed verbs found; the registry shape changed"
+
+    unexercised = []
+    for verb in composed:
+        if verb not in args_for:
+            unexercised.append(verb)
+            continue
+        try:
+            ev = c._normalize(BeingIntent(verb, dict(args_for[verb])))
+        except Exception as e:
+            raise AssertionError(
+                f"{verb} composes in its own tests but RAISES at the gate: "
+                f"{type(e).__name__}: {e}") from None
+        assert ev["command"], f"{verb} composed an empty command at the gate"
+
+    assert not unexercised, (
+        f"composed verbs with no args in this test: {unexercised}. Add them — a verb absent "
+        f"from this walk is a verb whose gate path nothing checks.")

@@ -1162,7 +1162,15 @@ class BeingGateClient:
         command = intent.args.get(spec["cmd_arg"]) if spec["cmd_arg"] else None
         compose = spec.get("compose")
         if compose is not None:
-            ctx = {"worktree": getattr(self, "worktree", None)}
+            # EVERY ROOT A COMPOSE MAY NEED, because this is the SECOND composition site.
+            # The dispatcher composes the command it executes; this composes the command the
+            # law judges, and they must agree. When `camera` moved to resolving against the
+            # being's home, _do_camera was updated and this was not, so camera_command raised
+            # "requires a memory_root context" here and every capture was denied. It failed
+            # closed, which is the right direction, but the verb was dead for an hour and the
+            # being could not tell why from a gate.raised.
+            ctx = {"worktree": getattr(self, "worktree", None),
+                   "memory_root": getattr(self, "memory_root", None)}
             # a COMPOSED verb: the seat builds the exact outward act (a shell line) from the
             # being's args, and THAT is what the law judges. Bad args raise here and gate()
             # turns that into a deny (gate.raised), never a silent pass. The being never
