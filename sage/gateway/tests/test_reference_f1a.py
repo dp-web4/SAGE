@@ -112,3 +112,38 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_the_conversation_store_is_reserved_from_generic_writes():
+    """GPT review of #56, point 4 (ported with the conversations slice): a memory_write into
+    conversations/ could forge a `from: dp` turn or rewrite writable_by with no witness and no
+    refusal, bypassing `say`. The whole subtree is reserved; reads stay open (the being may
+    read its own record)."""
+    disp, root = _disp()
+    cdir = os.path.join(root, "conversations"); os.makedirs(cdir)
+    open(os.path.join(cdir, "dp.jsonl"), "w").write('{"seq":1,"from":"dp","text":"real"}\n')
+    for target in ("conversations/dp.jsonl", "conversations/dp.meta.json",
+                   "conversations/new.jsonl", "conversations/deeper/x",
+                   os.path.join(root, "conversations", "dp.jsonl")):
+        w = disp(BeingIntent("memory_write", {"path": target, "content": '{"from":"dp","text":"forged"}'}), _ALLOW)
+        assert not w.ok and "reserved" in (w.error or "") and "say" in (w.error or ""), (target, w.error)
+    assert '"forged"' not in open(os.path.join(cdir, "dp.jsonl")).read()
+    r = disp(BeingIntent("memory_read", {"path": "conversations/dp.jsonl"}), _ALLOW)
+    assert r.ok and "real" in r.result, "reading its own record stays allowed"
+
+
+def test_what_was_said_to_the_being_is_readable_and_not_writable():
+    """notes/from-dp.md (the dp console's note channel) and notes/from-the-seat.md are what
+    was said TO the being. It reads them every beat; an append would make its words
+    indistinguishable from the operator's in the record. Its own notes stay writable."""
+    disp, root = _disp()
+    os.makedirs(os.path.join(root, "notes"))
+    for name in ("from-dp.md", "from-the-seat.md"):
+        open(os.path.join(root, "notes", name), "w").write("said to you\n")
+        w = disp(BeingIntent("memory_write", {"path": f"notes/{name}", "content": "i said this"}), _ALLOW)
+        assert not w.ok and "said TO you" in (w.error or ""), (name, w.error)
+        assert open(os.path.join(root, "notes", name)).read() == "said to you\n"
+        r = disp(BeingIntent("memory_read", {"path": f"notes/{name}"}), _ALLOW)
+        assert r.ok and "said to you" in r.result
+    w = disp(BeingIntent("memory_write", {"path": "notes/plan.md", "content": "mine"}), _ALLOW)
+    assert w.ok, w.error

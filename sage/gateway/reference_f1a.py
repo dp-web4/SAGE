@@ -31,6 +31,18 @@ from typing import Callable, Optional
 from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope
 
 
+# What was SAID TO the being is not the being's to edit. notes/from-dp.md is the operator's
+# own channel (written by the dp console) and notes/from-the-seat.md is the seat's; a being
+# that could append to either could not later be distinguished from the person who wrote to
+# it, and neither could anyone reading the record.
+SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
+# The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
+# reaches it only through `say`, which checks writable_by, witnesses the act and assigns
+# the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
+# would let the being forge a `from: dp` turn, or rewrite who may speak, with no witness
+# and no refusal. The whole subtree, not the two files that happen to exist today.
+RESERVED_SUBTREES = ("conversations",)
+
 class ReferenceF1aDispatcher:
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
 
@@ -72,7 +84,7 @@ class ReferenceF1aDispatcher:
         return wid
 
     # -- path confinement (defense in depth over the gate) -------------------
-    def _safe_path(self, raw: str) -> Path:
+    def _safe_path(self, raw: str, writing: bool = False) -> Path:
         # A being names its notes by a path inside its own memory ("notes/x.md"); a
         # relative path is rooted at memory_root, never at the process cwd. Absolute
         # paths are honoured only if they already lie inside the root (checked below).
@@ -80,6 +92,19 @@ class ReferenceF1aDispatcher:
         if not p.is_absolute():
             p = self.memory_root / p
         p = p.resolve()
+        if writing:
+            for sub in RESERVED_SUBTREES:
+                reserved = self.memory_root / sub
+                if p == reserved or reserved in p.parents:
+                    raise ValueError(
+                        f"{sub}/ is reserved: a turn enters a conversation only through `say`, "
+                        "which checks who may speak, witnesses the act and numbers it. Writing "
+                        "the store directly would let a turn appear that nobody said")
+            if p.parent == self.memory_root / "notes" and p.name in SEAT_OWNED_NOTES:
+                raise ValueError(
+                    f"notes/{p.name} is what was said TO you, and it stays as it was said. Your "
+                    "reply belongs in your journal, in a conversation with `say`, or in an "
+                    "appeal, all of which are read")
         roots = (self.memory_root,) + tuple(getattr(self, "_extra_roots", ()) or ())
         if not any(p == r or r in p.parents for r in roots):
             raise ValueError(f"path escapes the being's memory root and its grants: {p}")
@@ -104,7 +129,7 @@ class ReferenceF1aDispatcher:
     def _do_memory_write(self, intent: BeingIntent) -> ResultEnvelope:
         if not str(intent.args.get("path", "")).strip():
             return ResultEnvelope(ok=False, error="memory_write needs a 'path' (relative paths are inside your home)")
-        p = self._safe_path(intent.args["path"])
+        p = self._safe_path(intent.args["path"], writing=True)
         content = str(intent.args.get("content", ""))
         p.parent.mkdir(parents=True, exist_ok=True)
         with open(p, "a") as f:

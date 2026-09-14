@@ -15,3 +15,9 @@ tracing-subscriber = "0.3"
 futures-util = "0.3"
 async-stream = "0.3"
 uuid = { version = "1", features = ["v4"] }
+# flock(2) for the conversation store, whose other writer is the Python heartbeat.
+# Already present transitively; named here because this crate calls it directly.
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"

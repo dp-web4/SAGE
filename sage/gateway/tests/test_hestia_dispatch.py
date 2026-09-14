@@ -737,3 +737,45 @@ def test_request_scope_beneath_an_exact_grant_is_not_already_granted_and_files_n
     env = d(BeingIntent("request_scope", {"path": root + "/journal.md", "reason": "to write my journal entry"}),
             GatewayVerdict("allow", granted=(root,), granted_reach=((root, True),)))
     assert env.ok and env.result["status"] == "already_granted"
+
+
+def test_say_speaks_only_where_the_meta_allows_and_records_its_channel():
+    """`say` (conversations slice): the reach is the meta file, not the argument. Four
+    distinct answers, each a different sentence: no such conversation (naming the ones the
+    being is in), not a participant, participant but read-only, and a spoken turn that
+    carries via="say" and is opened and closed as a witnessed action."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    conv.create(home, "seat", title="seat", participants=["sprout-claude", "sprout-being", "dp"],
+                writable_by=["sprout-claude"])
+    conv.create(home, "private", title="private", participants=["dp", "sprout-claude"],
+                writable_by=["dp", "sprout-claude"])
+
+    r = d(BeingIntent("say", {"to": "nope", "text": "hi"}), _ALLOW)
+    assert not r.ok and "no conversation 'nope'" in r.error and "dp" in r.error and "private" not in r.error
+    r = d(BeingIntent("say", {"to": "private", "text": "hi"}), _ALLOW)
+    assert not r.ok and "not a participant" in r.error
+    r = d(BeingIntent("say", {"to": "seat", "text": "hi"}), _ALLOW)
+    assert not r.ok and "not speak in it" in r.error
+    # Enforced twice, on purpose: the dispatcher refuses before opening an action, and the
+    # store refuses again inside append (conversations.append, enforce_write). Measured: with
+    # the dispatcher check removed this arm still passes on the store's refusal, and no
+    # action is opened only because the dispatcher's check runs first.
+    assert "hestia_begin_action" not in [n for n, _ in FakeMcp.calls], "a refused say opens no action"
+    r = d(BeingIntent("say", {"to": "dp", "text": ""}), _ALLOW)
+    assert not r.ok and "needs 'to'" in r.error
+    assert conv.count(home, "seat") == 0 and conv.count(home, "private") == 0
+
+    FakeMcp.calls = []
+    r = d(BeingIntent("say", {"to": "dp", "text": "I read it, and here is my answer."}), _ALLOW)
+    assert r.ok, r.error
+    turn = conv.recent(home, "dp", limit=1)[-1]
+    assert turn["text"] == "I read it, and here is my answer." and turn.get("via") == "say"
+    names = [n for n, _ in FakeMcp.calls]
+    assert "hestia_begin_action" in names and "hestia_record_outcome" in names
+    outcome = [a for n, a in FakeMcp.calls if n == "hestia_record_outcome"][-1]
+    assert outcome["success"] is True
