@@ -878,8 +878,27 @@ class HestiaF1aDispatcher:
         # says only that HEAD and the hashed test inputs (tests + conftest) are the same
         # before and after, which is a check on the SEAT's view of the tree, not a proof
         # about the sandboxed process.
-        stable = (tree_after.get("head") == tree_before.get("head")
-                  and source_after == source_before)
+        # AN UNKNOWN IS NOT A MATCH. `source_after == source_before` is True when both are
+        # None, so a target whose test source could not be identified at all reported
+        # stable=True and state="pinned" — the strongest claim the envelope can make,
+        # produced by having measured nothing (GPT, second pass on #84). Missing identity
+        # is UNVERIFIED, and it is a distinct third state from "the tree moved under me".
+        identity_known = source_before is not None and source_after is not None
+        if not identity_known:
+            stable = None
+            state = "unverified_no_test_source_identity"
+        else:
+            stable = (tree_after.get("head") == tree_before.get("head")
+                      and source_after == source_before)
+            state = "pinned" if stable else "tree_changed_during_check"
+        # THE FIELD MUST NAME THE PATH ACTUALLY TAKEN. With SANDBOX_REQUIRED=False and no
+        # usable bwrap, sandbox_prefix() returns "" and the check deliberately runs
+        # unsandboxed — and this field still said True, so the degraded mode asserted the
+        # one guarantee it had explicitly given up. The read-only mount is what makes the
+        # claim true, so the claim is read off whether that mount is in the argv that ran.
+        from sage.gateway.being_gate_client import SANDBOX
+        sandboxed = bool(argv) and argv[0] == SANDBOX
+        source_readonly = sandboxed
         return ResultEnvelope(ok=True, witness_id=action_id,
                               result={"headline": headline,
                                       "target": target, "passed": passed,
@@ -896,9 +915,11 @@ class HestiaF1aDispatcher:
                                           "output_bytes": output_len,
                                           "embodiment": self._embodiment(),
                                           "stable": stable,
-                                          "state": "pinned" if stable else "tree_changed_during_check",
-                                          # the mount is the guarantee; this field is the seat's own check
-                                          "source_readonly": True,
+                                          "state": state,
+                                          # the read-only mount is the guarantee; this names
+                                          # whether the run actually had it, never the intent
+                                          "source_readonly": source_readonly,
+                                          "sandboxed": sandboxed,
                                       },
                                       "action_id": action_id})
 

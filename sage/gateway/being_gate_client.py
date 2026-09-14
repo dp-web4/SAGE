@@ -344,7 +344,9 @@ CHECK_TARGETS = {
 # WHAT THE SANDBOX IS. bubblewrap with a cleared environment: nothing of the seat's is
 # bound except a read-only interpreter, no network at all, its own pid/ipc/uts namespaces,
 # a fresh session so it cannot signal the seat's process group, and --die-with-parent so a
-# runaway cannot outlive the beat. The only writable path is the being's own worktree.
+# runaway cannot outlive the beat. THE WORKTREE IS BOUND READ-ONLY and /tmp is the only
+# writable path: this said the opposite until the read-only fix, and a comment that
+# contradicts the mount is worse than none, because a reader checks the prose first.
 #
 # THE FALSIFIER, and it is the point of the whole exercise (PRD r3 §10.5): from inside,
 # reads of the vault, the hestia socket and the agent environment must all fail. Measured
@@ -436,7 +438,7 @@ def sandbox_prefix(worktree: str) -> str:
         # defect has shaped a command; the issue carries the evidence.
         " --setenv HOME /tmp --setenv PYTHONUTF8 1 --setenv PYTHONDONTWRITEBYTECODE 1"
         f" --setenv PATH {interp}/bin:/usr/bin:/bin"
-        f" --chdir {worktree} "
+        f" --chdir {shlex.quote(worktree)} "
     )
 
 
@@ -494,8 +496,13 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
             "check needs a worktree of your own: there is nothing to run tests in, and a "
             "relative path would be judged against a tree you do not hold (PRD M1)")
     target = str(args.get("target", "")).strip()
+    # QUOTED for the same reason as --rootdir and --chdir: judged==executed is a property
+    # of the STRING, not of the fleet's current directory names. A worktree path containing
+    # a space splits into extra argv at execution while the law ruled on one token (GPT,
+    # second pass on #84). `node` below needs no quoting — it is [A-Za-z0-9_]+ by grammar —
+    # and the space between the path and `-k` is deliberate: those are two argv elements.
     if target in CHECK_TARGETS:
-        path = os.path.join(worktree, CHECK_TARGETS[target])
+        path = shlex.quote(os.path.join(worktree, CHECK_TARGETS[target]))
     else:
         # A single node id INSIDE a declared suite: "gateway::test_name". Nothing else.
         suite, sep, node = target.partition("::")
@@ -505,7 +512,7 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
                 f"'<suite>::<test_name>'; got {target!r}")
         if not re.fullmatch(r"[A-Za-z0-9_]+", node):
             raise ValueError(f"check test name must be a bare identifier; got {node!r}")
-        path = f"{os.path.join(worktree, CHECK_TARGETS[suite])} -k {node}"
+        path = f"{shlex.quote(os.path.join(worktree, CHECK_TARGETS[suite]))} -k {node}"
     # -p no:cacheprovider: the worktree is mounted read-only, so pytest must not try
     # to write .pytest_cache into it. PYTHONDONTWRITEBYTECODE already covers __pycache__.
     inner = (f"python3 -m pytest -q -c /dev/null -p no:cacheprovider "
@@ -540,7 +547,9 @@ def check_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
 # WHAT THE SANDBOX IS. bubblewrap with a cleared environment: nothing of the seat's is
 # bound except a read-only interpreter, no network at all, its own pid/ipc/uts namespaces,
 # a fresh session so it cannot signal the seat's process group, and --die-with-parent so a
-# runaway cannot outlive the beat. The only writable path is the being's own worktree.
+# runaway cannot outlive the beat. THE WORKTREE IS BOUND READ-ONLY and /tmp is the only
+# writable path: this said the opposite until the read-only fix, and a comment that
+# contradicts the mount is worse than none, because a reader checks the prose first.
 #
 # THE FALSIFIER, and it is the point of the whole exercise (PRD r3 §10.5): from inside,
 # reads of the vault, the hestia socket and the agent environment must all fail. Measured

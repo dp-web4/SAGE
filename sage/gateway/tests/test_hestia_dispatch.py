@@ -1039,3 +1039,124 @@ def test_the_sandbox_binds_source_read_only_and_hashes_conftest():
     after = d._test_source_identity("gateway", "HEAD")
     assert after["sha256"] != before["sha256"], \
         "a changed conftest must change the source identity — it is executable test input"
+
+
+def test_a_space_in_the_worktree_path_cannot_split_the_judged_command():
+    """judged==executed is a property of the STRING, not of today's directory names.
+
+    GPT's second pass on #84: --rootdir was quoted but --chdir and the pytest target path
+    were composed raw, so a worktree containing a space split into extra argv at execution
+    while the law had ruled on one token. check_argv is shlex.split of the same string, so
+    the invariant is checkable directly: every seat-derived path must survive the round
+    trip as ONE element.
+    """
+    from sage.gateway.being_gate_client import check_command, check_argv
+
+    wt = "/home/dp/being worktrees/legion-being"
+    cmd = check_command({"target": "gateway"}, {"worktree": wt})
+    argv = check_argv({"target": "gateway"}, {"worktree": wt})
+
+    import shlex
+    assert shlex.split(cmd) == argv, "judged and executed must be the same argv"
+
+    # No element is a FRAGMENT of the worktree path: a split produces "/home/dp/being" and
+    # "worktrees/..." as separate argv, which is exactly the drift being pinned against.
+    for a in argv:
+        assert a != "/home/dp/being" and not a.startswith("worktrees/"), \
+            f"the worktree path split into fragments: {argv!r}"
+    for flag in ("--chdir", "--rootdir="):
+        if flag.endswith("="):
+            got = [a for a in argv if a.startswith(flag)]
+            assert got == [f"{flag}{wt}"], f"{flag} split: {got!r}"
+        else:
+            i = argv.index(flag)
+            assert argv[i + 1] == wt, f"{flag} split into {argv[i + 1]!r}"
+
+    # And the target path itself is one element, not three. It is the last argv element.
+    target = argv[-1]
+    assert target.startswith(wt) and "gateway/tests" in target, \
+        f"the pytest target is not one whole path: {target!r}"
+
+    # The node form keeps `-k name` as two elements while still quoting the path.
+    argv2 = check_argv({"target": "gateway::test_thing"}, {"worktree": wt})
+    assert "-k" in argv2 and argv2[argv2.index("-k") + 1] == "test_thing"
+
+
+def test_evidence_names_the_path_taken_not_the_guarantee_it_wanted(tmp_path):
+    """Two overclaims from GPT's second pass on #84, pinned together.
+
+    (1) source_readonly was the literal True, so a check that deliberately ran unsandboxed
+        (SANDBOX_REQUIRED=False with no usable bwrap) asserted the exact guarantee it had
+        just given up. (2) `stable` was source_after == source_before, and None == None is
+        True, so a target whose test source could not be identified at all reported
+        stable=True, state="pinned" — the strongest claim the envelope makes, produced by
+        having measured nothing. Missing identity is a third state, not a match.
+    """
+    import types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent, SANDBOX
+
+    wt = tmp_path / "wt"
+    (wt / "sage" / "gateway" / "tests").mkdir(parents=True)
+    (wt / "sage" / "gateway" / "tests" / "test_x.py").write_text("def test_x():\n    pass\n")
+
+    def _dispatcher(argv0):
+        d = D.__new__(D); d.worktree = str(wt)
+        d._verdict = types.SimpleNamespace(command=None)
+        d._call = lambda n, a: {"actionId": "act-c"} if n == "hestia_begin_action" else {}
+        d._embodiment = lambda: {}
+        d._worktree_revision = lambda: {"head": "abc123", "dirty": False}
+        return d
+
+    # --- (2) unknown identity must not read as a match --------------------------------
+    d = _dispatcher(SANDBOX)
+    d._test_source_identity = lambda target, head: None
+    env = _run_check_capturing(d, SANDBOX)
+    ev = env.result["evidence"]
+    assert ev["stable"] is not True, "unmeasured source must never report stable=True"
+    assert ev["state"] != "pinned", f"unmeasured source claimed state={ev['state']!r}"
+    assert "unverified" in ev["state"], ev["state"]
+
+    # A known, unchanged identity still pins normally.
+    d2 = _dispatcher(SANDBOX)
+    d2._test_source_identity = lambda target, head: {"sha256": "deadbeef"}
+    ev2 = _run_check_capturing(d2, SANDBOX).result["evidence"]
+    assert ev2["stable"] is True and ev2["state"] == "pinned"
+
+    # --- (1) source_readonly must follow the argv that actually ran -------------------
+    assert ev2["source_readonly"] is True and ev2["sandboxed"] is True
+
+    d3 = _dispatcher("python3")
+    d3._test_source_identity = lambda target, head: {"sha256": "deadbeef"}
+    ev3 = _run_check_capturing(d3, "python3").result["evidence"]
+    assert ev3["sandboxed"] is False, "an unsandboxed run must say so"
+    assert ev3["source_readonly"] is False, \
+        "the degraded path asserted the guarantee it explicitly gave up"
+
+
+def _run_check_capturing(d, argv0):
+    """Drive _do_check with the subprocess and command composition stubbed.
+
+    The point of the test is the EVIDENCE assembly, so pytest is not really run; what
+    matters is that argv[0] is what the real composition would have produced — bwrap when
+    sandboxed, the interpreter when not.
+    """
+    import subprocess
+    import types
+    from sage.gateway.being_gate_client import BeingIntent
+    import sage.gateway.being_gate_client as bgc
+
+    argv = [argv0, "-q", "/wt/sage/gateway/tests"]
+    # _do_check imports subprocess and the composers function-locally, so the stdlib module
+    # and the client module are the namespaces the lookups actually go through.
+    o_run = subprocess.run
+    o_cmd, o_argv = bgc.check_command, bgc.check_argv
+    subprocess.run = lambda *a, **k: types.SimpleNamespace(
+        returncode=0, stdout="1 passed\n", stderr="")
+    bgc.check_command = lambda args, ctx=None: " ".join(argv)
+    bgc.check_argv = lambda args, ctx=None: list(argv)
+    try:
+        return d._do_check(BeingIntent("check", {"target": "gateway"}))
+    finally:
+        subprocess.run = o_run
+        bgc.check_command, bgc.check_argv = o_cmd, o_argv
