@@ -422,8 +422,27 @@ def fresh_frame(instance: Path, worktree: Optional[str], since: Optional[float])
     if best is None:
         return None, {"carried": False, "why": "no frame on disk; the being has not used camera"}
     p, st = best
-    age = None if since is None else st.st_mtime - since
-    if since is not None and st.st_mtime <= since:
+    # NO BEAT BOUNDARY MEANS NO FRAME. `since` is the previous beat's t0, read from the last
+    # line of the heartbeat log — and that read fails whenever the line is mid-write, which
+    # is a normal transient. The first cut skipped the freshness check entirely when `since`
+    # was None, which is FAIL-OPEN on the one property this producer exists to guarantee.
+    #
+    # It fired in production within the hour: beat 11:32:00Z carried a frame with
+    # `age_s: null` that had been captured at 03:34 — over eight hours stale, presented to
+    # the being as what it had just asked to see. Exactly the lie the guard is for, and my
+    # defect, not the being's.
+    #
+    # Freshness cannot be established without the boundary, so the answer is no. A beat
+    # without vision costs the being one beat of sight; a beat that shows it yesterday's
+    # world and calls it now costs it its grounds for trusting any frame.
+    if since is None:
+        return None, {"carried": False, "bytes": st.st_size, "path": str(p),
+                      "age_s": round(time.time() - st.st_mtime, 1),
+                      "why": ("the previous beat's start time could not be read, so freshness "
+                              "cannot be established and this frame is not carried. A frame "
+                              "whose age is unknown must not be shown as current")}
+    age = st.st_mtime - since
+    if st.st_mtime <= since:
         return None, {"carried": False, "bytes": st.st_size, "path": str(p),
                       "age_s": round(time.time() - st.st_mtime, 1),
                       "why": ("the frame predates this beat, so it is not what the being "

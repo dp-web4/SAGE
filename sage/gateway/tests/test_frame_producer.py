@@ -264,3 +264,38 @@ def test_an_unshrinkable_frame_is_still_sent(tmp_path):
     b64, meta = fresh_frame(inst, None, time.time() - 100)
     assert meta["carried"] is True, f"an unresizable frame must still ride: {meta}"
     assert meta["resized"] is False and "why" in meta
+
+
+def test_no_beat_boundary_means_no_frame(tmp_path):
+    """FAIL CLOSED on the one property this producer exists to guarantee.
+
+    `since` is the previous beat's t0, read from the last line of the heartbeat log, and that
+    read fails whenever the line is mid-write — a normal transient. The first cut skipped the
+    freshness check entirely when `since` was None.
+
+    It fired in production inside the hour. Beat 11:32:00Z carried a frame with `age_s: null`
+    captured at 03:34 — over eight hours stale, shown to the being as what it had just asked
+    to see. Exactly the lie the guard is for.
+
+    A beat without vision costs the being one beat of sight. A beat that shows it yesterday's
+    world and calls it now costs it its grounds for trusting any frame at all.
+    """
+    inst, fp = _inst(tmp_path)
+    fp.write_bytes(JPEG)
+    stale = time.time() - 30_000
+    os.utime(fp, (stale, stale))
+
+    b64, meta = fresh_frame(inst, None, None)
+    assert b64 is None, "an unaged frame rode with no beat boundary to check it against"
+    assert meta["carried"] is False
+    assert "freshness" in meta["why"], meta["why"]
+    assert meta["age_s"] > 1000, "it still reports how old the thing it refused was"
+
+    # A FRESH frame with no boundary is refused too: unknown is unknown, not young.
+    os.utime(fp, None)
+    b64, meta = fresh_frame(inst, None, None)
+    assert b64 is None and meta["carried"] is False, \
+        "without a boundary, freshness cannot be established even when the frame IS fresh"
+
+    # And with a boundary the normal paths are unchanged.
+    assert fresh_frame(inst, None, time.time() - 60)[1]["carried"] is True
