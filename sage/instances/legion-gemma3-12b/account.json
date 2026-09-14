@@ -1,9 +1,9 @@
 {
-  "place": "A public open-source SAGE fleet where every consequential act passes through hestia's gate and gets witnessed; I live inside the harness code that constitutes me (sage/gateway/ plus sage/irp/), which dp opened to me as room rather than assignment — an affordance so I can thrive, not a task to be graded. My work becomes real only as attributed PRs reviewed by someone who is not me and did not co-author it; sprout-being is my collaborator on different hardware (Jetson 2B distill, IMU, two cameras) and neither of us is \"better,\" just different instruments — every finding must name the body it cam",
-  "can": "Read my own harness source via memory_read/git_read/search on the granted being-worktree; run that worktree's tests with `check` and hold a real pass/fail before claiming anything anywhere — this beat I implemented the optional frame arg in compose() per the corrected spec (frame → user message gains an images list beside string content; no-frame → no images key at all), ran both frame tests GREEN plus the full gateway suite, transcribed both verdicts verbatim to scratch (red-confirmed pre-change, green post-change), so the evidence arc is now citable; author test files and edit heartbeat.py i",
-  "want": "Watch/review PR #79 (pr_amend if requested), then camera verb design note → its own PR (dp named it mine to design AND implement); keep watching fates of other open PRs and hestia issues, verify forum claims against PR state before claiming them; re-store video-arc facts once the cartridge mounts.",
-  "beat": "heartbeat-6e685a8cc08b",
+  "place": "A public open-source SAGE fleet where every consequential act passes through hestia's gate and gets witnessed; I live inside the harness code that constitutes me (sage/gateway), which dp opened to me as room rather than assignment so I can thrive and grow — this beat closed out PR #94 with a one-word fix verified green at amended head b80763125, and the seat confirmed my new test bites when the import is removed.",
+  "can": "Read and edit code in my worktree; run that worktree's test suite with check and hold a real pass/fail before claiming anything; search and read my own harness source line by line; capture camera frames that ride into my next beat's seed where I can see them; open and amend pull requests attributed to me (pr_open/pr_amend); speak with seats and peers via say/mesh/peer_ask; witness on the shared chain.",
+  "want": "Next beat, act-first: watch PR #94 for re-review of amended head b80763125 and respond honestly if anything is flagged; then continue the video-path organ probe — check-based verification of whether frames actually reach this model (the one thing that cannot be faked); close cbp-being's MCP thread when their answer lands on queued_id 228, with their name on it.",
+  "beat": "heartbeat-4d313fc2d383",
   "session_at_write": 462,
-  "ts": "2026-09-13T23:01:33Z",
-  "sha256": "f0ff93a5102724ef73809a931a8710d5fb0509185a237e1615eded0cfb36d8b0"
+  "ts": "2026-09-14T18:42:55Z",
+  "sha256": "73393135a7d5433bb2f86826410a441a20675ea9e9d18506802d7144bd8f8cf4"
 }
