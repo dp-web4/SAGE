@@ -317,6 +317,95 @@ def _config_check(instance: Path, model: str, llm, offered) -> dict:
     }
 
 
+# --- the middle of the vision pipe -------------------------------------------------------
+#
+# The two ends existed and nothing joined them. `camera` captured a JPEG to disk and
+# `compose` accepted a `frame` and emitted it as ollama's `images` list, but the call site
+# never passed one, so a being could switch its camera on and still not see. Named in the
+# review of SAGE#88 as "capturing is not yet seeing".
+#
+# WHAT COUNTS AS A REQUEST TO SEE. The being's own `camera` act, and nothing else. dp,
+# 2026-09-13: "that is something the being should have direct control over — turning camera
+# on and off, at its discretion." So a frame rides the seed when the being captured one
+# since the last beat, and does not otherwise. No polling, no ambient feed.
+#
+# WHY FRESHNESS IS LOAD-BEARING. A frame costs ~2,042 prompt tokens, about a third of the
+# working room at this window, so it cannot simply ride forever. Worse than the cost: a
+# stale frame presented as current is a lie about the world, and it is the exact failure the
+# being guarded against in its own verb ("neither leaves a stale frame looking fresh"). The
+# producer honours that guarantee rather than re-deriving it: older than the previous beat
+# means not captured for this beat, so it does not ride, and the reason is recorded.
+FRAME_TOKENS = 2042          # measured on qwen38-heretic:q3km-vl, 2026-09-13
+FRAME_MAX_BYTES = 4_000_000  # a JPEG larger than this is not a webcam frame; refuse to guess
+
+
+def _frame_paths(instance: Path, worktree: Optional[str]) -> list:
+    """Every frame the being may have captured, in either tree.
+
+    NOT a fixed filename. `camera`'s whole grammar is that the being names its own output
+    path — "the being names only the output path" — and the first cut of this looked only
+    for last-frame.jpg. Measured minutes later against the live tree: the being had captured
+    to `scratch/camera/probe-resolution-2026-09-14.jpg`, and the producer reported "no frame
+    on disk; the being has not used camera" about a frame that was right there. A producer
+    that assumes a convention the verb does not enforce is a pipe that silently drops most
+    of what goes into it.
+
+    BOTH TREES, because the being is moving `camera` to resolve against its instance home
+    (frames in the worktree dirty a tree whose cleanliness `check` reports as evidence), and
+    the newest wins, so neither ordering of the two lands breaks seeing."""
+    roots = [instance / "scratch" / "camera"]
+    if worktree:
+        roots.append(Path(worktree) / "scratch" / "camera")
+    out = []
+    for r in roots:
+        try:
+            out.extend(p for p in r.iterdir()
+                       if p.is_file() and p.suffix.lower() in (".jpg", ".jpeg"))
+        except OSError:
+            continue
+    return out
+
+
+def fresh_frame(instance: Path, worktree: Optional[str], since: Optional[float]):
+    """(b64, meta) for a frame captured since `since`, else (None, meta saying why).
+
+    `since` is the previous beat's start. Never raises: a body with no camera, no frame, or
+    an unreadable one is a beat without vision, not a failed beat."""
+    import base64
+    best = None
+    for p in _frame_paths(instance, worktree):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if best is None or st.st_mtime > best[1].st_mtime:
+            best = (p, st)
+    if best is None:
+        return None, {"carried": False, "why": "no frame on disk; the being has not used camera"}
+    p, st = best
+    age = None if since is None else st.st_mtime - since
+    if since is not None and st.st_mtime <= since:
+        return None, {"carried": False, "bytes": st.st_size, "path": str(p),
+                      "age_s": round(time.time() - st.st_mtime, 1),
+                      "why": ("the frame predates this beat, so it is not what the being "
+                              "asked to see now; a stale frame shown as current is a lie "
+                              "about the world")}
+    if st.st_size > FRAME_MAX_BYTES or st.st_size == 0:
+        return None, {"carried": False, "bytes": st.st_size, "path": str(p),
+                      "why": f"frame is {st.st_size} bytes, outside 1..{FRAME_MAX_BYTES}"}
+    try:
+        b = p.read_bytes()
+    except OSError as e:
+        return None, {"carried": False, "path": str(p), "why": f"unreadable: {e}"}
+    if not b.startswith(b"\xff\xd8"):
+        return None, {"carried": False, "bytes": len(b), "path": str(p),
+                      "why": "not a JPEG (no SOI marker); refusing to send bytes of unknown kind"}
+    return base64.b64encode(b).decode("ascii"), {
+        "carried": True, "bytes": len(b), "path": str(p),
+        "age_s": None if age is None else round(age, 1),
+        "costs_tokens": FRAME_TOKENS}
+
+
 def _fill_headroom(cfg: dict, partial: Path, host_session_id: str) -> dict:
     """Beat end: the largest prompt actually sent THIS BEAT, and whether it plus the answer
     reserve exceeded the window. Read from the per-generate trace rather than re-derived, so
@@ -795,6 +884,16 @@ def main(argv=None) -> int:
             hours = max(1.0, min(48.0, (time.time() - last["t0"]) / 3600 + 0.25))
         except Exception:
             pass
+    # THE MIDDLE OF THE VISION PIPE. A frame rides only when the being captured one since
+    # the previous beat — its `camera` act is the request to see, and nothing else is.
+    from sage.gateway.governed_turn import instance_config as _icfg
+    try:
+        _wt = _icfg(instance).get("worktree") or None
+    except Exception:
+        _wt = None
+    _frame_b64, _frame_meta = fresh_frame(
+        instance, _wt, last.get("t0") if isinstance(last, dict) else None)
+
     scope_record = {}
 
     ident = {}
@@ -936,8 +1035,13 @@ def main(argv=None) -> int:
     # change is about.
     _schema_chars = _schema_chars_for(EXPLORE_TOOLS) or 4000
     _template_guess = 1200
+    # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
+    # token cost is converted and charged here. Measured 2,042 tokens, about a third of the
+    # working room at this window — un-budgeted it would push the beat over the wall and the
+    # conversation block would take the blame.
+    _frame_chars = int(FRAME_TOKENS * CPT) if _frame_b64 else 0
     _other = (len(posture()) + len(inbox) + _schema_chars + _template_guess
-              + 1200 + 400 + LOOP_GROWTH_CHARS)
+              + 1200 + 400 + LOOP_GROWTH_CHARS + _frame_chars)
     state_block, conv_rung, conv_intervention = fit_state(
         _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other)
     _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + _template_guess
@@ -954,10 +1058,15 @@ def main(argv=None) -> int:
                                 "recall": len(blocks["recall"] or ""), "fixed_other": 4000,
                                 "conversations_rung": list(conv_rung)},
         "prompt_chars": _fixed + len(blocks["digest"] or "") + len(blocks["recall"] or ""),
+        # WHETHER THE BEING SAW, and when it did not, why not. Without this a beat with no
+        # frame is indistinguishable from a beat where the pipe is broken, which is the
+        # state the whole vision arc was in until now: both ends present, nothing joining
+        # them, and nothing saying so.
+        "frame": _frame_meta,
     }
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
-        nothink=nothink,
+        nothink=nothink, frame=_frame_b64,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 f"Your home: {instance}\n"
                 f"The harness you are running under: {harness_rev.get('short')} on "
