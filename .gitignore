@@ -294,3 +294,6 @@ sage/instances/*/grafts/*.own-index.jsonl
 # `memory` above (line ~280) ignores ANY path component named memory, which silently swallowed new
 # files under sage/memory/ (found adding sage/memory/consolidation.py, 2026-09-05). Re-include it.
 !sage/memory/
+
+# being worktree scratch (transient working files; SAGE#93's probe JPEG rode in via pr_open's git add -A, 2026-09-14)
+scratch/
