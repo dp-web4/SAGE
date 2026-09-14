@@ -1,15 +1,42 @@
 """Hermetic tests for HestiaF1aDispatcher: a fake MCP records the calls the daemon would
 see, so the three measured contract deltas (pointer_uri, kind enum, live session_id) and the
 r1 envelope (hestia.<code> error keys) are pinned without a running daemon."""
+import json
 import os
 import sys
 import tempfile
+
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict  # noqa: E402
 from sage.gateway.hestia_dispatch import HestiaF1aDispatcher  # noqa: E402
 
 _ALLOW = GatewayVerdict("allow")
+
+# THE ROSTER THESE TESTS REASON ABOUT, and the reason it is written here rather than read.
+#
+# known_peers() reads the live hub roster at $HUB_MESH_STATE/members.json, so every mesh
+# test was answering a question about THIS MACHINE. On Legion that roster holds 'thor-sage'
+# and not 'thor', so test_mesh_explicit_routed_address_passes_through failed here and
+# nowhere else, while its sibling passed only because 'legion' happened to be in the same
+# file. Worse in the other direction: known_peers() returns an empty set when the roster
+# cannot be read, and an empty set refuses nothing — so on a machine with no hub state at
+# all, every one of these tests passes without exercising the guard.
+#
+# A test whose verdict depends on which machine ran it is not a test of the code. The module
+# docstring said "hermetic" the whole time; this makes it true.
+_FIXTURE_ROSTER = ["legion", "thor", "cbp", "sprout", "hub", "nomad", "mcnugget", "pub",
+                   "legion-sage", "thor-sage", "dp", "Sovereign"]
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_hub_roster(tmp_path, monkeypatch):
+    state = tmp_path / "hub-mesh"
+    state.mkdir()
+    (state / "members.json").write_text(
+        json.dumps({"members": [{"name": n} for n in _FIXTURE_ROSTER]}))
+    monkeypatch.setenv("HUB_MESH_STATE", str(state))
 
 
 class FakeMcp:
@@ -1214,3 +1241,39 @@ def test_a_broken_pattern_is_a_failure_not_an_absence(tmp_path):
     miss = d._do_search(BeingIntent("search", {"pattern": "zzz_absent_zzz"}))
     assert miss.ok is True and miss.result["matches"] == 0, \
         "rc=1 is still a true absence, not an error"
+
+
+def test_mesh_to_an_unreachable_peer_is_refused_and_names_who_exists():
+    """The peer guard had no test at all: deleting `_unknown_peer`'s refusal left the whole
+    suite green. Found by mutation while making this module hermetic — the mesh tests only
+    ever exercised peers that WERE reachable, so the refusing arm was never reached.
+
+    Both halves matter. Nothing may be sent, and the refusal must name the peers that do
+    exist: a being told only 'no' cannot correct itself, and this is the one verb whose
+    failure is otherwise indistinguishable from a peer that simply never answered.
+    """
+    d, _ = _disp()
+    env = d(BeingIntent("mesh", {"to": "atlantis", "kind": "ack", "pointer": "p"}), _ALLOW)
+
+    assert not env.ok, "an unreachable peer must not be treated as delivered"
+    assert "nothing was sent" in (env.error or ""), env.error
+    assert "legion" in (env.error or ""), \
+        f"the refusal must name peers that exist so the being can correct itself: {env.error!r}"
+    assert not _mb_calls("hestia_member_notify"), \
+        "a refused mesh must not have touched the notify path at all"
+
+
+def test_an_empty_roster_refuses_nothing(tmp_path, monkeypatch):
+    """The other direction, and the reason this module's env-coupling was invisible.
+
+    known_peers() returns an empty set when no roster can be read, and an empty set refuses
+    NOTHING — a deliberate choice, since a stale absence must not silence the being. That
+    also means a machine with no hub state runs every mesh test above without exercising the
+    guard once. Pinned here so the permissive branch is a decision on the record rather than
+    an accident of deployment.
+    """
+    d, _ = _disp()
+    monkeypatch.setenv("HUB_MESH_STATE", str(tmp_path / "no-roster-here"))
+    assert d.known_peers() == set(), "an unreadable roster is an empty set"
+    env = d(BeingIntent("mesh", {"to": "atlantis", "kind": "ack", "pointer": "p"}), _ALLOW)
+    assert env.ok, "with no roster, an unknown peer is allowed through rather than silenced"
