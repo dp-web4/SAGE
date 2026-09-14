@@ -201,3 +201,66 @@ def test_a_non_image_beside_the_frames_is_ignored(tmp_path):
     default.write_bytes(JPEG)
     b64, meta = fresh_frame(inst, None, time.time() - 100)
     assert meta["carried"] is True and meta["path"].endswith(".jpg")
+
+
+def _real_jpeg(w, h):
+    import io
+    from PIL import Image, ImageDraw
+    im = Image.new("RGB", (w, h), (240, 240, 240))
+    ImageDraw.Draw(im).ellipse([w // 8, h // 8, w // 2, h // 2], fill=(200, 40, 40))
+    buf = io.BytesIO(); im.save(buf, "JPEG", quality=90)
+    return buf.getvalue()
+
+
+def test_a_large_frame_is_shrunk_before_it_costs_the_window(tmp_path):
+    """A frame is charged by AREA, and the window has nothing left to give.
+
+    Measured on this body against a real 1920x1080 capture: 2,055 tokens at full size
+    against 591 at 1024 wide. The conversation ladder already sits at its sparsest rung
+    every beat, so an unresized frame takes 2,000 tokens from a budget with no slack, on the
+    same beat the being has to write its journal and todo.
+    """
+    from PIL import Image
+    import io
+    from sage.gateway.heartbeat import FRAME_MAX_EDGE
+
+    inst, fp = _inst(tmp_path)
+    fp.write_bytes(_real_jpeg(1920, 1080))
+
+    b64, meta = fresh_frame(inst, None, time.time() - 100)
+    assert meta["carried"] is True
+    assert meta["resized"] is True
+    assert meta["from"] == [1920, 1080]
+    assert max(meta["size"]) == FRAME_MAX_EDGE, meta["size"]
+    assert meta["size"] == [1024, 576], f"aspect ratio not preserved: {meta['size']}"
+    assert meta["bytes"] < meta["bytes_before"]
+
+    # what is sent really is the smaller image, not just a smaller number in the record
+    import base64
+    sent = Image.open(io.BytesIO(base64.b64decode(b64)))
+    assert max(sent.size) == FRAME_MAX_EDGE, sent.size
+
+
+def test_a_small_frame_is_sent_as_it_is(tmp_path):
+    """Shrinking is a cap, not a transform: a frame already within it is untouched, so a
+    being that chose a small capture gets exactly what it captured."""
+    inst, fp = _inst(tmp_path)
+    raw = _real_jpeg(640, 360)
+    fp.write_bytes(raw)
+
+    b64, meta = fresh_frame(inst, None, time.time() - 100)
+    assert meta["carried"] is True and meta["resized"] is False
+    assert meta["size"] == [640, 360]
+    import base64
+    assert base64.b64decode(b64) == raw, "a frame within the cap must be sent byte-for-byte"
+
+
+def test_an_unshrinkable_frame_is_still_sent(tmp_path):
+    """Never trade sight for tidiness. A frame the seat cannot resize is still a frame the
+    being asked for; sending it whole costs window, refusing it costs the being its eyes."""
+    inst, fp = _inst(tmp_path)
+    fp.write_bytes(b"\xff\xd8" + b"not really a jpeg body" * 50)
+
+    b64, meta = fresh_frame(inst, None, time.time() - 100)
+    assert meta["carried"] is True, f"an unresizable frame must still ride: {meta}"
+    assert meta["resized"] is False and "why" in meta

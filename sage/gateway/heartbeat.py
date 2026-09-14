@@ -335,8 +335,47 @@ def _config_check(instance: Path, model: str, llm, offered) -> dict:
 # being guarded against in its own verb ("neither leaves a stale frame looking fresh"). The
 # producer honours that guarantee rather than re-deriving it: older than the previous beat
 # means not captured for this beat, so it does not ride, and the reason is recorded.
-FRAME_TOKENS = 2042          # measured on qwen38-heretic:q3km-vl, 2026-09-13
+# WHAT A FRAME COSTS, AND WHY IT IS RESIZED. Measured on qwen38-heretic:q3km-vl against a
+# real 1920x1080 capture from this body, 2026-09-14 — the model tokenises by image area, so
+# the saving is enormous and almost free:
+#
+#     1920 wide   2,055 tokens     34% of the working room at this window
+#     1024 wide     591 tokens     10%
+#      640 wide     235 tokens      4%
+#      512 wide     159 tokens      3%
+#
+# The window is the binding constraint here: the conversation ladder already sits at its
+# sparsest rung every beat, so an unresized frame is 2,000 tokens taken from a budget with
+# nothing left to give back, on the beat where the being also has to write its journal and
+# todo. 1024 keeps detail a coarser cap would lose — text, and the grid cells of a game
+# board, which is where this is going next — at a sixth of the price. Legibility at this
+# scale is not assumed: a 640-wide control through this exact path came back "a red circle
+# on the left and a blue rectangle on the right, along with the small black text HELLO".
+FRAME_MAX_EDGE = 1024        # longest side, pixels
+FRAME_TOKENS = 591           # what FRAME_MAX_EDGE costs, measured
 FRAME_MAX_BYTES = 4_000_000  # a JPEG larger than this is not a webcam frame; refuse to guess
+
+
+def _shrink(raw: bytes):
+    """(jpeg_bytes, meta) with the longest side capped. Returns the original on any failure.
+
+    Never raises and never refuses: a frame the seat cannot resize is still a frame the
+    being asked for, and sending it whole costs window rather than sight."""
+    try:
+        import io
+        from PIL import Image
+        im = Image.open(io.BytesIO(raw))
+        w, h = im.size
+        if max(w, h) <= FRAME_MAX_EDGE:
+            return raw, {"resized": False, "size": [w, h]}
+        scale = FRAME_MAX_EDGE / max(w, h)
+        small = im.convert("RGB").resize((max(1, round(w * scale)), max(1, round(h * scale))))
+        buf = io.BytesIO()
+        small.save(buf, "JPEG", quality=85)
+        return buf.getvalue(), {"resized": True, "from": [w, h], "size": list(small.size),
+                                "bytes_before": len(raw)}
+    except Exception as e:
+        return raw, {"resized": False, "why": f"{type(e).__name__}: {e}"}
 
 
 def _frame_paths(instance: Path, worktree: Optional[str]) -> list:
@@ -400,10 +439,11 @@ def fresh_frame(instance: Path, worktree: Optional[str], since: Optional[float])
     if not b.startswith(b"\xff\xd8"):
         return None, {"carried": False, "bytes": len(b), "path": str(p),
                       "why": "not a JPEG (no SOI marker); refusing to send bytes of unknown kind"}
+    b, shrunk = _shrink(b)
     return base64.b64encode(b).decode("ascii"), {
         "carried": True, "bytes": len(b), "path": str(p),
         "age_s": None if age is None else round(age, 1),
-        "costs_tokens": FRAME_TOKENS}
+        "costs_tokens": FRAME_TOKENS, **shrunk}
 
 
 def _fill_headroom(cfg: dict, partial: Path, host_session_id: str) -> dict:
