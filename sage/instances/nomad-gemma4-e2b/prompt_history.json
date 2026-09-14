@@ -207,6 +207,20 @@
         "That's a clean answer. Too clean, maybe. What's the messy version?",
         "If you could send one thought to your future self, what would it be?"
       ]
+    },
+    {
+      "session": 361,
+      "timestamp": 1789413561.0527968,
+      "prompts": [
+        "Let's skip the pleasantries. Tell me something specific about this moment.",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "What would someone who disagreed with you say right now?",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "What would someone who disagreed with you say right now?",
+        "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
+        "Say more about that. What's underneath it?",
+        "What surprised you in our conversation today?"
+      ]
     }
   ]
 }
