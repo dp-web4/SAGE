@@ -392,6 +392,7 @@ def sandbox_available() -> bool:
 
 
 def sandbox_prefix(worktree: str) -> str:
+    import shlex
     """The bwrap invocation that wraps every executed check, or "" when running unsandboxed
     is explicitly permitted."""
     import os
@@ -415,7 +416,17 @@ def sandbox_prefix(worktree: str) -> str:
         # the sandbox (measured 2026-09-08 by the real-conftest fixture: pytest ran in an
         # empty tree and the probe never wrote). tmpfs first, the worktree over it.
         " --proc /proc --dev /dev --tmpfs /tmp"
-        f" --bind {worktree} {worktree}"
+        # READ-ONLY. This was --bind (read-write), and the adversary this sandbox exists
+        # for is a being-authored conftest.py: pytest imports it from the rootdir BEFORE
+        # collecting, so a writable worktree lets that conftest rewrite product source, run
+        # the suite against transient bytes, and restore them. HEAD never moves, the test
+        # files never move, and the evidence would report stable=True about code that was
+        # not the code on disk either side of the run (GPT review of #84).
+        #
+        # The test process does not need write authority over source. The being edits its
+        # worktree BEFORE invoking check — that is its whole loop — and /tmp above is
+        # writable for anything pytest genuinely needs to spill.
+        f" --ro-bind {shlex.quote(worktree)} {shlex.quote(worktree)}"
         " --unshare-pid --unshare-net --unshare-ipc --unshare-uts"
         " --new-session --die-with-parent"
         # PYTHONUTF8 rather than LANG=C.UTF-8, and the reason is hestia #988: mrh.command
@@ -476,6 +487,7 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
     """
     import re
     import os
+    import shlex
     worktree = (ctx or {}).get("worktree")
     if not worktree:
         raise ValueError(
@@ -494,7 +506,10 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
         if not re.fullmatch(r"[A-Za-z0-9_]+", node):
             raise ValueError(f"check test name must be a bare identifier; got {node!r}")
         path = f"{os.path.join(worktree, CHECK_TARGETS[suite])} -k {node}"
-    inner = f"python3 -m pytest -q -c /dev/null --rootdir={worktree} {path}"
+    # -p no:cacheprovider: the worktree is mounted read-only, so pytest must not try
+    # to write .pytest_cache into it. PYTHONDONTWRITEBYTECODE already covers __pycache__.
+    inner = (f"python3 -m pytest -q -c /dev/null -p no:cacheprovider "
+             f"--rootdir={shlex.quote(worktree)} {path}")
     return sandbox_prefix(worktree) + inner
 
 

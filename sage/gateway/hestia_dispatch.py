@@ -872,6 +872,12 @@ class HestiaF1aDispatcher:
         # rests on, and test_source covers test_*.py only, so artifacts cannot flip it.
         tree_after = self._worktree_revision()
         source_after = self._test_source_identity(target, tree_after.get("head"))
+        # WHAT `stable` HONESTLY MEANS, narrowed after GPT's review of #84. It is not "the
+        # source held": the sandbox now mounts the worktree READ-ONLY, and that mount — not
+        # this comparison — is what makes the bytes unable to change under the run. This
+        # says only that HEAD and the hashed test inputs (tests + conftest) are the same
+        # before and after, which is a check on the SEAT's view of the tree, not a proof
+        # about the sandboxed process.
         stable = (tree_after.get("head") == tree_before.get("head")
                   and source_after == source_before)
         return ResultEnvelope(ok=True, witness_id=action_id,
@@ -891,6 +897,8 @@ class HestiaF1aDispatcher:
                                           "embodiment": self._embodiment(),
                                           "stable": stable,
                                           "state": "pinned" if stable else "tree_changed_during_check",
+                                          # the mount is the guarantee; this field is the seat's own check
+                                          "source_readonly": True,
                                       },
                                       "action_id": action_id})
 
@@ -911,8 +919,15 @@ class HestiaF1aDispatcher:
             return None
         root = Path(self.worktree) / rel
         try:
-            paths = sorted(p for p in root.rglob("test_*.py")) if root.is_dir() else (
-                [root] if root.exists() else [])
+            # conftest.py IS executable test input — pytest imports it from the rootdir
+            # before collecting anything — and it was omitted here while `stable` claimed
+            # "the source held across the run" (GPT review of #84). Hashing the tests but
+            # not the file that can rewrite them is the same false assurance as hashing a
+            # payload and never posting it.
+            if root.is_dir():
+                paths = sorted(set(root.rglob("test_*.py")) | set(root.rglob("conftest.py")))
+            else:
+                paths = [root] if root.exists() else []
             h = hashlib.sha256()
             for p in paths:
                 h.update(p.relative_to(self.worktree).as_posix().encode())

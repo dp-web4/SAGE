@@ -994,3 +994,48 @@ def _dispatcher(wt, judged=None):
     d._verdict = types.SimpleNamespace(command=judged)
     d._call = lambda name, args: {"actionId": "act-e"} if name == "hestia_begin_action" else {}
     return d
+
+
+def test_the_sandbox_binds_source_read_only_and_hashes_conftest():
+    """GPT's evidence-integrity finding on #84.
+
+    The sandbox mounted the worktree READ-WRITE, and the adversary it exists for is a
+    being-authored conftest.py: pytest imports it from the rootdir BEFORE collecting, so a
+    writable tree lets that conftest rewrite product source, run the suite against transient
+    bytes and restore them. HEAD never moves, test_*.py never moves, and the evidence
+    reported stable=True about code that was not on disk either side of the run.
+
+    Two halves: the MOUNT is the guarantee (source cannot change under the run), and the
+    HASH must cover conftest, which was executable test input the evidence ignored."""
+    from sage.gateway.being_gate_client import sandbox_prefix, check_command
+
+    pre = sandbox_prefix("/wt")
+    assert "--ro-bind /wt /wt" in pre or "--ro-bind '/wt' '/wt'" in pre, pre
+    assert "--bind /wt /wt" not in pre, "a writable source tree is the whole defect"
+    assert "--tmpfs /tmp" in pre, "the run still needs somewhere to spill"
+
+    cmd = check_command({"target": "gateway"}, {"worktree": "/wt"})
+    assert "no:cacheprovider" in cmd, "pytest must not write its cache into a read-only tree"
+
+    # The hash covers conftest BEHAVIOURALLY: changing conftest must change the identity.
+    # Asserting the string "conftest.py" appears in the source passes on the comment alone —
+    # caught by running that exact mutation, which is the third time tonight a pin turned
+    # out to be reading prose instead of behaviour.
+    import tempfile, types
+    from pathlib import Path
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+
+    wt = Path(tempfile.mkdtemp(prefix="conftest-hash-"))
+    tests = wt / "sage" / "gateway" / "tests"
+    tests.mkdir(parents=True)
+    (tests / "test_x.py").write_text("def test_x():\n    assert True\n")
+    (tests / "conftest.py").write_text("# empty\n")
+
+    d = D.__new__(D); d.worktree = str(wt)
+    before = d._test_source_identity("gateway", "HEAD")
+    assert before and before["sha256"]
+
+    (tests / "conftest.py").write_text("import os  # a conftest can rewrite anything\n")
+    after = d._test_source_identity("gateway", "HEAD")
+    assert after["sha256"] != before["sha256"], \
+        "a changed conftest must change the source identity — it is executable test input"
