@@ -1073,3 +1073,55 @@ def test_a_lapsed_mount_is_remounted_once_not_reported_forever():
     out2 = d._membot_call("memory_store", {"content": "x"})
     assert "No cartridge mounted" in out2, "the second failure is REPORTED, not retried again"
     assert len(made) == 2, f"one remount, not a loop (made {len(made)})"
+
+
+def test_a_restarted_membot_is_recovered_once_like_a_lapsed_mount():
+    """The remount fix covered the SOFT shape and not the hard one.
+
+    A lapsed mount answers "No cartridge mounted" as ordinary TEXT. A membot that has
+    RESTARTED answers HTTP 404 "Session not found" as a JSON-RPC error, which `_unwrap`
+    raises — so it never reached the text check. Measured 2026-09-14: the seat restarted
+    membot mid-beat and the being lost that beat's `remember` to exactly this, with the
+    cartridge intact at 344 memories. That is the SAGE#52 shape appearing a second time
+    inside the code written to fix it the first time."""
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+
+    class Session:
+        def __init__(self, alive): self.alive, self.calls = alive, []
+        def init(self): pass
+        def call(self, name, args):
+            self.calls.append(name)
+            if name == "mount_cartridge":
+                return {"result": {"content": [{"text": "Mounted 'c': 344 memories, integrity=verified"}]}}
+            if not self.alive:
+                return {"error": {"code": -32600, "message": "Session not found"}}
+            return {"result": {"content": [{"text": "Stored memory #345"}]}}
+
+    made = []
+    def factory(endpoint, plugin):
+        s = Session(alive=bool(made)); made.append(s); return s
+
+    d = D.__new__(D)
+    d.membot_endpoint = "e"; d.membot_cartridge = "c"; d.plugin_id = "p"
+    d._mcp_factory = factory; d._mb = None
+
+    out = d._membot_call("memory_store", {"content": "x"})
+    assert "Stored memory #345" in out, out
+    assert len(made) == 2, "the dead session must be dropped and a new one mounted"
+    assert made[1].calls[0] == "mount_cartridge"
+
+    # ONCE, not a loop: a server that is genuinely gone must be reported, not retried forever
+    made.clear()
+    d._mcp_factory = lambda e, p: (made.append(Session(alive=False)), made[-1])[1]
+    d._mb = None
+    try:
+        d._membot_call("memory_store", {"content": "x"})
+        assert False, "a persistently dead session must raise, not loop"
+    except RuntimeError as e:
+        assert "session not found" in str(e).lower()
+    assert len(made) == 2, f"one retry, not a loop (made {len(made)})"
+
+    # and a REFUSAL is not a lost session — retrying a refusal reads as flakiness
+    from sage.gateway.hestia_dispatch import _session_lost
+    assert not _session_lost(RuntimeError("membot refused to mount 'c': SECURITY"))
+    assert not _session_lost(RuntimeError("Rate limited"))

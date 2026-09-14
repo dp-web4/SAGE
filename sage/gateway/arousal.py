@@ -229,3 +229,33 @@ def _deferred_timer_waiting() -> bool:
     except Exception:
         return False
     return out == "waiting"
+
+
+def main(argv=None) -> int:
+    """CLI so a non-Python caller can use THIS policy instead of reimplementing it.
+
+    The Rust daemon needs to arouse the being when a turn arrives through its dashboard.
+    Encoding the weights and the refractory period a second time in Rust would make two
+    producers of one fact, which is the defect this codebase has now fixed four times in a
+    day (the fleet URL, the check command, the beat window, the fleet registry). One
+    policy, two callers.
+
+    Prints the decision as JSON on stdout; exit 0 whether or not it engaged, because
+    "declined, and here is why" is a successful answer.
+    """
+    import argparse
+    ap = argparse.ArgumentParser(description="metabolic response to a world input")
+    ap.add_argument("--instance", required=True)
+    ap.add_argument("--kind", required=True, help=f"one of {sorted(SALIENCE)} (unknown = quiet)")
+    ap.add_argument("--descriptor", required=True, help="what happened, in one line")
+    ap.add_argument("--dry-run", action="store_true", help="decide and report; never start a beat")
+    a = ap.parse_args(argv)
+    inst = Path(a.instance)
+    d = decide(inst, a.kind) if a.dry_run else respond(inst, a.kind, descriptor=a.descriptor)
+    d.setdefault("descriptor", a.descriptor)
+    print(json.dumps(d))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

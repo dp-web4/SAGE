@@ -107,3 +107,43 @@ def test_a_running_beat_does_not_read_as_an_unarmed_timer():
         armed, why = interpret_timer_state(bad)
         assert armed is False, why
         assert "not healthy" in why
+
+
+def test_the_tool_schemas_are_measured_not_budgeted():
+    """`fixed_other` was a flat 4,000 chars for "tool schemas + chat template", set when the
+    being had 13 verbs and never revisited. Measured 2026-09-13 at 18 verbs: the explore
+    schema JSON alone is 11,717 chars — 7,717 more than budgeted, ~2,600 tokens of a 24,576
+    window the fitter did not know it was spending. Every verb added made it worse, and a
+    budget is a promise the code makes to itself and never checks."""
+    import json
+    from sage.gateway.heartbeat import _schema_chars_for, EXPLORE_TOOLS, _config_check
+    from sage.gateway.being_gate_client import ollama_tools
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    n = _schema_chars_for(EXPLORE_TOOLS)
+    assert n == len(json.dumps(ollama_tools(EXPLORE_TOOLS)))
+    assert n > 4000, "the old budget; if the schemas ever fit in it again, say so deliberately"
+
+    # it GROWS with the verb set — that is the property the constant could not have
+    fewer = _schema_chars_for(EXPLORE_TOOLS[:4])
+    assert 0 < fewer < n, "a smaller offered set must cost fewer chars"
+
+    assert _schema_chars_for([]) is None and _schema_chars_for(None) is None
+
+    # and _config_check must actually RUN. ollama_tools is imported inside main(), which
+    # binds it as a local there; referencing it from _config_check NameErrors at runtime,
+    # and no test called _config_check, so nothing would have caught it.
+    c = _config_check(Path("."), "m", SimpleNamespace(num_ctx=24576), EXPLORE_TOOLS)
+    assert c["tool_schema_chars"] == n
+
+    # THE FITTER MUST USE THE SAME NUMBER. Pinning the helper alone left the fitter free to
+    # go back to a constant — a mutation replacing its call with 4000 passed everything.
+    # One source of truth, asserted at the source: main() must not compute this itself.
+    import inspect
+    from sage.gateway import heartbeat as hb
+    body = inspect.getsource(hb.main)
+    assert "_schema_chars_for(EXPLORE_TOOLS)" in body, \
+        "the fitter must call the same helper the record does"
+    assert "len(json.dumps(ollama_tools(" not in body, \
+        "main() is recomputing the schema size instead of using the helper"

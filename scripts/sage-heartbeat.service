@@ -9,7 +9,7 @@ WorkingDirectory=/home/dp/ai-workspace/SAGE
 Environment=HOME=/home/dp
 Environment="PATH=/home/dp/.cargo/bin:/home/dp/miniforge3/bin:/home/dp/.local/bin:/usr/local/bin:/usr/bin:/bin"
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/dp/miniforge3/bin/python3 -m sage.gateway.heartbeat --member legion-being --model qwen38-heretic:q3km-vl --instance sage/instances/legion-gemma3-12b --max-steps 0 --idle-wake-s 600 --resume-wake-s 180
+ExecStart=/home/dp/miniforge3/bin/python3 -m sage.gateway.heartbeat --member legion-being --model qwen38-heretic:q3km-vl --instance sage/instances/legion-gemma3-12b --max-steps 0 --idle-wake-s 600 --resume-wake-s 30
 # A beat now runs while there is work (--max-steps 0), bounded by --explore-budget-s
 # (2 h) rather than by a step count. This must sit comfortably ABOVE that budget: the
 # record is written at beat end, so a kill loses the whole beat. 3 h leaves an hour for

@@ -90,6 +90,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     step = 0
     last_fp, repeats = None, 0
     warned = False
+    reads_this_turn: Dict[str, List[int]] = {}
 
     while uncapped or step < max_steps:
         if deadline is not None and step > 0 and time.time() >= deadline:
@@ -139,6 +140,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
         convo.append({"role": "assistant", "content": content, "intents": intents})
         rested = None
         for intent in intents:
+            _note = _repeat_read_note(intent, reads_this_turn, step)
             if intent.effector == REST:
                 # The being ending its OWN turn. Never dispatched: the gate rules on acts
                 # that touch the world, and stopping touches nothing. Whatever it says here
@@ -148,7 +150,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
             env = client.dispatch(intent)                  # gate + F1a dispatch + consume
             trace.append((intent, env))
             convo.append({"role": "tool", "effector": intent.effector,
-                          "content": env.to_tool_message()})
+                          "content": env.to_tool_message() + _note})
         if rested is not None:
             return ToolTurnResult(reply=rested or content, trace=trace, steps=step,
                                   interjected=interjected, rested=rested or "(no reason given)")
@@ -352,6 +354,40 @@ def _retry_budget(llm, raw: Optional[dict] = None) -> int:
     return max(floor, num_ctx - prompt - RETRY_MARGIN)
 
 
+class _no_think:
+    """Turn thinking off for one retry, and put it back. Carried from SAGE#87.
+
+    A RETRY AFTER A THINK-ONLY GENERATE MUST NOT BE ANOTHER THINK-ONLY GENERATE. Measured
+    2026-09-14 on this being: a first attempt hit the wall at prompt_eval 24,194 of a
+    24,576 window with done_reason=length, everything in `thinking` and content empty. The
+    retry, given more room, spent its ENTIRE 8,000-token budget in `thinking` too and again
+    said nothing. Two generates, ~8,400 tokens, no tool call, and the beat carried on as if
+    the being had chosen silence.
+
+    More room was the wrong lever: room was not what ran out, the model never started
+    answering. The nudge is text the model may ignore, and did. `think` is a flag. It can
+    still re-open a block on its own (5/10 turns, 2026-09-03), so this improves the odds
+    rather than guaranteeing an answer; leaving thinking ON guarantees nothing.
+
+    Restores the previous value, absence included, so a retry cannot leave every later turn
+    of the beat silently un-thinking."""
+    def __init__(self, llm):
+        self.llm = llm
+        self.had = hasattr(llm, "think")
+        self.keep = None
+
+    def __enter__(self):
+        if self.had:
+            self.keep = self.llm.think
+            self.llm.think = False
+        return self.had
+
+    def __exit__(self, *exc):
+        if self.had:
+            self.llm.think = self.keep
+        return False
+
+
 class _retry_room:
     """Set llm.num_predict_override for one retry, restore it after. Falls back to
     max_response_tokens for llm objects without the override (older adapters)."""
@@ -472,6 +508,39 @@ REPEAT_NUDGE_AT = 3          # identical consecutive calls before the harness na
 REPEAT_BREAK_AT = 6          # ... and before it ends the tool phase
 
 
+# How many times the same file may be read in one beat before the harness says so.
+REREAD_NOTICE_AT = 2
+
+
+def _repeat_read_note(intent, reads_this_turn, step: int) -> str:
+    """Tell the being when it is reading a file it has already read THIS BEAT.
+
+    It cannot see its own repetition: by the time it reaches for a file again, the earlier
+    result has been elided to 400 chars and reads like a stub rather than like something it
+    already has. Measured 2026-09-13 across every beat: 86.7% of memory_read calls are
+    re-reads, 48.5% are duplicates inside one beat, and heartbeat.py has been read 342
+    times. This is the read-level twin of the identical-call guard — the same principle,
+    that a being which cannot see a loop cannot leave one, applied one layer down.
+
+    A notice, never a refusal. Re-reading is often correct: a different range, or a file
+    that changed under it. The harness says what it knows and lets the being decide."""
+    if intent.effector != "memory_read":
+        return ""
+    path = str((intent.args or {}).get("path", "")).strip()
+    if not path:
+        return ""
+    seen = reads_this_turn.setdefault(path, [])
+    seen.append(step)
+    if len(seen) < REREAD_NOTICE_AT:
+        return ""
+    earlier = ", ".join(str(x) for x in seen[:-1])
+    return (f"\n[harness] You have now read this path {len(seen)} times this beat "
+            f"(earlier at step {earlier}). Those results are still in this conversation, "
+            f"elided to their head and tail. If you need a part you have not seen, name a "
+            f"NARROW range; if you are re-reading to recall what you concluded, that is in "
+            f"your scratch and costs far less than the file.")
+
+
 def _fingerprint(intents) -> Optional[str]:
     """What makes two steps 'the same call'. None when it cannot be computed, which never
     counts as a repeat — an unfingerprintable step must not end a turn."""
@@ -572,9 +641,21 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         h = COMPACT_KEEP_CHARS // 2
         kept_head, kept_tail = body[:h], body[-(COMPACT_KEEP_CHARS - h):]
         elided_n = len(body) - COMPACT_KEEP_CHARS
+        # THE MARKER USED TO SAY "read the source again", AND THAT INSTRUCTION IS THE
+        # THRASH. Measured across all beats 2026-09-13: 86.7% of memory_read calls are
+        # re-reads and 48.5% are duplicates within a SINGLE beat; heartbeat.py has been
+        # read 342 times. The loop is mechanical — a result is elided to 400 chars, the
+        # marker tells the being to read the source again, the full re-read costs ~700
+        # tokens, that forces another elision, which says it again. The harness was
+        # issuing the instruction that refilled the window it had just cleared.
+        # The head of a ranged read already names its range, so point at a NARROWER read
+        # and at the being's own notes, which is where its conclusions actually live.
         out[i]["content"] = (kept_head +
                              f"\n[… {elided_n} characters elided from the middle to leave room "
-                             f"for your answer; read the source again if you still need it …]\n"
+                             f"for your answer. The head above names what this was. If you need "
+                             f"part of it, read a NARROW range rather than the file again — a "
+                             f"full re-read costs more room than this elision freed. If you need "
+                             f"what you concluded from it, that is in your scratch …]\n"
                              + kept_tail)
         elided.append({"index": i, "chars": elided_n, "kept": COMPACT_KEEP_CHARS})
     # THE NEWEST RESULT IS PROTECTED — until protecting it is what cuts the answer. When
@@ -728,8 +809,18 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                     f"call. The window will not grow. Act now: one tool call. The deliberation "
                     f"belongs in journal.md, after the act.")})
                 nudged = True
-                with _retry_room(llm, _retry_budget(llm, raw)) as budget:
-                    print(f"[tool-loop] retrying once with num_predict={budget} and a nudge "
+                # DID IT RUN OUT OF ROOM, OR NEVER START ANSWERING? Opposite failures, and
+                # this gave them the same remedy. A cut that produced real content ran out
+                # of room; a cut that produced only a think block did not, and handing that
+                # one a bigger budget buys a longer silence (SAGE#87).
+                thought_only = (bool(str(msg.get("thinking") or "").strip())
+                                and not str(msg.get("content") or "").strip())
+                from contextlib import ExitStack
+                with ExitStack() as _stack:
+                    budget = _stack.enter_context(_retry_room(llm, _retry_budget(llm, raw)))
+                    _unthought = bool(thought_only and _stack.enter_context(_no_think(llm)))
+                    print(f"[tool-loop] retrying once with num_predict={budget}, a nudge"
+                          f"{' and thinking OFF' if _unthought else ''} "
                           f"(num_ctx={getattr(llm, 'num_ctx', None)} prompt_eval={raw.get('prompt_eval_count')})",
                           file=_sys.stderr)
                     resp = llm.get_chat_response(msgs, tools=tools)

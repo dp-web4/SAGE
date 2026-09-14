@@ -269,6 +269,19 @@ def harness_revision(workspace: str) -> dict:
             "dirty": None if st is None else bool(st.strip())}
 
 
+def _schema_chars_for(offered) -> Optional[int]:
+    """Chars the offered verbs' schemas actually cost. None rather than a guess if it
+    cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
+    13 verbs to 18."""
+    if not offered:
+        return None
+    try:
+        from sage.gateway.being_gate_client import ollama_tools
+        return len(json.dumps(ollama_tools(list(offered))))
+    except Exception:
+        return None
+
+
 def _config_check(instance: Path, model: str, llm, offered) -> dict:
     """Did this beat run with the tool set and the context window the seat meant to give it?
     `active_embodiment` in instance.json is the canonical statement of intent (PRD r3 §3.2);
@@ -281,6 +294,11 @@ def _config_check(instance: Path, model: str, llm, offered) -> dict:
     got_ctx = getattr(llm, "num_ctx", None)
     return {
         "tools_offered": list(offered),
+        # Measured, not budgeted — see the fitter. A verb added is window spent, and this
+        # is where that shows up. Imported locally: main()'s `from ... import ollama_tools`
+        # binds it as a LOCAL of main, so referencing it here NameErrors at runtime — which
+        # no test would have caught, because none of them call _config_check.
+        "tool_schema_chars": _schema_chars_for(offered),
         "num_ctx_intended": want_ctx, "num_ctx_resolved": got_ctx,
         "window_matches_intent": None if want_ctx is None else (got_ctx == want_ctx),
         "tag_intended": want_tag, "tag_running": model,
@@ -718,10 +736,17 @@ def main(argv=None) -> int:
                     help="0 = no step cap: the beat ends when the being stops asking for "
                          "tools or a resource runs out (dp 2026-09-09: it continues as long "
                          "as it wishes). A positive value caps it, as before.")
-    ap.add_argument("--resume-wake-s", type=int, default=180,
+    ap.add_argument("--resume-wake-s", type=int, default=30,
                     help="after a beat that did NOT rest, wake this many seconds later "
                          "(a transient one-shot ON TOP of the timer; 0 disables). The "
-                         "being said it was not finished, and the GPU is its own.")
+                         "being said it was not finished, and the GPU is its own.\n"
+                         "dp, 2026-09-14: 'i would basically like to see it continuously "
+                         "active unless it deliberately decides to rest.' At 180 the being "
+                         "ran 88%% of wall clock and every gap was this timer — a pause it "
+                         "had not chosen. 30 is long enough for systemd to settle and for a "
+                         "mid-beat message to land, short enough not to be a rest it did "
+                         "not ask for. REST is what makes a real gap: that path takes the "
+                         "idle interval instead, so choosing to stop still means something.")
     ap.add_argument("--idle-wake-s", type=int, default=1800,
                     help="quiet time after a beat ENDS before the next one is due. The beat "
                          "is an inactivity timer, not a metronome (dp 2026-09-09): working "
@@ -895,10 +920,27 @@ def main(argv=None) -> int:
     # (~3k tokens). Measured 21:04Z 2026-09-08 with the seed fitted at 17.5k tokens: step 6
     # reached 23,823 of 24,576 and was cut. The seed must leave room for the loop, not only
     # for the answer.
-    _other = len(posture()) + len(inbox) + 4000 + 1200 + 400 + LOOP_GROWTH_CHARS
+    # MEASURE THE SCHEMAS, DO NOT BUDGET THEM. This was a flat 4,000 chars for "tool
+    # schemas + chat template", set when the being had 13 verbs and never revisited.
+    # Measured 2026-09-13 at 18 verbs: the explore schema JSON alone is 11,717 chars —
+    # 7,717 more than budgeted, ~2,600 tokens of a 24,576 window that the fitter did not
+    # know it was spending. Every verb added made it worse (rest, search and edit all
+    # landed today), and the constant could not notice, because a budget is a promise the
+    # code makes to itself and never checks.
+    #
+    # The chat template is still an estimate — it is applied server-side and is not
+    # visible from here — so 1,200 chars is carried explicitly as a named guess rather
+    # than hidden inside a round number.
+    # ONE source of truth with the beat record's `tool_schema_chars`: two sites computing
+    # the same number separately is how they drift apart, which is the defect this whole
+    # change is about.
+    _schema_chars = _schema_chars_for(EXPLORE_TOOLS) or 4000
+    _template_guess = 1200
+    _other = (len(posture()) + len(inbox) + _schema_chars + _template_guess
+              + 1200 + 400 + LOOP_GROWTH_CHARS)
     state_block, conv_rung, conv_intervention = fit_state(
         _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other)
-    _fixed = len(posture()) + len(state_block) + len(inbox) + 4000
+    _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + _template_guess
     blocks, fit_interventions = fit_to_window(
         num_ctx=_num_ctx, num_predict=_num_predict,
         fixed_chars=_fixed, blocks={"digest": digest, "recall": recall})

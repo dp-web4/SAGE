@@ -77,6 +77,16 @@ def _hestia_error(env: dict) -> Optional[str]:
 SEARCH_LINES_SHOWN = 40
 
 
+def _session_lost(exc: Exception) -> bool:
+    """Whether this failure means the session is gone rather than the act refused.
+
+    Narrow on purpose: only the shapes a restarted or recycled server produces. A broad
+    match would retry real refusals, and a retried refusal reads as flakiness."""
+    m = str(exc).lower()
+    return ("session not found" in m or "404" in m
+            or "session terminated" in m or "no valid session" in m)
+
+
 class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
     live daemon. Wraps ReferenceF1aDispatcher for the local verbs (witness / memory)."""
@@ -441,7 +451,23 @@ class HestiaF1aDispatcher:
         retry cannot manufacture a false success: `_do_remember` still requires a confirmed
         store before it will save, so a second failure ends as a refusal with the file on
         disk untouched."""
-        text = self._unwrap(self._membot().call(name, args), name)
+        try:
+            text = self._unwrap(self._membot().call(name, args), name)
+        except RuntimeError as e:
+            # A DEAD SESSION IS A HARD FAILURE, NOT A SOFT ONE, and the remount below only
+            # covered the soft shape. When the membot process RESTARTS, the cached session
+            # is gone and the server answers HTTP 404 "Session not found" as a JSON-RPC
+            # error — which `_unwrap` raises, so it never reaches the text check. Measured
+            # 2026-09-14: the seat restarted membot mid-beat and the being lost that beat's
+            # `remember` to exactly this, while the cartridge was intact (344 memories).
+            #
+            # This is the SAGE#52 shape a second time, in code written to fix the first: a
+            # recovery that exists, is correct, and is dead for the commoner form of its own
+            # failure. One retry on a fresh session; a second failure is reported as-is.
+            if _remounted or not _session_lost(e):
+                raise
+            self._mb = None
+            return self._membot_call(name, args, _remounted=True)
         if self._NOT_MOUNTED in text and not _remounted:
             self._mb = None
             return self._membot_call(name, args, _remounted=True)
@@ -649,10 +675,40 @@ class HestiaF1aDispatcher:
         truncated = len(lines) > SEARCH_LINES_SHOWN
         shown = lines[:SEARCH_LINES_SHOWN]
         if not shown:
+            # "NOT IN THAT FILE" AND "NO SUCH FILE" ARE THE SAME EXIT CODE (SAGE#89). git
+            # grep returns 1 for both, so a search whose pathspec matched nothing came back
+            # as a confident bounded absence about a file that does not exist. Measured on
+            # this being's own todo.md, which lives in its INSTANCE home and not in the
+            # worktree search runs inside. ls-files answers over the same universe git grep
+            # searches (tracked files), using the pathspec the law actually judged.
+            missing = None
+            if intent.args.get("path"):
+                argv_probe = shlex.split(cmd)
+                spec = argv_probe[argv_probe.index("--") + 1] if "--" in argv_probe else None
+                if spec:
+                    try:
+                        probe = subprocess.run(
+                            ["git", "-C", self.worktree, "ls-files", "--error-unmatch",
+                             "--", spec],
+                            cwd=self.worktree, text=True, capture_output=True, timeout=15)
+                        missing = probe.returncode != 0
+                    except Exception:
+                        missing = None
+            if missing:
+                return ResultEnvelope(ok=False, error=(
+                    f"search found no file at {where} in your worktree, so this is NOT an "
+                    f"absence of {pattern!r} — nothing was searched. `search` runs inside "
+                    f"your WORKTREE and sees only files git tracks there. A relative path "
+                    f"here is not the same path `memory_read` takes: memory_read resolves "
+                    f"relative paths inside your instance home, and files that live only "
+                    f"there (todo.md, journal.md, notes/, scratch/) cannot be searched at "
+                    f"all. Read those with memory_read; search the source tree."))
             return ResultEnvelope(ok=True, result={
                 "pattern": pattern, "searched": where, "matches": 0,
-                "note": (f"no line matches {pattern!r} in {where}. That is an answer about "
-                         f"WHAT WAS SEARCHED, not about the repository: widen the path, or "
+                "searched_a_real_file": True,
+                "note": (f"no line matches {pattern!r} in {where}. The path exists and was "
+                         f"searched, so this is a real absence — but an answer about WHAT "
+                         f"WAS SEARCHED, not about the repository: widen the path, or "
                          f"check the pattern (it is an extended regex, so ( ) | + are "
                          f"special — searching for a literal one needs a backslash)")})
         return ResultEnvelope(ok=True, result={
