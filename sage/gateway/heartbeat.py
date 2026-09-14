@@ -250,10 +250,24 @@ class BeatKilled(Exception):
     knew it had happened. systemd allows TimeoutStopSec (90 s) after SIGTERM — enough."""
 
 
+# What a verb's schema costs, and what to assume when it cannot be measured. Measured on
+# Legion 2026-09-13: 18 offered verbs serialise to 11,717 chars, ~651 chars each, and the
+# registry only ever grows. The old 4,000 was a budgeted guess made at 13 verbs that nobody
+# rechecked, which is how it survived to 18 while understating the real cost by ~7,700
+# chars a beat. So the fallback is a per-verb bound rather than a constant, and it rounds
+# UP: FAILING TO MEASURE MUST COST THE BEING WINDOW, NEVER SILENTLY HAND IT BACK. A
+# too-large estimate steps the conversation ladder down one rung; a too-small one puts the
+# beat over the wall with nothing saying so.
+_SCHEMA_CHARS_PER_VERB = 700   # above the 651 measured, so the bound stays conservative as verbs are added
+_SCHEMA_CHARS_FLOOR = 12_000   # at least the 18-verb measurement, for when the verb count is unknown too
+
+
 def _schema_chars_for(offered) -> Optional[int]:
     """Chars the offered verbs' schemas actually cost. None rather than a guess if it
     cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
-    13 verbs to 18."""
+    13 verbs to 18. Callers must route None through _schema_chars_fallback, never `or`
+    a constant: `or 4000` reintroduces the exact underestimate on the one path where the
+    seat already knows it is flying blind."""
     if not offered:
         return None
     try:
@@ -261,6 +275,19 @@ def _schema_chars_for(offered) -> Optional[int]:
         return len(json.dumps(ollama_tools(list(offered))))
     except Exception:
         return None
+
+
+def _schema_chars_fallback(offered) -> int:
+    """What to charge the window when the schemas could not be measured.
+
+    Conservative by construction and never below the largest measurement taken, so a
+    measurement failure degrades toward a thinner conversation block rather than toward a
+    silently overcommitted beat."""
+    try:
+        n = len(list(offered))
+    except Exception:
+        n = 0
+    return max(_SCHEMA_CHARS_FLOOR, n * _SCHEMA_CHARS_PER_VERB)
 
 
 def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512):
@@ -638,7 +665,9 @@ def main(argv=None) -> int:
     # ladder, and the digest and recall are trimmed, before anything is sent.
     _num_ctx = getattr(llm, "num_ctx", None)
     _num_predict = _sent_budget(llm)
-    _schema_chars = _schema_chars_for(EXPLORE_TOOLS) or 4000
+    _schema_measured = _schema_chars_for(EXPLORE_TOOLS)
+    _schema_chars = (_schema_measured if _schema_measured is not None
+                     else _schema_chars_fallback(EXPLORE_TOOLS))
     _state_head = f"# Your own state\n\n"
     _scope_tail = f"\n\n## Reach you hold (hestia scope)\n{scope}\n\n"
 

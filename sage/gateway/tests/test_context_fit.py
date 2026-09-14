@@ -158,3 +158,46 @@ def test_the_compaction_log_reaches_the_result_and_the_fallbacks_match_the_evide
     res = run_ollama_tool_turn(c, LLM(), seed, max_steps=1, tools=[])
     assert res.compacted, "the compaction log must reach the result, not die in a local"
     assert all("chars" in e and "elisions" in e for e in res.compacted)
+
+
+def test_unmeasurable_schemas_degrade_conservative_never_back_to_4000():
+    """A measurement failure must cost the being window, not hand it back.
+
+    GPT's second pass on SAGE#82: `_schema_chars_for(...) or 4000` reintroduced, on the
+    measurement-failed path exactly, the 13-verb constant this slice exists to retire. The
+    real cost at 18 verbs is 11,717 chars, so `or 4000` understates by ~7,700 chars a beat
+    precisely when the seat already knows it cannot see. Too large steps the conversation
+    ladder down a rung; too small puts the beat over the wall with nothing saying so.
+    """
+    from sage.gateway import heartbeat as H
+
+    # Unmeasurable: _schema_chars_for says None rather than guessing.
+    assert H._schema_chars_for(None) is None
+    assert H._schema_chars_for([]) is None
+
+    # And the fallback every caller must route None through is conservative.
+    eighteen = [f"verb_{i}" for i in range(18)]
+    assert H._schema_chars_fallback(eighteen) >= 11_717, \
+        "the fallback must not sit below the largest real measurement"
+    assert H._schema_chars_fallback(None) >= H._SCHEMA_CHARS_FLOOR
+    assert H._schema_chars_fallback([]) >= H._SCHEMA_CHARS_FLOOR
+
+    # It scales with the registry rather than sitting at a constant that rots.
+    assert H._schema_chars_fallback([f"v{i}" for i in range(40)]) > \
+           H._schema_chars_fallback(eighteen), \
+        "a per-verb bound must grow with the verb count; a constant is what rotted before"
+
+    # The specific regression: no path may yield the retired constant.
+    for offered in (None, [], eighteen, [f"v{i}" for i in range(13)]):
+        assert H._schema_chars_fallback(offered) != 4000, \
+            f"4000 came back for offered={offered!r}"
+
+
+def test_schema_chars_measured_when_the_registry_is_readable():
+    """The fallback is the degraded path, so the measured path must actually be taken."""
+    from sage.gateway import heartbeat as H
+    measured = H._schema_chars_for(H.EXPLORE_TOOLS)
+    assert isinstance(measured, int) and measured > 0, \
+        "EXPLORE_TOOLS must be measurable here, or the test above is measuring nothing"
+    # The measurement is the real cost; it should be nowhere near the retired guess.
+    assert measured > 4000, f"schemas measured at {measured}, below the constant that rotted"
