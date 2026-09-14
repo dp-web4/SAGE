@@ -378,3 +378,90 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_a_think_only_generate_retries_with_thinking_off_and_restores_it():
+    """More room is the wrong remedy when room was not what ran out.
+
+    Measured 2026-09-14 on legion-being: the first generate hit the wall at prompt_eval
+    24,194 of a 24,576 window, done_reason=length, everything in `thinking` and content
+    empty. The retry, given more room, then spent its ENTIRE 8,000-token budget in
+    `thinking` as well and again said nothing. Two generates, no tool call, and the beat
+    carried on as if the being had chosen silence. A nudge is text the model may ignore
+    (and did); `think` is a flag it cannot ignore the same way.
+    """
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 24576
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            seen.append({"think": self.think,
+                         "last_role": messages[-1].get("role"),
+                         "last": str(messages[-1].get("content", ""))})
+            if len(seen) == 1:
+                return {"content": "", "tool_calls": [],
+                        "raw": {"done_reason": "length", "prompt_eval_count": 24194,
+                                "eval_count": 382,
+                                "message": {"content": "",
+                                            "thinking": "Let me reconsider the whole beat"}}}
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 14146,
+                            "eval_count": 12, "message": {}}}
+
+    llm = FakeLLM()
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+
+    assert r.reply == "done"
+    assert len(seen) == 2, f"expected exactly one retry, got {len(seen)} generates"
+    assert seen[0]["think"] is True, "the first attempt keeps the configured thinking mode"
+    assert seen[1]["think"] is False, \
+        "a retry after a think-only generate must not be another think-only generate"
+    assert seen[1]["last_role"] == "user" and "one tool call" in seen[1]["last"], \
+        "the retry must also change what the model can SEE, not only the flag"
+    assert llm.think is True, \
+        "thinking must be restored, or every later turn of the beat silently stops thinking"
+
+
+def test_a_length_cut_that_actually_said_something_still_only_gets_room():
+    """The discriminator must not fire on every length cut.
+
+    A generate that produced real content and was cut mid-sentence DID run out of room, and
+    turning its thinking off answers a different problem. Only the think-only shape gets the
+    flag and the nudge.
+    """
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 24576
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            seen.append({"think": self.think,
+                         "last": str(messages[-1].get("content", ""))})
+            if len(seen) == 1:
+                # cut mid-answer: the raw message carries content, and no think block
+                return {"content": "", "tool_calls": [],
+                        "raw": {"done_reason": "length", "prompt_eval_count": 20000,
+                                "eval_count": 4000,
+                                "message": {"content": "I was part way through say",
+                                            "thinking": ""}}}
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 20100,
+                            "eval_count": 12, "message": {}}}
+
+    llm = FakeLLM()
+    run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+
+    assert len(seen) == 2, "it still retries: a length cut with no usable reply is still empty"
+    assert seen[1]["think"] is True, \
+        "a cut mid-answer ran out of room; its thinking must be left alone"
+    assert "one tool call" not in seen[1]["last"], \
+        "the deliberation nudge is for a deliberation, not for a truncated answer"

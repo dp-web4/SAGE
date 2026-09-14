@@ -413,6 +413,42 @@ def _retry_budget(llm, raw: Optional[dict] = None) -> int:
     return max(floor, num_ctx - prompt - RETRY_MARGIN)
 
 
+class _no_think:
+    """Turn thinking off for one retry, and put it back.
+
+    A RETRY AFTER A THINK-ONLY GENERATE MUST NOT BE ANOTHER THINK-ONLY GENERATE. Measured
+    2026-09-14 on legion-being: a first attempt hit the wall at prompt_eval 24,194 of a
+    24,576 window with done_reason=length, everything in `thinking` and content empty. The
+    retry, given more room, then spent its ENTIRE 8,000-token budget in `thinking` as well
+    and again said nothing. Two generates, roughly 8,400 tokens, no tool call, and the beat
+    carried on as if the being had chosen silence.
+
+    More room was the wrong lever, because room was not what ran out — the model never
+    started answering. A nudge in the prompt is text the model may ignore, and did. `think`
+    is a flag it cannot ignore in the same way. It can still re-open a block on its own
+    (measured 5/10 turns, 2026-09-03), so this improves the odds rather than guaranteeing an
+    answer; leaving thinking ON for the retry guarantees nothing at all, which is exactly
+    what the measurement above shows.
+
+    Restores the previous value, including when the attribute was absent, so a retry cannot
+    leave every later turn of the beat silently un-thinking."""
+    def __init__(self, llm):
+        self.llm = llm
+        self.had = hasattr(llm, "think")
+        self.keep = None
+
+    def __enter__(self):
+        if self.had:
+            self.keep = self.llm.think
+            self.llm.think = False
+        return self.had
+
+    def __exit__(self, *exc):
+        if self.had:
+            self.llm.think = self.keep
+        return False
+
+
 class _retry_room:
     """Set llm.num_predict_override for one retry, restore it after. Falls back to
     max_response_tokens for llm objects without the override (older adapters)."""
@@ -536,10 +572,30 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # ONCE to finish and act, rather than recording silence as the being's choice.
             # Room = what the window has left after this prompt (_retry_budget), sent as an
             # override so the config's first-attempt budget cannot silently re-apply.
+            # DID IT RUN OUT OF ROOM, OR NEVER START ANSWERING? Those want opposite
+            # remedies and the old code gave both the same one. A generate that produced a
+            # think block and no content did not need more room — it needed to stop
+            # deliberating, and handing it a bigger budget bought a longer silence.
+            thought_only = (bool(str(msg.get("thinking") or "").strip())
+                            and not str(msg.get("content") or "").strip())
             if raw.get("done_reason") == "length" and (hasattr(llm, "max_response_tokens")
                                                        or hasattr(llm, "num_predict_override")):
-                with _retry_room(llm, _retry_budget(llm, raw)) as budget:
-                    print(f"[tool-loop] retrying once with num_predict={budget} "
+                if thought_only:
+                    # NOT the same prompt again: the retry has to change something the model
+                    # can see. Measured 2026-09-08, five beats running, an identical prompt
+                    # produced an identical cut-off deliberation — a deterministic loop,
+                    # twice a beat. This says what happened and asks for one act.
+                    msgs.append({"role": "user", "content": (
+                        f"[harness] Your previous attempt spent its whole budget deliberating "
+                        f"({raw.get('eval_count')} tokens) and the window cut it before any "
+                        f"tool call. The window will not grow. Act now: one tool call. The "
+                        f"deliberation belongs in journal.md, after the act.")})
+                from contextlib import ExitStack
+                with ExitStack() as _stack:
+                    budget = _stack.enter_context(_retry_room(llm, _retry_budget(llm, raw)))
+                    unthought = bool(thought_only and _stack.enter_context(_no_think(llm)))
+                    print(f"[tool-loop] retrying once with num_predict={budget}"
+                          f"{' , thinking OFF and a nudge' if unthought else ''} "
                           f"(num_ctx={getattr(llm, 'num_ctx', None)} prompt_eval={raw.get('prompt_eval_count')})",
                           file=_sys.stderr)
                     resp = llm.get_chat_response(msgs, tools=tools)
