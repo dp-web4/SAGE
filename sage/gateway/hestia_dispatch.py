@@ -683,21 +683,37 @@ class HestiaF1aDispatcher:
             cmd = camera_command(intent.args, {"worktree": self.worktree})
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
+        begin = self._call("hestia_begin_action",
+                           {"tool_name": "camera", "target": device})
+        werr = _hestia_error(begin)
+        if werr:
+            return ResultEnvelope(ok=False, error=(
+                f"camera UNVERIFIED: the witness substrate is unreachable "
+                f"({str(werr)[:160]}); the camera was not switched on"))
+        action_id = begin.get("actionId")
         proc = subprocess.run(shlex.split(cmd), capture_output=True)
-        if proc.returncode == 0 and os.path.exists(full_out):
-            return ResultEnvelope(ok=True, result={
+        captured = proc.returncode == 0 and os.path.exists(full_out)
+        try:
+            self._call("hestia_record_outcome",
+                       {"action_id": action_id, "success": captured, "magnitude": 0.0})
+        except Exception:
+            pass
+        if captured:
+            return ResultEnvelope(ok=True, witness_id=action_id, result={
                 "device": device, "out_path": out_rel,
                 "bytes": os.path.getsize(full_out),
-                "note": ("one frame captured; read it back with memory_read on the path "
-                         "(or a vision-capable reader) — nothing persists across beats")})
+                "note": ("one frame captured. It is a JPEG, so memory_read will hand you "
+                         "binary, not a picture — it returns ok and you learn nothing. "
+                         "Seeing it needs a vision-capable reader, which is not wired yet. "
+                         "Nothing persists across beats.")})
         if proc.returncode != 0:
             kind = ("device absent" if not os.path.exists(device) else "device busy or "
                     "unopenable (another process may hold it, or the node is wrong)")
-            return ResultEnvelope(ok=False, result={
+            return ResultEnvelope(ok=False, witness_id=action_id, result={
                 "device": device, "out_path": out_rel, "exit_code": proc.returncode,
                 "note": (f"ffmpeg exited {proc.returncode} and no frame was written — "
                          f"{kind}. The previous file at the path, if any, is untouched.")})
-        return ResultEnvelope(ok=False, result={
+        return ResultEnvelope(ok=False, witness_id=action_id, result={
             "device": device, "out_path": out_rel,
             "note": ("ffmpeg exited 0 but wrote no readable frame — capture anomaly; do "
                      "not treat a missing file as a captured one")})

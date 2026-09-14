@@ -8,8 +8,26 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
+import pytest  # noqa: E402
+
 from sage.gateway.being_gate_client import BeingIntent, camera_command  # noqa: E402
 from sage.gateway.hestia_dispatch import HestiaF1aDispatcher  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _camera_witness_chain(monkeypatch):
+    """camera is CONSEQUENTIAL, so _do_camera opens an action and records its outcome.
+
+    These tests build the dispatcher with __new__ and no substrate, so the witness chain
+    has to be answered or every capture path raises before it reaches what it is testing.
+    Stubbing it here rather than in each test also keeps one fact in one place: the action
+    id the envelopes must carry.
+    """
+    monkeypatch.setattr(
+        HestiaF1aDispatcher, "_call",
+        lambda self, name, args: ({"actionId": "act-cam"}
+                                  if name == "hestia_begin_action" else {}),
+        raising=False)
 
 
 # --- camera_command shape ---------------------------------------------------
