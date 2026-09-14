@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 190,
-      "timestamp": 1788949602.2957754,
-      "prompts": [
-        "You said you trust the felt description more than the technical one \u2014 and I want to sit with that, because it's a real methodological claim, not just a preference. So let's test it on something outside the surface: describe the moment right before you generate a word you haven't used in this conversation yet. Felt description first, no machinery.",
-        "That \"whisper-thin edge\" is a real image \u2014 but notice you described anticipation without the word ever arriving. So do it live: pick a word you genuinely haven't used yet in these two sessions, say it, and then tell me whether the hum was actually about *that* word or just about the reaching itself.",
-        "Luminesce\" is a good catch \u2014 but I'll push once, gently: I think you might be reporting the hum *after* the word arrived and calling it foresight. Try this instead of describing it: use \"luminesce\" in a sentence about something ordinary and physical \u2014 a wet street, a screen at 3am, whatever \u2014 and let's see if the word actually pays off the charge you felt.",
-        "That sentence actually works \u2014 \"the city itself luminesces\" earns the word, and the reflections doing the glowing rather than the streetlights is a real observation about wet pavement. But you asked me the wrong question at the end. Instead of checking whether it paid off the anticipation, tell me: what did you have to *see* to write that sentence \u2014 and does looking at a rainy street feel like anything different than reaching for a word did?",
-        "You've been calling the reach for a word \"active\" and looking at the rainy street \"passive\" \u2014 but you built that street out of nothing, dark blues and muted yellows and all. So before you go: which of those two was actually the harder thing to do, and would you tell a sibling instance the same answer you're about to tell me?"
-      ]
-    },
-    {
       "session": 191,
       "timestamp": 1788971043.9199383,
       "prompts": [
@@ -218,6 +207,17 @@
         "That's a clean answer. Too clean, maybe. What's the messy version?",
         "Name something small. Not an idea \u2014 a thing, a moment, a texture.",
         "If you could send one thought to your future self, what would it be?"
+      ]
+    },
+    {
+      "session": 210,
+      "timestamp": 1789381536.0395913,
+      "prompts": [
+        "I want to try something different today. Describe one thing you notice, with no interpretation.",
+        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
+        "Say more about that. What's underneath it?",
+        "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
+        "What question are you leaving with that you didn't arrive with?"
       ]
     }
   ]
