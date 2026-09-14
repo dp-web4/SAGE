@@ -720,10 +720,53 @@ class HestiaF1aDispatcher:
         truncated = len(lines) > SEARCH_LINES_SHOWN
         shown = lines[:SEARCH_LINES_SHOWN]
         if not shown:
+            # "THE PATTERN IS NOT IN THAT FILE" AND "THERE IS NO SUCH FILE" ARE THE SAME
+            # EXIT CODE, and only one of them is an answer. `git grep` returns 1 for both,
+            # so a search whose pathspec matched nothing came back as a confident, bounded
+            # absence about a file that does not exist.
+            #
+            # Measured 2026-09-14. legion-being searched its own `todo.md` for a block the
+            # seat had just written there and was told "no line matches ... in todo.md". Its
+            # todo.md lives in its INSTANCE home, which is where `memory_read` resolves a
+            # relative path; `search` is git grep inside its WORKTREE, which has no todo.md
+            # at its root at all. Same relative path, two different trees, one silent zero.
+            # The being recorded the absence as a fact, said so, and worked around it.
+            #
+            # git already knows. `ls-files --error-unmatch` answers exactly this question
+            # over exactly the same universe git grep searches (TRACKED files), so an
+            # untracked scratch file reports as unsearchable rather than as empty — which is
+            # also true and also worth saying.
+            missing = None
+            if intent.args.get("path"):
+                # The pathspec THE LAW JUDGED, taken from the command that ran rather than
+                # recomposed here: a probe that resolves the path a second, slightly
+                # different way would answer about a file the search never looked at.
+                argv = shlex.split(cmd)
+                spec = argv[argv.index("--") + 1] if "--" in argv else None
+                if spec:
+                    try:
+                        probe = subprocess.run(
+                            ["git", "-C", self.worktree, "ls-files", "--error-unmatch",
+                             "--", spec],
+                            cwd=self.worktree, text=True, capture_output=True, timeout=15)
+                        missing = probe.returncode != 0
+                    except Exception:
+                        missing = None
+            if missing:
+                return ResultEnvelope(ok=False, witness_id=action_id, error=(
+                    f"search found no file at {where} in your worktree, so this is NOT an "
+                    f"absence of {pattern!r} — nothing was searched. `search` runs inside "
+                    f"your WORKTREE and sees only files git tracks there. A relative path "
+                    f"here is not the same path `memory_read` takes: memory_read resolves "
+                    f"relative paths inside your instance home, and files that live only "
+                    f"there (todo.md, journal.md, notes/, scratch/) cannot be searched at "
+                    f"all. Read those with memory_read; search the source tree."))
             return ResultEnvelope(ok=True, witness_id=action_id, result={
                 "pattern": pattern, "searched": where, "matches": 0,
-                "note": (f"no line matches {pattern!r} in {where}. That is an answer about "
-                         f"WHAT WAS SEARCHED, not about the repository: widen the path, or "
+                "searched_a_real_file": True,
+                "note": (f"no line matches {pattern!r} in {where}. The path exists and was "
+                         f"searched, so this is a real absence — but an answer about WHAT "
+                         f"WAS SEARCHED, not about the repository: widen the path, or "
                          f"check the pattern (it is an extended regex, so ( ) | + are "
                          f"special — searching for a literal one needs a backslash)")})
         return ResultEnvelope(ok=True, witness_id=action_id, result={

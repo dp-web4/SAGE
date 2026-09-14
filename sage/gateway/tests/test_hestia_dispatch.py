@@ -1277,3 +1277,55 @@ def test_an_empty_roster_refuses_nothing(tmp_path, monkeypatch):
     assert d.known_peers() == set(), "an unreadable roster is an empty set"
     env = d(BeingIntent("mesh", {"to": "atlantis", "kind": "ack", "pointer": "p"}), _ALLOW)
     assert env.ok, "with no roster, an unknown peer is allowed through rather than silenced"
+
+
+def test_a_search_for_a_file_that_is_not_there_is_not_an_absence(tmp_path):
+    """`git grep` returns 1 for "pattern not in file" AND for "no such file".
+
+    Only one of those is an answer. Measured 2026-09-14: legion-being searched its own
+    todo.md for a block the seat had just written there and was told "no line matches ...
+    in todo.md". Its todo.md lives in its INSTANCE home, which is where memory_read
+    resolves a relative path; `search` is git grep inside its WORKTREE, which has no
+    todo.md at all. Same relative path, two trees, one silent zero — and the being recorded
+    the absence as a fact and worked around it.
+    """
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent
+
+    wt = tmp_path / "wt"; (wt / "pkg").mkdir(parents=True)
+    (wt / "pkg" / "mod.py").write_text("def compose(a, b):\n    return a\n")
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
+
+    d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None)
+    d._call = lambda n, a: {"actionId": "act-s"} if n == "hestia_begin_action" else {}
+
+    # (1) no such file -> NOT an absence
+    gone = d._do_search(BeingIntent("search", {"pattern": "CORRECTION", "path": "todo.md"}))
+    assert gone.ok is False, \
+        f"a search of a file that is not there must not succeed: {gone.result!r}"
+    assert "NOT an absence" in (gone.error or ""), gone.error
+    assert "memory_read" in (gone.error or ""), \
+        "the refusal must name the verb that DOES reach the instance home"
+    assert gone.witness_id == "act-s"
+
+    # (2) the file is there and the pattern really is not -> still a true absence
+    real = d._do_search(BeingIntent("search", {"pattern": "zzz_absent_zzz",
+                                               "path": "pkg/mod.py"}))
+    assert real.ok is True and real.result["matches"] == 0
+    assert real.result.get("searched_a_real_file") is True
+    assert "real absence" in real.result["note"]
+
+    # (3) an untracked file reports as unsearchable, not as empty — git grep only sees
+    #     tracked files, so "0 matches" there would be the same lie in a quieter form.
+    (wt / "pkg" / "scratch.py").write_text("CORRECTION is right here\n")
+    untracked = d._do_search(BeingIntent("search", {"pattern": "CORRECTION",
+                                                    "path": "pkg/scratch.py"}))
+    assert untracked.ok is False, \
+        "an untracked file contains the pattern; reporting 0 matches would be false"
+
+    # (4) a hit is unaffected
+    hit = d._do_search(BeingIntent("search", {"pattern": r"def compose\(",
+                                              "path": "pkg/mod.py"}))
+    assert hit.ok is True and hit.result["matches"] == 1
