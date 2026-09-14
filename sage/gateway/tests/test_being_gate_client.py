@@ -891,3 +891,41 @@ def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
     assert not unexercised, (
         f"composed verbs with no args in this test: {unexercised}. Add them — a verb absent "
         f"from this walk is a verb whose gate path nothing checks.")
+
+
+def test_a_search_refused_for_a_word_in_its_pattern_says_so():
+    """The harness holds both halves the being lacks, and used to say neither.
+
+    hestia#1024: the gate resolves a bare word in a search PATTERN as a path and refuses when
+    that word also names a real directory. The refusal reads as a scope problem, so a being
+    inspects its grants — which are fine — and learns nothing. legion-being lost parts of five
+    beats to one word while wiring the code whose key is spelled exactly that.
+
+    The seat has the pattern it just sent and the refusal naming the token. Joining them turns
+    an opaque deny into a next step, and changes no decision: the gate has already refused and
+    that refusal stands untouched.
+    """
+    from sage.gateway.being_gate_client import _pattern_collision_hint, BeingIntent
+
+    hit = _pattern_collision_hint(
+        BeingIntent("search", {"pattern": "fresh_frame|images", "path": "hb.py"}),
+        "'images' is not granted (granted: path:/ws/**)")
+    assert "appears in your PATTERN" in hit, hit
+    assert "scope is not the problem" in hit, hit
+    assert "hestia#1024" in hit, "point at the defect so it is not rediscovered"
+    assert "imag" in hit and "." in hit, f"it must supply the adaptation, not just a diagnosis: {hit}"
+
+    # SILENT WHEN IT DOES NOT APPLY — a hint that fires on everything teaches nothing.
+    assert _pattern_collision_hint(
+        BeingIntent("search", {"pattern": "something_else"}),
+        "'images' is not granted") == "", "the token is not in this pattern"
+    assert _pattern_collision_hint(
+        BeingIntent("memory_read", {"path": "images/x"}),
+        "'images' is not granted") == "", "a real path deny must not be explained away"
+    assert _pattern_collision_hint(
+        BeingIntent("search", {"pattern": "x"}), "") == "", "no token named, nothing to say"
+
+    # A refusal naming a PATH token must stay a path refusal, hint or not.
+    assert _pattern_collision_hint(
+        BeingIntent("search", {"pattern": "q", "path": "/etc/x"}),
+        "'/etc/x' is not granted") == "", "a token with a separator is a path, not a pattern word"

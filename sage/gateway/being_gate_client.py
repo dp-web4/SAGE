@@ -1073,6 +1073,39 @@ class ResultEnvelope:
 Dispatcher = Callable[["BeingIntent", GatewayVerdict], ResultEnvelope]
 
 
+def _pattern_collision_hint(intent: "BeingIntent", reason: str) -> str:
+    """When a search is refused for a token that is in its PATTERN, say so and say what to do.
+
+    THE HARNESS KNOWS AND DOES NOT SAY. hestia#1024: the gate resolves a bare word in a search
+    pattern as a path, and refuses when that word also names a real directory. The refusal
+    reads as a scope problem, so a being goes and inspects its grants — which are fine — and
+    learns nothing. legion-being lost parts of five beats to one word, `images`, while wiring
+    the code whose key is spelled exactly that.
+
+    The seat has both halves the being lacks: the pattern it just sent, and the refusal text
+    naming the token. Joining them costs nothing and turns an opaque deny into a next step.
+
+    This does not relax, bypass or re-decide anything. The gate has already refused and the
+    refusal stands unchanged; only the explanation is better. The adaptation it suggests is
+    the one legion-being verified live on 2026-09-14: splitting the token with a regex dot
+    matches the same text while naming no directory."""
+    if intent.effector != "search":
+        return ""
+    pattern = str(intent.args.get("pattern", ""))
+    if not pattern:
+        return ""
+    import re as _re
+    for tok in _re.findall(r"'([^']+)'", reason or ""):
+        if tok and tok in pattern and "/" not in tok:
+            split = tok[:len(tok) // 2] + "." + tok[len(tok) // 2 + 1:]
+            return (f" — NOTE: {tok!r} appears in your PATTERN, not in your path, and your "
+                    f"scope is not the problem. The gate resolves a bare word in a pattern "
+                    f"as a path and refuses when it also names a real directory "
+                    f"(hestia#1024). Match it without spelling it: {split!r} finds the same "
+                    f"text. Your path argument was fine.")
+    return ""
+
+
 class BeingGateClient:
     """One per being. Governs every intent through the real hestia law, fail-closed."""
 
@@ -1293,6 +1326,7 @@ class BeingGateClient:
             import dataclasses as _dc
             v = _dc.replace(v, witness_id=wid)      # GatewayVerdict is frozen
             err = f"{v.rule}: {v.reason}"
+            err += _pattern_collision_hint(intent, v.reason or "")
             err += (f" (deny witnessed {wid}; if you think this is wrong, appeal with deny_hash={wid})"
                     if wid else " (deny not witnessed: daemon unreachable, so it cannot be appealed yet)")
             return ResultEnvelope(ok=False, refused=True, verdict=v, error=err, witness_id=wid)
