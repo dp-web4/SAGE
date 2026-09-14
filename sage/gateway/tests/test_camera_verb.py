@@ -30,13 +30,34 @@ def _camera_witness_chain(monkeypatch):
         raising=False)
 
 
+def _ctx(wt):
+    """The context camera_command now needs.
+
+    `camera` resolves its out_path against the being's HOME, not its worktree: frames in the
+    worktree dirty a tree whose cleanliness `check` reports as evidence, and the being found
+    that by using its own verb. These tests keep the two the same directory, because what
+    they are testing is the command's shape and the dispatcher's failure taxonomy, not the
+    choice of root — test_do_camera_out_path_escape_refused is where the root itself is
+    pinned."""
+    return {"worktree": wt, "memory_root": wt}
+
+
+def _dispatcher(wt):
+    """A dispatcher with the two roots set and nothing else; the witness chain comes from
+    the autouse fixture above."""
+    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    d.worktree = wt
+    d.memory_root = wt
+    return d
+
+
 # --- camera_command shape ---------------------------------------------------
 
 def test_camera_command_argv0_is_ffmpeg(tmp_path):
     """argv[0] must be 'ffmpeg' — the gate's contract is a single ffmpeg invocation."""
     wt = str(tmp_path)
     args = {"device": "/dev/video0", "out_path": f"{wt}/scratch/camera/last-frame.jpg"}
-    cmd = camera_command(args, {"worktree": wt})
+    cmd = camera_command(args, _ctx(wt))
     # The command string starts with the ffmpeg binary name.
     assert cmd.split()[0] == "ffmpeg"
 
@@ -45,7 +66,7 @@ def test_camera_command_has_frames_v(tmp_path):
     """The capture must be exactly one frame: -frames:v 1 present in the command."""
     wt = str(tmp_path)
     args = {"device": "/dev/video0", "out_path": f"{wt}/scratch/camera/last-frame.jpg"}
-    cmd = camera_command(args, {"worktree": wt})
+    cmd = camera_command(args, _ctx(wt))
     assert "-frames:v" in cmd
 
 
@@ -54,7 +75,7 @@ def test_camera_command_out_path_in_scratch(tmp_path):
     wt = str(tmp_path)
     out = f"{wt}/scratch/camera/last-frame.jpg"
     args = {"device": "/dev/video0", "out_path": out}
-    cmd = camera_command(args, {"worktree": wt})
+    cmd = camera_command(args, _ctx(wt))
     assert out in cmd
 
 
@@ -77,8 +98,7 @@ def test_do_camera_success(tmp_path):
         captured["cmd"] = cmd
         return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
 
-    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
-    d.worktree = wt
+    d = _dispatcher(wt)
 
     # Monkeypatch subprocess.run inside the dispatch module's namespace.
     import sage.gateway.hestia_dispatch as hd
@@ -111,8 +131,7 @@ def test_do_camera_device_busy(tmp_path):
             stderr=b"Device or resource busy: /dev/video0",
         )
 
-    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
-    d.worktree = wt
+    d = _dispatcher(wt)
 
     import sage.gateway.hestia_dispatch as hd
     orig_run = hd.subprocess.run
@@ -142,8 +161,7 @@ def test_do_camera_device_absent(tmp_path):
             stderr=b"No such file or directory: /dev/video99",
         )
 
-    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
-    d.worktree = wt
+    d = _dispatcher(wt)
 
     import sage.gateway.hestia_dispatch as hd
     orig_run = hd.subprocess.run
@@ -170,8 +188,7 @@ def test_do_camera_device_off(tmp_path):
             stderr=b"Cannot open: Device not configured",
         )
 
-    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
-    d.worktree = wt
+    d = _dispatcher(wt)
 
     import sage.gateway.hestia_dispatch as hd
     orig_run = hd.subprocess.run
@@ -193,8 +210,7 @@ def test_do_camera_out_path_escape_refused(tmp_path):
     wt = str(tmp_path)
     os.makedirs(wt + "/scratch/camera", exist_ok=True)
 
-    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
-    d.worktree = wt
+    d = _dispatcher(wt)
 
     import sage.gateway.hestia_dispatch as hd
     orig_run = hd.subprocess.run
@@ -218,8 +234,7 @@ def test_do_camera_out_path_whitespace_refused(tmp_path):
     wt = str(tmp_path)
     os.makedirs(wt + "/scratch/camera", exist_ok=True)
 
-    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
-    d.worktree = wt
+    d = _dispatcher(wt)
 
     import sage.gateway.hestia_dispatch as hd
     orig_run = hd.subprocess.run
@@ -244,6 +259,57 @@ if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
 
 
+def test_the_frame_resolves_against_HOME_not_the_worktree(tmp_path):
+    """The whole point of the change, and the only test that can see it.
+
+    Every other test in this file sets home and worktree to the SAME directory, because what
+    they pin is command shape and failure taxonomy. That makes the two roots indistinguish-
+    able, so reverting the resolution to the worktree leaves them all green — measured.
+    A discriminator that is true by construction is a constant, not a test.
+
+    Why home: legion-being found by using its own verb that frames land in its worktree and
+    flip that tree's `dirty` flag, and `check` reports dirty as part of the evidence a
+    verdict rests on. Using the camera quietly degraded its own ability to make verified
+    claims about its code.
+    """
+    home = tmp_path / "home"
+    wt = tmp_path / "worktree"
+    for d in (home, wt):
+        (d / "scratch" / "camera").mkdir(parents=True)
+
+    cmd = camera_command({}, {"worktree": str(wt), "memory_root": str(home)})
+
+    assert str(home) in cmd, f"the frame does not land under the being's home: {cmd}"
+    assert str(wt) not in cmd, (
+        f"the frame still lands in the worktree, whose cleanliness is evidence: {cmd}")
+    assert cmd.rstrip().endswith("scratch/camera/last-frame.jpg")
+
+
+def test_out_path_escaping_HOME_is_refused(tmp_path):
+    """Containment moved with the root: the boundary is the home now, and the refusal says
+    so rather than naming a tree the path no longer resolves against."""
+    home = tmp_path / "home"
+    wt = tmp_path / "worktree"
+    for d in (home, wt):
+        (d / "scratch" / "camera").mkdir(parents=True)
+    ctx = {"worktree": str(wt), "memory_root": str(home)}
+
+    try:
+        camera_command({"out_path": "../../escape.jpg"}, ctx)
+    except ValueError as e:
+        assert "home" in str(e).lower() or "worktree" in str(e).lower(), str(e)
+    else:
+        raise AssertionError("a path escaping the home was accepted")
+
+    # And a path INSIDE the worktree but outside the home is now an escape, which is the
+    # behavioural difference the two roots create.
+    try:
+        camera_command({"out_path": str(wt / "scratch" / "camera" / "x.jpg")}, ctx)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(
+            "a worktree path was accepted as a frame destination; the roots are not separate")
 def test_camera_creates_its_output_directory_and_names_a_write_failure(tmp_path):
     """The default out_path pointed somewhere that did not exist in the tree it writes to.
 
@@ -260,8 +326,7 @@ def test_camera_creates_its_output_directory_and_names_a_write_failure(tmp_path)
     wt.mkdir()
     assert not (wt / "scratch").exists(), "precondition: the worktree has no scratch/"
 
-    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
-    d.worktree = str(wt)
+    d = _dispatcher(str(wt))
 
     wrote = {}
 
@@ -296,8 +361,7 @@ def test_a_write_failure_is_not_reported_as_a_busy_device(tmp_path):
     import sage.gateway.hestia_dispatch as hd
 
     wt = tmp_path / "wt"; (wt / "scratch" / "camera").mkdir(parents=True)
-    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
-    d.worktree = str(wt)
+    d = _dispatcher(str(wt))
 
     orig = hd.subprocess.run
     hd.subprocess.run = lambda cmd, **kw: types.SimpleNamespace(
