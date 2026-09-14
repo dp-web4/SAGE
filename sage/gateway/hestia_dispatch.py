@@ -672,10 +672,40 @@ class HestiaF1aDispatcher:
         truncated = len(lines) > SEARCH_LINES_SHOWN
         shown = lines[:SEARCH_LINES_SHOWN]
         if not shown:
+            # "NOT IN THAT FILE" AND "NO SUCH FILE" ARE THE SAME EXIT CODE (SAGE#89). git
+            # grep returns 1 for both, so a search whose pathspec matched nothing came back
+            # as a confident bounded absence about a file that does not exist. Measured on
+            # this being's own todo.md, which lives in its INSTANCE home and not in the
+            # worktree search runs inside. ls-files answers over the same universe git grep
+            # searches (tracked files), using the pathspec the law actually judged.
+            missing = None
+            if intent.args.get("path"):
+                argv_probe = shlex.split(cmd)
+                spec = argv_probe[argv_probe.index("--") + 1] if "--" in argv_probe else None
+                if spec:
+                    try:
+                        probe = subprocess.run(
+                            ["git", "-C", self.worktree, "ls-files", "--error-unmatch",
+                             "--", spec],
+                            cwd=self.worktree, text=True, capture_output=True, timeout=15)
+                        missing = probe.returncode != 0
+                    except Exception:
+                        missing = None
+            if missing:
+                return ResultEnvelope(ok=False, error=(
+                    f"search found no file at {where} in your worktree, so this is NOT an "
+                    f"absence of {pattern!r} — nothing was searched. `search` runs inside "
+                    f"your WORKTREE and sees only files git tracks there. A relative path "
+                    f"here is not the same path `memory_read` takes: memory_read resolves "
+                    f"relative paths inside your instance home, and files that live only "
+                    f"there (todo.md, journal.md, notes/, scratch/) cannot be searched at "
+                    f"all. Read those with memory_read; search the source tree."))
             return ResultEnvelope(ok=True, result={
                 "pattern": pattern, "searched": where, "matches": 0,
-                "note": (f"no line matches {pattern!r} in {where}. That is an answer about "
-                         f"WHAT WAS SEARCHED, not about the repository: widen the path, or "
+                "searched_a_real_file": True,
+                "note": (f"no line matches {pattern!r} in {where}. The path exists and was "
+                         f"searched, so this is a real absence — but an answer about WHAT "
+                         f"WAS SEARCHED, not about the repository: widen the path, or "
                          f"check the pattern (it is an extended regex, so ( ) | + are "
                          f"special — searching for a literal one needs a backslash)")})
         return ResultEnvelope(ok=True, result={
