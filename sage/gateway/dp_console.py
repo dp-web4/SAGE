@@ -485,6 +485,9 @@ class Handler(BaseHTTPRequestHandler):
                     flash=f'<div class="card" style="border-color:var(--gn)">Sent as turn '
                           f'#{turn["seq"]}. '
                           + (f'<b>Waking {html.escape(BEING)} now</b> — a beat is starting for this.'
+                             if woke.get("started")
+                             else f'A wake was wanted and did not start ({html.escape(str(woke.get("wake_error", "")))}); '
+                                  f'it will be read at the next beat.'
                              if woke.get("engage")
                              else f'It will be read at the next beat: {html.escape(woke["reason"])}.')
                           + '</div>',

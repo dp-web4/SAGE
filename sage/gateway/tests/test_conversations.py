@@ -353,3 +353,19 @@ def test_the_short_cap_never_widens_a_narrow_rung():
 
     out = conv.render_for_being(inst, "legion-being", per_conv=6, turn_chars=200)
     assert ("S" * 200) in out and ("S" * 201) not in out
+
+
+def test_the_beat_state_puts_a_ceiling_on_the_conversations_block(tmp_path, monkeypatch):
+    """Until the context-fit ladder lands (Legion's review of SAGE#81): own_state renders the
+    conversations block with explicit bounds, never unbounded. Legion's live store measured
+    20,735 chars unbounded; one long thread must not be able to take the whole window."""
+    from sage.gateway import heartbeat, conversations as C
+    seen = {}
+
+    def spy(instance, me, **kw):
+        seen.update(kw)
+        return ""
+    monkeypatch.setattr(C, "render_for_being", spy)
+    heartbeat.own_state(tmp_path, "b")
+    assert seen.get("per_conv") == heartbeat.CONV_PER_CONV and seen.get("turn_chars") == heartbeat.CONV_TURN_CHARS
+    assert heartbeat.CONV_TURN_CHARS and heartbeat.CONV_PER_CONV <= 12

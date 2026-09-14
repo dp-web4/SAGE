@@ -50,6 +50,9 @@ REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "say"]
 # The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
 # Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
 DP_CHANNEL = "notes/from-dp.md"
+# Bounds on the conversations block in the being's state (see own_state).
+CONV_PER_CONV = 6
+CONV_TURN_CHARS = 1200
 
 POSTURE_FILE = Path(__file__).with_name("BEING_POSTURE.md")
 
@@ -212,7 +215,12 @@ def own_state(instance: Path, member: str = "") -> str:
     # that from a wall of notes. Both directions live in one ordered record.
     if member:
         from sage.gateway import conversations as _conv
-        convs = _conv.render_for_being(instance, member)
+        # A CEILING until the context-fit ladder (CONV_LADDER) lands as its own slice. Legion
+        # measured its live store at 20,735 chars (~7,150 tokens) unbounded, 13,394 at
+        # (12, 1500) and 4,603 at (3, 900); on 2026-09-08 an unbounded fixed prompt overflowed
+        # its window for eight beats. Legion's review of SAGE#81 recommended this stopgap.
+        convs = _conv.render_for_being(instance, member, per_conv=CONV_PER_CONV,
+                                       turn_chars=CONV_TURN_CHARS)
         if convs.strip():
             parts.append("## Your conversations (both directions, kept forever; reply with `say`)\n"
                          + convs.strip())

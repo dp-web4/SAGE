@@ -77,6 +77,30 @@ def _sh(*args: str) -> str:
         return ""
 
 
+def _start_wake() -> dict:
+    """Start the beat unit now, and say whether that actually happened.
+
+    `_sh` discards the exit code and turns every exception into "", so `started` used to be
+    True whenever the POLICY said engage, including on a host with no systemctl (McNugget is
+    launchd-managed), with no such user unit (CBP runs its beats from cron), or with a unit
+    that failed to start (GPT review of SAGE#81). The record and the UI said "waking now"
+    when nothing woke. Now `started` is the observed result, and a failure carries the
+    reason; the turn is still recorded and waits for the ordinary beat."""
+    try:
+        p = subprocess.run(["systemctl", "--user", "start", "--no-block", UNIT],
+                           text=True, capture_output=True, timeout=10)
+    except FileNotFoundError:
+        return {"started": False,
+                "wake_error": "no systemctl on this host: its beats are not systemd user units "
+                              "(launchd on macOS, or cron); the turn waits for the ordinary beat"}
+    except Exception as e:
+        return {"started": False, "wake_error": f"{type(e).__name__}: {e}"}
+    if p.returncode != 0:
+        detail = (p.stderr or p.stdout or "").strip()[:300]
+        return {"started": False, "wake_error": f"systemctl exit {p.returncode}: {detail}"}
+    return {"started": True}
+
+
 def beat_running() -> bool:
     return _sh("systemctl", "--user", "is-active", UNIT) in ("active", "activating")
 
@@ -171,10 +195,9 @@ def respond(instance: Path, kind: str, *, descriptor: str) -> dict:
     except Exception as e:
         d["marker_error"] = f"{type(e).__name__}: {e}"
     if d["engage"]:
-        out = _sh("systemctl", "--user", "start", "--no-block", UNIT)
-        d["started"] = True
-        if out:
-            d["systemctl"] = out
+        d.update(_start_wake())
+        if not d["started"]:
+            d["fallback"] = "recorded; it will be read at the next scheduled beat"
     elif d.get("deferred_s"):
         d.update(_arm_deferred_wake(d["deferred_s"]))
     return d

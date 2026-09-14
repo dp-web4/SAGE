@@ -200,3 +200,33 @@ def test_a_running_beat_does_not_claim_in_flight_delivery(tmp_path):
     d = arousal.decide(tmp_path, "dp_turn")
     assert d["engage"] is False and d.get("delivered_in_flight") is False
     assert "next beat" in d["reason"] and "between steps" not in d["reason"]
+
+
+def test_engage_is_not_started_when_the_wake_cannot_launch(tmp_path, monkeypatch):
+    """GPT review of SAGE#81: `started` was True whenever policy said engage, even with no
+    systemctl (McNugget runs launchd) or a unit that failed. Three arms: the tool is absent,
+    the unit fails, the start succeeds. Only the last may say started."""
+    import subprocess as _sp
+    _quiet()                                   # idle, no beat due: the policy engages
+    calls = []
+
+    def absent(args, **kw):
+        if "start" in args:
+            raise FileNotFoundError("systemctl")
+        return _sp.CompletedProcess(args, 0, "", "")
+    monkeypatch.setattr(arousal.subprocess, "run", absent)
+    d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
+    assert d["engage"] is True and d["started"] is False
+    assert "no systemctl" in d["wake_error"] and "next scheduled beat" in d["fallback"]
+
+    def failing(args, **kw):
+        calls.append(args)
+        return _sp.CompletedProcess(args, 5, "", "Unit sage-heartbeat.service not found.")
+    monkeypatch.setattr(arousal.subprocess, "run", failing)
+    d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
+    assert d["started"] is False and "exit 5" in d["wake_error"] and "not found" in d["wake_error"]
+
+    monkeypatch.setattr(arousal.subprocess, "run",
+                        lambda args, **kw: _sp.CompletedProcess(args, 0, "", ""))
+    d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
+    assert d["started"] is True and "wake_error" not in d
