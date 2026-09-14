@@ -41,7 +41,9 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
 # would let the being forge a `from: dp` turn, or rewrite who may speak, with no witness
 # and no refusal. The whole subtree, not the two files that happen to exist today.
-RESERVED_SUBTREES = ("conversations",)
+# asks_sent.jsonl is the record the ask limit counts (hestia_dispatch, SAGE #92); a being that
+# could rewrite it could reset its own limit.
+RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl")
 
 class ReferenceF1aDispatcher:
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""

@@ -1329,3 +1329,34 @@ def test_a_search_for_a_file_that_is_not_there_is_not_an_absence(tmp_path):
     hit = d._do_search(BeingIntent("search", {"pattern": r"def compose\(",
                                               "path": "pkg/mod.py"}))
     assert hit.ok is True and hit.result["matches"] == 1
+
+
+def test_asking_one_peer_is_capped_per_window_and_a_refused_ask_leaves_nothing_behind():
+    """SAGE #92: cbp-being asked one peer 48 times on a stale premise; each ask was an allowed,
+    witnessed act that published a forum file and cost the peer a wake. Three asks per peer per
+    six hours, counted whatever the wording; the fourth is refused BEFORE the publisher runs or
+    a notice is sent; another peer is unaffected; the window frees the peer again; peer_ask
+    counts once (not once for itself and again for the mesh it composes)."""
+    published = []
+    def pub(to, body):
+        published.append((to, body)); return f"shared-context/forum/being/q-{len(published)}.md"
+    d, root = _disp(publish_fn=pub)
+    clock = [1_000_000.0]
+    d._now = lambda: clock[0]
+    for i in range(3):
+        env = d(BeingIntent("peer_ask", {"to": "legion", "body": f"is the server up? attempt {i}"}), _ALLOW)
+        assert env.ok, env.error
+        clock[0] += 600
+    assert len(d.recent_asks()) == 3, "peer_ask must count once, not again for its inner mesh"
+    notices_before = len(_mb_calls("hestia_member_notify"))
+    env = d(BeingIntent("peer_ask", {"to": "legion", "body": "a completely different question"}), _ALLOW)
+    assert not env.ok and "already asked 'legion' 3 times" in env.error and "inbox" in env.error
+    assert len(published) == 3, "a refused ask must not publish a forum file"
+    assert len(_mb_calls("hestia_member_notify")) == notices_before, "and must not notify"
+    env = d(BeingIntent("mesh", {"to": "legion", "kind": "coordination", "pointer": "p"}), _ALLOW)
+    assert not env.ok and "already asked" in env.error, "a direct mesh counts against the same cap"
+    env = d(BeingIntent("peer_ask", {"to": "thor", "body": "unrelated"}), _ALLOW)
+    assert env.ok, "another peer has its own count"
+    clock[0] += 6 * 3600
+    env = d(BeingIntent("peer_ask", {"to": "legion", "body": "is the server up?"}), _ALLOW)
+    assert env.ok, "the oldest asks age out of the window"

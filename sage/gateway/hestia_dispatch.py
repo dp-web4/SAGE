@@ -37,7 +37,8 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+import time
+from typing import Any, Callable, Dict, List, Optional
 
 from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap, make_hestia_witness_fn
@@ -239,8 +240,82 @@ class HestiaF1aDispatcher:
         return (f"peer '{to}' is not a member this seat can reach; nothing was sent. "
                 f"Peers that exist: {listed}.")
 
+    # -- asks: how often this being has asked a peer (SAGE #92) -----------------
+    # cbp-being, 2026-09-13/14: a stale premise ("my memory server has been offline ~6 hours")
+    # plus no visible reply produced 92 sends and 110 forum questions, 48 of them to one peer,
+    # each an allowed, witnessed, well-formed act. Text similarity cannot catch it (the loop's
+    # asks scored a median best-match of 0.44; its distinct earlier asks scored up to 0.84),
+    # so the limit is a COUNT per peer in a rolling window, whatever the wording. Replayed
+    # against that record, 3 per peer per 6 h lets 31 of the 92 sends through.
+    ASK_WINDOW_S = 6 * 3600
+    ASK_CAP_PER_PEER = 3
+    ASKS_LOG = "asks_sent.jsonl"
+
+    def _now(self) -> float:
+        return time.time()
+
+    def _asks_path(self) -> Path:
+        return Path(self.memory_root) / self.ASKS_LOG
+
+    def recent_asks(self, window_s: Optional[float] = None) -> List[Dict[str, Any]]:
+        """This being's successful asks (peer_ask and mesh) inside the window, oldest first."""
+        window = self.ASK_WINDOW_S if window_s is None else window_s
+        cutoff = self._now() - window
+        out = []
+        try:
+            lines = self._asks_path().read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return out
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if float(row.get("t", 0)) >= cutoff:
+                out.append(row)
+        return out
+
+    def _peer_key(self, to: str) -> str:
+        return (to or "").split("/", 1)[0].strip().lower()
+
+    def _ask_limit(self, to: str) -> Optional[str]:
+        """The refusal text when this being has already reached the cap for `to`, else None.
+        Checked BEFORE anything is published or notified, so a refused ask leaves nothing
+        behind: no forum file, no notice, no wake on the peer's side."""
+        key = self._peer_key(to)
+        mine = [r for r in self.recent_asks() if r.get("peer") == key]
+        if len(mine) < self.ASK_CAP_PER_PEER:
+            return None
+        now = self._now()
+        last_min = int((now - float(mine[-1]["t"])) / 60)
+        frees_min = int((float(mine[0]["t"]) + self.ASK_WINDOW_S - now) / 60) + 1
+        convs = ""
+        try:
+            from sage.gateway import conversations as conv
+            ids = [m["id"] for m in conv.listing(Path(self.memory_root))
+                   if self.member in m.get("participants", [])]
+            if ids:
+                convs = " Conversations you can speak in: " + ", ".join(ids) + "."
+        except Exception:
+            pass
+        return (f"not sent: you have already asked {to!r} {len(mine)} times in the last "
+                f"{self.ASK_WINDOW_S // 3600} hours (most recently {last_min} min ago). Another ask "
+                f"reaches the same peer about the same moment and costs them a wake; it cannot make "
+                f"an answer arrive sooner. Read your inbox for their reply first. If something is "
+                f"still wrong, check it yourself this beat (recall, memory_read), or say what you "
+                f"found in a conversation.{convs} You can ask {to!r} again in about {frees_min} min.")
+
+    def _record_ask(self, to: str, via: str, text: str, queued_id: Any) -> None:
+        row = {"t": self._now(), "peer": self._peer_key(to), "to": to, "via": via,
+               "text": (text or "")[:300], "queued_id": queued_id}
+        try:
+            with open(self._asks_path(), "a", encoding="utf-8") as f:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        except OSError:
+            pass  # the record is a courtesy to the being; a failed write must not fail the send
+
     # -- mesh: THE primitive -------------------------------------------------
-    def _do_mesh(self, intent: BeingIntent) -> ResultEnvelope:
+    def _do_mesh(self, intent: BeingIntent, _count: bool = True) -> ResultEnvelope:
         to = str(intent.args.get("to", "")).strip()
         kind = str(intent.args.get("kind", "")).strip()
         pointer = str(intent.args.get("pointer") or intent.args.get("pointer_uri") or "").strip()
@@ -258,6 +333,10 @@ class HestiaF1aDispatcher:
         unknown = self._unknown_peer(to)
         if unknown:
             return ResultEnvelope(ok=False, error=unknown)
+        if _count:
+            limited = self._ask_limit(to)
+            if limited:
+                return ResultEnvelope(ok=False, error=limited)
         args: Dict[str, Any] = {"to_plugin_id": self._address(to), "kind": kind, "pointer_uri": pointer}
         irt = intent.args.get("in_reply_to")
         if irt not in (None, ""):
@@ -278,6 +357,8 @@ class HestiaF1aDispatcher:
             "egress_queued_to": out.get("egress_queued_to"),
             "recipient_liveness": out.get("recipient_liveness"),
         }
+        if _count:
+            self._record_ask(to, "mesh", pointer, result["queued_id"])
         return ResultEnvelope(ok=True, result=result,
                               witness_id=out.get("witnessEntryHash") or (str(out["queued_id"]) if out.get("queued_id") is not None else None))
 
@@ -291,11 +372,18 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, pending=True,
                                   note="peer_ask needs a publisher: the question must live at a pointer "
                                        "the peer can read (forum doc / hub thread); none configured on this seat")
+        # the limit is checked before publishing: a refused ask must leave no forum file behind
+        unknown = self._unknown_peer(to)
+        limited = None if unknown else self._ask_limit(to)
+        if limited:
+            return ResultEnvelope(ok=False, error=limited)
         pointer = self._publish(to, body)
         if not pointer:
             return ResultEnvelope(ok=False, error="peer_ask: publisher returned no pointer")
-        env = self._do_mesh(BeingIntent("mesh", {"to": to, "kind": "coordination", "pointer": pointer}))
+        env = self._do_mesh(BeingIntent("mesh", {"to": to, "kind": "coordination", "pointer": pointer}),
+                            _count=False)
         if env.ok and isinstance(env.result, dict):
+            self._record_ask(to, "peer_ask", body, env.result.get("queued_id"))
             env.result["question_at"] = pointer
             env.result["answer_via"] = "hestia_member_inbox (drain_inbox)"
         return env
