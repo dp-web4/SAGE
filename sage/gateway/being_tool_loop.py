@@ -37,6 +37,7 @@ class ToolTurnResult:
     salvaged: List[dict] = field(default_factory=list)     # calls lifted from the text channel: {step, effector, form}
     duplicates: List[dict] = field(default_factory=list)   # identical calls answered without re-executing: {step, effector}
     generates: List[dict] = field(default_factory=list)    # per generate, from Ollama's reply: {done_reason, prompt_eval_count, eval_count, retried}
+    compacted: List[dict] = field(default_factory=list)    # per step where old tool results were elided: {step, elisions, chars}
 
     @property
     def acted(self) -> bool:
@@ -241,6 +242,145 @@ def _think_budget(llm, floor: int = 6000) -> int:
         return floor
 
 
+# Chars per token for what the loop ADDS: tool results are JSON, paths and code, which
+# tokenize far denser than prose. Measured 2026-09-09 03:27Z: a 12,116-char read of
+# heartbeat.partial.jsonl moved the prompt 19,620 -> 24,466 (~2.5 chars/token) while the
+# estimate, at 3.4, had it ~1.4k tokens lighter than it was — and the generate was cut.
+_CPT_ADDED = 2.5
+
+# Chars per token, deliberately low (English + paths + JSON): under-estimating tokens here
+# would defeat the guard it feeds.
+_CPT = 3.4
+
+# Chars the prompt carries that are not in any message's content: the tool schemas and the
+# chat template. A FALLBACK only — used when nothing has been measured. heartbeat measures
+# the schemas instead, because a flat constant here was set at 13 verbs and was silently
+# wrong at 18 (measured 2026-09-13: 4,000 assumed, 11,717 real).
+_UNCOUNTED_CHARS = 4000
+
+
+def _est_tokens(chars_now: int, measured) -> float:
+    """Tokens the next prompt will cost. With a measurement from the previous generate —
+    (prompt_eval_count, content chars at that prompt) — the estimate is anchored on what
+    the server actually counted and only the DELTA rides a chars-per-token guess:
+    conservative in both directions (added chars counted dense, removed chars counted
+    light). Without one, the whole prompt rides the guess, plus the uncounted schema chars."""
+    if measured:
+        tokens_at, chars_at = measured
+        delta = chars_now - chars_at
+        return tokens_at + (delta / _CPT_ADDED if delta > 0 else delta / _CPT)
+    return (chars_now + _UNCOUNTED_CHARS) / _CPT
+
+# What a real answer needs. Explore generations across 506 measured on Legion: median
+# 1,282 tokens, p90 3,909, p99 5,741. Reserve the p99 with headroom rather than
+# num_predict, which is a ceiling the model has never approached.
+_ANSWER_RESERVE = 6144
+
+
+# Compaction keeps this many chars of an elided tool result and reports exactly the rest.
+COMPACT_KEEP_CHARS = 400
+COMPACT_MIN_BODY = 500        # a body at or under this is never elided
+
+def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
+                  measured=None) -> tuple:
+    """Shrink the OLDEST tool results until the prompt leaves room for an answer.
+
+    THE SEED FITTING IS NOT ENOUGH. heartbeat.fit_to_window sizes the first prompt; this
+    loop then grows it by every tool result it appends, and the wall is hit mid-loop.
+    Measured on Legion 2026-09-07, with the seed guard already live: seed 11,887 tokens,
+    then 13,803 on the next step, and 13,803 + 2,581 == 16,384 exactly, done_reason
+    "length" — the being's answer cut off mid-sentence. Across 506 generates every single
+    length-stop satisfies prompt + eval == num_ctx, so this is the wall, not num_predict.
+
+    WHAT IS ELIDED. Only tool RESULTS, oldest first, and only their bodies — the being is
+    told what was elided, from which effector, and that it can re-read the source. The
+    system prompt, the first user turn (its state, posture and entrustment), every assistant
+    turn and the two most recent tool results are never touched: those are what it is
+    reasoning WITH. An elision it cannot see would be worse than the truncation it replaces.
+    """
+    try:
+        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
+    except (TypeError, ValueError):
+        num_ctx = 0
+    if num_ctx <= 0:
+        return msgs, []
+    # ANCHOR ON THE MEASUREMENT. Legion 2026-09-08 20:01Z beat: the seed fit (17.5k tokens
+    # measured), three 260-line reads later the loop's chars/3.4 estimate said ~19k while
+    # the server counted 22,720, and the next memory_write body was cut mid-JSON (the
+    # Ollama 500). Code reads tokenize denser than prose, and the tool schemas were never
+    # in the sum at all. The previous generate's prompt_eval_count IS the number; use it.
+    size = lambda ms: sum(len(m.get("content") or "") for m in ms)
+    room = num_ctx - reserve
+    if _est_tokens(size(msgs), measured) <= room:
+        return msgs, []
+    budget = None  # decided per elision below, against the anchored estimate
+    out = [dict(m) for m in msgs]
+    # candidates: tool results, oldest first, excluding the MOST RECENT one.
+    # It kept the two most recent whole until 2026-09-07, when max_read_chars went
+    # 4,000 -> 12,000 (the being's reads were being silently cut mid-function). At the new
+    # size two protected results are ~7k tokens of untouchable content, and a beat with six
+    # reads hit the window anyway: 23,106 + 1,470 = 24,576. One kept whole is the answer the
+    # being is actually working from; the one before it has usually already been written to
+    # scratch, and the elision marker tells it where to look if not.
+    idx = [i for i, m in enumerate(out) if m.get("role") == "tool"]
+    elided = []
+    for i in idx[:-1] if len(idx) > 1 else []:
+        if _est_tokens(size(out), measured) <= room:
+            break
+        body = out[i].get("content") or ""
+        if len(body) <= COMPACT_MIN_BODY:
+            continue
+        # ONE constant for what is kept, and the accounting derives from it. The first cut
+        # kept body[:400] and reported len(body) - 160 — every elision overstated by 240
+        # chars, in the record AND in the marker the being reads (GPT review of #56, #5).
+        # An instrument that misreports its own intervention is the false-absence class
+        # again: the being would plan around a gap that was 240 chars smaller than told.
+        # BOTH ENDS. The head names what was read (path, op); the TAIL carries a command's
+        # verdict — pytest's FAILED line and count are its last lines. legion-being 20:41Z
+        # 2026-09-08: its first call was `check` (FAIL), five steps later the result had
+        # been elided to its head and it reported "I cannot name which test failed: the
+        # output was truncated in my view before the failure line reached me". True, and
+        # the harness's doing. Half and half of the same constant; the accounting holds.
+        h = COMPACT_KEEP_CHARS // 2
+        kept_head, kept_tail = body[:h], body[-(COMPACT_KEEP_CHARS - h):]
+        elided_n = len(body) - COMPACT_KEEP_CHARS
+        # THE MARKER USED TO SAY "read the source again", AND THAT INSTRUCTION IS THE
+        # THRASH. Measured across all beats 2026-09-13: 86.7% of memory_read calls are
+        # re-reads and 48.5% are duplicates within a SINGLE beat; heartbeat.py has been
+        # read 342 times. The loop is mechanical — a result is elided to 400 chars, the
+        # marker tells the being to read the source again, the full re-read costs ~700
+        # tokens, that forces another elision, which says it again. The harness was
+        # issuing the instruction that refilled the window it had just cleared.
+        # The head of a ranged read already names its range, so point at a NARROWER read
+        # and at the being's own notes, which is where its conclusions actually live.
+        out[i]["content"] = (kept_head +
+                             f"\n[… {elided_n} characters elided from the middle to leave room "
+                             f"for your answer. The head above names what this was. If you need "
+                             f"part of it, read a NARROW range rather than the file again — a "
+                             f"full re-read costs more room than this elision freed. If you need "
+                             f"what you concluded from it, that is in your scratch …]\n"
+                             + kept_tail)
+        elided.append({"index": i, "chars": elided_n, "kept": COMPACT_KEEP_CHARS})
+    # THE NEWEST RESULT IS PROTECTED — until protecting it is what cuts the answer. When
+    # every older result is already a stub and the prompt still does not fit, the newest
+    # one is trimmed too, with a larger keep (the being is working from it right now),
+    # rather than letting the window cut the generate at the wall (03:27Z 2026-09-09:
+    # 24,466 + 110 == 24,576, done_reason length, nothing said).
+    if idx and _est_tokens(size(out), measured) > room:
+        i = idx[-1]
+        body = out[i].get("content") or ""
+        keep = COMPACT_KEEP_CHARS * 4
+        if len(body) > keep + COMPACT_MIN_BODY:
+            h = keep // 2
+            elided_n = len(body) - keep
+            out[i]["content"] = (body[:h] +
+                                 f"\n[… {elided_n} characters elided from the middle of your NEWEST "
+                                 f"result to leave room for your answer; read it again in a smaller "
+                                 f"range if you need the middle …]\n" + body[-(keep - h):])
+            elided.append({"index": i, "chars": elided_n, "kept": keep, "newest": True})
+    return out, elided
+
+
 RETRY_MARGIN = 128   # tokens kept back from the window on a retry (template, tool-call framing)
 
 
@@ -326,8 +466,13 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     thoughts: List[str] = []
     salvaged: List[dict] = []
     generates: List[dict] = []
+    compacted: List[dict] = []
+    # (prompt_eval_count, chars at that prompt) from the last generate the server counted.
+    # Compaction is anchored on this, so only the DELTA rides a chars-per-token estimate.
+    measured = None
 
     def generate(convo: List[Dict[str, Any]]) -> Dict[str, Any]:
+        nonlocal measured
         # Flatten the loop's convo (carries extra keys) to chat messages. An assistant
         # turn that emitted intents MUST keep them as tool_calls: Qwen's chat template
         # raises on a tool message that follows an assistant message without tool_calls,
@@ -339,6 +484,16 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 out["tool_calls"] = [{"function": {"name": i.effector, "arguments": dict(i.args or {})}}
                                      for i in m["intents"]]
             msgs.append(out)
+        # LEAVE ROOM FOR THE ANSWER BEFORE ASKING FOR ONE. Every tool result is appended,
+        # so the prompt the loop ENDS on is not the seed it started from. Without this it
+        # grows until the server cuts the generate mid-sentence: measured on Legion, 27 of
+        # 506 generates ended with prompt + eval == num_ctx exactly, and one beat lost its
+        # closing words nine times in a day. Anchored on the server's own count from the
+        # previous generate, so only the delta rides an estimate.
+        msgs, _elided = compact_convo(msgs, llm, measured=measured)
+        if _elided:
+            compacted.append({"step": len(thoughts), "elisions": len(_elided),
+                              "chars": sum(e["chars"] for e in _elided)})
         retried = 0
         sent = _sent_budget(llm)          # the num_predict of the reply that stands
         resp = llm.get_chat_response(msgs, tools=tools)
@@ -393,6 +548,10 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # "did the retry have more room than the first attempt" reads from the file, not
         # from stderr (SAGE #45 sends the room; this says what it was).
         raw = resp.get("raw") or {}
+        if raw.get("prompt_eval_count"):
+            # re-measure from the list AS SENT: any nudge appended above is inside this count
+            measured = (int(raw["prompt_eval_count"]),
+                        sum(len(m.get("content") or "") for m in msgs))
         entry = {"done_reason": raw.get("done_reason"), "prompt_eval_count": raw.get("prompt_eval_count"),
                  "eval_count": raw.get("eval_count"), "retried": retried, "num_predict": sent}
         generates.append(entry)

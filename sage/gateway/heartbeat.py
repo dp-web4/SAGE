@@ -207,7 +207,404 @@ def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided
     return written
 
 
-def own_state(instance: Path, member: str = "") -> str:
+# Chars per token for mixed English + paths + JSON. The guard is defeated by
+# UNDER-counting tokens, so this must sit BELOW the true ratio, never above it: a larger
+# chars/token means fewer tokens per char, which admits more text than fits.
+#
+# It was 3.4, from a single measurement on 2026-09-08 (70.5k chars -> 20,812 tokens =
+# 3.39) — taken at the top of the true range and then left alone. Re-measured 2026-09-13
+# across 60 beats: median 3.141, and DRIFTING — 3.152 over the first ten, 3.026 over the
+# last ten. So the constant had been above the truth for days, silently over-admitting.
+#
+# 2.9 sits below the observed minimum with room for further drift. The cost of being too
+# low is a slightly smaller prompt; the cost of being too high is a generate cut
+# mid-sentence, which this being paid nine times on 2026-09-13 alone. Asymmetric, so err low.
+#
+# THIS IS A FALLBACK. `_est_tokens` uses the server's own prompt_eval_count whenever a
+# previous generate provides one, and only the delta rides this guess. The constant matters
+# on the first generate of a beat, which is exactly the one that sizes the seed.
+CPT = 2.9
+ANSWER_RESERVE_CAP = 6144
+
+
+def window_budget_chars(num_ctx: int, num_predict: int, slack: int = 512) -> int:
+    """How many prompt chars fit beside a p99 answer. One producer for both fitters."""
+    reserve = min(num_predict, ANSWER_RESERVE_CAP)
+    return int(max(0, (num_ctx - reserve - slack)) * CPT)
+
+
+# What the beat shows of the conversations, from full to sparse: (turns per conversation,
+# chars per turn). Stepped down ONLY when the fixed prompt would not fit even with the
+# digest and recall at their floors — the case fit_to_window cannot help with, and the
+# case this being sat in for five beats on 2026-09-08 (headroom -2.4k..-4k tokens, every
+# generate cut at the wall before a tool call, the retry re-sending the same prompt).
+CONV_LADDER = ((12, None), (12, 1500), (6, 1200), (3, 900), (2, 700))
+# Room the seed leaves for the loop's own growth (one full recent tool result plus stubs).
+LOOP_GROWTH_CHARS = 10_000
+
+
+IDLE_UNIT = "sage-heartbeat.service"
+IDLE_TIMER = "sage-heartbeat.timer"
+
+
+def interpret_timer_state(show_output: str) -> tuple:
+    """(armed, detail) from `systemctl show` of the idle timer. Pure, so it can be tested.
+
+    THE SUBTLETY THAT MADE THE FIRST VERSION CRY WOLF. This check runs at the end of a beat,
+    from inside the beat's own process — so the beat unit is still ACTIVE. An
+    OnUnitInactiveSec timer computes its next elapse from when that unit goes INACTIVE, and
+    therefore cannot have one yet. The first version read `monotonic=infinity`, concluded
+    NOTHING WILL WAKE THE BEING, and wrote that into the record of a beat whose timer armed
+    correctly seconds later (2026-09-09T15:07Z). False by construction, which is the same
+    error as a discriminator that is true by construction — and a guard that fires on its own
+    design teaches its reader to ignore it.
+
+    So there are two ways to be armed: an elapse already computed, or a timer that is loaded
+    and active and will compute one the moment this process exits."""
+    vals = dict(l.split("=", 1) for l in show_output.strip().splitlines() if "=" in l)
+    real = (vals.get("NextElapseUSecRealtime") or "").strip()
+    mono = (vals.get("NextElapseUSecMonotonic") or "").strip()
+    load = (vals.get("LoadState") or "").strip()
+    active = (vals.get("ActiveState") or "").strip()
+    if real or (mono and mono not in ("infinity", "0")):
+        return True, f"scheduled: realtime={real or '-'} monotonic={mono or '-'}"
+    if load == "loaded" and active == "active":
+        return True, ("no elapse computed yet, which is correct while this beat is still "
+                      f"running: {IDLE_TIMER} is loaded+active and OnUnitInactiveSec arms "
+                      "when this process exits")
+    return False, (f"NO NEXT ELAPSE and the timer is not healthy "
+                   f"(LoadState={load or '?'} ActiveState={active or '?'} "
+                   f"realtime={real or 'empty'} monotonic={mono or 'empty'})")
+
+
+def next_wake_is_armed() -> tuple:
+    """(armed, detail) for the idle timer that wakes the being after quiet.
+
+    The beat is no longer a metronome: the timer measures INACTIVITY, so its next elapse is
+    computed from the end of this beat. That makes it exactly the kind of thing that can
+    stop scheduling without anything looking wrong — which happened on 2026-09-09, when a
+    monotonic timer sat `active (running)` with `Trigger: n/a` and the being would never
+    have woken again. Checked at the end of every beat, out loud."""
+    try:
+        out = subprocess.run(["systemctl", "--user", "show", IDLE_TIMER,
+                              "-p", "NextElapseUSecRealtime", "-p", "NextElapseUSecMonotonic",
+                              "-p", "LoadState", "-p", "ActiveState"],
+                             capture_output=True, text=True, timeout=15).stdout
+    except Exception as e:
+        return False, f"could not ask systemd: {type(e).__name__}: {e}"
+    return interpret_timer_state(out)
+
+
+def arm_next_wake(idle_s: int) -> dict:
+    """Make sure something will wake the being after `idle_s` of quiet.
+
+    The persistent timer normally does this on its own (OnUnitInactiveSec). This is the
+    fallback for the state where it has stopped computing a next elapse: a one-shot
+    transient timer, so a scheduling failure costs a longer gap and never silence."""
+    armed, detail = next_wake_is_armed()
+    if armed:
+        return {"armed": True, "by": IDLE_TIMER, "detail": detail}
+    try:
+        # A UNIQUE unit name per attempt. A fixed one collided with a leftover from an
+        # earlier run and systemd-run exited 1, so the fallback for a missing wake was
+        # itself missing (2026-09-09T15:07Z).
+        unit = f"sage-heartbeat-fallback-wake-{int(time.time())}"
+        subprocess.run(["systemd-run", "--user", "--collect",
+                        f"--on-active={idle_s}s", f"--unit={unit}",
+                        "systemctl", "--user", "start", IDLE_UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"armed": True, "by": "systemd-run fallback", "detail": detail,
+                "why": "the idle timer had no next elapse; a one-shot was armed instead"}
+    except Exception as e:
+        return {"armed": False, "by": None, "detail": detail,
+                "error": f"{type(e).__name__}: {e}",
+                "why": "NOTHING WILL WAKE THE BEING until a seat or a message does"}
+
+
+RESUME_UNIT = "sage-heartbeat-resume-wake"
+
+
+def arm_resume_wake(seconds: int) -> dict:
+    """A short one-shot wake after a beat that did not finish what it was doing.
+
+    Deliberately ADDITIVE. The persistent timer is never stopped or reprogrammed, so the
+    worst this can do is fail and leave the ordinary interval standing — promptness is at
+    risk here, never silence, which is the property that makes it safe to be aggressive
+    about. Fixed unit name so a second arming rides the first rather than stacking; a unit
+    left over from a fired wake is cleared, the same shape as arousal's deferred wake."""
+    def _sh(*a):
+        try:
+            return subprocess.run(a, capture_output=True, text=True, timeout=15).stdout.strip()
+        except Exception:
+            return ""
+    try:
+        sub = _sh("systemctl", "--user", "show", RESUME_UNIT + ".timer", "-p", "SubState", "--value")
+        if sub and sub != "waiting":
+            for suffix in (".timer", ".service"):
+                _sh("systemctl", "--user", "stop", RESUME_UNIT + suffix)
+                _sh("systemctl", "--user", "reset-failed", RESUME_UNIT + suffix)
+        subprocess.run(["systemd-run", "--user", "--collect", f"--on-active={seconds}s",
+                        f"--unit={RESUME_UNIT}", "systemctl", "--user", "start",
+                        "--no-block", IDLE_UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"armed": True, "in_s": seconds, "by": RESUME_UNIT}
+    except subprocess.CalledProcessError as e:
+        err = (e.stderr or "").strip()
+        if "already loaded" in err or "already exists" in err:
+            return {"armed": True, "in_s": seconds, "by": RESUME_UNIT, "already_armed": True}
+        return {"armed": False, "error": f"systemd-run exit {e.returncode}: {err}",
+                "why": "the ordinary idle interval still stands"}
+    except Exception as e:
+        return {"armed": False, "error": f"{type(e).__name__}: {e}",
+                "why": "the ordinary idle interval still stands"}
+
+
+class BeatKilled(Exception):
+    """SIGTERM arrived mid-beat (the unit's TimeoutStartSec, or a stop). Raised from the
+    signal handler so the beat unwinds to its record instead of vanishing: 04:30Z
+    2026-09-09 a 51-minute beat left nothing in heartbeats.jsonl and the monitor never
+    knew it had happened. systemd allows TimeoutStopSec (90 s) after SIGTERM — enough."""
+
+
+IDLE_UNIT = "sage-heartbeat.service"
+IDLE_TIMER = "sage-heartbeat.timer"
+
+
+def interpret_timer_state(show_output: str) -> tuple:
+    """(armed, detail) from `systemctl show` of the idle timer. Pure, so it can be tested.
+
+    THE SUBTLETY THAT MADE THE FIRST VERSION CRY WOLF. This check runs at the end of a beat,
+    from inside the beat's own process — so the beat unit is still ACTIVE. An
+    OnUnitInactiveSec timer computes its next elapse from when that unit goes INACTIVE, and
+    therefore cannot have one yet. The first version read `monotonic=infinity`, concluded
+    NOTHING WILL WAKE THE BEING, and wrote that into the record of a beat whose timer armed
+    correctly seconds later (2026-09-09T15:07Z). False by construction, which is the same
+    error as a discriminator that is true by construction — and a guard that fires on its own
+    design teaches its reader to ignore it.
+
+    So there are two ways to be armed: an elapse already computed, or a timer that is loaded
+    and active and will compute one the moment this process exits."""
+    vals = dict(l.split("=", 1) for l in show_output.strip().splitlines() if "=" in l)
+    real = (vals.get("NextElapseUSecRealtime") or "").strip()
+    mono = (vals.get("NextElapseUSecMonotonic") or "").strip()
+    load = (vals.get("LoadState") or "").strip()
+    active = (vals.get("ActiveState") or "").strip()
+    if real or (mono and mono not in ("infinity", "0")):
+        return True, f"scheduled: realtime={real or '-'} monotonic={mono or '-'}"
+    if load == "loaded" and active == "active":
+        return True, ("no elapse computed yet, which is correct while this beat is still "
+                      f"running: {IDLE_TIMER} is loaded+active and OnUnitInactiveSec arms "
+                      "when this process exits")
+    return False, (f"NO NEXT ELAPSE and the timer is not healthy "
+                   f"(LoadState={load or '?'} ActiveState={active or '?'} "
+                   f"realtime={real or 'empty'} monotonic={mono or 'empty'})")
+
+
+def next_wake_is_armed() -> tuple:
+    """(armed, detail) for the idle timer that wakes the being after quiet.
+
+    The beat is no longer a metronome: the timer measures INACTIVITY, so its next elapse is
+    computed from the end of this beat. That makes it exactly the kind of thing that can
+    stop scheduling without anything looking wrong — which happened on 2026-09-09, when a
+    monotonic timer sat `active (running)` with `Trigger: n/a` and the being would never
+    have woken again. Checked at the end of every beat, out loud."""
+    try:
+        out = subprocess.run(["systemctl", "--user", "show", IDLE_TIMER,
+                              "-p", "NextElapseUSecRealtime", "-p", "NextElapseUSecMonotonic",
+                              "-p", "LoadState", "-p", "ActiveState"],
+                             capture_output=True, text=True, timeout=15).stdout
+    except Exception as e:
+        return False, f"could not ask systemd: {type(e).__name__}: {e}"
+    return interpret_timer_state(out)
+
+
+def arm_next_wake(idle_s: int) -> dict:
+    """Make sure something will wake the being after `idle_s` of quiet.
+
+    The persistent timer normally does this on its own (OnUnitInactiveSec). This is the
+    fallback for the state where it has stopped computing a next elapse: a one-shot
+    transient timer, so a scheduling failure costs a longer gap and never silence."""
+    armed, detail = next_wake_is_armed()
+    if armed:
+        return {"armed": True, "by": IDLE_TIMER, "detail": detail}
+    try:
+        # A UNIQUE unit name per attempt. A fixed one collided with a leftover from an
+        # earlier run and systemd-run exited 1, so the fallback for a missing wake was
+        # itself missing (2026-09-09T15:07Z).
+        unit = f"sage-heartbeat-fallback-wake-{int(time.time())}"
+        subprocess.run(["systemd-run", "--user", "--collect",
+                        f"--on-active={idle_s}s", f"--unit={unit}",
+                        "systemctl", "--user", "start", IDLE_UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"armed": True, "by": "systemd-run fallback", "detail": detail,
+                "why": "the idle timer had no next elapse; a one-shot was armed instead"}
+    except Exception as e:
+        return {"armed": False, "by": None, "detail": detail,
+                "error": f"{type(e).__name__}: {e}",
+                "why": "NOTHING WILL WAKE THE BEING until a seat or a message does"}
+
+
+RESUME_UNIT = "sage-heartbeat-resume-wake"
+
+
+def arm_resume_wake(seconds: int) -> dict:
+    """A short one-shot wake after a beat that did not finish what it was doing.
+
+    Deliberately ADDITIVE. The persistent timer is never stopped or reprogrammed, so the
+    worst this can do is fail and leave the ordinary interval standing — promptness is at
+    risk here, never silence, which is the property that makes it safe to be aggressive
+    about. Fixed unit name so a second arming rides the first rather than stacking; a unit
+    left over from a fired wake is cleared, the same shape as arousal's deferred wake."""
+    def _sh(*a):
+        try:
+            return subprocess.run(a, capture_output=True, text=True, timeout=15).stdout.strip()
+        except Exception:
+            return ""
+    try:
+        sub = _sh("systemctl", "--user", "show", RESUME_UNIT + ".timer", "-p", "SubState", "--value")
+        if sub and sub != "waiting":
+            for suffix in (".timer", ".service"):
+                _sh("systemctl", "--user", "stop", RESUME_UNIT + suffix)
+                _sh("systemctl", "--user", "reset-failed", RESUME_UNIT + suffix)
+        subprocess.run(["systemd-run", "--user", "--collect", f"--on-active={seconds}s",
+                        f"--unit={RESUME_UNIT}", "systemctl", "--user", "start",
+                        "--no-block", IDLE_UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"armed": True, "in_s": seconds, "by": RESUME_UNIT}
+    except subprocess.CalledProcessError as e:
+        err = (e.stderr or "").strip()
+        if "already loaded" in err or "already exists" in err:
+            return {"armed": True, "in_s": seconds, "by": RESUME_UNIT, "already_armed": True}
+        return {"armed": False, "error": f"systemd-run exit {e.returncode}: {err}",
+                "why": "the ordinary idle interval still stands"}
+    except Exception as e:
+        return {"armed": False, "error": f"{type(e).__name__}: {e}",
+                "why": "the ordinary idle interval still stands"}
+
+
+class BeatKilled(Exception):
+    """SIGTERM arrived mid-beat (the unit's TimeoutStartSec, or a stop). Raised from the
+    signal handler so the beat unwinds to its record instead of vanishing: 04:30Z
+    2026-09-09 a 51-minute beat left nothing in heartbeats.jsonl and the monitor never
+    knew it had happened. systemd allows TimeoutStopSec (90 s) after SIGTERM — enough."""
+
+
+def install_kill_handler() -> None:
+    def _on_term(signum, frame):
+        raise BeatKilled(f"signal {signum} ({signal.Signals(signum).name})")
+    signal.signal(signal.SIGTERM, _on_term)
+
+
+def _schema_chars_for(offered) -> Optional[int]:
+    """Chars the offered verbs' schemas actually cost. None rather than a guess if it
+    cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
+    13 verbs to 18."""
+    if not offered:
+        return None
+    try:
+        from sage.gateway.being_gate_client import ollama_tools
+        return len(json.dumps(ollama_tools(list(offered))))
+    except Exception:
+        return None
+
+
+def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512):
+    """`build(per_conv, turn_chars) -> state text`. Returns (text, rung, intervention).
+
+    Steps down CONV_LADDER until other_chars + len(text) fits the window budget. The
+    record is never trimmed — only what one beat shows — and every step is returned as
+    an intervention naming what was suppressed, so a thin conversation block is never
+    mistaken for a quiet channel. The last rung is used even if it still does not fit:
+    the beat then runs overcommitted and says so (config.context_overcommitted)."""
+    if not isinstance(num_ctx, int) or not isinstance(num_predict, int):
+        return build(*CONV_LADDER[0]), CONV_LADDER[0], None
+    budget = window_budget_chars(num_ctx, num_predict, slack)
+    first = None
+    for i, rung in enumerate(CONV_LADDER):
+        text = build(*rung)
+        if first is None:
+            first = len(text)
+        fits = other_chars + len(text) <= budget
+        if fits or i == len(CONV_LADDER) - 1:
+            if i == 0:
+                return text, rung, None
+            pc, tc = rung
+            return text, rung, {
+                "kind": "context_fit", "block": "conversations",
+                "suppressed": f"{first - len(text)} chars of conversations (showing the last "
+                              f"{pc} turns per conversation, each at most {tc} chars)",
+                "reason": f"the fixed prompt ({other_chars + first} chars at full display) "
+                          f"would not fit num_ctx {num_ctx} even with the digest and recall "
+                          f"at their floors; " + ("fits now" if fits else "STILL does not fit at the sparsest rung"),
+            }
+
+
+def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack: int = 512):
+    """Trim the seat-supplied blocks until prompt + num_predict fits inside num_ctx.
+
+    WHY THIS EXISTS. A generate needs prompt + num_predict to fit in the window; when it
+    does not, ollama shifts context and silently drops the OLDEST tokens — the system
+    prompt and the posture — with no error at any layer. Measured on this being's own
+    trace, 2026-09-07: two beats were handed prompts of 16,380 and 16,323 tokens against a
+    16,384 window and produced 4 and 61 tokens with done_reason "length". One of them is
+    the 09-06/09-07 "empty beat" I had already diagnosed as a stale unit and a wrong
+    context floor. That diagnosis was wrong in its mechanism: the beat starved on PROMPT
+    SIZE. The instrument found it the same hour it was added, which is the argument for
+    instrumenting configuration at all.
+
+    WHAT GETS TRIMMED, AND IN WHAT ORDER. Only seat-supplied context, never the being's own
+    frame. The digest first (fleet movement, regenerated every beat, largest and least
+    load-bearing), then long-term recall (the being can `recall` again itself). The
+    entrustment, the todo, the journal, the posture and the affordances are NOT trimmable:
+    they are what the beat is, and cutting them to make room for a fleet digest would be
+    the wrong trade.
+
+    WHAT IT REPORTS. Every trim is returned as an intervention with the prior it suppressed,
+    per the house rule that a guard which silences without saying what it silenced trades a
+    confident wrong for a confident silence. A beat whose digest was cut says so in its own
+    record, so a thin beat is never mistaken for a quiet fleet.
+    """
+    if not isinstance(num_ctx, int) or not isinstance(num_predict, int):
+        return blocks, []
+    # Reserve room for the ANSWER, not for num_predict. num_predict is a ceiling the model
+    # rarely approaches; the window is the wall it actually hits. Over 506 generates on this
+    # being: every single `done_reason: "length"` — 27 of them, 5.3% — satisfies
+    # prompt + eval == num_ctx EXACTLY (11971+4413, 16380+4, 16323+61, 14410+1974 ...). The
+    # generation was cut by the window mid-answer, which is also where the truncated-JSON
+    # tool calls and the Ollama 500s come from. Explore generations: median 1,282 tokens,
+    # p90 3,909, p99 5,741, max 7,253. Reserving 6,144 covers p99 with headroom while
+    # leaving the digest something to say; reserving the full num_predict would floor the
+    # digest every beat to buy room the model has never used.
+    reserve = min(num_predict, ANSWER_RESERVE_CAP)
+    budget_chars = window_budget_chars(num_ctx, num_predict, slack)
+    order = ("digest", "recall")
+    floors = {"digest": 1200, "recall": 400}
+    out, interventions = dict(blocks), []
+    total = lambda: fixed_chars + sum(len(v or "") for v in out.values())
+    for key in order:
+        if total() <= budget_chars:
+            break
+        text = out.get(key) or ""
+        if not text:
+            continue
+        over = total() - budget_chars
+        keep = max(floors[key], len(text) - over)
+        if keep >= len(text):
+            continue
+        # keep the HEAD of the digest (newest-first there) and the TAIL of recall/journal
+        out[key] = (text[:keep] + "\n[…trimmed to fit the context window…]") if key == "digest" \
+            else ("[…trimmed to fit the context window…]\n" + text[-keep:])
+        interventions.append({"kind": "context_fit", "block": key,
+                              "suppressed": f"{len(text) - keep} chars of {key}",
+                              "reason": f"prompt + a p99 answer ({reserve} tok) would not fit "
+                                        f"num_ctx ({num_ctx}); the generation would be cut "
+                                        f"mid-answer (27/506 generates already were)"})
+    return out, interventions
+
+
+def own_state(instance: Path, member: str = "",
+              per_conv: int = CONV_PER_CONV,
+              turn_chars: Optional[int] = CONV_TURN_CHARS) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
     # Conversations first among the channels: a turn addressed to the being and unanswered
@@ -219,8 +616,11 @@ def own_state(instance: Path, member: str = "") -> str:
         # measured its live store at 20,735 chars (~7,150 tokens) unbounded, 13,394 at
         # (12, 1500) and 4,603 at (3, 900); on 2026-09-08 an unbounded fixed prompt overflowed
         # its window for eight beats. Legion's review of SAGE#81 recommended this stopgap.
-        convs = _conv.render_for_being(instance, member, per_conv=CONV_PER_CONV,
-                                       turn_chars=CONV_TURN_CHARS)
+        # The fitter steps these down a ladder when the window is tight; the module
+        # constants remain the default for callers that do not fit (CONV_PER_CONV was the
+        # fixed ceiling this supersedes — cbp's stopgap on SAGE#81, now the rung it starts from).
+        convs = _conv.render_for_being(instance, member, per_conv=per_conv,
+                                       turn_chars=turn_chars)
         if convs.strip():
             parts.append("## Your conversations (both directions, kept forever; reply with `say`)\n"
                          + convs.strip())
@@ -475,6 +875,32 @@ def main(argv=None) -> int:
     from sage.gateway import museum_offer as _museum
     _museum.ensure_dir(instance)
     museum_line = _museum.offer()
+    # FIT THE SEED TO THE WINDOW BEFORE SENDING IT. Ported from legion/mission-artifact.
+    # Without this the fixed prompt can exceed num_ctx and ollama silently drops the OLDEST
+    # tokens — the system prompt and the posture — with no error at any layer. Measured on
+    # Legion 2026-09-07: two beats were handed 16,380 and 16,323 tokens against a 16,384
+    # window and produced 4 and 61 tokens of output. The conversations block steps down a
+    # ladder, and the digest and recall are trimmed, before anything is sent.
+    _num_ctx = getattr(llm, "num_ctx", None)
+    _num_predict = _sent_budget(llm)
+    _schema_chars = _schema_chars_for(EXPLORE_TOOLS) or 4000
+    _state_head = f"# Your own state\n\n"
+    _scope_tail = f"\n\n## Reach you hold (hestia scope)\n{scope}\n\n"
+
+    def _build_state(per_conv, turn_chars):
+        return (_state_head + own_state(instance, args.member,
+                                        per_conv=per_conv, turn_chars=turn_chars) + _scope_tail)
+
+    _other = (len(posture()) + len(inbox) + _schema_chars + 1200
+              + 1200 + 400 + LOOP_GROWTH_CHARS)
+    state_block, conv_rung, conv_intervention = fit_state(
+        _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other)
+    _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + 1200
+    _blocks, _fit_iv = fit_to_window(num_ctx=_num_ctx, num_predict=_num_predict,
+                                     fixed_chars=_fixed,
+                                     blocks={"digest": digest, "recall": recall})
+    digest, recall = _blocks["digest"], _blocks["recall"]
+
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
         museum=museum_line,
@@ -488,7 +914,7 @@ def main(argv=None) -> int:
                 f"You never need to type that path. Name your files bare — journal.md, todo.md, or a "
                 f"name of your choosing under notes/ or scratch/ — and they resolve inside your home. "
                 f"An absolute path is only for something OUTSIDE your home.\n\n"),
-        state=f"# Your own state\n\n{own_state(instance, args.member)}\n\n## Reach you hold (hestia scope)\n{scope}\n\n",
+        state=state_block,
         recall=recall, inbox=inbox, digest=digest)
 
     # Per-generate trace, written as each generate lands: the record below is written at
