@@ -400,7 +400,14 @@ def test_compaction_leaves_room_for_the_answer_and_never_touches_the_beings_own_
     for i in (2, 4, 6, 8):
         assert out[i]["content"] == "A" * 500, "assistant turns untouched"
     assert "elided from the middle to leave room for your answer" in out[3]["content"], "the being is told"
-    assert "read the source again" in out[3]["content"], "and told what to do about it"
+    # It must say what to do — and must NOT say "read the source again", which WAS the
+    # thrash instruction: 86.7% of memory_read calls are re-reads, 48.5% duplicates inside
+    # one beat (measured 2026-09-13), because the harness told it to re-read and the full
+    # re-read cost more room than the elision had just freed.
+    assert "NARROW range" in out[3]["content"], "and told what to do about it"
+    assert "scratch" in out[3]["content"], "and where its own conclusions live"
+    assert "read the source again" not in out[3]["content"], \
+        "the marker must not instruct the full re-read that refills the window"
 
     # a conversation that already fits is returned untouched, with nothing reported
     small = [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}]
@@ -923,3 +930,30 @@ def test_a_retry_has_more_room_than_the_attempt_it_replaces():
     assert sizes[1] < sizes[0], (
         f"the retry prompt ({sizes[1]}) must be SMALLER than the one that overflowed "
         f"({sizes[0]}) — it appended a nudge and freed nothing before this")
+
+
+def test_the_reread_note_fires_on_the_second_read_and_not_the_first():
+    from sage.gateway.being_tool_loop import _repeat_read_note, REREAD_NOTICE_AT
+
+    reads = {}
+    first = _repeat_read_note(BeingIntent("memory_read", {"path": "/a/mod.py"}), reads, 0)
+    assert first == "", "the first read of a file is not a repetition"
+
+    second = _repeat_read_note(BeingIntent("memory_read", {"path": "/a/mod.py"}), reads, 3)
+    assert "2 times this beat" in second and "step 0" in second
+    assert "NARROW range" in second and "scratch" in second
+
+    third = _repeat_read_note(BeingIntent("memory_read", {"path": "/a/mod.py"}), reads, 5)
+    assert "3 times this beat" in third and "step 0, 3" in third
+
+    # a different path is not a repetition, and non-reads are never annotated
+    assert _repeat_read_note(BeingIntent("memory_read", {"path": "/a/other.py"}), reads, 6) == ""
+    assert _repeat_read_note(BeingIntent("check", {"target": "gateway"}), reads, 7) == ""
+    # memory_write CARRIES a path, so the effector guard is what keeps a write from
+    # counting as a read. Without it, writing a file you have read would be reported as
+    # repetition — and the being writes its scratch on almost every beat.
+    reads2 = {}
+    _repeat_read_note(BeingIntent("memory_read", {"path": "/a/j.md"}), reads2, 0)
+    assert _repeat_read_note(BeingIntent("memory_write", {"path": "/a/j.md"}), reads2, 1) == "", \
+        "a write to a path you read is not a re-read"
+    assert _repeat_read_note(BeingIntent("memory_read", {}), reads, 8) == ""
