@@ -264,10 +264,31 @@ def harness_revision(workspace: str) -> dict:
             return None
 
     head = _git("rev-parse", "HEAD")
-    st = _git("status", "--porcelain")
+    # DIRTY ABOUT THE HARNESS, NOT ABOUT THE BEING'S OWN DIARY. The instance directory is
+    # TRACKED in this checkout and is written by the running beat — journal, todo,
+    # conversations, account — so a plain `status --porcelain` is non-empty every time the
+    # being writes a line about its day, and the flag that means "the code constituting you
+    # has uncommitted edits" was permanently True for a reason that is not code.
+    #
+    # Measured 2026-09-14: legion-being ran a three-way drift check, found its own worktree
+    # clean, and had to write "the header's 'uncommitted edits present' did not hold for my
+    # tree" — reasoning correctly AROUND a flag rather than with it. A warning that is always
+    # on is not a warning; it is a background colour, and the cost of it is that a real one
+    # would read the same.
+    st = _git("status", "--porcelain", "--", ".", ":(exclude)sage/instances")
+    # NOT ln[3:]. Porcelain v1 is "XY PATH" at a fixed offset, but `_git` above returns
+    # stdout.strip(), which eats the leading space of the FIRST line only — so a fixed
+    # offset silently loses a character from one path and none of the others. It read
+    # 'age/gateway/heartbeat.py' the first time it ran. Split on the status field instead.
+    dirty_paths = ([ln.strip().split(" ", 1)[-1].strip() for ln in st.splitlines() if ln.strip()]
+                   if st is not None else [])
     return {"head": head, "short": (head or "")[:9] or None,
             "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
-            "dirty": None if st is None else bool(st.strip())}
+            "dirty": None if st is None else bool(dirty_paths),
+            # Name them, bounded. "Something is modified" sends a reader hunting; three
+            # filenames end the question in the header it was raised in.
+            "dirty_paths": dirty_paths[:3] or None,
+            "dirty_excludes": "sage/instances (your own journal, todo and conversations)"}
 
 
 def _schema_chars_for(offered) -> Optional[int]:

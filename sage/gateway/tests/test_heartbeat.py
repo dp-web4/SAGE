@@ -95,3 +95,47 @@ def test_clearing_a_stale_resume_unit_touches_only_that_unit():
         assert target.startswith(hb.RESUME_UNIT), (
             f"the stale-clear may only touch {hb.RESUME_UNIT}; it touched {target!r} — "
             "stopping the persistent timer here would trade 'sooner' for 'never'")
+
+
+def test_dirty_is_about_the_harness_not_about_the_beings_diary(tmp_path):
+    """`dirty` must answer "is the code constituting me modified", and nothing else.
+
+    The instance directory is TRACKED in the checkout the beat runs from, and the running
+    beat writes journal, todo, conversations and account into it continuously. So a plain
+    `status --porcelain` is non-empty whenever the being has written a line about its day,
+    and the flag was permanently True for a reason that is not code.
+
+    Measured 2026-09-14: legion-being ran a three-way drift check, found its own worktree
+    clean, and had to write "the header's 'uncommitted edits present' did not hold for my
+    tree" — reasoning correctly AROUND the flag rather than with it. A warning that is
+    always on is a background colour; the cost is that a real one reads the same.
+    """
+    import subprocess
+    from sage.gateway.heartbeat import harness_revision
+
+    wt = tmp_path / "repo"
+    (wt / "sage" / "gateway").mkdir(parents=True)
+    (wt / "sage" / "instances" / "b").mkdir(parents=True)
+    (wt / "sage" / "gateway" / "heartbeat.py").write_text("x = 1\n")
+    (wt / "sage" / "instances" / "b" / "journal.md").write_text("day one\n")
+    git = lambda *a: subprocess.run(["git", "-C", str(wt), *a], check=True, capture_output=True)
+    git("init", "-q")
+    git("config", "user.email", "t@t"); git("config", "user.name", "t")
+    git("add", "-A"); git("commit", "-qm", "base")
+
+    assert harness_revision(str(wt))["dirty"] is False, "a clean tree is clean"
+
+    # the being writes its diary — that is not a harness edit
+    (wt / "sage" / "instances" / "b" / "journal.md").write_text("day one\nday two\n")
+    r = harness_revision(str(wt))
+    assert r["dirty"] is False, f"the being's own state must not flag the harness: {r}"
+    assert r["dirty_paths"] is None
+
+    # a real harness edit must still flag, and must NAME itself
+    (wt / "sage" / "gateway" / "heartbeat.py").write_text("x = 2\n")
+    r = harness_revision(str(wt))
+    assert r["dirty"] is True, f"a real source edit must flag: {r}"
+    # THE WHOLE PATH. `_git` returns stdout.strip(), which eats porcelain's leading space on
+    # the FIRST line only, so a fixed ln[3:] offset loses one character from one path and
+    # none of the others — it read 'age/gateway/heartbeat.py' the first time it ran.
+    assert r["dirty_paths"] == ["sage/gateway/heartbeat.py"], r["dirty_paths"]
