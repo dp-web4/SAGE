@@ -146,6 +146,30 @@ GIT_OPS = ("log", "show", "diff", "status", "blame", "cat")
 # were unnameable — two witnessed denies on 2026-09-08 for a natural thing to want. Still
 # no flags: a suffix is digits after ~ or ^, nothing else survives.
 
+def _escape_refusal(verb: str, path, worktree: str) -> str:
+    """A refusal that names the boundary it enforced, and the cheap way past it.
+
+    THE REFUSAL HELD THE ANSWER AND DID NOT SAY IT. Measured 2026-09-14: legion-being,
+    working on a review comment, was refused four times in one beat for guessing at its own
+    worktree root — `/home/dp/ai-worktrees/legion-being`, then
+    `/home/dp/ai-workspace/SAGE/.worktrees/legion-being`. Neither is right, and every
+    refusal said only "escapes your worktree", which is the one fact it already knew. The
+    beat ended with no act.
+
+    Naming the root in the beat's seed is NOT the fix: the header comment above `Your home`
+    records 15 of 15 path refusals on Sprout being that very string reproduced from memory
+    and truncated. A path given once at the top of a long prompt is a path that gets
+    retyped wrong. A path given at the moment of the mistake is a correction.
+
+    So the refusal names the root AND points at the relative form, which needs no memory at
+    all — the being can write `sage/gateway/x.py` and never hold an absolute path again."""
+    root = os.path.realpath(worktree)
+    return (f"{verb} 'path' escapes your worktree: {path!r}. Your worktree is {root}. "
+            f"You do not need to type it: a path here is taken RELATIVE to that root, so "
+            f"write it bare (for example sage/gateway/hestia_dispatch.py) and it resolves "
+            f"inside your tree without an absolute prefix to get wrong.")
+
+
 def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The shell command the seat runs for a git_read intent, built from validated args.
 
@@ -182,7 +206,7 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         full = os.path.realpath(os.path.join(worktree, path))
         if not (full == os.path.realpath(worktree)
                 or full.startswith(os.path.realpath(worktree) + os.sep)):
-            raise ValueError(f"git_read 'path' escapes your worktree: {path!r}")
+            raise ValueError(_escape_refusal("git_read", path, worktree))
         # The pathspec goes into the command ABSOLUTE, not as the being typed it. hestia's
         # mrh.command matches command tokens against GRANTED PREFIXES, which are absolute;
         # a relative 'sage/gateway/x.py' matches nothing and the whole read is refused
@@ -242,7 +266,7 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         # a colon is not a thing git resolves.
         rel = os.path.relpath(path, os.path.realpath(worktree))
         if rel.startswith(".."):
-            raise ValueError(f"git_read 'path' escapes your worktree: {rel!r}")
+            raise ValueError(_escape_refusal("git_read", rel, worktree))
         return f"{base} show --no-ext-diff --no-textconv {rev or 'HEAD'}:{rel}"
     if not path:
         raise ValueError("git_read op='blame' needs a 'path' inside your worktree")
@@ -318,7 +342,7 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
             raise ValueError(f"search 'path' must be a plain path inside your worktree, got {path!r}")
         full = os.path.realpath(os.path.join(worktree, path))
         if not (full == target or full.startswith(target + os.sep)):
-            raise ValueError(f"search 'path' escapes your worktree: {path!r}")
+            raise ValueError(_escape_refusal("search", path, worktree))
         target = full
     # EVERY interpolated value is quoted, not just the being-supplied one. The invariant
     # claimed here is representation-level — the judged string must shlex.split into exactly

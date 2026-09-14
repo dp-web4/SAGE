@@ -482,3 +482,44 @@ def test_every_git_op_the_grammar_accepts_is_named_in_the_schema():
     for advertised in re.findall(r"'([a-z]+)'", enumeration):
         assert advertised in GIT_OPS, \
             f"the schema offers {advertised!r}, which git_read_command refuses"
+
+
+def test_an_escape_refusal_names_the_worktree_and_the_relative_form():
+    """The refusal held the answer and did not say it.
+
+    Measured 2026-09-14: legion-being, acting on a review comment, was refused four times in
+    one beat for guessing at its own worktree root — first `/home/dp/ai-worktrees/...`, then
+    `/home/dp/ai-workspace/SAGE/.worktrees/...`. Neither is right. Every refusal said only
+    "escapes your worktree", which is the one fact it already had. The beat ended with no act.
+
+    Naming the root in the seed is not the fix and the header comment beside `Your home`
+    says why: 15 of 15 path refusals on Sprout were that string reproduced from memory and
+    truncated. The correction belongs at the moment of the mistake, and it must point at the
+    relative form, which needs no memory at all.
+    """
+    from sage.gateway.being_gate_client import search_command, git_read_command
+
+    WT = "/home/dp/ai-workspace/being-worktrees/legion-being"
+    wrong = "/home/dp/ai-worktrees/legion-being/sage/gateway"
+
+    for verb, call in (("search", lambda p: search_command({"pattern": "x", "path": p},
+                                                           {"worktree": WT})),
+                       ("git_read", lambda p: git_read_command({"op": "blame", "path": p},
+                                                               {"worktree": WT}))):
+        try:
+            call(wrong)
+        except ValueError as e:
+            msg = str(e)
+        else:
+            raise AssertionError(f"{verb} accepted a path outside the worktree")
+
+        assert WT in msg, f"{verb} refusal does not name the worktree root: {msg!r}"
+        assert "RELATIVE" in msg or "relative" in msg, \
+            f"{verb} refusal does not point at the form that needs no memory: {msg!r}"
+        assert wrong in msg, f"{verb} refusal should still quote what was asked for: {msg!r}"
+
+    # A path INSIDE the worktree is unaffected, absolute or relative.
+    assert "hestia_dispatch.py" in search_command(
+        {"pattern": "x", "path": "sage/gateway/hestia_dispatch.py"}, {"worktree": WT})
+    assert "hestia_dispatch.py" in search_command(
+        {"pattern": "x", "path": f"{WT}/sage/gateway/hestia_dispatch.py"}, {"worktree": WT})
