@@ -150,10 +150,26 @@ def test_a_carried_frame_is_charged_against_the_window():
     import dis
     from sage.gateway import heartbeat as H
 
-    consts = set()
-    for ins in dis.get_instructions(H.main):
-        if ins.opname == "LOAD_GLOBAL":
-            consts.add(ins.argval)
+    # WALK NESTED CODE OBJECTS, not just main's own. The first cut scanned only main's
+    # immediate LOAD_GLOBALs and went red on an implementation that was semantically
+    # IDENTICAL to the one it was written against — `sum(int(FRAME_TOKENS * CPT) for _ in
+    # frames)` puts the constant inside a generator expression, which compiles to its own
+    # code object. The test was pinning a spelling and calling it a behaviour, which is the
+    # defect it exists to catch, written into the catcher. Found when legion-being's version
+    # of this exact charge failed it, 2026-09-14.
+    import types as _t
+
+    def _globals(code, seen=None):
+        seen = seen if seen is not None else set()
+        for ins in dis.get_instructions(code):
+            if ins.opname == "LOAD_GLOBAL":
+                seen.add(ins.argval)
+        for c in code.co_consts:
+            if isinstance(c, _t.CodeType):
+                _globals(c, seen)
+        return seen
+
+    consts = _globals(H.main.__code__)
     assert "FRAME_TOKENS" in consts, (
         "main() never reads FRAME_TOKENS, so a carried frame costs the window nothing it "
         "can see")
