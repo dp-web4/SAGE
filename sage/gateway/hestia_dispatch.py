@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope
@@ -761,6 +762,257 @@ class HestiaF1aDispatcher:
                 "subject": _git("log", "-1", "--format=%s"),
                 "committed": _git("log", "-1", "--format=%cI"),
                 "dirty": None if status is None else bool(status.strip())}
+
+
+    # -- check: the being runs a test and reads the answer (PRD M0) --------------
+    def _do_check(self, intent: BeingIntent) -> ResultEnvelope:
+        """Run a declared test target in the being's OWN worktree and return the result.
+
+        Only ever reached on an intent the gate ALLOWED as the exact pytest command below.
+        A FAILING SUITE IS ok=True: the act succeeded and the answer is "it fails". Making
+        a red suite an error envelope would teach the being that checking is dangerous,
+        which is the opposite of what this organ is for — so `passed` carries the verdict
+        and `ok` carries only whether the check ran.
+        """
+        import hashlib
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import check_argv, check_command
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="check needs a worktree of your own; none is configured "
+                                       "on this seat (PRD M1)")
+        # Rebuild the SAME command the gate judged — same function, same context. Composing
+        # it differently here would mean the law ruled on one command and the seat ran
+        # another, which is the whole failure this organ exists to make impossible.
+        try:
+            cmd = check_command(intent.args, {"worktree": self.worktree})
+            argv = check_argv(intent.args, {"worktree": self.worktree})
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        # EXECUTE WHAT THE LAW JUDGED, not a lookalike rebuilt from the same args. Carried
+        # forward from SAGE#62 (GPT's #60 evidence contract), which never landed and sat
+        # conflicting for five days. The two agree by construction today — check_command is
+        # deterministic on the intent — so this asserts an invariant rather than fixing a
+        # live divergence, and it will be the thing that notices if that ever stops being
+        # true. A verdict that bound no command is not an authority to run one.
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "check refused: the command the law judged is not the command this "
+                "dispatcher would execute. The law is the authority for what runs."))
+        target = str(intent.args.get("target", "")).strip()
+        tree_before = self._worktree_revision()
+        source_before = self._test_source_identity(target, tree_before.get("head"))
+        # UNVERIFIED IS A RESULT. The being's own design answer (2026-09-07, its Q1): keep
+        # `check` gated and witnessed, do not build an unwitnessed local fallback — "two
+        # verification paths can diverge, and the unwitnessed one becomes the one people
+        # trust" — but when the substrate is down, say UNVERIFIED explicitly rather than
+        # returning nothing or something ambiguous. "A failing test is a real answer; so is
+        # 'the checker was down.'" The envelope carries the tree block either way, so the
+        # being can record WHICH tree it could not verify.
+        try:
+            begin = self._call("hestia_begin_action", {"tool_name": "check", "target": target})
+            err = _hestia_error(begin)
+        except Exception as e:
+            begin, err = {}, f"{type(e).__name__}: {e}"
+        if err:
+            return ResultEnvelope(
+                ok=False, error=f"check UNVERIFIED: the witness substrate is unreachable ({str(err)[:160]})",
+                result={"target": target, "verdict": "UNVERIFIED", "passed": None,
+                        "reason": "hestia_begin_action failed; the test did not run because an "
+                                  "unwitnessed check is not a check",
+                        "tree": self._worktree_revision(), "worktree": self.worktree})
+        action_id = begin.get("actionId")
+        try:
+            proc = subprocess.run(argv, cwd=self.worktree, text=True,
+                                  capture_output=True, timeout=600)
+            passed = proc.returncode == 0
+            raw_out = (proc.stdout or "") + (proc.stderr or "")
+            output_sha256 = hashlib.sha256(raw_out.encode("utf-8", "replace")).hexdigest()
+            output_len = len(raw_out.encode("utf-8", "replace"))
+            out = raw_out.strip()
+            # A TEST THAT DOES NOT EXIST IS NOT A FAILING TEST. pytest exits 5 when nothing
+            # was collected — "167 deselected" — and the first cut reported that as FAIL.
+            # Measured 2026-09-08 11:34Z: the being asked for
+            # gateway::test_heartbeat_composes_prompt, which is not a test in the suite, and
+            # was told its harness was red. A false red is worse than a false green here:
+            # this being is trained by its own record to believe red over its reading.
+            if proc.returncode == 5:
+                try:  # the act completed; the chain should not hold it open
+                    self._call("hestia_record_outcome",
+                               {"action_id": action_id, "success": True, "magnitude": 0.0})
+                except Exception:
+                    pass
+                return ResultEnvelope(ok=True, witness_id=action_id,
+                                      result={"target": target, "passed": None,
+                                              "verdict": "NO_SUCH_TEST",
+                                              "output": out[-800:],
+                                              "reason": "pytest collected nothing for that "
+                                                        "target — the test name does not "
+                                                        "exist in this suite. Nothing ran, "
+                                                        "so nothing failed",
+                                              "worktree": self.worktree,
+                                              "tree": self._worktree_revision(),
+                                              "action_id": action_id})
+            # The tail is where pytest puts the verdict and the failure detail; the head is
+            # progress dots. Truncate from the FRONT so a failure is never the part cut.
+            if len(out) > 3000:
+                out = "[…truncated…]\n" + out[-3000:]
+            ran, detail = True, out
+        except Exception as e:
+            ran, passed, detail = False, False, f"{type(e).__name__}: {e}"
+        try:
+            self._call("hestia_record_outcome",
+                       {"action_id": action_id, "success": ran, "magnitude": 0.0})
+        except Exception:
+            pass
+        if not ran:
+            return ResultEnvelope(ok=False, error=f"check could not run: {detail[:400]}",
+                                  witness_id=action_id)
+        # THE VERDICT LEADS, in words, before any structured field.
+        #
+        # `passed` and `verdict` were already the second and third keys, and the being still
+        # read three separate FAILs as passes (2026-09-09 22:29Z, 2026-09-10 06:04Z, and the
+        # journal entry that built a plan on "the full suite passes" while its own check that
+        # beat returned FAIL). The envelope's `ok` means THE CHECK RAN; the verdict means the
+        # tests passed. Two true things one word apart, and the wrong one is the one that
+        # sounds like an answer.
+        #
+        # A verb whose most important fact needs a field lookup will be misread eventually.
+        # So the first thing in the message is a sentence that cannot be read as anything
+        # else, and it says what `ok` does NOT mean.
+        tail = (detail or "").strip().splitlines()
+        summary = tail[-1][:120] if tail else ""
+        headline = (f"{'PASS' if passed else 'FAIL'} — {summary}. "
+                    f"This is the answer. A check that RAN and FAILED still returns "
+                    f"successfully as an act: 'the call worked' is not 'the tests passed'.")
+        # THE EVIDENCE CONTRACT (GPT on SAGE#60, carried forward from the #62 slice that
+        # never landed). A verdict is only as transferable as what it can name: which
+        # command ran, against which bytes, producing how much output, exiting how — and
+        # whether the tree moved underneath while it ran. The being pastes check output
+        # into PR bodies and a reviewer re-runs it; every field here is one the reviewer
+        # would otherwise have to reconstruct by hand.
+        #
+        # ONE THING FROM #62 IS DELIBERATELY NOT CARRIED: it REFUSED on a dirty worktree,
+        # on the sound argument that HEAD does not name the bytes that ran. That was right
+        # for a being that could not write to its tree; it would now break the being's
+        # whole loop, which is write a test -> check -> propose. Refusing there would mean
+        # it could never check its own uncommitted work — a guard that punishes the exact
+        # capability M1 exists to give it. So dirtiness DOWNGRADES the claim instead of
+        # blocking it: `tree.dirty` is already reported, and `test_source.sha256` names the
+        # bytes that actually ran whether or not they are committed.
+        # STABLE MEANS THE SOURCE HELD, not that nothing in the directory moved. Comparing
+        # the whole tree block made this False whenever the run itself left an artifact:
+        # pytest writes __pycache__, which flips `dirty`, so an unsandboxed check always
+        # reported "tree_changed_during_check" for a benign reason. (Invisible on the real
+        # path only because the sandbox sets PYTHONDONTWRITEBYTECODE — a field that is
+        # right by accident is not right.) HEAD and the test-source hash are what a verdict
+        # rests on, and test_source covers test_*.py only, so artifacts cannot flip it.
+        tree_after = self._worktree_revision()
+        source_after = self._test_source_identity(target, tree_after.get("head"))
+        # WHAT `stable` HONESTLY MEANS, narrowed after GPT's review of #84. It is not "the
+        # source held": the sandbox now mounts the worktree READ-ONLY, and that mount — not
+        # this comparison — is what makes the bytes unable to change under the run. This
+        # says only that HEAD and the hashed test inputs (tests + conftest) are the same
+        # before and after, which is a check on the SEAT's view of the tree, not a proof
+        # about the sandboxed process.
+        # AN UNKNOWN IS NOT A MATCH. `source_after == source_before` is True when both are
+        # None, so a target whose test source could not be identified at all reported
+        # stable=True and state="pinned" — the strongest claim the envelope can make,
+        # produced by having measured nothing (GPT, second pass on #84). Missing identity
+        # is UNVERIFIED, and it is a distinct third state from "the tree moved under me".
+        identity_known = source_before is not None and source_after is not None
+        if not identity_known:
+            stable = None
+            state = "unverified_no_test_source_identity"
+        else:
+            stable = (tree_after.get("head") == tree_before.get("head")
+                      and source_after == source_before)
+            state = "pinned" if stable else "tree_changed_during_check"
+        # THE FIELD MUST NAME THE PATH ACTUALLY TAKEN. With SANDBOX_REQUIRED=False and no
+        # usable bwrap, sandbox_prefix() returns "" and the check deliberately runs
+        # unsandboxed — and this field still said True, so the degraded mode asserted the
+        # one guarantee it had explicitly given up. The read-only mount is what makes the
+        # claim true, so the claim is read off whether that mount is in the argv that ran.
+        from sage.gateway.being_gate_client import SANDBOX
+        sandboxed = bool(argv) and argv[0] == SANDBOX
+        source_readonly = sandboxed
+        return ResultEnvelope(ok=True, witness_id=action_id,
+                              result={"headline": headline,
+                                      "target": target, "passed": passed,
+                                      "verdict": "PASS" if passed else "FAIL",
+                                      "output": detail, "worktree": self.worktree,
+                                      "tree": tree_before,
+                                      "evidence": {
+                                          "command": cmd,
+                                          "argv": argv,
+                                          "law_bound_command": judged is not None,
+                                          "test_source": source_before,
+                                          "exit_status": proc.returncode,
+                                          "output_sha256": output_sha256,
+                                          "output_bytes": output_len,
+                                          "embodiment": self._embodiment(),
+                                          "stable": stable,
+                                          "state": state,
+                                          # the read-only mount is the guarantee; this names
+                                          # whether the run actually had it, never the intent
+                                          "source_readonly": source_readonly,
+                                          "sandboxed": sandboxed,
+                                      },
+                                      "action_id": action_id})
+
+
+    def _test_source_identity(self, target: str, head: Optional[str]) -> Optional[dict]:
+        """WHICH TEST FILE the verdict is about, by content hash at the tree that ran.
+
+        Carried forward from SAGE#62 (GPT's #60 evidence contract). The tree block says
+        which commit; this says which BYTES the named target actually resolves to, so a
+        PASS cannot be silently transferred to a file that has since changed. Returns None
+        rather than raising: evidence that cannot be gathered must degrade the claim, never
+        fail the check the being was waiting on."""
+        import hashlib
+        from sage.gateway.being_gate_client import CHECK_TARGETS
+        suite = target.partition("::")[0].strip()
+        rel = CHECK_TARGETS.get(suite)
+        if not rel or not self.worktree:
+            return None
+        root = Path(self.worktree) / rel
+        try:
+            # conftest.py IS executable test input — pytest imports it from the rootdir
+            # before collecting anything — and it was omitted here while `stable` claimed
+            # "the source held across the run" (GPT review of #84). Hashing the tests but
+            # not the file that can rewrite them is the same false assurance as hashing a
+            # payload and never posting it.
+            if root.is_dir():
+                paths = sorted(set(root.rglob("test_*.py")) | set(root.rglob("conftest.py")))
+            else:
+                paths = [root] if root.exists() else []
+            h = hashlib.sha256()
+            for p in paths:
+                h.update(p.relative_to(self.worktree).as_posix().encode())
+                h.update(p.read_bytes())
+            return {"root": rel, "files": len(paths), "sha256": h.hexdigest(),
+                    "at_head": head}
+        except Exception:
+            return None
+
+
+    def _embodiment(self) -> dict:
+        """WHICH SUBSTRATE PRODUCED THIS VERDICT — a compact public identity, not host
+        inventory. #62 took this as a constructor argument; I carried the field forward
+        without its source and shipped `embodiment: {}` on every check result until the
+        being's own first evidence block showed it empty. An always-empty evidence field is
+        noise that reads like a measurement, which is worse than no field at all. Derived
+        here from the instance's declared `active_embodiment`, so all four construction
+        sites get it without one of them being the site that forgets."""
+        try:
+            from sage.gateway.governed_turn import instance_config
+            emb = (instance_config(Path(self.memory_root)).get("active_embodiment") or {})
+        except Exception:
+            return {}
+        return {k: emb[k] for k in ("running_tag", "runner", "params_b", "num_ctx", "as_of")
+                if k in emb}
 
 
     def _do_request_scope(self, intent: BeingIntent) -> ResultEnvelope:
