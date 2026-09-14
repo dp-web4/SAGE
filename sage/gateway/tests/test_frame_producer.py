@@ -159,3 +159,45 @@ def test_a_carried_frame_is_charged_against_the_window():
         "can see")
     assert H.FRAME_TOKENS > 0 and int(H.FRAME_TOKENS * H.CPT) > 1000, \
         "the charge must be a real number of characters, not a token"
+
+def test_the_being_may_name_its_own_frame_file(tmp_path):
+    """camera's grammar is that the being names its own output path, so the producer must
+    not assume a filename.
+
+    The first cut looked only for last-frame.jpg. Measured against the live tree minutes
+    later: the being had captured to scratch/camera/probe-resolution-2026-09-14.jpg, and the
+    producer reported "no frame on disk; the being has not used camera" about a frame that
+    was right there. A producer that assumes a convention the verb does not enforce is a
+    pipe that silently drops most of what goes into it.
+    """
+    inst, default = _inst(tmp_path)
+    named = default.parent / "probe-resolution-2026-09-14.jpg"
+    named.write_bytes(JPEG + b"NAMED")
+
+    b64, meta = fresh_frame(inst, None, time.time() - 100)
+    assert meta["carried"] is True, \
+        f"a frame the being named itself was not found: {meta.get('why')}"
+    assert meta["path"].endswith("probe-resolution-2026-09-14.jpg"), meta["path"]
+
+
+def test_the_newest_frame_wins_whatever_it_is_called(tmp_path):
+    """Two captures, different names: the being asked to see the one it took last."""
+    inst, default = _inst(tmp_path)
+    old = default.parent / "older.jpg"
+    old.write_bytes(JPEG + b"OLD")
+    t = time.time() - 50
+    os.utime(old, (t, t))
+    default.write_bytes(JPEG + b"NEWEST")
+
+    b64, meta = fresh_frame(inst, None, time.time() - 100)
+    assert meta["carried"] is True
+    assert meta["path"].endswith("last-frame.jpg"), meta["path"]
+
+
+def test_a_non_image_beside_the_frames_is_ignored(tmp_path):
+    """The camera directory is the being's; it may put notes there too."""
+    inst, default = _inst(tmp_path)
+    (default.parent / "notes.md").write_text("what I saw")
+    default.write_bytes(JPEG)
+    b64, meta = fresh_frame(inst, None, time.time() - 100)
+    assert meta["carried"] is True and meta["path"].endswith(".jpg")

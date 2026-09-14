@@ -340,13 +340,29 @@ FRAME_MAX_BYTES = 4_000_000  # a JPEG larger than this is not a webcam frame; re
 
 
 def _frame_paths(instance: Path, worktree: Optional[str]) -> list:
-    """Where a captured frame may be. HOME first: the being is moving `camera` to resolve
-    against its instance home precisely because frames in the worktree dirty a tree whose
-    cleanliness `check` reports as evidence. Both are looked at during the change, newest
-    wins, so neither ordering of the two lands breaks seeing."""
-    out = [instance / "scratch" / "camera" / "last-frame.jpg"]
+    """Every frame the being may have captured, in either tree.
+
+    NOT a fixed filename. `camera`'s whole grammar is that the being names its own output
+    path — "the being names only the output path" — and the first cut of this looked only
+    for last-frame.jpg. Measured minutes later against the live tree: the being had captured
+    to `scratch/camera/probe-resolution-2026-09-14.jpg`, and the producer reported "no frame
+    on disk; the being has not used camera" about a frame that was right there. A producer
+    that assumes a convention the verb does not enforce is a pipe that silently drops most
+    of what goes into it.
+
+    BOTH TREES, because the being is moving `camera` to resolve against its instance home
+    (frames in the worktree dirty a tree whose cleanliness `check` reports as evidence), and
+    the newest wins, so neither ordering of the two lands breaks seeing."""
+    roots = [instance / "scratch" / "camera"]
     if worktree:
-        out.append(Path(worktree) / "scratch" / "camera" / "last-frame.jpg")
+        roots.append(Path(worktree) / "scratch" / "camera")
+    out = []
+    for r in roots:
+        try:
+            out.extend(p for p in r.iterdir()
+                       if p.is_file() and p.suffix.lower() in (".jpg", ".jpeg"))
+        except OSError:
+            continue
     return out
 
 
