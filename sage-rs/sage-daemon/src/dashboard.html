@@ -305,10 +305,18 @@ function escapeHtml(text) {
   return d.innerHTML;
 }
 
+// Two timestamp shapes reach this: chat history carries epoch seconds (a number, or a numeric
+// string like "1789329766.8"), and conversation turns carry ISO-8601 ("2026-09-14T08:00:13Z").
+// Treating every value as epoch seconds turned every conversation turn into "Invalid Date"
+// (dp, 2026-09-14). A turn from another day shows its date, since conversations span months.
 function formatTime(ts) {
-  if (!ts) return '';
-  const d = new Date(ts * 1000);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (ts === null || ts === undefined || ts === '') return '';
+  const n = Number(ts);
+  const d = Number.isFinite(n) ? new Date(n * 1000) : new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return sameDay ? time : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
 }
 
 function formatUptime(secs) {
