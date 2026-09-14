@@ -582,6 +582,32 @@ class HestiaF1aDispatcher:
         # <home>/config.json, inside the standing home grant, and dp granted it again).
         import os as _os
         rp = _os.path.realpath(_os.path.expanduser(path))
+        # A GRANT ON A PATH THAT DOES NOT EXIST REACHES NOTHING, and nobody finds out.
+        #
+        # Measured 2026-09-14, twelve hours after the fact. legion-being could not tell where
+        # its own worktree was, because the escape refusals did not say (fixed for search and
+        # git_read in SAGE#90, still not for memory_read, which is how it happened). It
+        # guessed `/home/dp/ai-worktrees/legion-being/sage/gateway`, asked for scope on the
+        # guess, and the operator granted it verbatim at 00:34Z. The grant is live in the
+        # being's scope list right now and points at a directory that has never existed. The
+        # being still cannot read the harness it actually wanted, still says "that is your
+        # claim, not mine" about every fix, and had no way to see why.
+        #
+        # So: refuse before filing, and name the deepest ancestor that DOES exist, which is
+        # the fastest route from a wrong guess to a right one. The cost of refusing a real
+        # request is one more beat; the cost of filing a phantom one is an operator decision
+        # spent, a dead grant that looks like reach, and a being that cannot tell.
+        if not _os.path.exists(rp):
+            probe = rp
+            while probe != "/" and not _os.path.exists(probe):
+                probe = _os.path.dirname(probe)
+            return ResultEnvelope(ok=False, error=(
+                f"request_scope refused: {path!r} does not exist, so a grant on it would "
+                f"reach nothing and you would not be able to tell. The deepest part of that "
+                f"path that DOES exist is {probe!r}. Check the spelling against a path you "
+                f"have actually reached — a `search` or `check` refusal names your worktree "
+                f"root — and ask again for a path that is there. Nothing was filed, so no "
+                f"operator attention was spent on it."))
         for root in (getattr(getattr(self, "_verdict", None), "granted", ()) or ()):
             r = _os.path.realpath(str(root))
             if rp == r or rp.startswith(r + "/"):

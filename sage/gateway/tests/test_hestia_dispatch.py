@@ -361,13 +361,17 @@ def test_membot_iserror_on_search_is_an_error_not_a_recall():
 
 
 def test_request_scope_carries_plugin_path_reason_and_live_session():
+    # A REAL directory, because request_scope now refuses a path that is not there — a grant
+    # on a phantom reaches nothing and nobody finds out (see the dead-grant test below).
+    # What this test pins is the daemon round-trip, so the path only has to exist.
     d, _ = _mdisp()
-    env = d(BeingIntent("request_scope", {"path": "/home/dp/notes", "reason": "to read my notes"}), _ALLOW)
+    here = tempfile.mkdtemp(prefix="scope-real-")
+    env = d(BeingIntent("request_scope", {"path": here, "reason": "to read my notes"}), _ALLOW)
     assert env.ok and env.witness_id == "rs-hash", env
     assert env.result["request_id"] == "scope-1" and env.result["status"] == "pending"
-    assert env.result["path"] == "/home/dp/notes" and "mode" not in env.result
+    assert env.result["path"] == here and "mode" not in env.result
     (sent,) = [a for n, a in FakeMcp.calls if n == "hestia_request_scope"]
-    assert sent["plugin_id"] == "sprout-being" and sent["path"] == "/home/dp/notes"
+    assert sent["plugin_id"] == "sprout-being" and sent["path"] == here
     assert sent["session_id"] == "sid-1"                # the live session from hestia_connect
     assert sent["reason"] == "[sprout-being] to read my notes"
     assert set(sent) == {"plugin_id", "path", "reason", "session_id"}  # no mode, no permits_read
@@ -393,7 +397,8 @@ def test_request_scope_daemon_error_is_keyed():
     FakeMcp.calls = []
     d = HestiaF1aDispatcher("sprout-being", tempfile.mkdtemp(prefix="hd-"),
                             mcp_factory=lambda ep, pid: Refuses(ep, pid))
-    env = d(BeingIntent("request_scope", {"path": "/x", "reason": "y"}), _ALLOW)
+    env = d(BeingIntent("request_scope",
+                        {"path": tempfile.mkdtemp(prefix="scope-err-"), "reason": "y"}), _ALLOW)
     assert not env.ok and env.error.startswith("hestia.scope_request_unknown_member"), env
 
 
@@ -474,12 +479,14 @@ def test_request_scope_inside_existing_reach_is_answered_locally_and_files_nothi
     from sage.gateway.being_gate_client import GatewayVerdict
     d, root = _disp()
     FakeMcp.calls.clear()
+    open(root + "/config.json", "w").write("{}")
     env = d(BeingIntent("request_scope", {"path": root + "/config.json", "reason": "to review my configuration"}),
             GatewayVerdict("allow", granted=(root,)))
     assert env.ok and env.result["status"] == "already_granted" and env.result["within"]
     assert not [n for n, _ in FakeMcp.calls if n == "hestia_request_scope"]
     # outside reach: filed as before
-    env = d(BeingIntent("request_scope", {"path": "/srv/elsewhere/x", "reason": "to read a peer's note"}),
+    elsewhere = tempfile.mkdtemp(prefix="scope-outside-")
+    env = d(BeingIntent("request_scope", {"path": elsewhere, "reason": "to read a peer's note"}),
             GatewayVerdict("allow", granted=(root,)))
     assert env.ok and env.result["request_id"] == "scope-1"
 
@@ -1125,3 +1132,41 @@ def test_a_restarted_membot_is_recovered_once_like_a_lapsed_mount():
     from sage.gateway.hestia_dispatch import _session_lost
     assert not _session_lost(RuntimeError("membot refused to mount 'c': SECURITY"))
     assert not _session_lost(RuntimeError("Rate limited"))
+
+
+def test_scope_on_a_path_that_does_not_exist_is_refused_before_it_is_filed(tmp_path):
+    """A grant on a path that does not exist reaches nothing, and nobody finds out.
+
+    Measured 2026-09-14, twelve hours after the fact. legion-being could not tell where its
+    own worktree was, because the escape refusals did not say so. It guessed
+    `/home/dp/ai-worktrees/legion-being/sage/gateway`, asked for scope on the guess, and the
+    operator granted it verbatim. The grant sat live in the being's scope list pointing at a
+    directory that has never existed, while the being still could not read the thing it
+    actually wanted and had no way to see why.
+
+    The cost of refusing a real request is one more beat. The cost of filing a phantom one is
+    an operator decision spent, a dead grant that looks like reach, and a being that cannot
+    tell the difference.
+    """
+    from sage.gateway.being_gate_client import GatewayVerdict
+    d, root = _disp()
+    FakeMcp.calls.clear()
+
+    ghost = str(tmp_path / "not" / "a" / "real" / "place")
+    env = d(BeingIntent("request_scope", {"path": ghost, "reason": "because"}),
+            GatewayVerdict("allow", granted=(root,)))
+
+    assert env.ok is False, "a phantom path must not become a pending operator decision"
+    assert "does not exist" in (env.error or ""), env.error
+    assert str(tmp_path) in (env.error or ""), \
+        f"the refusal must name the deepest part that DOES exist: {env.error!r}"
+    assert not [n for n, _ in FakeMcp.calls if n == "hestia_request_scope"], \
+        "nothing may be filed for a path that is not there"
+
+    # A real path outside reach still files, exactly as before.
+    real = tmp_path / "here"
+    real.mkdir()
+    env2 = d(BeingIntent("request_scope", {"path": str(real), "reason": "because"}),
+             GatewayVerdict("allow", granted=(root,)))
+    assert env2.ok and env2.result["request_id"] == "scope-1", \
+        "an existing path must still reach the operator"
