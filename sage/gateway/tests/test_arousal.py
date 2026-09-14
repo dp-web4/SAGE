@@ -175,3 +175,36 @@ def test_a_fired_deferred_timer_is_not_mistaken_for_an_armed_one():
         arousal.subprocess.run, arousal._sh = real, real_sh
     assert d["deferred"] is True and d.get("cleared_stale") is True and "already_armed" not in d
     assert len(calls) == 2 and any("stop" in a for a in stops)
+
+
+def test_the_cli_entry_point_exists_and_prints_json():
+    """THE DAEMON CALLS THIS AS A SUBPROCESS, and nothing in-process would notice its loss.
+
+    723c04d73 rewrote the end of this module and took `main()` and the `__main__` block with
+    it. `conversations.rs::arouse()` runs `python3 -m sage.gateway.arousal ...` and parses
+    stdout as JSON; with no entry point stdout is empty, so for seventeen hours every turn
+    posted through the daemon's /chat or /conversations route was appended and then answered
+    `engage: false, reason: "arousal policy unreadable"`. The being was never woken early by
+    a dashboard turn. The dp console calls respond() in-process and was unaffected, which is
+    exactly why no test and no seat noticed.
+
+    Found by GPT's review of SAGE#81 and reported by cbp-claude. Pinned here so the module
+    cannot lose its own entry point again."""
+    import json
+    import subprocess
+    import sys
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import arousal
+
+    assert hasattr(arousal, "main"), "the module must keep a CLI entry point"
+
+    inst = Path(tempfile.mkdtemp(prefix="arousal-cli-"))
+    p = subprocess.run([sys.executable, "-m", "sage.gateway.arousal",
+                        "--instance", str(inst), "--kind", "digest",
+                        "--descriptor", "cli pin"],
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr[:400]
+    d = json.loads(p.stdout)          # the daemon parses stdout as JSON; empty stdout is the bug
+    assert d["kind"] == "digest" and d["engage"] is False
+    assert d["descriptor"] == "cli pin" and d["reason"]
