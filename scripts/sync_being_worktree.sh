@@ -37,12 +37,32 @@ if [ -n "$UNTRACKED" ]; then
   echo "$UNTRACKED" | sed 's/^/  /' >&2
 fi
 
+# Fetch BEFORE the branch check: deciding whether a PR branch is still live needs to know
+# where the base is now, and asking after the guard would be asking too late.
+git fetch -q origin "$REF"
+
 BR="$(git rev-parse --abbrev-ref HEAD)"
 if [ "$BR" != "legion-being/work" ]; then
-  echo "NOT SYNCED: worktree is on '$BR' (a PR branch, presumably). Leaving it alone." >&2
-  exit 4
+  # A PR BRANCH WHOSE WORK IS ALREADY IN THE BASE IS A MERGED BRANCH, and leaving the being
+  # parked on one strands it. Measured 2026-09-14: legion-being's camera verb (#88) merged,
+  # and its worktree sat on the merged `legion-being/camera-verb` afterwards. It went on
+  # keeping a watchlist of pull requests it could no longer observe — its own included —
+  # and said so honestly: "this worktree has no fetch, so those stand on your report". It
+  # was stuck until a seat noticed by hand, which is not a mechanism.
+  #
+  # The discriminator is containment, not the branch name: if HEAD is an ancestor of the
+  # base, everything on this branch is already in the base and returning to work loses
+  # nothing. If it is NOT, the PR is still live and the old refusal is still right.
+  if git merge-base --is-ancestor HEAD FETCH_HEAD 2>/dev/null; then
+    echo "'$BR' is fully contained in $REF (its PR merged); returning to legion-being/work" >&2
+    git checkout -q legion-being/work || {
+      echo "NOT SYNCED: could not return to legion-being/work from '$BR'" >&2; exit 7; }
+  else
+    echo "NOT SYNCED: worktree is on '$BR', whose work is NOT yet in $REF (an open PR," >&2
+    echo "NOT SYNCED: presumably). Leaving it alone." >&2
+    exit 4
+  fi
 fi
-git fetch -q origin "$REF"
 # The upstream is what pr_open reads to choose a PR's base branch. It was never set, so
 # pr_base_branch fell through to "main" and the being's first PR (#63) proposed a 159-line
 # change against a tree that shares almost nothing with it: 9,271 additions across 55 files,
