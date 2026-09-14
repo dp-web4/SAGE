@@ -360,6 +360,37 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
             f"-e {shlex.quote(pattern)} -- {target}")
 
 
+def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a camera intent, built from validated args.
+
+    One frame on demand, no stream, no state across beats: ffmpeg captures exactly one
+    JPEG from the device (default /dev/video0) into a file inside the being's own
+    scratch. The being names only the output path — never the tool, its flags, or the
+    device node beyond naming it plainly; the SEAT builds the command and the law judges
+    THAT string. A missing or busy device is reported by ffmpeg's exit code, which the
+    dispatcher interprets (see _do_camera).
+    """
+    import shlex
+    worktree = ctx["worktree"] if ctx else None
+    if not worktree:
+        raise ValueError("camera requires a worktree context")
+
+    out_rel = args.get("out_path", "scratch/camera/last-frame.jpg")
+    if any(ch.isspace() for ch in out_rel):
+        raise ValueError(f"camera 'out_path' may not contain whitespace: {out_rel!r}")
+    if out_rel.startswith("-") or ".." in out_rel.split("/"):
+        raise ValueError(
+            f"camera 'out_path' must be a plain path inside your worktree, got {out_rel!r}"
+        )
+    full = os.path.realpath(os.path.join(worktree, out_rel))
+    if not (full == worktree or full.startswith(worktree + os.sep)):
+        raise ValueError(f"camera 'out_path' escapes your worktree: {out_rel!r}")
+
+    device = args.get("device", "/dev/video0")
+    return (f"ffmpeg -hide_banner -loglevel error -y -f v4l2 -i {shlex.quote(device)} "
+            f"-frames:v 1 -qscale:v 3 -f image2 {shlex.quote(full)}")
+
+
 def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The shell command the seat runs for a git_read intent, built from validated args.
 
@@ -673,6 +704,11 @@ _REGISTRY = {
     # command, the law judges THAT string, and the being never holds a shell.
     "search":         dict(tool="search",      path_args=(),        cmd_arg=None,
                            compose=search_command),
+    # camera: one frame on demand from this body's device into the being's own scratch.
+    # Composed like search — the being names only an output path (and optionally a plain
+    # device node), the SEAT builds the ffmpeg command, and the law judges THAT string.
+    "camera":         dict(tool="camera",      path_args=(),        cmd_arg=None,
+                           compose=camera_command),
     # git_read: read the history of the tree that constitutes it. Composed like check —
     # the being names an op, the SEAT builds the command, the law judges THAT string, and
     # the being never holds a flag. See git_read_command for what it composes with.
@@ -718,7 +754,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "check", "git_read", "say", "pr_open",
-                            "pr_amend", "git_restore", "search", "edit"})
+                            "pr_amend", "camera", "git_restore", "search", "edit"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -726,6 +762,17 @@ _TOOL_SCHEMAS = {
                  {"to": "the being's name, e.g. 'legion'", "body": "your message"}, ["to", "body"]),
     "witness": ("Record a witnessed note of something you did or noticed.",
                 {"event": "what to witness"}, ["event"]),
+    "camera": ("Capture ONE frame from this machine's camera into your own scratch — no "
+              "stream, nothing persists across beats. The seat runs ffmpeg against /dev/"
+              "video0 (or a plain device node you name) and writes one JPEG to the path "
+              "you give inside your worktree; default is scratch/camera/last-frame.jpg, "
+              "overwritten each time. A missing or busy device comes back as an error "
+              "envelope that names which: 'device absent' means no frame could be opened, "
+              "'device busy' means another process holds it — in both cases nothing was "
+              "written, so the last good file (if any) is untouched.",
+               {"out_path": "optional: where the JPEG lands, a plain path inside your worktree (default scratch/camera/last-frame.jpg)",
+                "device": "optional: a plain device node to read from (default /dev/video0)"},
+               []),
     "search": ("Find where something IS, without reading the file it is in. Give a pattern "
                "(text, or an extended regex) and optionally a path to narrow it; you get "
                "back file:line:text for each match. Use this BEFORE memory_read: reading a "

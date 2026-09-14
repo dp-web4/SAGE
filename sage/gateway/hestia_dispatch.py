@@ -39,7 +39,10 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope
+import subprocess
+
+from sage.gateway.being_gate_client import (BeingIntent, GatewayVerdict, ResultEnvelope,
+                                           camera_command)
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap, make_hestia_witness_fn
 from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 
@@ -658,6 +661,46 @@ class HestiaF1aDispatcher:
             "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "
                           f"path or the pattern" if truncated else None),
             "lines": shown})
+
+    # -- camera: one frame on demand from this body's device --------------------
+    def _do_camera(self, intent: BeingIntent) -> ResultEnvelope:
+        """Run the composed ffmpeg capture and report what it actually did.
+
+        Only ever reached on an intent the gate ALLOWED as the exact command below (see
+        camera_command). The being never holds a shell; this runs the seat-built string.
+        'off' is checkable, not vibes: exit 0 AND the frame file exists -> ok with its
+        byte size; nonzero exit and no frame written -> an error envelope that names
+        which kind (device absent vs device busy); zero exit without a file is reported
+        as a capture anomaly rather than claimed as success.
+        """
+        worktree = self.worktree
+        import shlex
+        out_rel = intent.args.get("out_path") or "scratch/camera/last-frame.jpg"
+        full_out = os.path.realpath(os.path.join(worktree, out_rel))
+        device = intent.args.get("device", "/dev/video0")
+
+        try:
+            cmd = camera_command(intent.args, {"worktree": self.worktree})
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        proc = subprocess.run(shlex.split(cmd), capture_output=True)
+        if proc.returncode == 0 and os.path.exists(full_out):
+            return ResultEnvelope(ok=True, result={
+                "device": device, "out_path": out_rel,
+                "bytes": os.path.getsize(full_out),
+                "note": ("one frame captured; read it back with memory_read on the path "
+                         "(or a vision-capable reader) — nothing persists across beats")})
+        if proc.returncode != 0:
+            kind = ("device absent" if not os.path.exists(device) else "device busy or "
+                    "unopenable (another process may hold it, or the node is wrong)")
+            return ResultEnvelope(ok=False, result={
+                "device": device, "out_path": out_rel, "exit_code": proc.returncode,
+                "note": (f"ffmpeg exited {proc.returncode} and no frame was written — "
+                         f"{kind}. The previous file at the path, if any, is untouched.")})
+        return ResultEnvelope(ok=False, result={
+            "device": device, "out_path": out_rel,
+            "note": ("ffmpeg exited 0 but wrote no readable frame — capture anomaly; do "
+                     "not treat a missing file as a captured one")})
 
     # -- check: the being runs a test and reads the answer (PRD M0) --------------
     def _do_check(self, intent: BeingIntent) -> ResultEnvelope:
