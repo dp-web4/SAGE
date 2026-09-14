@@ -917,7 +917,30 @@ class ResultEnvelope:
             import json as _json
             body = self.result if isinstance(self.result, str) else _json.dumps(self.result)
             return body + (f"  (witnessed {self.witness_id})" if self.witness_id else "")
-        return f"[dispatch error — {self.error}]"
+        if self.error:
+            return f"[dispatch error — {self.error}]"
+        # A FAILURE THAT EXPLAINS ITSELF IN `result` MUST NOT RENDER AS "None".
+        #
+        # Measured 2026-09-14 on legion/mission-artifact, found by legion-being on the first
+        # live use of a verb it had written itself. That verb reports failures through
+        # `result` — device, exit code, and a sentence naming which kind of failure — and
+        # leaves `error` unset, because the explanation is structured rather than a string.
+        # This renderer assumed not-ok implied `error`, so a complete diagnosis reached the
+        # being as the literal text "[dispatch error — None]", twice, and it could diagnose
+        # nothing. It reported an empty-error envelope matching no code path, which was
+        # exactly right and as far as it could get.
+        #
+        # Every verb on this branch happens to set `error`, so the defect is latent here
+        # rather than live. It is landed anyway: the envelope is the contract, and a
+        # contract that silently drops one of its own fields will be rediscovered by
+        # whoever next writes a verb that fills the other one.
+        if self.result is not None:
+            import json as _json
+            body = self.result if isinstance(self.result, str) else _json.dumps(self.result)
+            return (f"[failed — {body}]"
+                    + (f"  (witnessed {self.witness_id})" if self.witness_id else ""))
+        return ("[dispatch error — the envelope carried neither an error nor a result, which "
+                "is a harness defect: the act failed and nothing said why]")
 
 
 # A Dispatcher is F1a's contract, SAGE-side: given an ALLOWED intent + its verdict,
