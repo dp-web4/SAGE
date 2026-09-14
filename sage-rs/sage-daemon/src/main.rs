@@ -202,7 +202,15 @@ async fn dashboard() -> Html<&'static str> {
     Html(include_str!("dashboard.html"))
 }
 
-const PORT: u16 = 8760;
+const DEFAULT_PORT: u16 = 8760;
+
+/// The listening port: `SAGE_PORT` when set to a valid port, else 8760. The launchers
+/// already export SAGE_PORT (cbp_raising.sh) and the daemon ignored it, which also made a
+/// real-daemon test impossible on a machine whose live daemon holds 8760.
+fn port() -> u16 {
+    std::env::var("SAGE_PORT").ok().and_then(|v| v.parse().ok()).filter(|p| *p != 0)
+        .unwrap_or(DEFAULT_PORT)
+}
 
 // Path + identity resolution (Sprint 7: per-machine via env vars).
 //
@@ -284,7 +292,7 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
         status: "ok",
         uptime_secs: state.started.elapsed().as_secs_f64(),
         version: env!("CARGO_PKG_VERSION"),
-        port: PORT,
+        port: port(),
         model: state.model.clone(),
         ollama_available: available,
         consciousness_loop: true,
@@ -438,6 +446,22 @@ fn loopback_only(peer: std::net::SocketAddr, route: &str)
     }))))
 }
 
+/// Conversation CONTENT is readable only over loopback (GPT review of SAGE#81). The daemon
+/// binds 0.0.0.0 for federation, so without this every host that can reach :8760 could read
+/// what dp and the seat said to the being. That is a different surface from /status or
+/// /peers telemetry, and the LAN or tailnet topology is not an access decision.
+fn loopback_reader(peer: std::net::SocketAddr, route: &str)
+    -> Option<(StatusCode, Json<serde_json::Value>)> {
+    if peer.ip().is_loopback() {
+        return None;
+    }
+    Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
+        "error": format!("{route} is readable only over loopback; {} is not this machine", peer.ip()),
+        "why": "conversation turns are what dp and the seat said to the being; no route here authenticates a reader",
+        "hint": "read from the machine the being runs on (the dashboard or dp console on 127.0.0.1)",
+    }))))
+}
+
 async fn chat_being(
     State(state): State<Arc<AppState>>,
     axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
@@ -486,22 +510,32 @@ struct SayRequest {
 }
 
 /// Every conversation this being is in, most recently spoken first.
-async fn conversations_list(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+async fn conversations_list(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(refused) = loopback_reader(peer, "/conversations") {
+        return refused;
+    }
     let convs = conversations::list(&state.being_instance, &state.being);
-    Json(serde_json::json!({
+    (StatusCode::OK, Json(serde_json::json!({
         "being": state.being,
         "instance": state.being_instance.display().to_string(),
         "conversations": convs,
-    }))
+    })))
 }
 
 /// One conversation. `?limit=N` bounds the VIEW; `total` is what is stored, and storage is
 /// never trimmed — the same contract as /chat-history, which this deliberately mirrors.
 async fn conversation_get(
     State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
     axum::extract::Path(id): axum::extract::Path<String>,
     axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(refused) = loopback_reader(peer, "/conversations/:id") {
+        return refused;
+    }
     let meta = match conversations::get_meta(&state.being_instance, &id) {
         Some(m) => m,
         None => return (StatusCode::NOT_FOUND,
@@ -856,7 +890,7 @@ async fn main() {
         .route("/images/:filename", get(serve_image))
         .with_state(state);
 
-    let addr = format!("0.0.0.0:{PORT}");
+    let addr = format!("0.0.0.0:{}", port());
     info!("sage-daemon listening on {addr} (model={model}, consciousness=active, federation=active)");
     println!("sage-daemon listening on {addr} (model={model}, consciousness=active, federation=active)");
 
@@ -893,6 +927,13 @@ mod speaker_route_tests {
 
     #[test]
     fn a_speaker_is_accepted_only_from_this_machine() {
+        assert!(loopback_reader(peer("127.0.0.1:5000"), "/conversations").is_none());
+        assert!(loopback_reader(peer("[::1]:5000"), "/conversations/:id").is_none());
+        for lan in ["10.0.0.146:5000", "100.75.141.17:5000", "192.168.1.9:5000"] {
+            let (code, body) = loopback_reader(peer(lan), "/conversations").expect(lan);
+            assert_eq!(code, StatusCode::FORBIDDEN);
+            assert!(body.0["error"].as_str().unwrap().contains("readable only over loopback"));
+        }
         assert!(loopback_only(peer("127.0.0.1:5000"), "/chat").is_none());
         assert!(loopback_only(peer("[::1]:5000"), "/chat").is_none());
         for lan in ["192.168.1.20:5000", "10.0.0.3:1", "[fe80::1]:1", "0.0.0.0:1"] {

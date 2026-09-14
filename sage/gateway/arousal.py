@@ -114,14 +114,16 @@ def decide(instance: Path, kind: str, *, now: Optional[float] = None) -> dict:
                        f"it will be read at the next scheduled beat")
         return d
     if beat_running():
-        # This used to be a consolation ("it will see this when it reads its state") that
-        # was not true within the beat: the conversation block is composed at beat start,
-        # so a turn arriving mid-beat waited for the next one. Since 2026-09-09 the loop
-        # drains new turns between steps (conversations.drain_new_for), so an already-awake
-        # being is the FASTEST case, not the slowest — it gets the message in seconds.
-        d["reason"] = ("a beat is already running: the turn is delivered into it between "
-                       "steps, so the being sees this within seconds without a new beat")
-        d["delivered_in_flight"] = True
+        # The conversation block is composed at beat START, so a turn arriving mid-beat is
+        # not in the beat that is running. On legion/mission-artifact the tool loop drains
+        # new turns between steps (conversations.drain_new_for via an `interject` hook) and
+        # this branch said so; that hook is not on main, so saying it here would be a claim
+        # about a capability this tree does not have (GPT review of SAGE#81). Until the
+        # interject slice lands: recorded, read at the next beat, and no in-flight delivery.
+        d["reason"] = ("a beat is already running and composed its state before this turn "
+                       "arrived; the turn is recorded and will be read at the next beat")
+        d["beat_running"] = True
+        d["delivered_in_flight"] = False
         return d
 
     since = None
@@ -229,3 +231,46 @@ def _deferred_timer_waiting() -> bool:
     except Exception:
         return False
     return out == "waiting"
+
+
+def main(argv=None) -> int:
+    """CLI so a non-Python caller uses THIS policy instead of reimplementing it.
+
+    The Rust daemon (sage-rs conversations::arouse) runs
+        python3 -m sage.gateway.arousal --instance <dir> --kind <kind> --descriptor <line>
+    when a turn arrives through /chat or /conversations/:id/say, and reads the decision as
+    JSON on stdout. Encoding the weights and the refractory period a second time in Rust
+    would make two producers of one fact. Exit 0 whether or not it engaged: "declined, and
+    here is why" is a successful answer.
+
+    This entry point existed (042ef5eae) and was lost when 723c04d73 rewrote the end of the
+    file on legion/mission-artifact; the daemon then read empty stdout, reported "arousal
+    policy unreadable", and never woke the being (GPT review of SAGE#81). Pinned now by a
+    real module invocation in test_arousal.py and a real daemon turn in
+    test_daemon_conversations.py.
+
+    --dry-run (or SAGE_AROUSAL_DRY_RUN=1 in the process environment, which the daemon
+    passes through to this subprocess) decides and reports only: no wake marker, no
+    systemd start, no deferred timer.
+    """
+    import argparse
+    import os as _os
+    ap = argparse.ArgumentParser(description="metabolic response to a world input")
+    ap.add_argument("--instance", required=True)
+    ap.add_argument("--kind", required=True, help=f"one of {sorted(SALIENCE)} (unknown = quiet)")
+    ap.add_argument("--descriptor", required=True, help="what happened, in one line")
+    ap.add_argument("--dry-run", action="store_true", help="decide and report; never start a beat")
+    a = ap.parse_args(argv)
+    inst = Path(a.instance)
+    flag = _os.getenv("SAGE_AROUSAL_DRY_RUN", "").strip().lower()
+    dry = a.dry_run or flag in ("1", "true", "yes")
+    d = decide(inst, a.kind) if dry else respond(inst, a.kind, descriptor=a.descriptor)
+    d.setdefault("descriptor", a.descriptor)
+    if dry:
+        d["dry_run"] = True
+    print(json.dumps(d))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

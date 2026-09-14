@@ -175,3 +175,28 @@ def test_a_fired_deferred_timer_is_not_mistaken_for_an_armed_one():
         arousal.subprocess.run, arousal._sh = real, real_sh
     assert d["deferred"] is True and d.get("cleared_stale") is True and "already_armed" not in d
     assert len(calls) == 2 and any("stop" in a for a in stops)
+
+
+def test_the_cli_is_what_the_daemon_calls_and_it_answers_in_json(tmp_path):
+    """GPT review of SAGE#81: sage-rs conversations::arouse runs
+    `python3 -m sage.gateway.arousal --instance --kind --descriptor` and parses stdout as
+    JSON. The entry point was deleted on the nursery branch (723c04d73) and nothing failed.
+    This runs the module exactly as the daemon does. --dry-run so no marker or unit."""
+    import subprocess, sys as _sys
+    repo = Path(__file__).resolve().parents[3]
+    p = subprocess.run([_sys.executable, "-m", "sage.gateway.arousal", "--instance", str(tmp_path),
+                        "--kind", "dp_turn", "--descriptor", "dp spoke in conversation 'dp'",
+                        "--dry-run"], cwd=str(repo), capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr
+    d = json.loads(p.stdout)
+    assert d["kind"] == "dp_turn" and "engage" in d and "reason" in d and d["dry_run"] is True
+    assert d["descriptor"] == "dp spoke in conversation 'dp'"
+
+
+def test_a_running_beat_does_not_claim_in_flight_delivery(tmp_path):
+    """On main the tool loop has no interject hook, so a turn posted mid-beat is NOT in the
+    beat that is running. The decision must say so, not promise seconds (GPT, SAGE#81)."""
+    _quiet(monkey_running=True)
+    d = arousal.decide(tmp_path, "dp_turn")
+    assert d["engage"] is False and d.get("delivered_in_flight") is False
+    assert "next beat" in d["reason"] and "between steps" not in d["reason"]

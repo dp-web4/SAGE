@@ -299,7 +299,9 @@ def drain_new_for(instance: Path, me: str, *, mark: bool = True) -> str:
     wakes it immediately to respond... it should be able to continue as long as it wishes")
     a beat can run for hours, and a message arriving into a working being would have waited
     the whole time — the opposite of what waking it immediately is for. So the loop drains
-    this between steps and hands it to the being as it works."""
+    this between steps and hands it to the being as it works. NOTE: on main no caller wires
+    it yet (the tool loop's `interject` hook is a later slice of #56), so a turn posted
+    mid-beat is read at the next beat."""
     out = []
     for m in listing(instance):
         if me not in m.get("participants", []):

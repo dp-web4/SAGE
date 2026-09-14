@@ -41,10 +41,12 @@ speaks to no daemon, and cannot act as the being or as a seat.
 """
 from __future__ import annotations
 
+import hmac
 import html
 import json
 import os
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -77,6 +79,16 @@ from sage.gateway import conversations as conv
 # told it can tell dp from a seat, and a console that wrote turns under a generic "operator"
 # would quietly make that untrue.
 DP = "dp"
+
+# Per-process form token. Loopback restricts who can CONNECT, not who can make a browser
+# submit a form; a hostile page can POST to 127.0.0.1. Every rendered form embeds this and
+# do_POST requires it, so a write reaches the being only from a page this process served.
+# Restarting the console invalidates old pages, which is the intended behaviour.
+FORM_TOKEN = secrets.token_urlsafe(32)
+
+
+def _csrf_field() -> str:
+    return f'<input type="hidden" name="csrf" value="{FORM_TOKEN}">'
 
 
 def _now() -> str:
@@ -207,7 +219,8 @@ def append_note(text: str) -> Path:
 def _clock_line() -> str:
     bc = beat_clock()
     if bc["running"]:
-        return "<b>Beat running now</b> — it will read anything already posted."
+        return ("<b>Beat running now</b> · it composed its state when it started, so a turn "
+                "posted now is read at the next beat")
     return (f"<b>Next beat {html.escape(bc['left'])}</b> · every 30 min ±2 · "
             f"~{bc['median_min'] or '?'} min per beat · a reply lands at the end of one")
 
@@ -265,7 +278,7 @@ def render_conv(conv_id: str, limit: int = conv.DEFAULT_LIMIT, flash: str = "") 
     if writable:
         form = (f'<div class="card"><div class="meta">Your words go to {html.escape(BEING)} '
                 f'verbatim, attributed to <b>dp</b>, and reach it at its next beat.</div>'
-                f'<form method="POST" action="/say"><input type="hidden" name="to" value="{html.escape(conv_id)}">'
+                f'<form method="POST" action="/say">{_csrf_field()}<input type="hidden" name="to" value="{html.escape(conv_id)}">'
                 f'<textarea name="text" placeholder="…"></textarea>'
                 f'<button type="submit">Send</button></form></div>')
     else:
@@ -319,7 +332,7 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <div class="card">
  <div class="meta">Appended to <code>notes/from-dp.md</code>, which it reads at the top of every beat,
   above the seat's relay. Use this for anything that is not an answer to a specific thread.</div>
- <form method="POST" action="/note"><textarea name="text" placeholder="…"></textarea>
+ <form method="POST" action="/note">{csrf}<textarea name="text" placeholder="…"></textarea>
  <button type="submit">Send to {being}</button></form>
 </div>
 
@@ -363,7 +376,7 @@ THREAD_BLOCK = """<div class="card">
  <div><b>{name}</b><span class="pill {cls}">{state}</span>
   <span class="meta"> · last touched {mtime}</span></div>
  <pre style="margin-top:10px">{body}</pre>
- <form method="POST" action="/reply">
+ <form method="POST" action="/reply">{csrf}
   <input type="hidden" name="thread" value="{name}">
   <textarea name="text" placeholder="Your reply is appended to this thread. The being reads it in full every beat."></textarea>
   <button type="submit">Reply in this thread</button>
@@ -380,14 +393,15 @@ def render(flash: str = "") -> str:
             name=html.escape(t["name"]), mtime=t["mtime"],
             cls="done" if answered else "wait",
             state="you answered last" if answered else "waiting on you",
-            body=html.escape(t["body"])))
+            body=html.escape(t["body"]), csrf=_csrf_field()))
     bc = beat_clock()
-    clock = (("<b>Beat running now</b> — it will read anything you have posted." if bc["running"]
+    clock = (("<b>Beat running now</b> · anything posted now is read at the next beat" if bc["running"]
               else f"<b>Next beat {html.escape(bc['left'])}</b> (at {html.escape(bc['next'])})")
              + f" &nbsp;·&nbsp; every 30 min ±2 · a beat takes ~{bc['median_min'] or '?'} min"
                " · your turn is read at the START of a beat, its reply lands at the end")
     return PAGE.format(
         clock=clock,
+        csrf=_csrf_field(),
         being=html.escape(BEING),
         flash=f'<div class="card" style="border-color:var(--gn)">{html.escape(flash)}</div>' if flash else "",
         beat_ts=b.get("ts") or "—", beat_drive=b.get("drive") or "—",
@@ -440,6 +454,13 @@ class Handler(BaseHTTPRequestHandler):
         from urllib.parse import parse_qs
         n = int(self.headers.get("Content-Length") or 0)
         form = parse_qs(self.rfile.read(n).decode(errors="replace"))
+        # Loopback is not browser authentication (GPT review of SAGE#81): any page open in a
+        # browser on this machine can submit a form to 127.0.0.1 without reading the reply.
+        # Every form this console renders carries a per-process random token; a POST without
+        # it, or with a stale one from a previous process, writes nothing.
+        if not hmac.compare_digest((form.get("csrf") or [""])[0], FORM_TOKEN):
+            return self._send(403, "refused: this form did not come from this console "
+                                   "(missing or stale form token); reload the page", "text/plain")
         text = (form.get("text") or [""])[0]
         try:
             if self.path == "/note":
