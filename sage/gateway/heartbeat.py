@@ -27,6 +27,7 @@ reflect. Same words, same tools, different order; a presentation, not a fork (Le
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import signal
