@@ -363,11 +363,22 @@ def test_a_write_failure_is_not_reported_as_a_busy_device(tmp_path):
     wt = tmp_path / "wt"; (wt / "scratch" / "camera").mkdir(parents=True)
     d = _dispatcher(str(wt))
 
+    # A DEVICE THIS TEST OWNS, not the host's. The classifier's first branch is
+    # os.path.exists(device), so with the default /dev/video0 this test asks a question
+    # about the machine it runs on: it passed on the host, where the node exists, and failed
+    # inside the being's sandbox, where `--dev /dev` is minimal and there is no video node —
+    # so it short-circuited to "device absent" and never reached the stderr branch this test
+    # exists to pin. Found by legion-being running `check` after I reported the same head
+    # green from the host. A test whose verdict depends on where it ran is not a test of the
+    # code (same defect as the mesh roster, fixed in SAGE#86 hours earlier).
+    dev = tmp_path / "fake-video0"
+    dev.write_bytes(b"")
+
     orig = hd.subprocess.run
     hd.subprocess.run = lambda cmd, **kw: types.SimpleNamespace(
         returncode=251, stdout=b"", stderr=b"Unable to open output file: Permission denied")
     try:
-        env = d._do_camera(BeingIntent("camera", {}))
+        env = d._do_camera(BeingIntent("camera", {"device": str(dev)}))
     finally:
         hd.subprocess.run = orig
 
