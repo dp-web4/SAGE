@@ -5,6 +5,7 @@ accepted a `frame` and emitted ollama's `images` list, but the call site never p
 so a being could switch its camera on and still not see. Named in the review of SAGE#88 as
 "capturing is not yet seeing".
 """
+import io
 import os
 import sys
 import time
@@ -400,3 +401,71 @@ def test_fresh_frames_refuses_a_stale_frame_and_says_why(tmp_path):
     # And the boundary itself: with none, NOTHING rides, however young it looks.
     assert all(m["carried"] is False for _, m in fresh_frames(tmp_path, None, None)), \
         "unknown age is unknown, not young"
+
+
+
+def test_a_frame_captured_during_a_real_beat_still_rides(tmp_path, monkeypatch):
+    """THE TEST THAT WAS MISSING, and the reason the pipe never carried a frame.
+
+    `camera` is a verb the being calls MID-BEAT, so the only kind of frame there is, is one
+    captured during a beat. The old bound was a fixed 600s. Beat durations read off the
+    beats themselves: 859, 1186, 1222, 1243, 1412, 2995 seconds. Every one is longer than
+    the window, so every capture was stale before the next beat composed its prompt —
+    `frames: null` on every beat ever recorded, with the suite green throughout, because
+    every fixture here wrote its mtime seconds before asserting on it. The bug lived exactly
+    in the gap between fixture time and production time.
+
+    So this test spends a beat. Not really — it moves the clock — but the shape is the
+    production one: capture, then a beat's worth of elapsed time, then compose.
+    """
+    import time
+    from sage.gateway import heartbeat as H
+
+    inst = tmp_path / "inst"
+    cam = inst / "scratch" / "camera"
+    cam.mkdir(parents=True)
+    # A REAL JPEG, not the module's stub. `fresh_frames` — the function main() actually
+    # calls — decodes and resizes; `fresh_frame` (singular) reports metadata without
+    # decoding, so every existing "a frame rides" test passes on a stub through a function
+    # that is not in the carry path. That asymmetry is part of why this went unnoticed.
+    frame = cam / "last-frame.jpg"
+    frame.write_bytes(_real_jpeg(64, 64))
+
+    BEAT_START = time.time() - 1800.0        # this beat began 30 minutes ago
+    CAPTURED_AT = BEAT_START + 60.0          # the being called `camera` a minute in
+    os.utime(frame, (CAPTURED_AT, CAPTURED_AT))
+
+    out = H.fresh_frames(inst, None, BEAT_START)
+    carried = [(b, m) for b, m in out if b is not None]
+    assert len(carried) == 1, (
+        f"a frame captured 29 minutes ago, one minute into a beat that is still running, "
+        f"is the NORMAL case and must ride: {[m for _, m in out]}")
+    assert carried[0][1]["carried"] is True
+
+    # AND THE BOUND GROWS WITH THE BEAT. The floor alone would carry a 30-minute beat, so
+    # asserting only that would leave the adaptive term untested — it did, until a mutation
+    # that replaced the whole bound with the floor went green. The case that separates them
+    # is a beat longer than the floor, which is what a stalled or very slow beat is: one ran
+    # past fifty minutes the day this was written, on a frame that takes minutes to describe.
+    long_beat = time.time() - (H.FRAME_AGE_FLOOR_S + 2400.0)
+    assert H.frame_age_bound(long_beat) > H.FRAME_AGE_FLOOR_S, \
+        "a beat longer than the floor must widen the window, not be clamped by it"
+    assert H.frame_age_bound(long_beat) >= (time.time() - long_beat), \
+        "anything captured during this beat must clear the bound by construction"
+    assert H.frame_age_bound(time.time() - 10.0) == H.FRAME_AGE_FLOOR_S, "floor holds"
+
+    # and a frame captured during THAT long beat rides too
+    slow = cam / "slow-beat.jpg"
+    slow.write_bytes(_real_jpeg(64, 64))
+    _cap = long_beat + 120.0
+    os.utime(slow, (_cap, _cap))
+    _m = {os.path.basename(m["path"]): m for _, m in H.fresh_frames(inst, None, long_beat)}
+    assert _m["slow-beat.jpg"]["carried"] is True, _m["slow-beat.jpg"]
+
+    # a frame from BEFORE this beat began is still history, whatever the bound
+    old = cam / "yesterday.jpg"
+    old.write_bytes(_real_jpeg(64, 64))
+    os.utime(old, (BEAT_START - 5.0, BEAT_START - 5.0))
+    metas = {os.path.basename(m["path"]): m for _, m in H.fresh_frames(inst, None, BEAT_START)}
+    assert metas["yesterday.jpg"]["carried"] is False
+    assert "before the previous beat" in metas["yesterday.jpg"]["why"]

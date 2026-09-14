@@ -376,11 +376,39 @@ def _config_check(instance: Path, model: str, llm, offered) -> dict:
 FRAME_MAX_EDGE = 1024        # longest side, pixels
 FRAME_TOKENS = 591           # what FRAME_MAX_EDGE costs, measured
 
-# How old a capture may be and still ride into the seed. A frame is evidence of
-# NOW; older than this it is history, not perception — and the beat's prompt
-# would spend its room on a picture of yesterday. Measured against the cadence
-# beats actually run (minutes), with headroom for a slow operator: 10 minutes.
-FRAME_MAX_AGE_S = 600
+# How old a capture may be and still ride into the seed.
+#
+# THE REAL BOUND IS `since`, NOT A CONSTANT. A frame rides when the being captured it after
+# the previous beat began — its `camera` act is the request to see, and that act is dated by
+# the beat it happened in. Everything below is a backstop against a clock that lied, not a
+# second opinion about freshness.
+#
+# THIS WAS A FIXED 600s AND THE PIPE NEVER CARRIED A SINGLE FRAME. The old comment claimed
+# it was "measured against the cadence beats actually run (minutes)". The cadence, read off
+# the beats themselves the day this was found: 859, 1186, 1222, 1243, 1412, 2995 seconds.
+# Every beat is longer than the window. So a frame captured DURING a beat — which is the
+# only kind there is, since `camera` is a verb the being calls mid-beat — was always stale
+# by the time the next beat composed its prompt. `frames: null` on every beat ever recorded,
+# while the suite stayed green because tests write fixtures with fresh mtimes and never
+# spend twenty minutes between capture and compose.
+#
+# This is the shape I already had a name for and built anyway: a TTL shorter than the
+# system's own delivery latency is a countdown, not a control (hestia #956, same week). A
+# constant cannot know how long a beat takes. This one asks the beat.
+FRAME_AGE_FLOOR_S = 3600     # backstop floor: never tighter than an hour, whatever the beat
+FRAME_AGE_GRACE_S = 300      # capture -> compose slack inside the same beat
+
+
+def frame_age_bound(since: Optional[float], now: Optional[float] = None) -> float:
+    """The oldest a frame may be, derived from THIS beat's own wait rather than guessed.
+
+    `now - since` is how long the current beat has been running, so any frame captured
+    during it clears the bound by construction. The floor keeps a pathologically short
+    beat from tightening the window below something sane."""
+    if since is None:
+        return FRAME_AGE_FLOOR_S
+    now = time.time() if now is None else now
+    return max(FRAME_AGE_FLOOR_S, (now - since) + FRAME_AGE_GRACE_S)
 FRAME_MAX_BYTES = 4_000_000  # a JPEG larger than this is not a webcam frame; refuse to guess
 
 
@@ -871,11 +899,14 @@ def fresh_frames(instance: Path, worktree: Optional[str], since: Optional[float]
             st = p.stat()
         except OSError:
             continue  # vanished between listing and stat — skip it, keep the rest
-        age_s = round(time.time() - st.st_mtime, 1)
-        if since is None or st.st_mtime < since or age_s > FRAME_MAX_AGE_S:
+        _now = time.time()
+        age_s = round(_now - st.st_mtime, 1)
+        _bound = frame_age_bound(since, _now)
+        if since is None or st.st_mtime < since or age_s > _bound:
             why = ("no beat boundary to check freshness against" if since is None
                    else (f"captured before the previous beat's t0 ({age_s}s old)"
-                         if st.st_mtime < since else f"older than {FRAME_MAX_AGE_S}s"))
+                         if st.st_mtime < since
+                         else f"older than {round(_bound)}s (this beat's own bound)"))
             out.append((None, {"path": str(p), "carried": False, "why": why, "age_s": age_s}))
         else:
             b64 = _frame_b64(p)
