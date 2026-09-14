@@ -107,7 +107,7 @@ def test_run_ollama_tool_turn_with_fake_llm():
     # the `gh` command it runs), + recall / remember (membot long-term memory) + request_scope
     # (the sanctioned answer to a deny) for the heartbeat (2026-09-03, dp: "it needs a reason
     # to look for things to do"). Widening this number is a registry decision, not a typo.
-    assert len(ollama_tools()) == 14   # + appeal (S4), + say (conversations), + git_read/search (worktree-read slice)
+    assert len(ollama_tools()) == 15   # + appeal (S4), + say, + git_read/search (#83), + check (this slice)
 
     calls = {"n": 0}
 

@@ -806,3 +806,191 @@ def test_a_search_that_finds_nothing_is_a_result_not_an_error(tmp_path):
     assert miss.ok is True, "a search that finds nothing still succeeded as an act"
     assert miss.result["matches"] == 0
     assert "WHAT WAS SEARCHED" in miss.result["note"]
+
+
+def test_a_check_result_carries_the_evidence_a_reviewer_would_reconstruct_by_hand(tmp_path):
+    """GPT's #60 evidence contract, carried forward from the #62 slice that never landed.
+
+    The being pastes check output into PR bodies and a reviewer re-runs it. Every field
+    here is one the reviewer would otherwise reconstruct by hand: which command ran, against
+    which bytes, how much output, what exit status, on which substrate, and whether the tree
+    moved underneath while it ran."""
+    from sage.gateway.being_gate_client import BeingIntent
+    import sage.gateway.being_gate_client as bgc
+
+    wt = _check_tree(tmp_path)
+    d = _dispatcher(wt)
+    saved = bgc.SANDBOX_REQUIRED, bgc.sandbox_available
+    bgc.SANDBOX_REQUIRED, bgc.sandbox_available = False, (lambda: False)
+    try:
+        env = d._do_check(BeingIntent("check", {"target": "gateway"}))
+    finally:
+        bgc.SANDBOX_REQUIRED, bgc.sandbox_available = saved
+
+    assert env.ok and env.result["verdict"] == "PASS"
+    e = env.result["evidence"]
+    assert e["exit_status"] == 0
+    assert e["output_bytes"] > 0 and len(e["output_sha256"]) == 64
+    assert e["embodiment"] == {"running_tag": "declared-tag", "runner": "ollama"}, (
+        "embodiment must come from the instance's declared active_embodiment. It was a "
+        "constructor argument in #62, nothing ever passed it, and every live check result "
+        "carried `embodiment: {}` until the being's own first evidence block showed it "
+        "empty — an always-empty evidence field reads like a measurement and is worse "
+        "than no field")
+    assert e["test_source"]["files"] == 1 and len(e["test_source"]["sha256"]) == 64
+    assert e["test_source"]["at_head"] == env.result["tree"]["head"]
+    assert e["stable"] is True and e["state"] == "pinned"
+    assert e["argv"][0] and e["command"].endswith(e["argv"][-1])
+
+
+
+
+def test_the_command_executed_must_be_the_command_the_law_judged(tmp_path):
+    """The authority for what runs is the verdict, not the intent's args. The dispatcher
+    used to execute a command it RECOMPOSED from the args; they agree by construction, and
+    that agreement was an assumption rather than a checked invariant."""
+    from sage.gateway.being_gate_client import BeingIntent, check_command
+    import sage.gateway.being_gate_client as bgc
+
+    wt = _check_tree(tmp_path)
+    saved = bgc.SANDBOX_REQUIRED, bgc.sandbox_available
+    bgc.SANDBOX_REQUIRED, bgc.sandbox_available = False, (lambda: False)
+    try:
+        # a verdict that bound a DIFFERENT command: refused before anything runs
+        env = _dispatcher(wt, judged="python3 -m pytest /etc")._do_check(
+            BeingIntent("check", {"target": "gateway"}))
+        assert env.ok is False and "the law is the authority" in env.error.lower()
+
+        # the matching command runs, and the result says the law bound it
+        real = check_command({"target": "gateway"}, {"worktree": str(wt)})
+        ok = _dispatcher(wt, judged=real)._do_check(BeingIntent("check", {"target": "gateway"}))
+        assert ok.ok and ok.result["evidence"]["law_bound_command"] is True
+    finally:
+        bgc.SANDBOX_REQUIRED, bgc.sandbox_available = saved
+
+
+
+
+def test_a_dirty_worktree_downgrades_the_claim_it_does_not_refuse_the_check(tmp_path):
+    """#62 REFUSED on a dirty tree — sound when the being could not write to its worktree,
+    and wrong now. Its loop is write a test -> check -> propose; refusing there would mean
+    it could never check its own uncommitted work, which is the capability M1 exists to
+    give it. Dirtiness is reported, and test_source names the bytes that actually ran."""
+    from sage.gateway.being_gate_client import BeingIntent
+    import sage.gateway.being_gate_client as bgc
+
+    wt = _check_tree(tmp_path)
+    clean_sha = None
+    saved = bgc.SANDBOX_REQUIRED, bgc.sandbox_available
+    bgc.SANDBOX_REQUIRED, bgc.sandbox_available = False, (lambda: False)
+    try:
+        first = _dispatcher(wt)._do_check(BeingIntent("check", {"target": "gateway"}))
+        clean_sha = first.result["evidence"]["test_source"]["sha256"]
+        assert first.result["tree"]["dirty"] is False
+
+        # uncommitted work, exactly as the being leaves it before proposing
+        (wt / "sage" / "gateway" / "tests" / "test_real.py").write_text(
+            "def test_real():\n    assert True\n\n\ndef test_new():\n    assert True\n")
+        env = _dispatcher(wt)._do_check(BeingIntent("check", {"target": "gateway"}))
+    finally:
+        bgc.SANDBOX_REQUIRED, bgc.sandbox_available = saved
+
+    assert env.ok and env.result["verdict"] == "PASS", "a dirty tree must still be checkable"
+    assert env.result["tree"]["dirty"] is True, "and must SAY it was dirty"
+    # the bytes that ran are named, and they are not the committed ones
+    assert env.result["evidence"]["test_source"]["sha256"] != clean_sha
+
+
+
+
+def test_check_on_a_nonexistent_test_is_no_such_test_not_fail(tmp_path):
+    """2026-09-08 11:34Z: the being asked for a test name that does not exist, pytest
+    deselected everything and exited 5, and the harness told it the suite was RED. A false
+    red is worse than a false green for a being trained by its own record to trust red
+    over its reading."""
+    import subprocess
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent
+    import sage.gateway.being_gate_client as bgc
+    wt = tmp_path / "wt"; (wt / "sage" / "gateway" / "tests").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    (wt / "sage" / "gateway" / "tests" / "test_real.py").write_text("def test_real():\n    assert True\n")
+    d = D.__new__(D); d.worktree = str(wt); d.plugin_id = "b"; d.being_lct = None
+    d._call = lambda name, args: {"actionId": "act-5"} if name == "hestia_begin_action" else {}
+    # run unsandboxed for the test's own sake: the subject is the exit-5 mapping
+    saved = bgc.SANDBOX_REQUIRED, bgc.sandbox_available
+    bgc.SANDBOX_REQUIRED, bgc.sandbox_available = False, (lambda: False)
+    try:
+        env = d._do_check(BeingIntent("check", {"target": "gateway::test_does_not_exist"}))
+        assert env.ok and env.result["verdict"] == "NO_SUCH_TEST" and env.result["passed"] is None, env
+        assert "does not exist" in env.result["reason"]
+        env2 = d._do_check(BeingIntent("check", {"target": "gateway::test_real"}))
+        assert env2.result["verdict"] == "PASS"
+    finally:
+        bgc.SANDBOX_REQUIRED, bgc.sandbox_available = saved
+
+
+
+# -- the cartridge-destroying path, reproduced (legion-being, 2026-09-08) ---------------
+#
+# 223 memories stood at 21:36:20Z. Every beat after that reported ok and left a 0-memory
+# cart. membot says "No cartridge mounted" as ORDINARY TEXT, so the store looked like a
+# success; save_cartridge then serialised the empty session over the populated file, and
+# the empty file fails membot's next integrity check, so the loop sustains itself.
+
+
+def test_a_check_result_leads_with_its_verdict_in_words():
+    """The being read three separate FAILs as passes, then wrote a plan on "the full suite
+    passes" while its own check that beat returned FAIL. `passed` and `verdict` were already
+    the 2nd and 3rd keys; that was not enough. The envelope's `ok` means the check RAN.
+
+    A verb whose most important fact needs a field lookup gets misread eventually, so the
+    first thing in the message is a sentence that cannot be read as anything else."""
+    import json
+    from sage.gateway.being_gate_client import ResultEnvelope
+    env = ResultEnvelope(ok=True, witness_id="w",
+                         result={"headline": "FAIL — 5 failed, 206 passed. This is the answer. "
+                                             "A check that RAN and FAILED still returns "
+                                             "successfully as an act: 'the call worked' is not "
+                                             "'the tests passed'.",
+                                 "target": "gateway", "passed": False, "verdict": "FAIL"})
+    msg = env.to_tool_message()
+    assert msg.index("FAIL") < 30, "the verdict must lead, not sit behind a field lookup"
+    assert "'the call worked' is not 'the tests passed'" in msg
+    assert json.loads(msg.split("  (witnessed")[0])["headline"].startswith("FAIL")
+
+
+
+
+
+def _check_tree(tmp_path, body="def test_real():\n    assert True\n"):
+    """A git worktree with one gateway test, committed, for exercising the check organ."""
+    import subprocess
+    wt = tmp_path / "wt"; (wt / "sage" / "gateway" / "tests").mkdir(parents=True)
+    (wt / "sage" / "gateway" / "tests" / "test_real.py").write_text(body)
+    for args in (["init", "-q"], ["add", "-A"],
+                 ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "t"]):
+        subprocess.run(["git", "-C", str(wt), *args], check=True,
+                       capture_output=True)
+    return wt
+
+
+
+
+def _dispatcher(wt, judged=None):
+    import json as _json
+    import types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    d = D.__new__(D)
+    d.worktree = str(wt); d.plugin_id = "b"; d.being_lct = None
+    # the instance declares its substrate; the dispatcher reads it rather than being told.
+    # The instance dir is NOT the worktree — writing instance.json inside the tree would
+    # dirty it, which is the very thing the dirty-tree test measures.
+    inst = wt.parent / "instance"
+    inst.mkdir(exist_ok=True)
+    (inst / "instance.json").write_text(_json.dumps(
+        {"active_embodiment": {"running_tag": "declared-tag", "runner": "ollama"}}))
+    d.memory_root = str(inst)
+    d._verdict = types.SimpleNamespace(command=judged)
+    d._call = lambda name, args: {"actionId": "act-e"} if name == "hestia_begin_action" else {}
+    return d

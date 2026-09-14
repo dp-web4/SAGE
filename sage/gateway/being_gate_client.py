@@ -320,6 +320,226 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
 
 
 
+# The test targets a being may name, and the command each one becomes (#M0, PRD
+# "Beings improve their own harness"). An ALLOW-LIST, not a grammar: `check` exists so a
+# being can verify a claim about its own harness, and the smallest thing that does that is
+# a fixed set of suites plus a single node id inside them. Anything wider is a shell with a
+# friendly name, which is the one thing the bounded registry exists to prevent.
+CHECK_TARGETS = {
+    "gateway": "sage/gateway/tests/",
+    "irp": "sage/irp/tests/",
+}
+
+
+
+# The M1 PREREQUISITE, built. Being-authored code runs under a principal that is not this
+# seat — the hard blocker PRD r3 §5 put on M1, cleared 2026-09-08.
+#
+# WHY IT IS NOT OPTIONAL. `check` executes pytest, pytest imports conftest.py from its
+# rootdir, and M1 gives the being write access to that rootdir. Under the seat's own uid
+# that composes into arbitrary code holding the vault passphrase and every key on this box
+# (measured 2026-09-07, SAGE#55, and closed then by taking write access away — a stopgap
+# with the wrong shape for a being whose entrustment is to author code there).
+#
+# WHAT THE SANDBOX IS. bubblewrap with a cleared environment: nothing of the seat's is
+# bound except a read-only interpreter, no network at all, its own pid/ipc/uts namespaces,
+# a fresh session so it cannot signal the seat's process group, and --die-with-parent so a
+# runaway cannot outlive the beat. The only writable path is the being's own worktree.
+#
+# THE FALSIFIER, and it is the point of the whole exercise (PRD r3 §10.5): from inside,
+# reads of the vault, the hestia socket and the agent environment must all fail. Measured
+# on 2026-09-08 — ~/.hestia, ~/.config, ~/.local, private-context, shared-context and the
+# shared SAGE tree all blocked; hestia 7711 and ollama 11434 unreachable; the environment
+# carries exactly HOME, LANG, PATH, PWD, PYTHONDONTWRITEBYTECODE. 152 tests pass inside it.
+#
+# ENABLEMENT: Ubuntu 24.04 sets kernel.apparmor_restrict_unprivileged_userns=1 and bwrap is
+# not setuid, so this needs /etc/apparmor.d/bwrap granting `userns` to that binary alone —
+# the distro's own pattern (see ch-run, crun, flatpak). Chosen over relaxing the sysctl
+# machine-wide: narrow beats convenient when the thing relaxed is a containment boundary.
+# Where the profile is absent, SANDBOX_REQUIRED decides whether to refuse or degrade.
+SANDBOX = "/usr/bin/bwrap"
+# Fail CLOSED by default: a check that silently ran unsandboxed would be the seat quietly
+# handing back the authority the sandbox exists to remove, and nothing in the result would
+# say so. A machine without bwrap sets this false deliberately and lives with M0 only.
+
+# Fail CLOSED by default: a check that silently ran unsandboxed would be the seat quietly
+# handing back the authority the sandbox exists to remove, and nothing in the result would
+# say so. A machine without bwrap sets this false deliberately and lives with M0 only.
+SANDBOX_REQUIRED = True
+
+
+
+def sandbox_available() -> bool:
+    """Whether bwrap is present AND permitted to create a user namespace here. Presence is
+    not permission: on Ubuntu 24.04 the binary exists and every attempt fails with
+    'setting up uid map: Permission denied' until an AppArmor profile allows it, so this
+    ACTUALLY RUNS one rather than testing for the file."""
+    import os
+    import subprocess
+    if not os.path.exists(SANDBOX):
+        return False
+    try:
+        # The probe must be a REAL sandbox, loader included. The first cut bound only
+        # /usr and failed on missing /lib64 — reporting "no sandbox permitted" on a machine
+        # where the sandbox works perfectly, which would have refused every check.
+        r = subprocess.run([SANDBOX, "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
+                            "--ro-bind", "/lib64", "/lib64", "--unshare-pid",
+                            "/usr/bin/true"], capture_output=True, timeout=10)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+
+def sandbox_prefix(worktree: str) -> str:
+    """The bwrap invocation that wraps every executed check, or "" when running unsandboxed
+    is explicitly permitted."""
+    import os
+    import sys
+    if not sandbox_available():
+        if SANDBOX_REQUIRED:
+            raise ValueError(
+                "check needs its sandbox and cannot get one: bubblewrap is missing or not "
+                "permitted to create a user namespace on this machine. Running your tests "
+                "under the seat's own authority instead would hand back exactly what the "
+                "sandbox exists to remove, so it is refused rather than silently downgraded")
+        return ""
+    interp = os.path.dirname(os.path.dirname(sys.executable))  # e.g. ~/miniforge3
+    return (
+        f"{SANDBOX} --clearenv"
+        " --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind /lib64 /lib64 --ro-bind /bin /bin"
+        " --ro-bind /etc/alternatives /etc/alternatives"
+        f" --ro-bind {interp} {interp}"
+        # ORDER IS THE MOUNT ORDER, and a later mount masks an earlier one. --tmpfs /tmp
+        # used to come after the worktree bind; a worktree under /tmp then vanished inside
+        # the sandbox (measured 2026-09-08 by the real-conftest fixture: pytest ran in an
+        # empty tree and the probe never wrote). tmpfs first, the worktree over it.
+        " --proc /proc --dev /dev --tmpfs /tmp"
+        f" --bind {worktree} {worktree}"
+        " --unshare-pid --unshare-net --unshare-ipc --unshare-uts"
+        " --new-session --die-with-parent"
+        # PYTHONUTF8 rather than LANG=C.UTF-8, and the reason is hestia #988: mrh.command
+        # splits a dotted token and fails the fragment, so "C.UTF-8" is refused as an
+        # ungranted path called "UTF-8" and the whole check dies. PYTHONUTF8=1 buys the
+        # same UTF-8 filesystem and IO encoding with no dot in it. Third time today that
+        # defect has shaped a command; the issue carries the evidence.
+        " --setenv HOME /tmp --setenv PYTHONUTF8 1 --setenv PYTHONDONTWRITEBYTECODE 1"
+        f" --setenv PATH {interp}/bin:/usr/bin:/bin"
+        f" --chdir {worktree} "
+    )
+
+
+
+# git_read: the being inspects its own repository history. READ-ONLY BY CONSTRUCTION, and
+# the construction is the interesting part rather than the intent.
+#
+# dp, 2026-09-07: "the being should be able to check git by itself." Right — it reasons
+# about a tree that moves under it between beats, and until now the only way it learned the
+# harness had changed was a seat telling it so.
+#
+# WHAT THIS COMPOSES WITH (the rule earned on 09-07, when a gated write plus a gated execute
+# turned into arbitrary code):
+#   * with `check`, which executes pytest in the same worktree — git_read cannot write, so
+#     it cannot author what check runs;
+#   * with `memory_write`, which is confined to the being's home — a diff it reads can be
+#     saved to scratch, and the home is not a tree anything executes;
+#   * git ITSELF is the composition hazard here, not the pairing. `git` will run code on
+#     request: external diff drivers, textconv filters, pagers, aliases, and `-c` overrides
+#     that install any of them. So the seat builds the whole command, the being never
+#     supplies a flag, and every invocation is pinned with --no-pager, --no-ext-diff and
+#     core.pager=cat so a repo-local config cannot turn a read into an exec.
+# Only these five subcommands, no others, and every argument is matched against a grammar
+# before it can reach the shell.
+# `cat` reads a FILE'S CONTENT at a revision — `git show <rev>:<path>` — which `show`
+# cannot do: show with a pathspec is a DIFF lens, not the file. The being hit this trying
+# to rebuild a file it had damaged: its worktree copy was the broken one, the clean version
+# existed only at the base commit, and nothing in its registry could read it (deny
+# d250004396e0, 2026-09-10). Without an edit verb every change means rewriting a whole file,
+# and rewriting a file you cannot read at its last good revision is guesswork.
+
+def check_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a `check` intent, built from validated args.
+
+    Raises ValueError on anything the allow-list cannot represent, so a malformed target is
+    a `gate.raised` deny rather than a silent pass. `-c /dev/null` because the repo's
+    pytest.ini declares an asyncio_mode this interpreter does not have (measured: bare
+    pytest errors before collecting), and a checking organ that reports an infrastructure
+    error as a test failure would teach the being the opposite of what it asked.
+
+    THE PATHS ARE ABSOLUTE, AND THAT IS THE WHOLE POINT (measured 2026-09-07). The command
+    runs with cwd = the being's worktree, but the gate resolves a RELATIVE path against the
+    workspace it was handed — the shared checkout. So `sage/gateway/tests/` was judged at
+    `<shared>/sage/gateway/tests/`, which the being has no grant for, while the command
+    would have touched the worktree it does. The law must judge the path the command will
+    actually touch; anything else is the `_safe_path` defect again, one layer over. No
+    worktree means no check: fail closed, and say which affordance is missing.
+    """
+    import re
+    import os
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError(
+            "check needs a worktree of your own: there is nothing to run tests in, and a "
+            "relative path would be judged against a tree you do not hold (PRD M1)")
+    target = str(args.get("target", "")).strip()
+    if target in CHECK_TARGETS:
+        path = os.path.join(worktree, CHECK_TARGETS[target])
+    else:
+        # A single node id INSIDE a declared suite: "gateway::test_name". Nothing else.
+        suite, sep, node = target.partition("::")
+        if not sep or suite not in CHECK_TARGETS:
+            raise ValueError(
+                f"check 'target' must be one of {sorted(CHECK_TARGETS)} or "
+                f"'<suite>::<test_name>'; got {target!r}")
+        if not re.fullmatch(r"[A-Za-z0-9_]+", node):
+            raise ValueError(f"check test name must be a bare identifier; got {node!r}")
+        path = f"{os.path.join(worktree, CHECK_TARGETS[suite])} -k {node}"
+    inner = f"python3 -m pytest -q -c /dev/null --rootdir={worktree} {path}"
+    return sandbox_prefix(worktree) + inner
+
+
+
+def check_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """The same command as a list, for execution without a shell.
+
+    Carried forward from SAGE#62 (GPT's #60 evidence contract), which never landed: the
+    dispatcher used to execute `shlex.split(check_command(args))` — a command it RECOMPOSED
+    from the intent, not the one the law actually judged. In practice the two agree, because
+    check_command is deterministic on the args; the point is that agreement was an
+    assumption rather than a checked invariant, and the authority for what runs should be
+    the verdict, not the args. Comparing this against the verdict's bound command makes the
+    assumption falsifiable at the moment it matters."""
+    import shlex
+    return shlex.split(check_command(args, ctx))
+
+
+# The M1 PREREQUISITE, built. Being-authored code runs under a principal that is not this
+# seat — the hard blocker PRD r3 §5 put on M1, cleared 2026-09-08.
+#
+# WHY IT IS NOT OPTIONAL. `check` executes pytest, pytest imports conftest.py from its
+# rootdir, and M1 gives the being write access to that rootdir. Under the seat's own uid
+# that composes into arbitrary code holding the vault passphrase and every key on this box
+# (measured 2026-09-07, SAGE#55, and closed then by taking write access away — a stopgap
+# with the wrong shape for a being whose entrustment is to author code there).
+#
+# WHAT THE SANDBOX IS. bubblewrap with a cleared environment: nothing of the seat's is
+# bound except a read-only interpreter, no network at all, its own pid/ipc/uts namespaces,
+# a fresh session so it cannot signal the seat's process group, and --die-with-parent so a
+# runaway cannot outlive the beat. The only writable path is the being's own worktree.
+#
+# THE FALSIFIER, and it is the point of the whole exercise (PRD r3 §10.5): from inside,
+# reads of the vault, the hestia socket and the agent environment must all fail. Measured
+# on 2026-09-08 — ~/.hestia, ~/.config, ~/.local, private-context, shared-context and the
+# shared SAGE tree all blocked; hestia 7711 and ollama 11434 unreachable; the environment
+# carries exactly HOME, LANG, PATH, PWD, PYTHONDONTWRITEBYTECODE. 152 tests pass inside it.
+#
+# ENABLEMENT: Ubuntu 24.04 sets kernel.apparmor_restrict_unprivileged_userns=1 and bwrap is
+# not setuid, so this needs /etc/apparmor.d/bwrap granting `userns` to that binary alone —
+# the distro's own pattern (see ch-run, crun, flatpak). Chosen over relaxing the sysctl
+# machine-wide: narrow beats convenient when the thing relaxed is a containment boundary.
+# Where the profile is absent, SANDBOX_REQUIRED decides whether to refuse or degrade.
+
+
 _REGISTRY = {
     "peer_ask":       dict(tool="peer_ask",     path_args=(),       cmd_arg=None),
     "witness":        dict(tool="witness",      path_args=(),       cmd_arg=None),
@@ -343,6 +563,18 @@ _REGISTRY = {
     # git_read: read the history of the tree that constitutes it. Composed like check —
     # the being names an op, the SEAT builds the command, the law judges THAT string, and
     # the being never holds a flag. See git_read_command for what it composes with.
+    # check: RUN a test suite in the being's own worktree and read the result. The first
+    # organ, and the ordering is argued from measurement (PRD §2): given only a diff this
+    # being asserted a compile error that did not exist; given the same diff plus a real
+    # test result it made zero false claims. Composed like pr_review — the being names a
+    # target from an allow-list, the SEAT builds the command, the law judges THAT, and the
+    # being never holds a shell. A failing check is a first-class result, not an error.
+    "check":          dict(tool="check",       path_args=(),       cmd_arg=None,
+                           compose=check_command),
+    # pr_amend: revise a proposal already open. Composed like pr_open — the being supplies
+    # a commit message and optionally a new PR body; the branch and the PR number are READ
+    # from the worktree, so it can only ever revise its own open proposal, and the law
+    # judges the outward `gh pr edit` rather than a friendly verb name.
     "memory_write":   dict(tool="write_note",   path_args=("path",), cmd_arg=None),
     "channel_egress": dict(tool="channel_send", path_args=(),       cmd_arg=None),
     "mesh":           dict(tool="mesh_notify",  path_args=(),       cmd_arg=None),  # §7.2 5th verb
@@ -387,7 +619,7 @@ _REGISTRY = {
 # consequential acts must not proceed without it (fail-closed).
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
-                            "remember", "request_scope", "git_read", "search", "say"})
+                            "remember", "request_scope", "git_read", "search", "check", "say"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -431,6 +663,12 @@ _TOOL_SCHEMAS = {
                 "path": "optional: a path inside your worktree to narrow the search to",
                 "n": "optional: maximum matches per file (default 30)"},
                ["pattern"]),
+    "check": ("Run a test suite in your own worktree and read the result. This is how you "
+              "find out whether something you believe about your harness is true, instead of "
+              "asserting it. A failure is a real answer, not a problem.",
+              {"target": "'gateway' or 'irp' for a whole suite, or '<suite>::<test_name>' "
+                         "for one test, e.g. 'gateway::test_relative_memory_path'"},
+              ["target"]),
     "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "
             "rather than writing about them in your journal. The turn is attributed to you "
             "and kept forever; nobody can edit it afterwards, including you. Saying nothing "
