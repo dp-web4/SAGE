@@ -155,6 +155,7 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     the being can correct without asking (measured 2026-09-07: it did exactly that on
     `check`, in one beat, and explicitly declined to appeal a grammar error)."""
     import os
+    import shlex
     import re
     worktree = (ctx or {}).get("worktree")
     if not worktree:
@@ -205,6 +206,10 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     # an external diff driver, `--no-textconv` defeats a textconv filter, and a git alias
     # cannot shadow a built-in subcommand at all, so the alias override was never doing
     # anything. Hardening that trips the law is hardening that does not ship.
+    # Seat-derived paths are QUOTED for the same reason as in search_command: the
+    # judged==executed invariant is a property of the STRING, not of the fleet's current
+    # directory names. `path` here is an absolute realpath built from the worktree, so a
+    # worktree containing a space would split into extra argv (GPT review of #83).
     base = "git --no-pager"
     if op == "status":
         return f"{base} status --porcelain=v1 --branch"
@@ -212,9 +217,10 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         cmd = f"{base} log --no-ext-diff --no-textconv --oneline --no-decorate -n {n}"
         if rev:
             cmd += f" {rev}"
-        return cmd + (f" -- {path}" if path else "")
+        return cmd + (f" -- {shlex.quote(path)}" if path else "")
     if op == "show":
-        return f"{base} show --no-ext-diff --no-textconv --stat --patch {rev or 'HEAD'}" + (f" -- {path}" if path else "")
+        return (f"{base} show --no-ext-diff --no-textconv --stat --patch {rev or 'HEAD'}"
+                + (f" -- {shlex.quote(path)}" if path else ""))
     if op == "diff":
         rev2 = str(args.get("rev2", "")).strip()
         if rev2 and not re.fullmatch(_REV, rev2):
@@ -226,7 +232,7 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         # no token that looks like a path escape. The rule is doing its job on a token that
         # genuinely looks like traversal; the command should not hand it one.
         span = f"{rev} {rev2}" if rev and rev2 else (rev or "HEAD~1")
-        return f"{base} diff --no-ext-diff --no-textconv {span}" + (f" -- {path}" if path else "")
+        return f"{base} diff --no-ext-diff --no-textconv {span}" + (f" -- {shlex.quote(path)}" if path else "")
     if op == "cat":
         if not path:
             raise ValueError("git_read op='cat' needs a 'path': the file whose content you want")
@@ -314,8 +320,14 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
         if not (full == target or full.startswith(target + os.sep)):
             raise ValueError(f"search 'path' escapes your worktree: {path!r}")
         target = full
-    return (f"git --no-pager -C {worktree} grep -n -I -E --max-count={n} "
-            f"-e {shlex.quote(pattern)} -- {target}")
+    # EVERY interpolated value is quoted, not just the being-supplied one. The invariant
+    # claimed here is representation-level — the judged string must shlex.split into exactly
+    # the argv that runs — and that is a property of the STRING, not of the fleet's current
+    # directory names. A worktree path containing a space would split into two argv elements
+    # and the law would have judged a command that is not the one executed (GPT review of
+    # #83). Fleet paths are simple today; the invariant must not depend on that staying true.
+    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I -E --max-count={n} "
+            f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
 
 
 

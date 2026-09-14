@@ -795,6 +795,8 @@ def test_a_search_that_finds_nothing_is_a_result_not_an_error(tmp_path):
     subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
 
     d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None)
+    # search is _CONSEQUENTIAL and now witnesses like git_read, so the chain must answer
+    d._call = lambda name, args: {"actionId": "act-s"} if name == "hestia_begin_action" else {}
 
     hit = d._do_search(BeingIntent("search", {"pattern": r"def compose\("})).result
     assert hit["matches"] == 1
@@ -805,4 +807,5 @@ def test_a_search_that_finds_nothing_is_a_result_not_an_error(tmp_path):
     miss = d._do_search(BeingIntent("search", {"pattern": "zzz_absent_zzz"}))
     assert miss.ok is True, "a search that finds nothing still succeeded as an act"
     assert miss.result["matches"] == 0
+    assert miss.witness_id == "act-s", "a consequential verb leaves a record"
     assert "WHAT WAS SEARCHED" in miss.result["note"]

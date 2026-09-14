@@ -435,3 +435,27 @@ def test_git_read_refuses_what_its_grammar_cannot_represent():
         assert False, "no worktree must refuse"
     except ValueError as e:
         assert "worktree" in str(e)
+
+
+def test_the_judged_command_round_trips_even_when_seat_paths_contain_spaces():
+    """The judged==executed invariant is a property of the STRING, not of the fleet's
+    current directory names. Both composers quoted the being-supplied value and interpolated
+    the seat-configured worktree and target RAW; a worktree containing a space would split
+    into extra argv, and the law would have judged a command that is not the one that runs
+    (GPT review of #83). Fleet paths are simple today — the invariant must not depend on
+    that staying true."""
+    import shlex
+    from sage.gateway.being_gate_client import git_read_command, search_command
+
+    wt = "/home/dp/a path/with spaces"
+    ctx = {"worktree": wt}
+
+    for label, cmd in (("git_read", git_read_command({"op": "show", "path": "sage"}, ctx)),
+                       ("search", search_command({"pattern": "def x", "path": "sage"}, ctx))):
+        argv = shlex.split(cmd)
+        assert argv[-1] == f"{wt}/sage", f"{label}: pathspec split into {argv[-3:]}"
+        assert wt in argv[argv.index("-C") + 1] if "-C" in argv else True
+
+    # and the being-supplied pattern stays one element beside them
+    argv = shlex.split(search_command({"pattern": "seed, posture = compose"}, ctx))
+    assert argv[argv.index("-e") + 1] == "seed, posture = compose"
