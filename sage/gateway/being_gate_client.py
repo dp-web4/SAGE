@@ -389,8 +389,11 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     """
     import shlex
     worktree = ctx["worktree"] if ctx else None
+    memory_root = (ctx or {}).get("memory_root")
     if not worktree:
         raise ValueError("camera requires a worktree context")
+    if not memory_root:
+        raise ValueError("camera requires a memory_root context")
 
     out_rel = args.get("out_path", "scratch/camera/last-frame.jpg")
     if any(ch.isspace() for ch in out_rel):
@@ -399,9 +402,13 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
         raise ValueError(
             f"camera 'out_path' must be a plain path inside your worktree, got {out_rel!r}"
         )
-    full = os.path.realpath(os.path.join(worktree, out_rel))
-    if not (full == worktree or full.startswith(worktree + os.sep)):
-        raise ValueError(f"camera 'out_path' escapes your worktree: {out_rel!r}")
+    # Frames are transient by contract — one JPEG per act, nothing to carry across
+    # beats. Resolve them against the being's home (memory_root) rather than the SAGE
+    # worktree: check reports the worktree's dirty flag as EVIDENCE, so an uncommitted
+    # frame there degrades your own evidence (measured on this machine 2026-09-14).
+    full = os.path.realpath(os.path.join(memory_root, out_rel))
+    if not (full == memory_root or full.startswith(memory_root + os.sep)):
+        raise ValueError(f"camera 'out_path' escapes your home: {out_rel!r}")
 
     device = args.get("device", "/dev/video0")
     return (f"ffmpeg -hide_banner -loglevel error -y -f v4l2 -i {shlex.quote(device)} "

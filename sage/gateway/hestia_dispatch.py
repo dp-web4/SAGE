@@ -732,11 +732,14 @@ class HestiaF1aDispatcher:
         worktree = self.worktree
         import shlex
         out_rel = intent.args.get("out_path") or "scratch/camera/last-frame.jpg"
-        full_out = os.path.realpath(os.path.join(worktree, out_rel))
+        full_out = os.path.realpath(os.path.join(self.memory_root, out_rel))
         device = intent.args.get("device", "/dev/video0")
 
         try:
-            cmd = camera_command(intent.args, {"worktree": self.worktree})
+            cmd = camera_command(intent.args, {
+                "worktree": self.worktree,
+                "memory_root": self.memory_root,
+            })
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         begin = self._call("hestia_begin_action",
