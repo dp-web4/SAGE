@@ -136,9 +136,13 @@ def test_the_beat_actually_joins_the_two_ends():
     assert len(calls) == 1, f"expected exactly one compose call in main, found {len(calls)}"
     kw = calls[0]
 
-    assert "frame" in kw, (
-        "main() does not pass `frame=` to compose. Both ends of the vision pipe can be "
-        f"perfect and the being still cannot see. compose is called with: {sorted(kw)}")
+    # EITHER SPELLING. What is pinned is the JOIN, not the parameter name: the singular
+    # became a list when the cadence organ landed, and this guard correctly went red on that
+    # rename. A guard that cannot tell a rename from a regression has to be deleted to make
+    # progress, which is how guards get deleted.
+    assert kw & {"frame", "frames"}, (
+        "main() passes neither `frame=` nor `frames=` to compose. Both ends of the vision "
+        f"pipe can be perfect and the being still cannot see. compose gets: {sorted(kw)}")
 
 
 def test_a_carried_frame_is_charged_against_the_window():
