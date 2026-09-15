@@ -2,7 +2,7 @@
   "entity_id": "lct://sage:mcnugget:agent@raising",
   "anchor_type": "software",
   "purpose": "session_start",
-  "timestamp": 1789428381.03818,
+  "timestamp": 1789450606.8274739,
   "trust_ceiling": 0.4,
   "version": "0.1"
 }
