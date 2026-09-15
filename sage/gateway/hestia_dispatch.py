@@ -834,7 +834,7 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=True, witness_id=action_id, result={
                 "device": device, "out_path": out_rel,
                 "bytes": os.path.getsize(full_out),
-                "note": ("one frame captured. It is a JPEG, so memory_read will hand you "
+                "note": ("one frame captured FROM THE WEBCAM (this device, not any game or file the seat drops). It is a JPEG, so memory_read will hand you "
                          "binary, not a picture — it returns ok and you learn nothing. "
                          "Seeing it needs a vision-capable reader, which is not wired yet. "
                          "Nothing persists across beats.")})
