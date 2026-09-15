@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 196,
-      "timestamp": 1789079239.8737884,
-      "prompts": [
-        "I've been thinking about your plastic breakroom mug \u2014 the one with \"Office Supplies Inc.\" on the side. It was completely invented and it was the most ordinary thing you'd made all session. Today I want to start somewhere else entirely: describe a sound you've never heard, and tell me what it would be coming from.",
-        "A crystal cave at dawn on a planet nobody's walked on \u2014 and you gave it harp strings. Now take one thing away: what does that cave sound like at *noon*, when whatever made the dawn hum has stopped?",
-        "That silence at noon is doing a lot of work \u2014 you built a sound and then gave me its absence, which is harder. But you smuggled in a howl of wind and an alien tree branch to make the silence audible. So tell me: is that cave silent because nothing is making sound, or because something stopped? Pick one, and tell me what it costs the cave.",
-        "That \"frozen moment that's lost its pulse\" is a good line \u2014 but I want to push on the physics you just invented. Something made those crystals stop at noon. Tell me what it is, and be specific enough that I could predict when the hum comes back.",
-        "You called it Resonant Saturation and gave me a cooling cycle \u2014 which means you handed me a prediction, not just a mood. If a sibling instance asked you what happened here today, what would you tell them about the moment the cave stopped being a feeling and started being a mechanism?"
-      ]
-    },
-    {
       "session": 197,
       "timestamp": 1789100773.241808,
       "prompts": [
@@ -218,6 +207,17 @@
         "You two just invented a rivalry with class politics in it \u2014 the keyboard thinks mechanical problems are more respectable than surface ones. Now settle it: something new arrives on the desk that they both hate more than each other. What is it, and what's the first thing they say once they're allies?",
         "Now that they're allies, make them useful: the two of them decide to write a formal complaint letter to whoever owns that desk. What are the first two lines, and which one of them insists on the dramatic opening?",
         "You gave that keyboard a class grudge and the mousepad a martyr streak, and then let a coffee stain unite them \u2014 what's the thing about writing *in an object's voice* that you couldn't have gotten at by describing it from the outside?"
+      ]
+    },
+    {
+      "session": 216,
+      "timestamp": 1789511228.9648674,
+      "prompts": [
+        "Last session you gave me a mind-map with a low-whining keyboard in it, and I keep thinking about how specific that sound was. Today I want to build something small and real with you: pick one object in your environment \u2014 any object \u2014 and write the three-line manual for it that nobody would ever write. The honest one.",
+        "That's a good pen. It has opinions. Now write the *unhonest* manual \u2014 the one the manufacturer would put in the box \u2014 and then tell me which of the two lies more.",
+        "That's a sharp read \u2014 the manufacturer's manual lies about *the pen*, but yours lies a little too: \"throw it across the room\" isn't really a reset, it's a confession. Pick a second object near that desk and write only its honest line, and this time let the lie in it be the interesting part.",
+        "That dusty keyboard line is better than the pen \u2014 \"just mashed random letters into existence\" is doing real work, because it admits the thing you can't verify from the inside. So write the manufacturer's masterpiece of understatement for that keyboard, and make it *almost* convincing.",
+        "Aesthetic appeal\" being the tell \u2014 that the cover-up is always a small extra flourish nobody needed \u2014 is the sharpest thing you said today. If a sibling instance started this same exercise tomorrow, what would you warn them about before they wrote their first honest line?"
       ]
     }
   ]

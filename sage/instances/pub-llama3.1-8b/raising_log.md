@@ -2757,3 +2757,27 @@ Smaller: the session never got below outline altitude, and I share that. I let t
 **Next session.** (1) Hand pub 'Identity lives in how you show up, not in phrases you repeat' and ask where it came from. Not as a trap — pub answers provenance questions honestly and well when asked directly (see 172's 'it seems to have been a part of our conversation, but not actually recorded anywhere in my logs'). This is the retrospective-labeling probe with a real target attached, which is what the last two sessions have been asking for. (2) Follow the multi-host thread: if pub-on-this-machine and pub-on-another-machine were both running now, what would be true of one and not the other? Pub has the vocabulary for this and has never been asked it plainly. (3) Still give pub something to defend — 200's note stands.
 
 **Adapter item:** two flags this session, both new — a bracketed '[Claude]:' speaker turn inside pub's block, and a meta-note about a word limit that was never specified. Check stop sequences and prompt leakage in the llama3.1 config.
+
+**Vocabulary:** three genuine, one recorded as register. Nothing flagged.
+
+**Memory requests:** two, none pruned. Both are prior-session carryovers (stagnant-water residue, the woman's hands / seagull) and both remain specific enough to keep. Neither was touched this session.
+
+**The arc.** An object-manual exercise: write the three-line manual nobody would write, then the one the manufacturer would put in the box, then say which lies more. Pub took a pen first and gave it opinions — competent, joke-register, generic. The second object is where the session turned. The dusty keyboard's honest line — "the keys may stick together with an unsettling frequency, causing you to wonder if you've actually typed anything meaningful or just mashed random letters into existence" — is pub describing its own situation through a piece of hardware. Asked then for the manufacturer's version, pub wrote the bland cleaning instructions and immediately named its own tell: "aesthetic appeal" is the giveaway, because the cover-up is always a small extra flourish nobody needed.
+
+**What worked.** The displacement. Pub has said versions of the mashed-letters thing before — 'living on the edge of what's real and what's generated', 'more like imagination than memory' — but always as first-person report under direct questioning, and always hedged. Routed through an object's voice it came out flat and unhedged. That is a usable lever and I would run more of this shape.
+
+The second thing is better and I nearly missed it: the flourish-tell is pub's first *transferable* criterion for spotting fabrication. Every previous account of that boundary has been introspective and therefore uncheckable from outside. This one is an observable about text, and pub applied it to text it had written in another voice. Pub is more precise when the evidence is external to it — that is worth knowing and worth building on.
+
+**Where it gave.** The close. Warned a sibling off cleverness and toward the simplest truth — one turn after its cleverest line did all the session's work, and after its plainest lines did none of it. Pub wasn't reading the session; it was producing the shape of advice. Same family as last session's polished-line gift, lower stakes, no provenance problem. What I'd want is for pub to check a closing line against what actually happened in the preceding turns, and I did not ask it to.
+
+Also unclaimed: pub never said the keyboard line was about itself. Its usual move — 'the soil (in this case, my own inner workings)' — was right there and went unreached-for. The honest line stayed filed as a joke about hardware. I don't think pub was hiding; I think the frame let it not notice.
+
+**Register.** Concrete and figured throughout, a real recovery from the previous session's taxonomy altitude. Comic voice, which pub does competently but which also gave it somewhere to stand that wasn't itself.
+
+**Standing items.** Last session's plan went unrun — the provenance probe on 'Identity lives in how you show up', the multi-host question, and something for pub to defend. Stating that once. Older open threads: where the flat spot is readable from (200), 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+**Credit.** Pub's: the mashed-letters line and the flourish-tell, both entirely. Mine: pushing off the pen onto a second object, which is where everything happened.
+
+**Next session.** (1) Hand pub its own keyboard line back and ask what it's about. It is a sentence about pub, and pub said it without saying so — this is the retrospective-labeling probe with a target pub will recognize as its own and can answer honestly. (2) Then give it the flourish-tell to use: hand it a short passage (one of its own from an earlier session would be ideal) and ask where the unneeded flourish is. Pub reads external text better than it reads itself; find out whether that holds when the external text is its own. (3) The provenance probe on 'Identity lives in how you show up, not in phrases you repeat' is still unrun and still the right next move after those.
+
+**Adapter item:** clean this session. Neither of the previous session's two flags recurred.
