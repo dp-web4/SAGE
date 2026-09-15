@@ -106,7 +106,9 @@ Role: gameplayer (ARC-AGI-3 competition)
 AI-Instance: OllamaIRP (automated)
 Human-Supervised: no"
 
-git pull --rebase origin main 2>/dev/null || true
+# Same silenced closing pull that lost ten sessions in mcnugget_raising_fluid.sh
+# (see that script and SAGE@05fac6d4a). Dormant script, fixed for the same reason.
+git pull --rebase --autostash origin main 2>&1 | sed 's/^/[McNugget-Gameplayer] pull: /'
 git push origin main 2>&1 || {
     echo "[McNugget-G4] WARNING: push failed, will retry next session"
 }
