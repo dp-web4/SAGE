@@ -75,21 +75,42 @@ def _forward(row: Dict[str, Any], sender=None, plugin_id: str = "sprout-being") 
 
 def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-drain",
                endpoint: str = _ENDPOINT, mcp=None, sender=None, log=print) -> Dict[str, Any]:
-    """One attributed drain pass. Returns {forwarded, failed, empty, error}."""
+    """One attributed drain pass. Returns {forwarded, failed, empty, error, signed_as, carrier}.
+
+    `signed_as` is the CARRIER: which hub identity's key signed the envelope ("being" when the
+    member holds `~/.config/hub-mesh-<plugin_id>.env`, else "seat"). It rides the summary
+    because the record is where a reader checks: hestia #1030 (cbp, 2026-09-15) measured that
+    the chain says the being forwarded, the hub says the seat signed, and the only place the
+    carrier appeared was a detail string this function threw away."""
+    # The carrier, resolved BEFORE any return path: every summary says which hub identity
+    # would sign, including the passes that forward nothing (hestia #1030).
+    env_file, signed_as = hub_env_for(plugin_id)
+    carrier = None
+    if env_file:
+        try:
+            for line in open(env_file):
+                if line.strip().startswith("MY_LCT"):
+                    carrier = line.split("=", 1)[1].split("#", 1)[0].strip().strip('"').strip("'")
+                    break
+        except Exception:
+            pass
     c = mcp
     if c is None:
         c = _Mcp(endpoint, plugin_id); c.init()
     conn = _unwrap(c.call("hestia_connect", {"plugin_id": plugin_id, "host_agent": host_agent,
                                               "host_agent_version": "sage", "requested_role": "citizen"}))
     if "_hestia_error" in conn:
-        return {"forwarded": 0, "failed": 0, "empty": False, "error": conn["_hestia_error"]}
+        return {"forwarded": 0, "failed": 0, "empty": False, "error": conn["_hestia_error"],
+                "signed_as": signed_as, "carrier": carrier}
     sid = conn.get("sessionId")
     q = _unwrap(c.call("hestia_egress_pending", {"session_id": sid}))
     if "_hestia_error" in q:                     # never confuse "refused" with "empty"
-        return {"forwarded": 0, "failed": 0, "empty": False, "error": q["_hestia_error"]}
+        return {"forwarded": 0, "failed": 0, "empty": False, "error": q["_hestia_error"],
+                "signed_as": signed_as, "carrier": carrier}
     rows: List[Dict[str, Any]] = q.get("pending") or []
     if not rows:
-        return {"forwarded": 0, "failed": 0, "empty": True, "error": None}
+        return {"forwarded": 0, "failed": 0, "empty": True, "error": None,
+                "signed_as": signed_as, "carrier": carrier}
     fwd = failed = 0
     for row in rows:
         rid = _row_id(row)
@@ -100,7 +121,8 @@ def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-d
         else:
             c.call("hestia_egress_pending", {"session_id": sid, "mark_failed": rid, "reason": detail[:200]})
             failed += 1; log(f"[egress] FAILED {rid}: {detail[-160:]}")
-    return {"forwarded": fwd, "failed": failed, "empty": False, "error": None}
+    return {"forwarded": fwd, "failed": failed, "empty": False, "error": None,
+            "signed_as": signed_as, "carrier": carrier}
 
 
 if __name__ == "__main__":

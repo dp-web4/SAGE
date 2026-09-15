@@ -60,6 +60,37 @@ def test_being_rows_sign_as_the_being_when_it_holds_a_hub_identity(monkeypatch=N
         if old is not None: os.environ["HOME"] = old
 
 
+def test_the_drain_summary_names_the_carrier_that_signed(monkeypatch=None):
+    """hestia #1030: the chain says the being forwarded, the hub says the seat signed, and the
+    carrier lived only in a detail string the summary discarded."""
+    import os, tempfile
+    from sage.gateway import egress_drain as ed
+    home = tempfile.mkdtemp(prefix="carrier-"); old = os.environ.get("HOME")
+    os.environ["HOME"] = home
+    try:
+        os.makedirs(os.path.join(home, ".config"))
+        sent = []
+        def fake_sender(to, kind, ptr):
+            sent.append((to, kind, ptr)); return True, "ledger=1 ok"
+        class Mcp:
+            def init(self): pass
+            def call(self, name, args):
+                if name == "hestia_connect":
+                    return {"result": {"structuredContent": {"sessionId": "s1"}}}
+                if name == "hestia_egress_pending" and "mark_forwarded" not in args and "mark_failed" not in args:
+                    return {"result": {"structuredContent": {"pending": [{"id": 1, "forward_on": "legion",
+                                                                          "kind": "coordination", "pointer_uri": "p"}]}}}
+                return {"result": {"structuredContent": {}}}
+        out = ed.drain_once(plugin_id="sprout-being", mcp=Mcp(), sender=fake_sender, log=lambda *a: None)
+        assert out["forwarded"] == 1 and out["signed_as"] == "seat" and out["carrier"] is None
+        with open(os.path.join(home, ".config", "hub-mesh-sprout-being.env"), "w") as f:
+            f.write('MY_LCT="2e175714-being"\nMY_KEYPAIR=/k\n')
+        out = ed.drain_once(plugin_id="sprout-being", mcp=Mcp(), sender=fake_sender, log=lambda *a: None)
+        assert out["signed_as"] == "being" and out["carrier"] == "2e175714-being"
+    finally:
+        if old is not None: os.environ["HOME"] = old
+
+
 if __name__ == "__main__":
     n = 0
     for name, fn in sorted(globals().items()):
