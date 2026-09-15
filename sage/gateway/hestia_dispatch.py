@@ -357,6 +357,13 @@ class HestiaF1aDispatcher:
             "egress_queued_to": out.get("egress_queued_to"),
             "recipient_liveness": out.get("recipient_liveness"),
         }
+        # hestia #1030: how the act will travel, in the being's own result. "unbound" means the
+        # drain picks the signing identity and a reply follows whichever it picked, so silence
+        # after an unbound send is not evidence the peer ignored the being.
+        if out.get("transport") is not None:
+            result["transport"] = out.get("transport")
+        if out.get("transport_note"):
+            result["transport_note"] = out.get("transport_note")
         if _count:
             self._record_ask(to, "mesh", pointer, result["queued_id"])
         return ResultEnvelope(ok=True, result=result,

@@ -91,6 +91,92 @@ def test_the_drain_summary_names_the_carrier_that_signed(monkeypatch=None):
         if old is not None: os.environ["HOME"] = old
 
 
+def _home_with(files):
+    import tempfile
+    home = tempfile.mkdtemp(prefix="stamp-")
+    os.makedirs(os.path.join(home, ".config"))
+    for name, lct in files.items():
+        with open(os.path.join(home, ".config", name), "w") as f:
+            f.write(f'MY_LCT="{lct}"\nMY_KEYPAIR=/k\n')
+    return home
+
+
+class _SwapHome:
+    def __init__(self, home): self.home = home
+    def __enter__(self):
+        self.old = {k: os.environ.get(k) for k in ("HOME", "HUB_MESH_ENV")}
+        os.environ["HOME"] = self.home; os.environ.pop("HUB_MESH_ENV", None)
+    def __exit__(self, *a):
+        for k, v in self.old.items():
+            if v is None: os.environ.pop(k, None)
+            else: os.environ[k] = v
+
+
+SEAT_ENV = "hub-mesh" + ".env"
+BEING_ENV = "hub-mesh-cbp-being" + ".env"
+
+
+def test_a_stamped_row_is_signed_by_its_carrier_and_the_mark_names_it():
+    """hestia #1030: the drain consumes the stamp. The being's identity signs because the
+    stamp names it, not because a file happens to exist, and the mark carries the carrier
+    and the hub's ledger id."""
+    home = _home_with({SEAT_ENV: "seat-lct", BEING_ENV: "being-lct"})
+    row = dict(ROW, transport={"mode": "direct", "carrier_lct": "BEING-LCT", "version": 3})
+    with _SwapHome(home):
+        m = FakeMcp(pending=[row])
+        r = drain_once(plugin_id="cbp-being", mcp=m,
+                       sender=lambda to, kind, ptr: (True, "[hub-notify] -> legion kind=coordination ledger=1588 hash=h"),
+                       log=lambda *_: None)
+    assert r["forwarded"] == 1 and r["transport_faults"] == []
+    mark = [a for n, a in m.calls if "mark_forwarded" in a][0]
+    assert mark["carrier_lct"] == "being-lct" and mark["hub_receipt"] == {"ledger": "1588"}
+
+
+def test_a_stamped_row_with_no_key_for_its_carrier_is_never_sent_under_another():
+    """Falsifier 2 at the drain: the seat's key is RIGHT THERE and must not be used."""
+    home = _home_with({SEAT_ENV: "seat-lct"})
+    row = dict(ROW, transport={"mode": "direct", "carrier_lct": "being-lct", "version": 3})
+    sent = []
+    with _SwapHome(home):
+        m = FakeMcp(pending=[row])
+        r = drain_once(plugin_id="cbp-being", mcp=m,
+                       sender=lambda to, kind, ptr: (sent.append(to) or (True, "ledger=1")), log=lambda *_: None)
+    assert sent == [], "nothing may leave under the seat's key"
+    assert r["failed"] == 1 and r["transport_faults"][0]["fault"] == "carrier-unavailable"
+    fail = [a for n, a in m.calls if "mark_failed" in a][0]
+    assert fail["fault"] == "carrier_unavailable" and "being-lct" in fail["reason"]
+
+
+def test_a_relay_stamp_signs_with_the_seat_it_names():
+    home = _home_with({SEAT_ENV: "seat-lct", BEING_ENV: "being-lct"})
+    row = dict(ROW, transport={"mode": "relay", "carrier_lct": "seat-lct", "delegation_ref": "d1", "version": 4})
+    with _SwapHome(home):
+        from sage.gateway import egress_drain as ed
+        env_file, label, carrier, refusal = ed.signer_for(row, "cbp-being")
+    assert (label, carrier, refusal) == ("seat", "seat-lct", None) and env_file.endswith(SEAT_ENV)
+
+
+def test_an_unbound_row_reports_the_carrier_it_chose():
+    home = _home_with({SEAT_ENV: "seat-lct"})
+    with _SwapHome(home):
+        m = FakeMcp(pending=[dict(ROW, transport=None)])
+        drain_once(plugin_id="cbp-being", mcp=m, sender=lambda *a: (True, "ledger=9"), log=lambda *_: None)
+    mark = [a for n, a in m.calls if "mark_forwarded" in a][0]
+    assert mark["carrier_lct"] == "seat-lct", "an unbound send still names who signed"
+
+
+def test_daemon_refusals_reach_the_summary():
+    class Refusing(FakeMcp):
+        def call(self, name, args):
+            if name == "hestia_egress_pending" and "mark_forwarded" not in args and "mark_failed" not in args:
+                self.calls.append((name, dict(args)))
+                return _sc({"pending": [], "transport_refused": [{"row_id": 3, "fault": "transport-stale",
+                                                                  "reported_to": "cbp-being"}]})
+            return super().call(name, args)
+    r = drain_once(plugin_id="cbp-being", mcp=Refusing(), sender=lambda *a: (True, ""), log=lambda *_: None)
+    assert r["empty"] is False and r["transport_faults"][0]["fault"] == "transport-stale"
+
+
 if __name__ == "__main__":
     n = 0
     for name, fn in sorted(globals().items()):
