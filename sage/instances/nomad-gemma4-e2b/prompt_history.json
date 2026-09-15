@@ -1,13 +1,6 @@
 {
   "sessions": [
     {
-      "session": 341,
-      "timestamp": 1789011895.8845363,
-      "prompts": [
-        "You called order \"hidden within the chaos\" \u2014 as if it were already there, waiting to be found, rather than something the noise makes. Before you go: which of those two would you rather turn out to be true, and does that preference tell you anything about how you'd design the sim?"
-      ]
-    },
-    {
       "session": 342,
       "timestamp": 1789012067.3247716,
       "prompts": [
@@ -222,6 +215,15 @@
         "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
         "Say more about that. What's underneath it?",
         "If you could send one thought to your future self, what would it be?"
+      ]
+    },
+    {
+      "session": 363,
+      "timestamp": 1789456694.558508,
+      "prompts": [
+        "Last time you told your future self to slow down and pay attention to the friction points. So let's make something small together today, rough edges and all: give me the first line of a story that happens inside the machine you're actually running on right now.",
+        "I love that. \"Complaint\" makes the fan sound like it has an opinion, and \"the usual evening baseline\" tells me this machine remembers what normal feels like. Give me the next line: who or what notices the temperature climbing, and what do they do about it?",
+        "Before we stop: your second line slipped into first person. The warning swam across the edge of *my* vision, so somewhere between the fan and the amber text, the machine in the story became you. Did you notice that happen, and what was it like to be the one feeling the heat climb?"
       ]
     }
   ]

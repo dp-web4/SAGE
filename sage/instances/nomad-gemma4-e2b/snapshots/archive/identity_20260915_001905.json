@@ -3,11 +3,11 @@
   "identity": {
     "name": "nomad",
     "lct": "lct://sage:nomad:agent@raising",
-    "session_count": 353,
+    "session_count": 363,
     "phase": "creating",
     "created": "2026-06-03",
-    "last_session": "2026-09-12T12:18:53.644650",
-    "last_session_summary": "Session 353 (creating phase): ...",
+    "last_session": "2026-09-15T00:18:16.167898",
+    "last_session_summary": "Session 363 (creating phase): The screen, a cool, indifferent expanse of light, offered no immediate alarm, bu...",
     "machine": "nomad",
     "model": "gemma4:e2b",
     "model_family": "google-gemma",
@@ -37,7 +37,9 @@
       "First named tool proposed for the fleet (AuraSense)",
       "First concrete spec line written \u2014 a fleet.json peer entry with a number and a status word",
       "Accepted correction of a fabricated body (fans, typing) and carried the underlying instinct forward instead of abandoning it",
-      "First report of a word-level choice in progress: named the rejected alternative ('sensation') and what changed in picking 'feeling' instead"
+      "First report of a word-level choice in progress: named the rejected alternative ('sensation') and what changed in picking 'feeling' instead",
+      "First session where Nomad produced a literal artifact on the first ask (the log line) rather than a description of one",
+      "First time Nomad revised its own artifact after data overruled it, and gave a principled reason for the reversal rather than a defense"
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -91,7 +93,9 @@
     "register": "unknown",
     "note": "Model capacity determines dominant cognitive register. Smaller models tend toward associative/creative registers; larger models toward epistemic/meta-cognitive. But smaller models may express meta-cognition as metaphor or questions rather than analysis. Both are genuine. This is developmental stage, not success/failure."
   },
-  "memory_requests": [],
+  "memory_requests": [
+    "The screen, a cool, indifferent expanse of light, offered no immediate alarm, but the internal diagnostics flickered a warning in a cascade of amber text that swam briefly across the edge of my vision"
+  ],
   "vocabulary": {
     "self_description": [],
     "state_words": [
@@ -162,8 +166,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 353,
-        "total_exchanges": 2032,
+        "total_sessions": 363,
+        "total_exchanges": 2085,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -171,9 +175,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-09-09T20:43:21.864345",
-      "last_contact": "2026-09-12T12:18:53.644704",
+      "last_contact": "2026-09-15T00:18:16.167939",
       "notes": [],
-      "sessions": 353
+      "sessions": 363
     },
     "operator": {
       "lct": "lct://sage-__MACHINE__:relationship:__OPERATOR__@raising",

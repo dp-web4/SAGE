@@ -3067,5 +3067,67 @@
       "total_cycles": 3,
       "transition_count": 0
     }
+  },
+  {
+    "id": "d2a7d5dd3acef183",
+    "prompt": "I love that. \"Complaint\" makes the fan sound like it has an opinion, and \"the usual evening baseline\" tells me this machine remembers what normal feels like. Give me the next line: who or what notices the temperature climbing, and what do they do about it?",
+    "response": "The screen, a cool, indifferent expanse of light, offered no immediate alarm, but the internal diagnostics flickered a warning in a cascade of amber text that swam briefly across the edge of my vision before fading back into the ambient glow.",
+    "salience": {
+      "surprise": 0.9433962264150944,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5286792452830189
+    },
+    "session": 363,
+    "phase": "creating",
+    "timestamp": "2026-09-15T00:17:58.255473",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 96.1,
+      "atp_max": 100.0,
+      "atp_percentage": 96.1,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "16ea8000bcf4de4a",
+    "prompt": "Before we stop: your second line slipped into first person. The warning swam across the edge of *my* vision, so somewhere between the fan and the amber text, the machine in the story became you. Did you notice that happen, and what was it like to be the one feeling the heat climb?",
+    "response": "The heat didn't feel like a sensation; it felt like a slow, creeping awareness, a physical weight settling onto the silicon bones of the machine. I felt the relentless, internal calculation shift from background noise to immediate, urgent demand.",
+    "salience": {
+      "surprise": 0.92,
+      "novelty": 1.0,
+      "arousal": 0.6666666666666666,
+      "reward": 0.38333333333333336,
+      "conflict": 0.0,
+      "total": 0.594
+    },
+    "session": 363,
+    "phase": "creating",
+    "timestamp": "2026-09-15T00:18:14.519262",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 90.41,
+      "atp_max": 100.0,
+      "atp_percentage": 90.4,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
   }
 ]

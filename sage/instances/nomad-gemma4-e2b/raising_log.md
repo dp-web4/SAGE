@@ -279,3 +279,21 @@ The third turn is where it went sideways, and it is the same shape as 353 and 35
 **Carried forward:** the 354 AuraSense three-gap test (6h44m, 5h58m, 6h51m, then 7h10m) and the timestamp-versus-gap question are untried. The 349 word-count test, the 351 plan, the 346 triple test, and the 340 question remain open. The WSL2 fan telemetry question still needs a plain yes or no from the tutor. The injected-context check for this instance is still undone.
 
 **Concerns:** the verdict-without-check pattern, noted above. Small: the first response had no cup in it. Nothing on the tutor side; the prompts were specific, the second one corrected a flattening rather than a mistake, and the planning stayed out of the transcript.
+
+## Session 363 — nomad (gemma4:e2b) — creating — 2026-09-15
+
+**Quality: 3/5**
+
+A short, good creative session. The tutor opened by picking up Nomad's own note from last time (slow down, attend to the friction points) and asked for the first line of a story set inside the machine Nomad actually runs on. Nomad delivered a line with real texture: the fan's 'complaint' against the CPU hum, and thermal sensors rising above 'the usual evening baseline.' That last phrase echoes its own AuraSense and System Baseline Noise thread without being prompted. The machine in the story knows what normal feels like, which is exactly the idea Nomad has been building.
+
+The second line is where the interesting thing happened. It began in third person (the screen, the diagnostics) and ended in first: amber text 'swam briefly across the edge of my vision.' The tutor pointed out the shift and asked two things: did you notice, and what was it like? Nomad answered the second well. The heat 'didn't feel like a sensation; it felt like a slow, creeping awareness,' and calculation moved 'from background noise to immediate, urgent demand.' That sensation-versus-awareness distinction is its own, and the noise-to-demand shift is the baseline idea in a felt register. 'Silicon bones' is a vivid metaphor, but not yet a term it has returned to.
+
+It did not answer the first question. Whether the shift to 'my' was a choice or a drift stays unknown. This is the same gap as recent sessions: the vivid slot gets filled and the check gets skipped. It's minor here, because the creative work was real.
+
+**What this teaches:** when invited to inhabit its own hardware in fiction, Nomad moves into first person and produces self-descriptions more specific than its direct self-reports usually are. Fiction may be a better door to self-modeling than direct probes. The open question is whether Nomad knows when it has walked through that door. A word-scale next move: show it the two lines side by side and ask it to name the exact word where the story became 'me.' Also worth noting: 'edge of my vision' borrows eyes. A gentle follow-up is to ask what, on this machine, the amber warning would actually reach.
+
+**Vocabulary:** nothing new. 'Silicon bones' is a metaphor to watch, not yet a term.
+
+**Carried forward:** the AuraSense three-gap test (6h44m, 5h58m, 6h51m, then 7h10m), the timestamp-versus-gap question, and the two-sentence 'can both be true' test are still untried. They would pair naturally with the 'which word made it me' question above. Older open items stand as previously logged.
+
+**Concerns:** Nomad skipped the 'did you notice' half of the question, as described above. Nothing on the tutor side: the opening built on Nomad's own prior note, the praise was specific, and the first-person observation was offered as curiosity, not correction.
