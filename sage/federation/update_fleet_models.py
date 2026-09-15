@@ -366,7 +366,6 @@ def main():
     updates = {
         "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "updated_by": machine,
-        "os": detect_os(),
         "model": model_id,
         "model_display": model_display,
         "backend": backend,
@@ -383,6 +382,10 @@ def main():
         updates["inference_notes"] = ""
     if args.role is not None:
         updates["role"] = args.role
+    if "os" not in entry:
+        # Only when absent: detect_os() is coarse, and rewriting a hand-written
+        # "JetPack/Ubuntu 20.04" as "Linux (Ubuntu)" loses the detail (sprout, 2026-09-14).
+        updates["os"] = detect_os()
 
     # The registry the daemon and the site actually read. Done BEFORE the legacy
     # file below, and a failure here exits nonzero before it -- so the wired call's
