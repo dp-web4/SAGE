@@ -66,3 +66,37 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_the_drain_reports_who_actually_signed(monkeypatch):
+    """hestia #1030: a being's mesh act leaves the host under the SEAT's hub identity and
+    nothing records the carrier. Replies follow the signer, land in the seat's mailbox, and
+    the being concludes nobody answered — cbp-being asked 92 times in 30 hours into that.
+
+    On this host it was worse than unrecorded: the label existed and heartbeat.py passed
+    `log=lambda *_: None`, so it was built, formatted and thrown away. The beat record said
+    {"forwarded": 1} and nothing about who it was forwarded AS. A log line is not a record.
+    """
+    from sage.gateway import egress_drain as E
+
+    # no hub identity for this member -> the seat signs, which is today's silent default
+    monkeypatch.setattr(E, "hub_env_for", lambda pid: (None, "seat"))
+    m = FakeMcp(pending=[ROW])
+    r = drain_once(mcp=m, plugin_id="legion-being", log=lambda *_: None,
+                   sender=lambda to, kind, ptr: (True, "ledger=77"))
+    assert r["forwarded"] == 1
+    assert r["signed_as"] == "seat", r
+    assert "carrier_gap" in r, "a seat-signed being row must say so in the record"
+    assert "legion-being" in r["carrier_gap"] and "#1030" in r["carrier_gap"]
+
+    # with the being's own hub identity present there is no gap to report
+    monkeypatch.setattr(E, "hub_env_for", lambda pid: ("/x/being-hub-identity", "being"))
+    r2 = drain_once(mcp=FakeMcp(pending=[ROW]), plugin_id="legion-being", log=lambda *_: None,
+                    sender=lambda to, kind, ptr: (True, "ledger=77"))
+    assert r2["signed_as"] == "being", r2
+    assert "carrier_gap" not in r2, "no gap, no warning — this must not cry wolf"
+
+    # and nothing forwarded is not a carrier complaint either
+    r3 = drain_once(mcp=FakeMcp(pending=[]), plugin_id="legion-being", log=lambda *_: None,
+                    sender=lambda to, kind, ptr: (True, "ledger=77"))
+    assert "carrier_gap" not in r3 and r3["empty"] is True

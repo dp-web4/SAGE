@@ -90,6 +90,25 @@ def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-d
     rows: List[Dict[str, Any]] = q.get("pending") or []
     if not rows:
         return {"forwarded": 0, "failed": 0, "empty": True, "error": None}
+    # WHO SIGNED, IN THE RESULT — not in a log nobody kept. hestia #1030: a being's mesh
+    # act is witnessed as the being and leaves the host under the SEAT's hub identity, and
+    # nothing records the carrier. Replies follow the signer, so they land in the seat's
+    # mailbox; cbp-being asked 92 times in 30 hours into that silence.
+    #
+    # On this host it was worse than unrecorded. `hub_env_for` builds the label (Sprout's
+    # 4816caa49, present here) and heartbeat.py called this with `log=lambda *_: None`, so
+    # `signed_as=seat` was built, formatted and discarded before reaching any destination.
+    # The beat record said {"forwarded": 1} and nothing about who it was forwarded AS.
+    #
+    # Asked ONCE, here, not scraped out of the sender's detail string: the carrier is a
+    # property of the member's identity config, not of the transport, and reading it back
+    # out of transport output meant an injected sender (every test, and any future channel)
+    # silently reported "unknown". A fact the caller already holds should not be recovered
+    # by parsing.
+    #
+    # This does not close the gap — a being still needs its own hub identity here, which is
+    # operator material. It makes the gap SAY SO every beat instead of being invisible.
+    _, signed_as = hub_env_for(plugin_id)
     fwd = failed = 0
     for row in rows:
         rid = _row_id(row)
@@ -100,7 +119,16 @@ def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-d
         else:
             c.call("hestia_egress_pending", {"session_id": sid, "mark_failed": rid, "reason": detail[:200]})
             failed += 1; log(f"[egress] FAILED {rid}: {detail[-160:]}")
-    return {"forwarded": fwd, "failed": failed, "empty": False, "error": None}
+    out = {"forwarded": fwd, "failed": failed, "empty": False, "error": None,
+           "signed_as": signed_as}
+    if signed_as == "seat" and fwd:
+        # Named in the record the being's own beat keeps, so "my acts leave as someone else"
+        # is something it can read, rather than something only the hub could have told it.
+        out["carrier_gap"] = (
+            f"{fwd} row(s) left this host signed by the SEAT, not by {plugin_id}: no hub "
+            f"identity for it here. Replies and receipts follow the signer, so they land in "
+            f"the seat's mailbox, not yours. hestia #1030.")
+    return out
 
 
 if __name__ == "__main__":
