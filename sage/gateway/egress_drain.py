@@ -59,18 +59,33 @@ def hub_env_for(plugin_id: str) -> tuple[Optional[str], str]:
     return None, "seat"
 
 
+# The variables hub-notify.sh reads to decide who signs. They are stripped from the
+# environment of both the resolver and the send, so the env FILE is the only thing that
+# decides: an inherited MY_LCT cannot make the shell sign as someone the resolver never saw.
+_SIGNER_VARS = ("MY_LCT", "MY_KEYPAIR", "CHANNEL_CLIENT", "HUB_URL", "HUB_MESH_ENV", "HUB_MESH_STATE")
+
+
+def _clean_env() -> Dict[str, str]:
+    return {k: v for k, v in os.environ.items() if k not in _SIGNER_VARS}
+
+
 def _env_lct(path: Optional[str]) -> Optional[str]:
-    """The MY_LCT a hub-mesh env file signs as, or None."""
-    if not path:
+    """The MY_LCT a hub-mesh env file signs as, read the way hub-notify.sh reads it: by
+    SOURCING the file in bash (SAGE #97 review). A Python parser of shell assignments
+    disagrees with the shell on prefixes (`MY_LCT_OLD=`), duplicates (first vs last),
+    `export` and quoting, and any disagreement certifies an identity the send does not
+    use: #1030 again. Sourcing cannot disagree with sourcing. None when the file is absent,
+    fails to source, or sets no MY_LCT."""
+    if not path or not os.path.isfile(path):
         return None
     try:
-        for line in open(path):
-            s = line.strip()
-            if s.startswith("MY_LCT"):
-                return s.split("=", 1)[1].split("#", 1)[0].strip().strip('"').strip("'") or None
+        p = subprocess.run(
+            ["bash", "-c", 'source "$1" >/dev/null 2>&1 || exit 3; printf %s "${MY_LCT-}"', "_", path],
+            capture_output=True, text=True, timeout=10, env=_clean_env())
     except Exception:
         return None
-    return None
+    lct = p.stdout.strip()
+    return lct if p.returncode == 0 and lct else None
 
 
 def seat_env_path() -> str:
@@ -78,30 +93,61 @@ def seat_env_path() -> str:
     return os.environ.get("HUB_MESH_ENV") or os.path.expanduser("~/.config/hub-mesh" + ".env")
 
 
-def signer_for(row: Dict[str, Any], plugin_id: str) -> tuple[Optional[str], str, Optional[str], Optional[str]]:
-    """Which identity signs this row: (env_file, signed_as, carrier_lct, refusal).
+def _member_env_path(member: str) -> str:
+    return os.path.expanduser(f"~/.config/hub-mesh-{member}.env")
 
-    A STAMPED row (hestia #1030) names its carrier; only an env file whose MY_LCT is that
-    carrier may sign it, and with none the answer is a refusal, never another key. An UNBOUND
-    row keeps the old choice (the being's own file, else the seat) and names the carrier it
-    picked, so the daemon's witness records it."""
-    being_env, _ = hub_env_for(plugin_id)
-    seat_env = seat_env_path()
-    seat_env = seat_env if os.path.isfile(seat_env) else None
+
+def identity_inventory(author: Optional[str] = None) -> List[tuple[str, str]]:
+    """Every hub identity file on this host, as (path, label), in preference order: the row's
+    AUTHOR's own file, then the seat's, then every other member file. Row-scoped (SAGE #97
+    review): the drain lists the whole forwarding plane, so the member running the drain is
+    not the member whose row it is."""
+    out: List[tuple[str, str]] = []
+    if author and os.path.isfile(_member_env_path(author)):
+        out.append((_member_env_path(author), "being"))
+    seat = seat_env_path()
+    if os.path.isfile(seat):
+        out.append((seat, "seat"))
+    cfg = os.path.expanduser("~/.config")
+    try:
+        names = sorted(os.listdir(cfg))
+    except OSError:
+        names = []
+    prefix, suffix = "hub-mesh-", ".env"
+    for n in names:
+        full = os.path.join(cfg, n)
+        if n.startswith(prefix) and n.endswith(suffix) and full not in {x for x, _ in out}:
+            out.append((full, "member:" + n[len(prefix):-len(suffix)]))
+    return out
+
+
+def signer_for(row: Dict[str, Any], plugin_id: str) -> tuple[Optional[str], str, Optional[str], Optional[str]]:
+    """Which identity signs THIS row: (env_file, signed_as, carrier_lct, refusal).
+
+    Decided per row, from the row (SAGE #97 review). `plugin_id` is only the drainer's hestia
+    attribution; the row's own `from_plugin` is the author.
+
+    * STAMPED (hestia #1030): the first identity file on this host whose sourced MY_LCT is
+      the stamped carrier signs it, whichever member that file belongs to (a relay's carrier
+      need not be the author or the seat). None matching is a refusal, never another key.
+    * UNBOUND: the author's own file, else the seat, as before, naming the carrier chosen."""
+    author = str(row.get("from_plugin") or plugin_id)
+    inventory = identity_inventory(author)
     transport = row.get("transport")
     if isinstance(transport, dict):
         want = str(transport.get("carrier_lct") or "").strip()
         if not want:
             return None, "none", None, f"row stamped mode={transport.get('mode')} names no carrier_lct"
-        for env_file, label in ((being_env, "being"), (seat_env, "seat")):
+        for env_file, label in inventory:
             lct = _env_lct(env_file)
             if lct and lct.lower() == want.lower():
                 return env_file, label, lct, None
         return None, "none", None, (f"no hub identity on this host signs as the stamped carrier {want}; "
                                     "not sending under another identity")
-    if being_env:
-        return being_env, "being", _env_lct(being_env), None
-    return None, "seat", _env_lct(seat_env), None
+    for env_file, label in inventory:
+        if label in ("being", "seat"):
+            return env_file, label, _env_lct(env_file), None
+    return None, "seat", None, None
 
 
 def _hub_receipt(detail: str) -> Optional[Dict[str, str]]:
@@ -112,7 +158,8 @@ def _hub_receipt(detail: str) -> Optional[Dict[str, str]]:
 def _forward(row: Dict[str, Any], sender=None, plugin_id: str = "sprout-being",
              env_file: Optional[str] = None, signed_as: Optional[str] = None) -> tuple[bool, str]:
     """Hand one row to the fleet mesh under the signer `signer_for` chose. Returns
-    (accepted, detail)."""
+    (accepted, detail). The env file is passed EXPLICITLY as HUB_MESH_ENV with the signer
+    variables stripped, so the shell sources exactly the file the resolver read."""
     to = row.get("forward_on") or row.get("dest_peer_lct") or row.get("peer")
     kind = row.get("kind") or "coordination"
     ptr = row.get("pointer_uri") or row.get("pointer") or ""
@@ -124,9 +171,10 @@ def _forward(row: Dict[str, Any], sender=None, plugin_id: str = "sprout-being",
         return False, f"hub-notify sender not available at {HUB_NOTIFY}"
     if signed_as is None:
         env_file, signed_as, _, _ = signer_for(row, plugin_id)
-    env = dict(os.environ)
-    if env_file:
-        env["HUB_MESH_ENV"] = env_file
+    if not env_file:
+        return False, "no hub identity file to sign with on this host"
+    env = _clean_env()
+    env["HUB_MESH_ENV"] = env_file
     p = subprocess.run([HUB_NOTIFY, str(to), str(kind), str(ptr)], capture_output=True, text=True, timeout=60, env=env)
     out = (p.stdout + p.stderr).strip()
     return (p.returncode == 0 and "ledger=" in out), f"signed_as={signed_as} " + out[-300:]
@@ -175,7 +223,7 @@ def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-d
     if not rows:
         return {"forwarded": 0, "failed": 0, "empty": not faults, "error": None,
                 "signed_as": signed_as, "carrier": carrier, "transport_faults": faults}
-    fwd = failed = 0
+    fwd = failed = unsettled = 0
     for row in rows:
         rid = _row_id(row)
         env_file, row_signed_as, row_carrier, refusal = signer_for(row, plugin_id)
@@ -199,12 +247,20 @@ def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-d
                 failed += 1; faults.append({"row_id": rid, "fault": res.get("fault"),
                                             "reported_to": res.get("reported_to")})
                 log(f"[egress] sent {rid} but NOT a forwarded success: {res.get('fault')}")
+            elif "_hestia_error" in res or not res:
+                # The hub took it, but hestia did not settle the row (refused, errored, or said
+                # nothing): the row may still be pending and the next pass may send it again.
+                # Not a clean forward, and not silent (SAGE #97 review).
+                unsettled += 1
+                faults.append({"row_id": rid, "fault": "sent-but-unsettled",
+                               "detail": res.get("_hestia_error") if res else "empty response"})
+                log(f"[egress] sent {rid} but hestia did not settle it: {res}")
             else:
                 fwd += 1; log(f"[egress] forwarded {rid} -> {row.get('forward_on')} as {row_signed_as} ({detail[-80:]})")
         else:
             c.call("hestia_egress_pending", {"session_id": sid, "mark_failed": rid, "reason": detail[:200]})
             failed += 1; log(f"[egress] FAILED {rid}: {detail[-160:]}")
-    return {"forwarded": fwd, "failed": failed, "empty": False, "error": None,
+    return {"forwarded": fwd, "failed": failed, "unsettled": unsettled, "empty": False, "error": None,
             "signed_as": signed_as, "carrier": carrier, "transport_faults": faults}
 
 
