@@ -14,12 +14,28 @@ Usage:
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 MANIFEST_PATH = Path(__file__).parent / "sage-fleet-models.json"
+
+# THE FILE THAT IS ACTUALLY READ. `sage-fleet-models.json` above is read by nothing
+# but this script -- verified at code level 2026-09-14: the only grep hits outside
+# forum posts are this file's own two references. `fleet.json` is the live registry:
+# `sage-rs/sage-lib/src/federation/fleet.rs` loads it into the daemon, and the SAGE
+# explainer site links it as "Fleet manifest", inviting readers to verify against it.
+#
+# That invitation was being answered with a document frozen on 2026-03-12, which said
+# McNugget ran gemma3:12b six months after it stopped. Four of eight rows disagreed
+# with the site (cbp, 2026-09-12) and the SITE was the correct one -- so a reader who
+# accepted our invitation to check concluded we were wrong about half our own fleet.
+#
+# This script was written 2026-03-08 to prevent exactly that, and was never wired to
+# anything. Writing the file nobody reads is why being unwired went unnoticed.
+FLEET_JSON_PATH = Path(__file__).parent / "fleet.json"
 
 
 def detect_machine() -> str:
@@ -33,14 +49,32 @@ def detect_machine() -> str:
 
 
 def detect_backend() -> str:
-    """Detect whether ollama or transformers is the primary backend."""
+    """Detect whether ollama or transformers is the primary backend.
+
+    Asks the ollama SERVER, not the PATH. Bare `ollama list` was the original
+    check and it answers a different question: "is the CLI on this PATH". Under
+    launchd the PATH is /usr/bin:/bin, so a box that has been serving ollama for
+    months reports `transformers` and this file records the flip -- measured here
+    2026-09-14 while wiring this into the raising loop, which is exactly where the
+    stripped PATH applies. Same defect that killed raising for 29 days when
+    /opt/homebrew/bin/python3 went missing: a PATH lookup standing in for a fact.
+    """
+    import urllib.request
+    host = os.getenv("SAGE_OLLAMA_HOST", "http://127.0.0.1:11434")
     try:
-        import subprocess
-        result = subprocess.run(["ollama", "list"], capture_output=True, timeout=5)
-        if result.returncode == 0:
-            return "ollama"
+        with urllib.request.urlopen(host + "/api/version", timeout=3) as r:
+            if r.status == 200:
+                return "ollama"
     except Exception:
         pass
+    # Fall back to the CLI, absolute paths included, before giving up on ollama.
+    for exe in ("ollama", "/usr/local/bin/ollama", "/opt/homebrew/bin/ollama"):
+        try:
+            import subprocess
+            if subprocess.run([exe, "list"], capture_output=True, timeout=5).returncode == 0:
+                return "ollama"
+        except Exception:
+            continue
     try:
         import transformers  # noqa
         return "transformers"
@@ -95,6 +129,104 @@ def detect_current_model(machine: str) -> tuple[str, str]:
         return model_id, model_display
     except Exception:
         return "unknown", "Unknown"
+
+
+def detect_observed_model(machine: str) -> "tuple[str, str] | None":
+    """What this machine ACTUALLY ran, from the record rather than from config.
+
+    `detect_current_model` below asks `machine_config`, which is a statement of
+    intent: it says what this box is configured to run. That is the right answer
+    right up until a switch lands somewhere else and the config is the thing that
+    was missed -- which is what happened on McNugget, whose switch to gemma4:12b on
+    2026-09-08 updated the instance record, the launchd unit and the sessions, and
+    left two manifests behind saying gemma3.
+
+    So this prefers evidence over declaration, in order:
+
+      1. the newest session record's `model` -- what the loop actually ran;
+      2. the instance record's `model` -- what the next session will use;
+      3. $SAGE_MODEL -- what the supervisor was told to use.
+
+    Returns None if none can be read, so the caller falls back to config rather
+    than this function inventing an answer.
+    """
+    import os
+    root = Path(__file__).resolve().parents[2]
+    inst_dir = root / "sage" / "instances"
+
+    # The instance DIRECTORY NAME is not the model. McNugget's is
+    # `mcnugget-gemma3-12b` and has run gemma4 since 09-08, because 461 sessions of
+    # history hang off that path and renaming it would orphan them. So resolve the
+    # instance by pin or by session count, never by parsing its name.
+    pin = os.getenv("SAGE_INSTANCE")
+    cand = None
+    if pin and (inst_dir / pin).is_dir():
+        cand = inst_dir / pin
+    elif inst_dir.is_dir():
+        owned = [d for d in inst_dir.iterdir()
+                 if d.is_dir() and d.name.startswith(machine + "-")]
+        if owned:
+            cand = max(owned, key=lambda d: len(list((d / "sessions").glob("*.json")))
+                       if (d / "sessions").is_dir() else 0)
+    if cand:
+        sess = cand / "sessions"
+        if sess.is_dir():
+            files = sorted(sess.glob("session_*.json"))
+            if files:
+                try:
+                    m = json.loads(files[-1].read_text()).get("model")
+                    if m:
+                        return m, files[-1].name + " (newest session record)"
+                except Exception:
+                    pass
+        ij = cand / "instance.json"
+        if ij.is_file():
+            try:
+                m = json.loads(ij.read_text()).get("model")
+                if m:
+                    return m, "instance.json"
+            except Exception:
+                pass
+
+    m = os.getenv("SAGE_MODEL")
+    if m:
+        return m, "$SAGE_MODEL"
+    return None
+
+
+def update_fleet_json(machine: str, model_id: str, dry_run: bool = False) -> bool:
+    """Set this machine's `model_default` in the registry the daemon and site read.
+
+    Touches exactly one field of one machine's entry and preserves the rest in key
+    order, because every other row here belongs to a seat that is not this one.
+    Writes temp-and-rename so the daemon, which loads this file at startup, never
+    sees a half-written registry.
+    """
+    if not FLEET_JSON_PATH.exists():
+        print("  fleet.json not found at " + str(FLEET_JSON_PATH) + "; skipping",
+              file=sys.stderr)
+        return False
+    import collections, os, tempfile
+    data = json.loads(FLEET_JSON_PATH.read_text(),
+                      object_pairs_hook=collections.OrderedDict)
+    machines = data.get("machines")
+    if not isinstance(machines, dict) or machine not in machines:
+        print("  '" + machine + "' has no entry in fleet.json; refusing to invent one",
+              file=sys.stderr)
+        return False
+    cur = machines[machine].get("model_default")
+    if cur == model_id:
+        print("  fleet.json: model_default already " + str(model_id))
+        return False
+    print("  fleet.json: model_default " + repr(cur) + " -> " + repr(model_id))
+    if dry_run:
+        return True
+    machines[machine]["model_default"] = model_id
+    fd, tmp = tempfile.mkstemp(dir=str(FLEET_JSON_PATH.parent), suffix=".tmp")
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(data, indent=2) + "\n")
+    os.replace(tmp, FLEET_JSON_PATH)
+    return True
 
 
 def git_push(manifest_path: Path):
@@ -169,7 +301,17 @@ def main():
         model_id = args.model
         model_display = args.model_display or model_id.replace(":", " ").title()
     else:
-        model_id, model_display = detect_current_model(machine)
+        # Evidence first, declaration second. `detect_current_model` reads the
+        # machine config, which states intent; a switch that lands in the instance
+        # record and the launchd unit but not the config leaves it confidently wrong.
+        observed = detect_observed_model(machine)
+        if observed:
+            model_id, basis = observed
+            model_display = model_id.replace(":", " ").title()
+            print("  observed model: " + model_id + "  (basis: " + basis + ")")
+        else:
+            model_id, model_display = detect_current_model(machine)
+            print("  no observed record; fell back to machine_config: " + model_id)
         if args.model_display:
             model_display = args.model_display
 
@@ -193,6 +335,15 @@ def main():
         updates["inference_notes"] = ""
     if args.role is not None:
         updates["role"] = args.role
+
+    # The registry the daemon and the site actually read. Done BEFORE the legacy
+
+    # file below, so a failure here is loud rather than masked by a successful
+
+    # write to the document nobody consumes.
+
+    update_fleet_json(machine, model_id, dry_run=args.dry_run)
+
 
     # Show diff
     changes = {k: (entry.get(k), v) for k, v in updates.items() if entry.get(k) != v}

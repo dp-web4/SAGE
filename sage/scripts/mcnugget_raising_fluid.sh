@@ -77,6 +77,21 @@ echo "[McNugget-Raising] Active instance: $INSTANCE_SLUG (daemon model: $DAEMON_
 
 # Snapshot state
 echo "[McNugget-Raising] Snapshotting state..."
+# Re-register this machine's CURRENT model in the fleet registry, from the session
+# that just ran rather than from config. Wiring this is the point: the tool was
+# written 2026-03-08 to be "called at the start of raising sessions" and nothing
+# ever called it, so fleet.json drifted six months while every seat assumed the
+# mechanism existed -- it did, unwired. McNugget's own switch to gemma4 on 09-08
+# was invisible here until a reader followed the site's "Fleet manifest" link and
+# found it contradicting the page.
+#
+# --no-push on purpose: the supervisor already commits this tree, and a raising
+# script that pushes on its own turns a model change into a race between seats.
+# It is a no-op when nothing changed, so it costs a file read per session.
+"$SAGE_PY" -m sage.federation.update_fleet_models --no-push || \
+  echo "[raising] fleet-model re-registration failed (non-fatal)" >&2
+
+
 "$SAGE_PY" -m sage.scripts.snapshot_state \
     --machine mcnugget \
     --instance "$INSTANCE_SLUG" 2>/dev/null || true
