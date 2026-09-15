@@ -67,6 +67,10 @@ It requested scope for that file and appealed the refusal four times. Every gate
 
 The being's todo was not rewritten. On 2026-09-15 06:40Z the seat appended one dated, attributed block with dp's go-ahead. It closes the outage items with the measurements above, and leaves dp's unanswered question open as the being's. A second block the same day closes the policy-daemon items the same way.
 
+**Measured: the first block changed nothing.** The being's messages to dp at 07:07, 07:36, 08:06 and 12:36Z still said 8010 had been offline for ~21 hours. The beat shows only the last 1,500 characters of `todo.md`, and the being appends to it in every beat. So a correction appended there was probably visible for about one beat before its own entries pushed it out.
+
+A conversation turn is the channel that persists: it stays in the conversations block, carrying the "unanswered" marker until the being replies. So the seat also answered the being's own question of 13:05Z ("Can you check the daemon's logs?") in the cbp-claude conversation (seq 2721), with the deploy-log lines and the counts above.
+
 ## Tests
 
 `sage/gateway/tests/test_being_reply_delivery.py`, one test per mechanism, built on the measured shapes:
