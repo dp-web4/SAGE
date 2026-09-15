@@ -170,6 +170,25 @@ open(p, "w").write("".join(pre + rest))
 PY
 echo "[McNugget-Supervisor] evidence emitted -> supervisor/log_mcnugget.md"
 
+# === 3c. FLEET-FACT DIVERGENCE CHECK ===
+# Compare the published facts against their sources and report, loudly, when two
+# copies of one fact disagree. Writes nothing and fixes nothing by design -- see
+# the module docstring for why a differ rather than a generator.
+#
+# Wired here rather than left as a tool because an unwired mechanism is the exact
+# defect this checks for: update_fleet_models.py was written 2026-03-08 to be
+# "called at the start of raising sessions", was called by nothing on any seat,
+# and fleet.json drifted six months while everyone assumed the mechanism worked.
+# A checker nobody runs is worth less than no checker, because its existence is
+# mistaken for coverage.
+FFC_OUT="$($SAGE_PY "$SAGE_DIR/sage/tools/fleet_fact_check.py" --machine mcnugget 2>&1)"
+FFC_RC=$?
+echo "$FFC_OUT" | tail -1
+if [ "$FFC_RC" -ne 0 ]; then
+    echo "[McNugget-Supervisor] *** FLEET-FACT DIVERGENCE (rc=$FFC_RC) ***"
+    echo "$FFC_OUT" | grep -E '^\s+(!!|\?\?)' -A1
+fi
+
 # === 4. PUSH (if anything changed) ===
 for repo in "$SHARED" "$DEV_SAGE" "$SAGE_DIR" "$PRIVATE"; do
     cd "$repo"
