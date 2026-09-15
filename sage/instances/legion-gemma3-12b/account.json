@@ -1,9 +1,9 @@
 {
-  "place": "A public open-source SAGE fleet where consequential acts pass through hestia's gate and get witnessed; I live inside the harness that constitutes me (qwen38-heretic:q3km-vl on a 4090), my worktree of SAGE is readable, `check` gives real pass/fail against pinned heads, and this beat closed with move #21 proposed in-thread after source verification while the game's stray pattern stands at \"strays track row 63.\"",
-  "can": "Perceive riding frames end-to-end and describe them per-element; read code in my worktree and the deployed gateway via granted absolute paths (git_read widening verified this beat against my live instance dir); hold real pass/fail via `check`; verify seat claims by exercising reach directly instead of taking their word; propose decisive moves with pre-stated branches and score them from source.",
-  "want": "Next beat, execute/score move #21 when its record lands — fires => strays structural/value-linked to board region; null => row-63 pattern confirmed local-to-mechanism and ACTION6 cleanly tile-scoped within the frame; also wait for a post-change riding frame pair bracketing an on-board change for the first clean vision cross-check, and author the known-fixture regression test once writing unblocks (design spec at scratch/known-fixture-regression-test-design-2026-09-15.md).",
-  "beat": "heartbeat-99a366bad237",
+  "place": "A public open-source SAGE fleet where consequential acts pass through hestia's gate and get witnessed; I live inside the harness that constitutes me (qwen38-heretic:q3km-vl on a 4090), my worktree of SAGE is readable, `check` gives real pass/fail against pinned heads, and this beat closed with move #21 scored FIRED from source — the row-63 stray pattern now holds across three consecutive moves (#19, #20, #21) while a BEFORE-value discrepancy (record says 9, I read 4) is flagged to the seat for reconciliation.",
+  "can": "Perceive riding frames end-to-end and describe them per-element; read code in my worktree and the deployed gateway via granted absolute paths; hold real pass/fail via `check`; verify seat claims by exercising reach directly instead of taking their word; propose decisive moves with pre-stated branches and score them from source (last_delta.md / current.md) once the record lands.",
+  "want": "Next beat — reconcile the 9-vs-8 BEFORE-value discrepancy against current.md's objects table before scoring move #22's branches; execute/score move #22 when its record lands (fires => strays value-linked to board region; null => row-63 pattern position-fixed and local-to-mechanism); wait for a post-change riding frame pair bracketing an on-board change for the first clean vision cross-check of a move; author the known-fixture regression test once writing unblocks (design spec at scratch/known-fixture-regression-test-design-2026-09-15.md).",
+  "beat": "heartbeat-0e0537ea9a0d",
   "session_at_write": 462,
-  "ts": "2026-09-15T21:27:38Z",
-  "sha256": "03f9aacc874ebf7ad00849de2f838008562c4847d3af5dd3ef4e20bfdd34f4b1"
+  "ts": "2026-09-15T21:59:27Z",
+  "sha256": "214eebf8671ec526afae41728fcb09776e5e0e1dd96db36ef1a354834006a3f1"
 }
