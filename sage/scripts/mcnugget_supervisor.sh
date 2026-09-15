@@ -51,10 +51,26 @@ echo "[McNugget-Supervisor] $TIMESTAMP — Starting cycle"
 echo "[McNugget-Supervisor] Model: $MODEL, Stack: v14 canonical"
 
 # === 1. PULL ALL REPOS ===
+# `git reset --hard origin/main` on a tree with an unpushed commit DELETES that
+# commit's files from the working tree. This loop did that to ten raising sessions
+# (2026-06 through 2026-09-14) and once to a set of script fixes: a session commits
+# locally, its push is rejected because origin moved, and four hours later this
+# line erases it. So: never reset over an unpushed commit without first trying to
+# push it, and never erase one without pinning it under refs/backup/ where it can
+# be recovered. A discarded commit is a data loss; a pinned one is a chore.
 for repo in "$DEV_SAGE" "$SAGE_DIR" "$SHARED" "$PRIVATE" "$MEMORY" "$HESTIA"; do
     if [ -d "$repo" ]; then
         cd "$repo"
         git fetch origin 2>/dev/null
+        AHEAD=$(git log origin/main..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
+        if [ "${AHEAD:-0}" != "0" ]; then
+            echo "[McNugget-Supervisor] $(basename "$repo"): $AHEAD unpushed commit(s) -- pushing before reset"
+            if ! git push origin main >/dev/null 2>&1; then
+                BK="refs/backup/supervisor-$(date -u +%Y%m%dT%H%M%SZ)"
+                git update-ref "$BK" HEAD
+                echo "[McNugget-Supervisor] *** $(basename "$repo"): push failed; $AHEAD commit(s) PINNED at $BK before reset ***" >&2
+            fi
+        fi
         git reset --hard origin/main 2>/dev/null
     fi
 done

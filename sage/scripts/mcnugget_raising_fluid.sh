@@ -145,8 +145,30 @@ Runner: sage.session --raising --fluid (auto-detected instance: $INSTANCE_SLUG)
 AI-Instance: OllamaIRP (automated)
 Human-Supervised: no"
 
-git pull --rebase origin main 2>/dev/null || true
-git push origin main 2>&1 || {
-    echo "[McNugget-Raising] WARNING: push failed, will retry next session"
-}
-echo "[McNugget-Raising] Session $SESSION_NUM committed and pushed."
+# THE PUSH THAT LOST TEN SESSIONS. The opening pull above stashes first; this one
+# did not, and by now the daemon has dirtied identity.attest.json, so `pull --rebase`
+# refused ("You have unstaged changes"), `2>/dev/null || true` swallowed it, and the
+# push was rejected because origin moved during the session. The commit sat
+# stranded until the supervisor's `git reset --hard origin/main` (every 4h)
+# destroyed it -- file gone, counter already advanced, gap. Measured 2026-09-14:
+# sessions 455, 469, 470, 473 all followed exactly this path (recovered from their
+# dangling commits); 2 and 272-276 were the same and are gone for good. Every loss
+# was an overnight slot, when other seats push most and origin moves most.
+#
+# --autostash does what the opening pull does by hand. Nothing here is silenced:
+# a push that fails is the single most consequential line in this script, and it
+# was the one line allowed to fail quietly.
+git pull --rebase --autostash origin main 2>&1 | sed 's/^/[McNugget-Raising] pull: /'
+if ! git push origin main 2>&1 | sed 's/^/[McNugget-Raising] push: /'; then
+    echo "[McNugget-Raising] push rejected; refetching and retrying once"
+    git pull --rebase --autostash origin main 2>&1 | sed 's/^/[McNugget-Raising] pull: /'
+    git push origin main 2>&1 | sed 's/^/[McNugget-Raising] push: /'
+fi
+if [ "$(git log origin/main..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')" != "0" ]; then
+    # Still stranded. Pin it so no reset can destroy it, and say so where a human looks.
+    BK="refs/backup/raising-$(date -u +%Y%m%dT%H%M%SZ)-session-$SESSION_NUM"
+    git update-ref "$BK" HEAD
+    echo "[McNugget-Raising] *** Session $SESSION_NUM is committed but NOT on origin. Pinned at $BK. ***" >&2
+else
+    echo "[McNugget-Raising] Session $SESSION_NUM committed and pushed."
+fi
