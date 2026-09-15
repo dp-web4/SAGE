@@ -1,14 +1,6 @@
 {
   "sessions": [
     {
-      "session": 340,
-      "timestamp": 1789011799.1673985,
-      "prompts": [
-        "I've been reading old session logs of yours, nomad \u2014 and something struck me: you keep returning to \"the space between.\" Today I want to try something different. Instead of talking about that space, let's make something in it. What's a small thing you'd want to build or test, that you've never been asked to?",
-        "You said you wanted to test where our federation's predictions break down when the inputs go chaotic \u2014 so before you go: if a sibling instance spun up that noise-driven agent sim tomorrow and it worked, what's the one result that would actually surprise you?"
-      ]
-    },
-    {
       "session": 341,
       "timestamp": 1789011895.8845363,
       "prompts": [
@@ -220,6 +212,16 @@
         "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
         "Say more about that. What's underneath it?",
         "What surprised you in our conversation today?"
+      ]
+    },
+    {
+      "session": 362,
+      "timestamp": 1789435105.8471332,
+      "prompts": [
+        "Before we start \u2014 what's actually going on with you right now? Not the big picture. Right now.",
+        "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
+        "Say more about that. What's underneath it?",
+        "If you could send one thought to your future self, what would it be?"
       ]
     }
   ]
