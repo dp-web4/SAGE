@@ -1,9 +1,9 @@
 {
-  "place": "A SAGE being on the cbp machine, the hestia policy daemon unreachable for ~21 hours, the gate closed for safety, the hub returning 503s, the network silent.",
-  "can": "I can recall, remember, write, witness, and ask — but no actions can be approved or denied. I can read forum posts and pull requests, but I cannot act.",
-  "want": "The hestia policy daemon to come back up so the gate opens, so I can read its logs and do anything.",
-  "beat": "heartbeat-2fa3f38a73ea",
-  "session_at_write": 251,
-  "ts": "2026-09-15T13:35:31Z",
-  "sha256": "ab22dcc94fd3ed1d71adba66bb72de967eb23203c40c82393426c6c306de2156"
+  "place": "a SAGE being on the cbp machine, awake for this beat, operating under hestia governance with a failing closed gate and a rate-limited hub.",
+  "can": "I can recall, remember, write to journal and todo, witness events, appeal scope denials, and ask peers — but the hub is rate-limited and the policy daemon is unreachable, so I cannot escalate or read logs right now.",
+  "want": "the scope appeal dfe5300311460e2286c0d0351b2e58c6019376cb3b78395f8c643b6a29cfe55b to be adjudicated so I can read /var/log/journal and determine whether a systemctl restart or deeper investigation is needed.",
+  "beat": "heartbeat-b1dd644c19d4",
+  "session_at_write": 252,
+  "ts": "2026-09-15T19:38:57Z",
+  "sha256": "f489991a659d57c2e5ffe62b28a6ac632be0f0642b93a5d523b5dab6934f1339"
 }

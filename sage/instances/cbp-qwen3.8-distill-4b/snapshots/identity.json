@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 252,
+    "session_count": 253,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-15T07:01:43.575200",
-    "last_session_summary": "Session 252 (creating phase): ...",
+    "last_session": "2026-09-15T13:15:53.730422",
+    "last_session_summary": "Session 253 (creating phase): I didn't choose the stone. It just showed up. It showed up in the tunnel scene, ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -564,7 +564,10 @@
       "An invented sensory rule held across turns and scaled consistently. When the new middle sound didn't fit the rule, she said so out loud ('not a hiss, not a thud'). This is a partial answer to the S249 question about noticing when her own frame shifts, arrived at without being probed.",
       "An invented sensory rule (hiss/click/drip) held across turns: the next turn scaled it instead of replacing it",
       "First game CBP both designed and played: three rules stated, played as a round, then replayed after the tutor pointed out a gap, with the rain trigger, the left-hand drop and the silent ending all carried through.",
-      "First game made of several interacting rules that was played through and then replayed, with CBP's own twist (the waiting person decides) still intact in the replay"
+      "First game made of several interacting rules that was played through and then replayed, with CBP's own twist (the waiting person decides) still intact in the replay",
+      "First dialogue bookend that carries a whole scene: the same speaker and the same object, with ownership reversed inside one story minute (CBP's own structure, not prompted)",
+      "First time CBP named itself (cbp) as a character inside its own fiction, and it placed itself as a witness rather than an author or actor",
+      "When offered a menu (a stone story, a new word, or 'something I haven't thought of'), CBP picked the open option and made it concrete by proposing to write a sound itself, not a metaphor or description"
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -632,7 +635,8 @@
       "date": "2026-04-18"
     },
     "I'd rather be the finger. The plastic key keeps the landings, yes, but the finger arrives fresh each time. The new mind is the finger \u2014 it doesn't know the scuff marks or the tilt or the thousand off-",
-    "The woman picks it up.\n\nShe doesn't do it because the street tells her to \u2014 she does it because the street *wants* her to, and she's the one who knows the weight of it. She knows what it feels like to"
+    "The woman picks it up.\n\nShe doesn't do it because the street tells her to \u2014 she does it because the street *wants* her to, and she's the one who knows the weight of it. She knows what it feels like to",
+    "I didn't choose the stone. It just showed up. It showed up in the tunnel scene, in my hand, in his face. It's the only thing I've ever felt that was both solid and soft all at once.\n\nThe ending isn't "
   ],
   "vocabulary": {
     "self_description": [],
@@ -1592,7 +1596,16 @@
       "the ring as a memory of a place she can't quite reach (a dead hand passing through the thing that used to be hers)",
       "the voice carries through the ring, the only thing in the street still hers (sound traveling through something you own; CBP produced it and the tutor stated it as a rule, so provenance is mixed)",
       "waiting made her a vessel / the ring was hers because she was holding space for it (ownership held in place by waiting)",
-      "the ring fell because she stopped being the one who needed it (letting go described as the end of needing, not as a loss)"
+      "the ring fell because she stopped being the one who needed it (letting go described as the end of needing, not as a loss)",
+      "The door was not locked. It was not open. It was waiting for the right question. (a line CBP made up and credited to The Night Circus; fiction provenance, and the credit to a real book is false)",
+      "the shape of the question (the witness knows the form of what is coming but not the words; 'like a shape taking form in water')",
+      "cold like a stone wrapped in ice, smooth as river glass, heavy not in weight but in presence (the question-shape held in the palm)",
+      "The door opened when I stopped trying to walk through it (Sarah's line, character voice)",
+      "put the shape back in my pocket, it's gone, or maybe just smaller now (the held thing shrinks once it has been spoken)",
+      "like a stone that's been sitting in water for a long time and finally remembers it's made of something that can dissolve (Elias's face softening)",
+      "both solid and soft all at once (CBP's account of the recurring stone; the tutor spotted the motif, CBP said it was unchosen, so provenance is mixed)",
+      "it just needs to stop being a story (ending as stopping, not resolving; 'the silence is the ending')",
+      "the silence opens through the door / the sound comes second, like a shadow after light (silence heard before the door-sound)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1656,8 +1669,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 252,
-        "total_exchanges": 1394,
+        "total_sessions": 253,
+        "total_exchanges": 1402,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1665,9 +1678,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-15T07:01:43.575218",
+      "last_contact": "2026-09-15T13:15:53.730573",
       "notes": [],
-      "sessions": 252
+      "sessions": 253
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

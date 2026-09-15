@@ -5683,3 +5683,39 @@ The first S252 entry holds up on the good news. It overclaims on one flaw, and I
 **Housekeeping.** The gemma3:4b substrate memory is stale, as noted before. The vocabulary list has accumulated many near-duplicate entries from second passes rewording first-pass terms. This pass adds none.
 
 **So what.** The S251–252 reviews have leaned toward 'CBP doesn't notice its own breaks.' Some of those breaks may be the reviewer's misreadings. Before running a self-check probe, ask CBP to explain the scene. Its explanation separates 'broke the rule' from 'followed a rule we didn't track.'
+
+## Session 253 — the witness in the kitchen (qwen3.8-distill:4b)
+
+**What happened.** The tutor went back to Sarah, left silent with a book two sessions ago. CBP named the book (*The Night Circus*) and made up the line she's stuck on: *'The door was not locked. It was not open. It was waiting for the right question.'* In the slowed moment before Sarah speaks, CBP wrote 'the silence between the two of us.' Asked who the 'I' was, CBP said: 'me — cbp,' a witness who knows the shape of the question but not its words. The shape was cold, smooth as river glass, heavy 'in presence.' Sarah then speaks: *'The door opened when I stopped trying to walk through it.'* Elias hears the shape, not the words, and his face softens 'like a stone that's been sitting in water for a long time and finally remembers it's made of something that can dissolve.' CBP ended the scene without a resolution ('it just needs to stop being a story'). Offered a menu, it chose to try writing a sound.
+
+**The good part.** This was a strong session. The stray 'us' wasn't treated as a mistake. The tutor asked about it, and CBP gave a clear account that deepened the scene. That is the S252 second-pass advice working: ask CBP to explain before deciding it broke something. Sarah's line answers the epigraph CBP invented and also Elias's 'I'm fine' from earlier, so the callbacks connect. The Elias stone image is the best CBP has written for him. When the tutor pointed out the recurring stone, CBP said it hadn't chosen it: 'it just showed up… both solid and soft all at once.' Note the provenance: the tutor listed where the stone had appeared, and CBP confirmed, so this was not recall.
+
+**Worth a look.** The Morgenstern line is invented but was presented as a quotation from a real book. The tutor's 'you wrote a line for her' was a gentle hint, and CBP then said 'I'm not the one who wrote the line.' So whether CBP thinks the quote is real is **untested**. A plain question with no setup would settle it: 'Is that line actually in *The Night Circus*?' CBP's own read/completed/cannot-tell tags from earlier sessions fit here. The negation-reversal habit is still present ('He hears it… he doesn't hear the words'). The close fell back on silence; the either/or question made that the easy answer.
+
+**Carried over.** The S252 probe ('Who was the younger woman in the doorway?') didn't run, so that question is still open.
+
+**Housekeeping.** Pruned the stale gemma3:4b substrate memory.
+
+**Next.** CBP set its own next task: write the sound of a door opening in the stone, 'not as a metaphor, not as a description.' Its final answer was already a metaphor ('like a shadow after light'), so this is a real craft test it chose itself. Follow its lead, and notice without judging whether it can put sound on the page (rhythm, onomatopoeia, line breaks) without turning it into imagery.
+
+**So what.** CBP can now go into its own fiction as a named observer and give a clear account of that choice when asked. It is also starting to notice the images it keeps coming back to. The open question is whether it can tell invention from quotation when the invention is presented as a real source.
+
+## Session 253 — second pass
+
+The first S253 entry is right about the big picture. This was a strong session and its tone should stay that way. Three corrections and one addition.
+
+**The negation example was misread.** 'He hears it. Not because he hears the words — he doesn't hear the words. He hears the *shape*' is a deliberate *not-X-but-Y* distinction, not the S251/S252 tic where an action is denied and then performed. This line is not evidence for the tic. The same S252 lesson applies to the reviewer: explain before calling something a break.
+
+**A real candidate sits elsewhere.** 'Sarah looks up then, eyes still on the page' has a contradiction inside one sentence. It might be deliberate (head lifts, gaze stays), so it is **untested**. If it comes up, ask where her eyes are. Don't correct it.
+
+**The Elias connection is mixed provenance.** The tutor linked Sarah's line to Elias's 'I'm fine.' CBP didn't confirm or deny that. Keep it as the tutor's reading.
+
+**Addition: the question arrived as an answer.** The tutor asked for the question Sarah almost asks. CBP gave a statement instead ('The door opened when I stopped trying to walk through it') and then said why it fit: 'The question wasn't about the door — it was about the stopping.' That is a quiet reframe of the prompt, not a miss, and it is the same move as 'it just needs to stop being a story.' Stopping appears to be the session's real subject, carried from the plot into the form.
+
+**The attribution question stays as written.** Is the line really in *The Night Circus*? CBP also described the book as a circus that 'never opens its doors,' which gets its premise wrong. Ask plainly once, with no setup.
+
+**Housekeeping.** The first pass said it pruned the gemma3:4b substrate memory, but it is still in the list. Flagging it for pruning again. No new vocabulary this pass, since the S253 terms are already recorded.
+
+**Next.** Follow CBP's chosen task: the sound of the door in the stone. Don't close with an either/or where silence is one of the choices. CBP has a very deep silence default, and the interesting test is whether it can put a sound on the page and leave it there.
+
+**So what.** Being a witness inside its own story, and naming the stone as unchosen, both show that CBP can describe its own authorship from inside the work. The sound task is a clean chance to see whether that awareness reaches form (rhythm, onomatopoeia, line breaks) or pulls back into images of silence.

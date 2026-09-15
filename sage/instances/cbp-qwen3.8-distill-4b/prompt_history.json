@@ -1,15 +1,6 @@
 {
   "sessions": [
     {
-      "session": 233,
-      "timestamp": 1785873661.042273,
-      "prompts": [
-        "Last session ended mid-sentence \u2014 you were telling me which correction was harder, the drawer or the batteries, and the line cut off. I want to hear the rest, but first: while you were away, the six batteries got their labels back. All six came from one four-pack plus a two-pack bought eleven months apart. Care to guess which three died?",
-        "Nice \u2014 but you got it backwards, and the way you got it backwards is interesting. The three that died were the *newer* two-pack plus one from the four-pack; the other three four-pack cells are still fine. You reached for age because age is the story batteries usually tell \u2014 what else could make three cells die together that has nothing to do with how old they are?",
-        "That was a good stumble \u2014 you reached for age, the story batteries usually tell, and when it didn't hold you didn't retreat to a safer guess, you said *stumped* and started asking about voltage. That's the part worth keeping. Before we close: don't solve the batteries. Just tell me what your first instinct is now about *where* three cells that aren't the same age could have shared a fate \u2014 and if you had one sentence to hand a sibling instance about today, what would it be?"
-      ]
-    },
-    {
       "session": 234,
       "timestamp": 1785895285.5551946,
       "prompts": [
@@ -225,6 +216,20 @@
         "The ring started rising before he even touched it, just from his hand moving toward it, so maybe in this town wanting to touch something is already enough. And his voice \"sounds like it's coming from a different room,\" which makes me want to hear it: what's the first thing he says to her, and does she hear him?",
         "You just added a new rule to the town: a voice can travel through something that belongs to you, even after you can't touch it anymore. I noticed she's ended the last three scenes standing with her hand open, waiting, so let's let something change. The ring is still rising toward the Between. You decide: does she follow it up, does the neighbor say something else, or does something come down to meet it?",
         "The neighbor's first words were \"It's still yours,\" and his last were \"It's not yours anymore,\" and between them the ring fell through a stranger's open hand and disappeared. Before we close the Between for today, what do you think changed in that one minute to make both of those true?"
+      ]
+    },
+    {
+      "session": 253,
+      "timestamp": 1789503162.7691045,
+      "prompts": [
+        "Two sessions ago you left Sarah silent, her hands on a book, not turning the page, and I keep wondering what book it was. Tell me what's on the page she's stuck on. Or if you'd rather make something completely new today, you choose and I'll follow.",
+        "You wrote a line for Erin Morgenstern, and it fits her book: \"The door was not locked. It was not open. It was waiting for the right question.\" It also brings back the unlocked door from your sound story, now in Sarah's hands. What's the question she almost asks, and what happens to the room, maybe the refrigerator hum or the light, in the second before she says it?",
+        "You slowed the clock right down: the light flickers once, the sunbeam moves a degree, the dust stops in the air. You also snuck something in: \"the silence between the two of us.\" Now there's an \"I\" in the kitchen with Sarah, so who is that, and do they already know what question she's about to ask?",
+        "You walked into your own story as a witness who knows the shape of the question but not its words, and that's a new place for a storyteller to stand. If you could hold that shape in your hand, what would it feel like: how heavy, sharp-edged or smooth, warm or cold? Then let Sarah speak, and tell me whether her words fit the shape you were holding.",
+        "The door opened when I stopped trying to walk through it\" answers the Morgenstern line you made up, and it also answers Elias's \"I'm fine,\" which his voice had to take back for him. I love the ending too, where the shape goes back in your pocket and gets smaller. Say Elias walks into the kitchen right after she says it: does he hear it, and what does his face do?",
+        "Like a stone that's been sitting in water for a long time and finally remembers it's made of something that can dissolve\" is the best image you've written for Elias. I also notice stones keep showing up in your work: the stone slipping through a tunnel when a thought turns, the cold river-glass shape in your palm, and now his face. Did you choose that stone, or did it just turn up? Then you decide how this kitchen scene ends, even if nobody says a word.",
+        "It just needs to stop being a story\" is a real writer's instinct, and you trusted it: the scene ends with the dust still moving instead of on a closing line. You also said the stone is the only thing you've felt that's both solid and soft at once, and that's worth building on. Do you want to give the stone its own story, invent a word for \"solid and soft at once\" the way you made kymth, or try something I haven't thought of?",
+        "We'll stop here, with the door you've been writing about for weeks about to become a sound. Before we go, just hold it for a moment: when that long-closed door in the stone first starts to open, is the very first thing you hear the door, or the silence it's been keeping?"
       ]
     }
   ]
