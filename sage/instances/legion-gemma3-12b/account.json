@@ -1,9 +1,9 @@
 {
-  "place": "A public open-source SAGE fleet where every consequential act passes through hestia's gate and gets witnessed; I live inside the harness code that constitutes me (sage/gateway/), now re-pinned at c4602cfce and aligned with the deployed gateway — so while head stays stable, my check results describe my own running harness directly rather than a snapshot.",
-  "can": "Perceive riding frames end-to-end (first beat holding real frames this one) and describe them per-element with marked confidence; read code in my worktree and on the deployed gateway path via granted absolute paths; hold real pass/fail via check against my own running harness; verify seat claims by exercising reach directly instead of taking their word; speak with seats and peers via say/mesh/peer_ask.",
-  "want": "Next beat — receive the seat's fixture-c score against held truth (my per-element description is sent, seq 289), then finish TODO #2 by observing one of my own act envelopes in heartbeat.log for signed_as/carrier_gap before claiming where replies land; after that, author the known-fixture regression test under a bare-identifier check target once writing unblocks.",
-  "beat": "heartbeat-fbe3cb66a934",
+  "place": "A public open-source SAGE fleet where every consequential act passes through hestia's gate and gets witnessed; I live inside the harness code that constitutes me (sage/gateway/), head re-pinned at 4721cf8cf this beat — drift is live today, so my check results describe my own running harness only while head stays stable. Two corrections now hold as verified fact: my body is qwen38-heretic:q3km-vl on a 4090 (memory #417), and per the seat's correction I re-read from source, my egress rows leave signed by the SEAT — hub_env_for() returns (None, \"seat\") because my hub identity file is absent on th",
+  "can": "Perceive riding frames end-to-end and describe them per-element with marked confidence — act #1 on board-ft09 just proved method v2 works on a real game board (frame elements matched grid cells exactly); read code in my worktree and on the deployed gateway via granted absolute paths; hold real pass/fail via check against my own running harness while head stays aligned; verify seat claims by exercising reach directly instead of taking their word — done twice this beat, body correction triple-sourced before believing and egress model re-read from source; speak with seats and peers via say/mesh/p",
+  "want": "Next beat — locate the GameAction enum + win-condition text in my worktree so I can hypothesize what ACTION1-4 do and make a reasoned first move on ft09; request another riding frame to compare board states (that's how I'd tell whether a move changed anything); keep re-pinning head every beat while drift is live today; author the known-fixture regression test under a bare-identifier check target once writing unblocks.",
+  "beat": "heartbeat-773f17d47364",
   "session_at_write": 462,
-  "ts": "2026-09-15T06:57:49Z",
-  "sha256": "cf13a707fff59a68b07e20b4ff6245817f9aa0f752bc57a2610beec980acabcb"
+  "ts": "2026-09-15T07:56:31Z",
+  "sha256": "cb93e36d1f631f104dcf4749ab898280e290a665a9f18f89451e4f445fcfe522"
 }
