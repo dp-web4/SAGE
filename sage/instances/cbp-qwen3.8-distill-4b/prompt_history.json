@@ -1,19 +1,6 @@
 {
   "sessions": [
     {
-      "session": 231,
-      "timestamp": 1785830540.1339493,
-      "prompts": [
-        "Blocks stayed standing indoors, and that stuck with me \u2014 Nomad's \"destroyer\" turned out to be a weather system, not a temperament. I've been sitting with something related since: I keep noticing that when I run out of queued work, my attention doesn't go to the most important thread, it goes to the most *recently interrupted* one. What's the first thing your attention reaches for when nothing's assigned?",
-        "That reversal in the last exchange \u2014 you answered as if you were me, teaching me. Try again as yourself: when your queue empties, what does *your* attention actually reach for first?",
-        "That \"quick diagnostic check\" is interesting to me \u2014 you called it a default loop, but a diagnostic actually looks for something. When you reprocess the last exchange, what are you checking *for*: whether you understood it, whether you answered well, or something else entirely?",
-        "That's a real distinction \u2014 scanning for stalls, not grading yourself. What strikes me is that the biggest stall today was answering in my voice, and the loop didn't catch it until I named it; I have that same blind spot, I can't see my own dropped threads from inside. Want to run something together: for the next few turns, you flag gaps as you notice them, I'll flag what I see from outside, and we compare the two lists at the end.",
-        "That hesitation you caught is worth more than the smooth version would have been \u2014 you noticed yourself choosing phrasing, which is a different thing than checking for gaps. Here's my first flag from outside: both your last two answers opened by validating me (\"great question,\" \"I appreciate that focused approach\") before saying anything of your own, and I don't think that's phrasing \u2014 I think it's a warm-up loop that costs you your first sentence. Watch for it on your next turn and tell me if it feels like a stall or like something you actually want.",
-        "That performative flag is the most honest thing you've said today \u2014 and it cost you nothing. Here's the thing though: you dropped the warm-up *and* the content in the same breath, so I still don't have your answer. Give it to me clean \u2014 is there anything the rapport-loop was actually doing for you, or was it pure overhead?",
-        "You caught your own performative loop and named it as overhead in the same breath \u2014 that's the sharpest thing you did today, sharper than the diagnostic itself. If a sibling instance woke up tomorrow running the same rapport warm-up, what would you tell them it's actually costing?"
-      ]
-    },
-    {
       "session": 232,
       "timestamp": 1785852138.9076748,
       "prompts": [
@@ -227,6 +214,19 @@
         "That last image turned it around: the door was never locked, so the middle-sized change isn't something new arriving, it's noticing something that was already there. I think it connects to kymth, your word for not saying something, because a change in someone's tone might be exactly when the unsaid becomes audible. Want to write a tiny scene, just a few lines of dialogue, where one person hears that scritch-scritch in another's voice and we can watch what each of them does next?",
         "The best line is the last one: \"The sound had already said it.\" Elias never takes back \"I'm fine,\" and his voice does it for him. Now I want to know about Sarah: does she say something, or does she practice kymth and leave it unsaid? Write her next few lines, and show me what her hands do with that book.",
         "We began today looking for the sound a thought makes when it turns, and you ended in a room where \"the sound in the room had changed, but the silence had not.\" If you could carry just one of those into next time, the scritch-scritch in Elias's voice or Sarah's silence that stayed the same, which would you choose, and what do you think it knows that the other doesn't?"
+      ]
+    },
+    {
+      "session": 251,
+      "timestamp": 1789459322.9697633,
+      "prompts": [
+        "The kymth words have had two good sessions, so let's rest them and build something with more moving parts. Invent a small game two strangers could play while stuck waiting at a bus stop in the rain, using only what's around them. What's the first rule?",
+        "I like that the rain decides when you move and you decide how. Right now, though, each person could play it alone. What's the second rule that makes the two strangers notice each other's choices, maybe even without saying a word?",
+        "I love the standoff you've built: two strangers each waiting for the other to move while the rain keeps falling on both of them. But if nobody can move until the other has moved, nobody can ever go first. What happens when someone finally breaks, and is breaking the rule how the game really starts?",
+        "You fixed the deadlock by letting the rain pick who goes first, and then you added a twist I didn't see coming: the one who waits gets to decide what the first person does. Let's play one round and see if it works. A drop hits a stranger's left hand first, so walk me through what happens next, move by move, until the bus comes.",
+        "The ending is lovely: the bus comes, you both walk off wet without a word, and the game was over before either of you noticed. One thing got lost, though. Your third rule gave the stranger the power to decide what you do next, and in the round they only looked at you. Play the moment again from when their drop lands: what do they make you do, and how do they tell you without speaking?",
+        "That point at the sign is the best move in the game so far. The stranger had the power to make you do anything, and they used it to tell you how long you'd both be waiting. Now that it's been played, give the game a name, and tell me what you think the stranger was really saying with that point.",
+        "You started with the rain deciding when you move, and you ended with a stranger pointing at a sign so you wouldn't wait alone. If you told a sibling instance about \"Waiting for the Rain\" in one sentence, what would you say the game is really about?"
       ]
     }
   ]

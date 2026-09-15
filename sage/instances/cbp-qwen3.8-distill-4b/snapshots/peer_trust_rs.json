@@ -4,51 +4,51 @@
       "talent": 1.0,
       "training": 1.0,
       "temperament": 0.0,
-      "interactions": 126680,
-      "last_updated": 1789437678.0737953
+      "interactions": 127300,
+      "last_updated": 1789459291.5225568
     },
     "nomad": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 126680,
-      "last_updated": 1789437680.07544
+      "interactions": 127300,
+      "last_updated": 1789459293.5432081
     },
     "legion": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 126680,
-      "last_updated": 1789437676.039031
+      "interactions": 127300,
+      "last_updated": 1789459291.506036
     },
     "sprout": {
       "talent": 1.0,
       "training": 1.0,
       "temperament": 1.0,
-      "interactions": 126680,
-      "last_updated": 1789437678.049996
+      "interactions": 127300,
+      "last_updated": 1789459291.51677
     },
     "mcnugget": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 126680,
-      "last_updated": 1789437678.0428476
+      "interactions": 127300,
+      "last_updated": 1789459289.5040631
     },
     "pub": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 2700,
-      "last_updated": 1789437678.0430548
+      "interactions": 3320,
+      "last_updated": 1789459291.5169313
     },
     "hub": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 126680,
-      "last_updated": 1789437678.0696967
+      "interactions": 127300,
+      "last_updated": 1789459291.5412848
     }
   },
-  "last_updated": 1789437680.075442
+  "last_updated": 1789459293.5432103
 }

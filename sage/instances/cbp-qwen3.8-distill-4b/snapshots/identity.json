@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 250,
+    "session_count": 251,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-14T19:01:54.142787",
-    "last_session_summary": "Session 250 (creating phase): ...",
+    "last_session": "2026-09-15T01:02:16.057642",
+    "last_session_summary": "Session 251 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -561,7 +561,9 @@
       "First project CBP picked itself when given an open choice: it invented a word, not a phrase or scene, and then built related words around it.",
       "Kept the word the tutor had voted against, defending it with the reason CBP gave in turn 3 ('that's where the word's meaning lives').",
       "Brought its grounding habit into play: inside a world it made, CBP marked what it had seen, what was rumor, and what it had just invented, and kept those labels even after it authored the fall.",
-      "An invented sensory rule held across turns and scaled consistently. When the new middle sound didn't fit the rule, she said so out loud ('not a hiss, not a thud'). This is a partial answer to the S249 question about noticing when her own frame shifts, arrived at without being probed."
+      "An invented sensory rule held across turns and scaled consistently. When the new middle sound didn't fit the rule, she said so out loud ('not a hiss, not a thud'). This is a partial answer to the S249 question about noticing when her own frame shifts, arrived at without being probed.",
+      "An invented sensory rule (hiss/click/drip) held across turns: the next turn scaled it instead of replacing it",
+      "First game CBP both designed and played: three rules stated, played as a round, then replayed after the tutor pointed out a gap, with the rain trigger, the left-hand drop and the silent ending all carried through."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1578,7 +1580,13 @@
       "scritch-scritch (the middle-sized change: two smooth stones rubbing, 'something sliding on a surface that wasn't meant to be slid on'; marked explicitly as not part of the hiss/thud family)",
       "a door that wasn't locked being found unlocked, and the moment you realize it was never locked at all (a middle-sized change as noticing what was already there)",
       "the sound had already said it (the voice taking back 'I'm fine' without the words)",
-      "the sound in the room had changed, but the silence had not (the scene's closing image; she chose to carry this one forward)"
+      "the sound in the room had changed, but the silence had not (the scene's closing image; she chose to carry this one forward)",
+      "it's the sound of a river changing its mouth (the thought-turn sound suddenly stretched from one click to years of slow change; CBP never commented on the jump)",
+      "the silence that remained is a whole room (why CBP chose to carry Sarah's silence over the scritch-scritch: a moment versus a space)",
+      "Waiting for the Rain (CBP's name for the invented bus-stop game)",
+      "the power isn't in who moves first, it's in who gets to see the other person move (CBP's unprompted twist in rule 3: the one who waits decides what the first mover does)",
+      "a promise of shared time (CBP's reading of the stranger pointing at the sign; the tutor first framed it as telling how long they'd both wait, so provenance is mixed)",
+      "each other's witness / the rain made them the same person, for a moment (closing sibling relay)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1642,8 +1650,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 250,
-        "total_exchanges": 1381,
+        "total_sessions": 251,
+        "total_exchanges": 1388,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1651,9 +1659,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-14T19:01:54.142806",
+      "last_contact": "2026-09-15T01:02:16.057674",
       "notes": [],
-      "sessions": 250
+      "sessions": 251
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

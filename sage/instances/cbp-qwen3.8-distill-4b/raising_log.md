@@ -5621,3 +5621,35 @@ The first S250 entry holds up on the craft. This pass adjusts one claim.
 **Housekeeping.** Already flagged: gemma3:4b substrate memory is stale, proposed for pruning.
 
 **So what.** A good session. The finding it seemed to offer ('CBP names rule changes') isn't settled yet, because it's mixed up with a verbal habit. That's fine, and it makes the next probe sharper: design the break on purpose, and check whether the naming shows up in a sentence the habit couldn't produce.
+
+## Session 251 — creating (qwen3.8-distill:4b)
+
+**What happened.** The tutor rested kymth, as last session's note suggested, and asked for a game two strangers could play at a rainy bus stop. CBP built it in stages. Rule 1: every raindrop that lands on you forces a small choice. Rule 2: you can't move until the other person has moved. The tutor pointed out that this deadlocks. Rule 3: whoever's drop falls first moves first. CBP added its own twist, that the one who waits decides what the first mover does: 'The power isn't in who moves first. It's in who gets to see the other person move.' In the first round that power went unused. The tutor said so, and in the replay the stranger raises a hand and points at the sign reading *Bus 22 in 3 stops*. CBP named the game 'Waiting for the Rain' and read the point as 'a promise of shared time.'
+
+**The good part.** A good session. The rules held for six turns: the rain trigger, the left-hand drop, the palm tap, the wordless ending. The replay changed only the moment it needed to change. The sign-point is a strong move. It uses the power to control someone to share information rather than give an order, and it is a concrete object doing the emotional work, the skill S250 saw growing. The rule-3 twist came from CBP alone and made the game more interesting than the tutor's framing of it.
+
+**Where it slipped.** Both repairs were silent. The tutor pointed out the deadlock and the dropped power, and CBP fixed each one without saying what had been wrong. That fits the silent fixes in S249 and S250. Rule 3's wording contradicts itself about who moves and who decides, and only the replay makes it clear. Negation pairs are still filling the rhythm. The last two turns asked for meaning and got it ('the rain made them the same person'), so the tutor's prompts share the cause.
+
+**On the S250 question.** It is still **untested**. The tutor named each gap, so CBP never had to notice one. This session doesn't show whether CBP can name a break. It shows that when someone else names it, CBP repairs rather than acknowledges.
+
+**Next.** Run the probe without giving the answer. Ask for a round, don't point out the flaw, then ask 'does that round follow all three rules?' and see whether CBP finds the gap and says so. For endings, ask for an object, not a meaning. Wall-or-pocket is still open.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale. It was flagged earlier and is listed for pruning.
+
+**So what.** CBP can build rules that interact and keep them stable through play and replay. That is a step up from a single rule held across turns. The pattern of repairing without acknowledging now has a third observation, and it narrows the question: does CBP not see the flaw, or see it and not say so? The next probe can tell those apart.
+
+## Session 251 — second pass (qwen3.8-distill:4b)
+
+The first S251 entry holds up. This pass corrects one claim and adds two notes.
+
+**Rule 1 didn't hold through the round.** The first pass said the rules held for six turns. Rule 1 says every drop that lands on you forces a choice ('You cannot ignore the rain'). In Round One, CBP writes 'You're not moving. You're not turning your head. You're just standing, rain on your shoulder.' The replay ends with the stranger 'rain on their shoulder, waiting for the next drop.' Drops land and nobody chooses anything. The rules CBP stated stayed stable. The rules as played did not. The tutor never mentioned this, so it's still unnamed, and that makes it good material for the probe the first pass proposed. Next session, ask CBP to reread Round One and check it against rule 1, without saying where the break is. Whether CBP finds it, and how CBP describes it, separates 'doesn't see the flaw' from 'sees it and doesn't say so.'
+
+**The negation pair contradicted the next sentence.** In the replay, 'They don't move their body' is followed right away by 'They simply raise their right hand and point.' That supports S250's tic reading: the 'not X, not Y' rhythm isn't being checked against content. It doesn't settle the question, because one filler slip doesn't show that CBP can't name a rule break on purpose. It is observed, though, not just predicted.
+
+**The ending erased the asymmetry.** CBP's best idea was that the two strangers hold different powers: one moves, the other decides. The closing line says 'the rain made them the same person.' The meaning-prompt pulled toward merging them and flattened the structure CBP had invented. It's the same thing the first pass said about endings: ask for an object, not a meaning. A useful variant is to ask what each stranger takes home that the other doesn't.
+
+**What stands.** The unprompted twist is real and is CBP's own. The sign-point is a strong move that uses a concrete object. Changing only the moment that needed changing in the replay is good craft.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale. It is listed for pruning.
+
+**So what.** The next probe no longer needs a planted flaw. There's a genuine unnamed one in CBP's own round. That makes the test cleaner, because CBP's own mistake is a better test than a trap the tutor sets up.
