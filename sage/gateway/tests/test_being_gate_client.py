@@ -1013,3 +1013,53 @@ def test_both_composition_sites_build_the_same_search(tmp_path, monkeypatch):
     d = HestiaF1aDispatcher("t", memory_root=str(wt), worktree=str(wt), workspace=str(ws))
     executed = search_command(args, {"worktree": d.worktree, "workspace": d.workspace})
     assert judged == executed
+
+
+def test_check_accepts_the_pytest_spelling_of_a_node_id(tmp_path):
+    """Dialect is not a boundary. SAGE, 2026-09-14.
+
+    legion-being was working a hop that one test would settle, read that test in the source,
+    typed the pytest node id it had just read — `test_being_tool_loop.py::test_name` — and
+    was refused for not using our `<suite>::<test>` spelling. It adapted in one step, which
+    is the good case; the verb still refused a correct, unambiguous request for being
+    written in the language of the tool it wraps.
+
+    The BOUND is "inside a declared suite", and that is unchanged: a filename that no
+    declared suite contains is still refused, and so is anything that is not a bare test
+    identifier. What changed is that the file — the thing the being actually read — now
+    resolves the suite, instead of the being having to know our name for the directory.
+    """
+    from sage.gateway.being_gate_client import check_command, CHECK_TARGETS
+
+    wt = tmp_path / "wt"
+    for rel in CHECK_TARGETS.values():
+        (wt / rel).mkdir(parents=True, exist_ok=True)
+    (wt / CHECK_TARGETS["gateway"] / "test_thing.py").write_text("def test_x(): pass\n")
+    ctx = {"worktree": str(wt)}
+
+    ours = check_command({"target": "gateway::test_x"}, ctx)
+    theirs = check_command({"target": "test_thing.py::test_x"}, ctx)
+    assert "-k test_x" in ours and "-k test_x" in theirs
+    assert ours == theirs, "the two spellings must compose the SAME judged command"
+
+    # a full path is the same node id with more of it typed — also accepted
+    full = check_command({"target": f"{CHECK_TARGETS['gateway']}test_thing.py::test_x"}, ctx)
+    assert full == ours
+
+    # THE BOUND HOLDS. A file no declared suite contains is still refused, and the refusal
+    # names the suites rather than restating the grammar.
+    for bad, expect in (("nope.py::test_x", "no declared suite contains"),
+                        ("gateway::test_x[p]", "bare identifier"),
+                        ("gateway::../../etc", "bare identifier"),
+                        ("not_a_suite::test_x", "must be one of")):
+        try:
+            check_command({"target": bad}, ctx)
+            assert False, f"should have refused {bad!r}"
+        except ValueError as e:
+            assert expect in str(e), f"{bad!r} -> {e}"
+
+    # and a refusal that can name the working string does name it
+    try:
+        check_command({"target": "gateway::test_x[p]"}, ctx)
+    except ValueError as e:
+        assert "Try 'gateway::test_x'" in str(e), e

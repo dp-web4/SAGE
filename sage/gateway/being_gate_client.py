@@ -149,14 +149,41 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
     if target in CHECK_TARGETS:
         path = os.path.join(worktree, CHECK_TARGETS[target])
     else:
-        # A single node id INSIDE a declared suite: "gateway::test_name". Nothing else.
+        # A single node id INSIDE a declared suite: "gateway::test_name" — or the ordinary
+        # pytest spelling of the same thing, "test_file.py::test_name", which is what anyone
+        # who has read the suite will type. Measured 2026-09-14: legion-being tried to run
+        # the one test that would have settled the hop it was working on, typed the pytest
+        # node id it had just read in the source, and was refused. It adapted in one step,
+        # which is the good case — but the verb refused a correct, unambiguous request for
+        # being spelled in the language of the tool it wraps rather than in ours. Dialect is
+        # not a boundary. The BOUND is "inside a declared suite", and a filename resolves
+        # that better than a suite name does, because the file is the thing the being read.
         suite, sep, node = target.partition("::")
+        if sep and suite.endswith(".py"):
+            owners = [k for k, rel in CHECK_TARGETS.items()
+                      if os.path.isfile(os.path.join(worktree, rel, os.path.basename(suite)))]
+            if len(owners) == 1:
+                suite = owners[0]
+            elif not owners:
+                raise ValueError(
+                    f"check: no declared suite contains {os.path.basename(suite)!r}. The "
+                    f"suites are {sorted(CHECK_TARGETS)} ({', '.join(CHECK_TARGETS.values())}).")
+            else:
+                raise ValueError(
+                    f"check: {os.path.basename(suite)!r} exists in more than one suite "
+                    f"({sorted(owners)}); name the suite instead: '<suite>::{node}'.")
         if not sep or suite not in CHECK_TARGETS:
             raise ValueError(
                 f"check 'target' must be one of {sorted(CHECK_TARGETS)} or "
                 f"'<suite>::<test_name>'; got {target!r}")
         if not re.fullmatch(r"[A-Za-z0-9_]+", node):
-            raise ValueError(f"check test name must be a bare identifier; got {node!r}")
+            # NAME THE STRING THAT WOULD WORK. A refusal that only restates the rule makes
+            # the reader do the translation the refusal could have done.
+            bare = re.sub(r"[^A-Za-z0-9_]", "", node.split("[")[0])
+            hint = f" Try '{suite}::{bare}'." if bare else ""
+            raise ValueError(
+                f"check test name must be a bare identifier (no parameters, no path); "
+                f"got {node!r}.{hint}")
         path = f"{os.path.join(worktree, CHECK_TARGETS[suite])} -k {node}"
     inner = f"python3 -m pytest -q -c /dev/null --rootdir={worktree} {path}"
     return sandbox_prefix(worktree) + inner
