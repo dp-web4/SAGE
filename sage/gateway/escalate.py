@@ -274,6 +274,14 @@ def escalate(member: str, intent: BeingIntent, env: ResultEnvelope, memory_root:
         # The note exists to be pointed at by the wake. Without a wake there is no reader, and a
         # beat with nine refused home writes would leave nine near-identical notes (Sprout, #38
         # review); the scope request above is still filed (the daemon dedups it on the path).
+        # A re-ask on a request the daemon already holds pending carries nothing new for the seat:
+        # the first wake delivered the note and the ruling (or the "left for dp") is on record. Each
+        # wake fires a full seat session under a fresh timestamped thread key, so MAX_HOPS never
+        # bounds the repeats (cbp-being re-asked /var/log/hestia/policy/daemon.log 30 min apart,
+        # scope-f2f4fd3c381b, 2026-09-15: two sessions, same answer).
+        if wake and (out.get("scope_request") or {}).get("status") == "already_pending":
+            out["wake"] = {"skipped": "already_pending: the seat was woken when this request was filed"}
+            wake = False
         if wake:
             note = write_note(member, intent, env, kind, out)
             out["note"] = note
