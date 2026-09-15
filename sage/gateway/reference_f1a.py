@@ -123,9 +123,33 @@ class ReferenceF1aDispatcher:
         if not str(intent.args.get("path", "")).strip():
             return ResultEnvelope(ok=False, error="memory_read needs a 'path' (relative paths are inside your home)")
         p = self._safe_path(intent.args["path"])
+        # AN EMPTY ANSWER MUST SAY WHY IT IS EMPTY (the rule git_read got on 2026-09-08, which
+        # this effector never did). Measured 2026-09-15: dp granted cbp-being read on
+        # /var/log/hestia/policy/daemon.log, a path the being had invented and that does not
+        # exist. This returned ok with "" and the being wrote "the daemon log is empty,
+        # suggesting a crash or silent failure": a nonexistent file read as evidence for an
+        # outage that was not happening. Missing, empty and directory are three different
+        # facts, and each now says which it is.
+        shown = str(intent.args["path"]).strip()
         if not p.exists():
-            return ResultEnvelope(ok=True, result="", witness_id=self._witness(f"memory_read {p.name} (empty)"))
+            return ResultEnvelope(
+                ok=True,
+                result=(f"[no such path: '{shown}' does not exist. This is not an empty file: there is "
+                        f"nothing here to read, so it is no evidence about anything else. "
+                        f"memory_write creates a file inside your home.]"),
+                witness_id=self._witness(f"memory_read {p.name} (does not exist)"))
+        if p.is_dir():
+            names = sorted(x.name + ("/" if x.is_dir() else "") for x in p.iterdir())
+            listing = "\n".join(f"- {n}" for n in names[:50])
+            more = f"\n…and {len(names) - 50} more" if len(names) > 50 else ""
+            return ResultEnvelope(
+                ok=True,
+                result=(f"[directory: '{shown}' holds {len(names)} entr{'y' if len(names) == 1 else 'ies'}]\n"
+                        + (listing + more if names else "(empty directory)")),
+                witness_id=self._witness(f"memory_read {p.name}/ (directory)"))
         content = p.read_text(errors="replace")[: self.max_read_chars]
+        if not content:
+            content = f"[empty file: '{shown}' exists and has no content]"
         return ResultEnvelope(ok=True, result=content, witness_id=self._witness(f"memory_read {p.name}"))
 
     def _do_memory_write(self, intent: BeingIntent) -> ResultEnvelope:
