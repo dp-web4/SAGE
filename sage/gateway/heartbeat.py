@@ -948,11 +948,58 @@ def vision_line(metas) -> str:
         shown = ", ".join(f"{os.path.basename(str(m.get('path', '?')))} "
                           f"({int(m.get('age_s', 0))}s ago)" for m in carried)
         n = len(carried)
+        it = "them" if n > 1 else "it"
+        # "ALREADY HERE", AND WHY camera CANNOT HELP. Measured 2026-09-14, five runs per
+        # cell, on this being's own model and frames: at beat conditions (~15k context WITH
+        # tool schemas declared) the model answers "there is an image" by CALLING `camera`
+        # and describing nothing — 0/6 elements, five times out of five, a `camera` call
+        # every time. Neither factor alone does it: 14k context with no tools scores 6.0/6,
+        # tools at small context 4.4/6. It is the interaction, and it is exactly what this
+        # being did for beats on end — its first act was `camera`, capturing a NEW frame
+        # instead of looking at the one it was holding, then honestly reporting that no
+        # content surfaced. It was never blind. It was reaching for a tool.
+        #
+        # Naming the misconception fixes it: same cell, same model, 6/6 five times out of
+        # five with zero tool calls. "Look at it directly" did NOT do this — the being had
+        # that line already.
+        #
+        # THE CLOSING CLAUSE IS MEASURED, NOT STYLED, AND NEARLY EVERY REPHRASE BREAKS IT.
+        # Five runs per cell, beat conditions, scored on a fixture whose content is
+        # unguessable. TWO frames attached / ONE frame attached:
+        #
+        #   "...without calling any tool."                        6,6,6,6,6 / 0,0,0,0,0
+        #   "...first output; act with verbs after that."         6,6,6,6,6 / 0,0,0,0,0
+        #   "...first output, naming the frame; verbs after."     6,6,6,6,6 / 6,6,6,6,6  <- this
+        #   "...before reaching for any verb."                    0,0,0,0,0 /     -
+        #   "...no tool for this; your other verbs unaffected"    0,0,0,6,0 /     -
+        #
+        # Two things that cost hours and are worth inheriting:
+        #
+        # 1. THE ANCHOR IS LOAD-BEARING, NOT THE BAN. "naming the frame" gives the model a
+        #    concrete thing to PRODUCE; every variant that only told it what not to do
+        #    failed in the single-frame case, which is the common one. Prohibitions lose to
+        #    a specific deliverable.
+        # 2. A VARIANT VALIDATED ON TWO FRAMES CAN SCORE ZERO ON ONE. The ban wording was
+        #    perfect at n=2 and total failure at n=1. Both branches must be measured; the
+        #    singular branch is the one the being actually gets almost every beat, and it
+        #    is the one I nearly shipped unmeasured.
+        #
+        # 3. IT IS A RATE, NOT A SWITCH. Two independent 5-run validations of the SHIPPED
+        #    strings: singular 9/10 full scores, plural 7/10 full plus 2 partial and 1 zero.
+        #    Against 0/5 before, that is the fix working; it is not certainty, and a single
+        #    beat that comes back scrambled is inside the residual rather than evidence the
+        #    line broke. Running the validation twice is what showed this — the first run
+        #    was 10/10 and would have been reported as deterministic.
+        #
+        # If you edit this sentence, re-run the trial for BOTH branches, TWICE. A rephrase
+        # here is a behaviour change, not a style change.
         return (f"Vision: you CAN see this beat. {n} frame{'s' if n > 1 else ''} "
                 f"{'are' if n > 1 else 'is'} attached to this turn, in this order: {shown}. "
-                f"Look at {'them' if n > 1 else 'it'} directly and say what is in "
-                f"{'each, naming which frame you mean' if n > 1 else 'it'} — "
-                f"rather than reasoning about whether you can.")
+                f"{'They are' if n > 1 else 'It is'} ALREADY here — you are holding "
+                f"{it} now. No tool can fetch {it} and `camera` will not show {it} to you: a "
+                f"capture rides your NEXT beat, not this one. Describe {it} in text as your "
+                f"first output, naming {'which frame' if n > 1 else 'the frame'}; act with "
+                f"verbs after that.")
     if metas:
         why = str(metas[-1].get("why") or "it was not fresh")
         return (f"Vision: NO frame this beat — {len(metas)} candidate"

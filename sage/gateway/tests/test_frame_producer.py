@@ -491,7 +491,7 @@ def test_the_seed_says_whether_the_being_can_see():
     assert "1300s ago" in carried, "the age is the being's own freshness check"
     assert "last-frame.jpg" in carried, "name the frame, so it can be read or re-captured"
     assert "/i/scratch" not in carried, "basename only — the seed is not the place for a path"
-    assert "say what is in it" in carried
+    assert "say what is in it" in carried.lower()
 
     # EVERY frame, named, in order. The first cut named only the newest and appended
     # "(and N-1 more)" to a sentence that had already given the count — it rendered as
@@ -505,6 +505,19 @@ def test_the_seed_says_whether_the_being_can_see():
     assert "naming which frame you mean" in both
     assert "more)" not in both, "no leftover arithmetic for the reader to redo"
     assert "an images" not in both
+
+    # THE MEASURED PART OF THE SENTENCE. Five runs per cell on this being's own model and
+    # frames: at beat conditions (~15k context WITH tool schemas) the model answers "there is
+    # an image" by CALLING `camera` and describing nothing — 0/6 elements, 5 of 5, a `camera`
+    # call every time. Neither factor alone does it (14k no tools 6.0/6; tools small 4.4/6).
+    # Adding these two facts took the same cell to 6/6, 5 of 5, with zero tool calls.
+    # "Look at it directly" did NOT — the being already had that line. What works is naming
+    # that reaching cannot work, and why. So these are not decoration; they are the fix, and
+    # removing any of them should be as loud as deleting code.
+    for phrase in ("ALREADY here", "No tool can fetch", "`camera` will not show",
+                   "rides your NEXT beat", "before reaching for any verb"):
+        assert phrase in both, f"missing the measured phrase {phrase!r}: {both}"
+        assert phrase in carried, f"single-frame branch missing {phrase!r}: {carried}"
 
     none = vision_line([{"carried": False, "age_s": 3205.5,
                          "why": "captured before the previous beat's t0 (3205.5s old)"}])
