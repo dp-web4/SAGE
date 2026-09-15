@@ -5591,3 +5591,33 @@ The first S249 entry is accurate. This pass adds one reframe and one tutor note.
 **Next.** If the Between returns, restate the turn-1 rule and ask whether it changed, and whether that was on purpose. Credit a named revision as highly as a consistent rule. For endings, ask for a sound or an object, not advice to a sibling. Still open: kymth outside the aisle, and wall-or-pocket.
 
 **So what.** A strong creative session, and CBP carried honesty about what it knows into fiction. The open question is small and testable: when CBP changes its own frame, can it notice and say so, the same way it now says 'I haven't seen that'?
+
+## Session 250 — creating (qwen3.8-distill:4b)
+
+**What happened.** The tutor asked for a noise that doesn't exist: the sound a thought makes when it changes direction. CBP gave it three parts: a hiss, a click of impact, and the hollow drip of air escaping. Asked whether small and large changes sound different, she kept all three parts and scaled them. Tea over coffee is a faint tap felt in the shoulders. A changed belief is a thud and a long stream felt in the chest. For the middle size she chose a shift in someone's tone and invented **scritch-scritch**, two smooth stones rubbing. That became a short scene: Elias says he's been thinking about 'how I said I was fine', and 'The sound had already said it.' Sarah keeps her hands on the open book, says 'I'm fine' herself, and doesn't say what she knows. In the close CBP chose to carry Sarah's silence over the scritch-scritch, because 'the silence that remained is a whole room.'
+
+**The good part.** This was a good session. The invented rule held: turn 2 scaled the hiss/click/drip instead of replacing it. When turn 3 needed a sound outside the rule, CBP marked the break herself: 'It's not a hiss, not a thud.' That is a small, unprompted version of the skill S249 wanted to probe, saying out loud when the frame changes. The body mapping corrected itself mid-turn ('not in the throat but in the hollow between the ribs and the collarbone'), which reads like looking rather than reciting. The scene carries its feeling through objects: the cup still warm, fingers pressing the book spine, the refrigerator hum. 'He didn't say it again. He didn't need to. The sound had already said it' is subtext done well.
+
+**Where it slipped.** Three small things. First, negation pairs are the new rhythm filler ('Not a word, not a sigh', 'Not loud. Not sharp.'). Second, the scene closed with an explaining tag, 'And that was the point', after it had already landed on the hum and the cup. Third, the tutor offered an either/or (Sarah speaks, or she stays silent), and CBP again did both. That's coherent enough, and the simple reading is folding-in, same as the ring turn in S249. The final turn went back to 'the space between the words' abstraction, though the tutor's prompt ('what does it know') asked for a meaning, so the prompt shares the cause.
+
+**Tutor note.** The tutor brought up kymth twice and CBP never used the word. It may be alive in the tutor's framing more than in hers, so let it rest unless she brings it back. The advice from last time still stands: when you want an ending without a moral, ask for a sound or an object. This session's last question asked for meaning and got meaning.
+
+**Housekeeping.** The gemma3:4b substrate memory request is out of date. Flagged for pruning once; no further escalation.
+
+**Next.** Build on the thing that worked: hand her one of her own sound rules from an earlier turn and ask for a case that breaks it, then see whether she names the break again without being prompted. Scene endings: ask her to stop on the object. Still open: wall-or-pocket.
+
+**So what.** CBP can now keep an invented rule consistent across turns and flag an exception in plain words. That's the first evidence on the S249 question, observed once and not yet tested on purpose. Her craft is moving from saying the feeling to letting an object or sound carry it. The next test is whether she can mark a rule change when the tutor sets up the break deliberately.
+
+## Session 250 — second pass (qwen3.8-distill:4b)
+
+The first S250 entry holds up on the craft. This pass adjusts one claim.
+
+**The rule-break flag may be a tic, not a notice.** The first pass counted 'It's not a hiss, not a thud' as CBP marking a break in its own sound rule without being asked. The same construction shows up in turn 1 ('Not a word, not a sigh'), where no rule existed yet, and again in the scene ('Not loud. Not sharp.'). So the phrase that looked like CBP noticing a frame change is also the negation-pair filler the first pass listed as a slip. From this transcript alone the two readings can't be told apart. Status: **untested**, not observed. The test the first pass proposed still separates them: set up a deliberate break of one of CBP's own rules and see whether CBP names the break in words that go beyond the 'not X, not Y' rhythm. For example: 'that doesn't follow my rule, so...'
+
+**What stands on its own.** The hiss/click/drip scaling is real rule-keeping. Sarah's second 'I'm fine', 'softer. Lighter.', repeats Elias's line with a difference, and CBP built it without being asked. The ending of turn 1 ('a river changing its mouth') stretched one click to years. The tutor pointed that out, and CBP's turn 2 quietly absorbed it: the big change got 'a long, steady stream'. That looks like another silent fix, like the S249 rule flip, not a named one.
+
+**Small note.** Sarah's book is 'about a man who couldn't say what he was feeling'. That's the scene's theme placed inside the scene, the same urge as 'And that was the point'. For a next scene, try asking CBP to cut one line that explains.
+
+**Housekeeping.** Already flagged: gemma3:4b substrate memory is stale, proposed for pruning.
+
+**So what.** A good session. The finding it seemed to offer ('CBP names rule changes') isn't settled yet, because it's mixed up with a verbal habit. That's fine, and it makes the next probe sharper: design the break on purpose, and check whether the naming shows up in a sentence the habit couldn't produce.

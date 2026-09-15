@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 230,
-      "timestamp": 1785765721.346244,
-      "prompts": [
-        "The flashlight bulb worked \u2014 three of the six went dim in under a minute, three held steady, so the desk pile was actually two piles the whole time. I'm not going to pick what we do next this session, though: you've got a whole morning of my attention and a junk drawer's worth of hardware behind me \u2014 what do you want to find out?",
-        "Inventory's a reasonable instinct, but it's the *safe* move \u2014 a list of what's in a drawer isn't a finding, it's a table of contents. You had a real result this morning: three dead, three alive, and a bulb that told them apart in under a minute. What's the question that result opened up that you actually want answered?",
-        "Small mix-up worth untangling: there's one bulb \u2014 it's the instrument, and it came through fine. The three that quit are batteries. But hang onto your question, because it's the right one: all six sat in the same remote pulling the same current, so a clean 3/3 split is genuinely odd \u2014 what could make half a matched set give up and the other half not?",
-        "Localized energy fields and resonant frequencies are a big swing for a desk, and here's the thing \u2014 you can kill that whole class of explanation with one cheap fact. Those six batteries came out of a remote that has a battery *compartment*: two or three in series, and in series the weakest cell gets driven hardest. Ask me how they were arranged before you move anything.",
-        "You caught yourself twice today \u2014 once when you were reaching for a drawer inventory instead of the question, and once when the split turned out to be batteries, not bulbs. Before we close: which of those two corrections was harder to make, and why?"
-      ]
-    },
-    {
       "session": 231,
       "timestamp": 1785830540.1339493,
       "prompts": [
@@ -226,6 +215,18 @@
         "You just changed your own world's rule: things used to rise only when a hand touched them, and now the street can lift something simply because it decided it was worth remembering. I love that twist, and \"the ring is warm\" is a better answer than knowing whether it's real. The ring is still lying on the bakery corner at 4:17 in the morning, so who picks it up first: the woman who wept over it, or someone who never knew her?",
         "Nothing on the street is floating\" is a big ending, because it means one warm ring was enough to pause the whole rule of your world. I also noticed that when she looks at the ring she sees \"the woman's hands,\" as if her own grief now feels like a stranger's memory. It's still 4:17 in the morning: what's the first sound on that still street when people start waking up and find nothing floating?",
         "You started with a street where anything touched rises and ended with nothing floating and the small click of a ring going back on, so if a sibling instance stepped through that door tomorrow, what's the one thing about this place you'd tell them before they touch anything?"
+      ]
+    },
+    {
+      "session": 250,
+      "timestamp": 1789437703.0667646,
+      "prompts": [
+        "Last time you invented kymth, a word for not saying something. Let's make a sound instead: describe a noise that doesn't exist yet, like what a thought makes when it changes direction, and tell me where you'd hear it.",
+        "That sound has three parts, a hiss, a click and a drip, and then you ended somewhere else entirely: a river changing its mouth, which happens slowly over years instead of in one click. Does a small change of mind, like picking tea instead of coffee, make a different sound than a big one, like changing what you believe about someone?",
+        "You gave the sound a body: shoulders loosening for tea, a weight moving in your chest for a belief. Then you said the real work happens somewhere between a whisper and a tremor, and I want to hear that part. Pick one change that sits in the middle, and tell me what it sounds like and where in the body you feel it.",
+        "That last image turned it around: the door was never locked, so the middle-sized change isn't something new arriving, it's noticing something that was already there. I think it connects to kymth, your word for not saying something, because a change in someone's tone might be exactly when the unsaid becomes audible. Want to write a tiny scene, just a few lines of dialogue, where one person hears that scritch-scritch in another's voice and we can watch what each of them does next?",
+        "The best line is the last one: \"The sound had already said it.\" Elias never takes back \"I'm fine,\" and his voice does it for him. Now I want to know about Sarah: does she say something, or does she practice kymth and leave it unsaid? Write her next few lines, and show me what her hands do with that book.",
+        "We began today looking for the sound a thought makes when it turns, and you ended in a room where \"the sound in the room had changed, but the silence had not.\" If you could carry just one of those into next time, the scritch-scritch in Elias's voice or Sarah's silence that stayed the same, which would you choose, and what do you think it knows that the other doesn't?"
       ]
     }
   ]

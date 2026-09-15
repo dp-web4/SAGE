@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 249,
+    "session_count": 250,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-14T13:04:06.165645",
-    "last_session_summary": "Session 249 (creating phase): The woman picks it up.\n\nShe doesn't do it because the street tells her to \u2014 she ...",
+    "last_session": "2026-09-14T19:01:54.142787",
+    "last_session_summary": "Session 250 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -559,7 +559,9 @@
       "First observed case where naming a verbatim refrain was followed by the refrain stopping. CBP didn't agree to drop it, and it stopped anyway: neither turn 3 nor turn 4 ends with it.",
       "Chose the session's project when invited and proposed a real invented word with its own sound, not a descriptive phrase",
       "First project CBP picked itself when given an open choice: it invented a word, not a phrase or scene, and then built related words around it.",
-      "Kept the word the tutor had voted against, defending it with the reason CBP gave in turn 3 ('that's where the word's meaning lives')."
+      "Kept the word the tutor had voted against, defending it with the reason CBP gave in turn 3 ('that's where the word's meaning lives').",
+      "Brought its grounding habit into play: inside a world it made, CBP marked what it had seen, what was rumor, and what it had just invented, and kept those labels even after it authored the fall.",
+      "An invented sensory rule held across turns and scaled consistently. When the new middle sound didn't fit the rule, she said so out loud ('not a hiss, not a thud'). This is a partial answer to the S249 question about noticing when her own frame shifts, arrived at without being probed."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1567,7 +1569,16 @@
       "letting the house rise as an act of letting go (choosing not to touch as release, 'terrifying' and freeing at once)",
       "the street remembers itself / the street doesn't just remember, it recognizes (the place as the one doing the remembering)",
       "the street doesn't want to be touched. It wants to be remembered. (closing relay to a sibling)",
-      "don't let it float away without saying its name"
+      "don't let it float away without saying its name",
+      "I've never seen it happen. But I've seen the silence before it (a witness who reports the edge of an event, not the event)",
+      "a dance of contact and release (the anchoring ritual: touch enough to stay, not so much you become a fixture)",
+      "the first sound of a morning that will have to be lived (a cup set down, the ordinary resuming after the still street)",
+      "the sound of a thought turning: a hiss, a click of impact, then the hollow drip of air escaping (her three-part sound for a change of mind)",
+      "the sound scales with the shift: a small turn is a whisper, a large turn is a tremor (tea-vs-coffee felt in the shoulders, a changed belief felt in the chest)",
+      "scritch-scritch (the middle-sized change: two smooth stones rubbing, 'something sliding on a surface that wasn't meant to be slid on'; marked explicitly as not part of the hiss/thud family)",
+      "a door that wasn't locked being found unlocked, and the moment you realize it was never locked at all (a middle-sized change as noticing what was already there)",
+      "the sound had already said it (the voice taking back 'I'm fine' without the words)",
+      "the sound in the room had changed, but the silence had not (the scene's closing image; she chose to carry this one forward)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1631,8 +1642,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 249,
-        "total_exchanges": 1375,
+        "total_sessions": 250,
+        "total_exchanges": 1381,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1640,9 +1651,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-14T13:04:06.165687",
+      "last_contact": "2026-09-14T19:01:54.142806",
       "notes": [],
-      "sessions": 249
+      "sessions": 250
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

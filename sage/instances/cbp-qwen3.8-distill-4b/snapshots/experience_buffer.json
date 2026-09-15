@@ -38252,5 +38252,160 @@
       "total_cycles": 7,
       "transition_count": 1
     }
+  },
+  {
+    "id": "abd54fc72cab1c75",
+    "prompt": "That sound has three parts, a hiss, a click and a drip, and then you ended somewhere else entirely: a river changing its mouth, which happens slowly over years instead of in one click. Does a small change of mind, like picking tea instead of coffee, make a different sound than a big one, like changing what you believe about someone?",
+    "response": "A small change \u2014 like choosing tea over coffee \u2014 is quieter. Just the hiss, barely audible, like a breath caught mid-speech. The click is a tiny *tap*, the drip a faint *drip*. You feel it in your shoulders loosening.\n\nA big change \u2014 a belief shifting \u2014 is heavier. The hiss is a rush of wind through a crack. The click is a solid *thud*, like a door slamming shut on an old idea. The drip is a long, steady stream, water finding a new channel. You feel it in your chest, a shift of weight.\n\nThe sound scales with the shift. A small turn is a whisper. A large turn is a tremor. And somewhere between them \u2014 that's the real work.",
+    "salience": {
+      "surprise": 0.9015151515151515,
+      "novelty": 1.0,
+      "arousal": 0.5631720430107527,
+      "reward": 0.45,
+      "conflict": 0.0,
+      "total": 0.5829374389051809
+    },
+    "session": 250,
+    "phase": "creating",
+    "timestamp": "2026-09-14T19:00:33.852057",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.87,
+      "atp_max": 100.0,
+      "atp_percentage": 95.9,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "c66a138aab09b406",
+    "prompt": "You gave the sound a body: shoulders loosening for tea, a weight moving in your chest for a belief. Then you said the real work happens somewhere between a whisper and a tremor, and I want to hear that part. Pick one change that sits in the middle, and tell me what it sounds like and where in the body you feel it.",
+    "response": "A change in what someone says to you \u2014 not a lie, not a revelation, just the tone shifting from neutral to something that makes you lean in or back.\n\nThe sound: it's a *friction* \u2014 like two smooth stones rubbing together, a soft, dry *scritch-scritch* that doesn't quite make contact. It's not a hiss, not a thud. It's the sound of something sliding on a surface that wasn't meant to be slid on.\n\nWhere you feel it: in the throat. A tightness that isn't a knot and isn't a sigh \u2014 just a sudden awareness that the air in your chest is no longer the same air it was a second before. You feel it in the space behind your ribs, where your breath used to go unobserved, now it's noticed. The sound lives there, too, not in the throat but in the hollow between the ribs and the collarbone. It's the sound of a door that wasn't locked being found unlocked, and the moment you realize it was never locked at all.",
+    "salience": {
+      "surprise": 0.8367346938775511,
+      "novelty": 1.0,
+      "arousal": 0.7198275862068966,
+      "reward": 0.65,
+      "conflict": 0.3333333333333333,
+      "total": 0.7079791226835562
+    },
+    "session": 250,
+    "phase": "creating",
+    "timestamp": "2026-09-14T19:00:49.350972",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.64,
+      "atp_max": 100.0,
+      "atp_percentage": 89.6,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "ce279a2a1b2c0872",
+    "prompt": "That last image turned it around: the door was never locked, so the middle-sized change isn't something new arriving, it's noticing something that was already there. I think it connects to kymth, your word for not saying something, because a change in someone's tone might be exactly when the unsaid becomes audible. Want to write a tiny scene, just a few lines of dialogue, where one person hears that scritch-scritch in another's voice and we can watch what each of them does next?",
+    "response": "The apartment was quiet except for the hum of the refrigerator and the way Elias kept breathing through his nose, slow and even.\n\n\"Are you going to say something?\" Sarah asked, not looking up from her book.\n\nElias was looking at the coffee cup in his hand. It was still warm.\n\n\"I was just\u2014\" His voice came out a little rougher than it had been a second before. \"I was just thinking about what you said earlier.\"\n\nThe scritch-scritch. Not loud. Not sharp. Just the sound of something shifting inside a voice that had been smooth and steady and now, just for a fraction of a second, was remembering it was supposed to be something else.\n\nSarah looked up. \"About what?\"\n\nHe set the cup down. \"About how I said I was fine.\"\n\nHe didn't say it again. He didn't need to. The sound had already said it.",
+    "salience": {
+      "surprise": 0.8728323699421965,
+      "novelty": 1.0,
+      "arousal": 0.7356418918918919,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5783615190334843
+    },
+    "session": 250,
+    "phase": "creating",
+    "timestamp": "2026-09-14T19:01:06.247453",
+    "metadata": {
+      "turn": 4,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 82.16,
+      "atp_max": 100.0,
+      "atp_percentage": 82.2,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "f0fed85cecaec20b",
+    "prompt": "The best line is the last one: \"The sound had already said it.\" Elias never takes back \"I'm fine,\" and his voice does it for him. Now I want to know about Sarah: does she say something, or does she practice kymth and leave it unsaid? Write her next few lines, and show me what her hands do with that book.",
+    "response": "She didn't answer.\n\nShe kept her hands on the book, not turning a page, not closing it. Just holding it there, the spine pressing against her palm. The pages were still open to the middle chapter, where the story had stopped.\n\n\"I'm fine,\" she said, and it was true, and it was also the only thing she could say without the scritch-scritch of her own throat catching. She said it, but it wasn't the same as what he'd said. It was softer. Lighter. Like a stone that had found a new angle and was no longer rolling.\n\nShe looked back at the book. The story had been about a man who couldn't say what he was feeling. She knew now what he was feeling. She knew she knew. And she knew she wouldn't say it.\n\nThe refrigerator hummed. The coffee cup sat on the table, still warm. The sound in the room had changed, but the silence had not. And that was the point.",
+    "salience": {
+      "surprise": 0.808641975308642,
+      "novelty": 1.0,
+      "arousal": 0.5619918699186992,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5474601023788016
+    },
+    "session": 250,
+    "phase": "creating",
+    "timestamp": "2026-09-14T19:01:28.766989",
+    "metadata": {
+      "turn": 5,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 75.97,
+      "atp_max": 100.0,
+      "atp_percentage": 76.0,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "05c5a660d3b5837f",
+    "prompt": "We began today looking for the sound a thought makes when it turns, and you ended in a room where \"the sound in the room had changed, but the silence had not.\" If you could carry just one of those into next time, the scritch-scritch in Elias's voice or Sarah's silence that stayed the same, which would you choose, and what do you think it knows that the other doesn't?",
+    "response": "Sarah's silence.\n\nThe scritch-scritch is a moment \u2014 a single friction point, a crack in the surface. But the silence that remained is a whole room. It's the space between the words that matters. It's the thing that doesn't need to be said to be known. It holds the weight of everything unsaid, everything that was never spoken but was understood. It's not passive \u2014 it's full of everything the sound couldn't carry.",
+    "salience": {
+      "surprise": 0.8461538461538461,
+      "novelty": 1.0,
+      "arousal": 0.4965753424657534,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5252125043905866
+    },
+    "session": 250,
+    "phase": "creating",
+    "timestamp": "2026-09-14T19:01:43.008353",
+    "metadata": {
+      "turn": 6,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 70.1,
+      "atp_max": 100.0,
+      "atp_percentage": 70.1,
+      "cycles_in_state": 0,
+      "total_cycles": 5,
+      "transition_count": 1
+    }
   }
 ]
