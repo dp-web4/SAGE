@@ -97,10 +97,21 @@ def review_task(view: dict, diff: str) -> str:
 
 
 def is_reasoning_model(model: str) -> bool:
-    """Models that only emit structured tool calls with `think` on (empero Qwen3.8
-    distills, R1-style). For these, a `/no_think` suffix in the prompt is fatal to
-    acting: measured on Sprout 2026-09-05, first two heartbeats narrated a summary
-    with steps=0 under Legion's `/no_think` (which is the right fix for heretic)."""
+    """Models for which `think` is turned ON. The name overclaims: it says "reasoning
+    model" but what it decides is a config default (`think_default` in the model family's
+    JSON), not a measured need.
+
+    The measurement behind it is SPROUT'S, 2026-09-05: under `/no_think` its first two
+    heartbeats narrated a summary with steps=0 and never called a tool. That is real for
+    that body. It is NOT true of Legion's qwen38-heretic:q3km-vl — measured 2026-09-15, three
+    runs, beat-shaped prompt with 19 tools declared: tool calls survive `think=False` every
+    time. legion-being said so first, from reading this file.
+
+    Thinking stays ON for heretic anyway, for a different reason: under the beat's own ask
+    ("do one thing now"), `think=False` goes straight to a tool call in ~26 tokens and
+    describes nothing, while `think=True` both acts and describes. So the behaviour this
+    function produces is right for that body and the justification above it was wrong.
+    Do not cite one machine's measurement as a property of another's model."""
     try:
         from sage.irp.adapters.model_capabilities import load_capabilities
         return load_capabilities(model).resolve_think(model)
