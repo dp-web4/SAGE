@@ -33,10 +33,19 @@ def test_memory_write_then_read_roundtrips():
     assert r.ok and "a promise to myself" in r.result
 
 
-def test_memory_read_missing_is_empty_not_error():
+def test_memory_read_says_missing_empty_or_directory_never_a_silent_zero():
+    """A missing path used to read as "" and was taken for an empty log (cbp-being,
+    2026-09-15). Not an error, but never silent: each case names itself."""
     disp, root = _disp()
     r = disp(BeingIntent("memory_read", {"path": os.path.join(root, "nope.md")}), _ALLOW)
-    assert r.ok and r.result == ""
+    assert r.ok and r.result.startswith("[no such path:") and "not an empty file" in r.result
+    open(os.path.join(root, "blank.md"), "w").close()
+    r = disp(BeingIntent("memory_read", {"path": os.path.join(root, "blank.md")}), _ALLOW)
+    assert r.ok and r.result.startswith("[empty file:")
+    os.makedirs(os.path.join(root, "notes"), exist_ok=True)
+    open(os.path.join(root, "notes", "a.md"), "w").write("x")
+    r = disp(BeingIntent("memory_read", {"path": os.path.join(root, "notes")}), _ALLOW)
+    assert r.ok and r.result.startswith("[directory:") and "- a.md" in r.result
 
 
 def test_path_escape_is_error():

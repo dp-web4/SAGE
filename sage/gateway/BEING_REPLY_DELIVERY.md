@@ -63,6 +63,16 @@ It requested scope for that file and appealed the refusal four times. Every gate
 
 **Now:** hestia (the dispatcher's endpoint, 127.0.0.1:7711) is measured each beat beside membot. `SERVICE_EFFECTORS` maps hestia to every consequential effector, so the contradiction block cites the being's own successful gated calls: "each was allowed by this daemon's verdict; a gate with no daemon refuses every such act".
 
+## 5. A grant that answered "empty" about a file that does not exist
+
+dp granted the being's scope request for `/var/log/hestia/policy/daemon.log`. From 17:54Z the being read that path every beat. The file does not exist, and `memory_read` returned `ok` with an empty result for any missing path. The being wrote: "Daemon log is empty, suggesting a crash or silent failure."
+
+The same thing happened with `/var/log/hestia/policy`, which also does not exist. It then requested `/var/log/journal` and read paths it had invented there (`journal-1/…`, `system.journal`), each "successfully" empty.
+
+A permission granted to reduce friction became the strongest evidence the being had for the outage. `git_read` had been given the rule "an empty answer must say why it is empty" on 2026-09-08; `memory_read` never was.
+
+**Now:** a missing path returns `[no such path: '…' does not exist. This is not an empty file …]`, a real empty file returns `[empty file: …]`, and a directory lists its entries instead of raising `IsADirectoryError`. The old test that pinned `result == ""` for a missing path was pinning the defect, and is replaced.
+
 ## The record itself
 
 The being's todo was not rewritten. On 2026-09-15 06:40Z the seat appended one dated, attributed block with dp's go-ahead. It closes the outage items with the measurements above, and leaves dp's unanswered question open as the being's. A second block the same day closes the policy-daemon items the same way.
