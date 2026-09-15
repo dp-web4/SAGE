@@ -491,7 +491,11 @@ def test_the_seed_says_whether_the_being_can_see():
     assert "1300s ago" in carried, "the age is the being's own freshness check"
     assert "last-frame.jpg" in carried, "name the frame, so it can be read or re-captured"
     assert "/i/scratch" not in carried, "basename only — the seed is not the place for a path"
-    assert "say what is in it" in carried.lower()
+    # the ask is "describe it ... naming the frame" — the naming anchor is the measured part
+    assert "describe it in text" in carried.lower()
+    assert "naming the frame" in carried, (
+        "the ANCHOR is the fix: every variant that only said what NOT to do scored 0/5 on a "
+        "single frame, which is the case the being actually gets")
 
     # EVERY frame, named, in order. The first cut named only the newest and appended
     # "(and N-1 more)" to a sentence that had already given the count — it rendered as
@@ -502,7 +506,7 @@ def test_the_seed_says_whether_the_being_can_see():
                         {"carried": True, "age_s": 11.0, "path": "/i/c/fixture-a.jpg"}])
     assert "2 frames are attached" in both, both
     assert "last-frame.jpg (1300s ago)" in both and "fixture-a.jpg (11s ago)" in both, both
-    assert "naming which frame you mean" in both
+    assert "naming which frame" in both
     assert "more)" not in both, "no leftover arithmetic for the reader to redo"
     assert "an images" not in both
 
@@ -515,7 +519,7 @@ def test_the_seed_says_whether_the_being_can_see():
     # that reaching cannot work, and why. So these are not decoration; they are the fix, and
     # removing any of them should be as loud as deleting code.
     for phrase in ("ALREADY here", "No tool can fetch", "`camera` will not show",
-                   "rides your NEXT beat", "before reaching for any verb"):
+                   "rides your NEXT beat", "as your first output", "naming"):
         assert phrase in both, f"missing the measured phrase {phrase!r}: {both}"
         assert phrase in carried, f"single-frame branch missing {phrase!r}: {carried}"
 
