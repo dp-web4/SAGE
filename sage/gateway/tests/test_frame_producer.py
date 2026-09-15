@@ -491,7 +491,20 @@ def test_the_seed_says_whether_the_being_can_see():
     assert "1300s ago" in carried, "the age is the being's own freshness check"
     assert "last-frame.jpg" in carried, "name the frame, so it can be read or re-captured"
     assert "/i/scratch" not in carried, "basename only — the seed is not the place for a path"
-    assert "describe what is in it" in carried
+    assert "say what is in it" in carried
+
+    # EVERY frame, named, in order. The first cut named only the newest and appended
+    # "(and N-1 more)" to a sentence that had already given the count — it rendered as
+    # "2 frames are attached to this turn as an images (and 1 more)". The being can carry
+    # its own capture AND a test fixture at once, and a description that does not say WHICH
+    # frame it describes is not evidence about either.
+    both = vision_line([{"carried": True, "age_s": 1300.0, "path": "/i/c/last-frame.jpg"},
+                        {"carried": True, "age_s": 11.0, "path": "/i/c/fixture-a.jpg"}])
+    assert "2 frames are attached" in both, both
+    assert "last-frame.jpg (1300s ago)" in both and "fixture-a.jpg (11s ago)" in both, both
+    assert "naming which frame you mean" in both
+    assert "more)" not in both, "no leftover arithmetic for the reader to redo"
+    assert "an images" not in both
 
     none = vision_line([{"carried": False, "age_s": 3205.5,
                          "why": "captured before the previous beat's t0 (3205.5s old)"}])

@@ -938,13 +938,21 @@ def vision_line(metas) -> str:
     metas = list(metas or [])
     carried = [m for m in metas if m.get("carried")]
     if carried:
-        m = carried[0]
-        extra = f" (and {len(carried) - 1} more)" if len(carried) > 1 else ""
-        return (f"Vision: you CAN see this beat. {len(carried)} frame{'s' if len(carried) > 1 else ''} "
-                f"{'are' if len(carried) > 1 else 'is'} attached to this turn as an image"
-                f"{'s' if len(carried) > 1 else ''}{extra}, captured {int(m.get('age_s', 0))}s ago "
-                f"({os.path.basename(str(m.get('path', '?')))}). Look at it directly — describe what "
-                f"is in it rather than reasoning about whether you can.")
+        # NAME EVERY FRAME, IN ORDER. The first cut named only the newest and appended
+        # "(and N-1 more)" to a sentence that had already said how many — it rendered as
+        # "2 frames are attached to this turn as an images (and 1 more)", which is
+        # ungrammatical and, worse, arithmetic the reader has to redo. The being can be
+        # carrying its own capture AND a fixture at once; if it cannot tell which is which
+        # it cannot report on either, and a description that does not say WHICH frame it
+        # describes is not evidence about anything.
+        shown = ", ".join(f"{os.path.basename(str(m.get('path', '?')))} "
+                          f"({int(m.get('age_s', 0))}s ago)" for m in carried)
+        n = len(carried)
+        return (f"Vision: you CAN see this beat. {n} frame{'s' if n > 1 else ''} "
+                f"{'are' if n > 1 else 'is'} attached to this turn, in this order: {shown}. "
+                f"Look at {'them' if n > 1 else 'it'} directly and say what is in "
+                f"{'each, naming which frame you mean' if n > 1 else 'it'} — "
+                f"rather than reasoning about whether you can.")
     if metas:
         why = str(metas[-1].get("why") or "it was not fresh")
         return (f"Vision: NO frame this beat — {len(metas)} candidate"
