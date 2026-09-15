@@ -601,3 +601,18 @@ def test_the_seed_cannot_say_can_see_over_an_empty_message():
         assert "you CAN see" not in user["content"], user["content"][:300]
         assert "NO frame" in user["content"]
         assert "not attached" in user["content"], "and it says why"
+
+
+def test_the_beat_record_names_what_was_attached():
+    """`config.frames[].carried` is the producer's claim. For 395 beats it said True while the
+    composed message carried nothing, and the record had no field that could show the
+    difference. main() must record the count from the SEED — the thing actually sent."""
+    import dis
+    from sage.gateway import heartbeat as H
+    consts = set()
+    def walk(code):
+        for c in code.co_consts:
+            if isinstance(c, str): consts.add(c)
+            if hasattr(c, "co_consts"): walk(c)
+    walk(H.main.__code__)
+    assert "images_attached" in consts, "main() must record images_attached from the seed"

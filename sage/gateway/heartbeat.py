@@ -1361,6 +1361,11 @@ def main(argv=None) -> int:
                   "this one, the answer is about different code than the code running you.\n\n"),
         state=state_block,
         recall=blocks["recall"], inbox=inbox, digest=blocks["digest"])
+    # WHAT WAS ATTACHED, NOT WHAT WAS PRODUCED. `frames` above is the producer's claim
+    # (carried=True); this counts images on the composed seed — the thing sent. The two
+    # differed for 395 beats and nothing recorded it. A record that names delivery makes
+    # that gap visible in one field instead of in a captured payload.
+    prompt_sizes["images_attached"] = sum(len(m.get("images") or []) for m in seed)
 
     # Per-generate trace, written as each generate lands: the record below is written at
     # beat end, so a beat killed by the unit's timeout (Legion 18:33Z 2026-09-05: 840 s cap,
