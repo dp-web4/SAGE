@@ -88,7 +88,7 @@ echo "[McNugget-Raising] Snapshotting state..."
 # --no-push on purpose: the supervisor already commits this tree, and a raising
 # script that pushes on its own turns a model change into a race between seats.
 # It is a no-op when nothing changed, so it costs a file read per session.
-"$SAGE_PY" -m sage.federation.update_fleet_models --no-push || \
+SAGE_INSTANCE="$INSTANCE_SLUG" "$SAGE_PY" -m sage.federation.update_fleet_models --no-push || \
   echo "[raising] fleet-model re-registration failed (non-fatal)" >&2
 
 

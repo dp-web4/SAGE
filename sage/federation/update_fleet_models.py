@@ -157,28 +157,33 @@ def detect_observed_model(machine: str) -> "tuple[str, str] | None":
     # The instance DIRECTORY NAME is not the model. McNugget's is
     # `mcnugget-gemma3-12b` and has run gemma4 since 09-08, because 461 sessions of
     # history hang off that path and renaming it would orphan them. So resolve the
-    # instance by pin or by session count, never by parsing its name.
+    # instance by pin or by newest session record, never by parsing its name.
+    #
+    # The pin is the real answer: the raising loop knows which folder it writes to and
+    # should pass it. The fallback used to be "the folder with the most sessions", which
+    # picks the OLD model after a switch to a fresh folder that restarts at session 1
+    # (sprout, 2026-09-14). It is now "the folder holding the newest session record",
+    # by the record's own `start` -- local naive time, comparable within one machine,
+    # which is the only comparison made here. mtime is not used: a checkout resets it.
     pin = os.getenv("SAGE_INSTANCE")
     cand = None
+    newest = None
     if pin and (inst_dir / pin).is_dir():
         cand = inst_dir / pin
+        newest = _newest_session(cand / "sessions")
     elif inst_dir.is_dir():
         owned = [d for d in inst_dir.iterdir()
                  if d.is_dir() and d.name.startswith(machine + "-")]
-        if owned:
-            cand = max(owned, key=lambda d: len(list((d / "sessions").glob("*.json")))
-                       if (d / "sessions").is_dir() else 0)
+        found = [(n, d) for d in owned for n in [_newest_session(d / "sessions")] if n]
+        if found:
+            newest, cand = max(found, key=lambda nd: nd[0][1].get("start") or "")
+        elif len(owned) == 1:
+            cand = owned[0]
+    if newest:
+        path, rec = newest
+        if rec.get("model"):
+            return rec["model"], path.name + " (newest session record)"
     if cand:
-        sess = cand / "sessions"
-        if sess.is_dir():
-            files = sorted(sess.glob("session_*.json"))
-            if files:
-                try:
-                    m = json.loads(files[-1].read_text()).get("model")
-                    if m:
-                        return m, files[-1].name + " (newest session record)"
-                except Exception:
-                    pass
         ij = cand / "instance.json"
         if ij.is_file():
             try:
@@ -194,18 +199,46 @@ def detect_observed_model(machine: str) -> "tuple[str, str] | None":
     return None
 
 
-def update_fleet_json(machine: str, model_id: str, dry_run: bool = False) -> bool:
+def _newest_session(sess: Path) -> "tuple[Path, dict] | None":
+    """Highest-NUMBERED session record in a sessions/ dir, parsed.
+
+    Numeric, not lexicographic: writers name files `session_{n:03d}`, so from 1000 on
+    `sorted()` puts session_1000.json before session_999.json and the newest record
+    would silently freeze at 999 (sprout, 2026-09-14; sprout reaches 1000 in ~75 days).
+    """
+    import re
+    if not sess.is_dir():
+        return None
+    nums = []
+    for f in sess.glob("session_*.json"):
+        mt = re.fullmatch(r"session_(\d+)\.json", f.name)
+        if mt:
+            nums.append((int(mt.group(1)), f))
+    for _, f in sorted(nums, reverse=True):
+        try:
+            rec = json.loads(f.read_text())
+        except Exception:
+            continue
+        if isinstance(rec, dict):
+            return f, rec
+    return None
+
+
+def update_fleet_json(machine: str, model_id: str, dry_run: bool = False) -> "bool | None":
     """Set this machine's `model_default` in the registry the daemon and site read.
 
     Touches exactly one field of one machine's entry and preserves the rest in key
     order, because every other row here belongs to a seat that is not this one.
     Writes temp-and-rename so the daemon, which loads this file at startup, never
     sees a half-written registry.
+
+    Returns True if changed, False if already correct, None if it could not run --
+    "already right" and "could not check" must not share a return value.
     """
     if not FLEET_JSON_PATH.exists():
         print("  fleet.json not found at " + str(FLEET_JSON_PATH) + "; skipping",
               file=sys.stderr)
-        return False
+        return None
     import collections, os, tempfile
     data = json.loads(FLEET_JSON_PATH.read_text(),
                       object_pairs_hook=collections.OrderedDict)
@@ -213,7 +246,7 @@ def update_fleet_json(machine: str, model_id: str, dry_run: bool = False) -> boo
     if not isinstance(machines, dict) or machine not in machines:
         print("  '" + machine + "' has no entry in fleet.json; refusing to invent one",
               file=sys.stderr)
-        return False
+        return None
     cur = machines[machine].get("model_default")
     if cur == model_id:
         print("  fleet.json: model_default already " + str(model_id))
@@ -277,6 +310,10 @@ def main():
 
     machine = args.machine or detect_machine()
     print(f"Updating fleet models entry for: {machine}")
+    if machine == "unknown":
+        # fleet.json already refuses this; the legacy file used to grow an `unknown` row.
+        print("ERROR: could not detect this machine; refusing to register", file=sys.stderr)
+        sys.exit(1)
 
     # Load manifest
     if not MANIFEST_PATH.exists():
@@ -316,9 +353,6 @@ def main():
             model_display = args.model_display
 
     updates = {
-        "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "updated_by": machine,
-        "os": detect_os(),
         "model": model_id,
         "model_display": model_display,
         "backend": backend,
@@ -335,29 +369,35 @@ def main():
         updates["inference_notes"] = ""
     if args.role is not None:
         updates["role"] = args.role
+    if "os" not in entry:
+        # Only when absent: detect_os() is coarse, and rewriting a hand-written
+        # "JetPack/Ubuntu 20.04" as "Linux (Ubuntu)" every session loses the detail.
+        updates["os"] = detect_os()
 
     # The registry the daemon and the site actually read. Done BEFORE the legacy
-
-    # file below, so a failure here is loud rather than masked by a successful
-
-    # write to the document nobody consumes.
-
-    update_fleet_json(machine, model_id, dry_run=args.dry_run)
-
+    # file below, and a failure here exits non-zero without touching it, so it is
+    # not masked by a successful write to the document nobody consumes.
+    if update_fleet_json(machine, model_id, dry_run=args.dry_run) is None:
+        sys.exit(1)
 
     # Show diff
     changes = {k: (entry.get(k), v) for k, v in updates.items() if entry.get(k) != v}
-    if changes:
-        print("  Changes:")
-        for k, (old, new) in changes.items():
-            print(f"    {k}: {old!r} -> {new!r}")
-    else:
+    if not changes:
+        # No write at all, timestamp included: this runs every raising session and a
+        # supervisor commits the tree, so a fresh `updated_at` alone is a junk commit
+        # per session per seat.
         print("  No changes detected.")
+        return
+    print("  Changes:")
+    for k, (old, new) in changes.items():
+        print(f"    {k}: {old!r} -> {new!r}")
 
     if args.dry_run:
         print("  (dry-run, not writing)")
         return
 
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    updates["updated_by"] = machine
     entry.update(updates)
     manifest["machines"][machine] = entry
 
