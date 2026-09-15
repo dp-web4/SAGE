@@ -177,19 +177,23 @@ def decided_requests(reqs):
     arbitrate door answers `denied`; the first cut filtered on ("granted", "denied") and so
     dropped every refusal on the floor (legion-claude, hestia #952 review, 2026-09-05): the
     being was never told, and no `## Resolved` block was ever written for one."""
-    return [(i, p_, d) for i, p_, d in reqs if d in ("granted", "refused", "denied")]
+    return [(i, p_, d) for i, p_, d in reqs if d in ("granted", "refused", "denied", "revoked")]
 
 
-def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided_by=None) -> list:
+def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided_by=None,
+                     reasons=None) -> list:
     """Append the ruling to each escalation note that filed the request (the note carries the
     request_id in its routing line). Idempotent: a note already resolved is left alone.
     `decided_by` maps request_id -> hestia's `decided_by` ("operator", or "delegate:<seat>"
     for a ruling under hestia #952); the note names it rather than assuming the operator.
-    Returns the note names written."""
+    `reasons` maps request_id -> the ruler's own note (hestia's `decision_reason`), written
+    beside the ruling: a refusal that arrives without its reason is friction with no way
+    forward (dp, 2026-09-15). Returns the note names written."""
     written = []
     if not decisions or not esc_dir.is_dir():
         return written
     decided_by = decided_by or {}
+    reasons = reasons or {}
     for req_id, path, decision in decisions:
         if not req_id:
             continue
@@ -202,8 +206,10 @@ def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided
             if req_id not in body or "## Resolved" in body:
                 continue
             with open(p, "a", encoding="utf-8") as f:
+                why = str(reasons.get(req_id) or "").strip()
                 f.write(f"\n## Resolved\n{stamp}: `{req_id}` on `{path}` -> **{decision}** by {who} "
-                        f"(read from hestia scope status by the seat, beat {seen_by}).\n")
+                        f"(read from hestia scope status by the seat, beat {seen_by}).\n"
+                        + (f"Their note: {why}\n" if why else ""))
             written.append(p.name)
     return written
 
@@ -812,6 +818,13 @@ def main(argv=None) -> int:
                     for r in (st.get("requests") or [])]
             who_ruled = {r.get("request_id"): r.get("decided_by") for r in (st.get("requests") or [])
                          if r.get("decided_by")}
+            # The ruler's own words. hestia returns them as `decision_reason` (a revocation's as
+            # `revoke_reason`); until 2026-09-15 the being was told only granted/refused and who,
+            # so a refusal written to redirect it ("that file does not exist; nothing needs
+            # restarting") reached it as a bare no, and it appealed.
+            why_ruled = {r.get("request_id"): (r.get("revoke_reason") or r.get("decision_reason"))
+                         for r in (st.get("requests") or [])
+                         if r.get("revoke_reason") or r.get("decision_reason")}
             # Close the loop the operator cannot see closed: a request decided since the
             # last beat is written back into the escalation note that filed it, and told
             # to the being. (dp 2026-09-05: "i just approved being's escalation - did you
@@ -826,12 +839,14 @@ def main(argv=None) -> int:
             new_decisions = [x for x in decided if tuple(x) not in seen]
             esc_dir = Path(args.forum_dir).parent / "escalations"
             noted = note_resolutions(esc_dir, new_decisions, f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC",
-                                     host_session_id, decided_by=who_ruled)
+                                     host_session_id, decided_by=who_ruled, reasons=why_ruled)
             scope_record = {"grants": grants, "decided": [list(x) for x in decided], "noted": noted}
             scope = ("granted paths: " + (", ".join(map(str, grants)) or "none") + "\n"
                      "requests: " + ("; ".join(f"{i} {p} -> {d}" for i, p, d in reqs) or "none") + "\n"
-                     + ("decided since your last beat: " + "; ".join(
-                            f"{i} {p_} -> {d} by {who_ruled.get(i) or 'operator'}" for i, p_, d in new_decisions) + "\n"
+                     + ("decided since your last beat:\n" + "\n".join(
+                            f"- {i} {p_} -> {d} by {who_ruled.get(i) or 'operator'}"
+                            + (f". Their note: \"{str(why_ruled[i]).strip()[:400]}\"" if why_ruled.get(i) else "")
+                            for i, p_, d in new_decisions) + "\n"
                         if new_decisions else "")
                      + "(live grants die when the daemon restarts; only standing grants persist)")
         except Exception as e:

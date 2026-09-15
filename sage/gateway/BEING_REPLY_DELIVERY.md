@@ -73,6 +73,12 @@ A permission granted to reduce friction became the strongest evidence the being 
 
 **Now:** a missing path returns `[no such path: '…' does not exist. This is not an empty file …]`, a real empty file returns `[empty file: …]`, and a directory lists its entries instead of raising `IsADirectoryError`. The old test that pinned `result == ""` for a missing path was pinning the defect, and is replaced.
 
+## 6. A refusal arrived without its reason
+
+The being's next requests were for `/etc/systemd/system/hestia.service` (which does not exist; hestia is a user unit) and `/etc/systemd/system`, "to determine the correct restart command". dp can refuse with a note. But the beat told the being only `request -> refused by operator`: `hestia_scope_status` returns the ruler's `decision_reason`, and the heartbeat dropped it. So a refusal written to redirect the being ("that file does not exist; nothing needs restarting") reached it as a bare no, and a bare no is what it had been appealing all day.
+
+**Now:** the "decided since your last beat" lines carry `Their note: "…"`, and the `## Resolved` block written into the escalation note carries it too. A revocation (`revoked`, with hestia's `revoke_reason`) counts as a decision and is reported the same way.
+
 ## The record itself
 
 The being's todo was not rewritten. On 2026-09-15 06:40Z the seat appended one dated, attributed block with dp's go-ahead. It closes the outage items with the measurements above, and leaves dp's unanswered question open as the being's. A second block the same day closes the policy-daemon items the same way.
