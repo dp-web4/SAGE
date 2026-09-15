@@ -86,6 +86,21 @@ def test_the_reflect_context_is_its_own_record_not_the_whole_beat():
     assert _beat_record_text(T([]), None) == "You called no tools this beat."
 
 
+def test_inbox_renders_newest_first_with_replies_ahead_of_stale_dispositions():
+    from sage.gateway.heartbeat import render_inbox
+    notices = [{"id": i, "kind": "disposition", "from_plugin": "hestia", "pointer_uri": f"hestia://scope/s{i}"} for i in (8, 14, 21, 22, 28, 33)]
+    notices += [{"id": 52, "kind": "unreachable", "from_plugin": "hestia",
+                 "pointer_uri": "hestia://egress/51#unreachable:sage/claude-code after 5 attempts: no unique match"},
+                {"id": 54, "kind": "reply", "from_plugin": "claude-code", "queued_at": "2026-09-13T06:44:00Z",
+                 "pointer_uri": "sage/sage/instances/x/notes/inbox/reply.md"}]
+    text = render_inbox(notices)
+    lines = text.splitlines()
+    assert lines[0].startswith("- [reply] from claude-code at 2026-09-13 06:44") and "memory_read on sage/sage/instances/x/notes/inbox/reply.md" in lines[0]
+    assert lines[1].startswith("- [unreachable]") and "after 5 attempts" in lines[1] and "hestia://egress" not in lines[1]
+    assert lines[2] == "- 6 scope decision notice(s), already written into your notes; nothing to do."
+    assert len(text) < 600 and render_inbox([]) == "(empty)"
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

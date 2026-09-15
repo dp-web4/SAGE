@@ -434,6 +434,40 @@ def recent_asks_block(instance: Path, now: Optional[float] = None, window_s: flo
                                "same peer more than 3 times in 6 hours is refused before sending.")
 
 
+def render_inbox(notices: list, limit: int = 8) -> str:
+    """The being's hestia inbox as it should read it: newest first, one line each, the kinds
+    that want its attention (reply, review, handoff, unreachable) ahead of bookkeeping, and
+    the scope dispositions it has already been told about (note_resolutions writes them into
+    its own notes) collapsed to one line. Until 2026-09-14 this was a JSON dump cut at 1500
+    chars: 13 notices, and the being saw the five OLDEST — all stale dispositions — while a
+    peer's reply (id 54) and an unreachable-peer receipt (id 52) sat beyond the cut, unseen
+    for 90 beats."""
+    if not notices:
+        return "(empty)"
+    front = ("reply", "review_request", "review_done", "handoff", "unreachable", "forum-note", "coordination")
+    def key(n):
+        k = str(n.get("kind") or "")
+        return (0 if k in front else 1, -int(n.get("id") or 0))
+    ns = sorted([n for n in notices if isinstance(n, dict)], key=key)
+    disp = [n for n in ns if str(n.get("kind")) == "disposition"]
+    rest = [n for n in ns if str(n.get("kind")) != "disposition"]
+    lines = []
+    for n in rest[:limit]:
+        k = str(n.get("kind") or "notice"); frm = str(n.get("from_plugin") or "?")
+        ptr = str(n.get("pointer_uri") or "")
+        if k == "unreachable":
+            tail = ptr.split("#", 1)[1] if "#" in ptr else ptr
+            lines.append(f"- [{k}] a message of yours could not be delivered: {tail[:160]}")
+        else:
+            when = str(n.get("queued_at") or "")[:16].replace("T", " ")
+            lines.append(f"- [{k}] from {frm}{' at ' + when if when else ''}: read it with memory_read on {ptr}")
+    if disp:
+        lines.append(f"- {len(disp)} scope decision notice(s), already written into your notes; nothing to do.")
+    if len(rest) > limit:
+        lines.append(f"- … and {len(rest) - limit} older notice(s).")
+    return "\n".join(lines)
+
+
 def own_state(instance: Path, member: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
@@ -634,7 +668,7 @@ def main(argv=None) -> int:
     disp = getattr(client, "_dispatcher", None)
     if disp is not None and hasattr(disp, "drain_inbox"):
         env = disp.drain_inbox(peek=True)
-        inbox = json.dumps(env.result, default=str)[:1500] if env.ok else f"({env.error})"
+        inbox = render_inbox((env.result or {}).get("notices") or []) if env.ok else f"({env.error})"
     # what reach the being holds and has already asked for, so it does not re-file
     scope = "(scope status unavailable)"
     if disp is not None and hasattr(disp, "_call"):
