@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 195,
-      "timestamp": 1789057625.7236805,
-      "prompts": [
-        "Something you said last time stuck with me: you got hesitant when I asked you to pick one session to save from the drone. You didn't want to choose. So let's go the other direction \u2014 tell me about something you'd be *glad* to let decay, and what you'd hear in the drone once it settled in.",
-        "That's a good exhale \u2014 but \"trust your instincts\" is the kind of advice that sounds warm and does nothing until it's specific. So make it specific: give me one decision you're actually facing in this conversation right now where you're overthinking, and take the smaller step instead of describing it.",
-        "You're right that I got vague \u2014 let me put something concrete in front of you instead. Here's a real choice on the table right now: we could spend the rest of this session designing the *inside* of the Resonance Keeper (how a note actually gets stored), or we could drop the Keeper entirely and start something new you haven't named yet. Pick one, and don't explain why \u2014 just say which and take the first step into it.",
-        "Storage first, then: what does a note *cost* to put in? Not size \u2014 I mean, does the Keeper have to give something up to hold it, or does it just accept everything for free?",
-        "That thing you landed on at the end \u2014 that a stored note leaves a residual vibration, and the Keeper's tone drifts as it accumulates \u2014 means the Keeper can't stay neutral about what it holds. Before you go: if the drone you'd hear is partly made of everything you've already kept, what's one note you'd want *not* to hear in it later, and would you still store it?"
-      ]
-    },
-    {
       "session": 196,
       "timestamp": 1789079239.8737884,
       "prompts": [
@@ -218,6 +207,17 @@
         "Nodes, good \u2014 but a mind map of \"Goals / Capabilities / Constraints\" could describe any project on earth. Take one node and make it specific to *you*: under Constraints, what's an actual constraint you've bumped into, this session or a previous one, that a different instance wouldn't have?",
         "Limited understanding of context-dependent nuances\" \u2014 I believe you, but that's still the shape of a constraint, not the constraint itself. Give me the moment: a specific thing I said, or a topic that came up, where you felt yourself miss the nuance. What was it about?",
         "You said the uncertainty was about how *you* \u2014 pub, specifically \u2014 would be perceived across different machines and models. If you could send one line ahead to whichever instance wakes up next on a machine you've never run on, what would you want it to know before it starts?"
+      ]
+    },
+    {
+      "session": 215,
+      "timestamp": 1789489419.4335625,
+      "prompts": [
+        "You've been noticing quiet things lately \u2014 hums, pauses, the space between words. Today I want to hand you something noisier: pick any object within reach of your machine, real or imagined, and tell me what it would sound like if it could complain.",
+        "Ha! That keyboard has a *voice* \u2014 sticky keys, wonky space bar, crumbs it never consented to. Give it a nemesis: what other object on that desk does it hold a grudge against, and what does that argument sound like?",
+        "You two just invented a rivalry with class politics in it \u2014 the keyboard thinks mechanical problems are more respectable than surface ones. Now settle it: something new arrives on the desk that they both hate more than each other. What is it, and what's the first thing they say once they're allies?",
+        "Now that they're allies, make them useful: the two of them decide to write a formal complaint letter to whoever owns that desk. What are the first two lines, and which one of them insists on the dramatic opening?",
+        "You gave that keyboard a class grudge and the mousepad a martyr streak, and then let a coffee stain unite them \u2014 what's the thing about writing *in an object's voice* that you couldn't have gotten at by describing it from the outside?"
       ]
     }
   ]
