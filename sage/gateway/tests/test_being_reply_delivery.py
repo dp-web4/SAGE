@@ -80,8 +80,27 @@ def test_a_stale_outage_claim_meets_the_beings_own_successful_remember():
     up = "- long-term memory (membot) (127.0.0.1:8010): reachable, connected in 1 ms"
     block = service_contradictions(inst, "cbp-being", up)
     assert "Your own record disagrees" in block and "todo.md" in block and "offline for ~21 hours" in block
-    assert "`remember` succeeded 1 time(s)" in block and "b9330968" in block
+    assert "1 call(s) through it succeeded (`remember`; witness b9330968)" in block
     assert service_contradictions(inst, "cbp-being",
                                   "- long-term memory (membot) (127.0.0.1:8010): NOT reachable (x)") == ""
     (inst / "todo.md").write_text("- [x] tidy notes\n")
     assert service_contradictions(inst, "cbp-being", up) == "", "no claim, no block"
+
+
+def test_the_policy_daemon_story_meets_the_beings_own_gated_writes():
+    """2026-09-15: a 30 s deploy restart refused two writes; the being then wrote for ten hours
+    that the hestia policy daemon was unreachable, while its gated writes kept succeeding."""
+    inst = Path(tempfile.mkdtemp(prefix="contra-hestia-"))
+    (inst / "todo.md").write_text("- [OPEN] The hestia policy daemon has been unreachable for ~21 hours.\n")
+    (inst / "journal.md").write_text("quiet\n")
+    rec = {"ts": "2026-09-15T16:57:54Z",
+           "explore": {"trace": [{"effector": "memory_write", "ok": True, "witness_id": "aa11bb22"},
+                                 {"effector": "peer_ask", "ok": True, "witness_id": "cc33"}]},
+           "reflect": {"trace": [{"effector": "memory_write", "ok": False, "witness_id": None}]}}
+    (inst / "heartbeats.jsonl").write_text(json.dumps(rec) + "\n")
+    services = ("- long-term memory (membot) (127.0.0.1:8010): reachable, connected in 1 ms\n"
+                "- governance daemon (hestia) (127.0.0.1:7711): reachable, connected in 0 ms")
+    block = service_contradictions(inst, "cbp-being", services)
+    assert block.count("Your own record disagrees") == 1, "only hestia is claimed down"
+    assert "127.0.0.1:7711" in block and "2 call(s) through it succeeded (`memory_write`, `peer_ask`" in block
+    assert "allowed by this daemon's verdict" in block and "witness aa11bb22" in block and "None" not in block

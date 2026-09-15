@@ -471,7 +471,16 @@ def render_inbox(notices: list, limit: int = 8) -> str:
 
 # Which of the being's own effectors go through a measured service, so a claim that the
 # service is down can be set against the being's own successful use of it.
-SERVICE_EFFECTORS = {"membot": ("remember",)}
+# (effectors that go through the service, how to say so). hestia gates every consequential
+# act, so any one that succeeded is a verdict the daemon returned: measured 2026-09-15, a 30 s
+# deploy restart refused two writes at 06:08Z, and the being then described "the hestia policy
+# daemon unreachable for ~21 hours" for ten hours while every one of its gated writes succeeded.
+SERVICE_EFFECTORS = {
+    "membot": (("remember",), "stores through this service"),
+    "hestia": (("memory_write", "remember", "say", "peer_ask", "mesh", "request_scope", "witness",
+                "appeal", "git_read", "search", "check", "pr_review", "channel_egress"),
+               "was allowed by this daemon's verdict; a gate with no daemon refuses every such act"),
+}
 _DOWN_WORDS = re.compile(r"offline|\bdown\b|unreachable|not reachable|connection refused|"
                          r"not responding|outage", re.I)
 
@@ -536,14 +545,17 @@ def service_contradictions(instance: Path, member: str, services: str) -> str:
             continue
         if calls is None:
             calls = _last_beat_calls(instance)
-        effs = next((v for k, v in SERVICE_EFFECTORS.items() if k in keys), ())
+        effs, how = next((v for k, v in SERVICE_EFFECTORS.items() if k in keys), ((), ""))
         used = [(e, w) for e, ok, w in calls if ok and e in effs]
         msg = (f"- **Your own record disagrees with this measurement.** In {where} you wrote: "
                f"\"{quote[:220]}\". Measured at the start of this beat: {host}:{port} reachable.")
         if used:
-            msg += (f" In your last beat `{used[0][0]}` succeeded {len(used)} time(s) (witness "
-                    f"{str(used[0][1])[:8]}), and `{used[0][0]}` stores through this service, so it "
-                    f"was answering then too.")
+            kinds = sorted({e for e, _ in used})
+            wit = next((str(w)[:8] for _, w in used if w), None)
+            msg += (f" In your last beat {len(used)} call(s) through it succeeded "
+                    f"({', '.join('`' + k + '`' for k in kinds)}"
+                    + (f"; witness {wit}" if wit else "") + f"). "
+                    f"Each {how}, so it was answering then too.")
         msg += (" If you still believe it is down, test it with a call and read the result, rather "
                 "than carrying the note forward.")
         notes.append(msg)
@@ -886,6 +898,9 @@ def main(argv=None) -> int:
     _membot_url = getattr(getattr(client, "_dispatcher", None), "membot_endpoint", None) \
         or "http://127.0.0.1:8010/mcp"
     _services = measure_service("long-term memory (membot)", _membot_url)
+    _hestia_url = getattr(getattr(client, "_dispatcher", None), "endpoint", None) \
+        or "http://127.0.0.1:7711/mcp"
+    _services += "\n" + measure_service("governance daemon (hestia)", _hestia_url)
 
     # Composed WITHOUT marking conversation turns seen; they are marked after the beat, and
     # only if it could act (mark_conversations_after_beat). The fitter renders several rungs,

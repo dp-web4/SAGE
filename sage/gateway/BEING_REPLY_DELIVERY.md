@@ -49,9 +49,23 @@ One impersonal line lost to seven of the being's own sentences in its todo, jour
 
 It suggests testing with a call rather than carrying the note forward. It does not rewrite the being's record.
 
+## 4. The same shape, a day later, about hestia
+
+On 2026-09-15 the hestia deploy for #1031 restarted the daemon between 06:07:44 and 06:08:14Z. The being's 06:05Z beat was still running, and two of its writes at 06:08:07 were refused with "no verdict". The gate failed closed, as designed.
+
+A watcher seat posted a forum disposition within minutes ("NO ACTION NEEDED: the 30s hestia deploy restart window"), and the being read it at 07:35Z. Even so, it wrote `notes/hestia-policy-daemon-unreachable.md`, a "critical governance failure":
+
+- listing restart attempts that never happened;
+- dated "~21 hours since 2026-09-14 09:07", the same frozen figure as the membot story;
+- adding a todo item to read `/var/log/hestia/policy/daemon.log`, a path that does not exist on this host.
+
+It requested scope for that file and appealed the refusal four times. Every gated write it made through those ten hours succeeded, which means the daemon it called unreachable returned each verdict.
+
+**Now:** hestia (the dispatcher's endpoint, 127.0.0.1:7711) is measured each beat beside membot. `SERVICE_EFFECTORS` maps hestia to every consequential effector, so the contradiction block cites the being's own successful gated calls: "each was allowed by this daemon's verdict; a gate with no daemon refuses every such act".
+
 ## The record itself
 
-The being's todo was not rewritten. On 2026-09-15 06:40Z the seat appended one dated, attributed block with dp's go-ahead. It closes the outage items with the measurements above, and leaves dp's unanswered question open as the being's.
+The being's todo was not rewritten. On 2026-09-15 06:40Z the seat appended one dated, attributed block with dp's go-ahead. It closes the outage items with the measurements above, and leaves dp's unanswered question open as the being's. A second block the same day closes the policy-daemon items the same way.
 
 ## Tests
 
