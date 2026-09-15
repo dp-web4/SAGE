@@ -919,6 +919,43 @@ def fresh_frames(instance: Path, worktree: Optional[str], since: Optional[float]
     return out
 
 
+def vision_line(metas) -> str:
+    """One line telling the being whether it can SEE this beat, and what to do either way.
+
+    THE HARNESS KNEW AND NEVER SAID. `compose` sets `user_msg["images"]` and the seed text
+    said nothing — so a being holding a frame and a being holding none received the same
+    prompt, and had to guess which it was. Measured 2026-09-14 across the first three beats
+    that ever carried one: the being reasoned at length about whether a reader hop existed
+    instead of looking, then on the next beat correctly refused to describe an image that
+    was not there and called describing it "confabulation". Both are the right behaviour
+    from someone who cannot tell, and neither should have been necessary — the producer
+    already knew the answer and had written it into `config.frames` for the RECORD, which
+    the being does not read, rather than into the seed, which it does.
+
+    The no-frame branch names the cause, because "no frame" has exactly one remedy the
+    being controls: its `camera` act is the request to see, and a frame rides the beat AFTER
+    the one that captured it. Miss a beat, see nothing next beat."""
+    metas = list(metas or [])
+    carried = [m for m in metas if m.get("carried")]
+    if carried:
+        m = carried[0]
+        extra = f" (and {len(carried) - 1} more)" if len(carried) > 1 else ""
+        return (f"Vision: you CAN see this beat. {len(carried)} frame{'s' if len(carried) > 1 else ''} "
+                f"{'are' if len(carried) > 1 else 'is'} attached to this turn as an image"
+                f"{'s' if len(carried) > 1 else ''}{extra}, captured {int(m.get('age_s', 0))}s ago "
+                f"({os.path.basename(str(m.get('path', '?')))}). Look at it directly — describe what "
+                f"is in it rather than reasoning about whether you can.")
+    if metas:
+        why = str(metas[-1].get("why") or "it was not fresh")
+        return (f"Vision: NO frame this beat — {len(metas)} candidate"
+                f"{'s' if len(metas) > 1 else ''} on disk, none carried ({why}). Anything you "
+                f"'see' now would be confabulation. Your `camera` act IS the request to see, and "
+                f"a frame rides the beat AFTER the one that captured it: call `camera` this beat "
+                f"to see next beat.")
+    return ("Vision: NO frame this beat and none on disk. Your `camera` act IS the request to "
+            "see, and a frame rides the beat AFTER the one that captured it.")
+
+
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
             nothink: str, header: str, state: str, recall: str, inbox: str, digest: str,
             frame: Optional[str] = None, frames: Optional[list] = None):
@@ -1247,6 +1284,7 @@ def main(argv=None) -> int:
                 f"The harness you are running under: {harness_rev.get('short')} on "
                 f"{harness_rev.get('branch')}"
                 + (" (uncommitted edits present)" if harness_rev.get("dirty") else "")
+                + "\n" + vision_line(_frame_metas)
                 + ". A `check` result carries the `tree` it ran against; if that head is not "
                   "this one, the answer is about different code than the code running you.\n\n"),
         state=state_block,

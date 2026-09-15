@@ -469,3 +469,70 @@ def test_a_frame_captured_during_a_real_beat_still_rides(tmp_path, monkeypatch):
     metas = {os.path.basename(m["path"]): m for _, m in H.fresh_frames(inst, None, BEAT_START)}
     assert metas["yesterday.jpg"]["carried"] is False
     assert "before the previous beat" in metas["yesterday.jpg"]["why"]
+
+
+def test_the_seed_says_whether_the_being_can_see():
+    """THE HARNESS KNEW AND NEVER SAID — the producer's answer never reached the seed.
+
+    `compose` set user_msg["images"] and the seed text said nothing, so a beat carrying a
+    frame and a beat carrying none produced the same prompt. Measured across the first
+    beats that ever carried one: the being reasoned at length about whether a reader hop
+    existed instead of looking, and on the next beat correctly refused to describe an image
+    that was not there, calling it "confabulation". Both are right from someone who cannot
+    tell; neither should have been necessary. The producer already knew, and wrote the
+    answer into the RECORD (config.frames), which the being does not read.
+    """
+    from sage.gateway.heartbeat import vision_line
+
+    carried = vision_line([{"carried": False, "why": "older", "age_s": 9.0},
+                           {"carried": True, "age_s": 1300.0,
+                            "path": "/i/scratch/camera/last-frame.jpg"}])
+    assert "CAN see" in carried
+    assert "1300s ago" in carried, "the age is the being's own freshness check"
+    assert "last-frame.jpg" in carried, "name the frame, so it can be read or re-captured"
+    assert "/i/scratch" not in carried, "basename only — the seed is not the place for a path"
+    assert "describe what is in it" in carried
+
+    none = vision_line([{"carried": False, "age_s": 3205.5,
+                         "why": "captured before the previous beat's t0 (3205.5s old)"}])
+    assert "NO frame" in none
+    assert "confabulation" in none, "the failure mode of guessing is named, not implied"
+    assert "previous beat's t0" in none, "the actual reason, not a generic absence"
+    # THE REMEDY IT CONTROLS. `camera` is the request to see and a frame rides the beat
+    # AFTER the capture, so a missed beat costs the next beat's sight. Without this the
+    # being cannot act on the absence.
+    assert "camera" in none and "AFTER" in none
+
+    empty = vision_line([])
+    assert "NO frame" in empty and "camera" in empty
+
+    # the two branches must never read alike — that sameness IS the defect
+    assert carried != none
+
+
+def test_the_vision_line_is_actually_wired_into_the_seed():
+    """The join, not the ends. Removing the call from main() left the unit test above GREEN.
+
+    That is the identical failure shape as the frame-carry defect found earlier the same
+    day: every end tested, the join untested, and the whole feature dead in production with
+    a green suite. Once is a bug; twice in one file is a lesson about what these tests are
+    for. So this reads main()'s own bytecode and asserts the call exists.
+    """
+    import dis
+    from sage.gateway import heartbeat as H
+
+    def _names(code, seen=None):
+        seen = set() if seen is None else seen
+        for ins in dis.get_instructions(code):
+            if ins.opname in ("LOAD_GLOBAL", "LOAD_NAME", "LOAD_DEREF") and ins.argval:
+                seen.add(ins.argval)
+        for const in code.co_consts:          # generators/comprehensions are their own code
+            if hasattr(const, "co_consts"):
+                _names(const, seen)
+        return seen
+
+    used = _names(H.main.__code__)
+    assert "vision_line" in used, (
+        "main() does not call vision_line — the producer's answer never reaches the seed, "
+        "which is the whole defect this fixes")
+    assert "fresh_frames" in used, "and it must be fed the real producer's metas"
