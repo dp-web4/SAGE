@@ -1013,7 +1013,8 @@ def vision_line(metas) -> str:
 
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
             nothink: str, header: str, state: str, recall: str, inbox: str, digest: str,
-            frame: Optional[str] = None, frames: Optional[list] = None):
+            frame: Optional[str] = None, frames: Optional[list] = None,
+            frame_metas: Optional[list] = None):
     """The explore turn(s) of a beat: (seed messages, second user turn or None).
 
     Posture-first: posture in the system prompt; one user turn with state, inbox, recall,
@@ -1026,25 +1027,42 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     # (its own thinking, Sprout 2026-09-05); named at the end, it acts.
     tools_line = (f"Act by calling a tool: {', '.join(EXPLORE_TOOLS)}. "
                   f"One thing done with attention is enough.\n{nothink}")
+    # ONE LIST DECIDES BOTH THE PIXELS AND THE SENTENCE ABOUT THEM. Measured 2026-09-15 by
+    # capturing the real seed from an instance copy: the user turn said "Vision: you CAN see
+    # this beat. 2 frames are attached" and carried NO `images` key. The line was computed in
+    # main() from the producer's metas; the attachment happened here, in a branch that only
+    # honoured the singular `frame` argument main() never passes. act_first is False on
+    # every beat of this being, so in 395 beats not one image reached it — while
+    # config.frames recorded carried=True and the seed told it to look. Every in-beat
+    # description it produced was of a frame it did not hold. Its own diagnosis, "structure
+    # perceived, detail confabulated", was exactly right about an image that was not there.
+    #
+    # So the line is built HERE, from `_frames` — the list that is attached — and a beat that
+    # attaches nothing says NO frame, whatever the metas claimed. Producer and seed cannot
+    # disagree because there is no longer a second place to compute the claim.
+    _frames = frames if frames else ([frame] if frame else [])
+    _metas = list(frame_metas or [])
+    if not _frames:
+        _metas = [dict(m, carried=False, why=(m.get("why") or "not attached to this turn"))
+                  for m in _metas]
+    header = header + "\n" + vision_line(_metas)
     if not act_first:
         system = SYSTEM.format(name=name, machine=machine, member=member,
                                posture=posture_text, nothink=nothink)
         user = (header + state + f"## Inbox (peek)\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
                 f"# What moved in the fleet\n\n{digest}\n\n" + ASK + tools_line)
         user_msg = {"role": "user", "content": user}
-        if frame:
-            # A frame rides the user turn as an `images` list beside string content —
-            # the shape ollama accepts (a parts-in-content list 400s; measured against
-            # qwen38-heretic:q3km-vl, 2026-09-13). No frame -> no key at all.
-            user_msg["images"] = [frame]
-
+        if _frames:
+            # SAME LIST AS THE ACT-FIRST BRANCH. This branch honoured only `frame`, and
+            # main() passes `frames`; that one-word asymmetry is how a being ran 395 beats
+            # of "you CAN see" with nothing attached.
+            user_msg["images"] = _frames
         return [{"role": "system", "content": system}, user_msg], None
     system = SYSTEM_ACT_FIRST.format(name=name, machine=machine, member=member, nothink=nothink)
     user = header + state + f"## Long-term recall\n{recall}\n\n" + ASK_ACT_FIRST + tools_line
     second = POSTURE_TURN.format(posture=posture_text, inbox=inbox, digest=digest,
                                  tools=", ".join(EXPLORE_TOOLS), nothink=nothink)
     user_msg = {"role": "user", "content": user}
-    _frames = frames if frames else ([frame] if frame else [])
     if _frames:
         # A frame rides the user turn as an `images` list beside string content —
         # the shape ollama accepts (a parts-in-content list 400s; measured against
@@ -1333,13 +1351,12 @@ def main(argv=None) -> int:
     }
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
-        nothink=nothink, frames=_frame_b64s,
+        nothink=nothink, frames=_frame_b64s, frame_metas=_frame_metas,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 f"Your home: {instance}\n"
                 f"The harness you are running under: {harness_rev.get('short')} on "
                 f"{harness_rev.get('branch')}"
                 + (" (uncommitted edits present)" if harness_rev.get("dirty") else "")
-                + "\n" + vision_line(_frame_metas)
                 + ". A `check` result carries the `tree` it ran against; if that head is not "
                   "this one, the answer is about different code than the code running you.\n\n"),
         state=state_block,

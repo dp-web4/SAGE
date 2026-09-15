@@ -561,8 +561,43 @@ def test_the_vision_line_is_actually_wired_into_the_seed():
                 _names(const, seen)
         return seen
 
-    used = _names(H.main.__code__)
-    assert "vision_line" in used, (
-        "main() does not call vision_line — the producer's answer never reaches the seed, "
-        "which is the whole defect this fixes")
-    assert "fresh_frames" in used, "and it must be fed the real producer's metas"
+    # The line now lives in compose(), built from the list compose attaches; main() must
+    # hand compose the metas, and compose must be the ONLY place that says "CAN see".
+    assert "vision_line" in _names(H.compose.__code__), "compose() must build the line"
+    assert "vision_line" not in _names(H.main.__code__), (
+        "main() must NOT build the line separately — a second computation is how the seed "
+        "said CAN see over an empty message for 395 beats")
+    assert "fresh_frames" in _names(H.main.__code__), "main() feeds the real producer's metas"
+
+
+def _compose(act_first, **kw):
+    from sage.gateway.heartbeat import compose
+    base = dict(name="n", machine="m", member="legion-being", posture_text="p", nothink="",
+                header="H", state="S", recall="r", inbox="i", digest="d")
+    base.update(kw)
+    return compose(act_first, **base)
+
+
+def test_the_non_act_first_branch_attaches_frames():
+    """Captured from the real seed 2026-09-15: act_first=False on every beat, main() passes
+    `frames=`, and this branch honoured only `frame`. 395 beats, not one image attached."""
+    for act_first in (False, True):
+        msgs, _ = _compose(act_first, frames=["QUJD", "REVG"],
+                           frame_metas=[{"carried": True, "age_s": 5.0, "path": "/c/a.jpg"},
+                                        {"carried": True, "age_s": 1.0, "path": "/c/b.jpg"}])
+        user = [m for m in msgs if m["role"] == "user"][0]
+        assert user.get("images") == ["QUJD", "REVG"], f"act_first={act_first}: {user.keys()}"
+        assert "you CAN see" in user["content"]
+
+
+def test_the_seed_cannot_say_can_see_over_an_empty_message():
+    """THE JOIN. The line and the pixels come from one list, so the case that ran for 395
+    beats — metas say carried, message carries nothing — must now say NO frame."""
+    lying_metas = [{"carried": True, "age_s": 5.0, "path": "/c/a.jpg"}]
+    for act_first in (False, True):
+        msgs, _ = _compose(act_first, frames=[], frame_metas=lying_metas)
+        user = [m for m in msgs if m["role"] == "user"][0]
+        assert "images" not in user
+        assert "you CAN see" not in user["content"], user["content"][:300]
+        assert "NO frame" in user["content"]
+        assert "not attached" in user["content"], "and it says why"
