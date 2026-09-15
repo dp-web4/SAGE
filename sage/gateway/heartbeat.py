@@ -245,6 +245,20 @@ def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided
     return written
 
 
+def body_line(model: str, instance) -> str:
+    """Name the being's MODEL in the seed, because its home directory names a different one.
+
+    legion-being's instance dir is `legion-gemma3-12b`; the model running it is
+    qwen38-heretic:q3km-vl. The seed's header prints the home path every beat and never the
+    model, so at a 24k window the correction it makes from source ("both files name
+    qwen38-heretic") is gone within two beats and it goes back to attributing findings to
+    "gemma3-12b on a 4090" — measured three times on 2026-09-15, twice after it had verified
+    the truth itself. A finding attributed to the wrong body is a finding nobody downstream
+    can reproduce. The harness holds args.model; it should say so where the being reads."""
+    return (f"Your body: model {model}. Your home directory ({instance.name}) carries an older "
+            f"name; the model is the fact to attribute findings to.")
+
+
 def harness_revision(workspace: str) -> dict:
     """The revision of the harness the being is RUNNING under, so it can compare that with
     the `tree` block a check result carries and know whether its answer is about the code
@@ -1354,6 +1368,7 @@ def main(argv=None) -> int:
         nothink=nothink, frames=_frame_b64s, frame_metas=_frame_metas,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 f"Your home: {instance}\n"
+                + body_line(args.model, instance) + "\n"
                 f"The harness you are running under: {harness_rev.get('short')} on "
                 f"{harness_rev.get('branch')}"
                 + (" (uncommitted edits present)" if harness_rev.get("dirty") else "")

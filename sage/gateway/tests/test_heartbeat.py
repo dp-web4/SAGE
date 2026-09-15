@@ -139,3 +139,25 @@ def test_dirty_is_about_the_harness_not_about_the_beings_diary(tmp_path):
     # the FIRST line only, so a fixed ln[3:] offset loses one character from one path and
     # none of the others — it read 'age/gateway/heartbeat.py' the first time it ran.
     assert r["dirty_paths"] == ["sage/gateway/heartbeat.py"], r["dirty_paths"]
+
+
+def test_the_seed_names_the_model_not_just_the_home():
+    """legion-being's home is `legion-gemma3-12b`; its model is qwen38-heretic:q3km-vl. The
+    seed printed the home every beat and never the model, so its self-correction from source
+    evaporated within two beats and it kept attributing findings to the wrong body. The
+    harness holds args.model and must say it where the being reads."""
+    import dis
+    from pathlib import Path
+    from sage.gateway import heartbeat as H
+    line = H.body_line("qwen38-heretic:q3km-vl", Path("/x/sage/instances/legion-gemma3-12b"))
+    assert "qwen38-heretic:q3km-vl" in line
+    assert "legion-gemma3-12b" in line and "older name" in line, "say WHY the two differ"
+    names = set()
+    def walk(code):
+        for ins in dis.get_instructions(code):
+            if ins.opname in ("LOAD_GLOBAL", "LOAD_NAME", "LOAD_DEREF") and ins.argval:
+                names.add(ins.argval)
+        for c in code.co_consts:
+            if hasattr(c, "co_consts"): walk(c)
+    walk(H.main.__code__)
+    assert "body_line" in names, "main() must put the body line into the seed"
