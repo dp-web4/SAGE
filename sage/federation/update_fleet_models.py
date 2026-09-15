@@ -131,6 +131,29 @@ def detect_current_model(machine: str) -> tuple[str, str]:
         return "unknown", "Unknown"
 
 
+def _session_num(path: Path) -> int:
+    """session_999 sorts after session_1000 as a string; sort by the number."""
+    try:
+        return int(path.stem.split("_", 1)[1])
+    except (IndexError, ValueError):
+        return -1
+
+
+def _newest_session_time(inst: Path) -> "str | None":
+    """`end` (else `start`) of the instance's highest-numbered session record."""
+    sess = inst / "sessions"
+    if not sess.is_dir():
+        return None
+    files = sorted(sess.glob("session_*.json"), key=_session_num)
+    if not files:
+        return None
+    try:
+        d = json.loads(files[-1].read_text())
+        return d.get("end") or d.get("start")
+    except Exception:
+        return None
+
+
 def detect_observed_model(machine: str) -> "tuple[str, str] | None":
     """What this machine ACTUALLY ran, from the record rather than from config.
 
@@ -157,21 +180,36 @@ def detect_observed_model(machine: str) -> "tuple[str, str] | None":
     # The instance DIRECTORY NAME is not the model. McNugget's is
     # `mcnugget-gemma3-12b` and has run gemma4 since 09-08, because 461 sessions of
     # history hang off that path and renaming it would orphan them. So resolve the
-    # instance by pin or by session count, never by parsing its name.
+    # instance by pin or by recency of its newest session, never by parsing its name.
+    #
+    # NOT by session count (cbp, 2026-09-14). The largest history is the instance a
+    # machine ran LONGEST, and on the day of a switch that is the one it just left:
+    # a new instance at session 1 loses to the old one at 240, so the tool reports
+    # the previous model on exactly the day it exists to catch. cbp only picked
+    # correctly because its switch copied 240 sessions into the new instance.
     pin = os.getenv("SAGE_INSTANCE")
     cand = None
-    if pin and (inst_dir / pin).is_dir():
-        cand = inst_dir / pin
+    if pin:
+        if (inst_dir / pin).is_dir():
+            cand = inst_dir / pin
+        else:
+            # A pin that does not resolve is a mistake to report, not a cue to guess.
+            print("  $SAGE_INSTANCE=" + pin + " is not a directory under "
+                  + str(inst_dir) + "; not guessing an instance", file=sys.stderr)
     elif inst_dir.is_dir():
         owned = [d for d in inst_dir.iterdir()
                  if d.is_dir() and d.name.startswith(machine + "-")]
-        if owned:
-            cand = max(owned, key=lambda d: len(list((d / "sessions").glob("*.json")))
-                       if (d / "sessions").is_dir() else 0)
+        stamped = [(t, d) for d in owned for t in [_newest_session_time(d)] if t]
+        if stamped:
+            cand = max(stamped)[1]
+        if len(owned) > 1:
+            print("  " + str(len(owned)) + " instances for " + machine
+                  + ", no $SAGE_INSTANCE pin; chose by newest session: "
+                  + (cand.name if cand else "none"), file=sys.stderr)
     if cand:
         sess = cand / "sessions"
         if sess.is_dir():
-            files = sorted(sess.glob("session_*.json"))
+            files = sorted(sess.glob("session_*.json"), key=_session_num)
             if files:
                 try:
                     m = json.loads(files[-1].read_text()).get("model")
@@ -194,14 +232,24 @@ def detect_observed_model(machine: str) -> "tuple[str, str] | None":
     return None
 
 
-def update_fleet_json(machine: str, model_id: str, dry_run: bool = False) -> bool:
+def update_fleet_json(machine: str, model_id: str, dry_run: bool = False) -> "bool | None":
     """Set this machine's `model_default` in the registry the daemon and site read.
 
     Touches exactly one field of one machine's entry and preserves the rest in key
     order, because every other row here belongs to a seat that is not this one.
     Writes temp-and-rename so the daemon, which loads this file at startup, never
     sees a half-written registry.
+
+    Returns True if changed, None if already current, False if it could not write.
+    Those were one value (False) before, so main() could not tell "nothing to do"
+    from "no entry" and exited 0 on both.
     """
+    if not model_id or model_id == "unknown":
+        # detect_current_model's "don't know" sentinel. Writing it would publish a
+        # registry row that says "unknown" as if it had been measured.
+        print("  no model detected; not writing 'unknown' into fleet.json",
+              file=sys.stderr)
+        return False
     if not FLEET_JSON_PATH.exists():
         print("  fleet.json not found at " + str(FLEET_JSON_PATH) + "; skipping",
               file=sys.stderr)
@@ -217,7 +265,7 @@ def update_fleet_json(machine: str, model_id: str, dry_run: bool = False) -> boo
     cur = machines[machine].get("model_default")
     if cur == model_id:
         print("  fleet.json: model_default already " + str(model_id))
-        return False
+        return None
     print("  fleet.json: model_default " + repr(cur) + " -> " + repr(model_id))
     if dry_run:
         return True
@@ -337,16 +385,19 @@ def main():
         updates["role"] = args.role
 
     # The registry the daemon and the site actually read. Done BEFORE the legacy
-
-    # file below, so a failure here is loud rather than masked by a successful
-
-    # write to the document nobody consumes.
-
-    update_fleet_json(machine, model_id, dry_run=args.dry_run)
-
+    # file below, and a failure here exits nonzero before it -- so the wired call's
+    # `|| echo ... failed` fires, instead of a successful write to the document
+    # nobody consumes masking it.
+    if update_fleet_json(machine, model_id, dry_run=args.dry_run) is False:
+        sys.exit(2)
 
     # Show diff
     changes = {k: (entry.get(k), v) for k, v in updates.items() if entry.get(k) != v}
+    # A fresh timestamp alone is not a change. Bumping it every run dirties this file
+    # every session on every wired seat -- eight seats editing adjacent lines of one
+    # JSON file, four times a day, is a merge conflict generator, not a registry.
+    if set(changes) <= {"updated_at"}:
+        changes = {}
     if changes:
         print("  Changes:")
         for k, (old, new) in changes.items():
@@ -356,6 +407,8 @@ def main():
 
     if args.dry_run:
         print("  (dry-run, not writing)")
+        return
+    if not changes:
         return
 
     entry.update(updates)
