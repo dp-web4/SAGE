@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -468,10 +469,91 @@ def render_inbox(notices: list, limit: int = 8) -> str:
     return "\n".join(lines)
 
 
+# Which of the being's own effectors go through a measured service, so a claim that the
+# service is down can be set against the being's own successful use of it.
+SERVICE_EFFECTORS = {"membot": ("remember",)}
+_DOWN_WORDS = re.compile(r"offline|\bdown\b|unreachable|not reachable|connection refused|"
+                         r"not responding|outage", re.I)
+
+
+def _last_beat_calls(instance: Path) -> list:
+    """The executed calls of the most recent beat record: (effector, ok, witness_id)."""
+    try:
+        with open(instance / "heartbeats.jsonl", "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - 400_000))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+        rec = json.loads(next(l for l in reversed(lines) if l.strip().startswith("{")))
+    except Exception:
+        return []
+    out = []
+    for ph in ("explore", "posture", "reflect"):
+        for t in ((rec.get(ph) or {}).get("trace") or []):
+            out.append((t.get("effector"), bool(t.get("ok")), t.get("witness_id")))
+    return out
+
+
+def service_contradictions(instance: Path, member: str, services: str) -> str:
+    """Where the being's OWN record says a service is down while the measurement says it is
+    up, say so, quoting the being and citing its own successful use of the service.
+
+    Why a measured line was not enough (SAGE #92, then 2026-09-15): the line "membot
+    reachable, connected in 1 ms; where they disagree, this line is current" sat in every
+    beat's state while cbp-being kept writing that 127.0.0.1:8010 had been "offline for ~21
+    hours", a figure that never increased, and its `remember` calls, which store through that
+    service, succeeded in the same beats. One impersonal line lost to seven of the being's own
+    sentences. This block puts the being's sentence next to the being's act."""
+    notes = []
+    own_turns = []
+    if member:
+        try:
+            from sage.gateway import conversations as _conv
+            for m in _conv.listing(instance):
+                if member in m.get("participants", []):
+                    own_turns += [t.get("text", "") for t in _conv.recent(instance, m["id"], limit=6)
+                                  if t.get("from") == member]
+        except Exception:
+            pass
+    sources = [("todo.md", _read(instance / "todo.md", 1500)),
+               ("journal.md", _read(instance / "journal.md", 1200)),
+               ("your own conversation turns", "\n".join(own_turns))]
+    calls = None
+    for line in services.splitlines():
+        m = re.match(r"-\s*(.+?)\s*\(([^():\s]+):(\d+)\):\s*reachable", line.strip())
+        if not m:
+            continue
+        name, host, port = m.group(1), m.group(2), m.group(3)
+        keys = {port, f"{host}:{port}"} | {w for w in re.findall(r"\((\w+)\)", name)}
+        quote = where = None
+        for label, text in sources:
+            for sent in re.split(r"(?<=[.!?])\s+|\n", text or ""):
+                if _DOWN_WORDS.search(sent) and any(k and k.lower() in sent.lower() for k in keys):
+                    quote, where = sent.strip(), label
+            if quote:
+                break
+        if not quote:
+            continue
+        if calls is None:
+            calls = _last_beat_calls(instance)
+        effs = next((v for k, v in SERVICE_EFFECTORS.items() if k in keys), ())
+        used = [(e, w) for e, ok, w in calls if ok and e in effs]
+        msg = (f"- **Your own record disagrees with this measurement.** In {where} you wrote: "
+               f"\"{quote[:220]}\". Measured at the start of this beat: {host}:{port} reachable.")
+        if used:
+            msg += (f" In your last beat `{used[0][0]}` succeeded {len(used)} time(s) (witness "
+                    f"{str(used[0][1])[:8]}), and `{used[0][0]}` stores through this service, so it "
+                    f"was answering then too.")
+        msg += (" If you still believe it is down, test it with a call and read the result, rather "
+                "than carrying the note forward.")
+        notes.append(msg)
+    return "\n".join(notes)
+
+
 def own_state(instance: Path, member: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
-              services: str = "") -> str:
+              services: str = "", mark_conversations: bool = True) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
     # Conversations first among the channels: a turn addressed to the being and unanswered
@@ -487,7 +569,7 @@ def own_state(instance: Path, member: str = "",
         # constants remain the default for callers that do not fit (CONV_PER_CONV was the
         # fixed ceiling this supersedes — cbp's stopgap on SAGE#81, now the rung it starts from).
         convs = _conv.render_for_being(instance, member, per_conv=per_conv,
-                                       turn_chars=turn_chars)
+                                       turn_chars=turn_chars, mark=mark_conversations)
         if convs.strip():
             parts.append("## Your conversations (both directions, kept forever; reply with `say`)\n"
                          + convs.strip())
@@ -495,6 +577,9 @@ def own_state(instance: Path, member: str = "",
         parts.append("## Your services, measured at the start of this beat\n" + services.strip()
                      + "\nThis was measured now. A note in your journal or todo about these services is "
                        "older than this line; where they disagree, this line is current.")
+        contra = service_contradictions(instance, member, services)
+        if contra:
+            parts.append(contra)
     asks = recent_asks_block(instance)
     if asks:
         parts.append("## Your recent asks to peers\n" + asks)
@@ -516,6 +601,40 @@ def own_state(instance: Path, member: str = "",
         names = sorted(x.name for x in p.iterdir()) if p.is_dir() else []
         parts.append(f"## {d}/\n" + ("\n".join(f"- {n}" for n in names[:30]) if names else "(empty)"))
     return "\n\n".join(parts)
+
+
+def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
+                                  explore, later: list) -> dict:
+    """Mark the turns a beat was shown as seen, but only where the beat could act on them.
+
+    A conversation's turns are marked when the EXPLORE turn executed at least one call (it
+    read its state and acted), or when the being said something into that conversation in
+    any phase. Otherwise they stay unseen and the next beat shows them under "unanswered".
+
+    Measured 2026-09-14: dp's question was shown to cbp-being at 19:30Z. Its explore and
+    posture turns made no calls (the say was written as text), only reflect's bookkeeping
+    writes ran, and the question was marked seen at render time. No later beat flagged it,
+    and the being's next word in that conversation, three hours later, was about something
+    else. Returns {"explore_acted", "marked": {id: seq}, "held_unseen": [ids]}."""
+    if not member or not shown_upto:
+        return {"explore_acted": None, "marked": {}, "held_unseen": []}
+    from sage.gateway import conversations as _conv
+    explore_acted = bool(explore is not None and explore.trace)
+    said_to = set()
+    for res in [explore] + list(later):
+        if res is None:
+            continue
+        for it, env in res.trace:
+            if it.effector == "say" and env.ok:
+                said_to.add(str((it.args or {}).get("to") or ""))
+    marked, held = {}, []
+    for cid, upto in shown_upto.items():
+        if explore_acted or cid in said_to:
+            _conv.mark_seen(instance, member, cid, upto)
+            marked[cid] = upto
+        else:
+            held.append(cid)
+    return {"explore_acted": explore_acted, "marked": marked, "held_unseen": held}
 
 
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
@@ -768,10 +887,16 @@ def main(argv=None) -> int:
         or "http://127.0.0.1:8010/mcp"
     _services = measure_service("long-term memory (membot)", _membot_url)
 
+    # Composed WITHOUT marking conversation turns seen; they are marked after the beat, and
+    # only if it could act (mark_conversations_after_beat). The fitter renders several rungs,
+    # and a render is not a reading.
+    from sage.gateway import conversations as _convs
+    _shown_upto = _convs.latest_seqs(instance, args.member) if args.member else {}
+
     def _build_state(per_conv, turn_chars):
         return (_state_head + own_state(instance, args.member,
                                         per_conv=per_conv, turn_chars=turn_chars,
-                                        services=_services) + _scope_tail)
+                                        services=_services, mark_conversations=False) + _scope_tail)
 
     _other = (len(posture()) + len(inbox) + _schema_chars + 1200
               + 1200 + 400 + LOOP_GROWTH_CHARS)
@@ -877,6 +1002,8 @@ def main(argv=None) -> int:
                                   "suppressed": "text-channel narration in place of a native tool call"})
     # Route refusals AI-to-AI (dp 2026-09-04), the same as governed_turn: a scope-class deny
     # files the being's own scope request + a note and wakes the seat's auto session; a
+    conversations_marked = mark_conversations_after_beat(
+        instance, args.member, _shown_upto, explore, [after, reflect])
     # governance escalation wakes it to arbitrate. The beat is where refusals actually
     # happen (Legion: nine consecutive beats of home-scope write refusals, and the being's
     # requests had died with a daemon restart), so the heartbeat must route, not just log.
@@ -930,6 +1057,7 @@ def main(argv=None) -> int:
         "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "t0": t0, "elapsed_s": round(time.time() - t0, 1),
         "member": args.member, "model": args.model, "window_h": round(hours, 2),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
+        "conversations_marked": conversations_marked,
         # the window and budget actually sent, so a beat is verifiable from this file alone
         # (beat 46's 8192 wall was reconstructed from stderr; Sprout's review of SAGE #40)
         # num_predict is what OllamaIRP resolves and sends (the config's num_predict_think

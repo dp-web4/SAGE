@@ -203,11 +203,45 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
     return out
 
 
+_ATTR_VALUE = r'"((?:[^"\\]|\\.)*)"' + "|" + r"'((?:[^'\\]|\\.)*)'"
+_ATTR_PAIR = re.compile(r"([A-Za-z_]\w*)\s*=\s*(?:" + _ATTR_VALUE + ")")
+
+
+def _attr_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
+    """`say to="dp" text="..."`: a tool name followed directly by key="value" pairs, often
+    inside markdown bold. Measured 2026-09-14 19:30Z on cbp-being: dp asked "what are you
+    curious about?", the being's thinking said it would answer, and both its explore and
+    posture replies were `**say to="dp" text="..."**` in the text channel. Neither form above
+    reads it, the trace was empty, nothing was said, and the question was marked seen.
+    Only an offered tool name immediately followed by at least one pair whose key is one of
+    that tool's parameters counts, so prose that mentions a tool is still never a call."""
+    out: List[dict] = []
+    for name, params in names.items():
+        for m in re.finditer(r"(?<![\w.])" + re.escape(name) + r"\s+(?=[A-Za-z_]\w*\s*=\s*[\"'])", text):
+            args: Dict[str, Any] = {}
+            pos = m.end()
+            while True:
+                pm = _ATTR_PAIR.match(text, pos)
+                if not pm:
+                    break
+                raw = pm.group(2) if pm.group(2) is not None else pm.group(3)
+                args[pm.group(1)] = raw.replace('\\"', '"').replace("\\'", "'").replace("\\n", "\n")
+                pos = pm.end()
+                ws = re.match(r"[ \t]*", text[pos:])
+                pos += ws.end() if ws else 0
+            if params:
+                args = {k: v for k, v in args.items() if k in params}
+            if args:
+                out.append({"function": {"name": name, "arguments": args}, "_salvaged": "attr"})
+    return out
+
+
 def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
     """Lift well-formed tool calls that a model put in the TEXT channel, in Ollama's
-    tool_calls shape (plus `_salvaged`: "json" | "python"). Accepted: a JSON object or
-    array of {"name", "arguments"} (fenced or bare), or fenced Python `name(k="v", ...)`
-    with literal or locally-assigned arguments, positional ones mapped in schema order.
+    tool_calls shape (plus `_salvaged`: "json" | "python" | "attr"). Accepted: a JSON object or
+    array of {"name", "arguments"} (fenced or bare), fenced Python `name(k="v", ...)`
+    with literal or locally-assigned arguments, positional ones mapped in schema order, or
+    the attribute form `name k="v" ...` (see `_attr_calls`), tried last.
     `tools` is what was offered this turn (Ollama tool specs); only those names count,
     so prose that mentions a tool is never a call.
 
@@ -227,6 +261,8 @@ def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
         found.extend(_python_calls(text, params))
     if blocks and not found:                    # fenced prose, bare call outside the fence
         found.extend(_json_calls(content, params))
+    if not found:
+        found.extend(_attr_calls(content, params))
     return found
 
 

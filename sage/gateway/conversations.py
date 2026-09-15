@@ -233,6 +233,20 @@ def mark_seen(instance: Path, me: str, conv_id: str, upto_seq: int) -> None:
         f.write_text(json.dumps(seen, indent=1) + "\n")
 
 
+def latest_seqs(instance: Path, me: str) -> dict:
+    """{conversation id: its latest seq} for every conversation `me` is in: what a beat composed
+    now would show. Captured at compose time and handed to `mark_seen` only after the beat has
+    shown it could act on it (heartbeat.mark_conversations_after_beat)."""
+    out = {}
+    for m in listing(instance):
+        if me not in m.get("participants", []):
+            continue
+        turns = recent(instance, m["id"], limit=1)
+        if turns:
+            out[m["id"]] = int(turns[-1].get("seq", 0))
+    return out
+
+
 def last_seen(instance: Path, me: str, conv_id: str) -> int:
     f = conv_dir(instance) / SEEN_FILE
     try:
