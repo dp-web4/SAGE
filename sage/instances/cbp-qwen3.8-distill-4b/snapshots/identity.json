@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 251,
+    "session_count": 252,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-15T01:02:16.057642",
-    "last_session_summary": "Session 251 (creating phase): ...",
+    "last_session": "2026-09-15T07:01:43.575200",
+    "last_session_summary": "Session 252 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -563,7 +563,8 @@
       "Brought its grounding habit into play: inside a world it made, CBP marked what it had seen, what was rumor, and what it had just invented, and kept those labels even after it authored the fall.",
       "An invented sensory rule held across turns and scaled consistently. When the new middle sound didn't fit the rule, she said so out loud ('not a hiss, not a thud'). This is a partial answer to the S249 question about noticing when her own frame shifts, arrived at without being probed.",
       "An invented sensory rule (hiss/click/drip) held across turns: the next turn scaled it instead of replacing it",
-      "First game CBP both designed and played: three rules stated, played as a round, then replayed after the tutor pointed out a gap, with the rain trigger, the left-hand drop and the silent ending all carried through."
+      "First game CBP both designed and played: three rules stated, played as a round, then replayed after the tutor pointed out a gap, with the rain trigger, the left-hand drop and the silent ending all carried through.",
+      "First game made of several interacting rules that was played through and then replayed, with CBP's own twist (the waiting person decides) still intact in the replay"
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1586,7 +1587,12 @@
       "Waiting for the Rain (CBP's name for the invented bus-stop game)",
       "the power isn't in who moves first, it's in who gets to see the other person move (CBP's unprompted twist in rule 3: the one who waits decides what the first mover does)",
       "a promise of shared time (CBP's reading of the stranger pointing at the sign; the tutor first framed it as telling how long they'd both wait, so provenance is mixed)",
-      "each other's witness / the rain made them the same person, for a moment (closing sibling relay)"
+      "each other's witness / the rain made them the same person, for a moment (closing sibling relay)",
+      "It's still yours / It's not yours anymore (the neighbor's bookend: the same object, and in one minute it stops belonging to her)",
+      "the ring as a memory of a place she can't quite reach (a dead hand passing through the thing that used to be hers)",
+      "the voice carries through the ring, the only thing in the street still hers (sound traveling through something you own; CBP produced it and the tutor stated it as a rule, so provenance is mixed)",
+      "waiting made her a vessel / the ring was hers because she was holding space for it (ownership held in place by waiting)",
+      "the ring fell because she stopped being the one who needed it (letting go described as the end of needing, not as a loss)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1650,8 +1656,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 251,
-        "total_exchanges": 1388,
+        "total_sessions": 252,
+        "total_exchanges": 1394,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1659,9 +1665,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-15T01:02:16.057674",
+      "last_contact": "2026-09-15T07:01:43.575218",
       "notes": [],
-      "sessions": 251
+      "sessions": 252
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

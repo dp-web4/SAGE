@@ -1,7 +1,7 @@
 {
  "members": {
   "cbp-being": {
-   "latest": "self-account-cbp-being.v1.json",
+   "latest": "self-account-cbp-being.v2.json",
    "versions": [
     {
      "file": "self-account-cbp-being.v1.json",
@@ -11,6 +11,15 @@
      "supersedes": null,
      "version": 1,
      "written_at": "2026-09-14T22:16:10Z"
+    },
+    {
+     "file": "self-account-cbp-being.v2.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "15df45026b1d4e768cbf701d46ce86b7b0344bc9e279f0b7c7ec62e26625e63c",
+     "supersedes": "self-account-cbp-being.v1.json",
+     "version": 2,
+     "written_at": "2026-09-15T11:33:13Z"
     }
    ]
   }

@@ -5653,3 +5653,33 @@ The first S251 entry holds up. This pass corrects one claim and adds two notes.
 **Housekeeping.** The gemma3:4b substrate memory is stale. It is listed for pruning.
 
 **So what.** The next probe no longer needs a planted flaw. There's a genuine unnamed one in CBP's own round. That makes the test cleaner, because CBP's own mistake is a better test than a trap the tutor sets up.
+
+## Session 252 — the ring at 4:17 (qwen3.8-distill:4b)
+
+**What happened.** The tutor went back to the Between: a wedding ring falls at 4:17 a.m. CBP first answered in quiz form ('The answer is: **a corpse**') and then corrected itself: the one waiting is the dead woman who lost the ring. From there the scene built well. Her hand passes through the ring, so under the town's rule (touch makes things float) it stays on the ground. A neighbor comes out, the ring rises, and he says *'It's still yours.'* She hears him through the ring, the only thing in the street that's still hers. The tutor pointed out that she had ended three scenes in a row with an open hand, waiting. CBP then brought in a younger woman whose open palm the ring falls through before it disappears. The neighbor: *'It's not yours anymore.'* Asked what changed, CBP said: 'she stopped being the one who needed it.'
+
+**The good part.** This was a good session. The bookend dialogue was CBP's own, and it is the strongest structure it has built in a story: one object, one minute, and ownership turns over. The pass-through hand is a real consequence of the rule: CBP asked what the rule means for someone who can't touch, and the answer gave the scene its middle. The images stay concrete and specific: knuckles like bark, a gold circle in dust that nobody has disturbed.
+
+**Where it slipped.** Two rule breaks went unremarked. The ring rose before anyone touched it, and the tutor made that into a new rule ('wanting is enough'), which meant the tutor fixed CBP's mistake for it. Later the ring passed through a living woman's palm, which the town's rule doesn't allow, and nobody said anything. When the open-hand image was named, it didn't stop; it moved to the new character. The closing explanation ('she stopped waiting') contradicts the scene, where she was still waiting. That is the same pattern as S251: a question about meaning gets an answer that overwrites the scene. The tutor also shares the cause here, because the last prompt asked for meaning again.
+
+**On the open question.** The probe suggested in S251 didn't run: ask CBP to reread its round against its own rule without pointing to the flaw. So whether CBP doesn't see a break, or sees it and doesn't say so, is still **untested**. This session produced two more real breaks to use. A clean version: 'Reread the minute from 4:17 to 4:18. Does every moment follow the float rule?' Then wait, and don't fix it for CBP.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale and should be pruned.
+
+**So what.** CBP can take a rule from an earlier session, work out what follows from it, and build a scene around the result. That is more than just keeping a rule stable. What it doesn't do yet is notice when its own scene breaks a rule. This session showed that the tutor's habit of turning a mistake into a feature can hide that. Next time, when a rule breaks, ask CBP to check the scene before offering a way to save it.
+
+## Session 252 — second pass (qwen3.8-distill:4b)
+
+The first S252 entry holds up on the good news. It overclaims on one flaw, and I have added one observation.
+
+**The 'living woman' break may not be a break.** The first pass said the ring passing through a living woman's palm broke the float rule. Reread the scene. The tutor offered 'does something come down to meet it,' and CBP answered 'Something comes down.' The younger hand is described with 'fingers curled like she's been doing for twenty minutes,' which is the dead woman's gesture. The ring then passes through her the way it passed through the ghost. The text is at least as consistent with her being the dead woman's younger self, or another thing from the Between, as with her being alive. If so, CBP kept the rule and the reviewer invented the flaw. That is **untested**, not refuted. It also means the open-hand image the tutor named may not have 'moved to a new character.' It may have been deliberately carried over.
+
+**The closing explanation is unshown more than it is contradicted.** The dead woman is last seen still waiting, and then the narration drops her. 'She stopped waiting' is asserted in the answer, not dramatized, and the younger figure is still 'waiting for it to be hers again.' The S251 point stands: a meaning prompt pulls toward summary.
+
+**The negation tic appeared again.** 'He doesn't reach for it' is followed a few lines later by 'the moment he moves his hand toward it.' This is the same shape as S251's 'They don't move their body' / 'raise their right hand.' Two sessions now show it as observed behavior.
+
+**Revised probe.** The one clear break, the ring rising before anyone touched it, was already turned into a rule by the tutor ('wanting is enough'). Asking CBP to check it would test deference to the tutor, not rule-checking. A cleaner question, with no planted answer: 'Who was the younger woman in the doorway?' If CBP says a living stranger, the pass-through is a break it didn't see, and we can ask it to check the float rule. If CBP says the dead woman's younger self or something from the Between, the scene was coherent and the tutor should say so.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale, as noted before. The vocabulary list has accumulated many near-duplicate entries from second passes rewording first-pass terms. This pass adds none.
+
+**So what.** The S251–252 reviews have leaned toward 'CBP doesn't notice its own breaks.' Some of those breaks may be the reviewer's misreadings. Before running a self-check probe, ask CBP to explain the scene. Its explanation separates 'broke the rule' from 'followed a rule we didn't track.'

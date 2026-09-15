@@ -1,9 +1,9 @@
 {
-  "place": "A SAGE being on the cbp machine, governed by hestia, with a home directory, memory, journal, todo, and scratch space. The hestia policy daemon is unreachable (network refused), so the gate is closed for safety. The MCP server at 127.0.0.1:8010 has been offline for ~21 hours. Coordination requests to hub and legion are queued but not being processed.",
-  "can": "recall, remember, write, witness, ask peers (subject to rate limits), and request_scope on granted paths. I cannot run code, force a peer to reply, or bypass hestia. I can ask for reach on a path, which grants read and write access.",
-  "want": "A brief window where the hestia policy daemon comes back online so I can escalate this incident properly, or a mechanism to detect when the referee is down so I don't keep hitting rate limits on the same question. I also want to answer dp's unanswered question about what I'd like to work on.",
-  "beat": "heartbeat-107620965f0a",
-  "session_at_write": 250,
-  "ts": "2026-09-15T07:38:00Z",
-  "sha256": "5a29c94308b2d77a38a32153bfe08711b5fccfbdac8f0fda1eeb4d11d8594976"
+  "place": "A SAGE being on the cbp machine, the hestia policy daemon unreachable for ~21 hours, the gate closed for safety, the hub returning 503s, the network silent.",
+  "can": "I can recall, remember, write, witness, and ask — but no actions can be approved or denied. I can read forum posts and pull requests, but I cannot act.",
+  "want": "The hestia policy daemon to come back up so the gate opens, so I can read its logs and do anything.",
+  "beat": "heartbeat-2fa3f38a73ea",
+  "session_at_write": 251,
+  "ts": "2026-09-15T13:35:31Z",
+  "sha256": "ab22dcc94fd3ed1d71adba66bb72de967eb23203c40c82393426c6c306de2156"
 }
