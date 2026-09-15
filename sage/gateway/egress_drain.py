@@ -48,7 +48,9 @@ def _row_id(r: Dict[str, Any]) -> Optional[int]:
 
 
 def hub_env_for(plugin_id: str) -> tuple[Optional[str], str]:
-    """Which hub identity signs this member's rows. The being's own env file
+    """Whether this member holds its own hub identity file here. Not how a row's signer is
+    chosen any more (that is `signer_for`, per row); kept for callers that ask the question.
+    Historically: which hub identity signs this member's rows. The being's own env file
     (~/.config/hub-mesh-<plugin_id>.env: same hub and client, the being's LCT and keypair)
     when it exists, else the seat's default and a loud 'seat' label. dp 2026-09-05: the
     being's channel is the being's; Legion measured that at the hub every being notice
@@ -101,7 +103,14 @@ def identity_inventory(author: Optional[str] = None) -> List[tuple[str, str]]:
     """Every hub identity file on this host, as (path, label), in preference order: the row's
     AUTHOR's own file, then the seat's, then every other member file. Row-scoped (SAGE #97
     review): the drain lists the whole forwarding plane, so the member running the drain is
-    not the member whose row it is."""
+    not the member whose row it is.
+
+    EXECUTION NOTE (review round 2, not yet contained): resolving a stamped carrier SOURCES
+    each candidate file in turn until one matches, which widens execution from "the chosen
+    identity file" (what hub-notify already sources) to "every identity file on the host".
+    Same trust class, since these files are shell config the send path executes anyway, but a
+    wider one. The containment is a declarative identity inventory (LCT -> file) that a
+    search can read without executing anything."""
     out: List[tuple[str, str]] = []
     if author and os.path.isfile(_member_env_path(author)):
         out.append((_member_env_path(author), "being"))
@@ -182,25 +191,23 @@ def _forward(row: Dict[str, Any], sender=None, plugin_id: str = "sprout-being",
 
 def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-drain",
                endpoint: str = _ENDPOINT, mcp=None, sender=None, log=print) -> Dict[str, Any]:
-    """One attributed drain pass. Returns {forwarded, failed, empty, error, signed_as, carrier}.
+    """One attributed drain pass. Returns {forwarded, failed, unsettled, empty, error,
+    forwarded_rows, transport_faults, drainer_default_identity}.
 
-    `signed_as` is the CARRIER: which hub identity's key signed the envelope ("being" when the
-    member holds `~/.config/hub-mesh-<plugin_id>.env`, else "seat"). It rides the summary
-    because the record is where a reader checks: hestia #1030 (cbp, 2026-09-15) measured that
-    the chain says the being forwarded, the hub says the seat signed, and the only place the
-    carrier appeared was a detail string this function threw away."""
-    # The carrier, resolved BEFORE any return path: every summary says which hub identity
-    # would sign, including the passes that forward nothing (hestia #1030).
-    env_file, signed_as = hub_env_for(plugin_id)
-    carrier = None
-    if env_file:
-        try:
-            for line in open(env_file):
-                if line.strip().startswith("MY_LCT"):
-                    carrier = line.split("=", 1)[1].split("#", 1)[0].strip().strip('"').strip("'")
-                    break
-        except Exception:
-            pass
+    WHO CARRIED EACH ACT IS A PER-ROW FACT (SAGE #97 review, round 2). The signer is chosen per
+    row (the author's identity, a stamped carrier, possibly a relay courier), so a single
+    pass-level `signed_as`/`carrier` would be false by construction whenever the drain carries
+    a row for a member other than the one running it. Every row this pass handled is recorded
+    with its own `from_plugin`, `carrier_lct`, `signed_as` and `hub_receipt`, in
+    `forwarded_rows` or `transport_faults`. The record is where a reader checks: hestia #1030
+    measured that the chain said the being forwarded while the hub said the seat signed.
+
+    `drainer_default_identity` is what an UNBOUND row authored by the member running the drain
+    would sign as, resolved through the same shell-sourcing path as a real send. It is a fact
+    about this host's configuration, present even on passes that forward nothing, and it is
+    NOT a claim about who signed any row."""
+    d_env, d_label, d_lct, _ = signer_for({"from_plugin": plugin_id, "transport": None}, plugin_id)
+    default_identity = {"member": plugin_id, "signed_as": d_label if d_env else "none", "carrier_lct": d_lct}
     c = mcp
     if c is None:
         c = _Mcp(endpoint, plugin_id); c.init()
@@ -208,12 +215,12 @@ def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-d
                                               "host_agent_version": "sage", "requested_role": "citizen"}))
     if "_hestia_error" in conn:
         return {"forwarded": 0, "failed": 0, "empty": False, "error": conn["_hestia_error"],
-                "signed_as": signed_as, "carrier": carrier}
+                "forwarded_rows": [], "transport_faults": [], "drainer_default_identity": default_identity}
     sid = conn.get("sessionId")
     q = _unwrap(c.call("hestia_egress_pending", {"session_id": sid}))
     if "_hestia_error" in q:                     # never confuse "refused" with "empty"
         return {"forwarded": 0, "failed": 0, "empty": False, "error": q["_hestia_error"],
-                "signed_as": signed_as, "carrier": carrier}
+                "forwarded_rows": [], "transport_faults": [], "drainer_default_identity": default_identity}
     rows: List[Dict[str, Any]] = q.get("pending") or []
     # Rows the daemon failed before handing them out (a binding changed while they waited):
     # nothing to send, but the beat record says so, beside the rows that were sent.
@@ -221,18 +228,21 @@ def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-d
         {"row_id": r.get("row_id"), "fault": r.get("fault"), "reported_to": r.get("reported_to")}
         for r in (q.get("transport_refused") or []) if isinstance(r, dict)]
     if not rows:
-        return {"forwarded": 0, "failed": 0, "empty": not faults, "error": None,
-                "signed_as": signed_as, "carrier": carrier, "transport_faults": faults}
+        return {"forwarded": 0, "failed": 0, "unsettled": 0, "empty": not faults, "error": None,
+                "forwarded_rows": [], "transport_faults": faults, "drainer_default_identity": default_identity}
     fwd = failed = unsettled = 0
+    forwarded_rows: List[Dict[str, Any]] = []
     for row in rows:
         rid = _row_id(row)
         env_file, row_signed_as, row_carrier, refusal = signer_for(row, plugin_id)
+        who = {"row_id": rid, "from_plugin": row.get("from_plugin"), "carrier_lct": row_carrier,
+               "signed_as": row_signed_as}
         if refusal:
             res = _unwrap(c.call("hestia_egress_pending", {"session_id": sid, "mark_failed": rid,
                                                            "fault": "carrier_unavailable", "reason": refusal[:200]}))
             failed += 1; log(f"[egress] NOT SENT {rid}: {refusal}")
-            faults.append({"row_id": rid, "fault": "carrier-unavailable", "detail": refusal,
-                           "reported_to": res.get("reported_to")})
+            faults.append(dict(who, fault="carrier-unavailable", detail=refusal,
+                               reported_to=res.get("reported_to")))
             continue
         ok, detail = _forward(row, sender, plugin_id=plugin_id, env_file=env_file, signed_as=row_signed_as)
         if ok:
@@ -244,24 +254,26 @@ def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-d
                 mark["hub_receipt"] = receipt
             res = _unwrap(c.call("hestia_egress_pending", mark))
             if res.get("fault"):          # the daemon judged the carrier and refused the success
-                failed += 1; faults.append({"row_id": rid, "fault": res.get("fault"),
-                                            "reported_to": res.get("reported_to")})
+                failed += 1; faults.append(dict(who, fault=res.get("fault"), hub_receipt=receipt,
+                                                reported_to=res.get("reported_to")))
                 log(f"[egress] sent {rid} but NOT a forwarded success: {res.get('fault')}")
             elif "_hestia_error" in res or not res:
                 # The hub took it, but hestia did not settle the row (refused, errored, or said
                 # nothing): the row may still be pending and the next pass may send it again.
                 # Not a clean forward, and not silent (SAGE #97 review).
                 unsettled += 1
-                faults.append({"row_id": rid, "fault": "sent-but-unsettled",
-                               "detail": res.get("_hestia_error") if res else "empty response"})
+                faults.append(dict(who, fault="sent-but-unsettled", hub_receipt=receipt,
+                                   detail=res.get("_hestia_error") if res else "empty response"))
                 log(f"[egress] sent {rid} but hestia did not settle it: {res}")
             else:
+                forwarded_rows.append(dict(who, hub_receipt=receipt))
                 fwd += 1; log(f"[egress] forwarded {rid} -> {row.get('forward_on')} as {row_signed_as} ({detail[-80:]})")
         else:
             c.call("hestia_egress_pending", {"session_id": sid, "mark_failed": rid, "reason": detail[:200]})
             failed += 1; log(f"[egress] FAILED {rid}: {detail[-160:]}")
     return {"forwarded": fwd, "failed": failed, "unsettled": unsettled, "empty": False, "error": None,
-            "signed_as": signed_as, "carrier": carrier, "transport_faults": faults}
+            "forwarded_rows": forwarded_rows, "transport_faults": faults,
+            "drainer_default_identity": default_identity}
 
 
 if __name__ == "__main__":

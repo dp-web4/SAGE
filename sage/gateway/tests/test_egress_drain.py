@@ -83,12 +83,18 @@ def test_the_drain_summary_names_the_carrier_that_signed(monkeypatch=None):
                 if "mark_forwarded" in args:   # hestia answers a settled mark; {} now reads as unsettled
                     return {"result": {"structuredContent": {"marked": args["mark_forwarded"]}}}
                 return {"result": {"structuredContent": {}}}
-        out = ed.drain_once(plugin_id="sprout-being", mcp=Mcp(), sender=fake_sender, log=lambda *a: None)
-        assert out["forwarded"] == 1 and out["signed_as"] == "seat" and out["carrier"] is None
-        with open(os.path.join(home, ".config", "hub-mesh-sprout-being.env"), "w") as f:
-            f.write('MY_LCT="2e175714-being"\nMY_KEYPAIR=/k\n')
-        out = ed.drain_once(plugin_id="sprout-being", mcp=Mcp(), sender=fake_sender, log=lambda *a: None)
-        assert out["signed_as"] == "being" and out["carrier"] == "2e175714-being"
+        old_seat = os.environ.pop("HUB_MESH_ENV", None)
+        try:
+            out = ed.drain_once(plugin_id="sprout-being", mcp=Mcp(), sender=fake_sender, log=lambda *a: None)
+            # no identity file at all: nothing to name, and the default says so
+            assert out["forwarded"] == 1 and out["drainer_default_identity"]["signed_as"] == "none"
+            with open(os.path.join(home, ".config", "hub-mesh-sprout-being.env"), "w") as f:
+                f.write('MY_LCT="2e175714-being"\nMY_KEYPAIR=/k\n')
+            out = ed.drain_once(plugin_id="sprout-being", mcp=Mcp(), sender=fake_sender, log=lambda *a: None)
+            assert out["drainer_default_identity"] == {"member": "sprout-being", "signed_as": "being",
+                                                       "carrier_lct": "2e175714-being"}
+        finally:
+            if old_seat is not None: os.environ["HUB_MESH_ENV"] = old_seat
     finally:
         if old is not None: os.environ["HOME"] = old
 
@@ -280,6 +286,29 @@ def test_a_send_hestia_does_not_settle_is_not_a_clean_forward():
                        sender=lambda *a: (True, "ledger=5"), log=lambda *_: None)
     assert r["forwarded"] == 0 and r["unsettled"] == 1
     assert r["transport_faults"][0]["fault"] == "sent-but-unsettled"
+
+
+def test_the_summary_names_each_rows_carrier_not_the_drainers():
+    """SAGE #97 review round 2: A drains; B authored the row; C carries it. The returned
+    summary, the thing the beat record keeps, must say C for that row and must not present
+    A's identity as the carrier of anything."""
+    home = _home_with({SEAT_ENV: "seat-lct", "hub-mesh-a-being" + ENV: "a-lct",
+                       "hub-mesh-b-being" + ENV: "b-lct", "hub-mesh-courier" + ENV: "c-lct"})
+    relay = dict(ROW, id=11, from_plugin="b-being",
+                 transport={"mode": "relay", "carrier_lct": "c-lct", "delegation_ref": "d", "version": 3})
+    unbound = dict(ROW, id=12, from_plugin="b-being", transport=None)
+    orphan = dict(ROW, id=13, from_plugin="b-being", transport={"mode": "direct", "carrier_lct": "z-lct", "version": 3})
+    with _SwapHome(home):
+        r = drain_once(plugin_id="a-being", mcp=FakeMcp(pending=[relay, unbound, orphan]),
+                       sender=lambda *a: (True, "ledger=77"), log=lambda *_: None)
+    rows = {x["row_id"]: x for x in r["forwarded_rows"]}
+    assert rows[11] == {"row_id": 11, "from_plugin": "b-being", "carrier_lct": "c-lct",
+                        "signed_as": "member:courier", "hub_receipt": {"ledger": "77"}}, rows[11]
+    assert rows[12]["carrier_lct"] == "b-lct" and rows[12]["signed_as"] == "being"
+    fault = r["transport_faults"][0]
+    assert fault["row_id"] == 13 and fault["from_plugin"] == "b-being" and fault["carrier_lct"] is None
+    assert "signed_as" not in r and "carrier" not in r, "no pass-level carrier claim survives"
+    assert r["drainer_default_identity"] == {"member": "a-being", "signed_as": "being", "carrier_lct": "a-lct"}
 
 
 if __name__ == "__main__":
