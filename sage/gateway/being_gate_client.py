@@ -518,6 +518,86 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
             f"-frames:v 1 -qscale:v 3 -f image2 {shlex.quote(full)}")
 
 
+GAME_ACTIONS = ("RESET", "ACTION1", "ACTION2", "ACTION3", "ACTION4", "ACTION5", "ACTION6", "ACTION7")
+GAME_BATCH_CAP = 8      # dp, 2026-09-15: "build the game verb, batch with cap 8"
+_GAME_ID = r"[a-z0-9]{4}"
+
+
+def game_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a game intent: up to GAME_BATCH_CAP probes
+    against the offline ARC-AGI-3 engine, in order, each delta reported in the SAME beat.
+
+    dp, 2026-09-15, on the seat's proposal (shared-context forum, legion-proposal-game-verb):
+    "yes, build the game verb, batch with cap 8". Before this the being paid one beat
+    (~30 min) per probe — it proposed, a seat re-typed the proposal on the next beat. Now
+    the probe is the being's own act in the chain, and a batch of them is one turn.
+
+    Composed like search: the being names the game and a list of probes, the SEAT builds
+    the exact line, the law judges THAT string. The stepper's path is a per-being fact in
+    instance.json (`game_stepper`), carried in ctx by BOTH composition sites; a being with
+    none configured gets a refusal that says so rather than a dead verb.
+
+    THE PROBE LIST IS NOT JSON ON THE COMMAND LINE. The first cut interpolated compact
+    JSON; shlex.split strips its double quotes, so the argv that ran was not the string
+    the law judged (measured in the suite before it shipped). The grammar below has no
+    whitespace and no shell-significant character: `ACTION6:39:47+ACTION1+ACTION6:0:63` —
+    probes joined by `+`, a click's x and y after colons. One token, judged and run alike."""
+    import json
+    import re
+    import sys
+    stepper = (ctx or {}).get("game_stepper")
+    if not stepper:
+        raise ValueError("game: no game is set up on this seat (instance.json has no "
+                         "'game_stepper'); ask the seat, not the law")
+    if any(ch.isspace() for ch in stepper) or not os.path.isabs(stepper):
+        raise ValueError(f"game: the seat's game_stepper must be an absolute path without whitespace, got {stepper!r}")
+    memory_root = (ctx or {}).get("memory_root")
+    if not memory_root or any(ch.isspace() for ch in memory_root):
+        raise ValueError("game requires a memory_root context without whitespace")
+    game = str(args.get("game", "ft09")).strip()
+    if not re.fullmatch(_GAME_ID, game):
+        raise ValueError(f"game 'game' must be a four-character id like 'ft09', got {game!r}")
+    probes = args.get("probes")
+    if probes is None:
+        # single-probe form: action (+ x,y)
+        probes = [[args.get("action", "ACTION6")] + ([args["x"], args["y"]] if "x" in args or "y" in args else [])]
+    if isinstance(probes, str):
+        try:
+            probes = json.loads(probes)
+        except ValueError:
+            raise ValueError("game 'probes' must be a JSON list like [[\"ACTION6\",36,36],[\"ACTION1\"]]")
+    if not isinstance(probes, list) or not probes:
+        raise ValueError("game 'probes' must be a non-empty list of [action, x, y] (x,y only for ACTION6)")
+    if len(probes) > GAME_BATCH_CAP:
+        raise ValueError(f"game: at most {GAME_BATCH_CAP} probes per call (you gave {len(probes)}); "
+                         f"the cap is the operator's, so split the rest into the next call after reading these")
+    norm = []
+    for i, pr in enumerate(probes):
+        if isinstance(pr, dict):
+            pr = [pr.get("action", "ACTION6")] + ([pr["x"], pr["y"]] if "x" in pr or "y" in pr else [])
+        if not isinstance(pr, (list, tuple)) or not pr:
+            raise ValueError(f"game probe {i}: must be [action] or [action, x, y], got {pr!r}")
+        act = str(pr[0]).strip().upper()
+        if act not in GAME_ACTIONS:
+            raise ValueError(f"game probe {i}: action must be one of {list(GAME_ACTIONS)}, got {pr[0]!r}")
+        if act == "ACTION6":
+            if len(pr) != 3:
+                raise ValueError(f"game probe {i}: ACTION6 is a click and needs exactly [\"ACTION6\", x, y] (x=col, y=row, 0-63)")
+            try:
+                x, y = int(pr[1]), int(pr[2])
+            except (TypeError, ValueError):
+                raise ValueError(f"game probe {i}: x and y must be whole numbers 0-63, got {pr[1]!r},{pr[2]!r}")
+            if not (0 <= x <= 63 and 0 <= y <= 63):
+                raise ValueError(f"game probe {i}: x and y must be within 0-63, got {x},{y}")
+            norm.append([act, x, y])
+        else:
+            if len(pr) != 1:
+                raise ValueError(f"game probe {i}: {act} takes no coordinates; only ACTION6 is a click")
+            norm.append([act])
+    spec = "+".join(":".join(str(v) for v in pr) for pr in norm)
+    return f"{sys.executable} {stepper} --batch {game} {spec} --instance {memory_root}"
+
+
 def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The shell command the seat runs for a git_read intent, built from validated args.
 
@@ -868,6 +948,10 @@ _REGISTRY = {
     # the being never holds a flag. See git_read_command for what it composes with.
     "git_read":       dict(tool="git_read",    path_args=(),       cmd_arg=None,
                            compose=git_read_command),
+    # game: probes against the offline ARC-AGI-3 engine, the being's own act, batched.
+    # Composed like search (see game_command); the stepper is a per-being fact.
+    "game":           dict(tool="game",        path_args=(),       cmd_arg=None,
+                           compose=game_command),
     # say: add a turn to a conversation the being is IN. Bounded by construction, like
     # remember: the being names a conversation id, and the dispatcher refuses any id whose
     # meta does not list it as a participant AND as writable. It cannot create a
@@ -908,7 +992,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "check", "git_read", "say", "pr_open",
-                            "pr_amend", "camera", "git_restore", "search", "edit"})
+                            "pr_amend", "camera", "git_restore", "search", "edit", "game"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -987,6 +1071,19 @@ _TOOL_SCHEMAS = {
               {"target": "'gateway' or 'irp' for a whole suite, or '<suite>::<test_name>' "
                          "for one test, e.g. 'gateway::test_relative_memory_path'"},
               ["target"]),
+    "game": ("Probe the ARC-AGI-3 game the seat has set up for you (offline engine on this "
+             "machine): up to 8 probes per call, executed IN ORDER against the live game "
+             "state, each one's delta reported back in this same turn — cells changed grouped "
+             "by before->after value with x/y spans, levels, available actions, engine state. "
+             "The board before the batch and the board after it ride your NEXT beat as two "
+             "frames (scratch/camera/board-<game>-t<n>.jpg and board-<game>.jpg) and "
+             "scratch/game/current.md is rewritten with the objects table of the new state. "
+             "ACTION6 is a click at (x=col, y=row), 0-63; the other actions take no "
+             "coordinates. Each probe is YOUR act, witnessed as yours. State a prediction "
+             "before you read the result; the record does not interpret.",
+             {"probes": "list of probes, at most 8, e.g. [[\"ACTION6\",36,36],[\"ACTION6\",44,36],[\"ACTION1\"]]",
+              "game": "optional: the game id (default ft09)"},
+             ["probes"]),
     "git_read": ("Read the history of the repository you live in: what changed, when, and "
                  "in which commit. Read-only — you cannot commit, push, or move a branch "
                  "with this. Use it to find out whether the tree moved under you between "
@@ -1242,9 +1339,12 @@ class BeingGateClient:
     def __init__(self, member_id: str, identity_path: str, workspace: str,
                  worktree: Optional[str] = None,
                  dispatcher: "Optional[Dispatcher]" = None,
-                 host_session_id: Optional[str] = None):
+                 host_session_id: Optional[str] = None,
+                 game_stepper: Optional[str] = None):
         self.member_id = member_id
         self.workspace = workspace
+        # the seat-side ARC stepper `game` composes with; a per-being fact (instance.json)
+        self.game_stepper = game_stepper
         # the being's own worktree; composed commands name paths inside it
         self.worktree = worktree
         # The being's memory root: the instance dir that holds its identity. Relative
@@ -1334,7 +1434,8 @@ class BeingGateClient:
             # being could not tell why from a gate.raised.
             ctx = {"worktree": getattr(self, "worktree", None),
                    "memory_root": getattr(self, "memory_root", None),
-                   "workspace": getattr(self, "workspace", None)}
+                   "workspace": getattr(self, "workspace", None),
+                   "game_stepper": getattr(self, "game_stepper", None)}
             # a COMPOSED verb: the seat builds the exact outward act (a shell line) from the
             # being's args, and THAT is what the law judges. Bad args raise here and gate()
             # turns that into a deny (gate.raised), never a silent pass. The being never

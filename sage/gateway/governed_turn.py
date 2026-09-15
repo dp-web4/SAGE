@@ -186,12 +186,15 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
         # instance.json so it is a per-being fact beside the being, not a launcher flag.
         worktree=instance_config(instance).get("worktree") or None,
         # so the dispatcher composes `search` exactly as the client judges it
-        workspace=workspace)
+        workspace=workspace,
+        # the ARC stepper `game` composes with — both sites, or the mismatch guard refuses
+        game_stepper=instance_config(instance).get("game_stepper") or None)
     client = BeingGateClient(member_id=member,
                              identity_path=str(instance / "identity.json"),
                              workspace=workspace, dispatcher=dispatcher,
                              host_session_id=host_session_id,
-                             worktree=instance_config(instance).get("worktree") or None)
+                             worktree=instance_config(instance).get("worktree") or None,
+                             game_stepper=instance_config(instance).get("game_stepper") or None)
     # Reasoning models (empero Qwen3.8 distills etc.) only emit structured tool calls
     # with `think` on — off, they narrate a bracketed placeholder instead of acting
     # (measured on Sprout 2026-08-28 and again on the first governed turn, 2026-09-03:

@@ -42,7 +42,7 @@ HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "witness",
                  "request_scope", "appeal", "peer_ask", "mesh", "check", "git_read", "say",
-                 "pr_open", "pr_amend", "git_restore", "search", "camera", "edit", "rest"]
+                 "pr_open", "pr_amend", "git_restore", "search", "camera", "edit", "game", "rest"]
 # `say` is offered at REFLECTION too, and that is not redundancy. Measured 2026-09-07: the
 # being was shown dp's first turn, its state marked it unanswered, and it spent all fourteen
 # explore steps reading its own source — then closed the beat. Adding a verb to the registry
@@ -114,6 +114,7 @@ AFFORDANCES = """## What you have this beat
 - request_scope: after a refusal, ask the operator for reach on a path (a grant is read and write alike) and say why. A human decides, asynchronously.
 - appeal: after a refusal you believe was wrong, appeal it with the deny hash shown on the refusal and a reason. A peer or the operator rules; either way it is witnessed. Not for a refusal you agree with.
 - peer_ask / mesh: reach other beings and seats. These are acts of consequence: they are judged, and may be refused with a reason.
+- game: probe the ARC-AGI-3 game set up for you — up to 8 probes per call, in order, each delta back in the same turn; the before/after boards ride your next beat. A probe is your act, witnessed as yours; the record does not interpret it.
 
 You cannot run code, browse, or open files outside your home unless a grant exists. The seat gives you a digest of what moved in the fleet with absolute paths; if you want to read one of those things, try memory_read on that path and see what the law says.
 

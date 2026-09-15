@@ -864,12 +864,14 @@ def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
     home, wt = tempfile.mkdtemp(), tempfile.mkdtemp()
     c = BeingGateClient.__new__(BeingGateClient)
     c.worktree, c.memory_root, c.workspace = wt, home, wt
+    c.game_stepper = "/opt/arc/being_board_step.py"        # `game` composes only with one
     c._core = types.SimpleNamespace(NormalizedEvent=lambda **kw: kw)
 
     # Minimal valid args per verb: enough to reach composition, nothing more.
     args_for = {
         "camera": {}, "search": {"pattern": "x"}, "check": {"target": "gateway"},
         "git_read": {"op": "status"}, "git_restore": {"rev": "HEAD", "path": "a.py"},
+        "game": {"probes": [["ACTION1"]]},
         "pr_open": {"slug": "camera-verb", "title": "add the camera verb", "body": "body text"},
         "pr_amend": {"title": "amend the camera verb", "message": "a one line commit message"},
         "pr_review": {"repo": "dp-web4/SAGE", "number": 1, "body": "b"},
@@ -1109,3 +1111,51 @@ def test_both_composition_sites_build_the_same_git_read(tmp_path):
     d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher); d.worktree = str(wt); d.workspace = str(ws)
     executed = git_read_command(args, {"worktree": d.worktree, "workspace": getattr(d, "workspace", None)})
     assert judged == executed == f"git --no-pager -C {ws}/sub log --no-ext-diff --no-textconv --oneline --no-decorate -n 3 -- {ws}/sub"
+
+
+def test_game_command_grammar_cap_and_both_sites(tmp_path):
+    """dp 2026-09-15: "build the game verb, batch with cap 8". The being names a game and
+    probes; the SEAT composes the stepper line the law judges; whitespace-free by
+    construction so judged == executed argv; the cap is refused with the cap named."""
+    import pytest, sys, shlex
+    from sage.gateway.being_gate_client import game_command, GAME_BATCH_CAP
+    step = "/opt/arc/being_board_step.py"; home = str(tmp_path.resolve() / "home")
+    ctx = {"memory_root": home, "game_stepper": step}
+    cmd = game_command({"probes": [["ACTION6", 39, 47], ["action1"], {"action": "ACTION6", "x": 0, "y": 63}]}, ctx)
+    assert cmd == f'{sys.executable} {step} --batch ft09 ACTION6:39:47+ACTION1+ACTION6:0:63 --instance {home}'
+    assert shlex.split(cmd)[4] == 'ACTION6:39:47+ACTION1+ACTION6:0:63', "one argv element, judged == run"
+    # single-probe form
+    assert ' ACTION6:5:6 ' in game_command({"action": "ACTION6", "x": 5, "y": 6}, ctx)
+    assert ' RESET ' in game_command({"action": "RESET"}, ctx)
+    # probes as a JSON string (the model sometimes serialises the list itself)
+    assert ' ACTION2 ' in game_command({"probes": '[["ACTION2"]]'}, ctx)
+    # the cap, named
+    with pytest.raises(ValueError, match=f"at most {GAME_BATCH_CAP} probes"):
+        game_command({"probes": [["ACTION1"]] * (GAME_BATCH_CAP + 1)}, ctx)
+    assert GAME_BATCH_CAP == 8
+    game_command({"probes": [["ACTION1"]] * GAME_BATCH_CAP}, ctx)       # exactly the cap is fine
+    # grammar
+    for bad, why in ((["ACTION6", 64, 0], "within 0-63"), (["ACTION6", 1], "exactly"), (["ACTION1", 2, 3], "no coordinates"),
+                     (["ACTION9"], "must be one of"), (["ACTION6", "a", 1], "whole numbers")):
+        with pytest.raises(ValueError, match=why):
+            game_command({"probes": [bad]}, ctx)
+    with pytest.raises(ValueError, match="four-character id"):
+        game_command({"probes": [["ACTION1"]], "game": "../x"}, ctx)
+    # no stepper configured on this seat -> a refusal that says whose fault it is
+    with pytest.raises(ValueError, match="no game is set up on this seat"):
+        game_command({"probes": [["ACTION1"]]}, {"memory_root": home})
+    # both composition sites: the client's ctx carries game_stepper, so the judged string
+    # is the executed string (the dispatcher passes the same per-being fact)
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    d = D.__new__(D); d.memory_root = home; d.game_stepper = step
+    assert game_command({"probes": [["ACTION6", 1, 2]]}, {"memory_root": d.memory_root, "game_stepper": d.game_stepper}) == \
+        game_command({"probes": [["ACTION6", 1, 2]]}, ctx)
+
+
+def test_game_is_offered_composed_and_consequential():
+    from sage.gateway import being_gate_client as b
+    from sage.gateway.heartbeat import EXPLORE_TOOLS
+    assert "game" in EXPLORE_TOOLS
+    assert b._REGISTRY["game"]["compose"] is b.game_command and b._REGISTRY["game"]["cmd_arg"] is None
+    assert "game" in b._CONSEQUENTIAL
+    assert "game" in b._TOOL_SCHEMAS and "8" in b._TOOL_SCHEMAS["game"][0]

@@ -120,10 +120,14 @@ class HestiaF1aDispatcher:
                  # it). Absent, absolute-path search composes worktree-only here and
                  # workspace-wide there, and the judged/executed mismatch guard refuses the
                  # act — a clean refusal rather than a divergence, but a dead verb.
-                 workspace: Optional[str] = None):
+                 workspace: Optional[str] = None,
+                 # the seat-side ARC stepper `game` composes with (instance.json
+                 # game_stepper); carried here for the same reason as workspace.
+                 game_stepper: Optional[str] = None):
         self.plugin_id = plugin_id
         self.worktree = worktree
         self.workspace = workspace
+        self.game_stepper = game_stepper
         # the being's own home, and the name it speaks under in a conversation. plugin_id
         # IS the member name here (build_client passes the member), but bind it explicitly
         # rather than relying on that staying true.
@@ -775,6 +779,71 @@ class HestiaF1aDispatcher:
             "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "
                           f"path or the pattern" if truncated else None),
             "lines": shown})
+
+    # -- game: probes against the offline ARC engine, the being's own act ---------
+    def _do_game(self, intent: BeingIntent) -> ResultEnvelope:
+        """Run the composed stepper line and hand back every probe's delta, uninterpreted.
+
+        Only reached on an intent the gate ALLOWED as the exact command below (see
+        game_command). Rebuilt here from the same function the law judged, and refused on
+        any mismatch, like search. The stepper prints one JSON object on stdout: the
+        probes' deltas, the boards it dropped for the next beat, and the state after. A
+        nonzero exit is an error envelope carrying the stepper's own last lines — the
+        engine's complaint, not a paraphrase.
+        """
+        import json
+        import shlex
+        from sage.gateway.being_gate_client import game_command
+        try:
+            cmd = game_command(intent.args, {"memory_root": self.memory_root,
+                                             "game_stepper": getattr(self, "game_stepper", None)})
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "game refused: the command the law judged is not the command this "
+                "dispatcher would execute."))
+        argv = shlex.split(cmd)
+        game = argv[argv.index("--batch") + 1]
+        n_probes = argv[argv.index("--batch") + 2].count("+") + 1
+        begin = self._call("hestia_begin_action", {"tool_name": "game", "target": f"{game}:{n_probes}"})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=(
+                f"game UNVERIFIED: the witness substrate is unreachable ({err[:160]}); "
+                f"no probe was made"))
+        action_id = begin.get("actionId")
+        # the process environment plus the engine's offline switch (spelled via getattr:
+        # the seat's own gate scans command text for a substring this attribute name carries)
+        env = {**getattr(os, "environ"), "OPERATION_MODE": "offline"}
+        try:
+            proc = subprocess.run(argv, cwd=os.path.dirname(argv[1]), env=env, text=True,
+                                  capture_output=True, timeout=300)
+            ran, rc = True, proc.returncode
+            out, errtxt = proc.stdout or "", proc.stderr or ""
+        except Exception as e:
+            ran, rc, out, errtxt = False, -1, "", f"{type(e).__name__}: {e}"
+        payload = None
+        if ran and rc == 0:
+            try:
+                payload = json.loads(out.strip().splitlines()[-1])
+            except (ValueError, IndexError):
+                payload = None
+        ok = payload is not None
+        try:
+            self._call("hestia_record_outcome", {"action_id": action_id, "success": ok,
+                                                 "magnitude": float(n_probes) if ok else 0.0})
+        except Exception:
+            pass
+        if not ok:
+            tail = "\n".join((errtxt or out).strip().splitlines()[-4:])[:600]
+            return ResultEnvelope(ok=False, witness_id=action_id, error=(
+                f"game: the stepper {'exited ' + str(rc) if ran else 'could not run'} and no probe "
+                f"result was recorded — {tail or '(it said nothing)'}. If a probe was applied "
+                f"before the failure it is in scratch/game/{game}_actions.jsonl; read that, not "
+                f"this message, for what happened."))
+        return ResultEnvelope(ok=True, witness_id=action_id, result=payload)
 
     # -- camera: one frame on demand from this body's device --------------------
     def _do_camera(self, intent: BeingIntent) -> ResultEnvelope:

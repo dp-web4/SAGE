@@ -64,6 +64,7 @@
   "has_lora": false,
   "encryption_enabled": false,
   "worktree": "/home/dp/ai-workspace/being-worktrees/legion-being",
+  "game_stepper": "/home/dp/ai-workspace/dev-SAGE/arc-agi-3/experiments/being_board_step.py",
   "peer_aliases": {
     "sprout-being": "2e175714-4b01-4063-a997-27a6dade7044"
   }

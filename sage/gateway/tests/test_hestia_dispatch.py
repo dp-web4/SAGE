@@ -1269,3 +1269,50 @@ def test_git_read_reaches_a_granted_sibling_repo_through_the_dispatcher(tmp_path
     # the being's own worktree has no commits: a read that stayed home could not say this
     inside = d._do_git_read(BeingIntent("git_read", {"op": "log", "path": "sage", "n": 5}))
     assert "instance todo landed" not in str(inside.result)
+
+
+def _fake_stepper(tmp_path, body):
+    p = tmp_path / "stepper.py"; p.write_text(body); return str(p)
+
+
+def test_game_dispatch_runs_the_judged_line_and_returns_the_stepper_envelope(tmp_path):
+    """The dispatcher executes exactly the composed argv (stub stepper echoes it), hands the
+    stepper's LAST stdout line back as the result, witnesses the batch as `game` with the
+    probe count, and refuses a judged/executed mismatch."""
+    import json, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent, game_command
+    home = tmp_path.resolve() / "home"; home.mkdir()
+    step = _fake_stepper(tmp_path, "import sys, json, os\n"
+                                   "print('noise the dispatcher must skip')\n"
+                                   "print(json.dumps({'argv': sys.argv[1:], 'mode': os.getenv('OPERATION_MODE'), 'probes': [{'move': 1}]}))\n")
+    d = D.__new__(D); d.memory_root = str(home); d.game_stepper = step
+    calls = []
+    d._call = lambda name, args: (calls.append((name, args)) or {"actionId": "w9"})
+    d._verdict = types.SimpleNamespace(command=game_command({"probes": [["ACTION6", 3, 4], ["ACTION1"]]},
+                                                            {"memory_root": str(home), "game_stepper": step}))
+    r = d._do_game(BeingIntent("game", {"probes": [["ACTION6", 3, 4], ["ACTION1"]]}))
+    assert r.ok, r.error
+    assert r.result["argv"] == ["--batch", "ft09", "ACTION6:3:4+ACTION1", "--instance", str(home)]
+    assert r.result["mode"] == "offline"
+    assert r.witness_id == "w9"
+    assert calls[0] == ("hestia_begin_action", {"tool_name": "game", "target": "ft09:2"})
+    assert calls[1][0] == "hestia_record_outcome" and calls[1][1]["success"] is True and calls[1][1]["magnitude"] == 2.0
+
+    # judged != executed -> refused before anything runs
+    d._verdict = types.SimpleNamespace(command="something else")
+    r2 = d._do_game(BeingIntent("game", {"probes": [["ACTION1"]]}))
+    assert r2.ok is False and "not the command this dispatcher would execute" in r2.error
+
+    # the stepper fails -> its own last lines, and where the partial record lives
+    d._verdict = types.SimpleNamespace(command=None)
+    d.game_stepper = _fake_stepper(tmp_path, "import sys; print('engine: no such game', file=sys.stderr); sys.exit(3)\n")
+    r3 = d._do_game(BeingIntent("game", {"probes": [["ACTION1"]]}))
+    assert r3.ok is False and "exited 3" in r3.error and "engine: no such game" in r3.error
+    assert "ft09_actions.jsonl" in r3.error
+    assert calls[-1][1]["success"] is False
+
+    # no stepper on this seat -> the composer's refusal, no witness opened
+    n = len(calls); d.game_stepper = None
+    r4 = d._do_game(BeingIntent("game", {"probes": [["ACTION1"]]}))
+    assert r4.ok is False and "no game is set up on this seat" in r4.error and len(calls) == n
