@@ -1127,7 +1127,8 @@ class HestiaF1aDispatcher:
                                   note="git_read needs a worktree of your own; none is "
                                        "configured on this seat")
         try:
-            cmd = git_read_command(intent.args, {"worktree": self.worktree})
+            cmd = git_read_command(intent.args, {"worktree": self.worktree,
+                                                 "workspace": getattr(self, "workspace", None)})
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         op = str(intent.args.get("op", "")).strip()

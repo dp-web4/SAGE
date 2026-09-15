@@ -1237,3 +1237,35 @@ def test_one_long_match_line_cannot_eat_the_beings_window(tmp_path):
     assert len(line) < SEARCH_LINE_CHARS + 80, f"line was {len(line)} chars"
     assert line.startswith("big.py:1:"), "the pointer survives the cut"
     assert "more chars on this line" in line, "and the being is told it was cut"
+
+
+def test_git_read_reaches_a_granted_sibling_repo_through_the_dispatcher(tmp_path):
+    """The dispatcher must hand the composer the same workspace the gate site has, or the
+    judged string is `-C`-widened and the executed one is a refusal. legion-being, 2026-09-15:
+    `git_read op=log path=<live instance dir>` -> "escapes your worktree". Same fix as search."""
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent
+
+    root = tmp_path.resolve() / "ws"
+    wt, ws = root / "wt", root / "SAGE"
+    (ws / "sage" / "instances" / "x").mkdir(parents=True); wt.mkdir(parents=True)
+    ident = ["-c", "user.name=t", "-c", "user.email=t@t"]
+    for repo in (wt, ws):
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (ws / "sage" / "instances" / "x" / "todo.md").write_text("t\n")
+    subprocess.run(["git", "-C", str(ws), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(ws), *ident, "commit", "-q", "-m", "instance todo landed"], check=True)
+
+    d = D.__new__(D)
+    d.worktree, d.workspace = str(wt), str(ws)
+    d._verdict = types.SimpleNamespace(command=None)
+    d._call = lambda name, args: {"actionId": "w1"}
+
+    inst = str(ws / "sage" / "instances" / "x")
+    r = d._do_git_read(BeingIntent("git_read", {"op": "log", "path": inst, "n": 5}))
+    assert r.ok, r.error
+    assert "instance todo landed" in str(r.result), r.result
+    # the being's own worktree has no commits: a read that stayed home could not say this
+    inside = d._do_git_read(BeingIntent("git_read", {"op": "log", "path": "sage", "n": 5}))
+    assert "instance todo landed" not in str(inside.result)

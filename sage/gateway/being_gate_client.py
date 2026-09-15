@@ -549,11 +549,28 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
             raise ValueError("git_read 'path' and 'rev' may not contain whitespace: the command "
                              "the law judges must split into exactly the argv that runs")
         if path.startswith("-") or ".." in path.split("/"):
-            raise ValueError(f"git_read 'path' must be a plain path inside your worktree, got {path!r}")
-        full = os.path.realpath(os.path.join(worktree, path))
-        if not (full == os.path.realpath(worktree)
-                or full.startswith(os.path.realpath(worktree) + os.sep)):
-            raise ValueError(_escape_refusal("git_read", path, worktree))
+            raise ValueError(f"git_read 'path' must be a plain path inside your reach, got {path!r}")
+        root = os.path.realpath(worktree)
+        if os.path.isabs(path):
+            # THE SAME REACH AS `search` (3fcca0830), for the same reason. legion-being,
+            # 2026-09-15, holding a standing recursive read grant on the workspace, asked for
+            # the log of its own instance directory in the LIVE checkout — to classify a
+            # harness drift for itself, the verification the seat asks of it — and was refused
+            # for "escaping" a worktree it had not named. git history is a read; the bound
+            # that matters is the machine's shared tree (_search_reach), and the law judges
+            # the composed string like any other. Outside the worktree the command carries
+            # `-C <dir>` and git resolves the repository itself at run time, so the JUDGED
+            # string depends on nothing but the arguments — both composition sites agree.
+            full = os.path.realpath(path)
+            outside = not (full == root or full.startswith(root + os.sep))
+            reach = _search_reach(worktree, (ctx or {}).get("workspace"))
+            if outside and not _under(full, reach):
+                raise ValueError(_reach_refusal("git_read", path, reach))
+        else:
+            full = os.path.realpath(os.path.join(worktree, path))
+            outside = False
+            if not (full == root or full.startswith(root + os.sep)):
+                raise ValueError(_escape_refusal("git_read", path, worktree))
         # The pathspec goes into the command ABSOLUTE, not as the being typed it. hestia's
         # mrh.command matches command tokens against GRANTED PREFIXES, which are absolute;
         # a relative 'sage/gateway/x.py' matches nothing and the whole read is refused
@@ -578,6 +595,16 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     # cannot shadow a built-in subcommand at all, so the alias override was never doing
     # anything. Hardening that trips the law is hardening that does not ship.
     base = "git --no-pager"
+    if path and outside:
+        if op == "cat":
+            # cat composes `<rev>:<path-relative-to-repo-root>`; the repo root of an outside
+            # path is not knowable at compose time without a filesystem probe, which would make
+            # the judged string depend on WHERE it was composed. memory_read reaches the file.
+            raise ValueError("git_read op='cat' works only inside your worktree; for a file "
+                             "elsewhere use memory_read (content) or op='log'/'show' (history)")
+        if op == "status":
+            raise ValueError("git_read op='status' reports your own worktree and takes no path")
+        base += f" -C {full if os.path.isdir(full) else os.path.dirname(full)}"
     if op == "status":
         return f"{base} status --porcelain=v1 --branch"
     if op == "log":

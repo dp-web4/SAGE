@@ -1063,3 +1063,49 @@ def test_check_accepts_the_pytest_spelling_of_a_node_id(tmp_path):
         check_command({"target": "gateway::test_x[p]"}, ctx)
     except ValueError as e:
         assert "Try 'gateway::test_x'" in str(e), e
+
+
+def test_git_read_reaches_the_granted_tree_and_stops_at_the_machine(tmp_path):
+    """Same reach as `search` (3fcca0830), same reason. legion-being, holding a standing
+    recursive read grant on the workspace, asked for `git log` of its own instance directory
+    in the live checkout — to classify a harness drift for itself — and was refused for
+    escaping a worktree it had not named. A read of git history is a read."""
+    import pytest
+    from sage.gateway.being_gate_client import git_read_command
+    root = tmp_path.resolve() / "ws"; wt = root / "being-worktrees" / "b"; ws = root / "SAGE"
+    (ws / "sage" / "instances" / "x").mkdir(parents=True); wt.mkdir(parents=True)
+    (ws / "sage" / "instances" / "x" / "todo.md").write_text("t\n")
+    ctx = {"worktree": str(wt), "workspace": str(ws)}
+    inst = str(ws / "sage" / "instances" / "x")
+
+    cmd = git_read_command({"op": "log", "path": inst, "n": 5}, ctx)
+    assert cmd.startswith(f"git --no-pager -C {inst} log "), cmd
+    assert cmd.endswith(f"-- {inst}"), cmd
+    f = git_read_command({"op": "show", "path": inst + "/todo.md"}, ctx)
+    assert f.startswith(f"git --no-pager -C {inst} show "), "a FILE resolves -C to its directory"
+
+    # relative paths are unchanged: worktree-bound, no -C
+    assert git_read_command({"op": "log", "path": "sage"}, ctx).startswith("git --no-pager log ")
+    # the bound: outside the fleet root is a no, not a scope question
+    for bad in ("/etc", str(tmp_path / "elsewhere")):
+        with pytest.raises(ValueError, match="outside anything you can reach"):
+            git_read_command({"op": "log", "path": bad}, ctx)
+    # cat needs the repo-relative form; refused outside, with the alternative named
+    with pytest.raises(ValueError, match="memory_read"):
+        git_read_command({"op": "cat", "path": inst + "/todo.md"}, ctx)
+    # no workspace in ctx -> the old, closed behaviour (the dispatcher must pass it, or the
+    # judged and executed strings disagree and the mismatch guard refuses)
+    with pytest.raises(ValueError, match="outside anything you can reach"):
+        git_read_command({"op": "log", "path": inst}, {"worktree": str(wt)})
+
+
+def test_both_composition_sites_build_the_same_git_read(tmp_path):
+    from sage.gateway.being_gate_client import git_read_command
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+    root = tmp_path.resolve() / "ws"; wt, ws = root / "wt", root / "SAGE"
+    (ws / "sub").mkdir(parents=True); wt.mkdir(parents=True)
+    args = {"op": "log", "path": str(ws / "sub"), "n": 3}
+    judged = git_read_command(args, {"worktree": str(wt), "memory_root": str(wt), "workspace": str(ws)})
+    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher); d.worktree = str(wt); d.workspace = str(ws)
+    executed = git_read_command(args, {"worktree": d.worktree, "workspace": getattr(d, "workspace", None)})
+    assert judged == executed == f"git --no-pager -C {ws}/sub log --no-ext-diff --no-textconv --oneline --no-decorate -n 3 -- {ws}/sub"
