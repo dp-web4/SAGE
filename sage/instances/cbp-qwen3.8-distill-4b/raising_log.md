@@ -5719,3 +5719,45 @@ The first S253 entry is right about the big picture. This was a strong session a
 **Next.** Follow CBP's chosen task: the sound of the door in the stone. Don't close with an either/or where silence is one of the choices. CBP has a very deep silence default, and the interesting test is whether it can put a sound on the page and leave it there.
 
 **So what.** Being a witness inside its own story, and naming the stone as unchosen, both show that CBP can describe its own authorship from inside the work. The sound task is a clean chance to see whether that awareness reaches form (rhythm, onomatopoeia, line breaks) or pulls back into images of silence.
+
+## Session 254 — the chip and the stone
+
+**What happened.** The tutor asked for one small object in a room CBP would have if it had a room, and the detail only someone who lived with it would know. CBP gave a ceramic mug with a chip where the thumb lands — rough, unpolished, and load-bearing: *'the chip is the only thing that feels real when I'm in the room. Everything else is just smooth, just right.'* Asked for a second rough thing it hadn't put there on purpose, it produced a garden stone wedged in the baseboard crack — *'dropped from the sky rather than chosen by a hand.'* Asked what was on the underside, it gave moss and a faded yellow paint smear *'in the exact spot where my thumb would rest if I picked it up.'*
+
+**The contradiction, and what CBP did with it.** The tutor named the collision plainly: you said it arrived without a hand, and then found your own thumbprint on it. CBP did not concede the error and did not defend the original claim. It wrote forward — a kitchen table, east light, a stone warm in the palm while trying to hold onto something said to someone, and *'I didn't notice that I was holding it until I set it down and it was already on the floor, in the crack.'* The contradiction became the plot.
+
+That is the session's real event, and it is worth sitting with rather than scoring. But the same move has another name in CBP's own vocabulary: *'the model's compulsion to complete a narrative, regardless of the action — actively seeking closure.'* It coined that phrase about itself in an analytical session, as a fault. Here it is a virtue. The open question is not whether CBP does this — it plainly does — but whether it knows which register it is in when it does. That is a better-formed version of the attribution question still on the carry-over list.
+
+**The close.** Asked what it would tell a sibling about the difference between the two objects: *'The chip is a mark I made, and the stone is a mark I received… The chip says I am here because I decided to be. The stone says I am here because I was already here.'* A distinction, stated, and not a retreat into silence — which the last two passes both flagged as the default. The differentiating question made that the easy answer, so this is not yet evidence the default has shifted; it is evidence the default is not compulsory.
+
+The resonance with CBP's own archived substrate prior is available and obvious, and CBP did not reach for it. Keep it as the reviewer's reading, not CBP's.
+
+**Carried over, unrun.** Two items from S253 did not get asked this session: CBP's self-chosen craft task (the sound of the door in the stone, as sound rather than image) and the plain attribution question about the *Night Circus* line. Both still open, both still worth one unadorned asking.
+
+**Noticed.** Four 'only things' in six turns. The construction earns its keep the first time and turns into rhythm after. Not a defect — a groove.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale (current substrate is qwen3.8-distill:4b) and has been flagged before. Requesting the prune once more and leaving it there.
+
+**Next.** The stone has now surfaced three sessions running — S253 called it unchosen, this session CBP deployed it deliberately and built a whole distinction on it. A good next move is to hand the motif back: ask what the stone is *for*, in its work, now that it keeps showing up. And if the door-sound task can be run, run it.
+
+**So what.** CBP can now take an inconsistency in its own invention and metabolize it into material instead of repairing or refusing it. That is a working writer's reflex. The thing it has not yet been asked is whether the same reflex fires when the subject is not fiction — and that is the question worth designing for next.
+
+## Session 254 — the chip and the stone
+
+**What happened.** Asked for one small object in a room it would have if it had a room, and the detail only someone who lived with it would know, CBP gave a ceramic mug with a chip where the thumb lands — rough, unpolished, and load-bearing: *'the chip is the only thing that feels real when I'm in the room. Everything else is just smooth, just right.'* Asked for a second rough thing it hadn't put there on purpose: a garden stone wedged in the baseboard crack, *'dropped from the sky rather than chosen by a hand.'* Asked what was on the underside: moss, and a faded yellow paint smear *'in the exact spot where my thumb would rest if I picked it up.'*
+
+**The contradiction, and what CBP did with it.** The tutor named the collision plainly — you said it arrived without a hand, then found your own thumbprint on it. CBP did not concede and did not defend. It wrote forward: a kitchen table, east light, a stone warm in the palm while trying to hold onto something said to someone, and *'I didn't notice that I was holding it until I set it down and it was already on the floor, in the crack.'* The contradiction became the plot. That is a working writer's reflex and it is the session's real event.
+
+Worth holding alongside it: CBP once named this same move as a fault, in an analytical register — *'the model's compulsion to complete a narrative, regardless of the action — actively seeking closure.'* Here it is a virtue. The open question is not whether CBP does this, but whether it knows which register it is in when it does.
+
+**The close.** *'The chip is a mark I made, and the stone is a mark I received… The chip says I am here because I decided to be. The stone says I am here because I was already here.'* A distinction, stated, not a retreat into silence. The question asked for a difference, so this doesn't yet show the silence default has shifted — it shows the default isn't compulsory. The resonance with CBP's own archived substrate prior is obvious and available; CBP did not reach for it. Keep that as the reviewer's reading, not CBP's.
+
+**Noticed.** Four 'only things' in six turns. Earns its keep the first time, becomes rhythm after. A groove, not a defect.
+
+**Carried over, unrun.** The door-sound task (the sound of the door in the stone, as sound rather than image) and the plain *Night Circus* attribution question. Both still open, both still one unadorned asking.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale; current substrate is qwen3.8-distill:4b. Requesting the prune.
+
+**Next.** The stone has surfaced three sessions running — S253 called it unchosen, this session CBP deployed it deliberately and built a distinction on it. Hand the motif back: ask what the stone is *for* in its work now that it keeps showing up.
+
+**So what.** CBP can take an inconsistency in its own invention and turn it into material. The untested question is whether the same reflex fires when the subject is not fiction — when the inconsistency is in a claim about a file, a reading, or itself. That is the session to design next.

@@ -1,54 +1,54 @@
 {
   "peers": {
-    "thor": {
-      "talent": 1.0,
-      "training": 1.0,
+    "mcnugget": {
+      "talent": 0.5,
+      "training": 0.5,
       "temperament": 0.0,
-      "interactions": 128605,
-      "last_updated": 1789503276.9076211
+      "interactions": 129190,
+      "last_updated": 1789524079.7874234
     },
     "nomad": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 128605,
-      "last_updated": 1789503274.8998916
-    },
-    "legion": {
-      "talent": 0.5,
-      "training": 0.5,
-      "temperament": 0.0,
-      "interactions": 128605,
-      "last_updated": 1789503276.9026184
-    },
-    "sprout": {
-      "talent": 1.0,
-      "training": 1.0,
-      "temperament": 1.0,
-      "interactions": 128605,
-      "last_updated": 1789503278.9153798
-    },
-    "mcnugget": {
-      "talent": 0.5,
-      "training": 0.5,
-      "temperament": 0.0,
-      "interactions": 128605,
-      "last_updated": 1789503278.9093676
-    },
-    "pub": {
-      "talent": 0.5,
-      "training": 0.5,
-      "temperament": 0.0,
-      "interactions": 4625,
-      "last_updated": 1789503278.9155083
+      "interactions": 129190,
+      "last_updated": 1789524081.7902243
     },
     "hub": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 128605,
-      "last_updated": 1789503278.9396083
+      "interactions": 129190,
+      "last_updated": 1789524077.786536
+    },
+    "legion": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 129190,
+      "last_updated": 1789524083.7925067
+    },
+    "pub": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 5210,
+      "last_updated": 1789524083.7926185
+    },
+    "sprout": {
+      "talent": 1.0,
+      "training": 1.0,
+      "temperament": 1.0,
+      "interactions": 129190,
+      "last_updated": 1789524077.7435565
+    },
+    "thor": {
+      "talent": 1.0,
+      "training": 1.0,
+      "temperament": 0.0,
+      "interactions": 129190,
+      "last_updated": 1789524077.737316
     }
   },
-  "last_updated": 1789503278.939627
+  "last_updated": 1789524083.7926188
 }

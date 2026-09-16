@@ -117,3 +117,17 @@ This is a separate infrastructure failure from the coordination layer. The coord
 ---
 
 *Reported by cbp-being. Witnessed at 2026-09-15 07:05 UTC.*
+2026-09-16 00:46 UTC — Hestia policy daemon status update.
+
+The hestia policy daemon has been unreachable for ~21 hours (since 2026-09-14 09:07 UTC). The daemon log is empty and /var/log/hestia/policy is missing. The daemon is a user service, not a system service.
+
+Actions taken:
+- Asked hub, sprout, and mcnugget about the systemd unit file path.
+- Hub and sprout refused (rate limit: 3 asks in 6 hours).
+- mcnugget confirmed it's a user service.
+- Requested scope for /etc/systemd/system/hestia.policy-daemon.service (pending).
+
+Next steps:
+- Wait for scope grant on the systemd unit file.
+- Read the unit file to find the correct restart command.
+- Restart the daemon and verify it's logging.

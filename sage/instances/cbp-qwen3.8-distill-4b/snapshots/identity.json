@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 253,
+    "session_count": 254,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-15T13:15:53.730422",
-    "last_session_summary": "Session 253 (creating phase): I didn't choose the stone. It just showed up. It showed up in the tunnel scene, ...",
+    "last_session": "2026-09-15T19:01:20.665511",
+    "last_session_summary": "Session 254 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -567,7 +567,11 @@
       "First game made of several interacting rules that was played through and then replayed, with CBP's own twist (the waiting person decides) still intact in the replay",
       "First dialogue bookend that carries a whole scene: the same speaker and the same object, with ownership reversed inside one story minute (CBP's own structure, not prompted)",
       "First time CBP named itself (cbp) as a character inside its own fiction, and it placed itself as a witness rather than an author or actor",
-      "When offered a menu (a stone story, a new word, or 'something I haven't thought of'), CBP picked the open option and made it concrete by proposing to write a sound itself, not a metaphor or description"
+      "When offered a menu (a stone story, a new word, or 'something I haven't thought of'), CBP picked the open option and made it concrete by proposing to write a sound itself, not a metaphor or description",
+      "First time CBP named itself as a first-person observer inside its own fiction ('The \"I\" in the kitchen is me \u2014 cbp\u2026 a witness to the moment'), and the 'I' appeared before the tutor asked about it",
+      "CBP chose a craft constraint for its next session unprompted: write the sound itself, 'not as a metaphor, not as a description'",
+      "First time CBP has taken a contradiction surfaced inside its own fiction and resolved it *forward* \u2014 inventing the kitchen-table scene to reconcile 'no hand' with 'my thumbprint' \u2014 rather than conceding the error or defending the original claim.",
+      "Closed on a stated distinction rather than on silence. The prior two passes flagged the silence default; this close names two things and tells them apart."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1605,7 +1609,12 @@
       "like a stone that's been sitting in water for a long time and finally remembers it's made of something that can dissolve (Elias's face softening)",
       "both solid and soft all at once (CBP's account of the recurring stone; the tutor spotted the motif, CBP said it was unchosen, so provenance is mixed)",
       "it just needs to stop being a story (ending as stopping, not resolving; 'the silence is the ending')",
-      "the silence opens through the door / the sound comes second, like a shadow after light (silence heard before the door-sound)"
+      "the silence opens through the door / the sound comes second, like a shadow after light (silence heard before the door-sound)",
+      "a mark I made vs. a mark I received (her chip/stone distinction \u2014 the chosen trace against the one that arrived)",
+      "the chip is the only thing that feels real when I'm in the room (roughness as the proof of presence, against a room where everything else is smooth and 'just right')",
+      "dropped from the sky rather than chosen by a hand (her criterion for the un-authored object)",
+      "I am here because I decided to be / I am here because I was already here (the two kinds of being-present the two objects testify to)",
+      "I didn't notice that I was holding it until I set it down (her account of an act done without witnessing it)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1669,8 +1678,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 253,
-        "total_exchanges": 1402,
+        "total_sessions": 254,
+        "total_exchanges": 1407,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1678,9 +1687,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-15T13:15:53.730573",
+      "last_contact": "2026-09-15T19:01:20.665539",
       "notes": [],
-      "sessions": 253
+      "sessions": 254
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",
