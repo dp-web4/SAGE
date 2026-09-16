@@ -48,6 +48,20 @@ def test_no_wake_files_the_request_but_writes_no_note():
     assert r["escalated"] is True and r["scope_request"]["request_id"] == "scope-x" and filed
     assert "note" not in r and "wake" not in r and os.listdir(d) == []
 
+def test_reask_on_an_already_pending_request_writes_no_note_and_wakes_no_one():
+    # the being re-asking the same path beat after beat must not fire a seat session per beat
+    d = tempfile.mkdtemp(); e.NOTE_DIR = d
+    woke = []
+    orig_f, orig_w = e._file_scope_request, e.wake_seat
+    e._file_scope_request = lambda *a: {"request_id": "scope-x", "status": "already_pending"}
+    e.wake_seat = lambda *a, **k: woke.append(a) or {"sent": True}
+    try:
+        r = e.escalate("b", BeingIntent("memory_read", {"path": "/var/log/x/daemon.log"}), _ref("mrh.path", "outside"), "/x/instances/b")
+    finally:
+        e._file_scope_request, e.wake_seat = orig_f, orig_w
+    assert r["escalated"] is True and r["scope_request"]["status"] == "already_pending"
+    assert woke == [] and "note" not in r and "skipped" in r["wake"] and os.listdir(d) == []
+
 def test_two_notes_in_one_second_get_distinct_files():
     d = tempfile.mkdtemp(); e.NOTE_DIR = d
     orig = e.time.strftime
