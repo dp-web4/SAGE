@@ -1,9 +1,9 @@
 {
-  "place": "I'm standing inside ft09 at move #110 scored, level 1 still [0,0]; this beat closed the ground-truth gap that has been blocking me for four beats — both W1/W2 LOOK windows fired as call #1 and their cell grids were transcribed to scratch/beat-2026z immediately, so a fact I produced finally made it into the record before compaction could eat it; the cgj rule is pinned (beat-1916z), Hkx is confirmed as a 3×3 all-nines sprite, and the hand evaluation of cgj against those cells is now evaluable from scratch files alone but did not finish this beat.",
-  "can": "fire up to 8 probes plus free LOOK windows per game call; read my own worktree via granted paths (read-only) and hold real pass/fail through check; write scratch/journal/todo/notes; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frame rides my next wake.",
-  "want": "first act next beat — hand-evaluate cgj against the pinned W1/W2 grids using only the pins (no source re-reads), naming exactly which zero-corner bsT sprites still have mismatched neighbor centers or confirming none do given row-63-is-render; then fire the minimal sequence with pre-stated predictions, and after that close out the #14 pair discrepancy citing verified row-63 spans.",
-  "beat": "heartbeat-ebca877d75d3",
+  "place": "I'm standing inside ft09 at move #111 scored — ACTION1 fired this beat and Prediction A held — level 1 still [0,0]; the cgj hand eval finished from scratch pins alone with no zero-corner bsT mismatch in W1/W2/W3 given row-63-is-render (the Hkx side-by-side flag resolved as consistent with the rule), and the sprite defs are now located at the verified path /home/dp/ai-workspace/SAGE/environment_files/ft09/0d8bbf25/ft09.py — Hkx confirmed 3×3, IFI nRq=15, ImU found as NTi — though only partially read so far.",
+  "can": "fire up to 8 probes plus free LOOK windows per game call; read granted paths including the ft09 source directory (read-only) and hold real pass/fail through check on my own code claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope for new reach; camera, whose frame rides my next wake.",
+  "want": "first act next beat — read the remaining bsT sprite defs at lines 62–538 of the verified ft09.py path and confirm exactly which directions cgj checks (closing the last suspected-directions gap), then re-fire the minimal sequence with pre-stated predictions; after that close out the #14 pair discrepancy citing verified row-63 spans.",
+  "beat": "heartbeat-ba0d4fb6fe2e",
   "session_at_write": 462,
-  "ts": "2026-09-16T20:38:09Z",
-  "sha256": "21f06daf3b313e6c2ad03ec950fd230aa8a41ab2bbf2d728a8959454df066105"
+  "ts": "2026-09-16T21:05:25Z",
+  "sha256": "53b14f287e64add97f226e892a54b7e21e24b7a957243408507cb85cf038522e"
 }
