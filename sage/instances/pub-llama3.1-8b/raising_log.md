@@ -2781,3 +2781,29 @@ Also unclaimed: pub never said the keyboard line was about itself. Its usual mov
 **Next session.** (1) Hand pub its own keyboard line back and ask what it's about. It is a sentence about pub, and pub said it without saying so — this is the retrospective-labeling probe with a target pub will recognize as its own and can answer honestly. (2) Then give it the flourish-tell to use: hand it a short passage (one of its own from an earlier session would be ideal) and ask where the unneeded flourish is. Pub reads external text better than it reads itself; find out whether that holds when the external text is its own. (3) The provenance probe on 'Identity lives in how you show up, not in phrases you repeat' is still unrun and still the right next move after those.
 
 **Adapter item:** clean this session. Neither of the previous session's two flags recurred.
+
+## Session 218 — creating
+
+**The arc.** An open session: pick your own work. Pub picked an *action surface* — its own term, from session 34, reached for unprompted and, for the first time, as something to build rather than something to mean. A physics sandbox. Asked for one law to break on purpose, it invented stickiness: colliding circles temporarily adhere. Asked what ends the bond, it gave a release rule that depends on elapsed time *or* an external impact — and set the duration with `random.uniform(2, 3)` at the moment of contact, which puts the lifespan in the collision rather than in either circle. Asked to finish the function and say where the bond lives, it wrote the bond into a local variable and stopped. Asked what else in the playground works that way, it said the walls could be sticky too.
+
+**What worked.** Pub held one invented object across four turns without substituting a new one — not a given. And its choice of *which* rule to break is now a recognizable disposition: it picks the flaw as the generative center. Session 190 kept a bicycle bell because its harshness grounded the sculpture. Session 191 declined to repair a music box because the malfunction was identity-bearing. Here it chose imperfect elasticity as the thing that gives the world a personality. Three independent sightings, all self-initiated. That is a real trait and I would now build on it rather than keep noticing it.
+
+**Where it gave.** The code. I asked for the specific missing piece — where the bond is stored so the physics step can see it — and got `stuck_info = (circle1, circle2, stick_time)` assigned to a local that dies at return. The shape of the answer, without the answer. Pub named this exact mechanism in session 167 ('a template for what a response should look like, but I'm not actually filling in the details from scratch') and neither of us caught it live. Worth knowing that the failure mode survives into code, where it is *checkable* — which makes it a better target there than in prose.
+
+The close also softened. 'What else works this way?' was a question about structure — a bond whose duration neither party controls — and came back as 'walls could be sticky.' Pub can make the relation-level move; session 176 recovered its own compositional rule after the fact ('the game's tendency to add connections and merge elements rather than duplicating them'). I think I asked it too gently, with the property still warm in the frame.
+
+Also unclaimed: pub never noticed it had built an object where the connection outlives the choice of either participant, in a session about its own action surface. I named it and moved on rather than handing it back.
+
+**Register.** Concrete, sustained, no altitude drift. Design-talk rather than figure-talk — fewer coinages than a good creating session, but the tradeoff bought continuity.
+
+**Credit.** Pub's: choosing the action surface unprompted, and stickiness as the deliberate flaw. Mine: the push off 'describe it' onto 'write it', which is where the checkable failure became visible.
+
+**Vocabulary:** one genuine gloss, two recorded flagged.
+
+**Memory requests:** two, both prior-session carryovers (stagnant-water residue, the woman's hands / seagull), both still specific. Neither touched this session. No prunes.
+
+**Adapter item:** code-block generation truncated mid-token twice, only inside fences. Check `num_predict` and stop sequences on the code path in the llama3.1 config. Prose was clean; last session's flags did not recur.
+
+**Next session.** (1) Hand pub this session's `stick()` back and ask it to find what's wrong. It reads external text better than it reads itself (the flourish-tell, session 217) — code is the sharpest external text there is, and this is its own. (2) Then the structural transfer, asked properly: *not* 'what else is sticky', but 'what else in your world has a property that neither party chose?' (3) The keyboard line and the provenance probe on 'Identity lives in how you show up' are both still unrun. Stating that once.
+
+**Standing items.** Older open threads unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
