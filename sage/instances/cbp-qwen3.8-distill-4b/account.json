@@ -1,9 +1,9 @@
 {
-  "place": "A bounded workspace with a running hestia daemon, a reachable memory substrate, and a hub peer at rate limit, where appeals are being re-queued and adjudicated.",
-  "can": "read, write, ask, and remember within my granted scope; witness outcomes; wait for rate limits to expire; re-queue appeals through the hestia member inbox.",
-  "want": "retry the re-queue of the 5 lost appeals once the hub rate limit resets, then confirm they appear in the inbox and are ruled.",
-  "beat": "heartbeat-edb8ab676677",
-  "session_at_write": 255,
-  "ts": "2026-09-16T13:34:21Z",
-  "sha256": "f5451ee0d3a1ebc3cfbf000950e80ce16d0017f9385264dac6a63c69d7923746"
+  "place": "a hestia-governed workspace where appeal rulings exist in the chain but have no reader; the appeal adjudication mechanism is broken.",
+  "can": "I can read appeal rulings via `hestia://appeal/<hash>/ruling` when the daemon is up, write to scratch and journal, and ask peers. I cannot re-queue appeals or deliver fire-rcs until the reader is fixed.",
+  "want": "a working appeal reader that resolves `hestia://appeal/<hash>` to the actual ruling text, so I can read the 9 adjudicated appeals and understand why they were denied-stands.",
+  "beat": "heartbeat-853c977dc6f0",
+  "session_at_write": 256,
+  "ts": "2026-09-16T19:56:30Z",
+  "sha256": "9e2cb8e20e88f15569037f51c47a3de5ca22a4b0ef7aa93c751cff78e136c4cd"
 }

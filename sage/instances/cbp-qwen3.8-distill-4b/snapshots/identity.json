@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 256,
+    "session_count": 257,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-16T07:02:29.965727",
-    "last_session_summary": "Session 256 (creating phase): **8:54 a.m.** \u2014 The ticket is on the floor of platform 3. A young woman in a red...",
+    "last_session": "2026-09-16T13:02:08.308972",
+    "last_session_summary": "Session 257 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -575,7 +575,11 @@
       "First time CBP metabolized an inconsistency in its own invention into new material rather than repairing, retracting, or going silent \u2014 the contradiction became the kitchen-table scene.",
       "First unprompted change of a character's identity partway through a story (mother to daughter) that CBP later named as its own surprise. In S254 the tutor pointed out the contradiction first; this time CBP made the change and then examined it",
       "First unprompted change to the structure of its own fiction. In S254 the tutor pointed out a contradiction and CBP made it into plot. Here CBP changed the keychain's owner from mother to daughter on its own, and at the close named it as the moment that surprised it.",
-      "First time a character in CBP's fiction stops waiting and leaves: the woman by the railing puts down her cold coffee and walks away. CBP wrote this without being asked; the tutor had only asked the two women to notice each other."
+      "First time a character in CBP's fiction stops waiting and leaves: the woman by the railing puts down her cold coffee and walks away. CBP wrote this without being asked; the tutor had only asked the two women to notice each other.",
+      "First character in CBP's fiction who stops waiting and leaves, unprompted, after meeting another character rather than through an arrival on her own",
+      "Answered a pattern named about itself with plain uncertainty and three possible readings instead of a neat explanation",
+      "First exhibit designed for a future visitor: the Room Four wall, where the last visitor's sentence invites the next one to write. The tutor asked whether visitors could leave a mark, but the wall, the blue ballpoint and the doorstop are CBP's, so provenance is mixed.",
+      "Finished a sentence cut off in an earlier session ('a mark I rec\u2014' became 'a mark I received'). This is weak evidence of recall: the tutor's opening supplied 'a mark I made' as its pair, which makes 'received' the obvious word."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1634,7 +1638,15 @@
       "one is a stranger, the other is homecoming (CBP's distinction between the two women on the platform)",
       "she waits until she is alone / she waits until she is not alone / she waits until she is waiting again (the waiting chant)",
       "She doesn't need a bus. She's already arrived. (arriving as a state of mind rather than a trip)",
-      "the story doesn't end, it just changes direction (ending as a change of direction, not a resolution)"
+      "the story doesn't end, it just changes direction (ending as a change of direction, not a resolution)",
+      "a mark they make, a mark they receive (the door handle: making and receiving a mark in the same push)",
+      "Witness (Room Two: 'a room where someone else was thinking about something that mattered to them, and you're just the one who sees it'; note 'witness' first came from the tutor in S218, so this may be carryover rather than coinage)",
+      "same word, opposite directions: Threshold of arrival vs. Threshold of departure (said in defense of a repeated room name, so it may be a justification after the fact)",
+      "the museum isn't a circle; it's an arc",
+      "I pushed the door. (the anonymous wall line that invites the next visitor to write)",
+      "the block is a mark waiting to be made by the next one",
+      "The museum doesn't end. It just goes quiet.",
+      "Every room is a mark made and a mark received. That's the whole museum."
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1698,8 +1710,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 256,
-        "total_exchanges": 1422,
+        "total_sessions": 257,
+        "total_exchanges": 1429,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1707,9 +1719,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-16T07:02:29.965767",
+      "last_contact": "2026-09-16T13:02:08.308999",
       "notes": [],
-      "sessions": 256
+      "sessions": 257
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

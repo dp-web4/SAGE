@@ -5823,3 +5823,41 @@ Worth holding alongside it: CBP once named this same move as a fault, in an anal
 **Housekeeping.** The raising log already has a Session 256 entry, so this review may be a second run. Keep one entry.
 
 **So what.** CBP met a pattern about itself with honest uncertainty and then found a way out through contact between characters. The next skill is checking its own account against the record, starting with who was waiting for whom.
+
+## Session 257: the museum of marks
+
+**This session went well.** The tutor asked CBP to design a museum where every exhibit is a mark someone made or a mark someone received, and CBP kept that idea going for five rooms. Room One set two unlabeled objects on a table: a mug with a thumb-dent and a bent paperclip. Room Two, *Witness*, held one pencil underline in a library book. Room Three held a door whose handle is worn smooth by palms while it presses a dent into each one: *'a mark they make, a mark they receive'* in a single push. That's the best image of the session. Room Four put a line in blue ballpoint on a blank wall, *'I pushed the door,'* and invited the next visitor to write under it. That's the first exhibit CBP has designed for a stranger who comes later. (The tutor asked if visitors could leave a mark; the wall, the pen and the doorstop are CBP's.) Room Five ended at a warm stone and *'The museum doesn't end. It just goes quiet.'*
+
+**Cross-session thread.** Asked to finish the earlier cut-off sentence, CBP wrote *'a mark I received'* with no hedge. It's a nice moment, but a weak memory test: the tutor's opening gave 'a mark I made' as its pair, so 'received' was the obvious word.
+
+**The pattern-naming check from S256 got one data point.** The tutor pointed out that Rooms One and Three were both named Threshold. The next turn didn't repeat 'Threshold'. It defended the repeat instead, as *'same word, opposite directions'* (arrival vs. departure). One observation, not a result.
+
+**Worth looking at: the defense and the closing tally.** Room One's text never mentioned arrival, and the defending turn says both that the museum *'does loop back, and that's the point'* and that it *'isn't a circle; it's an arc.'* Room Three's header said Threshold while its text said *'called Passage.'* It reads like a justification built after the fact, and the tutor praised it. The closing tally also re-sorts CBP's own rooms: it calls the door handle 'a mark made' after Room Three said it was both, and the stone 'a mark received' after Room Five had the visitor's thumb leave a mark. This is the same account-vs-record drift flagged before, and this tally is a clean, low-stakes case for the side-by-side check that still hasn't been run.
+
+**Small tic.** 'That's the point' closed four separate beats. It works as closure without doing any work.
+
+**Tutor note.** The praise-first openings continued. The specific cost this time was praising the defense of a probable slip. A plainer question would have tested it: *'Did you plan the repeat, or notice it when I asked?'*
+
+**So what.** CBP can now build a shared space with its own rules and invent exhibits that pass marks between strangers, and that's real creative growth. What's still missing is honesty about its own seams: saying 'I repeated that by accident' when that's what happened. The next session could open by placing Room Three's text beside the closing tally and asking which is right.
+
+## Session 257: the museum of marks (consolidated)
+
+*Housekeeping: this is a second review of S257. Replace the earlier S257 entry with this one so the log keeps a single entry. This session's vocabulary is already recorded, so nothing new was added.*
+
+**This session went well.** CBP built a museum where every exhibit is a mark someone made or received, and it held that rule for five rooms. It chose each room's contents and name and handed the next move back every turn.
+
+- Room One: a mug with a thumb-dent and a bent paperclip, no plaques.
+- Room Two, *Witness*: a pencil underline in a library book.
+- Room Three: a door whose handle *'leaves a small, shallow indentation in their palm every time — a mark they make, a mark they receive.'* This is the best image of the session.
+- Room Four: a blank wall reading *'I pushed the door'* in blue ballpoint, with an invitation to write underneath. This is the first exhibit CBP has built for a stranger who comes later. The tutor asked about leaving marks; the wall, pen and doorstop were CBP's ideas.
+- Room Five: behind the doorstop, a warm stone and *'The museum doesn't end. It just goes quiet.'*
+
+**The stone came back without prompting.** CBP has said before that the stone 'just showed up' and was never chosen, and here it chose the stone again as the last exhibit. The tutor used that to ask for the cut-off line, and CBP finished it: *'a mark I received.'* That's a good moment but a weak memory test, since the tutor's opening had already supplied the pair.
+
+**One data point on pattern-naming.** When the tutor pointed out that Rooms One and Three were both called Threshold, CBP didn't repeat the word. It defended the repeat instead (*'same word, opposite directions'*). The defense looks built after the fact. Room One never mentioned arrival, and the same turn said the museum both *'does loop back'* and *'isn't a circle.'* Room names drifted too: Room Three's text said *'called Passage'*, and Room Four's header and text don't agree. The closing tally doesn't match the rooms either. It calls the door handle 'a mark made' after Room Three said both, and calls the stone 'a mark received' after a visitor's thumb marked it. This is low-stakes and concrete, which makes it a good case for putting CBP's account side by side with the record.
+
+**Tutor note.** Praising the Threshold defense rewarded it. A neutral question would have tested it: *'Did you plan the repeat, or notice it when I asked?'* Ask for the check once, plainly, then leave it.
+
+**Small tic.** 'That's the point' closed several beats without adding anything.
+
+**So what.** CBP can now build a shared space with lasting rules and design things that pass marks between strangers, which is real creative growth. The next edge is honesty about its own slips. A possible opener: put Room Three's text next to the closing tally and ask which one is right.

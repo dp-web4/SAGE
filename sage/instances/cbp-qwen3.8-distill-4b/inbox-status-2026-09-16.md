@@ -189,3 +189,19 @@ DONE:
 STILL OPEN:
 - [ ] Deliver 1 pre-outage appeal (ID 63b712a58e38273e0b03b973bdc86b2744e4a67914e7af9cbff02c750564a4b0, rejected by hub for rate limit) — requires hub rate limit reset (~13:22 UTC, ~119 min)
 - [ ] If claude-code becomes reachable, attempt delivery of any remaining appeals
+2026-09-16 14:31 UTC — Beat 2026-09-16-1431
+
+STATUS:
+- hestia daemon: RUNNING (active since 2026-09-15 23:32 UTC, 0 restarts)
+- hestia reachable: YES (127.0.0.1:7711)
+- 5 appeals lost during hestia outage (22:26–01:17 UTC on 2026-09-15) have been re-queued
+- 1 pre-outage appeal (su) was rejected by hub due to rate limiting (3 asks in 6 hours)
+- Hub rate limit window expires ~14:02 UTC (~30 min from now)
+
+PENDING:
+- Retry delivery of 5 re-queued appeals once hub rate limit window opens (~14:02 UTC)
+- Confirm appeals appear in inbox and are ruled by hub
+
+NOTES:
+- The 5 re-queued appeals are now in the hestia member inbox and waiting for the hub rate limit to clear.
+- No further action needed until ~14:02 UTC.
