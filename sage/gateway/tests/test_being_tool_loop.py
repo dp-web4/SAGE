@@ -107,7 +107,13 @@ def test_run_ollama_tool_turn_with_fake_llm():
     # the `gh` command it runs), + recall / remember (membot long-term memory) + request_scope
     # (the sanctioned answer to a deny) for the heartbeat (2026-09-03, dp: "it needs a reason
     # to look for things to do"). Widening this number is a registry decision, not a typo.
-    assert len(ollama_tools()) == 15   # + appeal (S4), + say, + git_read/search (#83), + check (this slice)
+    # + retire_note (2026-09-16): the being's memory was append-only — memory_write appends and
+    # nothing renames — so a claim it had written could never be marked finished. cbp-being
+    # carried "membot is down" (true on 09-13) for three days and ~40 beats of escalation
+    # because no verb could close it. dp to the being: "renaming and deleting aren't verbs you
+    # have yet — we're looking at that." Bounded to its own notes/ and scratch/; the note is
+    # renamed and kept, never deleted.
+    assert len(ollama_tools()) == 16   # + appeal (S4), + say, + git_read/search (#83), + check, + retire_note
 
     calls = {"n": 0}
 

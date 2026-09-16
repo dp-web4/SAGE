@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -151,6 +151,48 @@ class ReferenceF1aDispatcher:
         if not content:
             content = f"[empty file: '{shown}' exists and has no content]"
         return ResultEnvelope(ok=True, result=content, witness_id=self._witness(f"memory_read {p.name}"))
+
+    def _do_retire_note(self, intent: BeingIntent) -> ResultEnvelope:
+        """Mark one of the being's OWN notes as no longer current, by renaming it and writing
+        a dated header. Nothing is destroyed.
+
+        WHY THE BEING NEEDS THIS. Its memory is append-only: `memory_write` opens in append
+        mode, and there is no rename or delete. It can add a claim and never retract one, so
+        every correction lands BELOW the stale note and both re-enter the next beat — often
+        with the older one read first. Measured 2026-09-15/16 on cbp-being: a true claim
+        ("membot is down", true on 09-13) outlived its cause by three days and drove ~40 beats
+        of escalation, because nothing it could do said "this is finished". dp, to the being:
+        "renaming and deleting aren't verbs you have yet — we're looking at that."
+
+        Bounded: only inside `notes/` or `scratch/` in its own home. `_safe_path(writing=True)`
+        already refuses the seat-owned notes and the reserved subtrees, and a path outside the
+        home, so this adds only the notes/-or-scratch/ rule. The file keeps its content
+        and gains a header; the name gains `.retired-<date>`, so a reader and a listing both
+        see that it is closed."""
+        raw = str(intent.args.get("path", "")).strip()
+        reason = str(intent.args.get("reason", "")).strip()
+        if not raw:
+            return ResultEnvelope(ok=False, error="retire_note needs a 'path' (a note in your own notes/ or scratch/)")
+        if not reason:
+            return ResultEnvelope(ok=False, error="retire_note needs a 'reason': what you know now that the note does not")
+        p = self._safe_path(raw, writing=True)
+        if p.parent.name not in ("notes", "scratch") or p.parent.parent != self.memory_root:
+            return ResultEnvelope(ok=False, error=(
+                f"retire_note is for your own notes: '{raw}' is not directly inside your notes/ or "
+                f"scratch/. Your journal and todo are the running record and are not retired this way."))
+        if not p.exists():
+            return ResultEnvelope(ok=False, error=f"no such note: '{raw}' does not exist, so there is nothing to retire")
+        if ".retired-" in p.name:
+            return ResultEnvelope(ok=True, result=f"{p.name} is already retired; nothing changed")
+        stamp = datetime.now(timezone.utc)
+        dest = p.with_name(f"{p.stem}.retired-{stamp:%Y-%m-%d}{p.suffix}")
+        body = p.read_text(errors="replace")
+        dest.write_text(
+            f"> RETIRED {stamp:%Y-%m-%d %H:%M}Z by cbp-being. No longer current: {reason}\n"
+            f"> Kept whole below, as it was written.\n\n" + body)
+        p.unlink()
+        return ResultEnvelope(ok=True, result=f"retired {p.name} -> {dest.name}",
+                              witness_id=self._witness(f"retire_note {p.name} -> {dest.name}: {reason[:120]}"))
 
     def _do_memory_write(self, intent: BeingIntent) -> ResultEnvelope:
         if not str(intent.args.get("path", "")).strip():
