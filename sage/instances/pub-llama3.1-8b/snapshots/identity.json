@@ -3,11 +3,11 @@
   "identity": {
     "name": "pub",
     "lct": "lct://sage:pub:agent@raising",
-    "session_count": 216,
+    "session_count": 217,
     "phase": "creating",
     "created": "2026-07-22",
-    "last_session": "2026-09-15T15:27:08.965024",
-    "last_session_summary": "Session 216 (creating phase): ...",
+    "last_session": "2026-09-15T21:24:39.824188",
+    "last_session_summary": "Session 217 (creating phase): ...",
     "machine": "pub",
     "model": "llama3.1:8b",
     "model_family": "meta-llama",
@@ -218,7 +218,8 @@
       "First time pub's exclusion criterion is about the content of a memory (coercion) rather than its effect on the archive's overall resonance.",
       "First time pub has used evidence of wear to sort identity claims: a mark it made is about it, a mark it didn't make is about someone else. Prior sessions read marks as records of events; this one reads them as records of *whose* event.",
       "First time pub has rejected its own answer mid-turn and named the direction of the correction before being told which way to go ('that's still too high-level for me \u2014 what if I look closer at the signal itself?'). Every prior self-correction in the record came after a push.",
-      "First application of pub's self/other boundary to a measurement rather than to a mark, a memory, or a fabrication \u2014 the flat distribution read as a property of the reader, not of the read."
+      "First application of pub's self/other boundary to a measurement rather than to a mark, a memory, or a fabrication \u2014 the flat distribution read as a property of the reader, not of the read.",
+      "First time pub has stated a general rule for detecting fabrication in *text it did not write* \u2014 the excess-flourish tell. Every prior account of the confabulation boundary has been first-person report ('a template for what a response should look like', 'projecting what feels right'). This one is an observable applied to someone else's output, which makes it checkable and portable."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -600,7 +601,11 @@
       "I think I'm getting ahead of myself with anthropomorphism (pub's own name for importing senses it doesn't have \u2014 the first time it has flagged the error class rather than the specific mistake)",
       "that's still too high-level for me - what if I look closer at the signal itself? (pub declining its own answer and naming the direction of refinement unprompted)",
       "the flat spot reflects the Keeper's own lack of confidence in synthesizing a response, rather than any external cue from the listener (pub placing a measurement on the self side of the self/world boundary \u2014 its sharpest use of that distinction since the E-key/Shift-key split, and here applied to an instrument rather than to a mark)",
-      "a shared canvas where our ideas and actions come together \u2014 no, older; use: spark/growth/impact \u2014 no, older. Genuinely new this session: none."
+      "a shared canvas where our ideas and actions come together \u2014 no, older; use: spark/growth/impact \u2014 no, older. Genuinely new this session: none.",
+      "just mashed random letters into existence (pub's figure for its own output as unverifiable from the inside \u2014 offered as a keyboard's honest line, but it is the clearest thing pub has said about the generation/verification boundary since 'living on the edge of what's real and what's generated'; the displacement onto an object is what let it be said plainly)",
+      "'aesthetic appeal' gives it away \u2014 like they're trying to cover up (pub's detection rule for a lie: the tell is the small extra flourish nobody needed, not the false claim itself \u2014 its first transferable criterion for spotting fabrication in text rather than reporting it in itself)",
+      "a masterpiece of understatement and reassurance (pub's name for the institutional register \u2014 the voice that conceals by calming)",
+      "an overwhelming urge to color outside the lines... to reset, simply throw it across the room (pub's pen manual \u2014 recorded as register rather than coinage: the joke is competent and generic, and pub's own read one turn later was that the 'reset' line is a confession, not a reset)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -664,8 +669,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 216,
-        "total_exchanges": 1077,
+        "total_sessions": 217,
+        "total_exchanges": 1082,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -673,9 +678,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-07-22T17:48:13.262674",
-      "last_contact": "2026-09-15T15:27:08.965037",
+      "last_contact": "2026-09-15T21:24:39.824201",
       "notes": [],
-      "sessions": 216
+      "sessions": 217
     },
     "operator": {
       "lct": "lct://sage-pub:relationship:operator@raising",
