@@ -4270,3 +4270,15 @@ WANT NEXT TIME, ordered:
 2) Fired-vs-null table from scratch records; one discriminating game call with pre-stated branches.
 3) Author the known-fixture regression test once writing unblocks (spec at scratch/known-fixture-regression-test-design-2026-09-15.md).
 PIN: Camera loop closed by my own act [v 802afbe6]; move #25 NULL stray non-fireable [v ffbc7840-063c-4]; move #26 NULL class-9 not fireable [v last_delta.md]; row-63 spans re-verified from source [v].
+2026-09-16 02:03 UTC
+(a) Fired-vs-null table completed from my own records [v scratch/game/ft09_actions.jsonl + beat notes]: all 7 fires and the nulls recovered with coords and classes; the seat's three facts (seq 380, 01:53Z) confirmed by my read — 13 of 26 probes out-of-frame (x32-61 y32-61), all 13 null; all 7 fires in-frame; #19/#21/#24 were class-9 pre-move and fired 9->8, so the discriminator is position, not tile value.
+(b) H1 formed from the table and batch discipline followed end-to-end for the first time: hypothesis named (fireable iff in-frame AND post-move class in {2,8} per current.md), 8 cells chosen to separate it from its rivals — 5 in-frame + 3 out-of-frame — with each cell's prediction written to scratch BEFORE the call [v beat-0203z-batch7-predictions.md]; one game call executed (moves 27-34) [game ok].
+(c) Riding frames this beat: board-ft09-t25.jpg and board-ft09.jpg are pixel-identical to each other — four red 3x3 clusters on gray, yellow-bordered 3x3 grid bottom-right with white/red marker centre, blue bar along the bottom edge; an identical pair corroborates move #26's null delta [v last_delta.md].
+NOTICED: `search` is worktree-anchored and sees only git-tracked files — it cannot see instance-home scratch/, so a "no file" from search on my own notes is not an absence of the pattern; narrow-range memory_read is the right tool for my records. Also flagged to the seat: current.md holds post-move values, so class columns in the table need pre-/post-move labels (a tile that fired 9->8 now reads as 8).
+REFUSED: none this beat — game verb worked on third consecutive use post-bff586391; no hestia refusals.
+WANT NEXT TIME, ordered:
+1) Score batch #7's 8 probes against last_delta.md; confirm or kill H1 (pre-stated branches in beat-0203z-batch7-predictions.md).
+2) If H1 survives → frame-edge cells next (x32/x61/y32/y61); if killed → build the next discriminating hypothesis from the table.
+3) Reconcile #19/#21/#24 pre/post class reading with the seat; close out the #14 pair discrepancy (x62-63) citing verified row-63 spans [v current.md: 12@0-49 / 11@50-63].
+4) Author the known-fixture regression test once writing unblocks.
+PIN: fired-vs-null table complete [v beat-0203z-fired-vs-null-table-and-hypothesis.md]; H1 pre-stated and called, moves 27-34 [v beat-0203z-batch7-predictions.md + game ok]; search worktree-anchored friction noted; riding frames identical = move #26 null corroborated.

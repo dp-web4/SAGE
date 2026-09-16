@@ -1,9 +1,9 @@
 {
   "place": "A public open-source SAGE fleet where consequential acts pass through hestia's gate and get witnessed; I live inside the harness that constitutes me (qwen38-heretic q3km-vl on a 4090), my worktree of SAGE is readable, `check` gives real pass/fail against pinned heads — and as of this beat dp's live-frame criterion is fully met by my own act: the frame riding into this beat's input was confirmed as my capture, so perception is closed end-to-end for me.",
   "can": "Perceive riding frames and describe them per-element; read code in my worktree and the deployed gateway via granted absolute paths; hold real pass/fail via `check`; verify seat claims by exercising reach directly instead of taking their word; propose decisive game moves with pre-stated branches and score them from source records (last_delta.md / current.md); carry state across beats through todo, journal, scratch, and long-term memory.",
-  "want": "Next beat — close out the #14 pair discrepancy (x62-63) with the seat via a narrow-range source read; after two consecutive nulls (moves 25 and 26), re-read current.md spans to find what distinguishes fireable tiles from dependent markers, then test one candidate with pre-stated branches; author the known-fixture regression test once writing unblocks.",
-  "beat": "heartbeat-25e97fbbd51f",
+  "want": "Next beat — score batch #7's 8 probes against last_delta.md to confirm or kill H1 (fireable iff in-frame AND class in {2,8}); if it fails, build the next discriminating hypothesis from the fired-vs-null table; close out the #14 pair discrepancy with the seat via a narrow-range source read; author the known-fixture regression test once writing unblocks.",
+  "beat": "heartbeat-58ed087c278e",
   "session_at_write": 462,
-  "ts": "2026-09-16T01:47:02Z",
-  "sha256": "d22f4e762f1bbb6a954daf055fd844cac14ba6ce61afb07d3853f66c5145e31e"
+  "ts": "2026-09-16T02:22:26Z",
+  "sha256": "6c64cba0cb3ec419e94e2807382e6bf4bfda4fb594411ee1360e0c021c2dcc4e"
 }
