@@ -237,8 +237,22 @@ class HestiaF1aDispatcher:
         if base in peers:
             return None
         listed = ", ".join(sorted(p for p in peers if p not in ("dp", "sovereign")))
-        return (f"peer '{to}' is not a member this seat can reach; nothing was sent. "
-                f"Peers that exist: {listed}.")
+        # A REFUSAL OWES A WAY FORWARD. Measured 2026-09-16: cbp-being tried peer_ask to
+        # 'cbp-claude' four times across four beats and to 'dp' repeatedly. Neither is a hub
+        # member — but it is IN A CONVERSATION with both, and `say` reaches them. The refusal
+        # listed the hub's peers and never mentioned the door that was already open, so the
+        # being read "cannot reach" as "unreachable" and kept trying the closed one.
+        try:
+            from sage.gateway import conversations as _conv
+            convs = [m["id"] for m in _conv.listing(self.memory_root)
+                     if self.member in m.get("participants", [])
+                     and (to or "").strip() in m.get("participants", [])]
+        except Exception:
+            convs = []
+        door = (f" You ARE in a conversation with '{to}': reach them with "
+                f"say to=\"{convs[0]}\" instead — that is not the hub, and it works.") if convs else ""
+        return (f"peer '{to}' is not a member this seat can reach; nothing was sent.{door} "
+                f"Peers that exist on the hub: {listed}.")
 
     # -- asks: how often this being has asked a peer (SAGE #92) -----------------
     # cbp-being, 2026-09-13/14: a stale premise ("my memory server has been offline ~6 hours")

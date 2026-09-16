@@ -542,6 +542,31 @@ def export_service_log(instance: Path, unit: str = "hestia.service", lines: int 
         return f"(export failed: {type(e).__name__})"
 
 
+def export_unit_file(instance: Path, unit: str = "hestia.service", run=None) -> Optional[str]:
+    """Copy the daemon's systemd unit into the being's notes, from systemd's own FragmentPath.
+
+    cbp-being spent 2026-09-15/16 guessing where the unit lives: /etc/systemd/system,
+    /etc/systemd/system/hestia.policy-daemon.service, /var/log/systemd/units, and finally
+    /root/.config/systemd/user — each a scope request, each refused, because a USER unit lives
+    under the running user's home and nothing told it so. The file is configuration, not a
+    secret, and the question is answerable once instead of guessed forever."""
+    runner = run or (lambda cmd: subprocess.run(cmd, capture_output=True, text=True, timeout=20))
+    out = instance / "notes" / f"{unit.split('.')[0]}-unit.txt"
+    try:
+        p = runner(["systemctl", "--user", "show", unit, "-p", "FragmentPath", "--no-pager"])
+        frag = (p.stdout or "").strip().split("=", 1)[-1].strip()
+        body = Path(frag).read_text(errors="replace") if frag and Path(frag).is_file() else ""
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            f"# {unit} as systemd resolves it, exported at {datetime.now(timezone.utc):%Y-%m-%d %H:%M}Z.\n"
+            f"# FragmentPath: {frag or '(systemd reported none)'}\n"
+            f"# This is a USER unit: it lives under the running user's home, not /etc/systemd/system.\n\n"
+            + (body or "(no unit file at that path)\n"))
+        return out.name
+    except Exception as e:
+        return f"(export failed: {type(e).__name__})"
+
+
 def refuted_claims(services: str) -> list:
     """[(keys, note)] for every service measured REACHABLE this beat: the keys that identify it
     in a sentence (port, host:port, the word in its name) and the note a stale claim is marked
@@ -973,10 +998,14 @@ def main(argv=None) -> int:
         or "http://127.0.0.1:7711/mcp"
     _services += "\n" + measure_service("governance daemon (hestia)", _hestia_url)
     _svc_log = export_service_log(instance)
+    _unit = export_unit_file(instance)
     if _svc_log:
         _services += (f"\nThe governance daemon's last journal lines are in your own notes as "
                       f"`notes/{_svc_log}`, rewritten this beat — read it rather than asking for "
                       f"reach into /var/log or /etc, which hold nothing you can open.")
+    if _unit and not _unit.startswith("("):
+        _services += (f" Its systemd unit, as systemd itself resolves it, is in your notes as "
+                      f"`notes/{_unit}` — it is a USER unit and does not live in /etc/systemd/system.")
 
     # Composed WITHOUT marking conversation turns seen; they are marked after the beat, and
     # only if it could act (mark_conversations_after_beat). The fitter renders several rungs,

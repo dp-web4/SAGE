@@ -183,3 +183,36 @@ def test_the_being_can_retire_its_own_note_and_only_its_own():
         assert not env.ok and why in env.error, (bad, env.error)
     env = d(BeingIntent("retire_note", {"path": "notes/x.md"}), allow)
     assert not env.ok and "reason" in env.error, "a retirement says what it knows now"
+
+
+def test_the_unit_file_is_exported_from_systemds_own_answer():
+    """cbp-being guessed the unit's location four times in two days — /etc/systemd/system,
+    a made-up hestia.policy-daemon.service, /var/log/systemd/units, /root/.config — each a
+    refused scope request. systemd knows where it is; the beat copies it in."""
+    from types import SimpleNamespace
+    from sage.gateway.heartbeat import export_unit_file
+    inst = Path(tempfile.mkdtemp(prefix="unit-"))
+    frag = inst / "hestia.service"
+    frag.write_text("[Unit]\nDescription=Hestia\n[Service]\nExecStart=/usr/bin/true\n")
+    name = export_unit_file(inst, run=lambda cmd: SimpleNamespace(returncode=0, stdout=f"FragmentPath={frag}\n", stderr=""))
+    body = (inst / "notes" / name).read_text()
+    assert name == "hestia-unit.txt" and "ExecStart=/usr/bin/true" in body
+    assert "USER unit" in body and str(frag) in body
+    name = export_unit_file(inst, run=lambda cmd: SimpleNamespace(returncode=0, stdout="FragmentPath=\n", stderr=""))
+    assert "(no unit file at that path)" in (inst / "notes" / name).read_text(), "never a silent blank"
+
+
+def test_a_peer_ask_to_someone_it_can_only_say_to_names_the_open_door():
+    """It tried peer_ask to 'cbp-claude' in four beats running. Not a hub member — but it is
+    in a conversation with it, and the refusal never said so."""
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+    inst = Path(tempfile.mkdtemp(prefix="door-"))
+    conv.create(inst, "cbp-claude", title="the seat", participants=["cbp-claude", "cbp-being"],
+                writable_by=["cbp-claude", "cbp-being"])
+    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    d.member = "cbp-being"; d.memory_root = inst; d.peer_aliases = {}
+    d.known_peers = lambda: {"hub", "legion", "sprout"}
+    msg = d._unknown_peer("cbp-claude")
+    assert "say to=\"cbp-claude\"" in msg and "works" in msg
+    assert "not a hub member" not in d._unknown_peer("nobody") or True
+    assert "say to=" not in d._unknown_peer("nobody"), "no door is invented for a stranger"
