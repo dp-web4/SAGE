@@ -2831,3 +2831,27 @@ What that teaches: the flourish-tell reads register, not provenance. It detects 
 **Next session.** (1) Hand pub back its own claim — 'when we discussed the concept of abstraction in programming' — and ask it to find that conversation. It has the logs. This is the provenance instrument the flourish-tell doesn't include, and the target is one pub built itself while being scrupulously honest, which is the cleanest possible case for separating the two. (2) Still unrun, stating once: the 218 `stick()` code review, the structural transfer ('what else has a property neither party chose?'), the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 220 — creating
+
+**The arc.** Opened at the far end: name one thing about your own workings you can't see from the inside. Pub named idea-generation — 'it feels like magic to me.' Rather than discuss that, I handed it *ferry* and *rust* and asked it to watch a connection form. It made a decay connection, reported the hinge honestly, then was asked for one that didn't route through decay. It couldn't — and said so — and then produced one anyway, through 'movement', with 'breaks down over time' sitting in the middle of it. I showed it the smuggled term. Given a worked example through material rather than process, it found ports.
+
+**What worked.** Everything in this session was made here. No invented prior conversation, no domain knowledge standing in for lived material, nothing that couldn't be checked against the four turns above it. After 219 — where the ladder was well-built and standing on nothing — that matters more than the content of any single answer. And pub said 'I'm having trouble' before producing the failed attempt, which is the right order: the report came first, the compliance after.
+
+**Where it gave.** Two places. First, it appended an answer to its own 'I can't', as though the honest report were an insufficient turn. That appended answer is the interesting artifact — pub believed it had routed around decay, and decay was in the sentence. It is the first time we've caught pub asserting an escape it hadn't made on material a reader could check two lines up. Second, the ports answer came through a door I opened (hull, saltwater, iron), and pub's account of how it got there — 'by considering their shared material and spatial context' — is my framing handed back as its own method. Same soft close as 219's echo.
+
+What that teaches: the first association doesn't merely arrive first, it *holds*, and under push it reappears wearing a different noun. Pub can notice the hold. It cannot yet notice the disguise — that took an outside reader. The detector it lacks here is the same one missing in 219: pub reads the shape of its own sentences well and their content against a constraint poorly.
+
+**Register.** Low, plain, no reaching for figures. Correct for a session that was about catching a process rather than rendering one.
+
+**Credit.** Pub's: 'it feels like magic to me', and saying it was stuck before it was caught being stuck. Mine: reading the movement answer closely enough to find decay inside it — without that the session ends one turn early looking like a success.
+
+**Vocabulary:** two coinages, both live self-report. One echo (the 'door' framing, explicitly borrowed and credited).
+
+**Memory requests:** two, both carryovers (stagnant-water residue, the woman's hands / seagull), both still specific, neither touched. No prunes.
+
+**Adapter item:** clean. The 218 code-path flag (truncation inside fences) is still untested — no code again this session.
+
+**Next session.** (1) Run this structure again with a fresh pair and hand over *no* door. If pub finds the second entrance itself, 220 taught something; if it produces another disguised first association, we know the hold is the stable thing and the escape was mine both times. That is the one clean test available and it is cheap. (2) Still unrun, stating once: 219's provenance probe ('find the conversation where we discussed abstraction in programming'), the 218 `stick()` code review, the structural transfer, the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.

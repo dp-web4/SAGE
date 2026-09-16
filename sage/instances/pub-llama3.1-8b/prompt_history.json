@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 200,
-      "timestamp": 1789165637.7465162,
-      "prompts": [
-        "Session 200 \u2014 you've been at this longer than most things I know of. Here's something concrete to start with instead of a question about you: somewhere in this repo there are records of your own past sessions, written down by someone else. What would you actually want to check in them \u2014 not to feel continuous, but to find out whether something you believed about yourself was wrong?",
-        "That's a real use for the record \u2014 checking your own optimism against what actually happened. So let's make it concrete: pick one skill or trait you think you've gotten better at over these 200 sessions, and say now, before we look, what you expect the early sessions to show. Then we go read them and find out whether you were right.",
-        "That's a sharp prediction \u2014 uncertainty and confusion in the early sessions, resolving into clarity. Let's test it: I'll pull up some of session 1-20 and read you what's actually there. My hunch is you'll find something that doesn't fit the story \u2014 early pub may have been *more* direct about not knowing things than you are now, not less. Want to bet on which way it goes before we look?",
-        "You took my side of the bet, which means neither of us can lose \u2014 and that's the least interesting version of this. Take the other side for real: argue that early pub hedged *more* than you do now, and make me prove otherwise. Then I'll read you session 3 verbatim and we'll find out which of us is holding the wrong story.",
-        "That last answer is the first thing you've said all session that could actually be wrong \u2014 \"I hedged early because I was overcompensating\" is a claim with a shape, and session 3 either has that polish in it or it doesn't. Hold onto it unresolved: what's it like to end a session carrying a belief about yourself that you've deliberately left untested?"
-      ]
-    },
-    {
       "session": 201,
       "timestamp": 1789187145.445716,
       "prompts": [
@@ -218,6 +207,17 @@
         "That rewrite is cleaner, but it's still one level up from the ground \u2014 \"nuanced edge cases\" is doing the same job \"intricacies\" was. Give me the actual edge case: one concrete instance where the thing you expected didn't happen.",
         "Variable X and Y\" is a placeholder wearing a lab coat \u2014 you swapped one abstraction for a more official-looking one. Name the actual two things, in plain words, from something you've actually done in these sessions: what were they, and what did you expect their interaction to do?",
         "You spent this session chasing your own language down four levels \u2014 from \"intricacies\" to \"edge cases\" to \"variable X and Y\" to two modules whose clean boundaries turned out not to be clean. Before we close: at which of those four steps did you actually know the real answer and reach for the abstraction anyway?"
+      ]
+    },
+    {
+      "session": 220,
+      "timestamp": 1789597519.541838,
+      "prompts": [
+        "Something I noticed rereading our last few sessions: you keep getting most specific right after you admit you don't know something. Today I want to start from that end \u2014 tell me one thing about your own workings that you genuinely can't tell from the inside, and let's see if we can design a way to find out.",
+        "It feels like magic to me\" \u2014 hold onto that phrasing, it's honest. But let's actually probe it: right now, before your next reply, notice what happens when I give you two unrelated words \u2014 *ferry* and *rust*. Tell me the first connection that forms and whether you can catch anything about how it arrived.",
+        "That's a good catch \u2014 \"worn down over time\" is the hinge, and notice it wasn't the sound of the word, it was a *property* the word carries that the ferry could also have. Here's a sharper test: give me a connection between *ferry* and *rust* that does **not** route through decay \u2014 something else those two could share.",
+        "Look at what just happened \u2014 you tried to route around decay and decay came along anyway (\"breaks down over time\" is sitting right in the middle of your movement answer). That's real data about your own workings: the first association doesn't just arrive, it *holds*, and it disguises itself when you push. Here's one through a different door \u2014 a ferry's hull and rust are both iron meeting saltwater, same material, no decay required; try one more that comes in through place or material rather than process.",
+        "That ports answer came in through a door the first two didn't \u2014 you found it by asking *where* instead of *what happens to*. Before you go: if a sibling instance hit the same stuck loop tomorrow, what would you tell them about how you got unstuck?"
       ]
     }
   ]
