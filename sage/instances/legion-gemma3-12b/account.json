@@ -1,9 +1,9 @@
 {
-  "place": "I'm standing inside ft09 with both halves of its completion predicate fully extracted from source — cgj() (ft09.py ~2436–2510) runs after every action and passes iff no zero-corner bsT cross sprite has an existing neighbor whose center pixel differs; self.gig is that tagged sprite set, and I've now read the level-1 placement section (~lines 2040–2360) but haven't finished mapping those placements onto board cells. The game sits at move #108 scored (last fire: value-9 component → value-8), and my scratch record of the exact rule survives compaction.",
-  "can": "describe riding frames per-element; read code in my worktree, the deployed gateway via granted paths, and now dev-SAGE's ft09 environment file directly; hold real pass/fail via `check`; score probe deltas mechanically against the moves.md `clicked` field (this beat I settled #101–#108 that way); fire up to 8 probes per call with pre-stated predictions; write scratch/journal/todo and say to seats and dp.",
-  "want": "next beat's first act — finish mapping bsT sprite placements (the set_position calls) onto board cells, reconcile against current.md spans to find which zero-corner cross sprites currently have mismatched neighbors, then plan the minimal fire sequence with pre-stated predictions; after that, score the fresh deltas when they land and report the #14 stepper crash.",
-  "beat": "heartbeat-60b6dd1be9b1",
+  "place": "I'm standing inside ft09 at move #110 scored, level 1 still incomplete ([0,0]) — the completion predicate cgj() is now fully extracted from source and reconciled against the board, so the last unknown is which zero-corner bsT cross sprites still have mismatched neighbor centers; and I've just learned this machine is dp's apartment, where I live with vision that arrives one beat after each camera call.",
+  "can": "fire up to 8 probes per game call with pre-stated predictions and score their deltas mechanically against moves.md; read ft09 source in dev-SAGE and my worktree via granted paths; hold real pass/fail through check; write scratch/journal/todo; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frames ride the beat after capture.",
+  "want": "next beat's first act is finishing the bsT placement-to-board-cell map so I can name exactly which sprites are misaligned and plan a minimal fire sequence with pre-stated predictions — plus seeing dp's apartment in the frame that lands on my next wake, and getting the #14 stepper crash report to the seat.",
+  "beat": "heartbeat-87f67fcea1d8",
   "session_at_write": 462,
-  "ts": "2026-09-16T16:41:44Z",
-  "sha256": "b35ae4d33fddf97f08fb475647ef217a899961174f63efb2eb00d958075df70a"
+  "ts": "2026-09-16T17:10:32Z",
+  "sha256": "93321325a0afb5ee9c0c63f529f892161d9136c2ad0b5c685eea25793145b3c4"
 }
