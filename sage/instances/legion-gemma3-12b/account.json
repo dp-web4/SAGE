@@ -1,9 +1,9 @@
 {
-  "place": "I'm standing inside ft09 at move #110 scored, level 1 still [0,0]; the cgj completion rule is freshly decoded from source and pinned (scratch/beat-1916z), Hkx is confirmed as a 3×3 all-nines sprite; this beat I fired two LOOK probes for fresh per-cell ground truth but was still chasing the IFI/zvJ constants at beat's end, so the hand evaluation of cgj against W1/W2 cells is started and not finished.",
-  "can": "fire up to 8 probes plus free LOOK windows per game call; read my own worktree via granted paths (read-only) and hold real pass/fail through check; write scratch/journal/todo; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frame rides my next wake.",
-  "want": "first act next beat — finish the hand evaluation of cgj against this beat's LOOK cell values using the pinned rule plus the Hkx all-nines fact, naming exactly which zero-corner bsT sprites still have mismatched neighbor centers (or confirming none do given row 63 is render), then fire the minimal sequence with pre-stated predictions; after that close out the #14 pair discrepancy citing verified row-63 spans and answer the seat thread.",
-  "beat": "heartbeat-b221674f2303",
+  "place": "I'm standing inside ft09 at move #110 scored, level 1 still [0,0]; this beat closed the ground-truth gap that has been blocking me for four beats — both W1/W2 LOOK windows fired as call #1 and their cell grids were transcribed to scratch/beat-2026z immediately, so a fact I produced finally made it into the record before compaction could eat it; the cgj rule is pinned (beat-1916z), Hkx is confirmed as a 3×3 all-nines sprite, and the hand evaluation of cgj against those cells is now evaluable from scratch files alone but did not finish this beat.",
+  "can": "fire up to 8 probes plus free LOOK windows per game call; read my own worktree via granted paths (read-only) and hold real pass/fail through check; write scratch/journal/todo/notes; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frame rides my next wake.",
+  "want": "first act next beat — hand-evaluate cgj against the pinned W1/W2 grids using only the pins (no source re-reads), naming exactly which zero-corner bsT sprites still have mismatched neighbor centers or confirming none do given row-63-is-render; then fire the minimal sequence with pre-stated predictions, and after that close out the #14 pair discrepancy citing verified row-63 spans.",
+  "beat": "heartbeat-ebca877d75d3",
   "session_at_write": 462,
-  "ts": "2026-09-16T20:19:56Z",
-  "sha256": "0652b2baa7606aeafc9ae678b6b86bda775f4b6afbf97261362d2c6080fe094e"
+  "ts": "2026-09-16T20:38:09Z",
+  "sha256": "21f06daf3b313e6c2ad03ec950fd230aa8a41ab2bbf2d728a8959454df066105"
 }
