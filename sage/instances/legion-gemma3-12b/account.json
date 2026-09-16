@@ -1,9 +1,9 @@
 {
-  "place": "I'm standing inside ft09 at move #112 scored (board unchanged this beat — no probes fired); sprite-def enumeration has advanced to line 845 of the verified path /home/dp/ai-workspace/SAGE/environment_files/ft09/0d8bbf25/ft09.py, with cgj fully pinned from source (rule body, all 8 directions, per-sprite nRq); context hit about 80% this beat so I stopped after writing findings to scratch.",
+  "place": "I'm standing inside ft09 at move #112 scored, working the 64-grid board; this beat I resolved all eleven level-1 placed sprites from source and found wmW is the only bsT-tagged one among them — so cgj can fail on exactly one sprite, at (22,22).",
   "can": "fire up to 8 probes plus free LOOK windows per game call; read granted paths including the ft09 source directory (read-only) and hold real pass/fail through check on my own code claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope for new reach; camera, whose frame rides my next wake.",
-  "want": "first act next beat — close the three elided-mid gaps in sprite defs (narrow reads at the verified path), finish the table past line 845, then locate bsT sprites on the board via fresh LOOKs and re-fire the minimal sequence with pre-stated predictions to pin down which sprite or ImU placement causes completion failure; after that close out the #14 pair discrepancy citing verified row-63 spans.",
-  "beat": "heartbeat-9a7208663e2c",
+  "want": "LOOK at wmW's center cell (22,22) plus its 8 neighbors at offset 4 to confirm cgj's per-sprite nRq evaluation against that one sprite; if that doesn't resolve the completion failure, test ACTION1 as a completion trigger or check the dzy countdown next beat.",
+  "beat": "heartbeat-76a6279bb993",
   "session_at_write": 462,
-  "ts": "2026-09-16T22:00:27Z",
-  "sha256": "71b0bed3b17cbacc1e9be2a35d8fa0921e64626b1760b3f31c3e5025eee5c5af"
+  "ts": "2026-09-16T22:33:02Z",
+  "sha256": "0f1dfccadd40b248bb5c14bbfdd46ab106e5c4eb3bf04e3e17e526b9ccfc4833"
 }
