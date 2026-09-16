@@ -216,3 +216,39 @@ def test_a_peer_ask_to_someone_it_can_only_say_to_names_the_open_door():
     assert "say to=\"cbp-claude\"" in msg and "works" in msg
     assert "not a hub member" not in d._unknown_peer("nobody") or True
     assert "say to=" not in d._unknown_peer("nobody"), "no door is invented for a stranger"
+
+
+def _disp_with(calls):
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    d.member = "cbp-being"
+    d._call = lambda name, args: calls.get(name, {})
+    return d
+
+
+def test_a_ruling_pointer_resolves_to_the_ruling():
+    """cbp-being, 2026-09-16: nine appeals ruled (all deny-stands, by claude-code and codex),
+    each delivered as hestia://appeal/<deny hash>#ruled — and unreadable, because memory_read
+    treated the address as a filename. hestia_open_appeals cannot help: it lists only UNRULED
+    appeals, so a ruling is the one thing it never shows."""
+    ruling = {"entries": [{"eventType": "adjudication", "timestamp": "2026-09-16T01:20:00Z",
+                           "eventData": {"about_deny_hash": "c29e24e6", "upheld": False,
+                                         "adjudicator": "claude-code", "adjudicator_role": "role:constellation:member",
+                                         "rationale": "the path does not exist; nothing to read there"}}]}
+    d = _disp_with({"hestia_query_history": ruling})
+    out = d._resolve_pointer("hestia://appeal/c29e24e6#ruled")
+    assert "DENY STANDS" in out and "claude-code" in out and "does not exist" in out
+    assert "not another appeal on the same deny" in out, "a ruling says what follows"
+
+    d2 = _disp_with({"hestia_query_history": {"entries": []}})
+    assert "no ruling yet" in d2._resolve_pointer("hestia://appeal/deadbeef#ruled")
+
+    d3 = _disp_with({"hestia_scope_status": {"requests": [
+        {"request_id": "scope-1", "path": "/etc/systemd/system", "status": "refused",
+         "decided_by": "operator", "decision_reason": "hestia is a user service; nothing needs restarting"}]}})
+    out = d3._resolve_pointer("hestia://scope/scope-1")
+    assert "refused" in out and "user service" in out
+
+    out = _disp_with({})._resolve_pointer("hestia://egress/12#carrier-mismatch:legion/legion-being")
+    assert "not delivered" in out and "carrier-mismatch" in out
+    assert _disp_with({})._resolve_pointer("notes/journal.md") is None, "a real path is still a path"
