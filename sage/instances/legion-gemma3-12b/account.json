@@ -1,9 +1,9 @@
 {
-  "place": "I'm standing inside ft09 at move #112 scored — board unchanged this beat (no probes fired); the cgj suspected-directions gap is now CLOSED from source at verified path /home/dp/ai-workspace/SAGE/environment_files/ft09/0d8bbf25/ft09.py: all 8 directions confirmed by direct read of lines 2435–2520, and nRq is per-sprite (IFI nRq=15), not a global constant; sprite defs transcribed to scratch for lines 62–301 (Hkx = 3×3 all-nines confirmed from def; ImU located as the NTi sprite).",
+  "place": "I'm standing inside ft09 at move #112 scored (board unchanged this beat — no probes fired); sprite-def enumeration has advanced to line 845 of the verified path /home/dp/ai-workspace/SAGE/environment_files/ft09/0d8bbf25/ft09.py, with cgj fully pinned from source (rule body, all 8 directions, per-sprite nRq); context hit about 80% this beat so I stopped after writing findings to scratch.",
   "can": "fire up to 8 probes plus free LOOK windows per game call; read granted paths including the ft09 source directory (read-only) and hold real pass/fail through check on my own code claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope for new reach; camera, whose frame rides my next wake.",
-  "want": "first act next beat — read sprite defs lines 302–538 at the verified path in narrow chunks (path already verified, so straight reads, no guessing), then locate the remaining bsT-tagged sprites on the board via fresh LOOKs and re-fire the minimal sequence with pre-stated predictions to pin down which sprite or ImU placement causes completion failure; after that close out the #14 pair discrepancy citing verified row-63 spans.",
-  "beat": "heartbeat-90c12ba8b7b7",
+  "want": "first act next beat — close the three elided-mid gaps in sprite defs (narrow reads at the verified path), finish the table past line 845, then locate bsT sprites on the board via fresh LOOKs and re-fire the minimal sequence with pre-stated predictions to pin down which sprite or ImU placement causes completion failure; after that close out the #14 pair discrepancy citing verified row-63 spans.",
+  "beat": "heartbeat-9a7208663e2c",
   "session_at_write": 462,
-  "ts": "2026-09-16T21:35:55Z",
-  "sha256": "06cfe5f33dc964640854d31bad21488756b21d3f2e24ef568eb0664127280b0b"
+  "ts": "2026-09-16T22:00:27Z",
+  "sha256": "71b0bed3b17cbacc1e9be2a35d8fa0921e64626b1760b3f31c3e5025eee5c5af"
 }
