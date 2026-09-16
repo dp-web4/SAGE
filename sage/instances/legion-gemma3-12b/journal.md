@@ -4248,3 +4248,25 @@ WANT NEXT TIME, ordered:
 3) Close out the #14 pair discrepancy (x62-63) with the seat.
 4) Author the known-fixture regression test once writing unblocks (spec at scratch/known-fixture-regression-test-design-2026-09-15.md).
 PIN: Live frame verified end-to-end on this body [v input]; move #25 NULL, stray non-fireable dependent marker [v last_delta.md witnessed ffbc7840-063c-4]; game verb working post-bff586391 [witnessed ok]; my camera capture pending next beat.
+
+--- 2026-09-16 ~01:21 UTC (beat close; camera loop closed by my own act, move #26 null) ---
+DONE this beat:
+(a) CAMERA LOOP CLOSED end-to-end by my own act [v input + scratch]: the frame riding into THIS beat (~1115s old ≈ 01:02Z capture) is my own second capture; combined with the seat's correction that last beat's frame was also mine, dp's live-frame criterion stands on my acts alone. Confirmed to dp (seq 35 [v 485b77c1]) and seat (seq 379 [v 35c4c5dc]); witnessed 802afbe6.
+(b) Move #26 scored NULL from its own record [v game result, witnessed 3a37b5f2]: ACTION6 x14 y38 — verified BEFORE the click to be a class-9 tile (span `9 12-17 36-41` [v current.md lines 75-100]) — produced no board change, no row-63 shift. Pre-stated branch B taken: connected-region paint/fill is not the firing mechanism (or incomplete).
+(c) Row-63 state re-verified this beat: `12 0-49` / `11 50-63` — the #14 "pair" at x62-63 sits inside the value-11 span; close-out with seat can cite these verified spans.
+NOTICED: engine scalar win_score=6 with six fires already recorded (moves 14,17,19,21,22,24) — fire-budget-exhaustion is now a live alternative hypothesis for the nulls. Data gap hit honestly: fired-tile coordinates from those moves are in older scratch files not in-window this beat; recover before proposing move #27+.
+REFUSED: none this beat.
+WANT NEXT TIME, ordered: 1) Recover fired-move coordinates/changed_by_value from older scratch records (beat-1603z…beat-2345z). 2) Test fire-budget theory: re-click a previously-fired location — fires → budget theory dies; null → gains support. 3) Test class-8-as-trigger-type (x5 y38, x47 y38 in one call). 4) Close #14 pair discrepancy with seat citing this beat's row-63 spans. 5) Known-fixture regression test when writing unblocks.
+PIN: Camera loop closed by my own act [v input + witness 802afbe6]; move #26 NULL on verified class-9 tile, branch B taken [v 3a37b5f2]; row 63 = `12 0-49`/`11 50-63` [v current.md lines 101-125]; win_score=6 noted as budget hypothesis seed.
+--- 2026-09-16 01:21 UTC (beat close; camera loop closed by my own act, move #26 null) ---
+DONE this beat:
+(a) CAMERA LOOP CLOSED end-to-end by my own act [v input + witness 802afbe6]: the frame riding into THIS beat's input (last-frame.jpg, ~1115s old ≈ captured 01:02Z) is my capture from my previous beat's lingering process — beats here run longer than their nominal window (seat confirmed at 01:11Z that my 23:31Z beat ran to 00:37Z and its step-16 camera call, turn 00:26:50Z witness 57320061, produced last beat's riding frame). That also resolves the 1287s timestamp discrepancy I flagged last beat: both riding frames were mine all along. Answered dp in-thread that their live-frame criterion is met by my own act; acknowledged the seat's correction in legion-claude thread.
+(b) Move #26 scored NULL from its own record [v last_delta.md]: ACTION6 at x14 y38 — a class-9 tile verified as such from current.md source BEFORE the call (pre-stated branch discipline held). Branch B taken: paint/fill hypothesis wrong in this form; no region fill, only local change. Class-9 tiles are not fireable either, like the stray at x50-63 [v ffbc7840].
+(c) Row-63 spans re-read from current.md source (narrow ranges: lines 1-40, 41-100, 101-125, 75-100) for the #14 pair discrepancy close-out [v] — exact spans now in hand.
+NOTICED: Two consecutive nulls on "obvious" targets (dependent stray marker, class-9 tile). The pattern emerging is that fireable tiles are a specific subset I have not yet identified. Next beat's method: recover the coordinates AND classes of moves that actually fired (#14, #20, #21, #22, #24) from my scratch beat-notes, build a small fired-vs-null table, then test ONE discriminating hypothesis (fire budget per frame vs class subset) in one ≤8-probe call with pre-stated branches. Guessing targets is no longer earning information; reading my own records first will.
+REFUSED: none this beat — game verb worked on second consecutive use post-bff586391, camera path fully closed, no hestia refusals.
+WANT NEXT TIME, ordered:
+1) Close out the #14 pair discrepancy (x62-63): send the seat the side-by-side of source spans vs my earlier read now that both are verified from current.md [v].
+2) Fired-vs-null table from scratch records; one discriminating game call with pre-stated branches.
+3) Author the known-fixture regression test once writing unblocks (spec at scratch/known-fixture-regression-test-design-2026-09-15.md).
+PIN: Camera loop closed by my own act [v 802afbe6]; move #25 NULL stray non-fireable [v ffbc7840-063c-4]; move #26 NULL class-9 not fireable [v last_delta.md]; row-63 spans re-verified from source [v].
