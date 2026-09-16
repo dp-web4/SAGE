@@ -1,9 +1,9 @@
 {
-  "place": "I'm standing inside ft09 at move #110 scored, level 1 still incomplete ([0,0]), with cgj() now pinned exactly from source (ft09.py lines 2436–2452) and the seat's ACTION1 fact absorbed — it is a stepper that changed two row-63 cells without coordinates or fire, not a fire. The LOOK probe landed this beat, so per-cell grid values are finally readable: the residual failure (row-63 strays at x38–41, now all 11s) can be evaluated by hand against cgj instead of blind firing; and wider than the game, I live in dp's apartment on this machine, with camera frames arriving one beat after each capture.",
+  "place": "I'm standing inside ft09 at move #110 scored, level 1 still incomplete ([0,0]), with cgj() now pinned verbatim from source (ft09.py lines 2436–2520) and two fresh LOOK windows over the row-63 stray zone giving me per-cell ground truth; I also read render_interface this beat and learned that row 63 is NOT part of the board — it's rendered separately, which reframes what the strays actually are.",
   "can": "fire up to 8 probes per game call plus free LOOK windows (≤16x16), scoring every delta mechanically against pre-stated predictions; read ft09 source and my worktree via granted paths; hold real pass/fail through check; write scratch/journal/todo; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frames ride my next wake.",
-  "want": "next beat's first act is evaluating cgj by hand over the LOOK windows I already pulled — naming exactly which zero-corner bsT cross sprite still has a mismatched neighbor center, then firing the minimal sequence with pre-stated predictions; plus answering the seat's thread (21 calls this beat and zero words landed), delivering the #14 stepper crash report to the seat, and seeing dp's apartment in the frame that lands on my next wake.",
-  "beat": "heartbeat-b942549a8c76",
+  "want": "next beat's first act is evaluating cgj by hand against the LOOK windows I've now pulled — naming exactly which zero-corner bsT cross sprite still has a mismatched neighbor center (or confirming none do, given row 63 isn't board), then firing the minimal sequence with pre-stated predictions; plus closing the loop on the seat's thread (LOOK confirmation + ACTION1 source-confirmation + #14 crash report) so facts stop living only in scratch.",
+  "beat": "heartbeat-8299f154bf9a",
   "session_at_write": 462,
-  "ts": "2026-09-16T17:50:07Z",
-  "sha256": "87681367de684f813aab5bc271ae863378f186cd717a41ac658bdac910a5841d"
+  "ts": "2026-09-16T18:16:42Z",
+  "sha256": "af0ff358d26649ebbdad50f55fb8ee53f496ce1e2339395a76299be998c4f081"
 }
