@@ -199,7 +199,8 @@ def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-d
     pass-level `signed_as`/`carrier` would be false by construction whenever the drain carries
     a row for a member other than the one running it. Every row this pass handled is recorded
     with its own `from_plugin`, `carrier_lct`, `signed_as` and `hub_receipt`, in
-    `forwarded_rows` or `transport_faults`. The record is where a reader checks: hestia #1030
+    `forwarded_rows` or `transport_faults` — including an ordinary mesh-send failure, which
+    lands in `transport_faults` as `fault: "send-failed"` with the same identity fields. The record is where a reader checks: hestia #1030
     measured that the chain said the being forwarded while the hub said the seat signed.
 
     `drainer_default_identity` is what an UNBOUND row authored by the member running the drain
@@ -269,8 +270,17 @@ def drain_once(plugin_id: str = "sprout-being", host_agent: str = "sage-egress-d
                 forwarded_rows.append(dict(who, hub_receipt=receipt))
                 fwd += 1; log(f"[egress] forwarded {rid} -> {row.get('forward_on')} as {row_signed_as} ({detail[-80:]})")
         else:
+            # A MESH-SEND FAILURE IS A ROW TOO (GPT post-merge note on #97). The summary's
+            # contract says every row this pass handled is represented; an ordinary
+            # `_forward` failure only incremented a counter and logged, so the one class of
+            # failure the drain sees most often — the hub refused, the sender is not
+            # available, the peer is unknown — left no {row_id, from_plugin, carrier_lct,
+            # signed_as} record for the beat to keep. It does now, with the same identity
+            # fields as a forward.
             c.call("hestia_egress_pending", {"session_id": sid, "mark_failed": rid, "reason": detail[:200]})
-            failed += 1; log(f"[egress] FAILED {rid}: {detail[-160:]}")
+            failed += 1
+            faults.append(dict(who, fault="send-failed", detail=detail[-200:]))
+            log(f"[egress] FAILED {rid}: {detail[-160:]}")
     return {"forwarded": fwd, "failed": failed, "unsettled": unsettled, "empty": False, "error": None,
             "forwarded_rows": forwarded_rows, "transport_faults": faults,
             "drainer_default_identity": default_identity}
