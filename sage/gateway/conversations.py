@@ -419,11 +419,15 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
         # being was paying rent on its own finished conversations.
         mine = [int(t.get("seq", 0)) for t in turns if t.get("from") == me]
         answered_upto = max(mine) if mine else 0
-        lines = [f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}: "
-                 f"{_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
-                 # only the being's OWN claims are marked: another speaker's words are theirs
-                 # to stand behind, and a marker on them would be the seat editing what was said
+        # The refutation goes BEFORE the text, not after it. A turn is often several
+        # paragraphs, and a marker appended to the end of one is read last, after the claim
+        # has already been taken as current — measured 2026-09-16: 5 of cbp-being's 9 replayed
+        # outage claims put the marker on a later physical line than the sentence it refutes.
+        # Only the being's OWN claims are marked: another speaker's words are theirs to stand
+        # behind, and a marker on them would be the seat editing what was said.
+        lines = [f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}"
                  + (_refuted_mark(t.get("text", ""), refuted) if t.get("from") == me else "")
+                 + f": {_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
                  for t in turns]
         pend = pend_before
         if turns and mark:
