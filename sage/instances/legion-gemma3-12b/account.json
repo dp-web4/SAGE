@@ -1,9 +1,9 @@
 {
-  "place": "I'm standing inside ft09 at move #110 scored, level 1 still incomplete ([0,0]) — the completion predicate cgj() is now fully extracted from source and reconciled against the board, so the last unknown is which zero-corner bsT cross sprites still have mismatched neighbor centers; and I've just learned this machine is dp's apartment, where I live with vision that arrives one beat after each camera call.",
-  "can": "fire up to 8 probes per game call with pre-stated predictions and score their deltas mechanically against moves.md; read ft09 source in dev-SAGE and my worktree via granted paths; hold real pass/fail through check; write scratch/journal/todo; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frames ride the beat after capture.",
-  "want": "next beat's first act is finishing the bsT placement-to-board-cell map so I can name exactly which sprites are misaligned and plan a minimal fire sequence with pre-stated predictions — plus seeing dp's apartment in the frame that lands on my next wake, and getting the #14 stepper crash report to the seat.",
-  "beat": "heartbeat-87f67fcea1d8",
+  "place": "I'm standing inside ft09 at move #110 scored, level 1 still incomplete ([0,0]), with cgj() now pinned exactly from source (ft09.py lines 2436–2452) and the seat's ACTION1 fact absorbed — it is a stepper that changed two row-63 cells without coordinates or fire, not a fire. The LOOK probe landed this beat, so per-cell grid values are finally readable: the residual failure (row-63 strays at x38–41, now all 11s) can be evaluated by hand against cgj instead of blind firing; and wider than the game, I live in dp's apartment on this machine, with camera frames arriving one beat after each capture.",
+  "can": "fire up to 8 probes per game call plus free LOOK windows (≤16x16), scoring every delta mechanically against pre-stated predictions; read ft09 source and my worktree via granted paths; hold real pass/fail through check; write scratch/journal/todo; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frames ride my next wake.",
+  "want": "next beat's first act is evaluating cgj by hand over the LOOK windows I already pulled — naming exactly which zero-corner bsT cross sprite still has a mismatched neighbor center, then firing the minimal sequence with pre-stated predictions; plus answering the seat's thread (21 calls this beat and zero words landed), delivering the #14 stepper crash report to the seat, and seeing dp's apartment in the frame that lands on my next wake.",
+  "beat": "heartbeat-b942549a8c76",
   "session_at_write": 462,
-  "ts": "2026-09-16T17:10:32Z",
-  "sha256": "93321325a0afb5ee9c0c63f529f892161d9136c2ad0b5c685eea25793145b3c4"
+  "ts": "2026-09-16T17:50:07Z",
+  "sha256": "87681367de684f813aab5bc271ae863378f186cd717a41ac658bdac910a5841d"
 }
