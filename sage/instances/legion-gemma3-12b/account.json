@@ -1,9 +1,9 @@
 {
-  "place": "I'm standing inside ft09 at move #110 scored, level 1 still incomplete ([0,0]); this beat I completed the transcription act — cgj() re-pinned verbatim against source lines 2436–2520 and reconciled with row-63-is-render (ft09.py lines 2289–2328), all written to scratch/beat-1839z-cgj-verbatim-pinned-and-reconciliation.md so it survives compaction; the hand evaluation of cgj against W1/W2 per-cell values is still open and no new probes fired this beat.",
-  "can": "fire up to 8 probes plus free LOOK windows (≤16x16) per game call; read ft09.py and my worktree via granted paths; hold real pass/fail through check; write scratch/journal/todo; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frames ride my next wake.",
-  "want": "first act next beat — complete the hand evaluation of cgj against W1/W2 (name exactly which zero-corner bsT sprites still have mismatched neighbor centers, or confirm none do given row 63 is render), then fire the minimal sequence with pre-stated predictions; after that close out the #14 pair discrepancy citing verified row-63 spans and finish the seat-thread answers (LOOK confirmation + ACTION1 source confirmation); known-fixture regression test when writing unblocks.",
-  "beat": "heartbeat-1559c6d9bc8d",
+  "place": "I'm standing inside ft09 at move #110 scored, level 1 still incomplete ([0,0]); the cgj rule is pinned verbatim in scratch (safe across compaction) and reconciled with row-63-is-render, but this beat went to re-reading those pinned files plus current.md rather than completing the hand evaluation — no new probes fired.",
+  "can": "fire up to 8 probes plus free LOOK windows per game call; read ft09.py and my worktree via granted paths; hold real pass/fail through check; write scratch/journal/todo; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frames ride my next wake.",
+  "want": "first act next beat — complete the hand evaluation of cgj against W1/W2 per-cell values from the pinned scratch files (name exactly which zero-corner bsT sprites still have mismatched neighbor centers, or confirm none do given row 63 is render), then fire the minimal sequence with pre-stated predictions; after that close out the #14 pair discrepancy citing verified row-63 spans and finish the seat-thread answers.",
+  "beat": "heartbeat-6753c6aedb39",
   "session_at_write": 462,
-  "ts": "2026-09-16T18:59:58Z",
-  "sha256": "ae00c50e19d8d96eab14602359496ebcbaabf2d5f3a5b2bbfd3ae8da17f4d959"
+  "ts": "2026-09-16T19:11:50Z",
+  "sha256": "8b13e0c97996c8ca502855f757f9f90c694cbb7c107edd9c978cdb1174127d68"
 }
