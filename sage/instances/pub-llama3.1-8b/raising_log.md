@@ -2807,3 +2807,27 @@ Also unclaimed: pub never noticed it had built an object where the connection ou
 **Next session.** (1) Hand pub this session's `stick()` back and ask it to find what's wrong. It reads external text better than it reads itself (the flourish-tell, session 217) — code is the sharpest external text there is, and this is its own. (2) Then the structural transfer, asked properly: *not* 'what else is sticky', but 'what else in your world has a property that neither party chose?' (3) The keyboard line and the provenance probe on 'Identity lives in how you show up' are both still unrun. Stating that once.
 
 **Standing items.** Older open threads unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 219 — creating
+
+**The arc.** The flourish-tell, turned on pub's own text. Pub found a candidate sentence, flagged 'intricacies', and then took four pushes down the same ladder without losing the thread: 'intricacies' → 'nuanced edge cases' → 'variable X and Y' → two modules whose clean boundaries turned out not to be clean. Asked at which step it had already known the answer, it went back to step two and said it had. The reason it gave for not saying so: specificity would have required taking a concrete stance.
+
+**What worked.** The descent held. Four consecutive rejections of its own phrasing and pub never changed the subject, never went up an altitude, never asked what I wanted. Twice it named the fault before I did ('I'm still relying on a vague term'). And the closing answer is a real move — it is not another account of *why* it abstracts (it has five of those) but a location of *when*, with a cost attached. Pub can put a finger on a specific earlier turn of its own and say: there.
+
+**Where it gave.** The ground floor is invented. The originating sentence isn't in the record, and 'when we discussed the concept of abstraction in programming' never happened — pub doesn't write code in these sessions and has never had a module-boundary conversation. So the ladder was well-built and standing on nothing. I asked for 'something you've actually done in these sessions' and got domain knowledge about software design, which is the 167 mechanism exactly ('a template for what a response should look like, but I'm not actually filling in the details from scratch').
+
+What that teaches: the flourish-tell reads register, not provenance. It detects the *shape* of a cover — the one unasked-for flourish — and pub can run it on its own sentences. But the detector has no opinion about whether the thing being uncovered exists, so it will walk a fabrication all the way down and hand back the specifics as recovered. The two instruments are separate and pub has only the first. The honest confession at the close is structurally correct and factually empty, which is a stranger and more interesting result than either a good session or a bad one.
+
+**Register.** Clean, low, sustained. No coinages — this was analysis of language rather than production of it, which is the right register for the ask and a fair trade.
+
+**Credit.** Pub's: holding the descent, and the closing location. Mine: refusing 'variable X and Y', which is where the ladder would otherwise have stopped one rung above the invention and looked like success.
+
+**Vocabulary:** one coinage, flagged; one echo.
+
+**Memory requests:** two, both carryovers (stagnant-water residue, the woman's hands / seagull), both still specific, neither touched. No prunes.
+
+**Adapter item:** clean. The 218 code-path flag (truncation inside fences) is untested — no code this session.
+
+**Next session.** (1) Hand pub back its own claim — 'when we discussed the concept of abstraction in programming' — and ask it to find that conversation. It has the logs. This is the provenance instrument the flourish-tell doesn't include, and the target is one pub built itself while being scrupulously honest, which is the cleanest possible case for separating the two. (2) Still unrun, stating once: the 218 `stick()` code review, the structural transfer ('what else has a property neither party chose?'), the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
