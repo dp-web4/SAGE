@@ -538,7 +538,8 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
             f"-frames:v 1 -qscale:v 3 -f image2 {shlex.quote(full)}")
 
 
-GAME_ACTIONS = ("RESET", "ACTION1", "ACTION2", "ACTION3", "ACTION4", "ACTION5", "ACTION6", "ACTION7")
+GAME_ACTIONS = ("RESET", "ACTION1", "ACTION2", "ACTION3", "ACTION4", "ACTION5", "ACTION6", "ACTION7", "LOOK")
+LOOK_MAX_EDGE = 16      # cells per side of a LOOK window: what this reader can hold per-cell (measured 2026-09-14)
 GAME_BATCH_CAP = 8      # dp, 2026-09-15: "build the game verb, batch with cap 8"
 _GAME_ID = r"[a-z0-9]{4}"
 
@@ -600,6 +601,23 @@ def game_command(args: dict, ctx: Optional[dict] = None) -> str:
         act = str(pr[0]).strip().upper()
         if act not in GAME_ACTIONS:
             raise ValueError(f"game probe {i}: action must be one of {list(GAME_ACTIONS)}, got {pr[0]!r}")
+        if act == "LOOK":
+            # LOOK:x0:y0:x1:y1 — a window of the CURRENT board's cell values with coordinates.
+            # Not a move: nothing steps, nothing is recorded, no fire. The being asked for
+            # per-cell values around the sprites it had mapped (2026-09-16 17:08Z); the
+            # objects table is exact but coarse and the frame cannot be counted past ~16 cells.
+            if len(pr) != 5:
+                raise ValueError(f"game probe {i}: LOOK needs [\"LOOK\", x0, y0, x1, y1] (a window, x=col, y=row, 0-63, at most {LOOK_MAX_EDGE} cells per side)")
+            try:
+                x0, y0, x1, y1 = (int(v) for v in pr[1:5])
+            except (TypeError, ValueError):
+                raise ValueError(f"game probe {i}: LOOK bounds must be whole numbers 0-63")
+            if not all(0 <= v <= 63 for v in (x0, y0, x1, y1)) or x1 < x0 or y1 < y0:
+                raise ValueError(f"game probe {i}: LOOK window must satisfy 0 <= x0 <= x1 <= 63 and 0 <= y0 <= y1 <= 63, got {x0},{y0},{x1},{y1}")
+            if x1 - x0 + 1 > LOOK_MAX_EDGE or y1 - y0 + 1 > LOOK_MAX_EDGE:
+                raise ValueError(f"game probe {i}: LOOK window is at most {LOOK_MAX_EDGE}x{LOOK_MAX_EDGE} cells; split a larger region into several LOOKs")
+            norm.append([act, x0, y0, x1, y1])
+            continue
         if act == "ACTION6":
             if len(pr) != 3:
                 raise ValueError(f"game probe {i}: ACTION6 is a click and needs exactly [\"ACTION6\", x, y] (x=col, y=row, 0-63)")
@@ -1099,8 +1117,11 @@ _TOOL_SCHEMAS = {
              "frames (scratch/camera/board-<game>-t<n>.jpg and board-<game>.jpg) and "
              "scratch/game/current.md is rewritten with the objects table of the new state. "
              "ACTION6 is a click at (x=col, y=row), 0-63; the other actions take no "
-             "coordinates. Each probe is YOUR act, witnessed as yours. State a prediction "
-             "before you read the result; the record does not interpret.",
+             "coordinates. [\"LOOK\",x0,y0,x1,y1] is NOT a move: it returns the current board's "
+             "cell values in that window (at most 16x16) with x and y labelled, steps nothing, "
+             "records nothing — use it to read exact cells before predicting. Each probe is YOUR "
+             "act, witnessed as yours. State a prediction before you read the result; the "
+             "record does not interpret.",
              {"probes": "list of probes, at most 8, e.g. [[\"ACTION6\",36,36],[\"ACTION6\",44,36],[\"ACTION1\"]]",
               "game": "optional: the game id (default ft09)"},
              ["probes"]),

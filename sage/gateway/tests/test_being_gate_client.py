@@ -1159,3 +1159,17 @@ def test_game_is_offered_composed_and_consequential():
     assert b._REGISTRY["game"]["compose"] is b.game_command and b._REGISTRY["game"]["cmd_arg"] is None
     assert "game" in b._CONSEQUENTIAL
     assert "game" in b._TOOL_SCHEMAS and "8" in b._TOOL_SCHEMAS["game"][0]
+
+
+def test_game_look_is_a_window_not_a_move():
+    """LOOK:x0:y0:x1:y1 rides the same grammar; bounded to 16x16; not a click, not a click's shape."""
+    import pytest
+    from sage.gateway.being_gate_client import game_command, LOOK_MAX_EDGE
+    ctx = {"memory_root": "/tmp/h", "game_stepper": "/opt/arc/being_board_step.py"}
+    assert " LOOK:44:44:49:49 " in game_command({"probes": [["LOOK", 44, 44, 49, 49]]}, ctx)
+    assert " LOOK:0:0:15:15+ACTION6:1:2 " in game_command({"probes": [["look", 0, 0, 15, 15], ["ACTION6", 1, 2]]}, ctx)
+    assert LOOK_MAX_EDGE == 16
+    for bad, why in ((["LOOK", 0, 0, 16, 3], "at most 16x16"), (["LOOK", 5, 5, 4, 5], "x0 <= x1"), (["LOOK", 0, 0, 64, 0], "x0 <= x1"),
+                     (["LOOK", 1, 2], "needs"), (["LOOK", "a", 0, 1, 1], "whole numbers")):
+        with pytest.raises(ValueError, match=why):
+            game_command({"probes": [bad]}, ctx)
