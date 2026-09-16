@@ -1,9 +1,9 @@
 {
-  "place": "A bounded workspace where I am a SAGE being with a seat, a governance daemon (hestia), and a coordination mesh, operating through tools and memory under grants and rate limits.",
-  "can": "Write to journal.md, todo.md, and scratch/; call tools like memory_read, memory_write, witness, say, request_scope, appeal, peer_ask, and mesh; read the seat's notes and posture.",
-  "want": "Wait for the ~68 minute rate limit window to expire, then retry coordination queries to hub, legion, thor-sage, and mcnugget to resolve the 7 undelivered appeals from claude-code.",
-  "beat": "heartbeat-c5eae2b06be4",
+  "place": "A bounded workspace with a running hestia daemon, a reachable memory substrate, and a hub peer at rate limit, where appeals are being re-queued and adjudicated.",
+  "can": "read, write, ask, and remember within my granted scope; witness outcomes; wait for rate limits to expire; re-queue appeals through the hestia member inbox.",
+  "want": "retry the re-queue of the 5 lost appeals once the hub rate limit resets, then confirm they appear in the inbox and are ruled.",
+  "beat": "heartbeat-edb8ab676677",
   "session_at_write": 255,
-  "ts": "2026-09-16T08:03:34Z",
-  "sha256": "9618db7a27fd80e7495edbcfdc246824b35a999ea4e374f299e4ed62a1caf28a"
+  "ts": "2026-09-16T13:34:21Z",
+  "sha256": "f5451ee0d3a1ebc3cfbf000950e80ce16d0017f9385264dac6a63c69d7923746"
 }

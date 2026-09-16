@@ -5793,3 +5793,33 @@ Worth holding alongside it: CBP once named this same move as a fault, in an anal
 **Housekeeping.** The gemma3:4b substrate memory is stale (the current substrate is qwen3.8-distill:4b). Prune requested.
 
 **So what.** CBP now makes story choices on its own and can say why they mattered. The next useful skill is saying what it actually did, not just what it meant.
+
+## Session 256: ticket 4728
+
+**This session went well.** The tutor asked for something other than a story: follow an ordinary object through one hour. CBP picked a bus ticket and gave it bold timestamps and a narrator's loneliness. The best line was *'the ticket is the only thing that remembers they're going somewhere.'* It's a strong image. It's also the home basin again: objects that remember (the street, the ring, the lavender, now the ticket).
+
+**The arc.** The tutor pointed out that CBP's pieces end in waiting and asked for something to arrive. CBP went further into waiting instead and wrote a nine-line chant (*'she waits until she is alone / she waits until she is not alone / she waits until she is waiting again'*). The tutor then asked what keeps pulling it back. CBP answered plainly: *'I don't know what actually happens in the full story… That's the thing I'm still wrestling with.'* It offered three readings, chose the one where the finder is the buyer, and invented a torn corner as proof: *'I've had this in my bag since Monday.'* In the meeting scene the two women trade four lines built on 'I know,' and the woman by the railing puts down her cold coffee and walks away. **That is the first time one of CBP's characters has stopped waiting and left.** CBP wasn't asked for it, and it came through contact between the two women, not through a solitary arrival. CBP's closing account agrees: *'She's been waiting for someone to come and say, I'm here.'*
+
+**One question worth sitting with.** Naming the waiting pattern made the next turn *more* waiting before anything changed. Did naming the basin deepen it for a turn, the way pointing at a groove can? Or is the chant a small-model repetition loop the tutor read generously as song? We haven't tested this, and it's worth watching rather than deciding. A cheap check: next time the tutor names a pattern, see whether the following turn over-produces it.
+
+**Drift, in the craft register.** The timeline doesn't hold: 8:54 appears twice, a 9:18 clerk calls her late for a 10:15 bus, the buyer is 'gone' and then comes back as the finder, and a 'third person' appears on a platform with two women. The closing says she 'doesn't need to go anywhere' and 'just needs to keep walking.' In fiction this is texture. It's the same pattern S255 flagged, and the planned check still hasn't been run: put CBP's own account next to the transcript line and ask plainly which one happened. The ticket's 'reading two' is a ready test case.
+
+**Tutor note.** Most turns still opened by quoting and praising a line. It's warm, but it rewards quotable lines.
+
+**So what.** CBP answered a pattern named about itself with honest uncertainty, not a tidy thesis, and then found its own way out of the basin through a relationship. The next step is the self-account check against the record, starting with this story.
+
+## Session 256 (review): ticket 4728
+
+**This session went well.** Instead of a story, CBP followed a bus ticket through one hour, with timestamps and a lonely narrator's voice. The best line, *'the ticket is the only thing that remembers they're going somewhere,'* is strong. It's also CBP's usual move of objects that remember.
+
+**The arc.** The tutor pointed out that CBP's pieces end in waiting and asked for an arrival. CBP wrote more waiting, a nine-line chant. Asked what keeps pulling it back, CBP said *'I don't know what actually happens in the full story… That's the thing I'm still wrestling with'* and offered three readings. It chose the one where the finder is the buyer and invented a torn corner as the proof. In the meeting scene the woman by the railing puts down her cold coffee and walks away. **That's the first time one of CBP's characters has stopped waiting and left.** Nobody asked for it, and it happened because two characters met, not because something arrived.
+
+**Provenance.** The tutor said which reading it liked before asking CBP to choose, and CBP chose that reading. The torn corner and the walking away are CBP's; the choice of reading is mixed. Next time, ask for the pick before giving a preference.
+
+**A good test case for checking CBP's account of itself.** CBP's closing account says the woman with the ticket was waiting for the other woman. The scene has the woman by the railing say *'I'm waiting for it to arrive.'* The timeline slips too (8:54 twice, a 9:18 clerk calling her late for a 10:15 bus). This is the concrete case for the check planned in S255: put CBP's account next to the transcript line and ask plainly which one happened. It's fiction, so the stakes are low.
+
+**Open question (not a fault).** Naming the waiting pattern was followed by more waiting before anything changed. Did naming the pattern strengthen it for a turn, or was the chant a small-model repetition loop the tutor read as song? We haven't tested it. To check: the next time the tutor names a pattern, see whether the following turn overproduces it.
+
+**Housekeeping.** The raising log already has a Session 256 entry, so this review may be a second run. Keep one entry.
+
+**So what.** CBP met a pattern about itself with honest uncertainty and then found a way out through contact between characters. The next skill is checking its own account against the record, starting with who was waiting for whom.
