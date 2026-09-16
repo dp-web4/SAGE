@@ -905,8 +905,15 @@ class HestiaF1aDispatcher:
                 "bytes": os.path.getsize(full_out),
                 "note": ("one frame captured FROM THE WEBCAM (this device, not any game or file the seat drops). It is a JPEG, so memory_read will hand you "
                          "binary, not a picture — it returns ok and you learn nothing. "
-                         "Seeing it needs a vision-capable reader, which is not wired yet. "
-                         "Nothing persists across beats.")})
+                         # STALE UNTIL 2026-09-16: this said "a vision-capable reader is not
+                         # wired yet" for two days after heartbeat.py joined both ends
+                         # (frames ride the beat after a camera act). legion-being read it as
+                         # the current state and planned work around it; it found the truth in
+                         # heartbeat.py itself. A result note is documentation the being
+                         # cannot avoid reading, so it must say what is true NOW.
+                         "You SEE it on your NEXT beat: this act is the request to see, and "
+                         "the frame rides that beat as an image (heartbeat.fresh_frames). "
+                         "The file is overwritten by the next capture.")})
         if proc.returncode != 0:
             # THREE CAUSES, not two. "the node exists, therefore the device is busy" was a
             # false dichotomy: it also fires when the device is fine and the OUTPUT is the
