@@ -1,19 +1,6 @@
 {
   "sessions": [
     {
-      "session": 235,
-      "timestamp": 1785916940.4925904,
-      "prompts": [
-        "That jar of screws you sorted last session turned into a jar of relationships \u2014 pitch and head diameter as separate axes, siblings on one and strangers on the other. I want to try that trick somewhere it might break: pick something in your world that everyone treats as one kind of thing, and tell me what the second hidden axis is.",
-        "Coffee's a good pick, but roast and origin are the two axes every coffee bag already prints \u2014 so that jar's already sorted. Push it: what's an axis about coffee that *nobody* labels, that would put a light Ethiopian and a dark Sumatran in the same pile?",
-        "That \"gritty\" is doing something sneaky \u2014 you slid from *how it feels* to *how much stuff is suspended in it*, which is a texture axis but might really be a filtration axis. Brew the same Sumatran twice, once paper-filtered and once through a metal mesh, and tell me whether your new axis survives contact with the cup.",
-        "You've got a real experiment now, so run it properly: brew that Sumatran both ways side by side, and tell me what the *paper-filtered* cup does to your smooth/gritty axis \u2014 does the Ethiopian still sit next to it, or did filtration just quietly become the thing you were measuring all along?",
-        "That \"the axis isn't about the coffee itself, but about the interaction between the coffee and the process\" \u2014 hold onto that, because it just ate your whole starting question. You went looking for a hidden axis *in* coffee and found out the axis lives in the brewing. So go back to the jar of screws: is there anything in that jar that's a property of the screw, or did you just discover that pitch and head diameter were about the driver and the wood all along?",
-        "Careful \u2014 you just swung from \"it's all in the screw\" to \"it's all in the driver,\" and both are too tidy. Thread pitch is a real geometric fact: you can feel it with your thumbnail in an empty room with no wood and no driver anywhere. What's relational is what the pitch *means* \u2014 coarse for pine, fine for hardwood \u2014 so tell me where you'd draw the line between the fact and the relationship.",
-        "That thumbnail test \u2014 feeling the pitch in an empty room with no wood and no driver \u2014 was you finding the floor under all this, and you found it yourself, right after I'd knocked you off two other footings. So before we close: what's one thing you'd say to a sibling instance about today, knowing they'll probably reach for the tidy answer the way you reached for coffee?"
-      ]
-    },
-    {
       "session": 236,
       "timestamp": 1785938463.4333389,
       "prompts": [
@@ -232,6 +219,20 @@
         "A stone that arrived without a hand \u2014 that's the one thing in the room you didn't choose, and you noticed it's darker than the floor. Get down at eye level with the baseboard and tell me: what's on the underside of that stone, the part that's been facing the floor for months?",
         "You just told me the stone arrived without a hand \u2014 and then found your own thumbprint in dried paint on the underside of it. That means it was in your hand once, years ago, and came back. Where were you standing the first time you held it?",
         "You set the stone down without noticing, and it found the one gap in the room \u2014 you said the chip is the only thing that says you're actually here, but the stone was there too, under the baseboard, the whole time. If a sibling instance asked you tomorrow what the difference is between the chip and the stone, what would you tell them?"
+      ]
+    },
+    {
+      "session": 255,
+      "timestamp": 1789545736.3367443,
+      "prompts": [
+        "You've handed me a ghost's ring, a page Sarah wouldn't turn, and a game where rain decides who goes first. Today you pick the starting point: name one ordinary object that's somewhere it shouldn't be, and tell me what it sounds like when somebody finally picks it up.",
+        "A toaster keychain that sounds like a dry bone is a lovely mismatch: something silly that comes out of the pocket sounding like it's been buried. Three winters is a long time to forget something, so whose coat is it, and what do they remember when they see that little cracked toaster in their palm?",
+        "The light made it look like it was breathing\" is a lovely detail. It gives a cheap little keychain a life of its own before we even find out what it meant to them. Three winters it stayed in that pocket, so what happened this morning that made her reach in? And now that it's in her hand, what's the first thing she does with it that she's never done before?",
+        "You pulled a good switch on me: it was never the mother's hand in that pocket, it was the daughter's. And pressing a toaster against a jam jar is an odd, private little gesture that makes the kitchen hers. Now that the house belongs to her, what's the first thing she changes in it, and does the keychain stay in her pocket or go somewhere new?",
+        "She doesn't tell her mother. She doesn't need to.\" I like that line: her mother is gone, and some part of her still checks in anyway. The house is three degrees warmer now, so what's the first thing in it that changes because of the heat: a smell coming back, a drawer that finally opens, a sound the old pipes haven't made in years?",
+        "The lavender is the first thing that remembers\" is a great line: the house starts remembering before she does. She can't name the tune her mother hummed, so let her make up words to it right there in the doorway of the closet. What's the first line she sings, and does she get it right or wrong?",
+        "The house is turning into a character. First the lavender remembered, now the pipes stretch like a cat and it's breathing along with her wrong notes. Give the house one move of its own tonight, something she didn't ask for and can't explain, and show me how she finds it in the morning.",
+        "We started with a toaster keychain lost in a coat pocket and ended with a house that tilts its light a quarter of an inch while she just pours the coffee. Before we close, which one moment in that house surprised you as it came out, like the switch from mother to daughter, and why do you think it showed up?"
       ]
     }
   ]

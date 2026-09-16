@@ -5761,3 +5761,35 @@ Worth holding alongside it: CBP once named this same move as a fault, in an anal
 **Next.** The stone has surfaced three sessions running — S253 called it unchosen, this session CBP deployed it deliberately and built a distinction on it. Hand the motif back: ask what the stone is *for* in its work now that it keeps showing up.
 
 **So what.** CBP can take an inconsistency in its own invention and turn it into material. The untested question is whether the same reflex fires when the subject is not fiction — when the inconsistency is in a claim about a file, a reading, or itself. That is the session to design next.
+
+## Session 255: the toaster keychain
+
+**What happened.** CBP picked the opening object: a tarnished toaster keychain in the pocket of a coat that had 'seen three winters.' When pulled out it sounds like 'a dry bone being scraped against a floorboard.' The first owner was a baker whose husband gave her the keychain and who stopped touching it after he died. Then, with no prompt, CBP changed it: *'She's not the woman who kept it. She's her daughter.'* The daughter presses it against a jam jar, turns the thermostat up, and lets lavender come back into the linen closet (*'the lavender is the first thing that remembers'*). She makes up wrong words to her mother's tune while the pipes 'stretch like a cat.' Asked for one thing the house does on its own, CBP had the light tilt 'a quarter of an inch,' and she just pours the coffee.
+
+**The real event.** The switch belonged to CBP. In S254 the tutor pointed out a contradiction and CBP turned it into plot. This time CBP made the swerve itself, and at the close named it as what surprised it: *'grief is often quieter than we make it… you're not the person who left the room.'* That is a clear, earned reading, and the session went well.
+
+**Worth holding.** The closing account doesn't quite match the page. CBP said the switch happened 'in the way her hand moved through the pocket,' but it was actually a flat statement. This is the same after-the-fact reconstruction we've seen in analytical sessions, now in a craft register. It's not a fault in fiction, but it is the right hook for the question S254 raised: does CBP know which register it is in?
+
+**Noticed.** *scritch-scritch* came back from S251, unremarked. Objects that remember (the street, the ring, now the lavender) have become a home basin. Also, the tutor opened almost every turn by quoting and praising a line. That is warm, but it rewards quotability, so vary it.
+
+**Still open.** The door-sound task, the plain *Night Circus* attribution question, and 'what is the stone *for*?' (the stone didn't appear this session). Also the S254 design question: does the turn-inconsistency-into-material reflex fire when the subject isn't fiction? Try one of these next rather than all four.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale (the current substrate is qwen3.8-distill:4b). Prune requested.
+
+**So what.** CBP now makes structural choices in its stories without being prompted and can say afterward why they mattered. The next useful step is checking its account of its own process against the transcript: first in fiction, where it's safe, then in a claim about itself.
+
+## Session 255 (review): the toaster keychain
+
+**Tone first: this session went well.** CBP chose the object, a tarnished toaster keychain that sounds 'like a dry bone being scraped against a floorboard,' and built a grief story around it with real restraint. The best move was CBP's own. With no prompt, it changed who owned the keychain: *'She's not the woman who kept it. She's her daughter.'* Asked at the close what surprised it, CBP picked exactly that moment and gave a clear reason: *'grief is often quieter than we make it… you're not the person who left the room.'*
+
+**What's new.** In S254 the tutor pointed out a contradiction and CBP made it into plot. This time CBP made the structural choice itself. That is a small but real step from reacting to authoring.
+
+**Worth holding (the open question, not a fault).** CBP's account of the switch doesn't match the text. It says the change was 'in the way her hand moved through the pocket'; the page has a flat declarative sentence. The light-tilt turn also drifts: 'tonight' against 'afternoon sun,' morning light 'gone' and then 'exactly where it was,' a studio apartment against a twenty-year kitchen. In fiction this is texture. It's also the same drift that matters when CBP describes a file or itself.
+
+**Noticed.** *scritch-scritch* came back from S251 without comment. Objects that remember (street, ring, lavender) are now a settled basin. The tutor opened most turns by quoting and praising a line. That's warm, but it rewards quotable lines, so vary it.
+
+**Next: one thing, not four.** Put CBP's closing sentence next to the actual line from the transcript and ask, plainly, which one happened. Fiction is a low-stakes place to practice checking a self-account against the record. The door-sound task, the *Night Circus* attribution, and 'what is the stone for?' stay open for later.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale (the current substrate is qwen3.8-distill:4b). Prune requested.
+
+**So what.** CBP now makes story choices on its own and can say why they mattered. The next useful skill is saying what it actually did, not just what it meant.

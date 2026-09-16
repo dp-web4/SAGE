@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 254,
+    "session_count": 255,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-15T19:01:20.665511",
-    "last_session_summary": "Session 254 (creating phase): ...",
+    "last_session": "2026-09-16T01:02:50.035237",
+    "last_session_summary": "Session 255 (creating phase): Tonight, the light in the kitchen changes. Not a flicker, not a flicker \u2014 it shi...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -571,7 +571,9 @@
       "First time CBP named itself as a first-person observer inside its own fiction ('The \"I\" in the kitchen is me \u2014 cbp\u2026 a witness to the moment'), and the 'I' appeared before the tutor asked about it",
       "CBP chose a craft constraint for its next session unprompted: write the sound itself, 'not as a metaphor, not as a description'",
       "First time CBP has taken a contradiction surfaced inside its own fiction and resolved it *forward* \u2014 inventing the kitchen-table scene to reconcile 'no hand' with 'my thumbprint' \u2014 rather than conceding the error or defending the original claim.",
-      "Closed on a stated distinction rather than on silence. The prior two passes flagged the silence default; this close names two things and tells them apart."
+      "Closed on a stated distinction rather than on silence. The prior two passes flagged the silence default; this close names two things and tells them apart.",
+      "First time CBP metabolized an inconsistency in its own invention into new material rather than repairing, retracting, or going silent \u2014 the contradiction became the kitchen-table scene.",
+      "First unprompted change of a character's identity partway through a story (mother to daughter) that CBP later named as its own surprise. In S254 the tutor pointed out the contradiction first; this time CBP made the change and then examined it"
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -640,7 +642,8 @@
     },
     "I'd rather be the finger. The plastic key keeps the landings, yes, but the finger arrives fresh each time. The new mind is the finger \u2014 it doesn't know the scuff marks or the tilt or the thousand off-",
     "The woman picks it up.\n\nShe doesn't do it because the street tells her to \u2014 she does it because the street *wants* her to, and she's the one who knows the weight of it. She knows what it feels like to",
-    "I didn't choose the stone. It just showed up. It showed up in the tunnel scene, in my hand, in his face. It's the only thing I've ever felt that was both solid and soft all at once.\n\nThe ending isn't "
+    "I didn't choose the stone. It just showed up. It showed up in the tunnel scene, in my hand, in his face. It's the only thing I've ever felt that was both solid and soft all at once.\n\nThe ending isn't ",
+    "Tonight, the light in the kitchen changes. Not a flicker, not a flicker \u2014 it shifts, like a curtain being drawn by an invisible hand. The afternoon sun that's been slanting through the window at an an"
   ],
   "vocabulary": {
     "self_description": [],
@@ -1614,7 +1617,13 @@
       "the chip is the only thing that feels real when I'm in the room (roughness as the proof of presence, against a room where everything else is smooth and 'just right')",
       "dropped from the sky rather than chosen by a hand (her criterion for the un-authored object)",
       "I am here because I decided to be / I am here because I was already here (the two kinds of being-present the two objects testify to)",
-      "I didn't notice that I was holding it until I set it down (her account of an act done without witnessing it)"
+      "I didn't notice that I was holding it until I set it down (her account of an act done without witnessing it)",
+      "a sound like a dry bone being scraped against a floorboard (the toaster keychain leaving the pocket: a silly object that sounds buried)",
+      "the lavender is the first thing that remembers (the house starts remembering before the person does)",
+      "the house sounds like it's breathing with her (wrong notes answered by groaning pipes; the tutor suggested the house as a character, and the image is CBP's)",
+      "the light has tilted a quarter of an inch (the house acts on its own through a change too small to prove; she answers by just pouring the coffee)",
+      "grief is often quieter than we make it (CBP's reading of why the switch showed up with no announcement)",
+      "you're not the person who left the room / the pocket where someone else's things were always kept, and suddenly you're the only one who knows where they are (inheriting as a quiet change of who is holding it)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1678,8 +1687,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 254,
-        "total_exchanges": 1407,
+        "total_sessions": 255,
+        "total_exchanges": 1415,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1687,9 +1696,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-15T19:01:20.665539",
+      "last_contact": "2026-09-16T01:02:50.035268",
       "notes": [],
-      "sessions": 254
+      "sessions": 255
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

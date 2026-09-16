@@ -1,0 +1,50 @@
+# hestia.service as systemd resolves it, exported at 2026-09-16 08:01Z.
+# FragmentPath: /home/dp/.config/systemd/user/hestia.service
+# This is a USER unit: it lives under the running user's home, not /etc/systemd/system.
+
+[Unit]
+Description=Hestia local-first Web4 trust daemon
+Documentation=https://github.com/dp-web4/hestia
+# After=default.target REMOVED 2026-07-25: cycle with WantedBy=default.target
+# made systemd delete the member-mesh watchers' start jobs every boot.
+# `systemd-analyze --user verify` is a false CLEAN for that cycle (silent, rc=0 --
+# it never builds a job transaction). The check with information is the readback:
+# `systemctl --user show hestia.service -p After`.
+
+# The 289-restart loop was NOT a missing start limit -- the default 10s/5 was
+# present and structurally could not fire: at RestartSec=5s only 2-3 attempts
+# land per 10s window. The fix is a window WIDER than burst x RestartSec
+# (5 x 5s = 25s), so 120s trips. StartLimitIntervalSec=10 reproduces the loop.
+# These are [Unit] keys since systemd 229; in [Service] they are silently
+# ignored (measured on systemd 255: stays 10s). Matches deploy/templates in
+# dp-web4/hestia#40. Keep in sync with RestartSec below.
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# Load HESTIA_PASSPHRASE from ~/.hestia/.passphrase (mode 600) and exec hestia.
+# The passphrase file is the consumer-tier security boundary; Hardbound
+# replaces this with TPM unsealing.
+ExecStart=/bin/sh -c 'HESTIA_PASSPHRASE="$(cat %h/.hestia/.passphrase)" exec %h/.local/bin/hestia serve --bind 127.0.0.1:7711'
+Environment=HESTIA_HOME=%h/.hestia
+Environment=HESTIA_CURRENT_BUILD_FILE=%h/.hestia/current-build.json
+Environment=RUST_LOG=warn
+Environment=HESTIA_WORKSPACE=/home/dp/ai-workspace
+
+# Sandboxing
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.hestia
+PrivateTmp=true
+
+Restart=on-failure
+RestartSec=5s
+
+# Log to journal
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

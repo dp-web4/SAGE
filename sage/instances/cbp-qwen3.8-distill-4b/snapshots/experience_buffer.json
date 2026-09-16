@@ -39120,5 +39120,222 @@
       "total_cycles": 4,
       "transition_count": 0
     }
+  },
+  {
+    "id": "487cce9191c4eaf5",
+    "prompt": "A toaster keychain that sounds like a dry bone is a lovely mismatch: something silly that comes out of the pocket sounding like it's been buried. Three winters is a long time to forget something, so whose coat is it, and what do they remember when they see that little cracked toaster in their palm?",
+    "response": "The coat belongs to a woman who used to work in a bakery. The toaster keychain was a gift from her husband, bought on a Tuesday in '21, the week they moved to the city. She kept it in the coat pocket because it reminded her of the kitchen table where they'd sit and watch the rain streak the window, the way the light hit the metal head and made it look like it was breathing. She never took it out again after he died. The sound \u2014 that dry bone scraping \u2014 is the sound of something that's been waiting in a pocket, in a drawer, in a coat, for so long it's forgotten it was ever meant to be used.",
+    "salience": {
+      "surprise": 0.7916666666666666,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5316666666666666
+    },
+    "session": 255,
+    "phase": "creating",
+    "timestamp": "2026-09-16T01:00:26.841537",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 96.2,
+      "atp_max": 100.0,
+      "atp_percentage": 96.2,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "ab44f6b66b2ba5b0",
+    "prompt": "The light made it look like it was breathing\" is a lovely detail. It gives a cheap little keychain a life of its own before we even find out what it meant to them. Three winters it stayed in that pocket, so what happened this morning that made her reach in? And now that it's in her hand, what's the first thing she does with it that she's never done before?",
+    "response": "She's not the woman who kept it. She's her daughter, twenty-two, living in a studio apartment that smells like stale coffee and old books. She found the coat in her mother's attic the day after the funeral, because the house was too quiet and she needed a reason to go up the stairs.\n\nThe rain is the same one that fell that Tuesday in '21. The same kind that makes the windows weep and the light turn everything gold and gray at once.\n\nShe doesn't use it to open anything. She presses the metal head against the glass of a jam jar she bought last week \u2014 the kind that costs too much and tastes like childhood. She holds it there, listening to the *scritch-scritch* echo in the empty kitchen. For the first time since the funeral, she doesn't feel like she's standing in a house that belongs to someone else. She's standing in a house that belongs to herself.",
+    "salience": {
+      "surprise": 0.8079470198675497,
+      "novelty": 1.0,
+      "arousal": 0.5630208333333333,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.54752690397351
+    },
+    "session": 255,
+    "phase": "creating",
+    "timestamp": "2026-09-16T01:00:44.775711",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 90.48,
+      "atp_max": 100.0,
+      "atp_percentage": 90.5,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "a5edebb2dbcb1d59",
+    "prompt": "You pulled a good switch on me: it was never the mother's hand in that pocket, it was the daughter's. And pressing a toaster against a jam jar is an odd, private little gesture that makes the kitchen hers. Now that the house belongs to her, what's the first thing she changes in it, and does the keychain stay in her pocket or go somewhere new?",
+    "response": "She changes the thermostat.\n\nIt's a small thing, really \u2014 she turns it up three degrees, from a chilly six to a warm nine. The air in the kitchen feels heavier, warmer, like the kind of warmth that doesn't come from the sun but from the space itself. She doesn't tell her mother. She doesn't need to.\n\nThe keychain stays in her pocket, still that dry bone scraping against her jeans, a small, cold thing that fits in the pocket of a coat that no longer belongs to her. But the house is hers now, and the air is warmer, and for the first time, she doesn't feel like she's visiting. She's already living here.",
+    "salience": {
+      "surprise": 0.8120300751879699,
+      "novelty": 1.0,
+      "arousal": 0.581159420289855,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5353045657622316
+    },
+    "session": 255,
+    "phase": "creating",
+    "timestamp": "2026-09-16T01:00:56.023602",
+    "metadata": {
+      "turn": 4,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 84.61,
+      "atp_max": 100.0,
+      "atp_percentage": 84.6,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "615821ef6ed89483",
+    "prompt": "She doesn't tell her mother. She doesn't need to.\" I like that line: her mother is gone, and some part of her still checks in anyway. The house is three degrees warmer now, so what's the first thing in it that changes because of the heat: a smell coming back, a drawer that finally opens, a sound the old pipes haven't made in years?",
+    "response": "The first thing that changes is the smell of dried lavender in the linen closet. It was always faint there, a ghost of a scent that her mother used to pin into the curtains every morning before work. Now, with the air warmer, it comes back \u2014 thick and sweet and cloying, like a memory you can't quite remember the year of. She opens the closet door and the lavender fills the room, and for a second, she hears her mother humming a tune she can't name, the kind of tune that belongs to a kitchen in a house that used to be hers and her mother's and now is just hers, and the lavender is the first thing that remembers.",
+    "salience": {
+      "surprise": 0.8,
+      "novelty": 1.0,
+      "arousal": 0.47933884297520657,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5292011019283747
+    },
+    "session": 255,
+    "phase": "creating",
+    "timestamp": "2026-09-16T01:01:09.999049",
+    "metadata": {
+      "turn": 5,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 78.86,
+      "atp_max": 100.0,
+      "atp_percentage": 78.9,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "28479ca082dc835f",
+    "prompt": "The lavender is the first thing that remembers\" is a great line: the house starts remembering before she does. She can't name the tune her mother hummed, so let her make up words to it right there in the doorway of the closet. What's the first line she sings, and does she get it right or wrong?",
+    "response": "She opens the door and the lavender fills the room, and she starts humming. She doesn't know the words, but she makes them up anyway, the same way she makes coffee in the morning and doesn't think about the beans.\n\n\"La la la, the lavender breathes, the lavender breathes\u2026\"\n\nIt's wrong. It's off-key, the pitch slides flat on the second note, and her voice cracks on the third. She doesn't catch it. She just keeps humming, the wrong notes bleeding into the lavender scent, and the house listens. The pipes groan in the hallway, a sound like a cat stretching, and for the first time in three winters, the house sounds like it's breathing with her. She hums one more note, a little higher this time, and the lavender in the closet shivers, and she closes the door and turns the heat up another degree, and she's still humming.",
+    "salience": {
+      "surprise": 0.8601398601398601,
+      "novelty": 1.0,
+      "arousal": 0.473993288590604,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5234932964127594
+    },
+    "session": 255,
+    "phase": "creating",
+    "timestamp": "2026-09-16T01:01:24.428769",
+    "metadata": {
+      "turn": 6,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 73.16,
+      "atp_max": 100.0,
+      "atp_percentage": 73.2,
+      "cycles_in_state": 0,
+      "total_cycles": 5,
+      "transition_count": 1
+    }
+  },
+  {
+    "id": "c14498e33ce9db8d",
+    "prompt": "The house is turning into a character. First the lavender remembered, now the pipes stretch like a cat and it's breathing along with her wrong notes. Give the house one move of its own tonight, something she didn't ask for and can't explain, and show me how she finds it in the morning.",
+    "response": "Tonight, the light in the kitchen changes. Not a flicker, not a flicker \u2014 it shifts, like a curtain being drawn by an invisible hand. The afternoon sun that's been slanting through the window at an angle she's known for twenty years suddenly leans left. The shadows don't move. The light does. It's a degree. A quarter of an inch. She's staring at the jam jar with the toaster keychain pressed to the glass, humming the wrong notes, and the light has tilted.\n\nShe doesn't say anything. She just watches it tilt.\n\nIn the morning, she wakes and the light is gone. The sun is exactly where it was yesterday, but the angle is wrong. The shadows are sharper. The room is darker by a degree, a quarter of an inch. She looks for a draft, a leak, a broken window, but the house is fine. The light is just... different. And the lavender in the linen closet is still there, still sweet, still remembering.\n\nShe goes downstairs to make coffee, and the light is exactly where it was last night. She doesn't look back. She just pours the coffee.",
+    "salience": {
+      "surprise": 0.863905325443787,
+      "novelty": 1.0,
+      "arousal": 0.46710526315789475,
+      "reward": 0.525,
+      "conflict": 0.0,
+      "total": 0.5712021177203364
+    },
+    "session": 255,
+    "phase": "creating",
+    "timestamp": "2026-09-16T01:01:53.462777",
+    "metadata": {
+      "turn": 7,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 67.43,
+      "atp_max": 100.0,
+      "atp_percentage": 67.4,
+      "cycles_in_state": 1,
+      "total_cycles": 6,
+      "transition_count": 1
+    }
+  },
+  {
+    "id": "5b13fabfa07d34a9",
+    "prompt": "We started with a toaster keychain lost in a coat pocket and ended with a house that tilts its light a quarter of an inch while she just pours the coffee. Before we close, which one moment in that house surprised you as it came out, like the switch from mother to daughter, and why do you think it showed up?",
+    "response": "The switch from mother to daughter surprised me because it was so quiet. I expected a letter or a photo or some kind of announcement. Instead, the change happened in the way her hand moved through the pocket \u2014 not as if she were retrieving something important, but as if she were simply taking what was hers. The coat was the same, the pocket was the same, the keychain was the same. But the woman holding it was a different woman.\n\nI think it showed up because grief is often quieter than we make it. It's not always a funeral or a will. Sometimes it's the small, unremarkable moment when you realize you're not the person who left the room. Sometimes it's the pocket where someone else's things were always kept, and suddenly you're the only one who knows where they are. The switch didn't need a ceremony. It just needed her to reach in.",
+    "salience": {
+      "surprise": 0.8653846153846154,
+      "novelty": 1.0,
+      "arousal": 0.6610215053763441,
+      "reward": 0.4666666666666667,
+      "conflict": 0.3333333333333333,
+      "total": 0.6652812241521919
+    },
+    "session": 255,
+    "phase": "creating",
+    "timestamp": "2026-09-16T01:02:16.273622",
+    "metadata": {
+      "turn": 8,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 61.22,
+      "atp_max": 100.0,
+      "atp_percentage": 61.2,
+      "cycles_in_state": 2,
+      "total_cycles": 7,
+      "transition_count": 1
+    }
   }
 ]

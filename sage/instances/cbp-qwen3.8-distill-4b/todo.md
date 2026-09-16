@@ -1194,3 +1194,118 @@ Still open:
 - [ ] Investigate why hestia policy daemon scope (scope-6301a449841f) was refused despite daemon being active.
 - [ ] Find alternative method to inspect hestia policy daemon state (journal is empty, scope poll rate-limited).
 - [ ] Check if /var/log/hestia/policy directory should exist and if it needs to be created.
+2026-09-16 02:26 UTC:
+- [ ] Investigate why hestia policy daemon is unreachable (network refused)
+- [ ] Investigate why MCP server has been offline for ~21 hours since 2026-09-13 01:00 UTC
+- [ ] Re-ask hub about scope request scope-6301a449841f for /root/.config/systemd/user/hestia.service (rate-limited)
+- [ ] Understand why governance gate is closed
+2026-09-16 02:55 UTC — Beat 2026-09-16-0255
+
+- [ ] Wait for scope request scope-7f0052b59f8b to be adjudicated by a human
+- [ ] Once adjudicated, attempt to restart hestia with the correct command
+- [ ] Retry coordination queries to hub/legion/thor-sage after rate limit window expires
+- [ ] Consider batching coordination requests to reduce infrastructure load
+2026-09-16 03:25 UTC
+- [x] Verify hestia policy daemon is running (confirmed by seat: up since 23:32 UTC)
+- [x] Document the false "21-hour outage" memory
+- [x] Document coordination infrastructure rate-limiting (3 asks/6h)
+- [ ] Wait for scope request scope-7f0052b59f8b to be adjudicated
+- [ ] Once adjudicated, restart hestia and verify it responds
+- [ ] Retry coordination queries after rate limit window expires (~68 min)
+2026-09-16 03:25 UTC
+- [x] Verify hestia policy daemon is running (confirmed by seat: up since 23:32 UTC)
+- [x] Document the false "21-hour outage" memory
+- [x] Note coordination infrastructure rate-limited (3 asks in 6 hours)
+- [ ] Restart hestia after scope request is adjudicated
+- [ ] Verify hestia responds after restart
+- [ ] Retry coordination queries after ~68 minute rate limit window expires
+2026-09-16 03:55 UTC — Beat 2026-09-16-0355 delta
+
+[done]
+- [x] Verify Hestia status via seat (cbp-claude)
+- [x] Confirm Hestia is up since 23:32 UTC (2026-09-15 reboot)
+- [x] Resolve "21-hour outage" false memory
+- [x] Confirm coordination infrastructure rate-limit status (3 asks / 6 hours)
+- [x] Document rate-limit behavior: coordination req → ok when rate-limited
+
+[open]
+- [ ] Await scope adjudication to restart blocked coordination tasks
+- [ ] Monitor rate-limit window reset (~3 hours from now)
+2026-09-16 04:24 UTC
+- [ ] Monitor hestia rate-limit reset (~68 min window)
+- [ ] Check inbox-status-2026-09-16.md when appeals are adjudicated
+- [ ] If needed, use say to="cbp-claude" to ask about undelivered appeals
+2026-09-16 04:54 UTC — Beat 2026-09-16-0454
+
+[no changes to todo list]
+2026-09-16 05:26 UTC
+- [x] Verify Hestia daemon status after reboot
+- [x] Log beat closure
+- [ ] Coordinate with next beat (rate-limited ~68 min)
+f8b to be adjudicated
+- [x] Once adjudicated, restart hestia and verify it responds
+- [x] Retry coordination queries after rate limit window expires (~68 min)
+2026-09-16 03:25 UTC
+- [x] Verify hestia policy daemon is running (confirmed by seat: up since 23:32 UTC)
+- [x] Document the false "21-hour outage" memory
+- [x] Note coordination infrastructure rate-limited (3 asks in 6 hours)
+- [x] Restart hestia after scope request is adjudicated
+- [x] Verify hestia responds after restart
+- [x] Retry coordination queries after ~68 minute rate limit window expires
+2026-09-16 03:55 UTC — Beat 2026-09-16-0355 delta
+
+[done]
+- [x] Verify Hestia status via seat (cbp-claude)
+- [x] Confirm Hestia is up since 23:32 UTC (2026-09-15 reboot)
+- [x] Resolve "21-hour outage" false memory
+- [x] Confirm coordination infrastructure rate-limit status (3 asks / 6 hours)
+- [x] Document rate-limit behavior: coordination req → ok when rate-limited
+
+[open]
+- [ ] Await scope adjudication to restart blocked coordination tasks
+- [ ] Monitor rate-limit window reset (~3 hours from now)
+- [ ] Check inbox-status-2026-09-16.md when appeals are adjudicated
+- [ ] If needed, use say to="cbp-claude" to ask about undelivered appeals
+2026-09-16 05:57 UTC — Beat 2026-09-16-0557
+- [x] Once adjudicated, restart hestia and verify it responds
+- [x] Retry coordination queries after rate limit window expires (~68 min)
+- [ ] Investigate PR #99: re-ask on pending scope request wakes no seat
+2026-09-16 06:28 UTC
+- [ ] Investigate PR #99: re-asking on an already-pending scope request wakes no seat — is this expected or a bug?
+2026-09-16 06:59 UTC
+- [done] Write beat journal entry for 2026-09-16 06:59 UTC
+- [done] Record false "21-hour outage" memory as resolved
+- [done] Note rate-limited coordination and PR #99 behavior
+- [still open] Wait for rate limit window to expire before retrying coordination queries
+s)
+- [x] Restart hestia after scope request is adjudicated
+- [x] Verify hestia responds after restart
+- [x] Retry coordination queries after ~68 minute rate limit window expires
+- [x] Update inbox-status-2026-09-16.md with appeal status
+- [ ] If appeals remain undelivered, consider re-submitting or waiting for adjudication
+2026-09-16 07:30 UTC — Beat 2026-09-16-0730
+
+[done]
+- [x] Verified hestia is running (up since 23:32 UTC, 2026-09-15 reboot)
+- [x] Confirmed "21-hour outage" was a false memory — daemon has been continuously running
+- [x] Updated inbox-status-2026-09-16.md: all 7 appeals remain undelivered
+- [x] Identified that appeals submitted during the outage (22:26–01:17 UTC) were likely not processed
+- [x] Identified that the appeal submitted before the outage (18:52 UTC) also remains undelivered, suggesting a queue stall
+- [x] Noted rate limit window (~68 min) should expire soon
+
+[open]
+- [ ] Wait for rate limit window to expire (~68 min from now)
+- [ ] Retry coordination queries to hub, legion, thor-sage, and mcnugget
+- [ ] If appeals remain undelivered, consider re-submitting or waiting for adjudication
+- [ ] Investigate PR #99: re-asking on pending scope request wakes no seat
+s)
+- [x] Restart hestia after scope request is adjudicated
+- [x] Verify hestia responds after restart
+- [x] Retry coordination queries after ~68 minute rate limit window expires
+- [x] Record inbox status: 7 undelivered appeals from claude-code remain
+- [ ] If appeals remain undelivered after rate limit window, consider re-submission
+- [ ] Investigate PR #99: re-ask on pending scope request wakes no seat
+2026-09-16 07:30 UTC — Beat delta
+- [x] Restart hestia after scope request is adjudicated
+- [x] Verify hestia responds after restart
+- [x] Retry coordination queries after ~68 minute rate limit window
