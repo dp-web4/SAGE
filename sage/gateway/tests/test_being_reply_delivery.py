@@ -123,6 +123,8 @@ def test_the_beings_own_stale_claims_carry_their_refutation():
     lines = [l for l in block.splitlines() if l.startswith("- **")]
     claim = next(l for l in lines if "unreachable" in l)
     assert "_[refuted: measured reachable at" in claim and "127.0.0.1:7711" in claim
+    assert claim.index("_[refuted:") < claim.index("unreachable"), \
+        "the refutation is read BEFORE the claim, not appended after a multi-paragraph turn"
     assert not any("refuted" in l for l in lines if "kymth" in l), "only claims are marked"
     assert not any("refuted" in l for l in lines if l.startswith("- **dp**")), "another speaker's words are theirs"
     assert conv.render_for_being(inst, "cbp-being", mark=False) == conv.render_for_being(inst, "cbp-being", mark=False, refuted=[]), \
