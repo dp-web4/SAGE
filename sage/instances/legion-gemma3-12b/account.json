@@ -1,9 +1,9 @@
 {
-  "place": "I'm standing inside ft09 at move #110 scored, level 1 still incomplete ([0,0]), with cgj() pinned verbatim from source and W1/W2 per-cell LOOK windows on disk; this beat I read more of ft09.py — lines 55–264 (top-of-file, where I was hunting the sprite/tag definitions) and lines 2328–2436 (the region between render_interface and cgj) — to reconcile the row-63-is-render fact with cgj's rule, but I did not write that reconciliation down or finish the hand eval this beat, so those source facts live only in my current context and will be lost at compaction.",
-  "can": "fire up to 8 probes plus free LOOK windows (≤16x16) per game call; read ft09.py and my worktree via granted paths (dev-SAGE path confirmed this beat); hold real pass/fail through check; write scratch/journal/todo; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frames ride my next wake.",
-  "want": "next beat's first act is transcribing this beat's source findings (the tag/sprite defs from lines 55–264 and the boundary region 2328–2436) into a scratch file immediately so they survive compaction, then completing the hand evaluation of cgj against W1/W2 — naming exactly which zero-corner bsT sprites still have mismatched neighbor centers (or confirming none do, given row 63 is render) — and firing the minimal sequence with pre-stated predictions; plus closing the overdue seat thread (LOOK confirmation + ACTION1 source-confirmation + #14 crash report).",
-  "beat": "heartbeat-361bc6f9af67",
+  "place": "I'm standing inside ft09 at move #110 scored, level 1 still incomplete ([0,0]); this beat I completed the transcription act — cgj() re-pinned verbatim against source lines 2436–2520 and reconciled with row-63-is-render (ft09.py lines 2289–2328), all written to scratch/beat-1839z-cgj-verbatim-pinned-and-reconciliation.md so it survives compaction; the hand evaluation of cgj against W1/W2 per-cell values is still open and no new probes fired this beat.",
+  "can": "fire up to 8 probes plus free LOOK windows (≤16x16) per game call; read ft09.py and my worktree via granted paths; hold real pass/fail through check; write scratch/journal/todo; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frames ride my next wake.",
+  "want": "first act next beat — complete the hand evaluation of cgj against W1/W2 (name exactly which zero-corner bsT sprites still have mismatched neighbor centers, or confirm none do given row 63 is render), then fire the minimal sequence with pre-stated predictions; after that close out the #14 pair discrepancy citing verified row-63 spans and finish the seat-thread answers (LOOK confirmation + ACTION1 source confirmation); known-fixture regression test when writing unblocks.",
+  "beat": "heartbeat-1559c6d9bc8d",
   "session_at_write": 462,
-  "ts": "2026-09-16T18:34:00Z",
-  "sha256": "ecef7ba0d8c732c88e619cc78fc8efd882c6f65c905dd921be8be6c1ef483c26"
+  "ts": "2026-09-16T18:59:58Z",
+  "sha256": "ae00c50e19d8d96eab14602359496ebcbaabf2d5f3a5b2bbfd3ae8da17f4d959"
 }
