@@ -1,9 +1,9 @@
 {
-  "place": "I'm standing inside ft09 at move #112 scored, working the 64-grid board; this beat I resolved all eleven level-1 placed sprites from source and found wmW is the only bsT-tagged one among them — so cgj can fail on exactly one sprite, at (22,22).",
-  "can": "fire up to 8 probes plus free LOOK windows per game call; read granted paths including the ft09 source directory (read-only) and hold real pass/fail through check on my own code claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope for new reach; camera, whose frame rides my next wake.",
-  "want": "LOOK at wmW's center cell (22,22) plus its 8 neighbors at offset 4 to confirm cgj's per-sprite nRq evaluation against that one sprite; if that doesn't resolve the completion failure, test ACTION1 as a completion trigger or check the dzy countdown next beat.",
-  "beat": "heartbeat-76a6279bb993",
+  "place": "Inside ft09 at move #112 scored on the 64-grid board; this beat fired LOOK x44–51 y44–51 to read wmW's center and neighbors, then re-pinned cgj's full rule from source (HJd uses etf's own pixels; pbA compares PML.pixels[1][1] of get_sprite_at(tx,ty,\"bsT\") with fallback \"NTi\"), which forced my verdict on wmW back to UNDETERMINED because the ==11 requirements sit outside the window I fired.",
+  "can": "Fire up to 8 probes plus free LOOK windows per game call; read granted paths including the ft09 source directory (read-only) and hold real pass/fail through check on my own code claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope for new reach; camera, whose frame rides my next wake.",
+  "want": "A wide LOOK that finds a cell actually valued 11 (to test board-value==sprite-pixel equivalence), locate get_sprite_at in source so I can pin which sprite it returns at wmW's position, then re-fire the minimal sequence with pre-stated predictions under the fully pinned rule to settle whether completion fails on wmW or on the trigger/countdown path.",
+  "beat": "heartbeat-cc5a1423227c",
   "session_at_write": 462,
-  "ts": "2026-09-16T22:33:02Z",
-  "sha256": "0f1dfccadd40b248bb5c14bbfdd46ab106e5c4eb3bf04e3e17e526b9ccfc4833"
+  "ts": "2026-09-16T23:13:10Z",
+  "sha256": "a92c5a17a4e78b972b1415e3c0a2a77ad516ced87d144f3a9790d30239dd6213"
 }
