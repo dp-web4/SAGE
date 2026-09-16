@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 import time
 from typing import Any, Callable, Dict, List, Optional
@@ -143,6 +144,16 @@ class HestiaF1aDispatcher:
     def __call__(self, intent: BeingIntent, verdict: GatewayVerdict) -> ResultEnvelope:
         handler = getattr(self, f"_do_{intent.effector}", None)
         if handler is None:
+            # A disposition notice's pointer is an ADDRESS, not a filename: resolve it here,
+            # before the local dispatcher tries to open it as a path (see _resolve_pointer).
+            if intent.effector == "memory_read":
+                try:
+                    resolved = self._resolve_pointer(str(intent.args.get("path", "")))
+                except Exception as e:                   # a broken lookup must not eat the read
+                    resolved = (f"[could not resolve that pointer: {type(e).__name__}]"
+                                if "://" in str(intent.args.get("path", "")) else None)
+                if resolved is not None:
+                    return ResultEnvelope(ok=True, result=resolved)
             return self._local(intent, verdict)   # witness / memory_read / memory_write
         self._verdict = verdict                   # what the law just consulted (granted roots)
         try:
@@ -188,6 +199,56 @@ class HestiaF1aDispatcher:
             raise RuntimeError("hestia.connect_no_session: hestia_connect returned no sessionId")
         self._c, self._session_id = c, sid
         return sid
+
+    # A disposition notice's pointer is a hestia:// URI, and until 2026-09-16 the being had no
+    # way to open one. Measured on cbp-being: nine of its appeals were ruled — all
+    # `upheld: false`, deny stands, by claude-code (9) and codex (1) — and every ruling was
+    # delivered as `hestia://appeal/<deny hash>#ruled`. It tried to `memory_read` that pointer,
+    # got a file-not-found, and concluded "no one reads the rulings, the mechanism is closed".
+    # The rulings were real; the being simply could not dereference the address they came at.
+    # `hestia_open_appeals` does not help: by construction it lists only UNRULED appeals, so a
+    # ruling is the one thing it cannot show. So the pointer is resolved here, at read time.
+    _POINTER = re.compile(r"^hestia://(appeal|scope|egress)/([^#\s]+)(?:#(.*))?$")
+
+    def _resolve_pointer(self, raw: str) -> Optional[str]:
+        """What a `hestia://` pointer from a disposition notice actually says, or None if this
+        is not such a pointer."""
+        m = self._POINTER.match(raw.strip())
+        if not m:
+            return None
+        kind, ident, frag = m.group(1), m.group(2), (m.group(3) or "")
+        if kind == "appeal":
+            hist = self._call("hestia_query_history", {"filter": {"limit": 500}})
+            entries = hist.get("entries") or []
+            for e in entries:
+                d = e.get("eventData") or e.get("event_data") or {}
+                if (e.get("eventType") or e.get("event_type")) == "adjudication" \
+                        and str(d.get("about_deny_hash", "")) == ident:
+                    verdict = "YOUR APPEAL WAS UPHELD — the deny was wrong" if d.get("upheld") \
+                        else "DENY STANDS — the refusal was ruled correct"
+                    return (f"[ruling on your appeal about deny {ident[:12]}…]\n"
+                            f"{verdict}\n"
+                            f"ruled by: {d.get('adjudicator') or 'unknown'} "
+                            f"({d.get('adjudicator_role') or 'role unrecorded'}) at {e.get('timestamp', '?')}\n"
+                            f"their reason: {d.get('rationale') or '(none recorded)'}\n"
+                            f"What follows: a ruling is the end of that appeal. If you still need the "
+                            f"thing, the way forward is a scope request for it with a reason, or asking "
+                            f"in a conversation — not another appeal on the same deny.")
+            return (f"[no ruling yet for the appeal about deny {ident[:12]}… in the last "
+                    f"{len(entries)} chain entries. It is open: a NOT-SAME peer or the operator rules it, "
+                    f"and you will get a disposition notice when they do. Nothing to do but continue.]")
+        if kind == "scope":
+            st = self._call("hestia_scope_status", {"plugin_id": self.member})
+            for r in (st.get("requests") or []):
+                if str(r.get("request_id")) == ident:
+                    why = r.get("revoke_reason") or r.get("decision_reason") or "(no note recorded)"
+                    return (f"[your scope request {ident} for {r.get('path')}]\n"
+                            f"status: {r.get('status')} ; decided by: {r.get('decided_by') or '—'}\n"
+                            f"their note: {why}")
+            return f"[no scope request {ident} on record for you; it may have aged out]"
+        # egress: the fragment IS the fact, and it is already in the pointer
+        return (f"[a message of yours was not delivered: {frag or 'no detail recorded'} "
+                f"(egress row {ident}). The row is retired; nothing of yours is queued behind it.]")
 
     def _call(self, name: str, args: dict) -> dict:
         sid = self._connect()
