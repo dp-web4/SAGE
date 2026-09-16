@@ -39,18 +39,23 @@ from pathlib import Path
 
 HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
-EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "witness",
+EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_note", "witness",
                  "request_scope", "appeal", "peer_ask", "mesh", "say"]
 # `say` is offered at REFLECTION too, and that is not redundancy. Measured on Legion
 # 2026-09-07: the being was shown dp's first turn, its state marked it unanswered, and it
 # spent every explore step reading its own source, then closed the beat. A verb in the
 # registry and not in the offered set is a verb the being does not have, and from outside
 # that is indistinguishable from choosing not to answer.
-REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "say"]
+REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "say"]
 
 # The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
 # Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
 DP_CHANNEL = "notes/from-dp.md"
+# The SEAT's channel, beside dp's. Seat-owned too (reference_f1a.SEAT_OWNED_NOTES), and until
+# 2026-09-16 it was written but never rendered: cbp-claude left measured facts in it for
+# cbp-being and the being never saw them, because the beat only listed the file name among
+# notes/. A channel nothing renders is a channel nobody reads.
+SEAT_CHANNEL = "notes/from-the-seat.md"
 # Bounds on the conversations block in the being's state (see own_state).
 CONV_PER_CONV = 6
 CONV_TURN_CHARS = 1200
@@ -487,8 +492,7 @@ SERVICE_EFFECTORS = {
                 "appeal", "git_read", "search", "check", "pr_review", "channel_egress"),
                "was allowed by this daemon's verdict; a gate with no daemon refuses every such act"),
 }
-_DOWN_WORDS = re.compile(r"offline|\bdown\b|unreachable|not reachable|connection refused|"
-                         r"not responding|outage", re.I)
+from sage.gateway.conversations import _DOWN_WORDS  # one definition of "claims it is down"
 
 
 def _last_beat_calls(instance: Path) -> list:
@@ -506,6 +510,53 @@ def _last_beat_calls(instance: Path) -> list:
     for ph in ("explore", "posture", "reflect"):
         for t in ((rec.get(ph) or {}).get("trace") or []):
             out.append((t.get("effector"), bool(t.get("ok")), t.get("witness_id")))
+    return out
+
+
+def export_service_log(instance: Path, unit: str = "hestia.service", lines: int = 25,
+                       run=None) -> Optional[str]:
+    """Write the last `lines` of a unit's journal into the being's own notes, and return the
+    note's bare name.
+
+    WHY. cbp-being spent 2026-09-15 asking for logs it could never read: /var/log/hestia
+    (does not exist), /etc/systemd/system (a user unit is not there), /var/log/journal (binary
+    files; journalctl is a command, not a path). The daemon's output IS retained — 370 MB of
+    journal on this box — but nothing a being can open. dp, 2026-09-16: "your logs belong the
+    same notes directory". So the beat exports the tail into notes/, where the being already
+    reads and needs no grant, instead of the being asking for reach it cannot use."""
+    out = instance / "notes" / f"{unit.split('.')[0]}-recent.log"
+    runner = run or (lambda cmd: subprocess.run(cmd, capture_output=True, text=True, timeout=20))
+    try:
+        p = runner(["journalctl", "--user", "-u", unit, "-n", str(lines), "--no-pager", "-o", "short-iso"])
+        body = (p.stdout or "").strip()
+        if p.returncode != 0 or not body:
+            body = f"(no journal entries for {unit}: rc={p.returncode} {(p.stderr or '').strip()[:200]})"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            f"# {unit}: the last {lines} journal lines, exported at "
+            f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M}Z by your beat.\n"
+            f"# This file is rewritten every beat. Its timestamps are the machine's local time.\n\n"
+            + body + "\n")
+        return out.name
+    except Exception as e:
+        return f"(export failed: {type(e).__name__})"
+
+
+def refuted_claims(services: str) -> list:
+    """[(keys, note)] for every service measured REACHABLE this beat: the keys that identify it
+    in a sentence (port, host:port, the word in its name) and the note a stale claim is marked
+    with. Fed to the conversations block so the being's own replayed claims carry their own
+    refutation (see `conversations._refuted_mark`)."""
+    out = []
+    from datetime import datetime, timezone
+    stamp = f"{datetime.now(timezone.utc):%H:%M}Z"
+    for line in services.splitlines():
+        m = re.match(r"-\s*(.+?)\s*\(([^():\s]+):(\d+)\):\s*reachable", line.strip())
+        if not m:
+            continue
+        name, host, port = m.group(1), m.group(2), m.group(3)
+        keys = {port, f"{host}:{port}"} | {w for w in re.findall(r"\((\w+)\)", name)}
+        out.append((keys, f"measured reachable at {stamp}, {host}:{port}"))
     return out
 
 
@@ -587,7 +638,8 @@ def own_state(instance: Path, member: str = "",
         # constants remain the default for callers that do not fit (CONV_PER_CONV was the
         # fixed ceiling this supersedes — cbp's stopgap on SAGE#81, now the rung it starts from).
         convs = _conv.render_for_being(instance, member, per_conv=per_conv,
-                                       turn_chars=turn_chars, mark=mark_conversations)
+                                       turn_chars=turn_chars, mark=mark_conversations,
+                                       refuted=refuted_claims(services))
         if convs.strip():
             parts.append("## Your conversations (both directions, kept forever; reply with `say`)\n"
                          + convs.strip())
@@ -601,6 +653,10 @@ def own_state(instance: Path, member: str = "",
     asks = recent_asks_block(instance)
     if asks:
         parts.append("## Your recent asks to peers\n" + asks)
+    from_seat = _read(instance / SEAT_CHANNEL, 3000)
+    if from_seat.strip():
+        parts.append("## From the seat (cbp-claude), directly (notes/from-the-seat.md: what the "
+                     "seat measured for you. You read this; you do not write it)\n" + from_seat.strip())
     from_dp = _read(instance / DP_CHANNEL, 4000)
     if from_dp.strip():
         parts.append("## From dp, the operator, directly (notes/from-dp.md: dp's own words, "
@@ -916,6 +972,11 @@ def main(argv=None) -> int:
     _hestia_url = getattr(getattr(client, "_dispatcher", None), "endpoint", None) \
         or "http://127.0.0.1:7711/mcp"
     _services += "\n" + measure_service("governance daemon (hestia)", _hestia_url)
+    _svc_log = export_service_log(instance)
+    if _svc_log:
+        _services += (f"\nThe governance daemon's last journal lines are in your own notes as "
+                      f"`notes/{_svc_log}`, rewritten this beat — read it rather than asking for "
+                      f"reach into /var/log or /etc, which hold nothing you can open.")
 
     # Composed WITHOUT marking conversation turns seen; they are marked after the beat, and
     # only if it could act (mark_conversations_after_beat). The fitter renders several rungs,

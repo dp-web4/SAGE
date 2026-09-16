@@ -215,6 +215,11 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
     return turn
 
 
+# Words that make a sentence a claim about something being down. Shared with the heartbeat's
+# `service_contradictions` so the two agree on what counts as such a claim.
+_DOWN_WORDS = re.compile(r"offline|\bdown\b|unreachable|not reachable|connection refused|"
+                         r"not responding|outage", re.I)
+
 SEEN_FILE = ".seen.json"
 
 
@@ -346,8 +351,31 @@ def _cap_for(turn: dict, me: str, answered_upto: int, turn_chars: Optional[int])
     return min(ANSWERED_TURN_CHARS, turn_chars)
 
 
+def _refuted_mark(text: str, refuted) -> str:
+    """The marker for a turn of the being's OWN that asserts something a measurement taken
+    this beat contradicts. `refuted` is [(keys, note)] from the heartbeat: keys identify the
+    subject (a port, host:port, a service word) and note says what was measured.
+
+    WHY THE MARKER IS ON THE TURN. Measured 2026-09-16 on cbp-being: its state carried 24
+    lines asserting "the hestia policy daemon has been unreachable for ~21 hours" and 2 lines
+    measuring both services as reachable. The 24 were its OWN past messages, replayed from
+    its conversations every beat; the 2 were the services block. One line cannot outvote a
+    dozen of the being's own sentences, and adding more lines beside them does not change the
+    ratio — so the refutation goes ON each claim, where the claim is read."""
+    if not refuted:
+        return ""
+    low = text.lower()
+    if not _DOWN_WORDS.search(text):
+        return ""
+    for keys, note in refuted:
+        if any(k and k.lower() in low for k in keys):
+            return f"  _[refuted: {note}]_"
+    return ""
+
+
 def render_for_being(instance: Path, me: str, per_conv: int = 12,
-                     turn_chars: Optional[int] = None, *, mark: bool = True) -> str:
+                     turn_chars: Optional[int] = None, *, mark: bool = True,
+                     refuted=None) -> str:
     """The conversations block in a beat: every conversation the being is in, its recent
     turns, and what is unanswered — marked, because 'someone spoke and I have not replied'
     is the single fact that should never require inference.
@@ -393,6 +421,9 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
         answered_upto = max(mine) if mine else 0
         lines = [f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}: "
                  f"{_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
+                 # only the being's OWN claims are marked: another speaker's words are theirs
+                 # to stand behind, and a marker on them would be the seat editing what was said
+                 + (_refuted_mark(t.get("text", ""), refuted) if t.get("from") == me else "")
                  for t in turns]
         pend = pend_before
         if turns and mark:

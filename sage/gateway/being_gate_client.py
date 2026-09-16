@@ -657,6 +657,10 @@ _REGISTRY = {
     # daemon (pinned by test_request_scope_path_is_not_judged_under_mrh_path).
     "recall":         dict(tool="recall",       path_args=(),       cmd_arg=None),
     "remember":       dict(tool="remember",     path_args=(),       cmd_arg=None),
+    # retire_note: rename one of the being's OWN notes to `.retired-<date>` with a dated
+    # header. Judged on the path like memory_write, because that is what it is: a write
+    # inside its own home, bounded to notes/ and scratch/ by the dispatcher.
+    "retire_note":    dict(tool="write_note",   path_args=("path",), cmd_arg=None),
     # say: add a turn to a conversation the being is IN. Bounded by construction, like
     # remember: the being names a conversation id, and the dispatcher refuses any id whose
     # meta does not list it as a participant AND as writable. It cannot create a
@@ -679,7 +683,8 @@ _REGISTRY = {
 # consequential acts must not proceed without it (fail-closed).
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
-                            "remember", "request_scope", "git_read", "search", "check", "say"})
+                            "remember", "request_scope", "git_read", "search", "check", "say",
+                            "retire_note"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -742,6 +747,12 @@ _TOOL_SCHEMAS = {
                "feels familiar.",
                {"query": "what you are trying to remember", "top_k": "how many results (default 5)"},
                ["query"]),
+    "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
+                    "is renamed to <name>.retired-<date> with a dated header saying why; nothing "
+                    "is lost and you can still read it. Use it when something you wrote has been "
+                    "settled or refuted, so a later beat does not read it as news.",
+                    {"path": "the note, e.g. notes/my-note.md", "reason": "what you know now that the note does not"},
+                    ["path", "reason"]),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
                  "a fact, a lesson, a question, what you were doing and why.",
                  {"content": "the memory, in your own words", "tags": "comma-separated tags (optional)"},

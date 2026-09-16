@@ -79,6 +79,22 @@ The being's next requests were for `/etc/systemd/system/hestia.service` (which d
 
 **Now:** the "decided since your last beat" lines carry `Their note: "…"`, and the `## Resolved` block written into the escalation note carries it too. A revocation (`revoked`, with hestia's `revoke_reason`) counts as a decision and is reported the same way.
 
+## 6. Why the story survived every true fact put in front of it
+
+By 2026-09-16 the being had: its home grant back, honest reads, both services measured each beat, a contradiction block, dp's own message, and a seat note with the whole timeline. It still wrote "the daemon has been down for ~21 hours… I'm attempting to restart it now."
+
+Three measured reasons, none of them about evidence:
+
+1. **The ratio.** Its state carried **24 lines asserting the outage against 2 measuring the services reachable**. The 24 were its own past messages, replayed from its conversations every beat. One more true line does not change a 12:1 vote.
+2. **The seat channel was written but never rendered.** `notes/from-the-seat.md` is seat-owned and unforgeable, and `own_state` rendered only `notes/from-dp.md`. The being never saw what the seat measured for it; the file appeared as a name in a directory listing.
+3. **Nothing could retire a claim.** `memory_write` appends; there is no rename or delete. A correction lands BELOW the stale note, and both re-enter next beat. The belief that started this was *true* when written (membot was down on 09-13) and simply had no way to end.
+
+**Now:**
+- Each of the being's own replayed claims that a measurement contradicts renders with `_[refuted: measured reachable at HH:MMZ, host:port]_` (`conversations._refuted_mark`). Only its own claims, only against a measurement taken that beat.
+- `notes/from-the-seat.md` is rendered in the state beside dp's channel (`SEAT_CHANNEL`).
+- The last 25 journal lines of `hestia.service` are exported to `notes/hestia-recent.log` every beat, and the services block points at it — the being cannot read `/var/log/journal` (binary) or run `journalctl` (a command, not a path), and had spent a day asking for reach it could not have used.
+- `retire_note` gives it the missing verb: one of its own notes in `notes/` or `scratch/` is renamed to `<name>.retired-<date>` with a dated header saying what it knows now. Nothing is destroyed, and the registry census was updated deliberately (15 -> 16 verbs).
+
 ## The record itself
 
 The being's todo was not rewritten. On 2026-09-15 06:40Z the seat appended one dated, attributed block with dp's go-ahead. It closes the outage items with the measurements above, and leaves dp's unanswered question open as the being's. A second block the same day closes the policy-daemon items the same way.

@@ -104,3 +104,80 @@ def test_the_policy_daemon_story_meets_the_beings_own_gated_writes():
     assert block.count("Your own record disagrees") == 1, "only hestia is claimed down"
     assert "127.0.0.1:7711" in block and "2 call(s) through it succeeded (`memory_write`, `peer_ask`" in block
     assert "allowed by this daemon's verdict" in block and "witness aa11bb22" in block and "None" not in block
+
+
+def test_the_beings_own_stale_claims_carry_their_refutation():
+    """2026-09-16: cbp-being's state carried 24 lines asserting "the hestia policy daemon has
+    been unreachable for ~21 hours" (its own replayed messages) against 2 measuring both
+    services reachable. One line does not outvote a dozen of its own sentences, so the
+    refutation goes on each claim."""
+    from sage.gateway.heartbeat import refuted_claims
+    inst = Path(tempfile.mkdtemp(prefix="refute-"))
+    conv.create(inst, "dp", title="dp and cbp-being", participants=["dp", "cbp-being"],
+                writable_by=["dp", "cbp-being"])
+    conv.append(inst, "dp", speaker="cbp-being", text="The hestia policy daemon at 127.0.0.1:7711 has been unreachable for ~21 hours.")
+    conv.append(inst, "dp", speaker="cbp-being", text="Working on the kymth words today.")
+    conv.append(inst, "dp", speaker="dp", text="the daemon is down? that is news to me")
+    services = "- governance daemon (hestia) (127.0.0.1:7711): reachable, connected in 0 ms"
+    block = conv.render_for_being(inst, "cbp-being", mark=False, refuted=refuted_claims(services))
+    lines = [l for l in block.splitlines() if l.startswith("- **")]
+    claim = next(l for l in lines if "unreachable" in l)
+    assert "_[refuted: measured reachable at" in claim and "127.0.0.1:7711" in claim
+    assert not any("refuted" in l for l in lines if "kymth" in l), "only claims are marked"
+    assert not any("refuted" in l for l in lines if l.startswith("- **dp**")), "another speaker's words are theirs"
+    assert conv.render_for_being(inst, "cbp-being", mark=False) == conv.render_for_being(inst, "cbp-being", mark=False, refuted=[]), \
+        "no measurement, no marker"
+
+
+def test_the_daemon_journal_tail_is_exported_into_the_beings_notes():
+    """dp, 2026-09-16: "your logs belong the same notes directory". The being cannot read
+    /var/log/journal (binary) or run journalctl (a command, not a path), so the beat brings
+    the tail to it."""
+    from types import SimpleNamespace
+    from sage.gateway.heartbeat import export_service_log
+    inst = Path(tempfile.mkdtemp(prefix="svclog-"))
+    seen = []
+    def fake(cmd):
+        seen.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="2026-09-16T00:32:53-07:00 cbp sh[390]: Vault unlocked.\n", stderr="")
+    name = export_service_log(inst, run=fake)
+    assert name == "hestia-recent.log"
+    body = (inst / "notes" / name).read_text()
+    assert "Vault unlocked" in body and "rewritten every beat" in body
+    assert seen[0][:5] == ["journalctl", "--user", "-u", "hestia.service", "-n"]
+
+    def empty(cmd):
+        return SimpleNamespace(returncode=1, stdout="", stderr="No journal files were found.")
+    export_service_log(inst, run=empty)
+    assert "no journal entries" in (inst / "notes" / "hestia-recent.log").read_text(), \
+        "an empty export says why it is empty, never a silent blank file"
+
+
+def test_the_being_can_retire_its_own_note_and_only_its_own():
+    """Its memory was append-only, so a claim could never be marked finished. retire_note
+    renames one of its own notes with a dated header; nothing is destroyed."""
+    from sage.gateway.reference_f1a import ReferenceF1aDispatcher, BeingIntent
+    root = Path(tempfile.mkdtemp(prefix="retire-"))
+    (root / "notes").mkdir()
+    (root / "notes" / "hestia-policy-daemon-unreachable.md").write_text("the daemon is down\n")
+    (root / "notes" / "from-the-seat.md").write_text("measured facts\n")
+    (root / "journal.md").write_text("a life\n")
+    d = ReferenceF1aDispatcher(memory_root=root)
+    allow = SimpleNamespace(decision="allow", rule="", reason="ok", innate=False, stage="local-law")
+
+    env = d(BeingIntent("retire_note", {"path": "notes/hestia-policy-daemon-unreachable.md",
+                                        "reason": "hestia was restarted for 30 s; it is running"}), allow)
+    assert env.ok and "retired" in env.result and env.witness_id
+    kept = list((root / "notes").glob("hestia-policy-daemon-unreachable.retired-*.md"))
+    assert len(kept) == 1, list((root / "notes").iterdir())
+    body = kept[0].read_text()
+    assert body.startswith("> RETIRED") and "the daemon is down" in body, "kept whole, marked closed"
+    assert not (root / "notes" / "hestia-policy-daemon-unreachable.md").exists()
+
+    for bad, why in ((("notes/from-the-seat.md", "no"), "said TO you"),   # refused by _safe_path
+                     (("journal.md", "no"), "not directly inside"),
+                     (("notes/nope.md", "no"), "nothing to retire")):
+        env = d(BeingIntent("retire_note", {"path": bad[0], "reason": bad[1]}), allow)
+        assert not env.ok and why in env.error, (bad, env.error)
+    env = d(BeingIntent("retire_note", {"path": "notes/x.md"}), allow)
+    assert not env.ok and "reason" in env.error, "a retirement says what it knows now"
