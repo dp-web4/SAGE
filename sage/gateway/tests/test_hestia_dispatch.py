@@ -1316,3 +1316,30 @@ def test_game_dispatch_runs_the_judged_line_and_returns_the_stepper_envelope(tmp
     n = len(calls); d.game_stepper = None
     r4 = d._do_game(BeingIntent("game", {"probes": [["ACTION1"]]}))
     assert r4.ok is False and "no game is set up on this seat" in r4.error and len(calls) == n
+
+
+def test_search_home_relative_path_searches_the_being_home_not_its_worktree(tmp_path):
+    """`search scratch/game` failed twelve times on 2026-09-15/16 ("no file at scratch/game in
+    your worktree") while `memory_read scratch/game/current.md` worked: two verbs, two roots
+    for the same spelling. A home path is a home path in every verb now — decidable from the
+    path string, so the gate site and this site compose the same line."""
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent, search_command
+    root = tmp_path.resolve() / "ws"; wt, ws, home = root / "wt", root / "SAGE", root / "SAGE" / "sage" / "instances" / "b"
+    (home / "scratch" / "game").mkdir(parents=True); wt.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    (home / "scratch" / "game" / "current.md").write_text("value  x=cols\n    9  36-41    44-49    36\n")
+    d = D.__new__(D); d.worktree, d.workspace, d.memory_root = str(wt), str(ws), str(home)
+    d._verdict = types.SimpleNamespace(command=None)
+    r = d._do_search(BeingIntent("search", {"pattern": "36-41", "path": "scratch/game"}))
+    assert r.ok, r.error
+    assert r.result["matches"] == 1 and "current.md:2:" in r.result["lines"][0]
+    # the gate site composes the same line (memory_root in both ctxs)
+    assert search_command({"pattern": "36-41", "path": "scratch/game"}, {"worktree": str(wt), "workspace": str(ws), "memory_root": str(home)}) \
+        .startswith(f"grep -rn -I -E --max-count=") and f"-- {home}/scratch/game" in search_command(
+        {"pattern": "36-41", "path": "scratch/game"}, {"worktree": str(wt), "workspace": str(ws), "memory_root": str(home)})
+    # a worktree-relative path that is not a home name stays worktree-relative
+    (wt / "sage").mkdir(); assert f"-- {wt}/sage" in search_command({"pattern": "x", "path": "sage"}, {"worktree": str(wt), "memory_root": str(home)})
+    # no memory_root in ctx -> the old behaviour (worktree), never a silent home read
+    assert f"-- {wt}/scratch/game" in search_command({"pattern": "x", "path": "scratch/game"}, {"worktree": str(wt)})

@@ -697,7 +697,8 @@ class HestiaF1aDispatcher:
             # __new__ in the suite, and a missing workspace must narrow the reach, never
             # raise inside the one try that only catches ValueError.
             cmd = search_command(intent.args, {"worktree": self.worktree,
-                                               "workspace": getattr(self, "workspace", None)})
+                                               "workspace": getattr(self, "workspace", None),
+                                               "memory_root": getattr(self, "memory_root", None)})
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         judged = getattr(getattr(self, "_verdict", None), "command", None)

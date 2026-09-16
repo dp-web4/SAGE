@@ -337,6 +337,12 @@ _REV = (r"(?:[0-9a-fA-F]{7,40}|HEAD|[A-Za-z][A-Za-z0-9._/-]{0,60})"
 SEARCH_MAX_N = 60        # matches returned at most; a search is a pointer, not a read
 
 
+# The being's home files, by name: a relative `search` path starting with one of these is a
+# path in its HOME, exactly as memory_read/memory_write treat it (heartbeat.HOME_FILES, plus
+# the conversations it is in). Decidable from the path string; no probe.
+HOME_ROOTED = ("todo.md", "journal.md", "notes", "scratch", "conversations")
+
+
 def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The shell command the seat runs for a `search` intent.
 
@@ -396,6 +402,20 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
             outside = not (target == root or target.startswith(root + os.sep))
             if outside and not _under(target, reach):
                 raise ValueError(_reach_refusal("search", path, reach))
+        elif path.split("/")[0] in HOME_ROOTED and (ctx or {}).get("memory_root"):
+            # A HOME PATH IS A HOME PATH IN EVERY VERB. `memory_read scratch/game/current.md`
+            # resolves under the being's home; `search scratch/game` resolved under its
+            # worktree, found nothing, and refused with a paragraph — in twelve of its beats
+            # on 2026-09-15/16, then the being retyped the absolute home path and it worked.
+            # The names of its home files are fixed (heartbeat.HOME_FILES + conversations),
+            # so the rule is decidable from the arguments alone: no filesystem probe, both
+            # composition sites agree. It composes as an outside-worktree read (grep -r on
+            # the home path, which is inside the fleet root and inside its own grant).
+            memory_root = os.path.realpath((ctx or {}).get("memory_root"))
+            target = os.path.realpath(os.path.join(memory_root, path))
+            if not (target == memory_root or target.startswith(memory_root + os.sep)):
+                raise ValueError(_escape_refusal("search", path, memory_root))
+            outside = True
         else:
             # A RELATIVE path is worktree-relative and stays there — that is the point of the
             # relative form, and a symlink out of the tree is still an escape.
