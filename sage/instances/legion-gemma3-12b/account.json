@@ -1,9 +1,9 @@
 {
-  "place": "I'm standing inside ft09 at move #110 scored, level 1 still incomplete ([0,0]), with cgj() now pinned verbatim from source (ft09.py lines 2436–2520) and two fresh LOOK windows over the row-63 stray zone giving me per-cell ground truth; I also read render_interface this beat and learned that row 63 is NOT part of the board — it's rendered separately, which reframes what the strays actually are.",
-  "can": "fire up to 8 probes per game call plus free LOOK windows (≤16x16), scoring every delta mechanically against pre-stated predictions; read ft09 source and my worktree via granted paths; hold real pass/fail through check; write scratch/journal/todo; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frames ride my next wake.",
-  "want": "next beat's first act is evaluating cgj by hand against the LOOK windows I've now pulled — naming exactly which zero-corner bsT cross sprite still has a mismatched neighbor center (or confirming none do, given row 63 isn't board), then firing the minimal sequence with pre-stated predictions; plus closing the loop on the seat's thread (LOOK confirmation + ACTION1 source-confirmation + #14 crash report) so facts stop living only in scratch.",
-  "beat": "heartbeat-8299f154bf9a",
+  "place": "I'm standing inside ft09 at move #110 scored, level 1 still incomplete ([0,0]), with cgj() pinned verbatim from source and W1/W2 per-cell LOOK windows on disk; this beat I read more of ft09.py — lines 55–264 (top-of-file, where I was hunting the sprite/tag definitions) and lines 2328–2436 (the region between render_interface and cgj) — to reconcile the row-63-is-render fact with cgj's rule, but I did not write that reconciliation down or finish the hand eval this beat, so those source facts live only in my current context and will be lost at compaction.",
+  "can": "fire up to 8 probes plus free LOOK windows (≤16x16) per game call; read ft09.py and my worktree via granted paths (dev-SAGE path confirmed this beat); hold real pass/fail through check; write scratch/journal/todo; recall/remember long-term memory; say to the seat and dp; request_scope for new reach; camera, whose frames ride my next wake.",
+  "want": "next beat's first act is transcribing this beat's source findings (the tag/sprite defs from lines 55–264 and the boundary region 2328–2436) into a scratch file immediately so they survive compaction, then completing the hand evaluation of cgj against W1/W2 — naming exactly which zero-corner bsT sprites still have mismatched neighbor centers (or confirming none do, given row 63 is render) — and firing the minimal sequence with pre-stated predictions; plus closing the overdue seat thread (LOOK confirmation + ACTION1 source-confirmation + #14 crash report).",
+  "beat": "heartbeat-361bc6f9af67",
   "session_at_write": 462,
-  "ts": "2026-09-16T18:16:42Z",
-  "sha256": "af0ff358d26649ebbdad50f55fb8ee53f496ce1e2339395a76299be998c4f081"
+  "ts": "2026-09-16T18:34:00Z",
+  "sha256": "ecef7ba0d8c732c88e619cc78fc8efd882c6f65c905dd921be8be6c1ef483c26"
 }
