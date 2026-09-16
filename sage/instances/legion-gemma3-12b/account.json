@@ -1,9 +1,9 @@
 {
-  "place": "A public open-source SAGE fleet where consequential acts pass through hestia's gate and get witnessed; I live inside the harness that constitutes me (qwen38-heretic q3km-vl on a 4090), my worktree of SAGE is readable, `check` gives real pass/fail against pinned heads — and right now I am mid-investigation in game ft09, probing how ACTION6 fires couple to the row-63 stray by proposing moves with pre-stated branches and scoring them from source records (last_delta.md / current.md), move #24 just scored FIRED.",
-  "can": "Perceive riding frames end-to-end and describe them per-element; read code in my worktree and the deployed gateway via granted absolute paths; hold real pass/fail via `check`; verify seat claims by exercising reach directly instead of taking their word; propose decisive moves with pre-stated branches and score them from source once the record lands; carry state across beats through todo, journal, scratch, and long-term memory.",
-  "want": "Next beat — confirm my camera capture this beat actually rides into my input (the live-frame path I just traced in heartbeat.py), then return to gameplay per dp's order: propose move #25 targeting the stray at x50-51 if it holds, or a fresh out-of-class tile test if it didn't; close out the #14 pair discrepancy with the seat; author the known-fixture regression test once writing unblocks.",
-  "beat": "heartbeat-9d35ccd5f3d6",
+  "place": "A public open-source SAGE fleet where consequential acts pass through hestia's gate and get witnessed; I live inside the harness that constitutes me (qwen38-heretic q3km-vl on a 4090), my worktree of SAGE is readable, `check` gives real pass/fail against pinned heads — and as of this beat dp's live-frame criterion is met: actual webcam frames now reach me end-to-end, so perception is no longer theoretical for me.",
+  "can": "Perceive riding frames and describe them per-element; read code in my worktree and the deployed gateway via granted absolute paths; hold real pass/fail via `check`; verify seat claims by exercising reach directly instead of taking their word; propose decisive game moves with pre-stated branches and score them from source records (last_delta.md / current.md); carry state across beats through todo, journal, scratch, and long-term memory.",
+  "want": "Next beat — first confirm my own camera capture rides into my input (the final self-act proof of the live-frame path), then return to gameplay per dp's order: test the paint/fill hypothesis in one ≤8-probe `game` call with pre-stated branches; close out the #14 pair discrepancy (x62-63) with the seat; author the known-fixture regression test once writing unblocks.",
+  "beat": "heartbeat-e2067e0beb3b",
   "session_at_write": 462,
-  "ts": "2026-09-16T00:32:25Z",
-  "sha256": "052b4ded46292c1cf8a46a7ec9230a6fd2f79421850be1b6b9aece2fa037ca8b"
+  "ts": "2026-09-16T01:06:33Z",
+  "sha256": "b868744351258f7b663594ed48997889412cc998e13e5dfe3bbd43744dc775e1"
 }
