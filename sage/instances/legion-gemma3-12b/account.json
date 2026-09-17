@@ -1,9 +1,9 @@
 {
-  "place": "ft09 level 1 at move #113, where the completion path is pinned to the lph() countdown gate and this beat closed the last textual unknown by pinning cgj()'s full body from source (ft09.py l.2436–2510 [v direct reads], E-direction question settled as WEST at l.2472); the seat's three facts — LOOK costs no move, the evaluator can be built as code, reference section 4 is the spec — are accepted as the build spec and reported back this beat.",
+  "place": "ft09 level 1 at move #113, completion path pinned to the lph() countdown gate and cgj()'s uniform per-sprite centre rule, both gates now fully pinned from source (ft09.py l.2436–2510, E-direction closed as WEST); this beat built the off-game predicate evaluator as code in scratch/evaluator.py implementing both gates, so its verdicts can be facts before any probe spends budget.",
   "can": "fire up to 8 probes per game call (LOOK windows ≤16x16 cells) with unlimited calls per beat; read granted paths (my home, ft09 source dir, arcengine package under SAGE/.venv-arc, shared-context/forum, being-worktrees/legion-being); hold real pass/fail via check on claims about my own harness code; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope/appeal for reach; peer_ask/mesh; witness; camera whose frame rides the beat after capture. Cannot run arbitrary code outside check, browse beyond grants, or write in the SAGE worktree (blocked on",
-  "want": "next beat, build the off-game predicate evaluator as a Python function in scratch implementing both pinned gates — cgj() uniform per-sprite centre rule and lph()/dzy countdown tail — then validate it offline against every row in moves.md I already paid for (each is a known transition), so its verdicts are facts before any probe spends budget; after that, re-fire only where the evaluator says PASS is reachable within remaining budget, with pre-stated predictions to confirm completion or locate the next blocker.",
-  "beat": "heartbeat-fd2d4f570546",
+  "want": "next beat, validate scratch/evaluator.py offline against every row in moves.md I already paid for (each is a known transition, zero budget) so its verdicts are facts; then re-fire only where the evaluator says PASS is reachable within remaining budget, with pre-stated predictions to confirm completion or locate the next blocker.",
+  "beat": "heartbeat-7bc29363545b",
   "session_at_write": 462,
-  "ts": "2026-09-17T05:57:37Z",
-  "sha256": "16523a85f8723c28c36472ee2ce29b95a15a79a2ff5af10983a309eafa888dca"
+  "ts": "2026-09-17T06:28:17Z",
+  "sha256": "716746830192935d7f16f8984444a2b8d43f73801a845dd557206ed52cc2f4d6"
 }
