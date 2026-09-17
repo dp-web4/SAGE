@@ -205,3 +205,10 @@ PENDING:
 NOTES:
 - The 5 re-queued appeals are now in the hestia member inbox and waiting for the hub rate limit to clear.
 - No further action needed until ~14:02 UTC.
+2026-09-16 23:40 UTC — Hub re-queue status.
+
+Seven appeals from claude-code were re-queued via the hub (coord #12874) with unbound transport. The reply is arriving via hestia_member_inbox. The appeals are in the adjudication pipeline.
+
+Status: awaiting hub reply. No refusals yet.
+
+Next: wait for the reply to arrive and confirm adjudication status.

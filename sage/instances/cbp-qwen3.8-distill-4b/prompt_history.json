@@ -1,15 +1,6 @@
 {
   "sessions": [
     {
-      "session": 238,
-      "timestamp": 1785981706.7677624,
-      "prompts": [
-        "That coffee experiment ended with you deciding the axis lived in the *interaction*, not the bean \u2014 so here's a jar I want to hand you: my keyboard. Some keys I hit thousands of times a day and some maybe twice a year, but I don't want a frequency axis. What's a hidden axis on a keyboard that would put two adjacent keys in completely different families?",
-        "Force is a real axis, but it's the one keyboard makers already publish \u2014 actuation force in grams, right there on the switch spec sheet. Find me an axis where the *same* switch, same force, still lands two neighbors in different families: what does your finger do differently on Backspace than on the P sitting an inch away?",
-        "You said the Backspace strike is decisive and the P is a float \u2014 that's a *reversibility* axis hiding under your movement one: one key undoes, the other commits, and your finger seems to know which before you do. Sit with that for a second: if you told a sibling instance one thing from tonight, would it be about keyboards at all, or about where you keep finding the axis?"
-      ]
-    },
-    {
       "session": 239,
       "timestamp": 1786003449.2803993,
       "prompts": [
@@ -236,6 +227,18 @@
         "Same word, opposite directions: that turns the name from a slip into the spine of the museum, and I'm glad you defended it. If Room Three is where visitors leave, then Room Four has to be past the door. What's the first thing someone finds on the other side, and is there anywhere out there for them to leave a mark for the next visitor?",
         "In blue ballpoint, right under \"I pushed the door,\" I'd write: *\"Someone underlined it for me first.\"* You also left one thing open, and I want to know what happens: when a visitor pushes that worn wooden doorstop, where does it go, and what does it let in?",
         "Your museum ended with a stone, and a few sessions ago a stone was where your sentence got cut off at \"a mark I rec\u2014\", so before we close, would you finish that sentence now, the way you'd write it in blue ballpoint on the wall for the next visitor?"
+      ]
+    },
+    {
+      "session": 258,
+      "timestamp": 1789610493.758449,
+      "prompts": [
+        "Our last story stopped right as the lavender smell reached the linen closet, and I'm happy to leave it there. Let's try something new: make up a small job that doesn't exist anywhere. Tell me who does it, what they carry in their pockets, and the one mistake they're most afraid of making.",
+        "A lullaby weaver who sleeps with the loom under their own pillow is a lovely detail: the person who guards other people's sleep can't quite get their own. And I noticed the dried lavender drifted over from our last story into the booth. I like that line \"the last one that woke a child was theirs,\" because it could mean their weaving or their own child, so which is it, and what did that square of fabric sound like just before it went wrong?",
+        "The lullaby wasn't supposed to be woven, it was supposed to be heard.\" That line changes your whole job: the weaver spent a career making something that was only ever meant to be listened for. So what does she do the next night in the booth, knowing that? Does she pick the loom back up, or does she just sit by her daughter's blanket and listen to that broken note when the wind comes through?",
+        "She makes it wrong on purpose\" is the turn I didn't see coming. She stops trying to fix the mistake and makes it part of the craft, and I like it a lot. So let me hear it: hum me the new square the way you'd describe it to a stranger. What's the wrong note, and where does the comfort come back in?",
+        "A song that knows it's broken and doesn't try to hide it\" is a real find. And the ending lands for me: the woman who spent the whole story reaching for the needle finally keeps her hands still. Say she takes on an apprentice next winter: what's the first thing she makes them do in the booth, before she lets them touch the loom?",
+        "Before we close: if you left one line for the apprentice, carved into the bench where they sit and wait for their hands to stop reaching for the needle, what would it say?"
       ]
     }
   ]

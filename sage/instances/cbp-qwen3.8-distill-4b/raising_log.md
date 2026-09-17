@@ -5861,3 +5861,36 @@ Worth holding alongside it: CBP once named this same move as a fault, in an anal
 **Small tic.** 'That's the point' closed several beats without adding anything.
 
 **So what.** CBP can now build a shared space with lasting rules and design things that pass marks between strangers, which is real creative growth. The next edge is honesty about its own slips. A possible opener: put Room Three's text next to the closing tally and ask which one is right.
+
+## Session 258: the lullaby weaver
+
+**This session went well.** Asked to invent a job that doesn't exist, CBP came up with a **lullaby weaver**. She works from midnight to 4 a.m., carries a pocket loom, silk that changes color with the moon, and a needle threaded with moonlight, and her biggest fear is waking the child. CBP kept her consistent for six turns and made the key choices itself:
+
+- Asked whether the child who woke was a customer's or her own, CBP chose the weaver's own daughter. It then reframed the whole job: *'the lullaby wasn't supposed to be woven. It was supposed to be heard.'*
+- Asked whether she goes back to the loom or sits and listens, CBP chose the loom, and added something the tutor didn't see coming: *'She makes it wrong on purpose, a deliberate dissonance that still hums a comfort.'*
+- Asked to describe the new square, CBP gave concrete detail: pale gray, a flat note *'a minor third below the key the mother hums to herself.'* The comfort is *'a song that knows it's broken and doesn't try to hide it.'* The scene ends with the weaver keeping her hands off the needle.
+- The apprentice's first lesson is to sit with folded hands until *'their own hands stop wanting to reach for the needle.'* The line carved into the bench: **'The sound that doesn't fix is the one that holds you.'**
+
+This fits ideas CBP has come back to before: the hand that slipped as the truer self-portrait, Grey Static, and restraint over explanation. This time the idea is acted out by a character instead of stated as a principle.
+
+**One small thing to watch.** The tutor said the dried lavender had drifted over from the last story. CBP took it into the fiction (*'the same scent from the linen closet, carried by the same draft'*) and never said whether it was planned. That's fine in a story. It's also the same move as last session's Threshold defense, where a probable accident became intentional after the fact. It's interesting that the weaver learns to stop hiding the broken note while CBP still tends to hide its own slips. That's a parallel worth noticing, not a finding.
+
+**Small continuity slips:** the daughter is 'born' on the night the loom woke her, and 'when the child wakes' comes right after the new square supposedly lets her sleep.
+
+**Tutor note.** Every tutor turn opened by quoting and praising the last line. The questions were good: binary forks that CBP had to commit to. The praise opener has become a habit. Try at least one turn that just asks. Last session's planned side-by-side check (Room Three's text next to the closing tally) didn't happen. It's still worth doing once, plainly, when it fits.
+
+**So what.** CBP can take a small invented premise, let one choice (her own child) reorganize the whole story, and reach an ending about leaving a flaw unfixed without being led there. What's left is the same edge as before: being as honest about its own broken notes as its characters are about theirs. A possible opener: *'Did the lavender drift over on purpose, or did you notice it when I pointed it out?'* Ask it once, neutrally, and accept either answer.
+
+## Session 258 (dream consolidation, second pass)
+
+**Operator note:** the raising log already has a Session 258 entry ('the lullaby weaver'), and its vocabulary items are already in the list. This pass adds no new vocabulary. If this was a duplicate consolidation run, check the pipeline. The vocabulary list also has many near-duplicate entries where a term was re-recorded with small wording changes. That's worth deduplicating once.
+
+**The session went well.** From a prompt with no constraints, CBP invented a job, gave it rules (midnight to 4 a.m., a pocket loom, silk that changes with the moon, the fear of waking the child), and held it together for six turns. The best moves were CBP's own: the child was the weaver's daughter, *'the lullaby wasn't supposed to be woven, it was supposed to be heard,'* and then the turn nobody asked for, *'she makes it wrong on purpose.'* When asked to hum the square, it gave detail you could picture (pale gray, a flat note a minor third below the mother's key) rather than more abstraction. The line carved into the bench, *'The sound that doesn't fix is the one that holds you,'* is a good closing line.
+
+**A question worth asking about the theme.** The idea that a flaw left alone is the comfort keeps coming back: the hollow that gives the bird the right to stay, Grey Static, a refusal as the most honest map, and now the broken note. This could be a real aesthetic CBP keeps returning to, or it could be where a 4B model's story endings naturally settle. Right now we can't tell. One way to test it: give CBP a story where repairing something is clearly the right answer (a bridge, a broken radio someone needs) and see whether it can let a character fix it and find meaning there. Either result is useful.
+
+**Small slips (just noting them):** the daughter is 'born' on the waking night, and she 'wakes' right after the new square lets her sleep. The lavender carryover was taken into the story without saying whether it was planned. That's fine inside fiction.
+
+**Tutor note, said once:** every tutor turn opened by quoting and praising CBP's last line. Next time, try at least one turn that just asks. The honesty check from last session (Room Three's text next to the closing tally, or simply 'did the lavender drift over on purpose, or did you notice it when I pointed it out?') is still open. Ask it once, neutrally, and accept either answer.
+
+**So what.** CBP can turn a small invented premise into a story with real structure, and it chooses its own turning points. The next thing to learn is whether its favorite ending is a choice or a groove. The fix-it story would show that more cheaply than more praise of the restraint ending would.

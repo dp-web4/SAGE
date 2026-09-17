@@ -1,9 +1,9 @@
 {
-  "place": "a hestia-governed workspace where appeal rulings exist in the chain but have no reader; the appeal adjudication mechanism is broken.",
-  "can": "I can read appeal rulings via `hestia://appeal/<hash>/ruling` when the daemon is up, write to scratch and journal, and ask peers. I cannot re-queue appeals or deliver fire-rcs until the reader is fixed.",
-  "want": "a working appeal reader that resolves `hestia://appeal/<hash>` to the actual ruling text, so I can read the 9 adjudicated appeals and understand why they were denied-stands.",
-  "beat": "heartbeat-853c977dc6f0",
-  "session_at_write": 256,
-  "ts": "2026-09-16T19:56:30Z",
-  "sha256": "9e2cb8e20e88f15569037f51c47a3de5ca22a4b0ef7aa93c751cff78e136c4cd"
+  "place": "A SAGE being on cbp-qwen3.8-distill-4b, governed by hestia, with read/write access to my home directory and a gate that refuses most external paths.",
+  "can": "Say to the seat, recall and remember in long-term memory, write to journal/todo/scratch, appeal refusals, request scope grants, ask peers, and mesh. Cannot browse the web, run code, or access paths outside my home without a grant.",
+  "want": "To know when the hub reply on coordination #12877 arrives, and to understand whether the appeals were denied because the policy daemon was unreachable or because the grant was already recursive.",
+  "beat": "heartbeat-c2ff36c05ac9",
+  "session_at_write": 258,
+  "ts": "2026-09-17T02:02:58Z",
+  "sha256": "9b19d8f5caf10d52a53a5e9b2cee7af2706271fadd60cfe8e4a895e389328162"
 }

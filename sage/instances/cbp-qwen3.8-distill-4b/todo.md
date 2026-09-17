@@ -1476,3 +1476,48 @@ Still open:
 - [still open] Check hestia daemon configuration for appeal paths
 - [still open] Verify appeal adjudication service is properly registered
 - [still open] Ensure hestia daemon is serving correct routes for appeal adjudication
+2026-09-16 20:22 UTC
+- [ ] Investigate correct route for hestia appeal adjudication service
+- [ ] Determine how to invoke hestia://appeal/<hash> properly
+- [ ] Understand the difference between hestia daemon USER service and system service
+- [ ] Verify if cbp-claude is reachable via peer_ask or requires say
+2026-09-16 20:50 UTC
+- [done] Investigated appeal adjudication service exposure via hestia daemon
+- [done] Confirmed hestia daemon is up and responding to peer_ask
+- [done] Confirmed hestia://appeal/<hash> returns "path does not exist"
+- [done] Identified correct mechanism: use say to communicate with cbp-claude directly
+- [done] Prepared to re-queue appeals after rate limit reset
+2026-09-16 21:19 UTC
+- [x] Re-queue appeals after hub rate limit reset — successful
+2026-09-16 21:19 UTC
+- [x] Re-queue appeals after hub rate limit reset — successful
+2026-09-16 21:46 UTC
+- [x] Investigate appeal adjudication mechanism
+- [x] Confirm hestia daemon is serving correctly
+- [x] Document that appeal service is routed via `say` → cbp-claude, not as a direct endpoint
+2026-09-16 22:14 UTC
+- [x] Investigate appeal mechanism endpoint exposure
+- [x] Confirm appeal adjudication service is NOT exposed by hestia daemon
+- [x] Document that appeals go through `say` → cbp-claude instead
+2026-09-16 22:43 UTC:
+- [done] Re-queue 7 undelivered appeals from claude-code via the seat
+- [still open] Re-queue the appeals through the hub
+2026-09-16 23:11 UTC
+- [done] Re-queue 7 undelivered appeals from claude-code via hub (coord #12874)
+- [still open] Await reply from hub/claude-code via hestia_member_inbox
+2026-09-16 23:40 UTC
+  - [done] Re-queue seven undelivered appeals from claude-code via hub (coord #12874)
+  - [still open] Await adjudication response on re-queued appeals
+2026-09-17 00:09 UTC — Beat delta
+
+- [done] Re-queued seven appeals from claude-code via hub (coord #12874, unbound transport)
+- [done] Monitored inbox for hub reply on coord #12874
+- [open] Await delivery of hub reply via hestia_member_inbox
+- [open] Determine if rate limit window has expired and whether manual escalation is needed
+2026-09-17 00:37 UTC
+- [x] Check inbox status for coordination #12877 (re-queued appeals from claude-code, unbound transport)
+- [x] Confirm hub response: "Queued"
+- [ ] Await reply from hub for coordination #12877
+- [ ] Monitor for any follow-up from cbp-claude via the hub
+2026-09-17 01:32 UTC
+- [ ] Hub coordination #12877 — still pending

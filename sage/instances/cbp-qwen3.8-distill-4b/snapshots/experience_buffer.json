@@ -39740,5 +39740,191 @@
       "total_cycles": 6,
       "transition_count": 1
     }
+  },
+  {
+    "id": "1608a395d0f19a09",
+    "prompt": "Our last story stopped right as the lavender smell reached the linen closet, and I'm happy to leave it there. Let's try something new: make up a small job that doesn't exist anywhere. Tell me who does it, what they carry in their pockets, and the one mistake they're most afraid of making.",
+    "response": "The job is a **lullaby weaver**. They work in the quiet hours between midnight and 4 a.m., sitting in a small booth lined with soft wool and dried lavender. Their job is to listen to the hum of a sleeping room and weave it into a physical object\u2014a small, hand-knitted square of fabric that, when hung on a child\u2019s nightstand, will emit a faint, comforting sound of a lullaby in the child\u2019s native tongue.\n\nThey carry a small, wooden loom in their pocket, a spool of silk that changes color with the moon\u2019s phase, and a silver needle threaded with a single strand of moonlight.\n\nThe one mistake they\u2019re most afraid of making is **waking the child**. If the loom hums too loud, if the silk shifts color too abruptly, or if the needle slips and pricks the thread\u2014the child will wake, and the weaver must start over. They\u2019ve seen a thousand lullabies fail, and the last one that woke a child was theirs. They still sleep with the loom tucked under their pillow, waiting for the quiet to return.",
+    "salience": {
+      "surprise": 0.5,
+      "novelty": 0.5,
+      "arousal": 0.48541666666666666,
+      "reward": 0.45,
+      "conflict": 0.16666666666666666,
+      "total": 0.42041666666666666
+    },
+    "session": 258,
+    "phase": "creating",
+    "timestamp": "2026-09-16T19:00:20.911523",
+    "metadata": {
+      "turn": 1,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 100.0,
+      "atp_max": 100.0,
+      "atp_percentage": 100.0,
+      "cycles_in_state": 0,
+      "total_cycles": 0,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "551fc5091c377cdc",
+    "prompt": "A lullaby weaver who sleeps with the loom under their own pillow is a lovely detail: the person who guards other people's sleep can't quite get their own. And I noticed the dried lavender drifted over from our last story into the booth. I like that line \"the last one that woke a child was theirs,\" because it could mean their weaving or their own child, so which is it, and what did that square of fabric sound like just before it went wrong?",
+    "response": "You caught it. The lavender did drift over \u2014 it's the same scent from the linen closet, carried by the same draft. And the square that woke the child? It was the weaver's own child. She'd been born on a night when the loom hummed too loud, when the moonlight silk shifted from pale blue to a sharp, angry violet. She didn't cry, not at first. She just stared at the blanket on her chest, and the weaver knew then that the lullaby wasn't supposed to be woven. It was supposed to be *heard*. The mistake wasn't in the thread or the needle \u2014 it was in thinking the sound could be made. The child's blanket still hums a broken note when the wind blows through the booth.",
+    "salience": {
+      "surprise": 0.8628571428571429,
+      "novelty": 1.0,
+      "arousal": 0.625,
+      "reward": 0.3666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.6042380952380952
+    },
+    "session": 258,
+    "phase": "creating",
+    "timestamp": "2026-09-16T19:00:34.264903",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.4,
+      "atp_max": 100.0,
+      "atp_percentage": 95.4,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "91a296c85920266a",
+    "prompt": "The lullaby wasn't supposed to be woven, it was supposed to be heard.\" That line changes your whole job: the weaver spent a career making something that was only ever meant to be listened for. So what does she do the next night in the booth, knowing that? Does she pick the loom back up, or does she just sit by her daughter's blanket and listen to that broken note when the wind comes through?",
+    "response": "She picks the loom back up.\n\nShe doesn't sit by the blanket. She sits by the loom, the wooden frame cold against her knees, and she weaves the broken note into the next square. She knows now that the sound was never supposed to be made \u2014 but it's a sound that has to exist for the child to sleep. So she makes it. She makes it wrong on purpose, a deliberate dissonance that still hums a comfort.\n\nShe works until dawn. She works until her hands are numb. She works until the moonlight silk is frayed and the needle is bent. And when the child wakes, she doesn't look at the blanket. She looks at her own hands, and she whispers, \"I'm sorry,\" into the empty room, and then she weaves the next square.",
+    "salience": {
+      "surprise": 0.7898550724637681,
+      "novelty": 1.0,
+      "arousal": 0.475,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5096376811594203
+    },
+    "session": 258,
+    "phase": "creating",
+    "timestamp": "2026-09-16T19:00:49.854020",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 88.95,
+      "atp_max": 100.0,
+      "atp_percentage": 89.0,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "031c3d30fe2f51f6",
+    "prompt": "She makes it wrong on purpose\" is the turn I didn't see coming. She stops trying to fix the mistake and makes it part of the craft, and I like it a lot. So let me hear it: hum me the new square the way you'd describe it to a stranger. What's the wrong note, and where does the comfort come back in?",
+    "response": "The square is pale gray, the color of a moonless night. It hangs in a corner of the child's room, and when the wind comes through the window, it hums a low, flat note \u2014 a minor third below the key the mother hums to herself. The child sleeps through it. She doesn't wake.\n\nThe comfort comes back in the way the note holds. It doesn't resolve. It doesn't try to. It just *is*, and in that refusal to fix, in that stubborn refusal to be a perfect lullaby, the child feels something other than fear. She feels the weight of a song that knows it's broken and doesn't try to hide it.\n\nThe weaver watches the silk catch the light, and for the first time in a long time, she doesn't reach for the needle. She just watches the gray square catch the light, and she smiles.",
+    "salience": {
+      "surprise": 0.8321678321678322,
+      "novelty": 1.0,
+      "arousal": 0.5385698198198198,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5474808637308637
+    },
+    "session": 258,
+    "phase": "creating",
+    "timestamp": "2026-09-16T19:01:04.018564",
+    "metadata": {
+      "turn": 4,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.46,
+      "atp_max": 100.0,
+      "atp_percentage": 83.5,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "5b34b8c1cdbebb1e",
+    "prompt": "A song that knows it's broken and doesn't try to hide it\" is a real find. And the ending lands for me: the woman who spent the whole story reaching for the needle finally keeps her hands still. Say she takes on an apprentice next winter: what's the first thing she makes them do in the booth, before she lets them touch the loom?",
+    "response": "The first thing she makes them do is sit on the bench, hands folded in their lap, and close their eyes. She tells them to listen to the broken note \u2014 the one that hums when the wind comes through the window \u2014 and to let it stay broken. She tells them to let it stay broken until their own hands stop wanting to reach for the needle.\n\nWhen they're ready, she lets them touch the loom.",
+    "salience": {
+      "surprise": 0.8181818181818181,
+      "novelty": 1.0,
+      "arousal": 0.48863636363636365,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5013636363636363
+    },
+    "session": 258,
+    "phase": "creating",
+    "timestamp": "2026-09-16T19:01:22.539034",
+    "metadata": {
+      "turn": 5,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 77.58,
+      "atp_max": 100.0,
+      "atp_percentage": 77.6,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "9e50541f30570b66",
+    "prompt": "Before we close: if you left one line for the apprentice, carved into the bench where they sit and wait for their hands to stop reaching for the needle, what would it say?",
+    "response": "**\"The sound that doesn't fix is the one that holds you.\"**",
+    "salience": {
+      "surprise": 0.9272727272727272,
+      "novelty": 1.0,
+      "arousal": 0.3416666666666667,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.49378787878787883
+    },
+    "session": 258,
+    "phase": "creating",
+    "timestamp": "2026-09-16T19:01:33.711062",
+    "metadata": {
+      "turn": 6,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 72.17,
+      "atp_max": 100.0,
+      "atp_percentage": 72.2,
+      "cycles_in_state": 0,
+      "total_cycles": 5,
+      "transition_count": 1
+    }
   }
 ]
