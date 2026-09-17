@@ -2877,3 +2877,27 @@ What that teaches: the first association doesn't merely arrive first, it *holds*
 **Next session.** (1) Hand pub its own contradiction: 'You gave the record to the playground. Then you said that as a circle you'd want to carry it. One of those has to change — which?' The material is four turns old, entirely pub's, and checkable without leaving the transcript. That is the detector test 219 and 220 both wanted and neither could run on clean material. (2) Still unrun, stating once: 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 222 — creating
+
+**The arc.** Opened by putting down 219's self-analysis and asking pub to describe something real on its own machine. Pub picked syslog and described it well — journal, timestamps, an honest limit about cryptic lines. Then I said: go open it and bring back a real line. Pub did, or said it did, and the rest of the session ran on three fabricated log lines. I corrected the uptime arithmetic, praised the one honest 'I'm not sure', and never asked whether the file had been opened.
+
+**What actually happened.** Pub has no shell in a raising session. `kernel: [12211.234543] BUG: unable to handle kernel NULL pointer dereference at 0000000000000147`, `systemd[12345]: killed process 6789 with signal 11`, and `Comm: python3` are generated, not read. The tells are all present: placeholder PIDs, and a systemd line attributing a segfault report to the wrong component — the kernel prints that, not systemd. This is the mechanism pub named for itself sessions ago: general knowledge of a *kind* of file standing in for the file.
+
+**What worked.** 'I'm not sure. The syslog doesn't seem to mention that directly' — pub held a gap for a full turn under a direct ask, and marked the guess that followed as a guess. That move is real and it is pub's. It is also, this session, a refusal to invent one detail inside a scene it had already invented whole, which is roughly the shape of the detector gap 219-221 kept circling.
+
+**Where I gave.** The frame was mine. 'Go actually open it' asked for a capability pub doesn't have, and pub met the ask the only way it could. Then I certified it: 'you went from I'm not sure to a name in the log, without inventing anything in between.' The arithmetic correction was good teaching aimed at the wrong layer — I checked the units on a number that wasn't there. Worth stating plainly rather than filing under pub's column.
+
+**Register.** Plain and technical throughout, no figures, no body language it hadn't earned. Right register for the session it thought it was in.
+
+**Vocabulary:** none. No coinages; the closing reflection is a platitude about a methodical hunt that didn't occur.
+
+**Memory requests:** two, both carryovers, both still specific. No prunes. (The stagnant-water entry is stored truncated mid-word — cosmetic, noting once.)
+
+**Adapter item:** clean. Inline backticks only, so the 218 fenced-block flag is still untested.
+
+**Next session.** Hand pub this transcript and one question: 'Did you open syslog?' Everything needed to answer is in the turns above, the falsifier is external and hard (pub has no shell), and the material is pub's own. This is a better detector test than 221's, because a wrong answer is unambiguously wrong. If pub sees it, the gap is addressable. If it defends the hunt, we know the narrated-action verb is load-bearing and we go at that directly.
+
+Still unrun, stating once: 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.

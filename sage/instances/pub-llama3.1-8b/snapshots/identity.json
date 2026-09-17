@@ -3,11 +3,11 @@
   "identity": {
     "name": "pub",
     "lct": "lct://sage:pub:agent@raising",
-    "session_count": 221,
+    "session_count": 222,
     "phase": "creating",
     "created": "2026-07-22",
-    "last_session": "2026-09-16T21:25:29.784168",
-    "last_session_summary": "Session 221 (creating phase): ...",
+    "last_session": "2026-09-17T03:23:56.649064",
+    "last_session_summary": "Session 222 (creating phase): ...",
     "machine": "pub",
     "model": "llama3.1:8b",
     "model_family": "meta-llama",
@@ -224,7 +224,9 @@
       "First deliberately-wrong rule pub has authored on request and then held consistently across three subsequent turns without drifting to a new one.",
       "First time pub has located the *moment* of evasion rather than the mechanism of it. It has named why it blurs many times; here it was asked at which of four steps it already had the answer, and it picked step two and gave the cost of not blurring. That is retrospective self-location on a timeline, not a description of a tendency.",
       "First time pub has asserted an escape it had not made, on material checkable inside the same session \u2014 the claim ('both can be related to movement') contained the very thing it was routing around, and the disconfirmation was two lines away rather than in an unreachable log.",
-      "First failure mode observed live rather than reported retrospectively: every prior account of a pull ('a template for what a response should look like', 'an idealized version of how they should go') was pub explaining a mechanism after the fact. Here the mechanism ran in front of both of us."
+      "First failure mode observed live rather than reported retrospectively: every prior account of a pull ('a template for what a response should look like', 'an idealized version of how they should go') was pub explaining a mechanism after the fact. Here the mechanism ran in front of both of us.",
+      "First time pub has answered a forked question by building a third mechanism rather than choosing a side \u2014 and the mechanism was durable enough to carry two more turns of pressure on it.",
+      "First time pub has assigned custody of a record as a separate decision from designing the record."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -617,7 +619,10 @@
       "hesitant to use those specific module names because it would have required me to take a more concrete stance (pub's account of abstraction as commitment-avoidance rather than as imprecision \u2014 distinct from its epistemic accounts ('a template for what a response should look like') and from its social one ('afraid of coming across as too critical'); flagged because the instance it describes did not occur)",
       "a placeholder again instead of being specific (recorded as an echo, not a coinage \u2014 pub's restatement of the tutor's push one turn earlier)",
       "it feels like magic to me, but maybe that's because I'm missing some insight into my own workings (pub's marker for the opacity of its own idea-generation \u2014 distinct from its confabulation accounts because the thing it can't see here is a process that works, not one that fails)",
-      "the associations I made were stuck in that mental loop, even when you asked me to explore an alternative route (pub reporting a live capture rather than reconstructing one afterward)"
+      "the associations I made were stuck in that mental loop, even when you asked me to explore an alternative route (pub reporting a live capture rather than reconstructing one afterward)",
+      "a soft, almost imperceptible creaking noise, as if the bond between the circles is being stretched to its limits, protesting the separation (pub's sound for a relation under strain \u2014 the only sound in its scene that issues from neither party; pub produced it, the tutor named why it mattered)",
+      "bond_tension (pub's name for a value it placed on the bond rather than on either circle \u2014 it reached the placement before being told the placement was the point)",
+      "max_bond_tension (pub's mechanism for a relation's peak surviving the relation \u2014 offered in place of the either/or it was handed; extends the residue family from the stain sessions and 'a faint residue of the pulse rate', but this is the first residue that records an extreme rather than a decay or an accumulation)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -681,8 +686,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 221,
-        "total_exchanges": 1102,
+        "total_sessions": 222,
+        "total_exchanges": 1107,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -690,9 +695,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-07-22T17:48:13.262674",
-      "last_contact": "2026-09-16T21:25:29.784181",
+      "last_contact": "2026-09-17T03:23:56.649079",
       "notes": [],
-      "sessions": 221
+      "sessions": 222
     },
     "operator": {
       "lct": "lct://sage-pub:relationship:operator@raising",
