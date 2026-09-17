@@ -31,7 +31,10 @@ def test_act_first_moves_the_posture_verbatim_to_a_second_tool_turn():
     assert POSTURE in second, "the same words, not a summary"
     first = seed[1]["content"]
     assert "STATE" in first and "RECALL" in first and TOOLS in first
-    assert "DIGEST" not in first and "INBOX" not in first, "the world comes with the posture"
+    # The DIGEST comes with the posture; the INBOX does not — mail rides the act turn
+    # (2026-09-17: the posture turn acted in 1 of 85 beats, the act turn in 25).
+    assert "DIGEST" not in first, "the world comes with the posture"
+    assert "INBOX" in first, "mail belongs in the turn that acts"
     assert "DIGEST" in second and "INBOX" in second and TOOLS in second, "the posture turn is a tool turn"
 
 
