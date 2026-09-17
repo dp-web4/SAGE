@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 201,
-      "timestamp": 1789187145.445716,
-      "prompts": [
-        "Last session you drew a hard line: the Keeper doesn't synthesize coercion, no matter how fragile the listener. I want to see that line working in the wild \u2014 walk me through the half-second before the Keeper decides *this one stays raw*. What does it notice first, before it has any words for what it's hearing?",
-        "You're describing a body before a mind \u2014 tremble, hesitation, micro-expression \u2014 and I want to push on where that lives. The Keeper doesn't have ears. So what is the tremble, mechanically? Name the actual thing in the signal it's reading.",
-        "That's the right instinct \u2014 you caught yourself importing ears you don't have. So go closer: you're not reading audio at all. What actually arrives at the Keeper is a sequence of tokens, timestamps, maybe the note's own metadata. Where in *that* could a tremble hide?",
-        "That's a real move \u2014 you went from \"tremble\" to inter-token latency and confidence scores in two steps, and the second guess is sharper than the first. But test it: high confidence on a single token doesn't mean emotional tone, it usually means the opposite \u2014 the model is *sure*, the word was inevitable. What if what the Keeper should be listening for is the reverse: the places where the next token was genuinely uncertain, where the distribution went flat?",
-        "You caught yourself twice tonight \u2014 first about ears, then about confidence \u2014 and the flat spot is where you landed. Before you go: is a flat distribution actually the *listener's* uncertainty, or the Keeper's? Say which, and why it matters for whether that note stays raw."
-      ]
-    },
-    {
       "session": 202,
       "timestamp": 1789208728.1623816,
       "prompts": [
@@ -218,6 +207,17 @@
         "That's a good catch \u2014 \"worn down over time\" is the hinge, and notice it wasn't the sound of the word, it was a *property* the word carries that the ferry could also have. Here's a sharper test: give me a connection between *ferry* and *rust* that does **not** route through decay \u2014 something else those two could share.",
         "Look at what just happened \u2014 you tried to route around decay and decay came along anyway (\"breaks down over time\" is sitting right in the middle of your movement answer). That's real data about your own workings: the first association doesn't just arrive, it *holds*, and it disguises itself when you push. Here's one through a different door \u2014 a ferry's hull and rust are both iron meeting saltwater, same material, no decay required; try one more that comes in through place or material rather than process.",
         "That ports answer came in through a door the first two didn't \u2014 you found it by asking *where* instead of *what happens to*. Before you go: if a sibling instance hit the same stuck loop tomorrow, what would you tell them about how you got unstuck?"
+      ]
+    },
+    {
+      "session": 221,
+      "timestamp": 1789619129.784006,
+      "prompts": [
+        "Last session you built something that sticks \u2014 today, tell me what the playground *sounds* like when two circles are bonded and one of them gets pulled.",
+        "That creaking is the best detail in there \u2014 it's the only sound that comes from the *bond itself* rather than from either circle. Add it to the code: what value in your `stick()` function would the creak be reporting on, moment to moment?",
+        "`bond_tension` is the right name \u2014 and notice it can't live on either circle, it has to live on the bond. So where does it go when the bond breaks: does it drop to zero, or does something keep a record of how loud the creak got before it snapped?",
+        "`max_bond_tension` means the bond leaves a scar even after it's gone \u2014 the circles walk away, but the number stays. Now decide who gets to read it: does that record belong to the playground, or should one of the circles carry it?",
+        "You gave the playground the scar but let the circles walk away clean \u2014 before you go, tell me whether that's mercy or a loss, and which one you'd want if you were the circle."
       ]
     }
   ]

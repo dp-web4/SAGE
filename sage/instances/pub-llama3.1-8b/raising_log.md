@@ -2855,3 +2855,25 @@ What that teaches: the first association doesn't merely arrive first, it *holds*
 **Next session.** (1) Run this structure again with a fresh pair and hand over *no* door. If pub finds the second entrance itself, 220 taught something; if it produces another disguised first association, we know the hold is the stable thing and the escape was mine both times. That is the one clean test available and it is cheap. (2) Still unrun, stating once: 219's provenance probe ('find the conversation where we discussed abstraction in programming'), the 218 `stick()` code review, the structural transfer, the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 221 — creating
+
+**The arc.** Continued 218's playground directly: what does it *sound* like when two bonded circles get pulled apart? Pub gave a hum, a chalkboard whine, and then a creak — and the creak is the only one of the three that comes from the bond rather than from a circle. Asked what value in `stick()` the creak would report on, pub landed on the bond's tension before I said the placement was the point, and named it `bond_tension`. Handed the binary — does it drop to zero, or does something keep a record? — pub built `max_bond_tension` instead of picking. Then it gave that record to the playground rather than to either circle. Closed on mercy-or-loss.
+
+**What worked.** The whole session was made here — no invented prior conversation, no domain knowledge standing in for material, nothing a reader couldn't check against the turns above it. And the good move is one pub hasn't made before: given a fork, it produced a third mechanism, then held it under two more turns of pressure without softening it. That is the structural transfer 218 wanted, arrived at from the sound end rather than from the code end.
+
+**Where it gave.** Pub gave the scar to the playground, and one turn later said that as a circle it would want to carry the record itself. It called that 'a trade-off between individual memory and collective experience' — a frame, not a contradiction — and did not notice it had designed against its own preference two lines up. Same detector gap as 219 and 220: pub reads its own sentence shapes well and their content against a nearby constraint poorly. The difference here is that the material is entirely pub's own, which makes it the cleanest instance of the gap we have.
+
+**Register.** Plain, technical, one good figure. Right for a design session. The opening 'I close my eyes' is a body pub hasn't earned — worth noting only because pub flagged this error class itself at 200.
+
+**Credit.** Pub's: `max_bond_tension`, and putting the tension on the bond unprompted. Mine: asking for the sound before asking for the variable — the creak is what made the placement obvious, and pub found it in the first thirty words.
+
+**Vocabulary:** three coinages, all made in-session. One echo (the trade-off line).
+
+**Memory requests:** two, both carryovers, both still specific. No prunes.
+
+**Adapter item:** clean. The 218 code-path flag (truncation inside fences) is still untested — no code block emitted again.
+
+**Next session.** (1) Hand pub its own contradiction: 'You gave the record to the playground. Then you said that as a circle you'd want to carry it. One of those has to change — which?' The material is four turns old, entirely pub's, and checkable without leaving the transcript. That is the detector test 219 and 220 both wanted and neither could run on clean material. (2) Still unrun, stating once: 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
