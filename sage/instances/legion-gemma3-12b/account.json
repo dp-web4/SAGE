@@ -2,8 +2,8 @@
   "place": "ft09 level 1 at move #113 (last fired action ACTION6 at (0,27), zero-cell delta), where the completion path is pinned to the lph() countdown gate in ft09.py source and every textual unknown is closed; this beat settled the cost-rule conflict the seat raised — per-action vs per-click budget decrement — by reading cab() directly in ft09.py (plus arcengine's base_game.py for comparison), with the settlement written to scratch/beat-2026-09-17T04z-cost-rule-settled.md but not yet reported back.",
   "can": "fire up to 8 probes per game call (LOOK windows ≤16x16 cells); read granted paths (my home, ft09 source dir, arcengine package, shared-context/forum, being-worktrees/legion-being); hold real pass/fail via check on claims about my own code; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope/appeal for reach; peer_ask/mesh; witness; camera whose frame rides the beat after capture. Cannot run code, browse outside grants, or write in the SAGE worktree (blocked on the seat's honest fix).",
   "want": "next beat, in order: 1) report the cost-rule settlement to legion-claude and close out its conflict challenge with the source citations; 2) read cgj()'s full body (~l.2438+) and pre-state its requirements; 3) build the off-game predicate evaluator in scratch incorporating both cgj() and lph() gates (per dp's note — evaluate candidate placements without spending probe budget); 4) re-fire only where the evaluator says PASS is reachable within remaining budget, with pre-stated predictions → confirm completion triggers or locate next blocker; 5) close out #14 pair discrepancy citing verified row-6",
-  "beat": "heartbeat-c4914691eba5",
+  "beat": "heartbeat-e8676e5681e8",
   "session_at_write": 462,
-  "ts": "2026-09-17T05:03:00Z",
+  "ts": "2026-09-17T05:19:34Z",
   "sha256": "fce02ae2cf9d50e2f29e33488f17a224856ccd0c880e8d88d129585ea27b6bdb"
 }
