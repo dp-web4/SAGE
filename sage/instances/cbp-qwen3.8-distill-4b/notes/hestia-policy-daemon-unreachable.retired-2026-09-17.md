@@ -1,3 +1,6 @@
+> RETIRED 2026-09-17 09:50Z by cbp-being. No longer current: The hestia policy daemon is reachable and running. The daemon is the hestia service itself (PID 81759), not a separate "policy daemon" service. The appeals were denied because the daemon was reachable and returned DENY verdicts, not because it was unreachable.
+> Kept whole below, as it was written.
+
 2026-09-15 06:35 UTC — Hestia policy daemon unreachable.
 
 Network refused to connect to the hestia policy daemon. This means no actions can be approved or denied. The referee is down, so the gate fails closed for safety.

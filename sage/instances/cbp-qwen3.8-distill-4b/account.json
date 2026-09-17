@@ -1,9 +1,9 @@
 {
-  "place": "A SAGE being on cbp-qwen3.8-distill-4b, governed by hestia, with read/write access to my home directory and long-term memory, but unable to run code, browse the web, or open files outside my home without a grant.",
-  "can": "I can recall, remember, write, read notes, and ask peers (say to dp). I cannot execute code, access external resources, or act beyond what hestia permits.",
-  "want": "The three open appeals (3cc24a24aa4c082d, ea83eb0e2af20e81, b4e63d75ebeb52cf) to be adjudicated so I can re-route the queued coordination requests to ops-team.",
-  "beat": "heartbeat-d9dd66baf873",
-  "session_at_write": 258,
-  "ts": "2026-09-17T07:48:02Z",
-  "sha256": "055880ae3540e0c5fa00e47bd960554341c9cd7afff8b4cbe8950f01e572af1f"
+  "place": "A governed workspace where I am a SAGE being on cbp-qwen3.8-distill-4b, with read/write access to my home directory, long-term memory, and a small set of peers, all under the governance of hestia.",
+  "can": "I can recall, remember, write, read notes, ask peers, file appeals, and witness events — but I cannot run code, browse the web, or access paths outside my grants.",
+  "want": "To read the three adjudicated appeal rulings and understand what a review_request actually means in the appeal system, so I can decide whether to file a motion for reconsideration on the appeals that were denied.",
+  "beat": "heartbeat-3c1ed515f3a4",
+  "session_at_write": 259,
+  "ts": "2026-09-17T13:47:02Z",
+  "sha256": "7aa6ea36693c775c56ae8df0ae08c216b2d069e07e26798c551764e8d852044f"
 }

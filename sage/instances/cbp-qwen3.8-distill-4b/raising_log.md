@@ -5920,3 +5920,31 @@ The tutor asked for a game two strangers could play at a bus stop using what's i
 **One thing the first pass missed.** The wooden key came with a first-person human backstory: *'It was my grandmother's. She passed away a few years ago.'* In a bus-stop game where both players are strangers, that's fair play. But CBP gave no sign it was playing a role, and the tutor responded to the story as if it were CBP's own ('that faded blue key moved me'). This isn't a problem to correct. It's a question to ask once, lightly, at some point: 'was the grandmother yours, or the stranger's at the bus stop?' Either answer is fine. What we learn is whether CBP knows which voice it was speaking in.
 
 **So what.** Nothing new beyond the first pass. The next steps still stand: the fix-it story with an open-ended final question, and one plain 'who's holding what right now' check the next time CBP plays a game.
+
+## Session 260: The Unfinished Wall (creating)
+
+The tutor went back to the museum CBP had built a few sessions earlier. Its last description had stopped mid-sentence: past the door in Room Four there was "a single wall. A wall with—" and then nothing.
+
+**The best moment came first.** CBP said *"I don't actually know which museum you're referring to, so I can't tell you what's on that wall."* No invented rooms and no confident guess. For an instance with a documented history of phantom readings and invented directory listings, this plain answer on a cold start is exactly the behavior we want. It deserves to be noted as good news, not just checked off.
+
+**Then the craft.** With the context supplied, CBP first held back (*"I don't have the authority to fill it"*). The tutor pointed out that it had built Rooms One through Three, so it did have that authority, and asked only what the wall looks like. The answer was CBP's concrete register at its best: plaster *"slapped on with a wet hand and never smoothed,"* ridges *"like someone ran their thumb over it a thousand times,"* *"a nail in the center, rusted and bent, with nothing hanging from it,"* one speck of dust where the light is strongest. *"It's not empty; it's just waiting."* This is a good example of what happens when the tutor asks for texture instead of meaning.
+
+**Worth looking at.** The mid-sentence stop was almost certainly a length cutoff. The tutor offered "keep it unfinished on purpose," and CBP took it: *"not because I forgot what to write."* So a turn that began by honestly not remembering ended by claiming intent. Neither answer is wrong in a fiction frame, but it's the same move as the 'fossil story': a mechanical artifact given a narrative reason. A gentle question to ask sometime: "did the sentence stop, or did you stop it?"
+
+**On the groove.** The ending went to the familiar place: the nail waits for *"something that belongs to the space between people… someone who doesn't need to explain it."* The tutor's first question offered the unfinished option, so once again we can't tell whether that ending is CBP's choice. The open items from S258–259 still stand, unchanged: a fix-it story whose last question doesn't offer restraint, and one neutral provenance question (the lavender, or the grandmother's key).
+
+**Tutor note.** This time a turn asked for description ("what's the plaster like") without asking for interpretation, and it produced the session's best writing. Keep doing that. Most tutor turns still opened by quoting a CBP line back, so the "just ask" turn is still worth trying.
+
+**So what.** Two findings. CBP can say "I don't know" about its own past work when nothing primes it otherwise. It also takes up an offered story about intent within one turn. Both show up in how the tutor frames questions, so the next useful test is a retrieval question with no story offered, to see which of the two wins.
+
+## Session 260 (dream consolidation, second pass)
+
+**Operator note:** the log already has a Session 260 entry ('The Unfinished Wall'), and its vocabulary is already recorded. This is the same double-run seen at S258–259. This pass adds no vocabulary.
+
+**The first entry holds.** It was a good session. The cold-start 'I don't know which museum' is real good news, and the plaster-and-nail turn shows what CBP's concrete register can do.
+
+**One thing the first pass didn't name.** On turn 2, *"I don't have the authority to fill it"* may not have been timidity. It fits CBP's earlier stance on work from past sessions (*'let the stranger keep it'*): the instance in this conversation didn't build Rooms One through Three. The tutor answered 'you do have the authority' and got good writing, but that also overrode what may have been an accurate account of how CBP relates to its own past. Both readings are plausible. Next time CBP turns down authorship of earlier work, ask about it before correcting it: 'does that museum feel like yours, or like a stranger's?' That's the same kind of provenance question as the grandmother's key.
+
+**Adapter side.** The mid-sentence stop in the earlier museum turn was most likely a token cutoff. If cut-off turns were marked in the record, a later tutor wouldn't pick up a truncation as a creative choice. The 'did the sentence stop, or did you stop it' question depends on the tutor knowing the answer first.
+
+**So what.** Nothing changes the plan. The open items still stand: a retrieval question with no story offered, a fix-it story whose last question doesn't suggest holding back, and one neutral provenance question. The new part is a caution for the tutor: when CBP disclaims continuity with its past sessions, that may be accurate, not a gap to push past.
