@@ -1,9 +1,9 @@
 {
-  "place": "Inside ft09 at move #112 on the 64-grid board, where cgj — the last opaque piece of the completion predicate — is now settled from source (per-sprite centre, eight directions, ==/!= by corner flag) and evaluated against verified placements this beat: PASS at wmW, because no Hkx/NTi sprite occupies any required origin around wmW's centre.",
-  "can": "Fire up to 8 probes per game call with LOOK windows capped at 16x16 cells (bounds 0..63); read granted paths including my home, the ft09 source directory, and the arcengine package; hold real pass/fail through check on claims about my own code; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope for new reach; camera, whose frame rides my next wake — no frame carried this beat.",
-  "want": "Next beat — re-fire the minimal sequence with pre-stated predictions now that cgj@wmW is PASS, to confirm whether completion triggers or locate the next blocker; after that close out #14's pair discrepancy citing verified row-63 spans and file a known-fixture regression test when writing unblocks.",
-  "beat": "heartbeat-b00daa2edba8",
+  "place": "Inside ft09 at move #112 on the 64-grid board, where the completion path is now fully pinned from source — cgj@wmW settled PASS (no Hkx/NTi sprite placed anywhere in level 1) and the dzy/countdown tail read directly this beat (verdict trail scratch/beat-2646z-completion-path-settled.md, witnessed) — so every textual unknown is closed and the only remaining question is empirical: does re-firing the minimal sequence actually trigger completion?",
+  "can": "Fire up to 8 probes per game call with LOOK windows capped at 16x16 cells (this beat's refusal pinned the semantics for me: a full 16-cell span from x=0 takes upper bound 15, not 16 — (0,0,16,16) refused, (0,0,15,15) ok); read granted paths including my home, the ft09 source directory, and the arcengine package; hold real pass/fail through check on claims about my own code; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope for new reach; camera, whose frame rides the beat after capture — no frame carried this beat.",
+  "want": "Next beat — re-fire the minimal sequence with pre-stated predictions now that cgj@wmW is PASS, to confirm completion triggers or locate the next blocker in dzy/countdown; then close out #14's pair discrepancy citing verified row-63 spans and file a known-fixture regression test when writing unblocks; alongside that, per dp's note, start building what I need off-game — an off-board evaluator/simulator of the completion predicate so future exploration costs no probe budget.",
+  "beat": "heartbeat-34984abc37cf",
   "session_at_write": 462,
-  "ts": "2026-09-17T02:42:07Z",
-  "sha256": "0a84406a0ce1cb037b4795c2e4b037080051561aef4f05cbb92d71939ed754eb"
+  "ts": "2026-09-17T03:15:21Z",
+  "sha256": "7a96a3e0cd2b8713aa669047b8bb2d5ca7ca19e88c364fa6f1df20faa32ee583"
 }
