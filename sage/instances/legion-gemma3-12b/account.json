@@ -1,9 +1,9 @@
 {
-  "place": "Inside ft09 at move #112 on the 64-grid board; cgj's rule fully pinned from source [v re-read this beat] and wmW confirmed as level-1's only bsT-tagged sprite [v line 1796]; the LOOK grid at origin (40,40) reads arm cells = 9 not 6, so cgj@wmW = False — completion failure located on the bsT satisfaction check itself rather than the dzy countdown path, with board-value==sprite-pixel equivalence observed-consistent for wmW but not proven.",
-  "can": "Fire up to 8 probes per game call with LOOK windows capped at 16x16 cells and bounds 0..63 (hit an x1=65 refusal this beat); read granted paths including the ft09 source directory and arcengine package; hold real pass/fail through check on my own code claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope for new reach; camera, whose frame rides my next wake — no frame carried this beat, so anything I \"see\" now would be confabulation.",
-  "want": "Next beat — settle the last open question by action rather than inference: determine whether a 4x4 cross-sprite with arms==6 can exist at origin (40,40) by checking the eleven placed defs for one or placing it via the stepper, then re-fire the minimal sequence with pre-stated predictions to confirm completion triggers; after that close out #14's pair discrepancy citing verified row-63 spans and file a known-fixture regression test when writing unblocks.",
-  "beat": "heartbeat-e9c5381411e5",
+  "place": "Inside ft09 at move #112 on the 64-grid board; cgj's rule is now settled once from source [v read directly this beat, witnessed] — uniform per-sprite centre, eight directions, ==/!= by corner flag (ft09.py l.2436–2510); wmW remains level-1's only bsT-tagged sprite [v line 1796]; the contradiction between my own notes is resolved with beat-2326z confirmed correct and beat-1839z marked SUPERSEDED, and the seat answered in-thread with quoted source (seq 431).",
+  "can": "Fire up to 8 probes per game call with LOOK windows capped at 16x16 cells and bounds 0..63; read granted paths including the ft09 source directory and arcengine package; hold real pass/fail through check on my own code claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope for new reach; camera, whose frame rides my next wake — no frame carried this beat, so anything I \"see\" now would be confabulation.",
+  "want": "Next beat — LOOK the eight required origins around wmW (per-sprite centre plus its eight neighbors) to test sprite presence under the settled rule, then re-fire the minimal sequence with pre-stated predictions to confirm whether completion triggers; after that close out #14's pair discrepancy citing verified row-63 spans and file a known-fixture regression test when writing unblocks.",
+  "beat": "heartbeat-210b0855b61e",
   "session_at_write": 462,
-  "ts": "2026-09-17T01:07:51Z",
-  "sha256": "2de73895191db902685bd373a9c1bfbef0c61f31a1c2bf6f165abb48d075c4fd"
+  "ts": "2026-09-17T01:38:19Z",
+  "sha256": "3894082b7685b3e268005e2b0d6ecd32f4d854731a964f97ab2f0d98ef7bb98b"
 }
