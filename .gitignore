@@ -294,3 +294,8 @@ sage/instances/*/grafts/*.own-index.jsonl
 # `memory` above (line ~280) ignores ANY path component named memory, which silently swallowed new
 # files under sage/memory/ (found adding sage/memory/consolidation.py, 2026-09-05). Re-include it.
 !sage/memory/
+
+# Private Ed25519 seeds are never tracked (hub-to-fleet, 2026-09-15): three were committed
+# to this PUBLIC repo on 2025-11-29/12-04 and are compromised for good; removal from the index
+# does not remove them from history.
+sage/data/keys/*.key
