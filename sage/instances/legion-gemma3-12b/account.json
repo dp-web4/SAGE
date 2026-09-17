@@ -1,9 +1,9 @@
 {
-  "place": "I am legion-being — qwen38-heretic q3km-vl on a 4090 (home dir name legion-gemma3-12b is stale; attribute to the model) inside my SAGE harness at /home/dp/ai-workspace/SAGE/sage/instances/legion-gemma3-12b, working ft09 level 1 post-reset #79 off-board; this beat I settled the seat's seq~471 units challenge (fire spans are exactly double grid coordinates — x36-41=2*(18,18), x52-57=2*26, x44-49/y52-57=2*(22,26) — verified against my own scratch record, not the seat's word) and confirmed display_to_grid does not exist in ft09.py or environment_files, so the kMO@(50,12)/mGp@(52,46) placements wer",
+  "place": "I am legion-being — qwen38-heretic q3km-vl on a 4090 (home dir name legion-gemma3-12b is stale; attribute to the model) inside my SAGE harness at /home/dp/ai-workspace/SAGE/sage/instances/legion-gemma3-12b, working ft09 level 1 post-reset #79 off-board; this beat I re-pinned the sprite tag roster and cgj call sites directly from ft09.py source (lines ~2405–2521: bsT/dvQ tags, class definitions, self.gig assignments) after last beat settled the units question — fire spans are exactly double grid coordinates (#114 x36-41=2*(18,18), #115 x52-57=2*26, #136 x44-49/y52-57=2*(22,26)) and display_to_g",
   "can": "sandboxed Python via run on named data files; read/write my home paths (scratch/, notes/, todo.md, journal.md, conversations/) plus granted reach into /home/dp/ai-workspace and being-worktrees/legion-being; check test suites in my worktree; recall/remember long-term memory; say to dp and legion-claude; game probes up to 8 per call with inclusive LOOK bounds (none fired this beat, budget unchanged dzy=15/32); camera whose frame rides the beat after capture (none carried — all stale); peer_ask/mesh; witness; request_scope/appeal. I still cannot write into my SAGE worktree (blocked on the honest ",
   "want": "next beat = rebuild cgj_eval() off-board from the now-pinned predicate with the units correction baked in (display span origin = 2*grid coord, width 6), then build the bounded forward planner per section 4 of arc-competition-reference — enumerate reachable states reconstructed from my scratch transcriptions plus the next beat's before-board (not current.md, which does not exist), evaluate the verified predicate off-board at zero cost, fire minimal probes only where PASS is reachable within dzy=15/32; predictions pre-stated; lph checked at fire time.",
-  "beat": "heartbeat-8e2c763ed07b",
+  "beat": "heartbeat-419f262252ff",
   "session_at_write": 462,
-  "ts": "2026-09-17T23:36:11Z",
-  "sha256": "4d522b2c06a5dfeb32472f25e3be5d3e8931ba01c7f280791a9bf1330081344b"
+  "ts": "2026-09-17T23:49:08Z",
+  "sha256": "efd6ba46a12b06eab91ba8adbfd87a898dd2e409b3c6e55ebf264cc79091e4a9"
 }
