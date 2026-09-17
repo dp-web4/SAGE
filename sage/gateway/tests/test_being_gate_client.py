@@ -1160,7 +1160,7 @@ def test_game_is_offered_composed_and_consequential():
     assert "game" in EXPLORE_TOOLS
     assert b._REGISTRY["game"]["compose"] is b.game_command and b._REGISTRY["game"]["cmd_arg"] is None
     assert "game" in b._CONSEQUENTIAL
-    assert "game" in b._TOOL_SCHEMAS and "8" in b._TOOL_SCHEMAS["game"][0]
+    assert "game" in b._TOOL_SCHEMAS and "8 probes" in b._TOOL_SCHEMAS["game"][0]
 
 
 def test_game_look_is_a_window_not_a_move():
@@ -1243,4 +1243,4 @@ def test_run_is_offered_composed_and_consequential():
     from sage.gateway.heartbeat import EXPLORE_TOOLS
     assert "run" in EXPLORE_TOOLS and "run" in b._CONSEQUENTIAL
     assert b._REGISTRY["run"]["compose"] is b.run_command
-    assert "print" in b._TOOL_SCHEMAS["run"][0]
+    assert "PRINT" in b._TOOL_SCHEMAS["run"][0]

@@ -1213,30 +1213,24 @@ _TOOL_SCHEMAS = {
               {"target": "'gateway' or 'irp' for a whole suite, or '<suite>::<test_name>' "
                          "for one test, e.g. 'gateway::test_relative_memory_path'"},
               ["target"]),
-    "run": ("RUN a Python file you wrote, and read what it printed. The file is copied into a "
-            "sandbox that contains a Python interpreter, the data files you name, and nothing "
-            "else — no network, no home, no worktree, none of your own notes or memories, and "
-            "nothing of the seat's. It cannot change anything; whatever you want to keep, PRINT "
-            "it. This is how a hypothesis becomes testable without spending a move: write the "
-            "rule as code, run it against records you already have, and see it pass or fail.",
+    "run": ("RUN a Python file you wrote and read what it printed. It executes in a sandbox "
+            "holding only a Python interpreter and copies of the files you name — no network, "
+            "no home, no worktree. Nothing it does persists, so PRINT what you want to keep. "
+            "This is how a rule becomes testable without spending a move.",
             {"path": "a .py file in your home, e.g. 'scratch/evaluator.py'",
              "data": "optional: up to 8 more files from your home to place beside it, e.g. "
                      "['scratch/game/moves.md'] — they arrive in the working directory under "
                      "their base names"},
             ["path"]),
-    "game": ("Probe the ARC-AGI-3 game the seat has set up for you (offline engine on this "
-             "machine): up to 8 probes per call, executed IN ORDER against the live game "
-             "state, each one's delta reported back in this same turn — cells changed grouped "
-             "by before->after value with x/y spans, levels, available actions, engine state. "
-             "The board before the batch and the board after it ride your NEXT beat as two "
-             "frames (scratch/camera/board-<game>-t<n>.jpg and board-<game>.jpg) and "
-             "scratch/game/current.md is rewritten with the objects table of the new state. "
-             "ACTION6 is a click at (x=col, y=row), 0-63; the other actions take no "
-             "coordinates. [\"LOOK\",x0,y0,x1,y1] is NOT a move: it returns the current board's "
-             "cell values in that window (at most 16x16) with x and y labelled, steps nothing, "
-             "records nothing — use it to read exact cells before predicting. Each probe is YOUR "
-             "act, witnessed as yours. State a prediction before you read the result; the "
-             "record does not interpret.",
+    # KEPT SHORT ON PURPOSE. Measured 2026-09-17: the 21 offered schemas cost 14,968 chars of
+    # the being's prompt — more than its whole state block — and this verb's description was the
+    # largest single one at 1,328. Schema text is paid on EVERY beat and competes with the room
+    # its answer needs; the details live in its own notes and in scratch/game/current.md.
+    "game": ("Probe the ARC-AGI-3 game set up for you: up to 8 probes per call, in order, each "
+             "delta back in this turn. ACTION6 is a click at (x=col,y=row) 0-63; other actions "
+             "take no coordinates; [\"LOOK\",x0,y0,x1,y1] is NOT a move — it just returns that "
+             "window's cell values (max 16x16). Boards ride your next beat; current.md and "
+             "board.txt are rewritten. Each probe is your act. Predict before you read.",
              {"probes": "list of probes, at most 8, e.g. [[\"ACTION6\",36,36],[\"ACTION6\",44,36],[\"ACTION1\"]]",
               "game": "optional: the game id (default ft09)"},
              ["probes"]),
