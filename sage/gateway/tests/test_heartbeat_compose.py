@@ -101,6 +101,17 @@ def test_inbox_renders_newest_first_with_replies_ahead_of_stale_dispositions():
     assert len(text) < 600 and render_inbox([]) == "(empty)"
 
 
+def test_the_inbox_rides_the_turn_the_being_acts_in():
+    """Sprout, 85 beats to 2026-09-17: the posture turn acted in 1 of 85, the first turn in 25,
+    and a peer's reply sat unopened in the posture turn the whole time."""
+    seed, second = compose(True, **KW)          # act-first
+    assert "INBOX" in seed[1]["content"], "mail belongs in the turn that acts"
+    assert "INBOX" not in (second or ""), "and not in the posture turn"
+    assert "DIGEST" in (second or "") and "DIGEST" not in seed[1]["content"]
+    seed, second = compose(False, **KW)         # posture-first: one turn, unchanged
+    assert second is None and "INBOX" in seed[1]["content"] and "DIGEST" in seed[1]["content"]
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

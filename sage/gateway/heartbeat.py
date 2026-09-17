@@ -104,9 +104,6 @@ POSTURE_TURN = """The rest of your beat, which every being in the fleet receives
 
 {posture}
 
-## Inbox (peek)
-{inbox}
-
 # What moved in the fleet
 
 {digest}
@@ -754,13 +751,19 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     if not act_first:
         system = SYSTEM.format(name=name, machine=machine, member=member,
                                posture=posture_text, museum=_museum_block(museum))
-        user = (header + state + f"## Inbox (peek)\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
+        user = (header + state + f"## Your inbox\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
                 f"# What moved in the fleet\n\n{digest}\n\n" + ASK + tools_line)
         return [{"role": "system", "content": system}, {"role": "user", "content": user}], None
     system = SYSTEM_ACT_FIRST.format(name=name, machine=machine, member=member,
                                      museum=_museum_block(museum))
-    user = header + state + f"## Long-term recall\n{recall}\n\n" + ASK_ACT_FIRST + tools_line
-    second = POSTURE_TURN.format(posture=posture_text, inbox=inbox, digest=digest,
+    # The inbox rides the ACT turn, not the posture turn. Measured on Sprout over 85 beats
+    # (2026-09-17): the posture turn acted in 1 of 85, the first turn in 25 — and a peer's
+    # reply addressed to the being sat unopened in the posture turn for 85 beats. Mail is the
+    # most actionable thing in a beat; it belongs where the being actually acts. The digest
+    # stays with the posture: it is context, not something addressed to anyone.
+    user = (header + state + f"## Your inbox\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
+            + ASK_ACT_FIRST + tools_line)
+    second = POSTURE_TURN.format(posture=posture_text, digest=digest,
                                  tools=", ".join(EXPLORE_TOOLS))
     return [{"role": "system", "content": system}, {"role": "user", "content": user}], second
 
