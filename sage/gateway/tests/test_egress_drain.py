@@ -311,6 +311,20 @@ def test_the_summary_names_each_rows_carrier_not_the_drainers():
     assert r["drainer_default_identity"] == {"member": "a-being", "signed_as": "being", "carrier_lct": "a-lct"}
 
 
+def test_a_mesh_send_failure_is_row_shaped_too():
+    """GPT's post-merge note on #97: the summary promised every handled row is represented,
+    and an ordinary send failure only incremented a counter."""
+    home = _home_with({SEAT_ENV: "seat-lct"})
+    with _SwapHome(home):
+        m = FakeMcp(pending=[dict(ROW, id=5, from_plugin="cbp-being", transport=None)])
+        r = drain_once(plugin_id="cbp-being", mcp=m,
+                       sender=lambda *a: (False, "hub refused: unknown peer 'nobody'"), log=lambda *_: None)
+    assert r["failed"] == 1 and r["forwarded"] == 0
+    f = r["transport_faults"][0]
+    assert f["fault"] == "send-failed" and f["row_id"] == 5 and f["from_plugin"] == "cbp-being"
+    assert f["carrier_lct"] == "seat-lct" and f["signed_as"] == "seat" and "unknown peer" in f["detail"]
+
+
 if __name__ == "__main__":
     n = 0
     for name, fn in sorted(globals().items()):
