@@ -865,6 +865,7 @@ def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
     c = BeingGateClient.__new__(BeingGateClient)
     c.worktree, c.memory_root, c.workspace = wt, home, wt
     c.game_stepper = "/opt/arc/being_board_step.py"        # `game` composes only with one
+    c.member_id = "legion-being"                           # `run` stages under the member name
     c._core = types.SimpleNamespace(NormalizedEvent=lambda **kw: kw)
 
     # Minimal valid args per verb: enough to reach composition, nothing more.
@@ -872,6 +873,7 @@ def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
         "camera": {}, "search": {"pattern": "x"}, "check": {"target": "gateway"},
         "git_read": {"op": "status"}, "git_restore": {"rev": "HEAD", "path": "a.py"},
         "game": {"probes": [["ACTION1"]]},
+        "run": {"path": "scratch/e.py"},
         "pr_open": {"slug": "camera-verb", "title": "add the camera verb", "body": "body text"},
         "pr_amend": {"title": "amend the camera verb", "message": "a one line commit message"},
         "pr_review": {"repo": "dp-web4/SAGE", "number": 1, "body": "b"},
@@ -1180,3 +1182,47 @@ def test_game_look_is_a_window_not_a_move():
                      (["LOOK", 1, 2], "needs"), (["LOOK", "a", 0, 1, 1], "whole numbers")):
         with pytest.raises(ValueError, match=why):
             game_command({"probes": [bad]}, ctx)
+
+
+def test_run_command_grammar_and_what_the_sandbox_contains():
+    """`run` exists because the being could author a simulator and never execute one: writes
+    land in its home, `check` executes its worktree, and _safe_path keeps those disjoint. The
+    composed line must bind ONE seat-staged directory and nothing else."""
+    import pytest
+    from sage.gateway.being_gate_client import run_command, RUN_MAX_DATA, sandbox_available, sandbox_prefix
+    if not sandbox_available():
+        pytest.skip("no bubblewrap here; run_command refuses by design and there is nothing to shape-check")
+    ctx = {"memory_root": "/home/x/inst", "member": "legion-being"}
+    cmd = run_command({"path": "scratch/eval.py", "data": ["scratch/game/moves.md"]}, ctx)
+
+    assert " --unshare-net " in cmd and " --clearenv " in cmd and " --die-with-parent " in cmd
+    assert " --bind /tmp/sage-run-legion-being /work" in cmd, "one writable dir, seat-owned"
+    assert cmd.rstrip().endswith("/work/eval.py"), cmd
+    assert " --chdir /work " in cmd
+    # NOTHING OF THE BEING'S AND NOTHING OF OURS IS IN THERE
+    assert "/home/x/inst" not in cmd, "its home is never bound"
+    assert cmd.count("--bind ") == 1, "exactly one writable bind"
+    for ro in ("--ro-bind /usr /usr", "--ro-bind /lib /lib"):
+        assert ro in cmd
+    # strictly weaker than the `check` it already has: check binds a whole writable worktree
+    assert "--bind /w/t /w/t" in sandbox_prefix("/w/t")
+
+    for bad, why in (({"path": "scratch/e.sh"}, "must end in .py"),
+                     ({"path": "/etc/x.py"}, "plain relative paths"),
+                     ({"path": "../x.py"}, "plain relative paths"),
+                     ({"path": "a b.py"}, "whitespace"),
+                     ({"path": ""}, "needs a 'path'"),
+                     ({"path": "e.py", "data": ["d%d.md" % i for i in range(RUN_MAX_DATA + 1)]}, "at most 8")):
+        with pytest.raises(ValueError, match=why):
+            run_command(bad, ctx)
+    with pytest.raises(ValueError, match="member name of its own"):
+        run_command({"path": "e.py"}, {"memory_root": "/home/x/inst"})
+    assert RUN_MAX_DATA == 8
+
+
+def test_run_is_offered_composed_and_consequential():
+    from sage.gateway import being_gate_client as b
+    from sage.gateway.heartbeat import EXPLORE_TOOLS
+    assert "run" in EXPLORE_TOOLS and "run" in b._CONSEQUENTIAL
+    assert b._REGISTRY["run"]["compose"] is b.run_command
+    assert "print" in b._TOOL_SCHEMAS["run"][0]

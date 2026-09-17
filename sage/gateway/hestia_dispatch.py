@@ -781,6 +781,111 @@ class HestiaF1aDispatcher:
                           f"path or the pattern" if truncated else None),
             "lines": shown})
 
+    # -- run: the being's own code, in a sandbox holding nothing of ours ----------
+    RUN_MAX_FILE_BYTES = 1 << 20
+    RUN_OUTPUT_CHARS = 6000
+
+    def _do_run(self, intent: BeingIntent) -> ResultEnvelope:
+        """Stage copies of the being's files into a seat-owned directory and execute the
+        composed sandbox line against them.
+
+        THE STAGING IS THE SECURITY BOUNDARY, not the sandbox alone. Nothing the being can
+        write is bound into the sandbox: the seat READS each named file inside the being's
+        home, refuses anything that is not a regular file it can reach without following a
+        symlink out, and writes a COPY into a directory only the seat touches. So between the
+        law's ruling and the execution there is no window in which the bytes can change, and
+        a symlink planted in its home resolves in the SEAT's read (where it is refused), never
+        inside the sandbox (where it would be an escape).
+        """
+        import os
+        import shlex
+        import shutil
+        import subprocess
+        from sage.gateway.being_gate_client import run_command, STAGE_ROOT, RUN_TIMEOUT_S
+        try:
+            cmd = run_command(intent.args, {"memory_root": self.memory_root,
+                                            "member": getattr(self, "member", None)})
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "run refused: the command the law judged is not the command this dispatcher "
+                "would execute."))
+        root = os.path.realpath(self.memory_root)
+        names = [str(intent.args.get("path", "")).strip()] + \
+                [str(d).strip() for d in (intent.args.get("data") or [])]
+        staged, seen = [], set()
+        for n in names:
+            base = os.path.basename(n)
+            if base in seen:
+                return ResultEnvelope(ok=False, error=(
+                    f"run: two files would arrive as {base!r} in the working directory; they are "
+                    f"placed under their base names, so give files whose names differ"))
+            seen.add(base)
+            full = os.path.realpath(os.path.join(root, n))
+            if not (full == root or full.startswith(root + os.sep)):
+                return ResultEnvelope(ok=False, error=(
+                    f"run: {n!r} resolves outside your home and will not be copied in"))
+            if not os.path.isfile(full):
+                return ResultEnvelope(ok=False, error=f"run: no such file in your home: {n}")
+            size = os.path.getsize(full)
+            if size > self.RUN_MAX_FILE_BYTES:
+                return ResultEnvelope(ok=False, error=(
+                    f"run: {n} is {size} bytes; the limit per file is {self.RUN_MAX_FILE_BYTES}"))
+            staged.append((base, full))
+        stage = f"{STAGE_ROOT}-{getattr(self, 'member', '')}"
+        try:
+            shutil.rmtree(stage, ignore_errors=True)
+            os.makedirs(stage, mode=0o700, exist_ok=False)
+            for base, full in staged:
+                with open(full, "rb") as fh:
+                    data = fh.read()
+                with open(os.path.join(stage, base), "wb") as fh:
+                    fh.write(data)
+        except OSError as e:
+            return ResultEnvelope(ok=False, error=f"run could not stage your files: {type(e).__name__}: {e}")
+        begin = self._call("hestia_begin_action", {"tool_name": "run", "target": staged[0][0]})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=(
+                f"run UNVERIFIED: the witness substrate is unreachable ({err[:160]}); "
+                f"your code was not executed"))
+        action_id = begin.get("actionId")
+        try:
+            proc = subprocess.run(shlex.split(cmd), text=True, capture_output=True,
+                                  timeout=RUN_TIMEOUT_S)
+            ran, rc = True, proc.returncode
+            out, errtxt = proc.stdout or "", proc.stderr or ""
+        except subprocess.TimeoutExpired:
+            ran, rc, out, errtxt = True, -9, "", (
+                f"[no output: your code was still running after {RUN_TIMEOUT_S}s and was stopped. "
+                f"That is a real answer about the code, not a failure of the verb]")
+        except Exception as e:
+            ran, rc, out, errtxt = False, -1, "", f"{type(e).__name__}: {e}"
+        try:
+            self._call("hestia_record_outcome", {"action_id": action_id, "success": ran and rc == 0,
+                                                 "magnitude": 0.0})
+        except Exception:
+            pass
+        shutil.rmtree(stage, ignore_errors=True)
+        if not ran:
+            return ResultEnvelope(ok=False, witness_id=action_id,
+                                  error=f"run could not start the sandbox: {errtxt[:400]}")
+
+        def _cap(t):
+            return t if len(t) <= self.RUN_OUTPUT_CHARS else (
+                t[:self.RUN_OUTPUT_CHARS] + f"\n[… truncated: {len(t) - self.RUN_OUTPUT_CHARS} "
+                f"more characters. Print less, or print a summary]")
+        # A NON-ZERO EXIT IS A RESULT. A traceback is the most useful thing this verb can hand
+        # back: it names the line, and the line is one the being wrote.
+        return ResultEnvelope(ok=True, witness_id=action_id, result={
+            "script": staged[0][0], "files": [b for b, _ in staged],
+            "exit": rc, "stdout": _cap(out.strip()), "stderr": _cap(errtxt.strip()),
+            "note": ("Ran in a sandbox with no network, no home and no worktree; the copies are "
+                     "gone now. Only what you printed survives." if rc == 0 else
+                     "Non-zero exit: read stderr, it names the line in your own file.")})
+
     # -- game: probes against the offline ARC engine, the being's own act ---------
     def _do_game(self, intent: BeingIntent) -> ResultEnvelope:
         """Run the composed stepper line and hand back every probe's delta, uninterpreted.

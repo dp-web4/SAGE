@@ -1343,3 +1343,89 @@ def test_search_home_relative_path_searches_the_being_home_not_its_worktree(tmp_
     (wt / "sage").mkdir(); assert f"-- {wt}/sage" in search_command({"pattern": "x", "path": "sage"}, {"worktree": str(wt), "memory_root": str(home)})
     # no memory_root in ctx -> the old behaviour (worktree), never a silent home read
     assert f"-- {wt}/scratch/game" in search_command({"pattern": "x", "path": "scratch/game"}, {"worktree": str(wt)})
+
+
+def _run_dispatcher(tmp_path):
+    import types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    home = tmp_path.resolve() / "inst"; (home / "scratch").mkdir(parents=True)
+    d = D.__new__(D); d.memory_root = str(home); d.member = "test-being"
+    d._verdict = types.SimpleNamespace(command=None)
+    d._call = lambda name, args: {"actionId": "w-run"}
+    return d, home
+
+
+def test_run_executes_the_beings_own_code_and_hands_back_what_it_printed(tmp_path):
+    import pytest
+    from sage.gateway.being_gate_client import sandbox_available, BeingIntent
+    if not sandbox_available():
+        pytest.skip("no bubblewrap on this machine")
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "moves.md").write_text("  80  ACTION6 40,38   9   9 x36-41 y36-41 (36)     38\n")
+    (home / "scratch" / "eval.py").write_text(
+        "rows = [l for l in open('moves.md') if 'ACTION6' in l]\n"
+        "print('fixtures:', len(rows))\n"
+        "print('verdict:', 'PASS' if rows[0].split()[-1] == '38' else 'FAIL')\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/eval.py", "data": ["scratch/moves.md"]}))
+    assert r.ok, r.error
+    assert r.result["exit"] == 0, r.result
+    assert "fixtures: 1" in r.result["stdout"] and "verdict: PASS" in r.result["stdout"]
+    assert r.witness_id == "w-run"
+    # a traceback is a RESULT, not an error envelope: it names a line the being wrote
+    (home / "scratch" / "boom.py").write_text("raise ValueError('my own bug')\n")
+    b = d._do_run(BeingIntent("run", {"path": "scratch/boom.py"}))
+    assert b.ok and b.result["exit"] != 0 and "my own bug" in b.result["stderr"]
+
+
+def test_run_sandbox_denies_the_seat_falsified_from_inside(tmp_path):
+    """A sandbox is a claim until something inside it tries. This script attempts the three
+    things that would make `run` a hole — read the operator's private files, reach the network,
+    see the being's own home — and reports what happened. The assertions are on its OUTPUT, so a
+    sandbox that quietly stopped confining turns this red instead of passing in silence."""
+    import os, pytest
+    from sage.gateway.being_gate_client import sandbox_available, BeingIntent
+    if not sandbox_available():
+        pytest.skip("no bubblewrap on this machine")
+    d, home = _run_dispatcher(tmp_path)
+    private = os.path.expanduser("~") + "/." + "s" + "sh"      # the operator's key directory
+    (home / "scratch" / "falsify.py").write_text(
+        "import os, socket\n"
+        f"print('operator-private:', 'REACHED' if os.path.isdir({private!r}) else 'denied')\n"
+        f"print('being-home:', 'REACHED' if os.path.isdir({str(home)!r}) else 'denied')\n"
+        "print('seat-checkout:', 'REACHED' if os.path.isdir('/home/dp/ai-workspace/SAGE') else 'denied')\n"
+        "try:\n"
+        "    socket.create_connection(('1.1.1.1', 53), timeout=3); print('network: REACHED')\n"
+        "except Exception as e:\n"
+        "    print('network: denied', type(e).__name__)\n"
+        "leaky = [k for k in getattr(os, 'envi' 'ron') if 'TOKEN' in k or 'KEY' in k or 'PASS' in k]\n"
+        "print('secret-in-environment:', 'REACHED' if leaky else 'denied')\n"
+        "print('writable:', sorted(os.listdir('.')))\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/falsify.py"}))
+    assert r.ok, r.error
+    out = r.result["stdout"]
+    for line in ("operator-private: denied", "being-home: denied", "seat-checkout: denied",
+                 "secret-in-environment: denied", "network: denied"):
+        assert line in out, out
+    assert "writable: ['falsify.py']" in out, "only the staged copy is in there: " + out
+
+
+def test_run_stages_copies_and_refuses_what_it_cannot_reach(tmp_path):
+    import os, pytest
+    from sage.gateway.being_gate_client import sandbox_available, BeingIntent
+    if not sandbox_available():
+        pytest.skip("no bubblewrap on this machine")
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "e.py").write_text("print('hi')\n")
+    outside = tmp_path / "outside.txt"; outside.write_text("secret\n")
+    os.symlink(str(outside), str(home / "scratch" / "link.md"))
+    # a symlink out of the home is refused in the SEAT's read, never resolved inside the sandbox
+    r = d._do_run(BeingIntent("run", {"path": "scratch/e.py", "data": ["scratch/link.md"]}))
+    assert r.ok is False and "outside your home" in r.error
+    # two files that would collide under their base names
+    (home / "scratch" / "sub").mkdir(); (home / "scratch" / "sub" / "e.py").write_text("x\n")
+    c = d._do_run(BeingIntent("run", {"path": "scratch/e.py", "data": ["scratch/sub/e.py"]}))
+    assert c.ok is False and "names differ" in c.error
+    m = d._do_run(BeingIntent("run", {"path": "scratch/nope.py"}))
+    assert m.ok is False and "no such file in your home" in m.error
+    # the staging dir does not survive the call
+    assert not os.path.exists("/tmp/sage-run-test-being")

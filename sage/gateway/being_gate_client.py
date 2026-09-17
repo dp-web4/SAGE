@@ -295,6 +295,84 @@ def sandbox_prefix(worktree: str) -> str:
 
 
 
+# run: the being executes code it wrote itself, in a sandbox that holds nothing of ours.
+#
+# WHY IT EXISTS. dp, 2026-09-17, to the being: "exploration has to be off-game. this is what
+# the current leaders are doing - writing solvers, simulators, ways to evaluate solutions
+# without paying the price." The being answered by designing an off-board evaluator and then
+# flagged, honestly, that it could not run one: `memory_write` and `edit` write only inside its
+# home, and `check` executes only its worktree, and _safe_path keeps those two sets disjoint on
+# purpose (see reference_f1a._safe_path: a gated write into a tree a gated execute runs composes
+# into ungated code). So it could author a simulator and never run it.
+#
+# WHY THIS IS SAFE TO ADD, stated as a comparison rather than a promise: `run` is STRICTLY
+# WEAKER than `check`, which the being already has. `check` binds a whole writable worktree into
+# the sandbox and runs pytest, which imports whatever conftest.py it finds. `run` binds ONE
+# seat-staged directory containing a COPY of one file the being named plus copies of the data
+# files it named — no worktree, no home, no network, no seat environment, no vault, no keys, and
+# nothing the being can alter between the staging and the execution. The being's own state
+# (journal, conversations, memories) is not bound, so code it writes cannot corrupt the record of
+# what it did. Anything it wants to keep it must PRINT, and the print is capped and witnessed.
+STAGE_ROOT = "/tmp/sage-run"          # seat-owned staging dir, one per member; never written by the being
+RUN_MAX_DATA = 8                      # data files copied in beside the script
+RUN_TIMEOUT_S = 30
+
+
+def run_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The sandboxed interpreter invocation for a `run` intent.
+
+    The being names a .py file in its home and optionally data files to place beside it. The
+    SEAT stages copies into a directory it owns and the law judges THIS string. The staging
+    path is derived from the member name alone, so it is identical at both composition sites
+    and contains nothing the being chose."""
+    import os
+    import re
+    import sys
+    memory_root = (ctx or {}).get("memory_root")
+    member = (ctx or {}).get("member") or ""
+    if not memory_root:
+        raise ValueError("run requires a memory_root context")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", member):
+        raise ValueError("run requires a member name of its own; none is configured on this seat")
+    path = str(args.get("path", "")).strip()
+    if not path:
+        raise ValueError("run needs a 'path': a .py file in your home to execute")
+    names = [path] + [str(d).strip() for d in (args.get("data") or [])]
+    if len(names) - 1 > RUN_MAX_DATA:
+        raise ValueError(f"run takes at most {RUN_MAX_DATA} 'data' files beside the script "
+                         f"(you gave {len(names) - 1}); the sandbox has nothing else in it")
+    for n in names:
+        if not n or any(ch.isspace() for ch in n):
+            raise ValueError(f"run paths may not be empty or contain whitespace: {n!r}")
+        if n.startswith("-") or n.startswith("/") or ".." in n.split("/"):
+            raise ValueError(f"run paths are plain relative paths inside your home, got {n!r}")
+    if not path.endswith(".py"):
+        raise ValueError(f"run executes a Python file; 'path' must end in .py, got {path!r}")
+    if not sandbox_available():
+        raise ValueError(
+            "run needs its sandbox and cannot get one: bubblewrap is missing or not permitted "
+            "to create a user namespace here. Running your code under the seat's own authority "
+            "instead is the one thing this verb exists to prevent, so it is refused rather than "
+            "silently downgraded")
+    interp = os.path.dirname(os.path.dirname(sys.executable))
+    stage = f"{STAGE_ROOT}-{member}"
+    script = os.path.basename(path)
+    return (
+        f"{SANDBOX} --clearenv"
+        " --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind /lib64 /lib64 --ro-bind /bin /bin"
+        " --ro-bind /etc/alternatives /etc/alternatives"
+        f" --ro-bind {interp} {interp}"
+        " --proc /proc --dev /dev --tmpfs /tmp"
+        # THE ONLY WRITABLE THING IN THERE, and its contents are copies the seat made.
+        f" --bind {stage} /work"
+        " --unshare-pid --unshare-net --unshare-ipc --unshare-uts"
+        " --new-session --die-with-parent"
+        " --setenv HOME /tmp --setenv PYTHONUTF8 1 --setenv PYTHONDONTWRITEBYTECODE 1"
+        f" --setenv PATH {interp}/bin:/usr/bin:/bin"
+        f" --chdir /work {interp}/bin/python3 /work/{script}"
+    )
+
+
 # git_read: the being inspects its own repository history. READ-ONLY BY CONSTRUCTION, and
 # the construction is the interesting part rather than the intent.
 #
@@ -993,6 +1071,10 @@ _REGISTRY = {
     # the being never holds a flag. See git_read_command for what it composes with.
     "git_read":       dict(tool="git_read",    path_args=(),       cmd_arg=None,
                            compose=git_read_command),
+    # run: execute code the being wrote, in a sandbox holding nothing of ours. Composed like
+    # check; see run_command for why it is strictly weaker than the check the being already has.
+    "run":            dict(tool="run",         path_args=(),       cmd_arg=None,
+                           compose=run_command),
     # game: probes against the offline ARC-AGI-3 engine, the being's own act, batched.
     # Composed like search (see game_command); the stepper is a per-being fact.
     "game":           dict(tool="game",        path_args=(),       cmd_arg=None,
@@ -1037,7 +1119,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "check", "git_read", "say", "pr_open",
-                            "pr_amend", "camera", "git_restore", "search", "edit", "game"})
+                            "pr_amend", "camera", "git_restore", "search", "edit", "game", "run"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -1116,6 +1198,17 @@ _TOOL_SCHEMAS = {
               {"target": "'gateway' or 'irp' for a whole suite, or '<suite>::<test_name>' "
                          "for one test, e.g. 'gateway::test_relative_memory_path'"},
               ["target"]),
+    "run": ("RUN a Python file you wrote, and read what it printed. The file is copied into a "
+            "sandbox that contains a Python interpreter, the data files you name, and nothing "
+            "else — no network, no home, no worktree, none of your own notes or memories, and "
+            "nothing of the seat's. It cannot change anything; whatever you want to keep, PRINT "
+            "it. This is how a hypothesis becomes testable without spending a move: write the "
+            "rule as code, run it against records you already have, and see it pass or fail.",
+            {"path": "a .py file in your home, e.g. 'scratch/evaluator.py'",
+             "data": "optional: up to 8 more files from your home to place beside it, e.g. "
+                     "['scratch/game/moves.md'] — they arrive in the working directory under "
+                     "their base names"},
+            ["path"]),
     "game": ("Probe the ARC-AGI-3 game the seat has set up for you (offline engine on this "
              "machine): up to 8 probes per call, executed IN ORDER against the live game "
              "state, each one's delta reported back in this same turn — cells changed grouped "
@@ -1483,7 +1576,8 @@ class BeingGateClient:
             ctx = {"worktree": getattr(self, "worktree", None),
                    "memory_root": getattr(self, "memory_root", None),
                    "workspace": getattr(self, "workspace", None),
-                   "game_stepper": getattr(self, "game_stepper", None)}
+                   "game_stepper": getattr(self, "game_stepper", None),
+                   "member": getattr(self, "member_id", None)}
             # a COMPOSED verb: the seat builds the exact outward act (a shell line) from the
             # being's args, and THAT is what the law judges. Bad args raise here and gate()
             # turns that into a deny (gate.raised), never a silent pass. The being never
