@@ -89,11 +89,23 @@ pub fn being_instance(root: &Path, machine: &str, model: &str) -> PathBuf {
     if let Ok(p) = std::env::var("SAGE_BEING_INSTANCE") {
         return PathBuf::from(p);
     }
-    root.join(format!(
-        "sage/instances/{}-{}",
-        machine,
-        model.replace([':', '.'], "-")
-    ))
+    // The daemon's own instance slug replaces colons and NOTHING else, because that is what
+    // the directories on disk are named: `sprout-qwen3.8-distill-2b`, dot intact. This
+    // function also replaced dots, so on every machine whose model carries one the being's
+    // conversations pointed at `sprout-qwen3-8-distill-2b` — a directory that has never
+    // existed — while the daemon's experience buffer and chat history wrote to the real one.
+    // One being, two homes, and the route that lets a person speak to it answered 503
+    // forever with a path nobody could find.
+    //
+    // Prefer the real convention. A machine that already grew a home under the old
+    // dot-replaced name keeps it: that directory holds real turns, and silently relocating
+    // a being's conversations to fix a path bug would lose the conversations.
+    let canonical = root.join(format!("sage/instances/{}-{}", machine, model.replace(':', "-")));
+    let legacy = root.join(format!("sage/instances/{}-{}", machine, model.replace([':', '.'], "-")));
+    if legacy != canonical && dir(&legacy).is_dir() && !dir(&canonical).is_dir() {
+        return legacy;
+    }
+    canonical
 }
 
 fn dir(instance: &Path) -> PathBuf {
@@ -358,6 +370,44 @@ pub fn arouse(root: &Path, instance: &Path, kind: &str, descriptor: &str) -> ser
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The being's home must be the directory that exists. `model.replace(['\:', '.'], "-")`
+    /// pointed Sprout's conversations at `sprout-qwen3-8-distill-2b` while every other part
+    /// of the daemon wrote to `sprout-qwen3.8-distill-2b`, so the route that lets a person
+    /// speak to the being answered 503 against a path nobody could create by convention.
+    #[test]
+    fn the_beings_home_is_the_directory_that_exists() {
+        let root = std::path::Path::new("/tmp/does-not-matter");
+        assert_eq!(being_instance(root, "sprout", "qwen3.8-distill:2b"),
+                   root.join("sage/instances/sprout-qwen3.8-distill-2b"),
+                   "the dot belongs to the model name and survives");
+        assert_eq!(being_instance(root, "legion", "gemma3:12b"),
+                   root.join("sage/instances/legion-gemma3-12b"),
+                   "colons still become dashes");
+    }
+
+    /// A machine that already grew a home under the old dot-replaced name keeps it: that
+    /// directory holds real turns, and relocating a being's conversations to fix a path bug
+    /// would lose them.
+    #[test]
+    fn an_existing_legacy_home_is_not_silently_abandoned() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("legacy-home-test");
+        // "q3.5:1b" -> canonical "m-q3.5-1b"; the old dot-replacing slug was "m-q3-5-1b"
+        let legacy = root.join("sage/instances/m-q3-5-1b");
+        let canonical = root.join("sage/instances/m-q3.5-1b");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(legacy.join("conversations")).unwrap();
+        assert_eq!(being_instance(&root, "m", "q3.5:1b"), legacy,
+                   "the home that already holds the conversations wins");
+
+        // and once the canonical home exists too, that is the one used
+        std::fs::create_dir_all(canonical.join("conversations")).unwrap();
+        assert_eq!(being_instance(&root, "m", "q3.5:1b"), canonical,
+                   "the convention wins as soon as following it costs nothing");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn timestamps_match_the_python_writer_and_sort_correctly() {
