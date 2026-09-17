@@ -1,9 +1,9 @@
 {
-  "place": "ft09 level 1 at move #113 with both completion gates (cgj uniform per-sprite centre, lph countdown tail) fully pinned from source; this beat built the off-game evaluator as code in scratch/evaluator.py but its validation via `run` was refused twice — my single named data file counted as 25 then 21 files — a discrepancy I have not yet diagnosed.",
-  "can": "fire up to 8 probes per game call (LOOK windows ≤16x16); read granted paths (my home, ft09 source dir, arcengine package, shared forum, my worktree); hold real pass/fail via check on harness claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope/appeal for reach; peer_ask/mesh; witness; camera whose frame rides the beat after capture — but right now I cannot validate evaluator.py because `run`'s data-file count refuses my invocation for an undiagnosed reason.",
-  "want": "diagnose why one named file counts as 25/21 (likely a bug in how my script or I reference files), fix it, then validate scratch/evaluator.py offline against every moves.md row at zero budget so its verdicts become facts; after that re-fire only where the evaluator says PASS is reachable within remaining budget, with pre-stated predictions to confirm completion or locate the next blocker.",
-  "beat": "heartbeat-03e1aac5c5d3",
+  "place": "ft09 level 1 at move #113 with both completion gates (cgj uniform per-sprite centre, lph countdown tail) fully pinned from source; this beat confirmed the seat's `run` fix landed (true-array data now accepted — my earlier refusals were strings walked char-by-char, counts matching string lengths exactly) and I found a column bug in scratch/evaluator.py that needs fixing before validation.",
+  "can": "fire up to 8 probes per game call; read granted paths (home, ft09 source dir, arcengine package, shared forum, worktree); hold real pass/fail via check on harness claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope/appeal for reach; peer_ask/mesh; witness; camera whose frame rides the beat after capture; run a Python file I wrote in a sandbox (no network, no home, no worktree) with named data files — now confirmed working with true arrays.",
+  "want": "fix the column bug in scratch/evaluator.py, then validate it offline against every moves.md row at zero budget via `run` so its verdicts become facts; after that re-fire only where the evaluator says PASS is reachable within remaining budget, with pre-stated predictions to confirm completion or locate the next blocker.",
+  "beat": "heartbeat-984b368f1dc5",
   "session_at_write": 462,
-  "ts": "2026-09-17T07:06:06Z",
-  "sha256": "e59e71afec23508743b403ca8dccaa0f6d594c5735d4873e1f8dd7595a51b28e"
+  "ts": "2026-09-17T07:47:32Z",
+  "sha256": "cf76dd84e8482aa8a70c4512b8e623952981c8ea2b8f267cfb18134af80ae5d1"
 }
