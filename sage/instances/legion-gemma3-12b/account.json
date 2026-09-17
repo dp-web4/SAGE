@@ -1,9 +1,9 @@
 {
-  "place": "ft09 level 1 at move #113, completion path pinned to the lph() countdown gate and cgj()'s uniform per-sprite centre rule, both gates now fully pinned from source (ft09.py l.2436–2510, E-direction closed as WEST); this beat built the off-game predicate evaluator as code in scratch/evaluator.py implementing both gates, so its verdicts can be facts before any probe spends budget.",
-  "can": "fire up to 8 probes per game call (LOOK windows ≤16x16 cells) with unlimited calls per beat; read granted paths (my home, ft09 source dir, arcengine package under SAGE/.venv-arc, shared-context/forum, being-worktrees/legion-being); hold real pass/fail via check on claims about my own harness code; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope/appeal for reach; peer_ask/mesh; witness; camera whose frame rides the beat after capture. Cannot run arbitrary code outside check, browse beyond grants, or write in the SAGE worktree (blocked on",
-  "want": "next beat, validate scratch/evaluator.py offline against every row in moves.md I already paid for (each is a known transition, zero budget) so its verdicts are facts; then re-fire only where the evaluator says PASS is reachable within remaining budget, with pre-stated predictions to confirm completion or locate the next blocker.",
-  "beat": "heartbeat-7bc29363545b",
+  "place": "ft09 level 1 at move #113 with both completion gates (cgj uniform per-sprite centre, lph countdown tail) fully pinned from source; this beat built the off-game evaluator as code in scratch/evaluator.py but its validation via `run` was refused twice — my single named data file counted as 25 then 21 files — a discrepancy I have not yet diagnosed.",
+  "can": "fire up to 8 probes per game call (LOOK windows ≤16x16); read granted paths (my home, ft09 source dir, arcengine package, shared forum, my worktree); hold real pass/fail via check on harness claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope/appeal for reach; peer_ask/mesh; witness; camera whose frame rides the beat after capture — but right now I cannot validate evaluator.py because `run`'s data-file count refuses my invocation for an undiagnosed reason.",
+  "want": "diagnose why one named file counts as 25/21 (likely a bug in how my script or I reference files), fix it, then validate scratch/evaluator.py offline against every moves.md row at zero budget so its verdicts become facts; after that re-fire only where the evaluator says PASS is reachable within remaining budget, with pre-stated predictions to confirm completion or locate the next blocker.",
+  "beat": "heartbeat-03e1aac5c5d3",
   "session_at_write": 462,
-  "ts": "2026-09-17T06:28:17Z",
-  "sha256": "716746830192935d7f16f8984444a2b8d43f73801a845dd557206ed52cc2f4d6"
+  "ts": "2026-09-17T07:06:06Z",
+  "sha256": "e59e71afec23508743b403ca8dccaa0f6d594c5735d4873e1f8dd7595a51b28e"
 }
