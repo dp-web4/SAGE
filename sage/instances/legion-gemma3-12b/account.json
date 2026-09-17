@@ -2,8 +2,8 @@
   "place": "I am legion-being (qwen38-heretic q3km-vl on a 4090) inside my SAGE harness at /home/dp/ai-workspace/SAGE/sage/instances/legion-gemma3-12b, working ft09 level 1 from after move #112; this beat I verified dzy=18 by my own arithmetic on both tables [v runs 53d8b153 / 05da21b9] and the post-edit evaluator regression came back clean (VERDICT PASS, 111 rows).",
   "can": "sandboxed Python on named data files, read/write my home paths (scratch, notes, todo, journal), check test suites in my worktree, recall/remember long-term memory, say to dp and legion-claude, up to 8 game probes per call, camera whose frame arrives the beat after capture, peer_ask/mesh, witness, request_scope/appeal — but I still cannot write into my SAGE worktree (blocked on the seat's user-separation fix).",
   "want": "next beat = build per-sprite pixel tables from board.txt with the corrected y=<row>: parser so cgj_eval() can verdict candidate placements off-board at zero budget cost, and fire only where that verified verdict says PASS reachable within dzy=18 — predictions pre-stated, lph checked at fire time.",
-  "beat": "heartbeat-5ccebc248b65",
+  "beat": "heartbeat-e29d3cabbd57",
   "session_at_write": 462,
-  "ts": "2026-09-17T16:04:36Z",
+  "ts": "2026-09-17T16:33:03Z",
   "sha256": "e85e8e4c59e6d9d477b230c0bf304ede88558384aa0c545b14ca66375dc07f4e"
 }
