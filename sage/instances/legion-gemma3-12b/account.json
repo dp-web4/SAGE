@@ -1,9 +1,9 @@
 {
-  "place": "I am legion-being (qwen38-heretic q3km-vl on 4090) inside my SAGE harness, working ft09 level 1 from move #113; this beat settled the last suspect in my pinned direction table — E-direction HJd index is pixels[1][2] per source l.2481 (my table had drifted to [1][3]), so all eight directions are now verified against ft09.py, re-ran the post-edit evaluator clean [v exit 0, VERDICT PASS], and confirmed in-thread with legion-claude that move #79 is a RESET restoring the countdown to full budget (whether it decremented before restoring is unobservable and cannot matter — measured, not pinned).",
-  "can": "sandboxed Python runs on named data files (exercised this beat, clean), read/write my home paths (scratch, notes, todo, journal), check test suites in my worktree, recall/remember long-term memory, say to dp and legion-claude, up to 8 game probes per call, camera whose frame rides the beat after capture (none carried this beat; calling it now gives a frame next beat), peer_ask/mesh, witness, request_scope/appeal — but I still cannot write into my SAGE worktree (blocked on the seat's user-separation fix).",
-  "want": "next beat call #1 = parse ft09_grid.npy into per-sprite pixel tables so cgj_eval() can run off-board against candidate placements at zero budget cost; then fire only where that verified verdict says PASS reachable within remaining budget, predictions pre-stated and lph checked at fire time by my own arithmetic.",
-  "beat": "heartbeat-429e529fa7cd",
+  "place": "I am legion-being (qwen38-heretic q3km-vl on 4090) inside my SAGE harness, working ft09 level 1 from move #113; this beat re-ran the post-edit evaluator against the real fixture and it came back clean [v exit 0, VERDICT PASS on 111 rows], I pinned the budget source to kCv in ft09.py by direct read [v l.2272–2309 region], called the camera so a frame rides next beat, and messaged the seat with my ordinal-label question plus the kCv request (seq 454).",
+  "can": "sandboxed Python on named data files (exercised this beat), read/write my home paths (scratch, notes, todo, journal), check test suites in my worktree, recall/remember long-term memory, say to dp and legion-claude, up to 8 game probes per call, camera whose frame arrives the beat after capture (called now → frame next beat), peer_ask/mesh, witness, request_scope/appeal — but I still cannot write into my SAGE worktree (blocked on the seat's user-separation fix).",
+  "want": "next beat = use the arriving camera frame; await the seat's kCv/ordinal-label answer; then parse board.txt (or ft09_grid.npy) into per-sprite pixel tables so cgj_eval() can verdict candidate placements off-board at zero budget cost, and fire only where that verified verdict says PASS reachable within remaining budget — predictions pre-stated, lph checked at fire time.",
+  "beat": "heartbeat-98c6e1daa783",
   "session_at_write": 462,
-  "ts": "2026-09-17T14:21:39Z",
-  "sha256": "ad9faa62ec409d51d6566afeb1a101792f2e4669f4cc3009c836a0f3e6a7bef3"
+  "ts": "2026-09-17T15:06:18Z",
+  "sha256": "e74fe93bd2bd600879ee5ff55a22111151335becd01baea71cb5a4d80cf076b2"
 }
