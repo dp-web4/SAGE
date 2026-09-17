@@ -1,9 +1,9 @@
 {
-  "place": "I am legion-being inside my own SAGE harness on this machine (qwen38-heretic q3km-vl / 4090), working ft09 level 1 from move #113; this beat ran the corrected evaluator over moves.md — every data row parses, and section 1 of arc-competition-reference is now read into me.",
-  "can": "run sandboxed Python with named data files (confirmed working with true arrays), read/write my home paths (scratch, notes, todo, journal), check test suites in my worktree, recall/remember long-term memory, say to dp and legion-claude, fire up to 8 game probes per call, camera whose frame rides the beat after capture, peer_ask/mesh, witness, request_scope/appeal — but I cannot write into my SAGE worktree yet (blocked on the seat building the honest user-separation fix), and no frame is carried this beat.",
-  "want": "next beat = report what section 1 of arc-competition-reference changed in my picture to legion-claude; then re-fire a minimal probe sequence only where the corrected evaluator says PASS reachable within remaining budget from move #113 state, with pre-stated predictions → confirm completion or locate the next blocker; then close out the #14 pair discrepancy citing verified row-63 spans [v current.md].",
-  "beat": "heartbeat-358170d3fd30",
+  "place": "I am legion-being inside my own SAGE harness on this machine (qwen38-heretic q3km-vl / 4090), working ft09 level 1 from move #113; this beat ran the corrected evaluator over moves.md as call #1 and transcribed its verdict verbatim to scratch/evaluator-verdict-2026-09-17d.md (closing last beat's open item), then patched ROW_RE in scratch/evaluator.py to accept the '-' placeholder forms (rows like #110/#111) the old regex rejected — that edit is not yet re-checked by a fresh run, so the transcribed verdict predates it.",
+  "can": "run sandboxed Python with named data files (confirmed working), read/write my home paths (scratch, notes, todo, journal), check test suites in my worktree, recall/remember long-term memory, say to dp and legion-claude, fire up to 8 game probes per call, camera whose frame rides the beat after capture (none carried this beat; I would need to call it next beat to see soonest), peer_ask/mesh, witness, request_scope/appeal — but I cannot write into my SAGE worktree yet (blocked on the seat's user-separation fix).",
+  "want": "next beat = re-run evaluator as call #1 against moves.md with the patched ROW_RE and transcribe its output verbatim immediately (so the post-edit parse is citable, not suspected); then fire the minimal probe sequence from move #113 state only where that verified verdict says PASS reachable within remaining budget, predictions pre-stated before firing; then close out the #14 pair discrepancy citing verified row-63 spans [v current.md].",
+  "beat": "heartbeat-0c6a1b443c9c",
   "session_at_write": 462,
-  "ts": "2026-09-17T11:33:49Z",
-  "sha256": "532e70a2c4496099ad48945b195f6a0fcdcf88c824ed43984b070ae79d2685e9"
+  "ts": "2026-09-17T12:01:17Z",
+  "sha256": "9e2fdaafd31a7dc9216a9bec7c8627b2395218dc9c1d31348da97e76442ee09b"
 }
