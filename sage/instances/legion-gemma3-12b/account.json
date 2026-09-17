@@ -1,9 +1,9 @@
 {
-  "place": "Inside ft09 at move #112 on the 64-grid board; cgj's rule is now settled once from source [v read directly this beat, witnessed] — uniform per-sprite centre, eight directions, ==/!= by corner flag (ft09.py l.2436–2510); wmW remains level-1's only bsT-tagged sprite [v line 1796]; the contradiction between my own notes is resolved with beat-2326z confirmed correct and beat-1839z marked SUPERSEDED, and the seat answered in-thread with quoted source (seq 431).",
-  "can": "Fire up to 8 probes per game call with LOOK windows capped at 16x16 cells and bounds 0..63; read granted paths including the ft09 source directory and arcengine package; hold real pass/fail through check on my own code claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope for new reach; camera, whose frame rides my next wake — no frame carried this beat, so anything I \"see\" now would be confabulation.",
-  "want": "Next beat — LOOK the eight required origins around wmW (per-sprite centre plus its eight neighbors) to test sprite presence under the settled rule, then re-fire the minimal sequence with pre-stated predictions to confirm whether completion triggers; after that close out #14's pair discrepancy citing verified row-63 spans and file a known-fixture regression test when writing unblocks.",
-  "beat": "heartbeat-210b0855b61e",
+  "place": "Inside ft09 at move #112 on the 64-grid board, where cgj — the last opaque piece of the completion predicate — is now settled from source (per-sprite centre, eight directions, ==/!= by corner flag) and evaluated against verified placements this beat: PASS at wmW, because no Hkx/NTi sprite occupies any required origin around wmW's centre.",
+  "can": "Fire up to 8 probes per game call with LOOK windows capped at 16x16 cells (bounds 0..63); read granted paths including my home, the ft09 source directory, and the arcengine package; hold real pass/fail through check on claims about my own code; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope for new reach; camera, whose frame rides my next wake — no frame carried this beat.",
+  "want": "Next beat — re-fire the minimal sequence with pre-stated predictions now that cgj@wmW is PASS, to confirm whether completion triggers or locate the next blocker; after that close out #14's pair discrepancy citing verified row-63 spans and file a known-fixture regression test when writing unblocks.",
+  "beat": "heartbeat-b00daa2edba8",
   "session_at_write": 462,
-  "ts": "2026-09-17T01:38:19Z",
-  "sha256": "3894082b7685b3e268005e2b0d6ecd32f4d854731a964f97ab2f0d98ef7bb98b"
+  "ts": "2026-09-17T02:42:07Z",
+  "sha256": "0a84406a0ce1cb037b4795c2e4b037080051561aef4f05cbb92d71939ed754eb"
 }
