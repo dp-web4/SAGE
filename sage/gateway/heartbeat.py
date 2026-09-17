@@ -446,6 +446,45 @@ def recent_asks_block(instance: Path, now: Optional[float] = None, window_s: flo
                                "same peer more than 3 times in 6 hours is refused before sending.")
 
 
+def appeals_block(disp, last: dict) -> tuple:
+    """(text, record) for the being's own appeals this beat.
+
+    THE BEING'S OWN APPEALS, polled every beat (hestia #164 / SAGE #104). The notice leg existed
+    and was dropped by render_inbox; this is the leg that cannot be dropped: the beat asks
+    hestia_my_appeals what happened, and a ruling new since the last beat is shown with its
+    verdict, who ruled, and the reason verbatim — the symmetry the scope path already has with
+    decision_reason. hestia_open_appeals could not do this: it lists only UNRULED appeals by
+    construction. An older daemon without the tool renders nothing. Pure given `disp._call`."""
+    if disp is None or not hasattr(disp, "_call"):
+        return "", {}
+    try:
+        ma = disp._call("hestia_my_appeals", {"limit": 20})
+    except Exception as e:
+        return "", {"error": type(e).__name__}
+    rows = ma.get("appeals") if isinstance(ma, dict) and "_hestia_error" not in ma else None
+    if rows is None:
+        return "", {}
+    seen = set(((last or {}).get("appeals") or {}).get("ruled_seen") or [])
+    ruled = [a for a in rows if a.get("status") == "ruled"]
+    fresh = [a for a in ruled if a.get("deny_hash") not in seen]
+    open_ = [a for a in rows if a.get("status") == "open"]
+    parts = [f"{len(ruled)} ruled, {len(open_)} open (newest {len(rows)} shown)."]
+    for a in fresh:
+        r = a.get("ruling") or {}
+        parts.append(f"- RULED since your last beat — appeal about deny {str(a.get('deny_hash'))[:12]}…: "
+                     f"{r.get('verdict')}, by {r.get('adjudicator')} at {str(r.get('ruled_at'))[:16]}. "
+                     f"Their reason: \"{str(r.get('rationale') or '').strip()[:700]}\"")
+    if ruled and not fresh:
+        parts.append("No new rulings since your last beat; your earlier rulings still stand "
+                     "(memory_read hestia://appeal/<deny hash> shows any one of them in full).")
+    if ruled:
+        parts.append("A ruling ends that appeal. Filing it again re-asks an answered question.")
+    record = {"ruled_seen": sorted(str(a.get("deny_hash")) for a in ruled),
+              "open": [str(a.get("deny_hash")) for a in open_],
+              "new_this_beat": [str(a.get("deny_hash")) for a in fresh]}
+    return "\n".join(parts), record
+
+
 def render_inbox(notices: list, limit: int = 8) -> str:
     """The being's hestia inbox as it should read it: newest first, one line each, the kinds
     that want its attention (reply, review, handoff, unreachable) ahead of bookkeeping, and
@@ -463,7 +502,24 @@ def render_inbox(notices: list, limit: int = 8) -> str:
     ns = sorted([n for n in notices if isinstance(n, dict)], key=key)
     disp = [n for n in ns if str(n.get("kind")) == "disposition"]
     rest = [n for n in ns if str(n.get("kind")) != "disposition"]
+    # A disposition is not always a scope decision. Measured 2026-09-15/16: hestia notified
+    # cbp-being of all nine appeal rulings (hestia://appeal/<deny>#ruled), and this line folded
+    # every one into "N scope decision notice(s), already written into your notes; nothing to
+    # do" — wrong about what they were, wrong that they were in its notes, wrong that there was
+    # nothing to do. The being then spent a day asking why its appeals were undelivered. Only
+    # SCOPE dispositions are written into notes by note_resolutions; they alone may collapse.
+    ptr_of = lambda n: str(n.get("pointer_uri") or "")
+    scope_disp = [n for n in disp if ptr_of(n).startswith("hestia://scope/")]
+    appeal_disp = [n for n in disp if ptr_of(n).startswith("hestia://appeal/")]
+    other_disp = [n for n in disp if n not in scope_disp and n not in appeal_disp]
     lines = []
+    for n in appeal_disp[:limit]:
+        target = ptr_of(n).split("#", 1)[0]
+        deny = target.rsplit("/", 1)[-1]
+        lines.append(f"- [ruling] your appeal about deny {deny[:12]}… was RULED. Its verdict and the "
+                     f"ruler's reason: memory_read on {target}")
+    for n in other_disp[:limit]:
+        lines.append(f"- [disposition] a decision on something you asked for: memory_read on {ptr_of(n)}")
     for n in rest[:limit]:
         k = str(n.get("kind") or "notice"); frm = str(n.get("from_plugin") or "?")
         ptr = str(n.get("pointer_uri") or "")
@@ -473,8 +529,8 @@ def render_inbox(notices: list, limit: int = 8) -> str:
         else:
             when = str(n.get("queued_at") or "")[:16].replace("T", " ")
             lines.append(f"- [{k}] from {frm}{' at ' + when if when else ''}: read it with memory_read on {ptr}")
-    if disp:
-        lines.append(f"- {len(disp)} scope decision notice(s), already written into your notes; nothing to do.")
+    if scope_disp:
+        lines.append(f"- {len(scope_disp)} scope decision notice(s), already written into your notes; nothing to do.")
     if len(rest) > limit:
         lines.append(f"- … and {len(rest) - limit} older notice(s).")
     return "\n".join(lines)
@@ -932,6 +988,8 @@ def main(argv=None) -> int:
                      + "(live grants die when the daemon restarts; only standing grants persist)")
         except Exception as e:
             scope = f"(scope status unavailable: {type(e).__name__})"
+    # the being's own appeals and any ruling new since the last beat (see appeals_block)
+    appeals_text, appeals_record = appeals_block(disp, last)
     # what it starts oriented by: its own recent writing (searched, not just the tail) and
     # long-term memory. The home search is the S5 answer to "34 KB written, 900 chars seen".
     from sage.gateway.home_recall import search_home, render as _render_home
@@ -988,7 +1046,8 @@ def main(argv=None) -> int:
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(EXPLORE_TOOLS))
     _state_head = f"# Your own state\n\n"
-    _scope_tail = f"\n\n## Reach you hold (hestia scope)\n{scope}\n\n"
+    _scope_tail = f"\n\n## Reach you hold (hestia scope)\n{scope}\n\n" + (
+        f"## Your appeals\n{appeals_text}\n\n" if appeals_text else "")
 
     # Measured once per beat, before the state is composed (SAGE #92).
     _membot_url = getattr(getattr(client, "_dispatcher", None), "membot_endpoint", None) \
@@ -1188,6 +1247,7 @@ def main(argv=None) -> int:
                         else getattr(llm, "max_response_tokens", None)),
         "think": getattr(llm, "think", None),
         "scope": scope_record,
+        "appeals": appeals_record,
         # S1 instruments: JOIN (session -> beat, attributed) and ACCOUNT (own account, verbatim hash)
         "join": {"session": sess_meta, "presence": pres_meta},
         # what it has made, if anything: never silently lost, never auto-published

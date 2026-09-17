@@ -256,3 +256,50 @@ def test_a_ruling_pointer_resolves_to_the_ruling():
     out = _disp_with({})._resolve_pointer("hestia://egress/12#carrier-mismatch:legion/legion-being")
     assert "not delivered" in out and "carrier-mismatch" in out
     assert _disp_with({})._resolve_pointer("notes/journal.md") is None, "a real path is still a path"
+
+
+def test_an_appeal_ruling_notice_is_not_folded_into_scope_decisions():
+    """SAGE #104. hestia notified cbp-being of all nine rulings, and render_inbox folded every
+    one into "N scope decision notice(s), already written into your notes; nothing to do"."""
+    from sage.gateway.heartbeat import render_inbox
+    notices = [
+        {"id": 1, "kind": "disposition", "from_plugin": "hestia", "pointer_uri": "hestia://appeal/20c6c5a4df71c210#ruled"},
+        {"id": 2, "kind": "disposition", "from_plugin": "hestia", "pointer_uri": "hestia://scope/scope-1"},
+        {"id": 3, "kind": "disposition", "from_plugin": "hestia", "pointer_uri": "hestia://escalation/abc#decided"},
+    ]
+    out = render_inbox(notices)
+    assert "[ruling] your appeal about deny 20c6c5a4df71" in out and "memory_read on hestia://appeal/20c6c5a4df71c210" in out
+    assert "#ruled" not in out.split("memory_read on")[1].split("\n")[0], "the pointer handed back is the lookup key"
+    assert "1 scope decision notice(s)" in out, "only the scope disposition is counted as scope"
+    assert "[disposition]" in out and "hestia://escalation/abc" in out
+
+
+def test_the_beat_shows_a_new_ruling_verbatim_once():
+    from sage.gateway.heartbeat import appeals_block
+    rows = {"appeals": [
+        {"deny_hash": "c29e24e65f21aaaa", "status": "ruled",
+         "ruling": {"verdict": "deny stands", "adjudicator": "claude-code", "ruled_at": "2026-09-16T04:38:30Z",
+                    "rationale": "Deny stands. /etc/systemd/system/hestia.policy-daemon.service does not exist."}},
+        {"deny_hash": "0000aaaa11112222", "status": "open"},
+    ]}
+    d = SimpleNamespace(_call=lambda name, args: rows if name == "hestia_my_appeals" else {})
+    text, rec = appeals_block(d, {})
+    assert "1 ruled, 1 open" in text and "RULED since your last beat" in text
+    assert "does not exist" in text and "claude-code" in text and "Filing it again" in text
+    assert rec["new_this_beat"] == ["c29e24e65f21aaaa"]
+    text2, rec2 = appeals_block(d, {"appeals": rec})
+    assert "RULED since your last beat" not in text2 and "No new rulings" in text2, "shown once, not every beat"
+    old = SimpleNamespace(_call=lambda name, args: {"_hestia_error": {"code": "unknown_tool"}})
+    assert appeals_block(old, {}) == ("", {}), "a daemon without the tool renders nothing"
+
+
+def test_a_pointer_read_uses_the_exact_lookup_first():
+    mine = {"appeals": [{"deny_hash": "c29e24e65f21aaaa", "appeal_entry": "e1", "status": "ruled",
+                         "ruling": {"verdict": "deny stands", "adjudicator": "claude-code",
+                                    "ruled_at": "2026-09-16T04:38:30Z", "rationale": "the path does not exist"}},
+                        {"deny_hash": "0000aaaa11112222", "appeal_entry": "e2", "status": "open"}]}
+    d = _disp_with({"hestia_my_appeals": mine})
+    out = d._resolve_pointer("hestia://appeal/c29e24e65f21#ruled")
+    assert "DENY STANDS" in out and "the path does not exist" in out
+    assert "still open" in d._resolve_pointer("hestia://appeal/0000aaaa1111")
+    assert "no appeal about deny" in d._resolve_pointer("hestia://appeal/ffffffffffff")

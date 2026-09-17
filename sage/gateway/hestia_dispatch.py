@@ -221,6 +221,29 @@ class HestiaF1aDispatcher:
         # `hestia://appeal/<hash>/ruling`, and the suffix made the hash match nothing.
         ident = ident.split("/", 1)[0]
         if kind == "appeal":
+            # The exact, windowless lookup first (hestia #164). The 500-row scan below is only a
+            # fallback for a daemon that predates hestia_my_appeals.
+            mine = self._call("hestia_my_appeals", {"limit": 100})
+            if isinstance(mine, dict) and "_hestia_error" not in mine and "appeals" in mine:
+                for a in mine.get("appeals") or []:
+                    if str(a.get("deny_hash", "")).startswith(ident) or str(a.get("appeal_entry", "")).startswith(ident):
+                        r = a.get("ruling")
+                        if not r:
+                            state = ("still open: a NOT-SAME peer or the operator rules it, and you are "
+                                     "notified when they do" if a.get("status") == "open" else
+                                     "never ruled, and now too old to be ruled")
+                            return f"[your appeal about deny {ident[:12]}… is {state}. Nothing to do but continue.]"
+                        return (f"[ruling on your appeal about deny {ident[:12]}…]\n"
+                                f"{str(r.get('verdict')).upper()}\n"
+                                f"ruled by: {r.get('adjudicator')} ({r.get('adjudicator_role') or 'role unrecorded'}) "
+                                f"at {r.get('ruled_at')}\n"
+                                f"their reason: {r.get('rationale') or '(none recorded)'}\n"
+                                f"What follows: a ruling is the end of that appeal. If you still need the "
+                                f"thing, the way forward is a scope request for it with a reason, or asking "
+                                f"in a conversation — not another appeal on the same deny.")
+                return (f"[you have no appeal about deny {ident[:12]}… on record. The lookup has no "
+                        f"recency window, so this is not an old appeal gone missing: none was filed "
+                        f"against that hash under your name.]")
             hist = self._call("hestia_query_history", {"filter": {"limit": 500}})
             entries = hist.get("entries") or []
             for e in entries:
