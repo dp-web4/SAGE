@@ -115,6 +115,16 @@ def test_the_inbox_rides_the_turn_the_being_acts_in():
     assert second is None and "INBOX" in seed[1]["content"] and "DIGEST" in seed[1]["content"]
 
 
+def test_the_answer_ask_appears_only_when_there_is_someone_to_answer():
+    """2026-09-17: in no conversation at all, the being filled the id slot three beats running
+    with "speaker", "conversation_id_placeholder" and "1234567890"."""
+    from sage.gateway.heartbeat import REFLECT
+    none = REFLECT.format(date="D", say_line="")
+    assert "say to=" not in none and "journal.md" in none and "remember" in none
+    some = REFLECT.format(date="D", say_line='4. ... say to="<id>", one of: c1.\n')
+    assert 'say to="<id>", one of: c1' in some
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

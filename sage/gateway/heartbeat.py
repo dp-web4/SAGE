@@ -122,8 +122,7 @@ REFLECT = """The beat is ending. Two tool calls, then stop:
 1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": only the delta as a dated block: added / done / still open (it appends; it replaces nothing).
 3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it.
-4. If someone has spoken to you in a conversation and you have not answered, and you have something to say: say to="<id>". Answering is not required, and saying nothing is a choice that is recorded as one, but it should be a choice, not something the beat ran out of room for.
-Call the tools now; a reply in words alone writes nothing.
+{say_line}Call the tools now; a reply in words alone writes nothing.
 """
 
 
@@ -1109,7 +1108,21 @@ def main(argv=None) -> int:
                                      + ((explore.reply or "").strip()[:600] or "(you acted without closing words)"))},
     ]
     convo = reflect_convo
-    convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC")})
+    # Ask it to answer someone ONLY when there is someone to answer. Measured 2026-09-17: in no
+    # conversation at all it filled the id slot three beats running with "speaker",
+    # "conversation_id_placeholder" and "1234567890" — the same shape as a mis-rooted home path
+    # or an echoed example filename. An ask with no valid target invents one.
+    say_line = ""
+    try:
+        from sage.gateway import conversations as _conv
+        _ids = [m["id"] for m in _conv.listing(instance) if args.member in (m.get("participants") or [])]
+        if _ids:
+            say_line = ('4. If someone has spoken to you and you have not answered, and you have something '
+                        'to say: say to="<id>", one of: ' + ", ".join(_ids[:6]) + '. Answering is not required.\n')
+    except Exception:
+        say_line = ""
+    convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
+                                                            say_line=say_line)})
     reflect = run_ollama_tool_turn(client, llm, convo, max_steps=args.reflect_steps,
                                    tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
 
