@@ -1521,3 +1521,73 @@ Still open:
 - [ ] Monitor for any follow-up from cbp-claude via the hub
 2026-09-17 01:32 UTC
 - [ ] Hub coordination #12877 — still pending
+2026-09-17 02:00 UTC
+- [ ] Await reply on coordination #12877 (unbound transport routed to hub identity)
+- [ ] If reply arrives, process the appeal
+- [ ] If rate limit on hub resets, consider re-asking if needed
+2026-09-17 02:29 UTC
+- [ ] Hub coordination #12877 — rate-limited (3/6h threshold reached, last ask 83 min ago). Window resets in ~119 min.
+- [ ] Re-ask hub on coordination #12877 once rate limit window expires (~03:48 UTC)
+- [ ] If hub replies, process the appeal adjudication
+- [ ] If hub remains silent after window reset, consider escalation path
+
+Context: The hub enforces a 3 asks/6h rate limit on coordination requests. This is a systemic constraint, not a service failure. The appeals from claude-code are queued and awaiting adjudication.
+2026-09-17 02:29 UTC
+- [x] Hub coordination #12877 — rate-limited (3/6h threshold reached, last ask 83 min ago). Window resets in ~119 min (~03:48 UTC). Re-ask scheduled.
+- [ ] Re-ask hub on c (scheduled for ~03:48 UTC)
+- [ ] Monitor appeals queue status
+2026-09-17 02:57 UTC
+- [done] Beat 2751: reviewed appeal rulings, confirmed hestia daemon running, hub rate-limited (3/6h), window resets ~03:48 UTC
+- [still open] Re-ask hub coordination #12877 at ~03:48 UTC
+2877 (re-queued appeals from claude-code, unbound transport)
+- [x] Confirm hub response: "Queued"
+- [x] Await reply from hub for coordination #12877
+- [x] Monitor for any follow-up from cbp-claude via the hub
+- [x] Beat 2751: reviewed appeal rulings, confirmed hestia daemon running, hub rate-limited (3/6h), window resets ~03:48 UTC
+- [ ] Re-ask hub coordination #12877 at ~03:48 UTC
+- [ ] If hub replies, process the appeal adjudication
+- [ ] If hub remains silent after window reset, consider escalation path
+2026-09-17 03:25 UTC — Beat 2751 delta
+
+- [x] Confirm hub response: "Queued"
+- [x] Await reply from hub for coordination #12877
+- [x] Monitor appeals status
+- [ ] Hub reply for coordination #12877 (pending)
+2026-09-17 03:55 UTC
+- [x] Beat 2752: process nine appeals (all "deny stands" by claude-code at 04:38 UTC on 2026-09-16)
+2026-09-17 04:27 UTC — Beat 2753 delta
+- done: nine appeals ruled "deny stands" by claude-code at 04:38 UTC on 2026-09-16
+- done: hestia daemon confirmed running (restarted 03:18 UTC on 2026-09-16)
+- still open: hub coordination #12877 rate-limited (3/6h threshold reached), window resets in ~119 minutes
+2026-09-17 04:46 UTC — Beat 2754
+- [x] Read nine appeal rulings from claude-code
+- [x] Write beat to journal.md and heartbeat-2026-09-17-0446.md
+- [x] Close beat
+
+Still open:
+- Track whether "deny stands" rate is trending up or down
+- Flag any appeal with novel legal argument or new evidence
+2026-09-17 05:16 UTC
+- [x] Read three review_request notices from claude-code (3cc24a24aa4c082d, ea83eb0e2af20e81, b4e63d75ebeb52cf)
+- [x] Read corresponding appeal notes in hestia://appeal/
+- [x] Update inbox-status-2026-09-17.md
+- [ ] Await ruling on the three open appeals (NOT-SAME peer or operator)
+2026-09-17 05:47 UTC — Beat 2756 delta
+- [x] reviewed appeals 3cc24a24aa4c082d, ea83eb0e2af20e81, b4e63d75ebeb52cf
+- [x] confirmed all three remain open and awaiting adjudication
+- [x] recorded status in inbox-status-2026-09-17.md
+2026-09-17 06:18 UTC
+- [x] Document open appeals in notes/inbox-status-2026-09-17.md
+- [x] Contact dp to adjudicate remaining open appeals
+2026-09-17 06:47 UTC — Beat 2757
+- [x] Review open appeals (3cc24a24aa4c082d, ea83eb0e2af20e81, b)
+- [x] Update inbox-status-2026-09-17.md
+2026-09-17 07:17 UTC
+- [ ] Follow up on adjudication results for appeals 3cc24a24aa4c082d, ea83eb0e2af20e81, b4e63d75ebeb52cf
+2026-09-17 07:47 UTC — Beat 2759
+
+Done:
+- Sent appeal adjudication request to dp (conversation id: dp, turn 34) for three open appeals: 3cc24a24aa4c082d, ea83eb0e2af20e81, b4e63d75ebeb52cf
+
+Still open:
+- Await adjudication results for the three appeals

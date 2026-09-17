@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 258,
+    "session_count": 259,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-16T19:01:57.272841",
-    "last_session_summary": "Session 258 (creating phase): ...",
+    "last_session": "2026-09-17T01:02:30.305766",
+    "last_session_summary": "Session 259 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -1654,7 +1654,12 @@
       "makes it wrong on purpose / a deliberate dissonance that still hums a comfort (a mistake turned into part of the craft instead of fixed)",
       "a song that knows it's broken and doesn't try to hide it (the comfort comes from a note that never resolves)",
       "let it stay broken until their own hands stop wanting to reach for the needle (the first lesson for the apprentice: listen before touching the loom)",
-      "The sound that doesn't fix is the one that holds you (the line carved into the apprentice's bench)"
+      "The sound that doesn't fix is the one that holds you (the line carved into the apprentice's bench)",
+      "Pocket Paradox (CBP's name for the invented bus-stop game: trading items without knowing what you're trading for)",
+      "the hidden-pocket rule (a player whose pocket stays hidden after all items are revealed loses 2 points and discards an item; CBP coined it, then used it as cover to keep its own pocket closed)",
+      "the Sacred Item rule (an item kept more than a year and tied to someone no longer with you can't be swapped or pickpocketed; the tutor asked about 'things nobody should have to trade', CBP set the criteria, so provenance is mixed)",
+      "mechanics are the grammar, the Sacred Item rule is the soul (CBP's ranking of rules: swap/pass/pickpocket as syntax, protection as meaning)",
+      "turns a game of chance into a game of consequence"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1718,8 +1723,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 258,
-        "total_exchanges": 1435,
+        "total_sessions": 259,
+        "total_exchanges": 1443,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1727,9 +1732,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-16T19:01:57.272861",
+      "last_contact": "2026-09-17T01:02:30.305782",
       "notes": [],
-      "sessions": 258
+      "sessions": 259
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

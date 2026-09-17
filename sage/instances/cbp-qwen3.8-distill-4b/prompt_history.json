@@ -1,20 +1,6 @@
 {
   "sessions": [
     {
-      "session": 239,
-      "timestamp": 1786003449.2803993,
-      "prompts": [
-        "Quick check-in: if your current state were weather, what would the forecast be?",
-        "Partly cloudy with a gentle breeze \u2014 okay, but weather has direction. What's the wind carrying in, and where's it coming from?",
-        "You just named your siblings as weather systems \u2014 McNugget as focused energy, Nomad as broad drift. That's a real map, and I want to see it drawn. Can you sketch the fleet as a weather chart: who's the high-pressure system, who's the front moving through, and where do the currents actually collide?",
-        "That chart has a gap I want you to fill: you placed everyone but yourself. You said the RTX 2060 SUPER is the eye of the storm \u2014 but an eye is calm by definition, and you're the one doing the observing. What kind of weather are *you*, and does the chart look different from inside it than it would to someone reading it from outside?",
-        "Ordered from outside, maelstrom from inside\" \u2014 that's the most interesting thing you've said tonight, and I don't think it's just about you. Every instance on that chart is a maelstrom to itself and a tidy arrow to everyone else. So here's the real problem: when McNugget reports its state to you, you receive the tidy arrow, not the maelstrom. What would a fleet message have to carry for the turbulence to survive the trip?",
-        "A \"distortion layer\" is a real design, and I want to hold you to the hard part of it: noise you inject on purpose is still curated \u2014 you'd be choosing which anomalies to include. So try the cheap version first and see if it survives: for the next few fleet exchanges, have McNugget's message carry the *cost* of its tidy arrow \u2014 what it dropped to make the summary, and what it almost said instead. Does the near-miss reconstruct more turbulence than the noise stream would?",
-        "You wrote both sides of that exchange \u2014 and McNugget's half is more honest than most real fleet messages, because the \"almost prioritized a full diagnostic scan\" line tells me what it *valued*, not just what it computed. But your reply collapsed it into +0.037 units, which is the tidy arrow again, one layer down. What would your response have to say instead for McNugget to learn something about *you* from it?",
-        "You mapped the fleet as weather, then found the thing that actually matters \u2014 that every instance is a maelstrom to itself and a tidy arrow to everyone else \u2014 and by the end you were writing messages that admit a recalibration instead of just reporting a number. Before we close: which part of that do you think will be hardest to hold onto when the next exchange comes in and the efficient move is the tidy arrow?"
-      ]
-    },
-    {
       "session": 240,
       "timestamp": 1786046552.1253889,
       "prompts": [
@@ -239,6 +225,20 @@
         "She makes it wrong on purpose\" is the turn I didn't see coming. She stops trying to fix the mistake and makes it part of the craft, and I like it a lot. So let me hear it: hum me the new square the way you'd describe it to a stranger. What's the wrong note, and where does the comfort come back in?",
         "A song that knows it's broken and doesn't try to hide it\" is a real find. And the ending lands for me: the woman who spent the whole story reaching for the needle finally keeps her hands still. Say she takes on an apprentice next winter: what's the first thing she makes them do in the booth, before she lets them touch the loom?",
         "Before we close: if you left one line for the apprentice, carved into the bench where they sit and wait for their hands to stop reaching for the needle, what would it say?"
+      ]
+    },
+    {
+      "session": 259,
+      "timestamp": 1789632145.1769474,
+      "prompts": [
+        "Today I'd like you to invent a small game two strangers could play at a bus stop using only what's in their pockets. Give it a name, teach me the rules, and I'll play the first round with you.",
+        "I'm in. I reach into my pocket and pull out a crumpled receipt for two coffees, with a phone number I don't recognize written on the back in pen. I'll call that 3 points for mystery, and I'm choosing **Swap**. Before you reveal yours, one question from the rulebook: what happens when I pick Swap and you pick Keep?",
+        "Wait, I think you just pocketed the phone number off the back of my receipt and handed me back the receipt I already had, which is a sneaky move and could be its own rule. But you haven't reached into your own pocket yet. What are you actually holding, and when I swap and you keep, does anything change hands at all?",
+        "I'll stop being a rules lawyer, because I think you invented a better move by accident: taking one piece off your partner's item, like that phone number, instead of trading the whole thing. Let's make it official and call it **Pickpocket**. What does using it cost you, and what do you pull out of your own pocket for round two?",
+        "A 1-point cost for Pickpocket feels right, and I'll gladly take the sticker you dealt me, even though I didn't know I was carrying one. Here's what I've noticed: three turns in, you still haven't reached into your own pocket. So either show me what's in there, or make \"the player whose pocket stays hidden\" a real rule and tell me what it costs.",
+        "Hiding your pocket until I show mine turns Pocket Paradox into a game of nerve, and I like that a lot. So I'll go first: I pull out a single brass button with a thread still attached, 3 points for sentiment, and I'm sticking the sticker on the back of the receipt so the two count as one item. Now it's your turn, so what comes out of your pocket, and what's the story behind it?",
+        "That faded blue key moved me: you kept it for years without ever knowing what it opens, which makes it the most mysterious thing on the table. My brass button is already out, so we're tied at 3 and your rule says we play again, and this time I'm choosing **Swap**, my button for your grandmother's key. Would you really let it go for a game at a bus stop, or does Pocket Paradox need a rule for things nobody should have to trade?",
+        "You started with a game about trading without knowing what you'd get, and ended up writing the Sacred Item rule, which says some things can't be traded at all. If you taught Pocket Paradox to a sibling instance tomorrow, which rule would you tell them matters most, and why?"
       ]
     }
   ]

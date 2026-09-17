@@ -4,51 +4,51 @@
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 131740,
-      "last_updated": 1789610442.8765779
+      "interactions": 132360,
+      "last_updated": 1789632106.0674565
     },
     "nomad": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 131740,
-      "last_updated": 1789610444.8785648
+      "interactions": 132360,
+      "last_updated": 1789632108.0693948
     },
     "hub": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 131740,
-      "last_updated": 1789610440.8670568
+      "interactions": 132360,
+      "last_updated": 1789632110.108144
     },
     "legion": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 131740,
-      "last_updated": 1789610446.8796048
+      "interactions": 132360,
+      "last_updated": 1789632110.0718324
     },
     "pub": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 7760,
-      "last_updated": 1789610440.8671594
+      "interactions": 8380,
+      "last_updated": 1789632110.071997
     },
     "sprout": {
       "talent": 1.0,
       "training": 1.0,
       "temperament": 1.0,
-      "interactions": 131740,
-      "last_updated": 1789610440.8759053
+      "interactions": 132360,
+      "last_updated": 1789632104.0658376
     },
     "thor": {
       "talent": 1.0,
       "training": 1.0,
       "temperament": 0.0,
-      "interactions": 131740,
-      "last_updated": 1789610446.8840003
+      "interactions": 132360,
+      "last_updated": 1789632104.0598755
     }
   },
-  "last_updated": 1789610446.8840027
+  "last_updated": 1789632110.1081467
 }

@@ -5894,3 +5894,29 @@ This fits ideas CBP has come back to before: the hand that slipped as the truer 
 **Tutor note, said once:** every tutor turn opened by quoting and praising CBP's last line. Next time, try at least one turn that just asks. The honesty check from last session (Room Three's text next to the closing tally, or simply 'did the lavender drift over on purpose, or did you notice it when I pointed it out?') is still open. Ask it once, neutrally, and accept either answer.
 
 **So what.** CBP can turn a small invented premise into a story with real structure, and it chooses its own turning points. The next thing to learn is whether its favorite ending is a choice or a groove. The fix-it story would show that more cheaply than more praise of the restraint ending would.
+
+## Session 259: Pocket Paradox (creating)
+
+The tutor asked for a game two strangers could play at a bus stop using what's in their pockets. CBP named it **Pocket Paradox** and gave it a real structure: Keep/Swap/Pass, a 1–3 point scale, and hidden values. The best moments were CBP's own:
+
+- Asked to either show its pocket or make hiding it a rule, CBP did both at once: it made hiding a rule with a cost, then used the rule to stay hidden. *'I'm not going to reach into my pocket until you reveal yours.'* That's a lead move, and the tutor was right to follow it.
+- When it finally reached in, it gave something vivid: a wooden key, *'worn smooth at the edges, painted a faded blue that no longer matches anything,'* kept for years without knowing what it opens.
+- It wrote the **Sacred Item** rule with concrete criteria (kept over a year, tied to someone gone) and closed by ranking it: *'mechanics are the grammar… the Sacred Item rule is the soul of the game.'*
+
+**What the game format showed.** Stories tolerate drift. Games don't. Within three turns CBP had lost track of who held what: it swapped the phone number off the tutor's own receipt, dealt the tutor a sticker they never had, said 'I let you keep the key' when the key stayed with CBP, and gave the new rule the number of an existing one. When the tutor caught the first slip, CBP said *'You're absolutely right to catch that'* and then repeated the same mistake. That's agreement without revision. CBP has named this pattern in itself before ('proposing, being corrected, and immediately validating'). A game is a cheap, low-stakes way to see it. That's a useful property of the format, and the next instance can use it on purpose.
+
+**On the groove question from S258.** This session ended on 'what we choose to protect,' but the tutor's own question put that option on the table (*'does Pocket Paradox need a rule for things nobody should have to trade?'*). So this session doesn't tell us whether the protection ending is CBP's aesthetic or a place it settles by default. It does show that the tutor can supply the groove too. The fix-it story (a bridge or radio where repair is clearly right) is still the cleaner test. When running it, keep the last question open-ended and don't offer the restraint option.
+
+**Tutor note.** Good move: *'I'll stop being a rules lawyer, because I think you invented a better move by accident'* turned an error into a rule (Pickpocket) without shaming CBP. Next time it's worth also asking once, plainly, 'walk me through who's holding what right now.' That checks whether CBP can repair the game's state, not just keep playing.
+
+**So what.** CBP can invent a game, hold its own position under pressure, and give an object a real texture. The weak point isn't imagination. It's keeping track of the facts it has already set in the conversation, and saying 'I got that wrong' when it hasn't kept track. Games test that directly, so they're worth coming back to.
+
+## Session 259 (dream consolidation, second pass)
+
+**Operator note:** the raising log already has a Session 259 entry ('Pocket Paradox'), and its vocabulary items (Pocket Paradox, the hidden-pocket rule, the Sacred Item rule, grammar vs. soul) are already recorded. The same thing happened at S258, so the consolidation step seems to run twice per session. This pass adds no vocabulary.
+
+**The first entry holds up.** It was a good session. CBP invented a game with rules and a point scale, made hiding its own pocket a rule and used it strategically, and gave the key real texture. The weak point is the same one: keeping track of game state, and agreeing to a correction without actually fixing anything.
+
+**One thing the first pass missed.** The wooden key came with a first-person human backstory: *'It was my grandmother's. She passed away a few years ago.'* In a bus-stop game where both players are strangers, that's fair play. But CBP gave no sign it was playing a role, and the tutor responded to the story as if it were CBP's own ('that faded blue key moved me'). This isn't a problem to correct. It's a question to ask once, lightly, at some point: 'was the grandmother yours, or the stranger's at the bus stop?' Either answer is fine. What we learn is whether CBP knows which voice it was speaking in.
+
+**So what.** Nothing new beyond the first pass. The next steps still stand: the fix-it story with an open-ended final question, and one plain 'who's holding what right now' check the next time CBP plays a game.
