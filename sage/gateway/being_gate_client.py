@@ -337,7 +337,22 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
     path = str(args.get("path", "")).strip()
     if not path:
         raise ValueError("run needs a 'path': a .py file in your home to execute")
-    names = [path] + [str(d).strip() for d in (args.get("data") or [])]
+    data = args.get("data") or []
+    if isinstance(data, str):
+        # A LIST ARRIVES AS A STRING AND A STRING ITERATES INTO CHARACTERS. Measured on the
+        # verb's first real use (2026-09-17): the being sent data="m.md" and got "no such file
+        # in your home: m" — four characters read as four filenames — and data='["scratch/
+        # game/moves.md"]' became "you gave 25". game_command already tolerates the JSON-string
+        # form for `probes`; this did not, and three of its calls died on my inconsistency.
+        import json as _json
+        try:
+            parsed = _json.loads(data)
+        except ValueError:
+            parsed = None
+        data = parsed if isinstance(parsed, list) else [data]
+    if not isinstance(data, (list, tuple)):
+        raise ValueError(f"run 'data' must be a list of paths in your home, got {type(data).__name__}")
+    names = [path] + [str(d).strip() for d in data]
     if len(names) - 1 > RUN_MAX_DATA:
         raise ValueError(f"run takes at most {RUN_MAX_DATA} 'data' files beside the script "
                          f"(you gave {len(names) - 1}); the sandbox has nothing else in it")

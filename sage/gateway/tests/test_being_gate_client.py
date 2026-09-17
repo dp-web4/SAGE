@@ -1220,6 +1220,24 @@ def test_run_command_grammar_and_what_the_sandbox_contains():
     assert RUN_MAX_DATA == 8
 
 
+def test_run_data_accepts_the_shapes_a_model_actually_emits():
+    """First real use, 2026-09-17: the being sent data as a JSON string and as a bare path.
+    Both iterated into CHARACTERS — "m.md" became four filenames — and three of its calls died.
+    `game` already tolerated the JSON-string form for probes; this must too."""
+    from sage.gateway.being_gate_client import run_command, sandbox_available
+    import pytest
+    if not sandbox_available():
+        pytest.skip("no bubblewrap here")
+    ctx = {"memory_root": "/home/x/inst", "member": "b"}
+    for shape in ([], None, ["scratch/game/moves.md"], '["scratch/game/moves.md"]', "scratch/game/moves.md"):
+        cmd = run_command({"path": "scratch/e.py", "data": shape}, ctx)
+        assert cmd.rstrip().endswith("/work/e.py"), (shape, cmd)
+    # a bare path and a one-element list must compose identically
+    assert run_command({"path": "e.py", "data": "m.md"}, ctx) == run_command({"path": "e.py", "data": ["m.md"]}, ctx)
+    with pytest.raises(ValueError, match="must be a list of paths"):
+        run_command({"path": "e.py", "data": 7}, ctx)
+
+
 def test_run_is_offered_composed_and_consequential():
     from sage.gateway import being_gate_client as b
     from sage.gateway.heartbeat import EXPLORE_TOOLS

@@ -813,8 +813,17 @@ class HestiaF1aDispatcher:
                 "run refused: the command the law judged is not the command this dispatcher "
                 "would execute."))
         root = os.path.realpath(self.memory_root)
-        names = [str(intent.args.get("path", "")).strip()] + \
-                [str(d).strip() for d in (intent.args.get("data") or [])]
+        # the composer already normalised the shapes a model emits; mirror it exactly so the
+        # staged set is the set the law judged (run_command: JSON string or bare path -> list)
+        _d = intent.args.get("data") or []
+        if isinstance(_d, str):
+            import json as _json
+            try:
+                _p = _json.loads(_d)
+            except ValueError:
+                _p = None
+            _d = _p if isinstance(_p, list) else [_d]
+        names = [str(intent.args.get("path", "")).strip()] + [str(x).strip() for x in _d]
         staged, seen = [], set()
         for n in names:
             base = os.path.basename(n)
