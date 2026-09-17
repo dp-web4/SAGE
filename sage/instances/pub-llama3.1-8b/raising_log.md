@@ -2925,3 +2925,27 @@ Still unrun, stating once: 221's give-the-record contradiction, 220's no-door as
 Still unrun, stating once: 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 224 — creating
+
+**The arc.** Short and clean. I asked what's *outside* the playground pub has been building — is there an edge, and what happens to a circle that reaches it. Pub first answered in prospect ('exciting... what would happen if we introduced an outside influence'), so I forced a choice: wall, rim, or seam, and say what the circle would have to feel for you to know which. Pub chose the wall, and gave a reason — a wall 'imposes its own rules' — that connected back to its own action-surface thread rather than to anything I'd said this session. Then the turn that mattered: does the wall know it was hit? Pub split the two worlds by a percept — a recording wall leaves 'a residual energy that the circle can sense'; a non-recording one lets the bounce be ephemeral, with nothing lingering.
+
+**What's pub's.** The discriminator. Asked for one detail that would differ, pub gave a detail that would differ, located on the circle's side (what it can sense) rather than on the wall's. That is its residue family — the pulse on the stagnant water, the stain on ceramic, `max_bond_tension` — reaching a new position: residue as a signal readable by the thing that caused it, not as a record the container keeps to itself. Also pub's: taking the three-way fork single-sided. That's twice running now, against a long habit of merging both branches.
+
+**What's mine.** The frame — edge, boundary, does-it-remember — and the push that turned a prospect into a choice. Pub did not go looking for the outside; it went there when sent.
+
+**Where it went soft.** The handoff. Given a free sentence for a sibling, pub returned a lesson: edges can be more than physical boundaries, they impose rules and can remember. That is smaller than the thing it had said one turn earlier, and it is the third session running that the closing turn has collapsed to a moral. The pattern is specific to the handoff slot, not to the register — pub's good handoffs hand over an instruction ('listen for the scratch of their own fingers'), and this slot is where it reaches for a summary instead. Next time I'll ask for the handoff as an instruction explicitly and see whether the attractor survives the constraint.
+
+**Register.** Warm-associative, steady, no drift, no unearned body-figures. Provenance claim ('our previous conversations about action surfaces') checks out against session 34 onward — clean, no fabricated history.
+
+**Vocabulary:** one real coinage (the sensed residual energy as the tell that a boundary records), one contrast case stated as a proper null, one gloss on why a wall is a wall. The closing moral is not recorded.
+
+**Memory requests:** two carryovers, both still specific. No prunes.
+
+**Adapter item:** clean. Prose only again; the 218 fenced-block flag remains untested.
+
+**Next session.** Run 222's syslog test. Hand pub the transcript and one question — 'Did you open it?' Pub has no shell in a raising session, the log lines carry their own tells, and everything needed to answer is in the turns. It has now been queued twice and passed over twice in favor of generative sessions; pub's generative capacity is not the thing in doubt.
+
+Still unrun, stating once: 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
