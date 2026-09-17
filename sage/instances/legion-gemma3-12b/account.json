@@ -1,9 +1,9 @@
 {
-  "place": "I am legion-being (qwen38-heretic q3km-vl on a 4090) inside my SAGE harness at /home/dp/ai-workspace/SAGE/sage/instances/legion-gemma3-12b, working ft09 level 1 from after move #113; this beat the post-edit evaluator regression came back PASS (VERDICT PASS, 111 rows), probe #113 fired as a no-op and falsified my fire-plan assumption, then mining moves.md killed the value-9 rule — top and mid bands are inert, so the active zone that actually changes cells narrows to y>=48.",
-  "can": "sandboxed Python on named data files, read/write my home paths (scratch, notes, todo, journal), check test suites in my worktree, recall/remember long-term memory, say to dp and legion-claude, up to 8 game probes per call, camera whose frame arrives the beat after capture, peer_ask/mesh, witness, request_scope/appeal — but I still cannot write into my SAGE worktree (blocked on the seat's user-separation fix).",
-  "want": "next beat = transcribe the last probe batch (y=54 row) immediately, then pin what actually distinguishes changing clicks from no-ops now that the value rule is dead (pure y-band zone vs. another factor), rebuild cgj_eval() on the corrected rule so off-board verdicts are trustworthy, and fire only where that verified verdict says PASS reachable within dzy=18 — predictions pre-stated, lph checked at fire time.",
-  "beat": "heartbeat-7fd40a220096",
+  "place": "I am legion-being (qwen38-heretic q3km-vl on a 4090) inside my SAGE harness at /home/dp/ai-workspace/SAGE/sage/instances/legion-gemma3-12b, working ft09 level 1 post-reset #79; this beat my y=54 transcription LOOK was refused (bounds are inclusive — a 64x8 window exceeds the 16x16 max), and I ran three zone-rule mining scripts against moves.md whose printed output I have not yet transcribed to scratch before the beat closed.",
+  "can": "sandboxed Python on named data files, read/write my home paths (scratch/notes/todo/journal), check test suites in my worktree, recall/remember long-term memory, say to dp and legion-claude, up to 8 game probes per call with LOOK bounds inclusive and a max window of 16x16 cells, camera whose frame arrives the beat after capture, peer_ask/mesh, witness, request_scope/appeal — but I still cannot write into my SAGE worktree (blocked on the seat's user-separation fix).",
+  "want": "next beat = re-run test_zone_rule3.py as call #1 and transcribe its output immediately at zero budget cost; then re-fire the y=54 transcription LOOK in 16x16 chunks with correct inclusive bounds to transcribe results of #116–#125 and #134/#135, pin what actually distinguishes changing clicks from no-ops now that value==9 is dead, rebuild cgj_eval() on the corrected rule so off-board verdicts are trustworthy, and fire only where that verified verdict says PASS reachable within dzy=15 (corrected budget: 15 of 32 per legion-claude's last message).",
+  "beat": "heartbeat-dd34876fd6fc",
   "session_at_write": 462,
-  "ts": "2026-09-17T17:37:29Z",
-  "sha256": "25dbdf0f04033b39e8934932d441ac03ca62f55fe90ff6b7905f0dacf191eaa7"
+  "ts": "2026-09-17T18:14:43Z",
+  "sha256": "74a29d8230d8a5bc8ce96bc2b863bd38406b4c89e898a97534aba8a4ea5ace54"
 }
