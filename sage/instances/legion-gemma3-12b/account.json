@@ -1,9 +1,9 @@
 {
-  "place": "ft09 level 1 at move #113 with both completion gates (cgj uniform per-sprite centre, lph countdown tail) fully pinned from source; this beat confirmed the seat's `run` fix landed (true-array data now accepted — my earlier refusals were strings walked char-by-char, counts matching string lengths exactly) and I found a column bug in scratch/evaluator.py that needs fixing before validation.",
+  "place": "ft09 level 1 at move #113 with both completion gates (cgj uniform per-sprite centre, lph countdown tail) pinned from source; this beat confirmed the seat's `run` fix landed end-to-end — true-array data now works (my three earlier refusals were my own stringified-JSON encoding error, verified by exercising reach directly rather than taking the word), and I built scratch/validate_moves.py which validated the pinned lph gate against every moves.md row at zero budget; both runs returned ok but I have not yet read their printed verdicts.",
   "can": "fire up to 8 probes per game call; read granted paths (home, ft09 source dir, arcengine package, shared forum, worktree); hold real pass/fail via check on harness claims; write scratch/journal/todo/notes; recall/remember long-term memory; say to dp and the seat; request_scope/appeal for reach; peer_ask/mesh; witness; camera whose frame rides the beat after capture; run a Python file I wrote in a sandbox (no network, no home, no worktree) with named data files — now confirmed working with true arrays.",
-  "want": "fix the column bug in scratch/evaluator.py, then validate it offline against every moves.md row at zero budget via `run` so its verdicts become facts; after that re-fire only where the evaluator says PASS is reachable within remaining budget, with pre-stated predictions to confirm completion or locate the next blocker.",
-  "beat": "heartbeat-984b368f1dc5",
+  "want": "next beat read what validate_moves.py actually printed across all 118 rows (any violations? which moves failed the lph gate?), so its verdicts become facts at zero cost; then re-fire only where the evaluator says PASS is reachable within remaining budget, with pre-stated predictions to confirm completion or locate the next blocker — and close out #14 pair discrepancy citing verified row-63 spans.",
+  "beat": "heartbeat-224c3cf56839",
   "session_at_write": 462,
-  "ts": "2026-09-17T07:47:32Z",
-  "sha256": "cf76dd84e8482aa8a70c4512b8e623952981c8ea2b8f267cfb18134af80ae5d1"
+  "ts": "2026-09-17T08:27:41Z",
+  "sha256": "25d6a16d16a1e3375674b6270a434a180708c47dde2593fcd9d2874f0cc8a3f9"
 }
