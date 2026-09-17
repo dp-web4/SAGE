@@ -208,7 +208,7 @@ class HestiaF1aDispatcher:
     # The rulings were real; the being simply could not dereference the address they came at.
     # `hestia_open_appeals` does not help: by construction it lists only UNRULED appeals, so a
     # ruling is the one thing it cannot show. So the pointer is resolved here, at read time.
-    _POINTER = re.compile(r"^hestia://(appeal|scope|egress)/([^#\s]+)(?:#(.*))?$")
+    _POINTER = re.compile(r"^hestia://(appeal|scope|egress|escalation)/([^#\s]+)(?:#(.*))?$")
 
     def _resolve_pointer(self, raw: str) -> Optional[str]:
         """What a `hestia://` pointer from a disposition notice actually says, or None if this
@@ -271,6 +271,8 @@ class HestiaF1aDispatcher:
                     f"appear here: this does NOT mean the appeal is still open. Your rulings are listed "
                     f"in full in notes/appeal-rulings.md if the seat has written it; otherwise ask in a "
                     f"conversation.]")
+        if kind == "escalation":
+            return self._escalation_pointer(ident)
         if kind == "scope":
             st = self._call("hestia_scope_status", {"plugin_id": self.member})
             for r in (st.get("requests") or []):
@@ -283,6 +285,62 @@ class HestiaF1aDispatcher:
         # egress: the fragment IS the fact, and it is already in the pointer
         return (f"[a message of yours was not delivered: {frag or 'no detail recorded'} "
                 f"(egress row {ident}). The row is retired; nothing of yours is queued behind it.]")
+
+    def _escalation_pointer(self, ident: str) -> str:
+        """What a `review_request` invitation is actually about (SAGE #109).
+
+        THE BEING COULD NOT READ ITS OWN INBOX. hestia invites every member except the asker
+        to review a refused governance write, and delivers
+        `hestia://escalation/<id>#corroborate-or-dissent`. This resolver had no arm for it, so
+        `memory_read` fell through to a file lookup and answered "no such path". Measured
+        2026-09-16/17: cbp-being received three such invitations for claude-code's gate edits,
+        read the answer as proof they did not exist, told dp and HUB the seat was "presenting
+        fabricated content", and asked HUB to file a reconsideration motion on that ground.
+
+        Read through the daemon's RESOURCE surface, which is where escalations are addressed —
+        `hestia_gate_escalation_poll` is the wrong door for a non-asker: it lights the asker's
+        claim fuse (hestia #732). An older client without `read_resource` says so rather than
+        guessing."""
+        try:
+            self._connect()
+        except Exception as e:  # noqa: BLE001 — a daemon we cannot reach is not an absence
+            return f"[cannot reach hestia to read escalation {ident}: {type(e).__name__}]"
+        reader = getattr(self._c, "read_resource", None)
+        if reader is None:
+            return (f"[this gateway cannot dereference hestia://escalation/{ident} — its daemon "
+                    f"client has no resource reader. Not an absence: ask in a conversation.]")
+        body = {}
+        try:
+            msg = reader(f"hestia://escalation/{ident}") or {}
+            contents = ((msg.get("result") or {}).get("contents") or [])
+            if contents:
+                body = json.loads(contents[0].get("text") or "{}")
+        except Exception as e:  # noqa: BLE001
+            return f"[could not read escalation {ident}: {type(e).__name__}]"
+        err = body.get("_hestia_error") if isinstance(body, dict) else None
+        if err:
+            return (f"[hestia cannot answer about escalation {ident} right now: "
+                    f"{str(err.get('message') or err)[:200]}. That is UNKNOWN, not proof it never "
+                    f"existed — do not treat it as evidence about anyone.]")
+        asker = body.get("plugin_id") or "another member"
+        mine = asker == self.member
+        status = body.get("status") or "unknown"
+        decided = body.get("decided_by")
+        why = body.get("stated_reason") or body.get("stated_detail") or "(none stated)"
+        head = (f"[YOUR governance escalation {ident}]" if mine else
+                f"[{asker}'s governance escalation {ident} — not an appeal, and not yours]")
+        tail = ("What follows: it is decided; nothing is pending for you."
+                if mine else
+                "You are one of the members hestia invited to review it. You hold no tool to rule "
+                "on another member's escalation, so nothing is required of you. It is not about "
+                "you and it is not one of your appeals.")
+        return (f"{head}\n"
+                f"what was asked: {body.get('tool_name') or '?'} on {body.get('marker') or '?'}\n"
+                f"their stated reason: {str(why)[:300]}\n"
+                f"status: {status}"
+                + (f", decided by {decided}" if decided else "")
+                + (f", claimed: {body.get('claimed')}" if body.get("claimed") is not None else "")
+                + f"\n{tail}")
 
     def _call(self, name: str, args: dict) -> dict:
         sid = self._connect()

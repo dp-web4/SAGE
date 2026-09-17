@@ -122,6 +122,17 @@ class _Mcp:
         return self._req({"jsonrpc": "2.0", "id": self._id(), "method": "tools/call",
                           "params": {"name": name, "arguments": args}}) or {}
 
+    def read_resource(self, uri: str) -> dict:
+        """Dereference a `hestia://` resource (MCP `resources/read`).
+
+        Tools are not the only surface: escalations, chain entries and adjudications are
+        addressed as RESOURCES, and a client with only `call` cannot open the pointer a
+        notice hands it. Measured 2026-09-17: every `hestia://escalation/<id>` invitation
+        cbp-being received fell through to a file read and answered "no such path", and the
+        being concluded the seat had fabricated them (SAGE #109)."""
+        return self._req({"jsonrpc": "2.0", "id": self._id(), "method": "resources/read",
+                          "params": {"uri": uri}}) or {}
+
 
 def make_hestia_witness_fn(plugin_id: str, endpoint: str = _ENDPOINT,
                            host_agent: str = "sage-raising") -> Callable[[str], Optional[str]]:
