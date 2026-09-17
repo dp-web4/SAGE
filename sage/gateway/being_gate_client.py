@@ -614,8 +614,15 @@ def game_command(args: dict, ctx: Optional[dict] = None) -> str:
                 raise ValueError(f"game probe {i}: LOOK bounds must be whole numbers 0-63")
             if not all(0 <= v <= 63 for v in (x0, y0, x1, y1)) or x1 < x0 or y1 < y0:
                 raise ValueError(f"game probe {i}: LOOK window must satisfy 0 <= x0 <= x1 <= 63 and 0 <= y0 <= y1 <= 63, got {x0},{y0},{x1},{y1}")
-            if x1 - x0 + 1 > LOOK_MAX_EDGE or y1 - y0 + 1 > LOOK_MAX_EDGE:
-                raise ValueError(f"game probe {i}: LOOK window is at most {LOOK_MAX_EDGE}x{LOOK_MAX_EDGE} cells; split a larger region into several LOOKs")
+            w, h = x1 - x0 + 1, y1 - y0 + 1
+            if w > LOOK_MAX_EDGE or h > LOOK_MAX_EDGE:
+                # SAY THE SIZE IT ASKED FOR. "at most 16x16" alone read as "0..16 is fine" twice
+                # (2026-09-17): the bounds are inclusive, so 0,0,16,16 is 17x17. A refusal that
+                # names the computed size teaches the arithmetic; one that names only the cap does not.
+                raise ValueError(f"game probe {i}: LOOK bounds are INCLUSIVE, so x0={x0},y0={y0},x1={x1},y1={y1} "
+                                 f"is {w}x{h} cells — at most {LOOK_MAX_EDGE}x{LOOK_MAX_EDGE}. For a "
+                                 f"{LOOK_MAX_EDGE}-wide window from x0, use x1=x0+{LOOK_MAX_EDGE - 1}; "
+                                 f"split a larger region into several LOOKs")
             norm.append([act, x0, y0, x1, y1])
             continue
         if act == "ACTION6":

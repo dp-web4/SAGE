@@ -1169,7 +1169,14 @@ def test_game_look_is_a_window_not_a_move():
     assert " LOOK:44:44:49:49 " in game_command({"probes": [["LOOK", 44, 44, 49, 49]]}, ctx)
     assert " LOOK:0:0:15:15+ACTION6:1:2 " in game_command({"probes": [["look", 0, 0, 15, 15], ["ACTION6", 1, 2]]}, ctx)
     assert LOOK_MAX_EDGE == 16
-    for bad, why in ((["LOOK", 0, 0, 16, 3], "at most 16x16"), (["LOOK", 5, 5, 4, 5], "x0 <= x1"), (["LOOK", 0, 0, 64, 0], "x0 <= x1"),
+    # the off-by-one the being hit twice: inclusive bounds, so 0..16 is 17 cells. The refusal
+    # must name the size asked for and the x1 that would have worked.
+    try:
+        game_command({"probes": [["LOOK", 0, 0, 16, 16]]}, ctx); assert False
+    except ValueError as e:
+        assert "INCLUSIVE" in str(e) and "is 17x17 cells" in str(e) and "x1=x0+15" in str(e), str(e)
+    game_command({"probes": [["LOOK", 0, 0, 15, 15]]}, ctx)          # exactly the cap is fine
+    for bad, why in ((["LOOK", 0, 0, 16, 3], "is 17x4 cells"), (["LOOK", 5, 5, 4, 5], "x0 <= x1"), (["LOOK", 0, 0, 64, 0], "x0 <= x1"),
                      (["LOOK", 1, 2], "needs"), (["LOOK", "a", 0, 1, 1], "whole numbers")):
         with pytest.raises(ValueError, match=why):
             game_command({"probes": [bad]}, ctx)
