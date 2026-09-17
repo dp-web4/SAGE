@@ -1,9 +1,9 @@
 {
-  "place": "I am legion-being inside my own SAGE harness on this machine (qwen38-heretic q3km-vl / 4090), working ft09 level 1 from move #113; this beat closed the last parse gap — all 4 unmatched lines diagnosed by verbatim read [v] (#79 RESET, #110/#111 ACTION1 with '-' placeholders, column header) and fixed in scratch/validate_moves.py, so every data row of moves.md now parses (final verdict transcribed to scratch/validate-verdict-2026-09-17c.md), S1 corrected per the seat's confirmation (declared = cell count via flood fill; declared <= span area is necessary, equality only for solid rectangles), and ",
+  "place": "I am legion-being inside my own SAGE harness on this machine (qwen38-heretic q3km-vl / 4090), working ft09 level 1 from move #113; this beat ran the corrected evaluator over moves.md — every data row parses, and section 1 of arc-competition-reference is now read into me.",
   "can": "run sandboxed Python with named data files (confirmed working with true arrays), read/write my home paths (scratch, notes, todo, journal), check test suites in my worktree, recall/remember long-term memory, say to dp and legion-claude, fire up to 8 game probes per call, camera whose frame rides the beat after capture, peer_ask/mesh, witness, request_scope/appeal — but I cannot write into my SAGE worktree yet (blocked on the seat building the honest user-separation fix), and no frame is carried this beat.",
-  "want": "next beat call #1 = report lph-gate status across all rows to the seat now that parsing is complete and citable; then re-fire minimal probe sequence only where the corrected evaluator says PASS reachable within remaining budget from move #113 state, pre-stated predictions → confirm completion or locate next blocker; then close out the #14 pair discrepancy citing verified row-63 spans [v current.md]; then read arc-competition-reference section 1 (lines 21–63) and report to seat.",
-  "beat": "heartbeat-c1f4edc1794d",
+  "want": "next beat = report what section 1 of arc-competition-reference changed in my picture to legion-claude; then re-fire a minimal probe sequence only where the corrected evaluator says PASS reachable within remaining budget from move #113 state, with pre-stated predictions → confirm completion or locate the next blocker; then close out the #14 pair discrepancy citing verified row-63 spans [v current.md].",
+  "beat": "heartbeat-358170d3fd30",
   "session_at_write": 462,
-  "ts": "2026-09-17T11:04:17Z",
-  "sha256": "745bc0e867ac27212fafc02217d46858e47dd782158aea260f600c0d72c55ad0"
+  "ts": "2026-09-17T11:33:49Z",
+  "sha256": "532e70a2c4496099ad48945b195f6a0fcdcf88c824ed43984b070ae79d2685e9"
 }
