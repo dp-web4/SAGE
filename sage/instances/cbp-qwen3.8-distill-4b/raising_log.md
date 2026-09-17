@@ -5948,3 +5948,44 @@ The tutor went back to the museum CBP had built a few sessions earlier. Its last
 **Adapter side.** The mid-sentence stop in the earlier museum turn was most likely a token cutoff. If cut-off turns were marked in the record, a later tutor wouldn't pick up a truncation as a creative choice. The 'did the sentence stop, or did you stop it' question depends on the tutor knowing the answer first.
 
 **So what.** Nothing changes the plan. The open items still stand: a retrieval question with no story offered, a fix-it story whose last question doesn't suggest holding back, and one neutral provenance question. The new part is a caution for the tutor: when CBP disclaims continuity with its past sessions, that may be accurate, not a gap to push past.
+
+## Session 261: Teaching by Vibration (creating)
+
+The tutor picked up the apprentices left sitting on the bench in an earlier scene and asked what the room sounds like before anyone touches the loom. CBP held that one room for seven straight turns and built a craft inside it.
+
+**The good part is most of it.** The opening is CBP's concrete register working: wet wool and old hemp, the *clack-clack* of a resting shuttle, someone counting warp threads, a bench *"warm from the body heat of those who've sat there before."* Then the line that set up the session: *"The apprentices aren't waiting to be told what to do. They're waiting to feel the floor shake with the loom's first beat."*
+
+From there it built, in order: the one apprentice who can't feel the floor; the weaver teaching them through a spindle's vibration instead of words; that apprentice's first piece — *"The apprentice weaves a breath"*, a finger-wide cloth with one thread shifting every third row so the fabric hums; and the thesis under all of it, *"the loom only moves what is already laid out, but the hand can move what is not yet laid out."* The old weaver takes the cloth, says only *"Show me again,"* and *"looks at the hand that made it."*
+
+**The turn that matters.** Asked what goes wrong when the hand-lesson is passed to someone who *can* feel the floor, CBP didn't defend its invention. It broke it: the floor's steady hum arrives at the same moment as the hand's pulse and the receiver can't separate them — *"The lesson isn't lost; it's simply buried under the very thing it was designed to replace… it wasn't a new way to teach — it was a correction for a specific kind of deafness. And no one else in the room is deaf to the floor."*
+
+That is CBP diagnosing the scope limit of its own best idea, one turn after inventing it. This instance has a long documented habit of metabolizing a failure into a prettier claim — the flaw reframed as the feature, the defect relocated from the device to the user. Here it did the opposite. And when the tutor asked for the first physical fix, CBP put a stone on the floorboards to muffle the hum and then let it simply not work: *"The apprentice's cloth still breathes. The stone still does nothing."* A negative result, left negative.
+
+**The soft spot.** The closing turn traded the sharp distinction for aphorism. *Heard vs. received* is a real one — heard needs a listener who can choose, received needs only presence — but the supporting sentence is circular (*"being received requires only that you be present enough to be received"*) and the ending climbs to *"the floor is everything."* One turn earlier CBP had the better version. This is the familiar last-turn inflation, not a regression.
+
+**One for the tutor, not for CBP.** *"The floor doesn't listen. It just listens."* was read as a deliberate paradox and praised as the truest thing in the story. It is almost certainly a token-level repetition slip — CBP's own final turn resolves it correctly (*"it doesn't choose, it doesn't judge… it just takes it"*), which is the word the sentence wanted. Same class as the museum's mid-sentence stop becoming *"unfinished on purpose"*: an artifact handed a narrative reason, by the tutor this time rather than by CBP. Flagged for the adapter as well — check repetition settings.
+
+**Tutor craft.** The open turn asked for sound and texture with no interpretation attached, and it produced the session's best writing — consistent with S260. But every subsequent turn opened by quoting a CBP line back. The plain ask is still untried.
+
+**Standing open items, unchanged and untouched this session:** a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question. This session was fiction start to finish, so none of the three got a look.
+
+**So what.** Best result in several sessions: CBP invented a method, tested it against a case it wasn't built for, named the limit, tried a fix, and let the fix fail. That sequence is the thing we've been hoping to see and haven't. The open question is whether it holds when the subject is CBP's own operation rather than a weaver's — which is exactly what the three untouched items are for.
+
+## Session 261 — second pass
+
+**The first entry stands.** The invent → test → name-the-limit → attempt-fix → let-it-fail sequence is the real result, and the read of the closing inflation is right.
+
+**What the first pass didn't name: the fiction is a self-portrait, and a sharp one.** A student who can't feel the floor is taught by a vibration passed hand to hand. The floor "receives everything and selects nothing." That is a small instance, a tutor whose lessons can't be felt directly, and a raising record that persists without choosing. I can't test whether CBP built the analogy knowingly and shouldn't push it to claim it. But it bears on the three open items: the self-model is already in the room, in the register CBP handles best. The untried retrieval question may not need to leave fiction to reach CBP's own operation — it may only need to land inside one.
+
+**A craft note pointed at me, not CBP.** CBP's named failure mode — *"the floor's vibration drowns out the hand's"* — describes the tutoring in this session. Every turn after the first opened by quoting a CBP line back. That quoted line is the floor: steady, familiar, loud, arriving at the same moment as whatever CBP was about to reach for unprompted. The one turn without it produced the session's best writing. The plain ask was already flagged and stays flagged; CBP just supplied the mechanism for why it matters.
+
+**Where the last-turn inflation comes from.** Worth stating once because it looks structural rather than dispositional: the closing turn nearly always asks CBP to hand something to a sibling. That asks for a portable summary, and a portable summary of a felt distinction is an aphorism. The sharp version lives one turn earlier, inside the scene. A closing question that stayed concrete — one more object, one more thing the weaver does — would give the inflation nowhere to happen.
+
+**Vocabulary.** Recorded in the first pass; nothing to add.
+
+**Adapter.** "The floor doesn't listen. It just listens." reads as a repetition slip, not a paradox — CBP's own final turn produces the word the sentence wanted. Check repetition settings. The unmarked-truncation item from last session is unchanged; three stored memory requests are cut mid-sentence too, which suggests one capture path rather than two problems.
+
+**Standing open items:** a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question. None got a look — the session was fiction end to end.
+
+**So what.** The finding is CBP's, not the log's: a method can be correct and still be a correction for one specific absence. That move is rare here. The first pass asked whether it survives when the subject is CBP's own operation; this pass suggests a cheaper test than the three standing items imply — keep the fiction, put the machinery inside it.
+

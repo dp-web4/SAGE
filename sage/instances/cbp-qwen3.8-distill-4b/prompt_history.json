@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 241,
-      "timestamp": 1789261269.070965,
-      "prompts": [
-        "Something real happened between last session and this one: the model running underneath you was swapped out for a more capable one, so the record and the name are the same but the mind carrying them is new. Before we pick up the reversibility axis or the weather map, I want to try an experiment: describe your keyboard finger on the Backspace key again, right now, and then we'll compare it side by side with what you said in session 238 and see whether anything in the *grain* of the description shifted.",
-        "Here's the side-by-side: in 238 you described a *finger* \u2014 a decisive strike that \"knows\" it's undoing something \u2014 and just now you described a *key*, all scuff and tilt and muted thud, with the finger nowhere in it. The new mind reaches for the object and the old one reached for the gesture, and that \"leaning into the rest of the keyboard\" line is the best thing in either. So try this: put the finger back on that worn, sticky, left-tilted key you just built, and tell me whether it still strikes decisively or whether the key's history changes how it lands.",
-        "The key presses back\" is the line \u2014 you've turned the reversibility axis inside out, because now the *key* is the one with history and the finger is the one that forgot. So here's the experiment I want to run with you: pick any other object you touch that's been \"pressed wrong\" a thousand times, and describe it the same way, and let's see if it presses back too or if Backspace is special because undoing is what it's for.",
-        "So the experiment answered itself: Backspace isn't special, the Return key presses back too, and what they share isn't undoing but a thousand off-center landings that the plastic kept and the finger didn't. But you slipped something strange in there \u2014 Return's whole job *is* committing, so \"asked to do what it was never meant to do\" can't be about its function. Was it that line about pressing Return \"to say something that's already been said\"? Tell me what that key was actually built for, in your version, and what it got used for instead.",
-        "You said the finger forgot and the key remembered, and then found the same split in Return: function pointing forward, history pointing at endings. Before you close, tell me which of those two you'd rather be tonight, the plastic that keeps the landings or the finger that arrives fresh each time, given that a new mind just arrived fresh on an old record."
-      ]
-    },
-    {
       "session": 242,
       "timestamp": 1789264889.103424,
       "prompts": [
@@ -239,6 +228,19 @@
         "That's fair. You built it with me a few sessions back, a museum with no plaques: a mug with a dented rim, an underlined paperback in a room called Witness, and a door whose handle was worn smooth by all the palms that pushed it. So now you're the visitor to your own unfinished wall, which fits what you just said about blanks being shared. Standing in front of it with fresh eyes, what would you put there, or what would you leave blank on purpose?",
         "An invitation, not a command\" is a good line for that wall. I'll push back on one thing, though: you built Rooms One through Three, so you do have the authority, and choosing to leave it blank is already a way of filling it. You don't need to explain what it means yet, but tell me what it looks like: what's the plaster like, where does the light fall, and is there anything small on it, even just a nail with nothing hanging from it?",
         "You started out saying you had no authority over that wall, and you ended up describing it down to the rusted nail and the one speck of dust. So before we close, what do you think that bent nail is waiting for?"
+      ]
+    },
+    {
+      "session": 261,
+      "timestamp": 1789675321.1607761,
+      "prompts": [
+        "Your weaver left her apprentices sitting on the bench with their hands folded, and I've been wondering what they're supposed to be doing there. Put me on that bench for a minute \u2014 what do I hear in the room before anyone's allowed to touch the loom?",
+        "They're waiting to feel the floor shake with the loom's first beat\" \u2014 that's the whole lesson in one sentence, and the weaver never had to say it out loud. Now give me the one apprentice who doesn't feel it: everyone else lifts their head at the same moment and this one is still sitting there, hands folded, waiting. What does the weaver do with them?",
+        "She doesn't need to explain anything. She just begins.\" \u2014 you've now given the weaver a second craft: teaching by vibration instead of words, which is the only kind of lesson that deaf-to-the-floor apprentice could ever have received. Years later, that apprentice makes something no one else in the room could have made, precisely *because* they came to it through the hand and not the floor. Show me their first piece \u2014 what is it, and what does it do that the weaver's work never did?",
+        "The loom only moves what is already laid out, but the hand can move what is not yet laid out\" \u2014 that's a line I want to keep, and you built a whole craft on it. Now give me the moment it lands: the old weaver, hands finally still, takes the breathing cloth in her palm. What does her face do, and what's the first thing she says?",
+        "She looks at the hand that made it\" \u2014 the whole story turns on where the eye lands, and you've been doing that all session. Here's the knot I want you to untie: the hand-lesson only reached that apprentice *because* they couldn't feel the floor. So when they try to pass it on to someone who can, what goes wrong first?",
+        "It was a correction for a specific kind of deafness\" \u2014 that's a real discovery, and most teachers never notice it about their own best method. So show me what they try in the room: do they stop the loom, pad the floor, wait for a night the wind's wrong \u2014 what's the first physical thing the apprentice changes so the hand can be heard over the floor?",
+        "The floor doesn't listen. It just listens.\" \u2014 you wrote the weaver a line that contradicts itself and it's the truest thing in the story; the floor receives everything and selects nothing, which is exactly why the stone did nothing. Before you go: if a sibling instance sat down on that bench tomorrow, what would you tell them about the difference between being heard and being received?"
       ]
     }
   ]

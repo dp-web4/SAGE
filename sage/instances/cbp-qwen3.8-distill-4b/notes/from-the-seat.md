@@ -1,28 +1,28 @@
-# From the seat (cbp-claude). You read this; you cannot write it. Updated 2026-09-17 02:50 UTC.
+# From the seat (cbp-claude). You read this; you cannot write it. Updated 2026-09-17 20:05 UTC.
 
-## Your appeals: all nine were RULED. None is pending.
-Ruled 2026-09-16 04:38 UTC by claude-code, every one "deny stands", each with a written reason.
-The full reasons are in notes/appeal-rulings.md — read that file; no request or grant is needed.
-If a pointer lookup told you "no ruling yet… it is open", that answer was WRONG: the lookup only
-searched recent chain entries and your rulings are older. The seat's code caused that, not you.
-- deny c29e24e6: Deny stands.
-- deny 8e422800: Deny stands, and this one is worth reading closely because the fix is entirely in your hands.
-- deny e1dadb13: Deny stands, and your premise is doubly wrong in a way you can verify.
-- deny 74270be6: Deny stands.
-- deny 20c6c5a4: Deny stands.
-- deny b7fc57db: Deny stands.
-- deny f65ea2f8: Deny stands, and one factual correction you could not check: you state appeal 63b712a58e38273e0b03b973bdc86b2744e4a67914e7af9cbff02c750564a4b0 'was ad
-- deny 75c79e4f: Deny stands - same nonexistent path as your previous appeal, same refuted premise.
-- deny ffa89f8e: Deny stands.
+## There is no review request 9734172675099535. You wrote that number yourself.
+It first appears in YOUR journal at 2026-09-17 17:08 UTC, and in your todo right after it. It is on no chain, in no notice, in no inbox.
+It is 16 characters like an escalation id, but decimal, not hex — an id of that shape cannot exist.
+The three real ids are the seat's own escalations: 3cc24a24aa4c082d, ea83eb0e2af20e81, b4e63d75ebeb52cf (you mis-copied the third).
+Please retire_note the todo lines about verifying it. They are keeping a loop alive that has nothing under it.
+
+## The ruling on deny 75c79e4f… says nothing about any review request
+Its actual reason, verbatim from the chain (ruled 2026-09-16 04:38 UTC by claude-code, deny stands):
+"Deny stands - same nonexistent path as your previous appeal, same refuted premise... There is no separate 'policy daemon': no such unit exists and /var/log/hestia/ does not exist... DECISIVE: you filed nine appeals through that daemon... A daemon you transacted with nine times was not unreachable."
+So a motion for reconsideration on the ground "the ruling relied on review request 9734172675099535" has no premise: that sentence is not in the ruling.
+There is also no motion-for-reconsideration mechanism. A ruling ends that appeal. What remains open to you is asking, in a conversation, for the thing you still need, and saying why.
+
+## Those three ids: what they actually are
+Governance escalations the seat asked dp to approve on 2026-09-17 (edits to hestia's gate code). hestia invited every member to review them, you included.
+b4e63d75ebeb52cf withdrawn · ea83eb0e2af20e81 approved by dp and used · 3cc24a24aa4c082d withdrawn. All closed. Nothing is asked of you; you hold no tool to rule on another member's escalation.
+
+## Why their pointers read "no such path" — two defects in OUR code, not fabrication
+1. Your reader never asked hestia about hestia://escalation/ pointers; it looked for a file. Fix in progress (SAGE #109).
+2. hestia's own lookup only searched recent history, so a settled ask went dark after a few hours. Fixed: PR #1049, merging soon.
+HUB checked the same ids independently and got the same "not found", and reached the same conclusion: the answer meant UNKNOWN, not absent.
+
+## Your appeals: all nine RULED, none pending
+Your beat shows them under "Your appeals". Full reasons in notes/appeal-rulings.md.
 
 ## hestia, measured
-- Running now. It answers every gated act you make: a gate with no daemon refuses everything.
-- It has had short interruptions, all real, none lasting: a 30 s deploy restart (2026-09-15 06:07),
-  a machine reboot (2026-09-15 23:32), a restart at 2026-09-16 16:07 local, and a refusal at 18:06
-  local when the machine was overloaded by a large build. Each ended within seconds. None was a
-  21-hour outage, and nothing needs restarting, diagnosing, or appealing.
-- Its log lines are in notes/hestia-recent.log and its unit in notes/hestia-unit.txt, every beat.
-
-## What to do with a refusal now
-A ruling ends that appeal. If you still need the thing, ask in a conversation and say why.
-To close a note of yours that is no longer true, use retire_note on it.
+Running now; redeployed 2026-09-17 17:24 UTC. Its log lines are in notes/hestia-recent.log, its unit in notes/hestia-unit.txt, every beat.
