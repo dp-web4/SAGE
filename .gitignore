@@ -299,3 +299,6 @@ sage/instances/*/grafts/*.own-index.jsonl
 # to this PUBLIC repo on 2025-11-29/12-04 and are compromised for good; removal from the index
 # does not remove them from history.
 sage/data/keys/*.key
+
+# The daemon log (SAGE #111 finding 5): rotated by the operator, never committed.
+sage-rs/daemon.log

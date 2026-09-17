@@ -35,8 +35,13 @@ Environment=RUST_LOG=info
 Restart=always
 RestartSec=30
 
-StandardOutput=journal
-StandardError=journal
+# Logs must survive (SAGE #111 finding 5). On a box with no user journal — Sprout, measured
+# 2026-09-17 — `journal` discards everything: 45 h of output, including the peer monitor's own
+# startup line and every hundredth-cycle report, existed nowhere, which is why a dashboard
+# reading zeros could not be diagnosed from logs. Keep `journal` only where
+# `journalctl --user -u sage-daemon` actually shows output.
+StandardOutput=append:/home/dp/ai-workspace/sage/sage-rs/daemon.log
+StandardError=append:/home/dp/ai-workspace/sage/sage-rs/daemon.log
 SyslogIdentifier=sage-daemon-sprout
 
 MemoryMax=512M

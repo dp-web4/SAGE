@@ -41,6 +41,33 @@ pub struct ConsciousnessResponse {
     pub cycle: u64,
 }
 
+/// What the loop knows about itself, published where the HTTP layer can read it.
+///
+/// WHY THIS EXISTS (SAGE #111). The loop owned its metabolic controller and its five SNARC
+/// detectors; `AppState` built a SECOND set that nothing drove. `/status` read those, so it
+/// answered `total_cycles: 0, atp_percentage: 100.0` while this loop was at cycle 1,593,000
+/// with ATP 36.1% — same process, same second, two answers. Parallel state is not a display
+/// bug: a healthy machine and a dead one rendered identically on every dashboard in the fleet.
+///
+/// The loop is the only writer. Readers get a clone; nobody else may mutate it.
+#[derive(Clone, Debug, Default, serde::Serialize)]
+pub struct LoopSnapshot {
+    pub total_cycles: u64,
+    pub messages_processed: u64,
+    pub experiences_recorded: u64,
+    pub state_transitions: u64,
+    pub metabolic_state: String,
+    pub atp_current: f64,
+    pub atp_percentage: f64,
+    /// The SNARC of the last message the being actually processed. `None` until one arrives —
+    /// deliberately not zeros, because "nothing has happened yet" and "everything scored zero"
+    /// are different facts and the dashboard showed both as 0.00 for months.
+    pub salience: Option<sage_lib::consciousness::observation::SalienceScore>,
+    /// Unix seconds when the loop last published. Staleness is the liveness signal: a loop
+    /// that stopped leaves its last numbers behind, and only this field says so.
+    pub published_at: u64,
+}
+
 pub struct LoopStats {
     pub total_cycles: u64,
     pub messages_processed: u64,
@@ -66,6 +93,8 @@ pub struct ConsciousnessLoop {
     shadow_atp: f64,
     shadow_atp_max: f64,
     shadow_log: Option<std::path::PathBuf>,
+    /// Published state (SAGE #111). The loop writes; the HTTP layer reads a clone.
+    snapshot: Option<std::sync::Arc<tokio::sync::Mutex<LoopSnapshot>>>,
 }
 
 impl ConsciousnessLoop {
@@ -99,7 +128,43 @@ impl ConsciousnessLoop {
             shadow_atp: 100.0,      // starts aligned with the real controller's initial ATP
             shadow_atp_max: 100.0,
             shadow_log,
+            snapshot: None,
         }
+    }
+
+    /// Give the loop the cell it publishes into (SAGE #111). Called once at startup by the
+    /// daemon, which hands the same Arc to the HTTP layer; without it the loop runs exactly
+    /// as before and publishes nothing, so this stays optional for tests and `--simulate`.
+    pub fn with_snapshot(mut self, cell: std::sync::Arc<tokio::sync::Mutex<LoopSnapshot>>) -> Self {
+        self.snapshot = Some(cell);
+        self
+    }
+
+    /// The loop's own reading of itself, for publishing.
+    fn snapshot_now(&self, salience: Option<sage_lib::consciousness::observation::SalienceScore>) -> LoopSnapshot {
+        LoopSnapshot {
+            total_cycles: self.stats.total_cycles,
+            messages_processed: self.stats.messages_processed,
+            experiences_recorded: self.stats.experiences_recorded,
+            state_transitions: self.stats.state_transitions,
+            metabolic_state: self.metabolic.current_state.as_str().to_string(),
+            atp_current: self.metabolic.atp_current,
+            atp_percentage: self.metabolic.atp_percentage(),
+            salience,
+            published_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+        }
+    }
+
+    /// Publish, carrying forward the last salience unless this call supplies a newer one.
+    /// Never blocks the loop: a contended lock skips this publish and the next one wins.
+    async fn publish(&self, salience: Option<sage_lib::consciousness::observation::SalienceScore>) {
+        let Some(cell) = self.snapshot.as_ref() else { return };
+        let Ok(mut cur) = cell.try_lock() else { return };
+        let carried = salience.or_else(|| cur.salience.clone());
+        *cur = self.snapshot_now(carried);
     }
 
     /// Advance the shadow ATP: apply the SAME base delta the real ATP just took, then add
@@ -162,6 +227,9 @@ impl ConsciousnessLoop {
 
             self.cycle += 1;
             self.stats.total_cycles = self.cycle;
+            // Publish what this loop knows, every cycle. Ten writes a second of a small struct
+            // behind a try_lock; a contended tick simply skips and the next one wins.
+            self.publish(None).await;
 
             if self.cycle % 100 == 0 {
                 info!(
@@ -246,6 +314,12 @@ impl ConsciousnessLoop {
         );
 
         let system = pending.system.unwrap_or(system_prompt);
+
+        // Publish the SNARC the being just FELT, and the state it moved to, before generating
+        // (SAGE #111). Not in the success arm: the salience is real whether or not the model
+        // answers, generation can take a minute on this hardware, and a reader watching the
+        // being react should not have to wait for the reply to see the reaction.
+        self.publish(Some(salience.clone())).await;
 
         let result = self.ollama.generate(&pending.content, Some(&system)).await;
 
@@ -348,5 +422,81 @@ impl ConsciousnessHandle {
         };
         self.tx.send(msg).await.map_err(|_| "consciousness loop not running".to_string())?;
         response_rx.await.map_err(|_| "consciousness loop dropped response".to_string())?
+    }
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    fn loop_with(cell: std::sync::Arc<tokio::sync::Mutex<LoopSnapshot>>) -> ConsciousnessLoop {
+        let (_tx, rx) = mpsc::channel(4);
+        ConsciousnessLoop::new(
+            OllamaClient::default_local("test-model"),
+            ExperienceBuffer::new(&std::path::PathBuf::from("/dev/null"), 0.5),
+            rx,
+            "testmachine",
+            "test-model",
+            None,
+        )
+        .with_snapshot(cell)
+    }
+
+    /// SAGE #111: `/status` read a controller nothing drove, so it answered 0 cycles / 100% ATP
+    /// while the loop ran at 1.6M cycles / 36% ATP. What the loop publishes must BE the loop's.
+    #[tokio::test]
+    async fn publish_reports_the_loops_own_numbers_not_a_default_controller() {
+        let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
+        let mut l = loop_with(cell.clone());
+
+        assert_eq!(cell.lock().await.total_cycles, 0, "nothing published yet");
+        assert_eq!(cell.lock().await.published_at, 0, "and it says so");
+
+        l.cycle = 1_593_000;
+        l.stats.total_cycles = l.cycle;
+        l.stats.messages_processed = 12;
+        l.publish(None).await;
+
+        let s = cell.lock().await.clone();
+        assert_eq!(s.total_cycles, 1_593_000);
+        assert_eq!(s.messages_processed, 12);
+        assert_eq!(s.metabolic_state, l.metabolic.current_state.as_str());
+        assert!(s.published_at > 0, "a publish stamps its time; staleness is the liveness signal");
+    }
+
+    /// No salience is not zero salience — the distinction the dashboard could not draw.
+    #[tokio::test]
+    async fn salience_is_none_until_something_is_felt_then_carries_forward() {
+        let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
+        let l = loop_with(cell.clone());
+
+        l.publish(None).await;
+        assert!(cell.lock().await.salience.is_none(), "nothing felt yet");
+
+        let felt = sage_lib::consciousness::observation::SalienceScore::from_components(
+            0.8, 0.6, 0.4, 0.2, 0.1,
+        );
+        l.publish(Some(felt.clone())).await;
+        let got = cell.lock().await.salience.clone().expect("felt");
+        assert!((got.surprise - 0.8).abs() < 1e-9 && (got.conflict - 0.1).abs() < 1e-9);
+
+        // an idle tick afterwards must not erase what was felt
+        l.publish(None).await;
+        assert!(cell.lock().await.salience.is_some(), "an idle cycle is not a forgetting");
+    }
+
+    /// A loop with no cell runs exactly as before and publishes nothing.
+    #[tokio::test]
+    async fn publishing_is_optional() {
+        let (_tx, rx) = mpsc::channel(4);
+        let l = ConsciousnessLoop::new(
+            OllamaClient::default_local("test-model"),
+            ExperienceBuffer::new(&std::path::PathBuf::from("/dev/null"), 0.5),
+            rx,
+            "testmachine",
+            "test-model",
+            None,
+        );
+        l.publish(None).await; // must not panic
     }
 }
