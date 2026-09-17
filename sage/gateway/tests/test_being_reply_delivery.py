@@ -241,7 +241,11 @@ def test_a_ruling_pointer_resolves_to_the_ruling():
     assert "not another appeal on the same deny" in out, "a ruling says what follows"
 
     d2 = _disp_with({"hestia_query_history": {"entries": []}})
-    assert "no ruling yet" in d2._resolve_pointer("hestia://appeal/deadbeef#ruled")
+    miss = d2._resolve_pointer("hestia://appeal/deadbeef#ruled")
+    assert "does NOT mean the appeal is still open" in miss and "is open" not in miss.replace("still open", ""), \
+        "absence from a bounded window must never be reported as an open appeal"
+    # a trailing segment is not part of the address
+    assert "DENY STANDS" in d._resolve_pointer("hestia://appeal/c29e24e6/ruling")
 
     d3 = _disp_with({"hestia_scope_status": {"requests": [
         {"request_id": "scope-1", "path": "/etc/systemd/system", "status": "refused",

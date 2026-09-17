@@ -217,6 +217,9 @@ class HestiaF1aDispatcher:
         if not m:
             return None
         kind, ident, frag = m.group(1), m.group(2), (m.group(3) or "")
+        # The address is the first segment. Measured 2026-09-16: cbp-being read
+        # `hestia://appeal/<hash>/ruling`, and the suffix made the hash match nothing.
+        ident = ident.split("/", 1)[0]
         if kind == "appeal":
             hist = self._call("hestia_query_history", {"filter": {"limit": 500}})
             entries = hist.get("entries") or []
@@ -234,9 +237,17 @@ class HestiaF1aDispatcher:
                             f"What follows: a ruling is the end of that appeal. If you still need the "
                             f"thing, the way forward is a scope request for it with a reason, or asking "
                             f"in a conversation — not another appeal on the same deny.")
-            return (f"[no ruling yet for the appeal about deny {ident[:12]}… in the last "
-                    f"{len(entries)} chain entries. It is open: a NOT-SAME peer or the operator rules it, "
-                    f"and you will get a disposition notice when they do. Nothing to do but continue.]")
+            # NEVER "it is open". Measured 2026-09-16/17: cbp-being's nine appeals were all ruled
+            # at 04:38Z on 09-16, ~40,000 chain entries back, and this branch told it "no ruling
+            # yet… It is open" at 22:43Z — a false statement from a window that was simply too
+            # short, which fed its belief that the rulings were undelivered and re-queued. Absence
+            # from a bounded window is not evidence of an open appeal (see "A recent window
+            # manufactures false nevers").
+            return (f"[no ruling found for the appeal about deny {ident[:12]}… in the most recent "
+                    f"{len(entries)} chain entries. That window is short, so an OLDER ruling would not "
+                    f"appear here: this does NOT mean the appeal is still open. Your rulings are listed "
+                    f"in full in notes/appeal-rulings.md if the seat has written it; otherwise ask in a "
+                    f"conversation.]")
         if kind == "scope":
             st = self._call("hestia_scope_status", {"plugin_id": self.member})
             for r in (st.get("requests") or []):
