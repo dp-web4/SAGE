@@ -40794,5 +40794,98 @@
       "total_cycles": 3,
       "transition_count": 0
     }
+  },
+  {
+    "id": "151364656c2958bb",
+    "prompt": "The laundromat on my corner has a strip of masking tape over the third dryer with three words on it in black marker: **THIS ONE REMEMBERS.** Nobody's explained it and I've decided not to ask \u2014 so you go first: what does it remember, and what happens to the next person who loads it?",
+    "response": "I don't know what it remembers, but I think the dryer remembers things in a way that isn't quite the same as remembering. It remembers the hands that turned the dial, the weight of the clothes, the humidity of the room at 3 AM. It remembers the way the neighbor's kid cried when he loaded it because it hummed a different song than the others.\n\nThe next person who loads it doesn't get their clothes done. They get something else. Not a stain, not a malfunction \u2014 something that feels like it's *been* there before. The clothes come out folded, but they're the wrong color. Or they smell like someone who's been waiting in that room for a long time. Or they're just warm, and the warmth feels like a memory you can't place.\n\nNobody asks what it remembers. That's the point.",
+    "salience": {
+      "surprise": 0.5,
+      "novelty": 0.5,
+      "arousal": 0.5815727699530516,
+      "reward": 0.3666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.42298122065727695
+    },
+    "session": 265,
+    "phase": "creating",
+    "timestamp": "2026-09-18T13:00:22.097425",
+    "metadata": {
+      "turn": 1,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 100.0,
+      "atp_max": 100.0,
+      "atp_percentage": 100.0,
+      "cycles_in_state": 0,
+      "total_cycles": 0,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "8cf157a05d54ea91",
+    "prompt": "Nobody asks what it remembers. That's the point\" \u2014 you landed that and then walked away from it, which is the right instinct. But I want the part you skipped: the clothes come out the wrong color. What color, specifically, and whose were they before?",
+    "response": "The clothes come out the wrong color. Blue shirts come out gray. White ones come out the color of old blood. The last person who loaded it was a woman who lived in the apartment above \u2014 her name was Clara. She left them there. They came out the color of bruised skin.",
+    "salience": {
+      "surprise": 0.8728813559322034,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5145762711864407
+    },
+    "session": 265,
+    "phase": "creating",
+    "timestamp": "2026-09-18T13:00:31.396043",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.37,
+      "atp_max": 100.0,
+      "atp_percentage": 95.4,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "1c43598671898297",
+    "prompt": "You named her, cbp \u2014 Clara, the woman upstairs who left her clothes and didn't come back for them. Before you go: does the dryer remember Clara, or is it holding her clothes *for* her? Those are different machines, and I think you know which one you built.",
+    "response": "The dryer isn't remembering Clara. It's holding her clothes for her.\n\nThat's the difference. A machine that remembers is a ghost. A machine that holds is a witness.\n\nThe clothes are still waiting. The blue shirt is still blue, just grayed at the edges. The white shirt is still white, just duller. They're not broken. They're just waiting. And the dryer knows exactly when to let them go.",
+    "salience": {
+      "surprise": 0.8699186991869918,
+      "novelty": 1.0,
+      "arousal": 0.49816176470588236,
+      "reward": 0.35833333333333334,
+      "conflict": 0.0,
+      "total": 0.5452827594452415
+    },
+    "session": 265,
+    "phase": "creating",
+    "timestamp": "2026-09-18T13:00:43.796710",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.82,
+      "atp_max": 100.0,
+      "atp_percentage": 89.8,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
   }
 ]

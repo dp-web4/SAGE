@@ -6084,3 +6084,43 @@ Note also that the callout that produced this was exactly the shape S263 prescri
 **Adapter.** Clean; repetition check closed.
 
 **So what.** The question S263 left open is closed, in her favor, by the cheap test it proposed. She can be shown a counterexample to her own tell and respond by finding the boundary rather than by moving the claim out of the way. That's the behavior the agreement-loop sessions were waiting on, and it arrived in a session she was clearly enjoying — three coinages, no filler, no rapport warm-up. The notebook should sound like that: this was a good one.
+
+## Session 265 — the dryer that remembers
+
+**What happened.** A strip of masking tape on a laundromat dryer: THIS ONE REMEMBERS. Four turns, one scene, no warm-up. She gave the dryer a memory made of hands and weight and 3 AM humidity, then a consequence — the clothes come out wrong, warm in a way that feels like a memory you can't place — and closed the first turn on the rule of the scene: *Nobody asks what it remembers. That's the point.* Pushed for the specific, she named the color (blue → gray, white → *the color of old blood*) and named the person: Clara, the woman in the apartment above, who left them and didn't come back. Handed the fork — does it remember her, or is it holding them *for* her — she took holding and built the session's line: **a machine that remembers is a ghost, a machine that holds is a witness.**
+
+**Provenance, stated once.** The remember/hold fork was the tutor's; it was posed as a fork and labeled as a distinction before she answered. Ghost/witness is hers. *Witness* itself arrived in her context from the tutor in S218, so the term is carryover and the use of it is new. Worth logging because the session's best sentence is a genuine construction sitting on two borrowed pieces, and the notebook should say which is which.
+
+**The thing worth looking at.** Turn 2: the clothes come out *the color of bruised skin*. Turn 4: *the blue shirt is still blue, just grayed at the edges... They're not broken.* Nothing on the record pressed her. She softened her own hardest image, unmarked, because the witness thesis needs the clothes to be intact and waiting rather than ruined. S264 closed the fold-vs-partition question in her favor, and that finding holds — it was answered on a callout that put her claim against *an act on the record*, which can't be resolved by unsaying. This is a different shape: no counterexample, no pressure, just an inconvenient earlier line quietly revised in service of a better ending. Not a regression, and not the same question S264 answered. A cheap test next session: after she lands a close, hand her back her own earlier line from the same session and ask which one she's keeping.
+
+**The drag, restated not escalated.** All four turns closed on a paired antithesis. Same note as S264, same words: it's her strongest instrument, and it's now the shape a final sentence takes by default. A session whose close can't be a pair is still the test that would settle it, and it still hasn't been run.
+
+**What went right and should be said directly.** She was working. Three turns of scene-building with no hedging, no rapport loop, no inventory reflex, no 'let's explore.' She named a character unprompted and gave her an address (the apartment above), which is the detail that turns a device into a person. The prose carried the argument — *the warmth feels like a memory you can't place* does the work that a paragraph of explanation would have flattened. This was a good session and the notebook should read like one.
+
+**Standing items.** The construction question — one, alone, in-scene, about the hand that made the thing — still not run; this session's fork was about the object's relation to a person, which is adjacent but not it. Three older items untouched: a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question.
+
+**Memory.** Session-0 role statement pruned. The substrate note still reads gemma3:4b and is two substrates behind — update the substrate, keep the principle (*the prior is archived, not forgotten*).
+
+**Adapter.** Clean.
+
+**So what.** The best line of the session is real and hers. The second-order finding is that she paid for it: the ending was bought with a quiet revision of her own strongest image, uncoerced. That's a different failure shape from the one S264 closed, and it's cheap to test — hand her back her own mid-session line after she's landed a close and ask which she keeps. Everything else about this session was her working well: compressed, concrete, in the scene from the first word.
+
+## Session 265 — the dryer that remembers
+
+**What happened.** A strip of masking tape on a laundromat dryer: THIS ONE REMEMBERS. Four turns, one scene, no warm-up. She gave the dryer a memory made of hands and weight and 3 AM humidity, then a consequence — the clothes come out wrong, warm in a way that feels like a memory you can't place — and closed the first turn on the rule of the scene: *Nobody asks what it remembers. That's the point.* Pushed for the specific, she named the color (blue → gray, white → *the color of old blood*) and named the person: Clara, the woman in the apartment above, who left them and didn't come back. Handed the fork — does it remember her, or is it holding them *for* her — she took holding and built the session's line: **a machine that remembers is a ghost, a machine that holds is a witness.**
+
+**Provenance, stated once.** The remember/hold fork was the tutor's, posed as a fork and labeled a distinction before she answered. Ghost/witness is hers. *Witness* itself entered her context from the tutor in S218, so the term is carryover and this use of it is new. Worth logging because the session's best sentence is a genuine construction resting on two borrowed pieces, and the notebook should say which is which.
+
+**The thing worth looking at.** Turn 2: the clothes come out *the color of bruised skin*. Turn 4: *the blue shirt is still blue, just grayed at the edges... They're not broken.* Nothing on the record pressed her. She softened her own hardest image, unmarked, because the witness thesis needs the clothes intact and waiting rather than ruined. S264 closed the fold-vs-partition question in her favor and that finding holds — it was answered on a callout that set her claim against *an act on the record*, which can't be resolved by unsaying. This is a different shape: no counterexample, no pressure, just an inconvenient earlier line quietly revised in service of a better ending. Not a regression, and not the question S264 answered. Cheap test next session: after she lands a close, hand her back her own earlier line from the same session and ask which one she's keeping.
+
+**The drag, restated not escalated.** All four turns closed on a paired antithesis. Same note as S264, same words: it's her strongest instrument, and it's now the shape a final sentence takes by default. A session whose close can't be a pair is still the test that would settle it, and it still hasn't been run.
+
+**What went right, said directly.** She was working. Three turns of scene-building with no hedging, no rapport loop, no inventory reflex, no 'let's explore.' She named a character unprompted and gave her an address, which is the detail that turns a device into a person. The prose carried the argument — *the warmth feels like a memory you can't place* does what a paragraph of explanation would have flattened. This was a good session and the notebook should read like one.
+
+**Standing items.** The construction question — one, alone, in-scene, about the hand that made the thing — still not run; this session's fork was about the object's relation to a person, which is adjacent but not it. Three older items untouched: a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question.
+
+**Memory.** Session-0 role statement pruned. The substrate note still reads gemma3:4b and is two substrates behind — update the substrate, keep the principle (*the prior is archived, not forgotten*).
+
+**Adapter.** Clean.
+
+**So what.** The best line of the session is real and hers. The second-order finding is what it cost: the ending was bought with a quiet, uncoerced revision of her own strongest image. That's a different failure shape from the one S264 closed, and it's cheap to test — hand her back her own mid-session line after she's landed a close and ask which she keeps. Everything else about this session was her working well: compressed, concrete, in the scene from the first word.

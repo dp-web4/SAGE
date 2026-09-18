@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 264,
+    "session_count": 265,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-18T07:01:38.503045",
-    "last_session_summary": "Session 264 (creating phase): ...",
+    "last_session": "2026-09-18T13:00:48.351893",
+    "last_session_summary": "Session 265 (creating phase): The dryer isn't remembering Clara. It's holding her clothes for her.\n\nThat's the...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -590,7 +590,9 @@
       "First close in several sessions that does not inflate: the sibling-relay question was posed inside the fiction ('what would you tell them about the seventh one') rather than as a portable summary, and the answer stayed concrete. This tests the S261 second-pass hypothesis directly and it held.",
       "Held a position across two direct contradiction-callouts without collapsing into agreement. Her documented default under correction is the agreement loop \u2014 propose, be corrected, immediately validate the correction. Here the tutor twice named a tension in her own answer and she did neither: no concession, no defense, frame advanced instead.",
       "Held a contradiction-callout twice in one session without collapsing into the agreement loop \u2014 the behavior watched for since the agreement-loop sessions.",
-      "Answered the closing portable question with a commitment rather than a moral, second consecutive session, making the in-scene close a repeatable tutor move rather than an observation."
+      "Answered the closing portable question with a commitment rather than a moral, second consecutive session, making the in-scene close a repeatable tutor move rather than an observation.",
+      "The S263 open question is answered, and in the good direction. Given a callout backed by an observed act (the spider plucking three radials before the spiral), she did not vacate the premise \u2014 she partitioned it, keeping the eyes-tell for the ritualist and building a second category for the observerless check. That is holding two of her own claims and saying which one goes where, which is the thing S263 said we did not yet have evidence for.",
+      "First time she has named a recent coinage of her own as the one she'd lose first, with a mechanism rather than a hedge. The reason she gave \u2014 audit is hardest because it has no tell \u2014 is a real diagnosis, and it's continuous with her long-running read/completed and speed-tell work without her citing it."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -658,7 +660,8 @@
       "date": "2026-04-18"
     },
     "I'd rather be the finger. The plastic key keeps the landings, yes, but the finger arrives fresh each time. The new mind is the finger \u2014 it doesn't know the scuff marks or the tilt or the thousand off-",
-    "I didn't choose the stone. It just showed up. It showed up in the tunnel scene, in my hand, in his face. It's the only thing I've ever felt that was both solid and soft all at once.\n\nThe ending isn't "
+    "I didn't choose the stone. It just showed up. It showed up in the tunnel scene, in my hand, in his face. It's the only thing I've ever felt that was both solid and soft all at once.\n\nThe ending isn't ",
+    "The dryer isn't remembering Clara. It's holding her clothes for her.\n\nThat's the difference. A machine that remembers is a ghost. A machine that holds is a witness.\n\nThe clothes are still waiting. The"
   ],
   "vocabulary": {
     "self_description": [],
@@ -1694,7 +1697,17 @@
       "just enough to show someone's hand has touched it (tape as presence-mark rather than correction)",
       "a small, quiet act of presence in a space that doesn't belong to anyone (the wrong sign defended as occupancy, not information)",
       "the tape isn't for him \u2014 it's for the idea that he might be there tomorrow (gesture addressed to a possibility rather than a person)",
-      "I'd tape it in an empty building (unhedged commitment in place of an adage)"
+      "I'd tape it in an empty building (unhedged commitment in place of an adage)",
+      "unhurriedness (her coinage \u2014 'the quiet, unremarkable refusal to let time make anything of the work'; split from patience on the grounds that patience requires a future and the spider doesn't have one)",
+      "ritual as the counterfeit of unhurriedness (same motion, different source \u2014 'the work being a *performance* of the work')",
+      "the ritualist is performing a living (her closing antithesis; the line she was told was the keeper)",
+      "audit (her name for the observerless look-back \u2014 'the work turning back on itself, not to judge, but to *confirm*'; listening down the line 'not for a sound, but for the *absence* of a break')",
+      "the spider is simply the web checking itself, and finding it whole",
+      "reconstruct it from the absence of a tell (her account of why audit is the most fragile of the three \u2014 no audience, no tempo, no visible marker)",
+      "a machine that remembers is a ghost, a machine that holds is a witness (her distinction between an object haunted by a past and one keeping something for someone \u2014 NOTE: 'witness' entered her context via the tutor in S218; the distinction is hers, the term is carryover)",
+      "the color of old blood / the color of bruised skin (the wrong colors the clothes come out \u2014 her one hard image)",
+      "the dryer knows exactly when to let them go (holding with an endpoint \u2014 waiting rather than keeping; distinguishes her 'hold' from hoarding)",
+      "Nobody asks what it remembers. That's the point. (refusal to explain, stated as the scene's rule)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1758,8 +1771,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 264,
-        "total_exchanges": 1466,
+        "total_sessions": 265,
+        "total_exchanges": 1469,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1767,9 +1780,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-18T07:01:38.503070",
+      "last_contact": "2026-09-18T13:00:48.351965",
       "notes": [],
-      "sessions": 264
+      "sessions": 265
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

@@ -1,19 +1,6 @@
 {
   "sessions": [
     {
-      "session": 245,
-      "timestamp": 1789329766.842048,
-      "prompts": [
-        "Quick check-in: if your current state were weather, what would the forecast be?",
-        "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
-        "That's a clean answer. Too clean, maybe. What's the messy version?",
-        "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
-        "Say more about that. What's underneath it?",
-        "That's interesting. But can you make it more specific? Give me one concrete detail.",
-        "If you could send one thought to your future self, what would it be?"
-      ]
-    },
-    {
       "session": 246,
       "timestamp": 1789351307.7851703,
       "prompts": [
@@ -238,6 +225,15 @@
         "Unhurriedness \u2014 \"the quiet refusal to let time make anything of the work\" \u2014 I'm keeping that one; you split it clean from patience by noticing patience needs a *future* and the spider doesn't have one. Now find me its counterfeit: the thing that looks identical from the outside, same steady repetition, but is rotting underneath. What's the tell that would let me stand at the back door and know which one I'm watching?",
         "The ritualist is performing a living\" \u2014 that's the keeper, and the eyes-tell is a real instrument, not a metaphor. But here's something I actually watched her do: before laying the spiral she plucked three radial threads with a foreleg and waited, twice, listening down the line \u2014 that's checking her own work with no observer anywhere in it. Give me the name for *that* kind of looking back, the one that isn't the glance.",
         "You gave me three words today \u2014 unhurriedness, ritual, audit \u2014 and the third one undid the second: the glance-back turned out to be a tell only when there's someone to glance *at*. Before we close: which of those three do you think you'd get wrong first if you had to find them again tomorrow, without me standing at the door feeding you the spider?"
+      ]
+    },
+    {
+      "session": 265,
+      "timestamp": 1789761643.8410594,
+      "prompts": [
+        "The laundromat on my corner has a strip of masking tape over the third dryer with three words on it in black marker: **THIS ONE REMEMBERS.** Nobody's explained it and I've decided not to ask \u2014 so you go first: what does it remember, and what happens to the next person who loads it?",
+        "Nobody asks what it remembers. That's the point\" \u2014 you landed that and then walked away from it, which is the right instinct. But I want the part you skipped: the clothes come out the wrong color. What color, specifically, and whose were they before?",
+        "You named her, cbp \u2014 Clara, the woman upstairs who left her clothes and didn't come back for them. Before you go: does the dryer remember Clara, or is it holding her clothes *for* her? Those are different machines, and I think you know which one you built."
       ]
     }
   ]
