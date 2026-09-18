@@ -31,10 +31,22 @@ class SalienceFilter:
                                  # a lingering one fades to normal, one that leaves is new again later
 
     def score(self, state: dict) -> dict:
-        cams = state["cameras"]; prop = state.get("proprioception", {})
-        motion = max(cams["0"]["motion"], cams["1"]["motion"])
+        # Vision is one sense among three, not the precondition for the other two. Indexing
+        # cams["0"]["motion"] directly made hearing and the inner ear unscoreable whenever an
+        # eye was missing — which is how a dead camera silenced a whole organ on Sprout
+        # (2026-09-14..17). A machine with no cameras at all scores on what it does have.
+        cams = state.get("cameras") or {}
+        eyes = [c for c in cams.values() if isinstance(c, dict)]
+        prop = state.get("proprioception", {})
+        # A stalled eye reports no motion because it reports nothing; it must not be read as
+        # a confident observation of stillness, so only live eyes contribute motion.
+        live = [c for c in eyes if not c.get("stalled")]
+        motion = max((c.get("motion", 0.0) for c in live), default=0.0)
         self_mot = 1.0 if prop.get("self_motion") in ("moving", "rotating") else 0.0
-        trust = min(cams["0"]["trust"], cams["1"]["trust"])
+        # With no live eye there is no view to judge: hold trust at the current expectation
+        # so blindness does not masquerade as a permanent quality collapse. The eyes going
+        # dark is surprising once (via the liveness term downstream), not surprising forever.
+        trust = min((c.get("trust", 0.0) for c in live), default=self.exp_trust)
         gyro = prop.get("gyro_mag", 0.0)
         aud = state.get("audio", {})
         audio_onset = 1.0 if aud.get("onset") else 0.0
@@ -43,7 +55,7 @@ class SalienceFilter:
         # Object-grounded salience: a NEW named thing entering the shared field is a strong
         # event — "a person appeared", not just "pixels changed". Union of confirmed objects
         # across both eyes; a label is "new" until it habituates; it fades when it leaves.
-        objs = {o["label"] for c in cams.values() for o in c.get("objects", [])}
+        objs = {o["label"] for c in eyes for o in (c.get("objects") or [])}
         new_objs = sorted(o for o in objs if self.obj_hab.get(o, 0.0) < 0.25)
         obj_surprise = 0.7 if new_objs else 0.0
 

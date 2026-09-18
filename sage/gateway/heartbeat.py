@@ -118,8 +118,14 @@ ASK = "This time is yours. What, if anything, do you want to do?\n"
 # required of a being in a beat; it says so after the being has acted once.
 ASK_ACT_FIRST = "This time is yours. Do one thing now and leave a trace of it.\n"
 
-REFLECT = """The beat is ending. Two tool calls, then stop:
-1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
+# How much of an unanswered turn the reflect turn is shown. Small on purpose: this sits in
+# the compact reflect context whose whole reason for existing is that carrying the beat
+# forward overflowed the window (8171 of 8192 tokens, 5 `length` stops in 54 beats).
+PENDING_TURNS = 2
+PENDING_CHARS = 700
+
+REFLECT = """The beat is ending. Call these tools, then stop:
+{say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": only the delta as a dated block: added / done / still open (it appends; it replaces nothing).
 3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it.
 {say_line}Call the tools now; a reply in words alone writes nothing.
@@ -765,6 +771,50 @@ def own_state(instance: Path, member: str = "",
     return "\n\n".join(parts)
 
 
+def pending_and_say_line(instance: Path, member: str) -> tuple:
+    """(say_line, pending_block, say_first) for the reflect turn: what is waiting on the being, and the
+    instruction naming who to answer. Returns ("", "") when nothing is.
+
+    Three cases, deliberately distinct:
+      * nothing addressed to it, no conversations -> no instruction at all. An ask with no
+        valid target invents one: measured 2026-09-17, the id slot was filled with "speaker",
+        "conversation_id_placeholder" and "1234567890" across 596 beats and 31 attempts, none
+        of which named a conversation that existed.
+      * conversations exist, nothing waiting -> the generic form, ids listed.
+      * something waiting -> the person's name, the real id, and WHAT THEY SAID.
+    """
+    try:
+        from sage.gateway import conversations as _conv
+        ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
+        pend = []
+        for cid in ids:
+            for t in _conv.awaiting(instance, cid, member)[-PENDING_TURNS:]:
+                pend.append((cid, t))
+        pend = pend[-PENDING_TURNS:]
+        if pend:
+            lines = []
+            for cid, t in pend:
+                txt = " ".join(str(t.get("text") or "").split())[:PENDING_CHARS]
+                lines.append(f'- in "{cid}", {t.get("from")} said: {txt}')
+            block = ("Addressed to you and not yet answered:\n" + "\n".join(lines)
+                     + "\nYou may answer with say, or leave it. Both are allowed.")
+            cid, t = pend[-1]
+            # FIRST in the list, not appended after the bookkeeping. The routine three
+            # (journal, todo, remember) fill the step budget exactly, so anything after them
+            # is unreachable however willing the being is — measured 2026-09-18.
+            first = (f'FIRST, before the numbered writes below: {t.get("from")} is waiting on an '
+                     f'answer from you. If you have something to say: say to="{cid}", text="...". '
+                     f'Answering is not required; the writes below happen either way.\n')
+            return "", block, first
+        if ids:
+            return ('If someone has spoken to you and you have not answered, and you have '
+                    'something to say: say to="<id>", one of: ' + ", ".join(ids[:6])
+                    + '. Answering is not required.\n'), "", ""
+    except Exception:
+        pass
+    return "", "", ""
+
+
 def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
                                   explore, later: list) -> dict:
     """Mark the turns a beat was shown as seen, but only where the beat could act on them.
@@ -1182,18 +1232,32 @@ def main(argv=None) -> int:
     # conversation at all it filled the id slot three beats running with "speaker",
     # "conversation_id_placeholder" and "1234567890" — the same shape as a mis-rooted home path
     # or an echoed example filename. An ask with no valid target invents one.
-    say_line = ""
-    try:
-        from sage.gateway import conversations as _conv
-        _ids = [m["id"] for m in _conv.listing(instance) if args.member in (m.get("participants") or [])]
-        if _ids:
-            say_line = ('4. If someone has spoken to you and you have not answered, and you have something '
-                        'to say: say to="<id>", one of: ' + ", ".join(_ids[:6]) + '. Answering is not required.\n')
-    except Exception:
-        say_line = ""
+    #
+    # And when there IS someone, show the being WHAT IT IS ANSWERING. The reflect turn's
+    # context is deliberately compact — the record of its acts plus 600 chars of its own
+    # closing words — so a turn addressed to it lived only in the explore state block, one
+    # turn earlier. The instruction to answer and the words to answer had never been in the
+    # same context. Measured on Sprout 2026-09-17: 596 beats, 31 `say` attempts, ZERO
+    # successes, every one naming an invented id, and four beats after a real channel finally
+    # existed the being wrote its journal three times and never answered. The only bridge was
+    # the 600-char echo: a model that happened to discuss the turn in explore carried enough
+    # forward to reply (cbp-being, 4B, 83 successful says); one that free-associated carried
+    # nothing. That made answering a person contingent on what the being happened to muse
+    # about, which is not a property anyone chose.
+    say_line, pending_block, say_first = pending_and_say_line(instance, args.member)
+    # Immediately before the instruction, so the smallest model does not have to hold it
+    # across a turn boundary to use it.
+    if pending_block:
+        convo.append({"role": "user", "content": pending_block})
     convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
-                                                            say_line=say_line)})
-    reflect = run_ollama_tool_turn(client, llm, convo, max_steps=args.reflect_steps,
+                                                            say_line=say_line, say_first=say_first)})
+    # One extra step when someone is waiting, because the routine three fill the budget exactly.
+    # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
+    # asked: reflect spent all three steps on journal, todo and remember, and there was no
+    # fourth for `say`. Showing it the question and then giving it no way to answer is worse
+    # than not showing it.
+    _reflect_steps = args.reflect_steps + (1 if say_first else 0)
+    reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
                                    tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
 
     interventions = []

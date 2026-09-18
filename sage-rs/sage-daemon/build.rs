@@ -18,8 +18,13 @@ fn main() {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_else(|| "nogit".to_string());
 
+    // Scoped to the daemon's own sources, NOT the whole repo. Unscoped, this flag was stuck
+    // on forever: the beings rewrite their instance directories every beat, so `-dirty` said
+    // "a being has been living here" rather than "this binary differs from its commit", which
+    // is the only thing a reader can act on. Measured 2026-09-18: a tree with zero source
+    // changes stamped `-dirty` regardless.
     let dirty = Command::new("git")
-        .args(["status", "--porcelain", "--untracked-files=no"])
+        .args(["status", "--porcelain", "--untracked-files=no", "--", "."])
         .output()
         .ok()
         .filter(|o| o.status.success())

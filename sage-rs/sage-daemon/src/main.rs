@@ -105,8 +105,12 @@ struct StatusResponse {
     consciousness_loop: bool,
     messages_processed: u64,
     experiences_recorded: u64,
-    /// The SNARC of the last message the being processed; `null` until one arrives.
+    /// The SNARC of the last input the being FELT; `null` until one arrives.
     salience: Option<sage_lib::consciousness::observation::SalienceScore>,
+    /// Whose stream that salience belongs to: "dp", the seat, "cortex", a peer.
+    salience_source: Option<String>,
+    /// Inputs felt without being answered here — sensor moments and governed turns.
+    observations_felt: u64,
     /// Seconds since the loop last published. `null` = it never has.
     loop_published_age_secs: Option<u64>,
     /// Which build answered. Was `version: "0.1.0"` and a frozen sprint label.
@@ -158,6 +162,12 @@ struct ChatRequest {
     // (valence) axis instead of the word-count proxy — coherence-as-reward (H1).
     #[serde(default)]
     coherence: Option<f64>,
+    // Which stream this arrived on. Each source carries its own SNARC history, so the
+    // cortex's 4 Hz chatter and a person's occasional words habituate on separate curves
+    // instead of one collapsing the other. Defaults to the transport, which is honest about
+    // knowing nothing more.
+    #[serde(default)]
+    source: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -369,6 +379,8 @@ async fn status(State(state): State<Arc<AppState>>) -> Json<StatusResponse> {
         messages_processed: snap.messages_processed,
         experiences_recorded: snap.experiences_recorded,
         salience: snap.salience.clone(),
+        salience_source: snap.salience_source.clone(),
+        observations_felt: snap.observations_felt,
         loop_published_age_secs: if snap.published_at > 0 { Some(age) } else { None },
         build: build_stamp(),
     })
@@ -435,7 +447,9 @@ async fn chat(
             }))),
         }
     } else {
-        match state.consciousness.send_message(req.message, req.system, req.salience, req.coherence, "http").await {
+        let source = req.source.unwrap_or_else(|| "http".to_string());
+        match state.consciousness.send_message(req.message, req.system, req.salience,
+                                               req.coherence, &source).await {
             Ok(resp) => (StatusCode::OK, Json(serde_json::json!({
                 "response": resp.text,
                 "model": state.model,
@@ -559,15 +573,22 @@ async fn chat_being(
             "hint": "create it with sage.gateway.conversations.create, or use /chat/raw to prompt the model directly (that is NOT the being)",
         })));
     }
+    let spoken = req.message.clone();
     match conversations::append_via(&state.being_instance, id, "dp", &req.message,
                                     Some("daemon-loopback")) {
         Ok(turn) => {
+            // dp's words reach the being NOW, not only when it next reads the file. Recording
+            // a turn and rousing a beat told the being it had mail; neither let it be
+            // AFFECTED by what was said. (dp, 2026-09-17: "messages from me and you" should
+            // trigger snarc.)
+            let felt = state.consciousness.observe(spoken, None, None, "dp");
             let woke = conversations::arouse(&state.root, &state.being_instance, "dp_turn",
                                              &format!("dp spoke in conversation '{id}'"));
             (StatusCode::OK, Json(serde_json::json!({
                 "to": state.being,
                 "conversation": id,
                 "turn": turn,
+                "felt": felt,
                 "delivery": delivery_text(&woke),
                 "arousal": woke,
                 "note": "the being answers on its own rhythm; its reply appears in this conversation when it next beats",
@@ -575,6 +596,51 @@ async fn chat_being(
         }
         Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))),
     }
+}
+
+#[derive(Deserialize)]
+struct ObserveRequest {
+    /// What was perceived, in words. For the cortex this is its descriptor sentence.
+    message: String,
+    /// Real perceptual salience [0,1] from the cortex, which has the sensor data this
+    /// daemon does not. When absent the being falls back to the text-shape proxy.
+    #[serde(default)]
+    salience: Option<f64>,
+    /// Cross-modal coherence [0,1] → the reward (valence) axis.
+    #[serde(default)]
+    coherence: Option<f64>,
+    /// Which stream this came from; each carries its own SNARC history. Defaults to the
+    /// body's own senses rather than to a person, because misattributing perception to a
+    /// speaker is worse than leaving it anonymous.
+    #[serde(default)]
+    source: Option<String>,
+}
+
+/// Something the being PERCEIVED, as distinct from something anybody said to it.
+///
+/// The cortex used to post its noticings to `/chat`, which became the governed conversation
+/// route: a perceptual descriptor was filed as a turn spoken by dp, and its salience and
+/// coherence were dropped on the floor. On this machine it had been answering 503 since the
+/// being's conversation directory did not exist, so the loop had felt nothing at all.
+///
+/// Perception is not speech from anyone. It is felt, never recorded as a turn, and never
+/// generates a reply — the being reacts on its own beat.
+async fn observe(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    Json(req): Json<ObserveRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(refused) = loopback_only(peer, "/observe") {
+        return refused;
+    }
+    let source = req.source.unwrap_or_else(|| "cortex".to_string());
+    let felt = state.consciousness.observe(req.message, req.salience, req.coherence, &source);
+    (StatusCode::OK, Json(serde_json::json!({
+        "felt": felt,
+        "source": source,
+        "note": if felt { "felt; the being reacts on its own rhythm and answers to nobody for it" }
+                else { "not felt: the loop's queue is full or the loop is not running" },
+    })))
 }
 
 #[derive(Deserialize)]
@@ -641,9 +707,14 @@ async fn conversation_say(
         return refused;
     }
     let speaker = req.from.unwrap_or_else(|| "dp".to_string());
+    let spoken = req.message.clone();
     match conversations::append_via(&state.being_instance, &id, &speaker, &req.message,
                                     Some("daemon-loopback")) {
         Ok(turn) => {
+            // Felt under the speaker's own name: each source carries its own SNARC history,
+            // so the seat's routine relay and dp's first words in a week are not measured
+            // against one another's rhythm.
+            let felt = state.consciousness.observe(spoken, None, None, &speaker);
             let woke = conversations::arouse(
                 &state.root, &state.being_instance,
                 if speaker == "dp" { "dp_turn" } else { "peer_turn" },
@@ -652,6 +723,7 @@ async fn conversation_say(
             (StatusCode::OK, Json(serde_json::json!({
                 "turn": turn,
                 "conversation": id,
+                "felt": felt,
                 "delivery": delivery_text(&woke),
                 "arousal": woke,
             })))
@@ -953,6 +1025,7 @@ async fn main() {
         // model stays reachable at /chat/raw for probing weights, which is a different
         // and much narrower thing than talking to the entity that lives here.
         .route("/chat", post(chat_being))
+        .route("/observe", post(observe))
         .route("/chat/raw", post(chat))
         .route("/conversations", get(conversations_list))
         .route("/conversations/:id", get(conversation_get))

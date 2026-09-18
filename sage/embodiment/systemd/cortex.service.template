@@ -1,0 +1,52 @@
+################################################################################
+# Visual cortex — the embodiment perception organ (user unit)
+#
+# Senses -> ~/.sprout/perception.json + the perception journal, at ~4 Hz. The
+# presence feeder and the raising both read what this writes.
+#
+# Kept in the repo since 2026-09-17 (SAGE #113). It had lived only in
+# ~/.config/systemd/user on the one machine that runs it, so the unit that
+# defines Sprout's senses existed nowhere in version control, and the logging
+# fix below could not travel.
+#
+# INSTALL (substitute the markers):
+#   sed -e "s|@ROOT@|$PWD|" -e "s|@MACHINE@|sprout|" -e "s|@VENV@|$HOME/arc-venv|" \
+#       -e "s|@UID@|$(id -u)|" -e "s|@DISPLAY@|:1|" \
+#       sage/embodiment/systemd/cortex.service.template \
+#     > ~/.config/systemd/user/@MACHINE@-cortex.service
+#   systemctl --user daemon-reload && systemctl --user enable --now sprout-cortex
+#   loginctl enable-linger "$USER"
+################################################################################
+[Unit]
+Description=@MACHINE@ visual cortex — embodiment perception organ (senses -> perception.json + journal, feeds the raising)
+After=graphical-session.target
+Wants=graphical-session.target
+# calm retry if the X session is momentarily unavailable, never a tight crash-loop
+StartLimitIntervalSec=300
+StartLimitBurst=8
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@
+# A FILE, not `journal`. A box with no user journal discards everything: measured on
+# Sprout 2026-09-14..17, the cortex wedged for 3.5 days and produced no diagnosable
+# output anywhere. Once redirected, the cameras' actual fault was on the first line
+# (nvarguscamerasrc "Failed to create CaptureSession"). Use `journal` only where
+# `journalctl --user -u <name>` really shows output.
+StandardOutput=append:@ROOT@/@MACHINE@-cortex.log
+StandardError=append:@ROOT@/@MACHINE@-cortex.log
+# The user must be in the dialout group for the IMU port to open without sg.
+# DISPLAY/XAUTHORITY are required even "headless": nvarguscamerasrc's EGL/NVMM path
+# needs an X display for its GPU context, or the pipeline opens but never delivers
+# frames — which looks exactly like a dead camera.
+Environment=DISPLAY=@DISPLAY@
+Environment=XAUTHORITY=/run/user/@UID@/gdm/Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/@UID@
+Environment=SAGE_MACHINE=@MACHINE@
+# login shell so the Tegra GStreamer env (LD_LIBRARY_PATH, GST_PLUGIN_PATH) is present
+ExecStart=/bin/bash -lc 'exec @VENV@/bin/python -m sage.embodiment.visual_cortex --display'
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=default.target
