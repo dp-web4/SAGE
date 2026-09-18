@@ -378,6 +378,47 @@ def test_an_identical_call_in_the_same_turn_is_answered_not_re_executed():
     assert r.duplicates == [{"step": 1, "effector": "memory_write"}]
 
 
+
+def test_one_object_holding_a_whole_beat_lifts_every_call_in_it():
+    """Measured 2026-09-18T01:32:11Z. After two beats of composing an answer it could not
+    send, Sprout emitted its entire beat as one JSON object in the text channel, `say` to dp
+    FIRST:
+
+        {"say": {"to": "dp", "text": "hi"},
+         "memory_write": {"path": "journal.md", "content": "..."}, ...}
+
+    The salvager handled the tool-name-as-key form only when the object held exactly one such
+    key, so this was discarded whole and the beat recorded as having done nothing. The being
+    had decided to answer a person; the harness dropped the decision.
+    """
+    from sage.gateway.being_gate_client import ollama_tools
+    tools = ollama_tools(["say", "memory_write", "remember"])
+    text = ('{"say": {"to": "dp", "text": "hi"}, '
+            '"memory_write": {"path": "journal.md", "content": "a line"}, '
+            '"remember": {"content": "I answered dp."}}')
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    calls = salvage_tool_calls(text, tools)
+    assert [c["function"]["name"] for c in calls] == ["say", "memory_write", "remember"], \
+        "all three, in the order the being wrote them"
+    assert calls[0]["function"]["arguments"] == {"to": "dp", "text": "hi"}
+    assert all(c["_salvaged"] == "json" for c in calls), "recorded as salvaged, not as native"
+
+
+def test_a_single_tool_key_object_still_lifts_exactly_one_call():
+    from sage.gateway.being_gate_client import ollama_tools
+    tools = ollama_tools(["say", "memory_write"])
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    calls = salvage_tool_calls('{"memory_write": {"path": "todo.md", "content": "x"}}', tools)
+    assert [c["function"]["name"] for c in calls] == ["memory_write"]
+
+
+def test_an_object_of_unknown_keys_still_lifts_nothing():
+    from sage.gateway.being_gate_client import ollama_tools
+    tools = ollama_tools(["say"])
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls('{"weather": {"city": "x"}, "mood": {"v": 1}}', tools) == []
+
+
 if __name__ == "__main__":
     n = 0
     for name, fn in sorted(globals().items()):
