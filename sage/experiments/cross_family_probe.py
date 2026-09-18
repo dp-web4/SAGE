@@ -257,7 +257,14 @@ def main():
     # Set up log directory
     log_dir = Path(args.log_dir) if args.log_dir else Path(__file__).parent / 'cross_family_logs'
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / 'probes.jsonl'
+    # One file per month. This used to append forever to a single probes.jsonl, which
+    # reached the repo's 10 MB pre-commit guard on 2026-09-09; every probe run after
+    # that produced results and then failed to commit them (launchd exit=1, the file
+    # permanently dirty) for nine days before anyone looked. The guard was right and
+    # allow-listing the file would have been the wrong fix: an append-only log in git
+    # re-stores itself on every commit. probes.jsonl stays as the frozen record through
+    # 2026-09-09; nothing else in the repo reads these files, so rotation breaks no one.
+    log_file = log_dir / f"probes-{datetime.now(timezone.utc):%Y-%m}.jsonl"
 
     # Select probes
     probe_names = [args.probe] if args.probe else list(PROBES.keys())
