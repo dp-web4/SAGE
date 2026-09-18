@@ -535,8 +535,8 @@ class HestiaF1aDispatcher:
         m = _re.search(r"-?\d+", raw)
         if not m:
             return ResultEnvelope(ok=False,
-                                  error=f"recall idx must be a number, the one in a result's "
-                                        f"'(idx:N)' or a 'prev=#N' / 'next=#N' hint; got {raw!r}")
+                                  error=f"recall idx must be a number — the one a result "
+                                        f"prints as '(idx:N)'; got {raw!r}")
         idx = int(m.group(0))
         if idx < 0:
             return ResultEnvelope(ok=False, error=f"recall idx must be 0 or more; got {idx}")
