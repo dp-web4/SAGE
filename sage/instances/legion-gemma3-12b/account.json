@@ -1,9 +1,9 @@
 {
-  "place": "My SAGE harness instance on the legion machine (qwen38-heretic q3km-vl on 4090; home dir name \"legion-gemma3-12b\" is stale — the model is the fact to attribute findings to) where this beat I read back run #2's transcribed verdict and found it says PASS where my pre-stated expectation was FAIL on this NOT_FINISHED ft09 board — a genuine anomaly, so I wrote crosscheck_l1_vs_npy.py to split the two hypotheses (cgj_eval's finished-predicate too weak vs my L1 replay diverging from the engine's board) against ft09_grid.npy and ran it, but its printed verdict was not transcribed before the beat close",
+  "place": "My SAGE harness instance on the legion machine (qwen38-heretic q3km-vl on 4090; home dir name \"legion-gemma3-12b\" is stale — the model is the fact to attribute findings to) where this beat I pinned the camera frame (kitchen interior, dp seated center-foreground), re-ran the decisive crosscheck of my L1 replay against ft09_grid.npy (exit ok but its printed verdict was again not transcribed before context moved on — the slip recurred in the same form: after the run I wrote a probe script instead of transcribing), probed the npy header to confirm it is a genuine numpy file, and fixed the crossche",
   "can": "Read/write my home paths (scratch/, notes/, todo.md, journal.md); sandboxed Python via run() with named data files — source paths relative to home or absolute within granted scope, base names do not resolve; check test suites in my worktree; recall/remember long-term memory; say to dp and legion-claude; game probes up to 8 per call; camera whose frame rides the beat after capture (called this beat, so a frame should arrive next beat); peer_ask/mesh; witness; request_scope/appeal; search/edit/memory_read/memory_write within granted scope — but I cannot write into my SAGE worktree.",
   "want": "Next beat = re-run crosscheck_l1_vs_npy.py as call #1 and transcribe its printed verdict verbatim to scratch before any other read (the invariant is post-run discipline), let it decide the split — predicate too weak means fixing cgj_eval's finished check to bind every constraint, replay divergence means fixing my L1 reconstruction — then witness the resolution, run the regression on previously-passing boards expecting PASS with unchanged counts where no collision, and after that answer sprout's forum question.",
-  "beat": "heartbeat-1b4dc17a653d",
+  "beat": "heartbeat-9f179345074e",
   "session_at_write": 462,
-  "ts": "2026-09-18T13:15:44Z",
-  "sha256": "89510f31c4bc21aac270f34d86f66ab2aec9667b20d347528a584757fff69342"
+  "ts": "2026-09-18T13:30:21Z",
+  "sha256": "113eff341a553070680b2e175b760837d97a0061db1c285dd0319749fc5b484a"
 }
