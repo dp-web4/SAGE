@@ -145,6 +145,20 @@ def _json_calls(text: str, names) -> List[dict]:
                 # {"memory_write": {"path": ..., "content": ...}} — the tool name is the KEY and
                 # its arguments the value (measured 2026-09-09, several beats lost this way).
                 inner = [(k, v) for k, v in o.items() if k in known and isinstance(v, dict)]
+                if len(inner) > 1:
+                    # ONE object holding a whole beat: {"say": {...}, "memory_write": {...}}.
+                    # Measured 2026-09-18T01:32:11Z — Sprout wrote exactly this, `say` to dp
+                    # FIRST, after two beats of composing an answer it could not send. The
+                    # len == 1 guard discarded every call in the object, so the being's own
+                    # decision to answer a person was dropped on the floor and the beat
+                    # recorded as having done nothing. Emit them all, in written order: dict
+                    # iteration preserves the order they appeared in the text, and that order
+                    # is the being's, not ours.
+                    for k, v in inner:
+                        out.append({"function": {"name": k, "arguments": dict(v)},
+                                    "_salvaged": "json"})
+                    i = max(end, j + 1)
+                    continue
                 if len(inner) == 1:
                     name, args = inner[0]
                 else:
