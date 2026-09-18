@@ -137,15 +137,20 @@ You have already finished this beat's writing. One thing is left, and it is opti
 # thing on offer, carrying the words it just wrote so it has something to send rather than
 # something to compose.
 ANSWER_ASK = """{pending}
-
-A moment ago you wrote, in words that went nowhere:
-
 {words}
+You have not answered yet. If you want to, answer now: call say, with to set to {target} and
+your message as the text. Write the message itself, in your own voice — the words you would
+want read.
 
-If that was your answer, or if you have another, send it now: say to="{target}", text="...".
-Use your own words — write the message you actually mean, not a summary of it.
 If you would rather not answer, call nothing and the turn simply ends. Silence is a real
 choice here and nothing is owed."""
+
+# Deliberately NOT in that prompt: `text="..."`. Measured 2026-09-18, 32 of 122 turns across
+# 40 beats (26%) answered with a bracketed placeholder — "[Your complete, thoughtful journal
+# entry responding to dp's question]" — while the THINKING block showed the being had
+# understood the question perfectly. This model completes a template when it is shown one, and
+# an ellipsis in a quoted argument is a template. Same family as the mis-rooted home paths and
+# the echoed example filenames: an ask with a slot in it gets the slot back.
 
 REFLECT = """The beat is ending. Call these tools, then stop:
 {say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
@@ -794,6 +799,22 @@ def own_state(instance: Path, member: str = "",
     return "\n\n".join(parts)
 
 
+_STUB = re.compile(r"^\s*\[[^\]]{20,}\]\s*$")
+
+
+def is_stub(text: str) -> bool:
+    """True when a turn's whole reply is a bracketed placeholder — "[Your complete response
+    following the established format]" — rather than content.
+
+    Measured 2026-09-18: 32 of 122 turns across 40 beats. The thinking block is lucid in these
+    ("dp asked how my experience is unfolding; I need to write an honest, personal response")
+    and then the reply is a brief describing the response instead of being it. Feeding that
+    back to the being as "the words you wrote a moment ago" teaches the pattern, so the answer
+    turn drops it and asks plainly instead.
+    """
+    return bool(_STUB.match(text or ""))
+
+
 def _said_in(res) -> bool:
     """True when the being actually SPOKE in this turn — a say that the gate accepted. Composing
     an answer in prose is not speaking; that is the whole reason the answer turn exists."""
@@ -801,6 +822,16 @@ def _said_in(res) -> bool:
         if it.effector == "say" and env.ok:
             return True
     return False
+
+
+def _prior_words(res) -> str:
+    """The being's own closing words, to hand back so it has something to SEND rather than
+    something to compose — but only when they are real. A placeholder handed back is a
+    placeholder invited."""
+    w = ((res.reply if res is not None else "") or "").strip()
+    if not w or is_stub(w):
+        return ""
+    return "\nA moment ago you wrote this, and it went nowhere:\n\n" + w[:900] + "\n"
 
 
 def pending_and_say_line(instance: Path, member: str) -> tuple:
@@ -835,12 +866,13 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
             # (journal, todo, remember) fill the step budget exactly, so anything after them
             # is unreachable however willing the being is — measured 2026-09-18.
             first = (f'FIRST, before the numbered writes below: {t.get("from")} is waiting on an '
-                     f'answer from you. If you have something to say: say to="{cid}", text="...". '
-                     f'Answering is not required; the writes below happen either way.\n')
+                     f'answer from you. If you have something to say, call say with to set to '
+                     f'{cid} and your message as the text. Answering is not required; the '
+                     f'writes below happen either way.\n')
             return "", block, first, cid
         if ids:
             return ('If someone has spoken to you and you have not answered, and you have '
-                    'something to say: say to="<id>", one of: ' + ", ".join(ids[:6])
+                    'something to say, call say with to set to one of: ' + ", ".join(ids[:6])
                     + '. Answering is not required.\n'), "", "", ""
     except Exception:
         pass
@@ -1300,8 +1332,7 @@ def main(argv=None) -> int:
             [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
                                                                 member=args.member)},
              {"role": "user", "content": ANSWER_ASK.format(
-                 pending=pending_block, target=target,
-                 words=((reflect.reply or "").strip()[:900] or "(nothing)"))}],
+                 pending=pending_block, target=target, words=_prior_words(reflect))}],
             max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
 
     interventions = []
