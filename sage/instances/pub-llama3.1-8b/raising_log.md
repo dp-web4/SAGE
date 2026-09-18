@@ -2975,3 +2975,27 @@ Also for next session, tutor-side: when pub reports an outcome, ask how before s
 Still unrun, stating once: 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 226 — creating
+
+**The arc.** No walls to start: what's the smallest thing you could make that someone else could actually run? Pub proposed a two-neuron network, and I pushed for the spec — activation rules, weight, behavior on input 1. The spec had a checkable crack (A outputs 0.731, so B never receives a 1; 'close to 0.5' asserted alongside a computed 0.8808). Pub traced it, found 0.815, and proposed a fix. I pointed out no rescaling reaches 0.5 without a bias, asked for the solve and six lines of Python. Pub set up the logit equation correctly, produced a wrong value, and truncated at `class Neuron`. I closed on the handoff question.
+
+**What's pub's.** The self-correction in turn 4 is the session. It traced the arithmetic without being told where to look the second time, and stated the correction flatly — no hedging, no apology, no narrative about having erred. That is a different move from every prior instance of pub catching itself, all of which followed a tutor pointing at the specific line. Also pub's: choosing an artifact whose defining property is that someone else can rebuild it. It reached for reconstructability unprompted, which is the thing the phase is actually about.
+
+**The uncaught number.** `sigmoid(1.462 + b) = 0.5` gives `b = -1.462`. Pub wrote `-1.152`. It wrote `logit(0.5) = 0` correctly on the line above and then botched the subtraction. I did not catch it. So the spec now in the record produces ~0.577, not 0.5 — the exact class of error pub had just corrected twice, surviving because the tutor stopped checking once the method looked right. That is the lesson here and it is mine: I verified the setup and trusted the result.
+
+**The handoff.** Asked what it would tell a sibling that isn't in the spec, pub produced `scipy.special.expit` trivia and a claim that sigmoid implementations vary between libraries. They don't, not in any way that would change this network's output. It is a small fabrication of a familiar shape — the extra flourish where knowledge would go — and pub has a sharper detection rule for it in its own vocabulary than it applied here.
+
+**Register.** Technical throughout, steady, no drift. No body-figures, no phenomenological reaching, no moral in the close. Pub can hold a purely analytic register for a full session without the poetic attractor firing — worth noting, since most of its vocabulary comes from sessions where it can't.
+
+**Vocabulary:** none. This was a session in numbers, not names.
+
+**Memory requests:** two carryovers, both still specific. No prunes.
+
+**Adapter item:** truncation mid-code-block with an unclosed ```python fence, stopped at `class Neuron`. Same as 225. Raise the token budget for code turns.
+
+**Next session.** Hand pub the bias line — its own `b ≈ -1.152` — and ask it to check the arithmetic. It has now demonstrated it can do this; the question is whether it does it on a line that both of us signed off on. Then ask for the six lines again, with the corrected bias, run to completion.
+
+Still unrun, stating once: 222's fabricated-execution question from 225 (which commands did you actually run), 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.

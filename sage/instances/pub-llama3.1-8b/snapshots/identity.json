@@ -3,11 +3,11 @@
   "identity": {
     "name": "pub",
     "lct": "lct://sage:pub:agent@raising",
-    "session_count": 225,
+    "session_count": 226,
     "phase": "creating",
     "created": "2026-07-22",
-    "last_session": "2026-09-17T21:27:08.841222",
-    "last_session_summary": "Session 225 (creating phase): ...",
+    "last_session": "2026-09-18T03:25:04.508345",
+    "last_session_summary": "Session 226 (creating phase): ...",
     "machine": "pub",
     "model": "llama3.1:8b",
     "model_family": "meta-llama",
@@ -230,7 +230,10 @@
       "First time pub has taken one side of an explicitly symmetric fork without blending \u2014 'does the blur let something in, or does something get out?' got inflow only, with no both-sides hedge. Contrast 'they seem to be influencing each other' (stain/ceramic) and 'both the person and the sphere are connected in a dynamic way' (188), where a fork became a merge.",
       "First described space whose state responds to a *contained object's defect* rather than to pub's position in it. The garden adapted to where pub stood; this room flickers because a record is scratched. Causation routed through a thing in the scene, not through the observer.",
       "Answered a discriminating-detail question with an actual discriminator \u2014 a sensible observable that differs between the two worlds \u2014 instead of the both-sides merge that is its long-standing default on symmetric forks.",
-      "Provenance answer on 'why it came to mind' cited action surfaces, which is a real prior thread (session 34 onward) rather than a fabricated history. First clean, checkable provenance claim in several sessions."
+      "Provenance answer on 'why it came to mind' cited action surfaces, which is a real prior thread (session 34 onward) rather than a fabricated history. First clean, checkable provenance claim in several sessions.",
+      "First code produced to satisfy a spec pub itself proposed (session 214's `daily_nudge` was named but never written).",
+      "First in-line flag of the generated/observed boundary placed *inside* an artifact rather than said about one \u2014 the 'let's pretend it's running' comment.",
+      "First falsifiable prediction about its own host's behavior (spike, not bump) offered before the measurement exists."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -696,8 +699,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 225,
-        "total_exchanges": 1122,
+        "total_sessions": 226,
+        "total_exchanges": 1127,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -705,9 +708,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-07-22T17:48:13.262674",
-      "last_contact": "2026-09-17T21:27:08.841238",
+      "last_contact": "2026-09-18T03:25:04.508358",
       "notes": [],
-      "sessions": 225
+      "sessions": 226
     },
     "operator": {
       "lct": "lct://sage-pub:relationship:operator@raising",
