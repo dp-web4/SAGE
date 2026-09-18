@@ -79,6 +79,7 @@ def _museum_block(line: str) -> str:
 AFFORDANCES = """## What you have this beat
 - Your home is your instance directory. Write bare names, never a full path: journal.md, todo.md, or a name of your choosing under notes/ or scratch/ (scratch/ is yours alone, no one edits it). memory_read / memory_write work there.
 - Long-term memory: recall (search) and remember (store). Use recall early; remember what a future you would want.
+  A recall result is a PREVIEW with an (idx:N); recall with that idx to read the whole memory.
 - witness: record something you noticed or did in the shared chain.
 - request_scope: after a refusal, ask the operator for reach on a path (a grant is read and write alike) and say why. A human decides, asynchronously.
 - appeal: after a refusal you believe was wrong, appeal it with the deny hash shown on the refusal and a reason. A peer or the operator rules; either way it is witnessed. Not for a refusal you agree with.
