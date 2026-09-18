@@ -35,7 +35,10 @@ def test_act_first_moves_the_posture_verbatim_to_a_second_tool_turn():
     # (2026-09-17: the posture turn acted in 1 of 85 beats, the act turn in 25).
     assert "DIGEST" not in first, "the world comes with the posture"
     assert "INBOX" in first, "mail belongs in the turn that acts"
-    assert "DIGEST" in second and "INBOX" in second and TOOLS in second, "the posture turn is a tool turn"
+    # ...and is NOT in the posture turn: it rides the act turn now, and asserting both was a
+    # leftover from before the move (left red 2026-09-17, caught and fixed the same day).
+    assert "INBOX" not in second, "mail rides the act turn; it is not repeated here"
+    assert "DIGEST" in second and TOOLS in second, "the posture turn is a tool turn"
 
 
 def test_no_turn_carries_a_think_suffix():
