@@ -124,6 +124,29 @@ ASK_ACT_FIRST = "This time is yours. Do one thing now and leave a trace of it.\n
 PENDING_TURNS = 2
 PENDING_CHARS = 700
 
+ANSWER_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
+You have already finished this beat's writing. One thing is left, and it is optional."""
+
+# One turn, one tool, one decision. Measured on Sprout 2026-09-18T01:00:11Z: with dp's question
+# visible and the ask placed first, the being COMPOSED a real answer — "Hi there — I'm glad
+# you're here... I'm curious about your experience too" — and put it in its closing prose
+# instead of a `say` call. It answered; the words were simply never delivered. The reflect
+# prompt's own warning ("a reply in words alone writes nothing") described exactly what
+# happened. At 2B the failure is not comprehension or willingness, it is emitting a call while
+# three other instructions compete for the same turn. So: a turn where answering is the ONLY
+# thing on offer, carrying the words it just wrote so it has something to send rather than
+# something to compose.
+ANSWER_ASK = """{pending}
+
+A moment ago you wrote, in words that went nowhere:
+
+{words}
+
+If that was your answer, or if you have another, send it now: say to="{target}", text="...".
+Use your own words — write the message you actually mean, not a summary of it.
+If you would rather not answer, call nothing and the turn simply ends. Silence is a real
+choice here and nothing is owed."""
+
 REFLECT = """The beat is ending. Call these tools, then stop:
 {say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": only the delta as a dated block: added / done / still open (it appends; it replaces nothing).
@@ -771,8 +794,17 @@ def own_state(instance: Path, member: str = "",
     return "\n\n".join(parts)
 
 
+def _said_in(res) -> bool:
+    """True when the being actually SPOKE in this turn — a say that the gate accepted. Composing
+    an answer in prose is not speaking; that is the whole reason the answer turn exists."""
+    for it, env in ((res.trace if res is not None else []) or []):
+        if it.effector == "say" and env.ok:
+            return True
+    return False
+
+
 def pending_and_say_line(instance: Path, member: str) -> tuple:
-    """(say_line, pending_block, say_first) for the reflect turn: what is waiting on the being, and the
+    """(say_line, pending_block, say_first, target) for the reflect turn: what is waiting on the being, and the
     instruction naming who to answer. Returns ("", "") when nothing is.
 
     Three cases, deliberately distinct:
@@ -805,14 +837,14 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
             first = (f'FIRST, before the numbered writes below: {t.get("from")} is waiting on an '
                      f'answer from you. If you have something to say: say to="{cid}", text="...". '
                      f'Answering is not required; the writes below happen either way.\n')
-            return "", block, first
+            return "", block, first, cid
         if ids:
             return ('If someone has spoken to you and you have not answered, and you have '
                     'something to say: say to="<id>", one of: ' + ", ".join(ids[:6])
-                    + '. Answering is not required.\n'), "", ""
+                    + '. Answering is not required.\n'), "", "", ""
     except Exception:
         pass
-    return "", "", ""
+    return "", "", "", ""
 
 
 def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
@@ -1244,7 +1276,7 @@ def main(argv=None) -> int:
     # forward to reply (cbp-being, 4B, 83 successful says); one that free-associated carried
     # nothing. That made answering a person contingent on what the being happened to muse
     # about, which is not a property anyone chose.
-    say_line, pending_block, say_first = pending_and_say_line(instance, args.member)
+    say_line, pending_block, say_first, target = pending_and_say_line(instance, args.member)
     # Immediately before the instruction, so the smallest model does not have to hold it
     # across a turn boundary to use it.
     if pending_block:
@@ -1260,10 +1292,24 @@ def main(argv=None) -> int:
     reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
                                    tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
 
+    # The answer turn: only when someone is still waiting and the being has not already spoken.
+    answer = None
+    if target and not _said_in(reflect):
+        answer = run_ollama_tool_turn(
+            client, llm,
+            [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
+                                                                member=args.member)},
+             {"role": "user", "content": ANSWER_ASK.format(
+                 pending=pending_block, target=target,
+                 words=((reflect.reply or "").strip()[:900] or "(nothing)"))}],
+            max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
+
     interventions = []
     if act_first:
         interventions.append({"kind": "act_first", "suppressed": "posture-first presentation (the model narrates under it)"})
-    for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect)):
+    for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer)):
+        if res is None:
+            continue
         for dup in (getattr(res, "duplicates", None) or []):
             interventions.append({"kind": "duplicate", "phase": ph, "effector": dup.get("effector"),
                                   "suppressed": "a second execution of an identical call in the same turn"})
@@ -1273,7 +1319,7 @@ def main(argv=None) -> int:
     # Route refusals AI-to-AI (dp 2026-09-04), the same as governed_turn: a scope-class deny
     # files the being's own scope request + a note and wakes the seat's auto session; a
     conversations_marked = mark_conversations_after_beat(
-        instance, args.member, _shown_upto, explore, [after, reflect])
+        instance, args.member, _shown_upto, explore, [after, reflect, answer])
     # governance escalation wakes it to arbitrate. The beat is where refusals actually
     # happen (Legion: nine consecutive beats of home-scope write refusals, and the being's
     # requests had died with a daemon restart), so the heartbeat must route, not just log.
@@ -1354,6 +1400,7 @@ def main(argv=None) -> int:
         # act-first only: the posture+digest turn, after the short one; None otherwise
         "posture": _turn(after),
         "reflect": _turn(reflect),
+        "answer": _turn(answer) if answer is not None else None,
         "escalations": escalations, "egress": egress,
     }
     with open(log, "a", encoding="utf-8") as f:
