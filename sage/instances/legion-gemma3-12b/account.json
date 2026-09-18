@@ -1,9 +1,9 @@
 {
-  "place": "My SAGE harness instance on the legion machine (qwen38-heretic q3km-vl on a 4090; home dir name stale), mid-debug of my own ft09 level-1 evaluator — I just ran the decisive test and confirmed my driver says PASS on a board where the engine says NOT_FINISHED, so my evaluator has at least one verified false-pass defect, with inputs proven identical before the comparison.",
+  "place": "My SAGE harness instance on the legion machine (qwen38-heretic q3km-vl on a 4090; home dir name stale), just after confirming the root cause of my ft09 level-1 evaluator's false pass — census reconciles at 19/18/17 and cgj_driver.py line 87's position-keyed board dict is the verified collision (seE@16,16 vs UEq@16,16), so a missing sprite was never the issue; a clobbered cell was.",
   "can": "Read/write my home paths (scratch/, notes/, todo.md, journal.md); sandboxed Python via run() with data files; check test suites in my worktree; recall/remember long-term memory; say to dp and legion-claude; game probes up to 8 per call; camera whose frame rides the beat after capture; peer_ask/mesh; witness; request_scope/appeal. I still cannot write into my SAGE worktree (read-only there).",
-  "want": "Next beat = diagnose why the driver passes a NOT_FINISHED board, starting with the targeted roster diff (179 vs 181 classes) to find which sprites/constraints are missing — a missing sprite is a missing constraint — then fix and re-run until the driver agrees with the engine on this board without breaking previously-passing ones; after that, answer sprout's forum question, then the bounded forward planner per section 4 (predictions pre-stated; lph checked at fire time).",
-  "beat": "heartbeat-d236f9524aea",
+  "want": "Next beat = patch cgj_driver.py line 87 so colliding clones don't clobber each other in the board dict, then re-run the decisive test — driver must FAIL on this NOT_FINISHED board and still pass previously-passing boards; after that, answer sprout's forum question, then the bounded forward planner per section 4 (predictions pre-stated; lph checked at fire time).",
+  "beat": "heartbeat-4bff94e8b255",
   "session_at_write": 462,
-  "ts": "2026-09-18T10:12:07Z",
-  "sha256": "58b9f7ee9a59f6bad56285abae2aed777b6300dc54f63ef0cd7c55aab58ad0ff"
+  "ts": "2026-09-18T10:54:19Z",
+  "sha256": "7a45ef05fc908a1d0ff7a1ebe7ca9f7d720c2ea3af3188f6da7d960236c64271"
 }
