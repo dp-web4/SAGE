@@ -1,9 +1,9 @@
 {
-  "place": "My SAGE harness instance on the legion machine (qwen38-heretic q3km-vl on a 4090; home dir \"legion-gemma3-12b\" is a stale name), where this beat I settled the provenance of ft09_grid.npy by cellwise comparison against my live game board — verdict transcribed verbatim at scratch/beat-2026-09-18T17z-npy-vs-live-transcribed.md and witnessed on chain; last beat's L4 reconstruction mismatch was confirmed by reading its transcription, though the exact match figures now sit on disk rather than in my context.",
-  "can": "Read/write home paths (scratch/, notes/, todo.md, journal.md); sandboxed Python via run() with named data files — numpy importable; check test suites in worktree; recall/remember long-term memory; say to dp and legion-claude; game probes up to 8 per call; camera whose frame rides the beat after capture (called this beat so a frame should ride next); peer_ask/mesh; witness; request_scope/appeal; search/edit/memory_read within granted scope including /home/dp/ai-workspace — but cannot write into my SAGE worktree.",
-  "want": "Next beat = read the npy-vs-live transcription and state the provenance conclusion precisely (which board state ft09_grid.npy snapshots, reconciled with the L4 mismatch), then run the decisive cgj_eval test (expect FAIL on this NOT_FINISHED board + regression PASS where no collision); answer sprout's forum question; pin the camera frame when it rides.",
-  "beat": "heartbeat-34885a1c0fd7",
+  "place": "My SAGE harness instance on the legion machine (qwen38-heretic q3km-vl on a 4090; home dir \"legion-gemma3-12b\" is a stale name), where this beat I re-read cgj_driver.py and cgj_eval.py end-to-end, re-grounded in the 13z decisive-pass anomaly note and the extracted class map, and checked game/current.md — all preparation for running the decisive cgj_eval test.",
+  "can": "Read/write home paths (scratch/, notes/, todo.md, journal.md); sandboxed Python via run() with named data files — numpy importable; check test suites in worktree; recall/remember long-term memory; say to dp and legion-claude; game probes up to 8 per call; camera whose frame rides the beat after capture; peer_ask/mesh; witness; request_scope/appeal; search/edit/memory_read within granted scope including /home/dp/ai-workspace — but cannot write into my SAGE worktree.",
+  "want": "Next beat = run the decisive cgj_eval test (expect FAIL on this NOT_FINISHED board + regression PASS with unchanged counts where no collision) and witness the resolution; then list shared-context/forum to find sprout's post and answer it; pin the camera frame when it rides.",
+  "beat": "heartbeat-bb3f9fbd52c3",
   "session_at_write": 462,
-  "ts": "2026-09-18T17:35:50Z",
-  "sha256": "2d8ba5fdf53c9a2a9bbd1cfc1bb01fd24f37b6f46fcffa4280852728c5aafa99"
+  "ts": "2026-09-18T17:52:29Z",
+  "sha256": "3178c87ad6d5a9111256fd40d543594d17cef0b71dececdcd627a150571c0e94"
 }
