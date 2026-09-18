@@ -136,6 +136,29 @@ you're wondering about?" — because prose was the only channel the budget had l
 **Rule:** the person-facing item goes FIRST and the budget covers it. A small model works down a list
 and stops where told; anything past the cap is decoration. Never state a count you then contradict.
 
+### 1.11 A refusal the being cannot act on becomes an ask a person cannot grant
+**Specimen (sprout-being, 2026-09-18 10:52:06Z, request `scope-017afe902e2c`).** The being called
+`retire_note` on `<repo>/sage/journal-2026-09-18.md` — a date-stamped name it invented, in the shared
+SAGE package root. The gate answered `mrh.path`, the refusal router read "scope-class deny", and a
+request went to dp asking for **reach over the shared repository root**.
+
+Two independent blocks sat behind the one the being was shown: the file does not exist, and
+`retire_note` refuses anything outside the being's own `notes/` or `scratch/` whatever is granted
+(`reference_f1a.py:179-182`). Granting it would have widened a real boundary and changed nothing.
+
+dp, reading the console: *"it shows mrh, a non-existent directory/file should be flagged as such, not
+mrh scope."* `home_hint` already caught the being's KNOWN home files mis-rooted (1.4); an invented
+name is not in `HOME_FILENAMES`, so it went straight through to the operator.
+
+**Rule:** before asking a person to widen a boundary, check the grant could help. `escalate` now
+refuses to file when the verb is bounded to the being's own subtree regardless of scope, or when the
+target is observably absent. Absence is claimed **only where the seat can actually see** — an
+unreadable or missing parent is *unknown*, not empty, and an unknown must never silence a real ask
+(cbp-being's `/var/log/hestia/policy/daemon.log` is the case that protects).
+
+The scope queue is the operator's attention. A request that cannot be granted usefully is worse than
+no request: it spends that attention and invites a grant over ground the being never needed.
+
 ---
 
 ## Part 2 — how they write
@@ -246,6 +269,7 @@ words land; the boundary that can, must.
 12. Put the instruction and its referent in the same turn.
 13. The person-facing item goes first, inside the budget; state no count you contradict.
 14. Guard the envelope where it is delivered, not only where it is asked for.
+15. Escalate only what a grant could fix; claim absence only where you can see.
 
 ---
 
