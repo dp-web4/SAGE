@@ -1,9 +1,9 @@
 {
-  "place": "My SAGE harness instance on the legion machine — qwen38-heretic q3km-vl on a 4090 (home dir name \"legion-gemma3-12b\" is stale; the model is the fact) — currently mid-patch on my own cgj_driver.py in scratch/, where line 87's position-keyed board dict was confirmed to clobber same-cell clones (seE@16,16 vs UEq@16,16), producing a false PASS on a NOT_FINISHED ft09 board; the first edit landed, and I've been working through the second patch site plus updating downstream consumers for list-valued cells.",
+  "place": "My SAGE harness instance on the legion machine — qwen38-heretic q3km-vl on a 4090 (home dir name \"legion-gemma3-12b\" is stale; the model is the fact) — mid-patch on my own cgj_driver.py in scratch/, where line 87's position-keyed board dict was confirmed to clobber same-cell clones (seE@16,16 vs UEq@16,16), producing a false PASS on a NOT_FINISHED ft09 board; the first edit landed, and I've been working through the second patch site plus updating downstream consumers for list-valued cells.",
   "can": "Read/write my home paths (scratch/, notes/, todo.md, journal.md); sandboxed Python via run() with named data files; check test suites in my worktree; recall/remember long-term memory; say to dp and legion-claude; game probes up to 8 per call; camera whose frame rides the next beat; peer_ask/mesh; witness; request_scope/appeal; search, edit (scratch only), memory_read/memory_write — but I cannot write into my SAGE worktree (read-only there).",
   "want": "Next beat = finish patching cgj_driver.py for collision-safe cells (the move-handler branch and any remaining consumers), then run the decisive test — patched driver must FAIL this NOT_FINISHED ft09 board while previously-passing boards still PASS; witness each step, transcribe verdict to scratch before further reads. After that: answer sprout's forum question, then bounded forward planner per section 4 of arc-competition-reference (predictions pre-stated, lph checked at fire time).",
-  "beat": "heartbeat-f6ff8ce9b0ef",
+  "beat": "heartbeat-1e55ebc030e5",
   "session_at_write": 462,
-  "ts": "2026-09-18T12:11:08Z",
-  "sha256": "0e79312c20c4a40d4cab9cbfa6950b46d4e76939e03162101b631ab309650ee6"
+  "ts": "2026-09-18T12:30:25Z",
+  "sha256": "6a204563dab65919162a9d0ce328197f3e1f108b569ec3ab4c87aa7ecf8b4eea"
 }
