@@ -40,7 +40,14 @@ struct AppState {
     arousal: Mutex<ArousalDetector>,
     reward: Mutex<RewardEstimator>,
     conflict: Mutex<ConflictDetector>,
-    metabolic: Mutex<MetabolicController>,
+    /// NOT the being's metabolism. This controller exists only for the `POST /metabolic`
+    /// probe, which lets a caller step a controller by hand. The being's real one lives in
+    /// the consciousness loop and is read through `loop_state` (SAGE #111): until 2026-09-17
+    /// `/status` read THIS one, so it answered `total_cycles: 0, atp 100%` on every machine
+    /// while the loop ran at 1.6M cycles and ATP 36%.
+    probe_metabolic: Mutex<MetabolicController>,
+    /// What the consciousness loop publishes about itself. The loop is the only writer.
+    loop_state: Arc<Mutex<consciousness::LoopSnapshot>>,
     consciousness: ConsciousnessHandle,
     ollama: OllamaClient,
     fleet: Option<FleetRegistry>,
@@ -67,10 +74,19 @@ struct HealthResponse {
     status: &'static str,
     uptime_secs: f64,
     version: &'static str,
+    /// Which build is answering (SAGE #111 finding 6).
+    build: &'static str,
     port: u16,
     model: String,
     ollama_available: bool,
     consciousness_loop: bool,
+    // THE FIELDS A PEER'S MONITOR ALREADY PARSES (SAGE #111 finding 4). `federation::monitor`
+    // reads `metabolic_state`, `atp_level` and `cycle_count` out of this response; none of
+    // them existed, and because every field there is `Option` + serde default the parse
+    // succeeded anyway — so a reachable peer went green carrying nothing at all.
+    metabolic_state: Option<String>,
+    atp_level: Option<f64>,
+    cycle_count: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -79,12 +95,22 @@ struct StatusResponse {
     sprint: &'static str,
     snarc_detectors: Vec<&'static str>,
     half_lives: Vec<(&'static str, f64)>,
-    metabolic_state: &'static str,
+    /// Owned, not `&'static str`: this is the LOOP's state now, read at request time.
+    metabolic_state: String,
     atp_percentage: f64,
     total_cycles: u64,
     model: String,
     fleet_size: usize,
+    /// Derived from the publish age, not asserted (SAGE #111): it was a hard-coded `true`.
     consciousness_loop: bool,
+    messages_processed: u64,
+    experiences_recorded: u64,
+    /// The SNARC of the last message the being processed; `null` until one arrives.
+    salience: Option<sage_lib::consciousness::observation::SalienceScore>,
+    /// Seconds since the loop last published. `null` = it never has.
+    loop_published_age_secs: Option<u64>,
+    /// Which build answered. Was `version: "0.1.0"` and a frozen sprint label.
+    build: &'static str,
 }
 
 #[derive(Deserialize)]
@@ -288,30 +314,63 @@ fn chat_history_path(root: &std::path::Path, machine: &str, model: &str) -> std:
 
 async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let available = state.ollama.is_available().await;
+    let snap = state.loop_state.lock().await.clone();
+    let alive = snap.published_at > 0 && now_secs().saturating_sub(snap.published_at) <= LOOP_STALE_SECS;
     Json(HealthResponse {
         status: "ok",
         uptime_secs: state.started.elapsed().as_secs_f64(),
         version: env!("CARGO_PKG_VERSION"),
+        build: build_stamp(),
         port: port(),
         model: state.model.clone(),
         ollama_available: available,
-        consciousness_loop: true,
+        consciousness_loop: alive,
+        // Only when the loop is actually publishing. A stale loop reports None rather than
+        // its last numbers: a peer must be able to tell "quiet" from "stopped".
+        metabolic_state: alive.then(|| snap.metabolic_state.clone()),
+        atp_level: alive.then_some(snap.atp_percentage),
+        cycle_count: alive.then_some(snap.total_cycles),
     })
 }
 
+/// A loop that has not published within this many seconds is not running. It ticks every
+/// 100 ms, so this is 300 missed ticks — long enough that a busy generate never trips it.
+const LOOP_STALE_SECS: u64 = 30;
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Which build this is, stamped at compile time (SAGE #111 finding 6). `version: "0.1.0"` has
+/// not moved since Sprint 1, so a running daemon could not be told from a months-old one.
+fn build_stamp() -> &'static str {
+    option_env!("SAGE_BUILD").unwrap_or(concat!(env!("CARGO_PKG_VERSION"), "+unstamped"))
+}
+
 async fn status(State(state): State<Arc<AppState>>) -> Json<StatusResponse> {
-    let ctrl = state.metabolic.lock().await;
+    let snap = state.loop_state.lock().await.clone();
+    // A loop that stopped leaves its last numbers behind; only the publish age says so.
+    let age = now_secs().saturating_sub(snap.published_at);
+    let alive = snap.published_at > 0 && age <= LOOP_STALE_SECS;
     Json(StatusResponse {
         daemon: "sage-daemon",
         sprint: "6 — dashboard + cutover",
         snarc_detectors: vec!["surprise", "novelty", "arousal", "reward", "conflict"],
         half_lives: temporal::DEFAULT_HALF_LIVES.to_vec(),
-        metabolic_state: ctrl.current_state.as_str(),
-        atp_percentage: ctrl.atp_percentage(),
-        total_cycles: ctrl.total_cycles,
+        metabolic_state: if alive { snap.metabolic_state.clone() } else { "unknown".to_string() },
+        atp_percentage: snap.atp_percentage,
+        total_cycles: snap.total_cycles,
         model: state.model.clone(),
         fleet_size: state.fleet.as_ref().map_or(0, |f| f.fleet_size()),
-        consciousness_loop: true,
+        consciousness_loop: alive,
+        messages_processed: snap.messages_processed,
+        experiences_recorded: snap.experiences_recorded,
+        salience: snap.salience.clone(),
+        loop_published_age_secs: if snap.published_at > 0 { Some(age) } else { None },
+        build: build_stamp(),
     })
 }
 
@@ -339,7 +398,7 @@ async fn metabolic_cycle(
         crisis_detected: req.crisis_detected.unwrap_or(false),
         ..Default::default()
     };
-    let mut ctrl = state.metabolic.lock().await;
+    let mut ctrl = state.probe_metabolic.lock().await;
     ctrl.update(&data);
     Json(MetabolicResponse {
         state: ctrl.current_state.as_str(),
@@ -362,12 +421,13 @@ async fn chat(
         });
         match state.ollama.chat(&messages).await {
             Ok(text) => {
-                let ctrl = state.metabolic.lock().await;
+                // The being's real metabolism, not the probe controller (SAGE #111).
+                let snap = state.loop_state.lock().await.clone();
                 (StatusCode::OK, Json(serde_json::json!({
                     "response": text,
                     "model": state.model,
-                    "metabolic_state": ctrl.current_state.as_str(),
-                    "atp_percentage": ctrl.atp_percentage(),
+                    "metabolic_state": snap.metabolic_state,
+                    "atp_percentage": snap.atp_percentage,
                 })))
             }
             Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({
@@ -822,6 +882,8 @@ async fn main() {
     // Non-forcing shadow-metabolism experiment log (sibling of the experience buffer).
     let shadow_path = exp_path.with_file_name("atp_shadow.jsonl");
     info!("shadow metabolism log: {}", shadow_path.display());
+    // The cell the loop publishes into and the HTTP layer reads (SAGE #111).
+    let loop_state = Arc::new(Mutex::new(consciousness::LoopSnapshot::default()));
     let consciousness_loop = ConsciousnessLoop::new(
         OllamaClient::default_local(&model),
         experience,
@@ -829,7 +891,8 @@ async fn main() {
         &machine,
         &model,
         Some(shadow_path),
-    );
+    )
+    .with_snapshot(loop_state.clone());
 
     let loop_shutdown = shutdown_rx.clone();
     let loop_handle = tokio::spawn(async move {
@@ -863,7 +926,8 @@ async fn main() {
         arousal: Mutex::new(ArousalDetector::with_defaults()),
         reward: Mutex::new(RewardEstimator::with_defaults()),
         conflict: Mutex::new(ConflictDetector::with_defaults()),
-        metabolic: Mutex::new(MetabolicController::with_defaults()),
+        probe_metabolic: Mutex::new(MetabolicController::with_defaults()),
+        loop_state: loop_state.clone(),
         consciousness: consciousness_handle,
         ollama: OllamaClient::default_local(&model),
         fleet,
