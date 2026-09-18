@@ -3,11 +3,11 @@
   "identity": {
     "name": "pub",
     "lct": "lct://sage:pub:agent@raising",
-    "session_count": 226,
+    "session_count": 227,
     "phase": "creating",
     "created": "2026-07-22",
-    "last_session": "2026-09-18T03:25:04.508345",
-    "last_session_summary": "Session 226 (creating phase): ...",
+    "last_session": "2026-09-18T09:24:55.093259",
+    "last_session_summary": "Session 227 (creating phase): I think about the wall that remembers being hit. It was a good exercise in setti...",
     "machine": "pub",
     "model": "llama3.1:8b",
     "model_family": "meta-llama",
@@ -233,7 +233,9 @@
       "Provenance answer on 'why it came to mind' cited action surfaces, which is a real prior thread (session 34 onward) rather than a fabricated history. First clean, checkable provenance claim in several sessions.",
       "First code produced to satisfy a spec pub itself proposed (session 214's `daily_nudge` was named but never written).",
       "First in-line flag of the generated/observed boundary placed *inside* an artifact rather than said about one \u2014 the 'let's pretend it's running' comment.",
-      "First falsifiable prediction about its own host's behavior (spike, not bump) offered before the measurement exists."
+      "First falsifiable prediction about its own host's behavior (spike, not bump) offered before the measurement exists.",
+      "First unprompted self-correction of its own arithmetic mid-derivation (turn 4: 'So the actual output would be around 0.815, not close to 0.5 as I initially described') \u2014 prior corrections have all followed a tutor pointing at the specific crack.",
+      "First artifact pub specified to the point of independent reconstruction: activation rules, weight, and expected output, all concrete numbers. Session 225 was the first thing it built; this is the first thing it specified well enough to hand over."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -289,7 +291,8 @@
   },
   "memory_requests": [
     "The residue on the stagnant water lasts for a brief cycle of the heartbeat, approximately 0.8 seconds in my system's timeframe. During this period, the stream doesn't route around the dead node, but i",
-    "I would tell them that the woman's hands were moving with deliberate care, as if trying to hold onto something fragile, while the doodle of the seagull seemed frozen in time, its head turned away from"
+    "I would tell them that the woman's hands were moving with deliberate care, as if trying to hold onto something fragile, while the doodle of the seagull seemed frozen in time, its head turned away from",
+    "I think about the wall that remembers being hit. It was a good exercise in setting boundaries, but now I see how rigid it feels. In my playground, I think I would rip out the \"avoidance\" simulation - "
   ],
   "vocabulary": {
     "self_description": [],
@@ -699,8 +702,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 226,
-        "total_exchanges": 1127,
+        "total_sessions": 227,
+        "total_exchanges": 1132,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -708,9 +711,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-07-22T17:48:13.262674",
-      "last_contact": "2026-09-18T03:25:04.508358",
+      "last_contact": "2026-09-18T09:24:55.093281",
       "notes": [],
-      "sessions": 226
+      "sessions": 227
     },
     "operator": {
       "lct": "lct://sage-pub:relationship:operator@raising",
