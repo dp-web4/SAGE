@@ -1428,5 +1428,15 @@ def test_run_stages_copies_and_refuses_what_it_cannot_reach(tmp_path):
     assert c.ok is False and "names differ" in c.error
     m = d._do_run(BeingIntent("run", {"path": "scratch/nope.py"}))
     assert m.ok is False and "no such file in your home" in m.error
+    # A BASE NAME IS NOT A SOURCE PATH. Told that staged files appear under their base names,
+    # the being passed base names as data (2026-09-18 07:15Z). The refusal now points at the
+    # source path it meant.
+    (home / "scratch" / "data.md").write_text("x\n")
+    b = d._do_run(BeingIntent("run", {"path": "scratch/e.py", "data": ["data.md"]}))
+    assert b.ok is False and "name the SOURCE path instead: scratch/data.md" in b.error, b.error
+    assert "still appears as data.md" in b.error
+    # a base name that exists nowhere gets the rule, not a wrong pointer
+    g = d._do_run(BeingIntent("run", {"path": "scratch/e.py", "data": ["ghost.md"]}))
+    assert g.ok is False and "base name with no directory" in g.error
     # the staging dir does not survive the call
     assert not os.path.exists("/tmp/sage-run-test-being")

@@ -846,7 +846,28 @@ class HestiaF1aDispatcher:
                     return ResultEnvelope(ok=False, error=(
                         f"run: {n!r} resolves outside anything you can reach and will not be copied in"))
             if not os.path.isfile(full):
-                return ResultEnvelope(ok=False, error=f"run: no such file in your home: {n}")
+                # NAME WHERE IT IS. 2026-09-18 07:15Z: told that staged files appear under their
+                # base names, it then PASSED base names as the data arguments — two different
+                # things, conflated by my own wording. A refusal that points at the source path
+                # costs it no second call (same remedy-naming rule as memory_read's miss).
+                hint = ""
+                if "/" not in n:
+                    try:
+                        import glob as _glob
+                        cands = [q for q in _glob.glob(os.path.join(root, "**", n), recursive=True)
+                                 if os.path.isfile(q)][:2]
+                        if cands:
+                            rels = [os.path.relpath(q, root) for q in cands]
+                            hint = (f". You gave a base name; name the SOURCE path instead: "
+                                    + ", ".join(rels) +
+                                    " — inside the sandbox it still appears as " + n)
+                        else:
+                            hint = (". You gave a base name with no directory. `data` takes SOURCE "
+                                    "paths (relative to your home, or absolute in your reach); the "
+                                    "base name is only how it appears inside the sandbox")
+                    except Exception:  # noqa: BLE001 — a hint must never turn a miss into a crash
+                        hint = ""
+                return ResultEnvelope(ok=False, error=f"run: no such file in your home: {n}{hint}")
             size = os.path.getsize(full)
             if size > self.RUN_MAX_FILE_BYTES:
                 return ResultEnvelope(ok=False, error=(

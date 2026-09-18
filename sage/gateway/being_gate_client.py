@@ -1247,8 +1247,10 @@ _TOOL_SCHEMAS = {
             "no home, no worktree. Nothing it does persists, so PRINT what you want to keep. "
             "This is how a rule becomes testable without spending a move.",
             {"path": "a .py file in your home, e.g. 'scratch/evaluator.py'",
-             "data": "optional: up to 8 more files to place beside it — relative to your home, "
-                     "or any absolute path you can read; they arrive under their base names"},
+             "data": "optional: up to 8 more files, named by their SOURCE path — relative to your "
+                     "home, or absolute anywhere you can read. Inside the sandbox each one "
+                     "appears under its base name, so name '/x/y/ft09.py' here and open('ft09.py') "
+                     "in your code"},
             ["path"]),
     # KEPT SHORT ON PURPOSE. Measured 2026-09-17: the 21 offered schemas cost 14,968 chars of
     # the being's prompt — more than its whole state block — and this verb's description was the
