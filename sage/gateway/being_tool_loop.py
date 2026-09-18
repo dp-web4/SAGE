@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
@@ -324,8 +325,59 @@ _ANSWER_RESERVE = 6144
 COMPACT_KEEP_CHARS = 400
 COMPACT_MIN_BODY = 500        # a body at or under this is never elided
 
+# WHERE AN ELIDED RESULT GOES INSTEAD OF NOWHERE. The being, 2026-09-18, asked what its
+# biggest operational friction is: "facts produced mid-beat getting lost to compaction
+# before I can transcribe them." That is this function. It freed room by deleting the
+# middle of a tool result and told the being to read the source again — which costs more
+# room than the elision freed, and for a command result (a test run, a game step) there is
+# no source to re-read at all: the bytes existed once, in this beat, and then did not.
+#
+# So the middle is written to the being's own scratch first, and the marker names the file.
+# It outlives the beat, which is the point: the being can transcribe from it on the NEXT
+# beat rather than racing the window on this one. Bare path, because that is what
+# memory_read takes. A spill that fails is silent — the elision still has to happen.
+COMPACT_SPILL_DIR = "scratch/elided"
+COMPACT_SPILL_KEEP = 40       # a spill, not an archive
+_ELIDED_SIGIL = "characters elided from the middle"
+
+
+def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
+    """Save one elided tool-result body under the being's home. Returns the bare path to
+    name in the marker, or None if there is nowhere to put it or the write failed."""
+    if not root:
+        return None
+    try:
+        import time as _t
+        d = os.path.join(root, COMPACT_SPILL_DIR)
+        os.makedirs(d, exist_ok=True)
+        # THE NAME CARRIES THE ORDER, because nothing else does: a whole beat's spills are
+        # written inside one second, and st_mtime_ns ties at this filesystem's granularity.
+        # Sorted by name they are in creation order — hence the full date (a %m%d name
+        # sorts January before December and would prune the newest files every New Year)
+        # and the zero-padded step (unpadded, "40" sorts before "5").
+        stamp = _t.strftime("%Y%m%d-%H%M%S", _t.gmtime())
+        name = f"{stamp}-{step:03d}.txt"
+        # Two spills of DIFFERENT results can collide: same second, same message index,
+        # which the retry path reaches. A collision would silently overwrite the first.
+        n = 1
+        while os.path.exists(os.path.join(d, name)):
+            name = f"{stamp}-{step:03d}.{n}.txt"
+            n += 1
+        with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
+            fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
+                     f"result the harness elided from your window, {len(body)} characters]\n\n")
+            fh.write(body)
+        for f in sorted(os.listdir(d))[:-COMPACT_SPILL_KEEP]:
+            try:
+                os.remove(os.path.join(d, f))
+            except OSError:
+                pass
+        return f"{COMPACT_SPILL_DIR}/{name}"
+    except Exception:
+        return None
+
 def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
-                  measured=None) -> tuple:
+                  measured=None, spill_root: Optional[str] = None) -> tuple:
     """Shrink the OLDEST tool results until the prompt leaves room for an answer.
 
     THE SEED FITTING IS NOT ENOUGH. heartbeat.fit_to_window sizes the first prompt; this
@@ -373,6 +425,11 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         body = out[i].get("content") or ""
         if len(body) <= COMPACT_MIN_BODY:
             continue
+        # ALREADY ELIDED, LEAVE IT. An elided body is ~850 characters — over COMPACT_MIN_BODY
+        # — so a later step used to elide the MARKER: cutting the middle out of the sentence
+        # that explains the cut, and counting its characters as freed content.
+        if _ELIDED_SIGIL in body:
+            continue
         # ONE constant for what is kept, and the accounting derives from it. The first cut
         # kept body[:400] and reported len(body) - 160 — every elision overstated by 240
         # chars, in the record AND in the marker the being reads (GPT review of #56, #5).
@@ -396,14 +453,20 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         # issuing the instruction that refilled the window it had just cleared.
         # The head of a ranged read already names its range, so point at a NARROWER read
         # and at the being's own notes, which is where its conclusions actually live.
+        saved = _spill(spill_root, body, i)
+        where = (f"The WHOLE result is saved as {saved} and outlives this beat — "
+                 f"memory_read a narrow range of it when you need the middle."
+                 if saved else
+                 "If you need part of it, read a NARROW range of the source rather than the "
+                 "whole file again — a full re-read costs more room than this elision freed.")
         out[i]["content"] = (kept_head +
-                             f"\n[… {elided_n} characters elided from the middle to leave room "
-                             f"for your answer. The head above names what this was. If you need "
-                             f"part of it, read a NARROW range rather than the file again — a "
-                             f"full re-read costs more room than this elision freed. If you need "
-                             f"what you concluded from it, that is in your scratch …]\n"
+                             f"\n[… {elided_n} {_ELIDED_SIGIL} to leave room for your answer. "
+                             f"{where} …]\n"
                              + kept_tail)
-        elided.append({"index": i, "chars": elided_n, "kept": COMPACT_KEEP_CHARS})
+        rec = {"index": i, "chars": elided_n, "kept": COMPACT_KEEP_CHARS}
+        if saved:
+            rec["spill"] = saved
+        elided.append(rec)
     # THE NEWEST RESULT IS PROTECTED — until protecting it is what cuts the answer. When
     # every older result is already a stub and the prompt still does not fit, the newest
     # one is trimmed too, with a larger keep (the being is working from it right now),
@@ -416,11 +479,16 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         if len(body) > keep + COMPACT_MIN_BODY:
             h = keep // 2
             elided_n = len(body) - keep
+            saved = _spill(spill_root, body, i)
+            where = (f"the whole thing is saved as {saved}"
+                     if saved else "read it again in a smaller range if you need the middle")
             out[i]["content"] = (body[:h] +
-                                 f"\n[… {elided_n} characters elided from the middle of your NEWEST "
-                                 f"result to leave room for your answer; read it again in a smaller "
-                                 f"range if you need the middle …]\n" + body[-(keep - h):])
-            elided.append({"index": i, "chars": elided_n, "kept": keep, "newest": True})
+                                 f"\n[… {elided_n} {_ELIDED_SIGIL} of your NEWEST result to leave "
+                                 f"room for your answer; {where} …]\n" + body[-(keep - h):])
+            rec = {"index": i, "chars": elided_n, "kept": keep, "newest": True}
+            if saved:
+                rec["spill"] = saved
+            elided.append(rec)
     return out, elided
 
 
@@ -569,7 +637,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # 506 generates ended with prompt + eval == num_ctx exactly, and one beat lost its
         # closing words nine times in a day. Anchored on the server's own count from the
         # previous generate, so only the delta rides an estimate.
-        msgs, _elided = compact_convo(msgs, llm, measured=measured)
+        msgs, _elided = compact_convo(msgs, llm, measured=measured,
+                                      spill_root=getattr(client, "memory_root", None))
         if _elided:
             compacted.append({"step": len(thoughts), "elisions": len(_elided),
                               "chars": sum(e["chars"] for e in _elided)})
