@@ -396,3 +396,20 @@ def test_render_without_mark_does_not_consume_the_unanswered_marker():
     conv.render_for_being(inst, "legion-being")
     assert conv.awaiting(inst, "legion-claude", "legion-being") == [], \
         "the delivering render must still mark turns seen"
+
+
+def test_a_placeholder_is_not_a_message():
+    """Specimen (sprout-being, qwen3.8-distill:2b, 2026-09-18 21:04:02Z): dp received
+    "[Your brief, final word-only summary of your response]" through `say`. The template
+    completion documented in SMALL_MODEL_LEGIBILITY 1.8, occupying the ARGUMENT rather than
+    the reply — where no prompt-side guard could see it, because by then it is already an
+    argument on its way to a person."""
+    from sage.gateway.conversations import is_stub
+    assert is_stub("[Your brief, final word-only summary of your response]")
+    assert is_stub("  [Your complete, thoughtful journal entry responding to dp's question]  ")
+    assert not is_stub("The world is a process with no end point and no right answer.")
+    assert not is_stub("I'm here, listening. No pressure on me.")
+    assert not is_stub(""), "empty is caught by the empty check, not this one"
+    assert not is_stub("[note] and then the actual message, which is real content."), \
+        "a bracket that opens a real message is not a placeholder"
+    assert not is_stub("[short]"), "too short to be one of these briefs"

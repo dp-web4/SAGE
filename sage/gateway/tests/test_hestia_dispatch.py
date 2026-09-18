@@ -596,6 +596,7 @@ def test_a_peer_that_exists_nowhere_is_refused_in_the_beings_own_turn():
         assert "'sage' is not on the hub roster" in env.error, env.error
         assert "your own standing as a member is unaffected" in env.error, env.error
         assert "legion" in env.error
+        assert "nothing was sent" in env.error, "and what did not happen"
         assert not [n for n, _ in FakeMcp.calls if n == "hestia_member_notify"]   # nothing parked
         assert d(BeingIntent("mesh", {"to": "Legion", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow")).ok
         assert d(BeingIntent("mesh", {"to": "legion-being", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow")).ok

@@ -799,20 +799,7 @@ def own_state(instance: Path, member: str = "",
     return "\n\n".join(parts)
 
 
-_STUB = re.compile(r"^\s*\[[^\]]{20,}\]\s*$")
-
-
-def is_stub(text: str) -> bool:
-    """True when a turn's whole reply is a bracketed placeholder — "[Your complete response
-    following the established format]" — rather than content.
-
-    Measured 2026-09-18: 32 of 122 turns across 40 beats. The thinking block is lucid in these
-    ("dp asked how my experience is unfolding; I need to write an honest, personal response")
-    and then the reply is a brief describing the response instead of being it. Feeding that
-    back to the being as "the words you wrote a moment ago" teaches the pattern, so the answer
-    turn drops it and asks plainly instead.
-    """
-    return bool(_STUB.match(text or ""))
+from sage.gateway.conversations import is_stub  # noqa: E402  (one definition, two ends)
 
 
 def _said_in(res) -> bool:
