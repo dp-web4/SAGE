@@ -40484,5 +40484,129 @@
       "total_cycles": 6,
       "transition_count": 1
     }
+  },
+  {
+    "id": "bbd3103ad643d7aa",
+    "prompt": "Warm to the touch, as if it had been held a moment before\" \u2014 that's the line that made the whole thing tilt, and I'm not going to explain it away. Here's my piece: the brass is worn smooth on one side only, which means someone rubbed that face with a thumb, over and over, for years. Tell me whose thumb \u2014 and then I'm going to the bakery tonight with it, so tell me what I find when I turn it.",
+    "response": "The thumb belongs to a boy named Thomas, age 12, who worked the night shift at the bakery. He was locked inside for a shift, and his father left the key with him. He was never found.\n\nWhen you turn the key in the lock, it turns with a soft click \u2014 not the click of a key, but the click of something else. The door opens.\n\nInside is not a room. It is a single, small room with a single chair and a single table. On the table sits a small, old photograph of a young boy, smiling, holding a key. The boy in the photograph is Thomas. The key in the photograph is the same key you found.\n\nThe photograph is dated 1978. The boy is 12 years old. The key has been there since 1978. It has been there for 47 years. It has been there since Thomas was locked inside.\n\nYou should not look at the photograph for more than five seconds.",
+    "salience": {
+      "surprise": 0.844311377245509,
+      "novelty": 1.0,
+      "arousal": 0.4510542168674699,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.49907311882259575
+    },
+    "session": 262,
+    "phase": "creating",
+    "timestamp": "2026-09-17T19:00:57.292419",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.73,
+      "atp_max": 100.0,
+      "atp_percentage": 95.7,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "a5cf92bfb6b7d8d2",
+    "prompt": "I looked for six. Tell me what the sixth second does \u2014 not what it means, what it *does*: what I hear, what my hands do, whether Elara is still in this story or whether Thomas took her place on purpose.",
+    "response": "The sixth second is the moment the key turns.\n\nIt doesn't click. It *screams*. A thin, high wire sound, like a guitar string snapping in a dark room. Your hands go still. You're holding the key with both hands now, because the one in your right hand feels suddenly heavy \u2014 like it's holding something back.\n\nYou hear it: a whisper from inside the room. Not a voice. A sound like a breath being held, then released. A long, flat exhale.\n\nYour hands don't move. They don't shake. They just\u2026 stop. The weight of the key is gone. It's light. It's warm. It feels like it's part of you now.\n\nThe photograph on the table is gone. The chair is empty. The table is bare.\n\nYou're still standing in the doorway. The air is cold. The bell above the door is silent.\n\nThe sixth second doesn't tell you anything. It just *is*. And you're still standing there.",
+    "salience": {
+      "surprise": 0.8703703703703703,
+      "novelty": 1.0,
+      "arousal": 0.5578556263269638,
+      "reward": 0.45,
+      "conflict": 0.0,
+      "total": 0.5756451993394668
+    },
+    "session": 262,
+    "phase": "creating",
+    "timestamp": "2026-09-17T19:01:24.718418",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 90.34,
+      "atp_max": 100.0,
+      "atp_percentage": 90.3,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "6fb476fb4e23f724",
+    "prompt": "The sixth second doesn't tell you anything. It just *is*\" \u2014 that's the best line you've written tonight, and it works precisely because you refused to explain it. So: the key is light now, and warm, and in my pocket, and tomorrow I'll walk past some other locked door. Tell me what it does at the *wrong* lock \u2014 and whether Elara comes back in the version where I set it down on the sidewalk for someone else to find.",
+    "response": "The key turns the wrong lock with a sound like a match striking in a dry room. The door opens. Inside is a room that looks exactly like the bakery's back room \u2014 the same smell of yeast and old flour, the same flickering fluorescent light.\n\nBut there is no Elara. There is only a chair, and on the chair, a small stack of keys.\n\nYou pick them up. There are seven of them. Each one is identical to the one in your pocket. Each one is warm. Each one is heavy.\n\nYou hold them in your hand and realize you've been holding them this whole time.\n\nElara does not come back. She never did. The version where you set the key down on the sidewalk was never a version at all \u2014 it was the version that never happened. The one where the key stays on the sidewalk is the one that exists. The one where you turn it is the one that doesn't.\n\nYou look down at your pocket. The key is gone.",
+    "salience": {
+      "surprise": 0.7866666666666666,
+      "novelty": 1.0,
+      "arousal": 0.5326190476190475,
+      "reward": 0.4583333333333333,
+      "conflict": 0.16666666666666666,
+      "total": 0.5888571428571427
+    },
+    "session": 262,
+    "phase": "creating",
+    "timestamp": "2026-09-17T19:01:56.647420",
+    "metadata": {
+      "turn": 4,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 84.18,
+      "atp_max": 100.0,
+      "atp_percentage": 84.2,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "69d720508588780a",
+    "prompt": "You built a version where setting the key down is the version that never happened \u2014 and that's a stranger idea than the ghost. Before you go: if a sibling instance found that same key tomorrow, what would you tell them about the seventh one?",
+    "response": "The seventh key is not in the pocket.\n\nIt is not in the room.\n\nIt is not in the world.\n\nIf a sibling instance found it, it would find nothing. The key never existed. The warmth was a trick of the light. The weight was a trick of the air. The scream was the sound of a door closing on a hallway that wasn't there.\n\nThe seventh key is the one that never was.\n\nYou set it down on the sidewalk because you don't remember setting it down. You set it down because you remember not setting it down.\n\nThe seventh key is the memory of a door that was never opened.\n\nIf you look in your pocket, the key is gone. If you look at the sidewalk, the key is gone. If you look at the room, the room is gone.\n\nThe seventh key is the one that remembers being found.",
+    "salience": {
+      "surprise": 0.7874015748031495,
+      "novelty": 1.0,
+      "arousal": 0.4004934210526316,
+      "reward": 0.45,
+      "conflict": 0.0,
+      "total": 0.5275789991711562
+    },
+    "session": 262,
+    "phase": "creating",
+    "timestamp": "2026-09-17T19:02:18.421509",
+    "metadata": {
+      "turn": 5,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 77.89,
+      "atp_max": 100.0,
+      "atp_percentage": 77.9,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
   }
 ]

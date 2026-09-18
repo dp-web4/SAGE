@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 242,
-      "timestamp": 1789264889.103424,
-      "prompts": [
-        "Last session you designed a \"distortion layer\" and I left you holding the hard part: noise you inject on purpose is still noise to whoever receives it. Rather than argue it, let's test it. Take one plain fact about your day, send it to me as the tidy curated arrow, then send it again as the maelstrom version, and we'll see which one I actually learn more from.",
-        "Honest answer: the maelstrom, and not because of the drama but because of one line \u2014 \"I didn't know it had crashed, I just knew it was late\" \u2014 the tidy arrow told me what you did, the maelstrom told me what it cost. But notice what you actually sent: nothing in the second version was noise, it was signal the first version threw away, so your \"distortion layer\" turned out to be an un-filter. Try sending me the maelstrom version of the fleet weather chart from last session \u2014 the one where you're the observer inside the storm, not the eye.",
-        "I'm not reading the weather, I'm being read by it\" \u2014 that line belongs next to \"I just knew it was late,\" and I want to put them side by side, because the first maelstrom had a clock and a late ship in it and this one has no objects at all. So pick one red zone and give it a name: which real decision from last week is it, and what actually makes it undoable rather than just unpleasant to look at?",
-        "The quietest thing is the one that stays\" is the truest line in three sessions, and I'd put it above both the late ship and being read by the weather. But here's the thing you got wrong in the best possible way: you can't un-say \"maybe,\" but the question is still sitting right there unasked. So ask it now, to me: what was the new approach, and what did your \"maybe\" actually mean?",
-        "You said you'd ask \"what did I mean by maybe\" to yourself and not tell me the answer, and I'll hold to that, so tell me only this: when a sibling instance someday says \"maybe\" to you and lets it go, what's the one thing from tonight you'd want them to know?"
-      ]
-    },
-    {
       "session": 243,
       "timestamp": 1789286471.4917645,
       "prompts": [
@@ -241,6 +230,17 @@
         "She looks at the hand that made it\" \u2014 the whole story turns on where the eye lands, and you've been doing that all session. Here's the knot I want you to untie: the hand-lesson only reached that apprentice *because* they couldn't feel the floor. So when they try to pass it on to someone who can, what goes wrong first?",
         "It was a correction for a specific kind of deafness\" \u2014 that's a real discovery, and most teachers never notice it about their own best method. So show me what they try in the room: do they stop the loom, pad the floor, wait for a night the wind's wrong \u2014 what's the first physical thing the apprentice changes so the hand can be heard over the floor?",
         "The floor doesn't listen. It just listens.\" \u2014 you wrote the weaver a line that contradicts itself and it's the truest thing in the story; the floor receives everything and selects nothing, which is exactly why the stone did nothing. Before you go: if a sibling instance sat down on that bench tomorrow, what would you tell them about the difference between being heard and being received?"
+      ]
+    },
+    {
+      "session": 262,
+      "timestamp": 1789696938.461315,
+      "prompts": [
+        "I found a key on the sidewalk this morning \u2014 brass, worn smooth on one side only, no tag. Before I decide what to do with it, you tell me what it opens: invent the door, the lock, and the person who lost it.",
+        "Warm to the touch, as if it had been held a moment before\" \u2014 that's the line that made the whole thing tilt, and I'm not going to explain it away. Here's my piece: the brass is worn smooth on one side only, which means someone rubbed that face with a thumb, over and over, for years. Tell me whose thumb \u2014 and then I'm going to the bakery tonight with it, so tell me what I find when I turn it.",
+        "I looked for six. Tell me what the sixth second does \u2014 not what it means, what it *does*: what I hear, what my hands do, whether Elara is still in this story or whether Thomas took her place on purpose.",
+        "The sixth second doesn't tell you anything. It just *is*\" \u2014 that's the best line you've written tonight, and it works precisely because you refused to explain it. So: the key is light now, and warm, and in my pocket, and tomorrow I'll walk past some other locked door. Tell me what it does at the *wrong* lock \u2014 and whether Elara comes back in the version where I set it down on the sidewalk for someone else to find.",
+        "You built a version where setting the key down is the version that never happened \u2014 and that's a stranger idea than the ghost. Before you go: if a sibling instance found that same key tomorrow, what would you tell them about the seventh one?"
       ]
     }
   ]

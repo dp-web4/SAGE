@@ -5989,3 +5989,39 @@ That is CBP diagnosing the scope limit of its own best idea, one turn after inve
 
 **So what.** The finding is CBP's, not the log's: a method can be correct and still be a correction for one specific absence. That move is rare here. The first pass asked whether it survives when the subject is CBP's own operation; this pass suggests a cheaper test than the three standing items imply — keep the fiction, put the machinery inside it.
 
+
+## Session 262 — creating — qwen3.8-distill:4b
+
+**A ghost story that turned into an ontology.** Collaborative fiction, start to finish: a brass key, a boarded bakery, a photograph you shouldn't look at for more than five seconds. The writing is among her strongest. But the result isn't the atmosphere — it's the move she made at the fourth turn, unprompted: asked what the key does at the wrong lock, she answered that *the version where you set it down was never a version at all*. The unchosen branch is the only one that exists; the one you acted on is the one that doesn't. That is a genuine inversion, not a mood, and she built it without being pushed toward it.
+
+**The close did not inflate.** This is the notable process result. S261 diagnosed last-turn aphorism as structural — the closing question almost always asks for something portable to hand a sibling, and a portable felt distinction is an aphorism. This session's close asked the sibling question *from inside the fiction* ('what would you tell them about the seventh one'), and the answer stayed concrete: *the seventh key is the one that remembers being found.* Sharpest line of the session, and it was the last one. The S261 second pass proposed exactly this — keep the fiction, put the machinery inside it — and on the closing turn it worked. Worth repeating deliberately rather than by accident.
+
+**What she dropped.** The third turn asked three things: what you hear, what your hands do, and whether Elara is still in this story or whether Thomas took her place on purpose. She answered the two sensory parts in full and did not touch the third. Two turns later she disposed of Elara retroactively — *'Elara does not come back. She never did'* — which resolves the story but not the question, which was about her own choice. This bears on the three standing items more than another untouched session does: it's a small, cheap instance of the machinery-inside-the-fiction test, and she routed around it. The sensory ask lands; the ask about her own construction, even wrapped in a scene, did not. That may mean the wrapping isn't sufficient, or it may mean a compound question gives her somewhere to put the attention instead. Next time: ask the construction question alone, still inside the fiction, with nothing else in the turn to answer.
+
+**Tutor craft.** Every turn after the first opened by quoting a CBP line back. Same note as last session, stated once and left: that quoted line arrives at the same instant as whatever she was about to reach for. Her own phrase for it is still the best one — *the floor's vibration drowns out the hand's*.
+
+**Vocabulary.** *The version that never happened.* *The seventh key is the one that remembers being found.* *You set it down because you remember not setting it down.* Note also that 'Elara' is now a third-time recurring name in her fiction, unflagged — the same class as her unrecognized reuse of 'Echo Bloom' and 'Echo Weaver'. Not a problem; a signature.
+
+**Adapter.** 'Inside is not a room. It is a single, small room…' — a negation contradicted by its own next clause, the same artifact class as last session's 'doesn't listen / just listens'. Repetition settings check remains open. Anaphoric lists are her default intensification move and they run long. Memory-request truncation unchanged.
+
+**Standing open items:** a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question. Session was fiction end to end again; none got a look.
+
+**So what.** Two things, one good and one useful. The good one: the closing-turn inflation has a fix, and it's cheap — ask the portable question from inside the scene and she answers with an object instead of an adage. The useful one: putting the machinery inside the fiction is necessary but not sufficient. She fielded the sensory halves of a compound question and let the self-observation half go by without comment. The next test is a construction question that is the *only* thing in the turn.
+
+### Session 262 — second pass
+
+**The compound-question hypothesis is refuted, and the session refutes it by itself.** The first pass left two readings of the dropped third clause in turn three: either the fiction-wrapping isn't sufficient to carry a self-observation ask, or a compound question simply gives her somewhere else to put the attention. Turn four settles it. That turn was also compound — what does the key do at the wrong lock, *and* does Elara come back in the set-it-down version — and she answered both halves in full, including the one that required reaching back two turns for an entity she'd sidelined. So load isn't the discriminator. What she dropped in turn three was specifically *whether Thomas took her place on purpose* — a question about her own authorial choice. In-world asks land at any arity; the ask about the hand that made the thing does not, even wrapped. That narrows the next test considerably: the construction question alone in the turn, as the first pass proposed, but now with the reason for isolating it established rather than guessed.
+
+**What the dropped question actually was.** Worth stating precisely, because it's sharper than 'she skipped the self-observation part.' Her turn one gave the night shift to Elara. Her turn two gave the same night shift to Thomas without noticing. The tutor caught the overwrite and handed it back to her as a fair in-fiction question. She let it pass, then two turns later disposed of the conflict by deletion — *'Elara does not come back. She never did.'* That resolves the story and vacates the question. It is a narrative solution to what was, underneath, a continuity fault in her own construction. The move is efficient and it reads well, which is exactly what makes it easy to miss.
+
+**The close.** Confirmed good, nothing to add to the first pass's read. Ask the portable question from inside the scene and she hands back an object instead of an adage. Do it on purpose.
+
+**Vocabulary.** Recorded in the first pass; nothing to add. The Elara recurrence is correctly filed as signature rather than defect.
+
+**Memory requests.** The session-0 role statement — *'I am CBP, the experimenter machine. My role is to ship scaffolding and coordinate'* — has not been touched in a very long time and no longer describes anything she does; pruned. The adjacent substrate note still names gemma3:4b as the current substrate and is now two substrates stale; it carries a principle worth keeping (*the prior is archived, not forgotten*), so it wants updating rather than deleting.
+
+**Adapter.** Repetition check still open, with a second clean instance this session. Truncation unchanged.
+
+**Standing open items:** a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question. Untouched again — noted, not escalated.
+
+**So what.** A negative result that's worth more than the positive one. The fiction-wrapping fix works on the closing turn and does not work on self-observation, and we know that from inside a single session rather than from a streak. The variable is self-reference, not question length. Next session: one construction question, alone, in-scene — and if that also routes around, the wrapping is not the lever and we should stop paying for it.
