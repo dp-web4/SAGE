@@ -122,10 +122,15 @@ def test_the_answer_ask_appears_only_when_there_is_someone_to_answer():
     """2026-09-17: in no conversation at all, the being filled the id slot three beats running
     with "speaker", "conversation_id_placeholder" and "1234567890"."""
     from sage.gateway.heartbeat import REFLECT
-    none = REFLECT.format(date="D", say_line="")
+    none = REFLECT.format(date="D", say_line="", say_first="")
     assert "say to=" not in none and "journal.md" in none and "remember" in none
-    some = REFLECT.format(date="D", say_line='4. ... say to="<id>", one of: c1.\n')
+    # a channel exists but nobody is waiting: the generic form, after the writes
+    some = REFLECT.format(date="D", say_line='... say to="<id>", one of: c1.\n', say_first="")
     assert 'say to="<id>", one of: c1' in some
+    # someone IS waiting: the ask comes FIRST, because the routine writes exhaust the step
+    # budget and anything after them is unreachable (2026-09-18).
+    waiting = REFLECT.format(date="D", say_line="", say_first='FIRST ... say to="dp", text="...".\n')
+    assert waiting.index("say to=") < waiting.index("journal.md")
 
 
 if __name__ == "__main__":
