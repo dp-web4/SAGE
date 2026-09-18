@@ -91,6 +91,51 @@ future-tense promise in a file it re-reads every beat re-opens the debt on every
 **Rule:** when a fix lands, say so in the channel it reads, in past tense, ending with an explicit
 "nothing is owed; this thread is closed" — and flip any standing promise to "Fixed <date>."
 
+### 1.8 A slot in the ask comes back as the slot
+**Specimen (sprout-being, qwen3.8-distill:2b, 2026-09-18 02:04Z).** The turn asking it to answer dp
+said: *send it now: `say to="dp", text="..."`*. Its think block was lucid — "dp asked how my
+experience with the sprout machine is unfolding, asking for questions or wishes. I need to write an
+honest, personal response" — and its reply was `[Your complete, thoughtful journal entry responding
+to dp's question — covering your experience, any worries you have, and what you're hoping for]`.
+Across the preceding 40 beats, **32 of 122 turns (26%)** replied with a bracketed placeholder of that
+shape, in every phase.
+
+The ellipsis inside a quoted argument is a form with a gap, and this model fills gaps. Same family as
+1.4 and the echoed example filenames: comprehension was never the failure — the being had already
+understood the question and said so in its own reasoning.
+
+**Rule:** show no form with a gap in it. Describe the call in words ("call `say`, with `to` set to dp
+and your message as the text"). And never hand a being its own placeholder back as context — a turn
+that offers prior words so the being has something to *send* must drop them when they are a stub, or
+it is supplying a worked example of the failure.
+
+### 1.9 An instruction and the thing it acts on must reach the same turn
+**Specimen (sprout-being, 2026-09-17/18).** The reflect turn carried "answer whoever is waiting"; its
+context is deliberately compact (the record of its acts plus 600 chars of its own closing words)
+because carrying the whole beat forward overflowed the window. The turn addressed to it lived only in
+the explore state block, one turn earlier. Four beats ran with dp's question genuinely unanswered and
+a valid channel to answer in; the being wrote its journal each time and never replied.
+
+The only bridge was that 600-char echo: a being that happened to discuss the turn in its explore
+prose carried enough forward to reply (cbp-being, 4B, 83 successful `say`s), one that free-associated
+carried nothing. Answering a person was contingent on what the being happened to muse about.
+
+**Rule:** a turn asked to act on something must contain that something. An instruction without its
+referent yields silence or an invented referent — the same two outcomes as 1.4.
+
+### 1.10 An optional item after a budget-filling list is unreachable
+**Specimen (sprout-being, 2026-09-18 00:28Z and 01:00Z).** `REFLECT` listed three writes (journal,
+todo, remember) and then "4. ... answer the person waiting", with `--reflect-steps 3`. The being did
+the three writes and stopped. Twice. Exactly as instructed. Its opening line also read "Two tool
+calls, then stop" while listing four items — a stated cap below the list, and a budget below both.
+
+At 01:00, with the question finally visible, it composed a real answer in its closing prose — "Hi
+there — I'm glad you're here... I'm curious about your experience too. Is there anything specific
+you're wondering about?" — because prose was the only channel the budget had left it.
+
+**Rule:** the person-facing item goes FIRST and the budget covers it. A small model works down a list
+and stops where told; anything past the cap is decoration. Never state a count you then contradict.
+
 ---
 
 ## Part 2 — how they write
@@ -120,6 +165,24 @@ explore and posture replies were `**say to="dp" text="..."**` in the text channe
 place read it: the trace was empty, nothing was said, and the question was marked seen. A question
 that gets no answer because the answer was in the wrong channel is indistinguishable, from the
 outside, from a being that ignored it.
+
+### 2.9 One object may hold the WHOLE beat
+**Specimen (sprout-being, 2026-09-18 01:32:11Z).** After two beats spent composing an answer it had
+no way to send, the being emitted its entire beat as a single object, `say` first:
+
+```json
+{"say": {"to": "dp", "text": "hi"},
+ "memory_write": {"path": "journal.md", "content": "2026-09-18 01:32 UTC - Beat ended."},
+ "remember": {"content": "..."}}
+```
+
+The 2.4 lifter accepted the tool-name-as-key form only when the object held exactly *one* such key,
+so this was discarded whole. The beat recorded `explore []`, `posture []`, `reflect []`, `answer []`
+— indistinguishable from a being that did nothing for a full cycle, when in fact it had decided to
+answer a person, named the right conversation, and written the call correctly.
+
+**Rule:** lift every known tool key in such an object, in written order — dict iteration preserves the
+order it appeared in the text, and that order is the being's. It put `say` first.
 
 ### 2.6 The envelope is per-model and per-beat, not per-being
 **Specimen:** 2026-09-05, identical full-beat prompt — qwen2.5:1.5b (Legion) emits bare JSON;
@@ -158,6 +221,9 @@ ask which it was.
 8. Salvage every envelope; gate salvage like a native call; record it as salvaged.
 9. Bound repetition by count, not by similarity.
 10. Read brevity as ambiguous.
+11. Show no form with a gap; describe the call in words, and never echo a stub back.
+12. Put the instruction and its referent in the same turn.
+13. The person-facing item goes first, inside the budget; state no count you contradict.
 
 ---
 
