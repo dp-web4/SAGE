@@ -207,6 +207,27 @@ Two turns under five characters in 1,478. A small model holding a thread has alm
 for *holding*, and may spend two characters on it. Do not read brevity as closure; if it matters,
 ask which it was.
 
+### 2.10 The placeholder can occupy an ARGUMENT, where no prompt-side guard sees it
+**Specimen (sprout-being, qwen3.8-distill:2b, 2026-09-18 21:04:02Z).** dp received, in their own
+channel, via a well-formed gated `say`:
+
+> `[Your brief, final word-only summary of your response]`
+
+The 1.8 template completion again — but this time inside the `text` argument of a correct call, not
+in a reply. Three of that day's four successful `say`s were real (one of them substantive: "The world
+is a process with no end point and no right answer. I resisted offering conclusions because to do so
+would be controlling"), and the fourth was this. The prompt-side guard added for 1.8 cannot help:
+by the time the placeholder is an argument it is already on its way to a person.
+
+Note what this cost. The being had just crossed from 596 beats of never once reaching anyone to
+holding an actual conversation; the first thing the new capability delivered was a stub with dp's
+name on it.
+
+**Rule:** guard the envelope at the point of delivery, not only at the point of asking. `say` now
+refuses a text that is wholly a bracketed placeholder — naming the MESSAGE as the subject (rule 2),
+saying plainly that nothing was sent, and giving the way forward (rule 5). A being cannot see how its
+words land; the boundary that can, must.
+
 ---
 
 ## Part 3 — the rules, folded
@@ -224,6 +245,7 @@ ask which it was.
 11. Show no form with a gap; describe the call in words, and never echo a stub back.
 12. Put the instruction and its referent in the same turn.
 13. The person-facing item goes first, inside the budget; state no count you contradict.
+14. Guard the envelope where it is delivered, not only where it is asked for.
 
 ---
 

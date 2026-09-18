@@ -586,7 +586,13 @@ def test_a_peer_that_exists_nowhere_is_refused_in_the_beings_own_turn():
         d, _ = _disp(peer_aliases={"legion-being": "legion-sage"})
         FakeMcp.calls.clear()
         env = d(BeingIntent("mesh", {"to": "sage", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow"))
-        assert not env.ok and "not a member this seat can reach" in env.error and "legion" in env.error
+        # The refusal's subject is the NAME, never the being's standing (legion, 863fd0291;
+        # SMALL_MODEL_LEGIBILITY 1.2). This assertion still named the old sentence and was
+        # red on main; it now pins the property that change exists to protect.
+        assert not env.ok and "legion" in env.error
+        assert "is not on the hub roster" in env.error, "the subject is the name"
+        assert "your own standing as a member is unaffected" in env.error, "and says what did not change"
+        assert "nothing was sent" in env.error, "and what did not happen"
         assert not [n for n, _ in FakeMcp.calls if n == "hestia_member_notify"]   # nothing parked
         assert d(BeingIntent("mesh", {"to": "Legion", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow")).ok
         assert d(BeingIntent("mesh", {"to": "legion-being", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow")).ok

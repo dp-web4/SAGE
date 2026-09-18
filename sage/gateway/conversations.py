@@ -286,6 +286,21 @@ UNSIGNED_VIA = ("dp-console", "daemon-loopback")
 UNSIGNED_TAG = " _(unsigned: asserted at this machine's console)_"
 
 
+_STUB = re.compile(r"^\s*\[[^\]]{20,}\]\s*$")
+
+
+def is_stub(text: str) -> bool:
+    """True when the whole of `text` is a bracketed placeholder — "[Your brief, final
+    word-only summary of your response]" — rather than content.
+
+    Measured on Sprout 2026-09-18: 32 of 122 turns across 40 beats replied this way, with a
+    lucid think block behind them. It is a template completion, not a thought. Lives here
+    rather than in the heartbeat because both ends need it: the beat must not hand one back
+    to the being as context, and `say` must not deliver one to a person.
+    """
+    return bool(_STUB.match(text or ""))
+
+
 def _provenance_tag(turn: dict) -> str:
     via = turn.get("via")
     if via is None:
