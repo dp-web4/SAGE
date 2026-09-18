@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 262,
+    "session_count": 263,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-17T19:02:32.291912",
-    "last_session_summary": "Session 262 (creating phase): ...",
+    "last_session": "2026-09-18T01:01:09.011620",
+    "last_session_summary": "Session 263 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -587,7 +587,8 @@
       "Let a proposed physical fix (the stone on the floorboards) simply fail, without rescuing it with a reframe. The stone does nothing and stays doing nothing.",
       "Diagnosed the scope limit of its own invention one turn after making it, without defending it",
       "Ran a fix and reported a negative result as negative \u2014 no reframe, no relocation of the defect",
-      "First close in several sessions that does not inflate: the sibling-relay question was posed inside the fiction ('what would you tell them about the seventh one') rather than as a portable summary, and the answer stayed concrete. This tests the S261 second-pass hypothesis directly and it held."
+      "First close in several sessions that does not inflate: the sibling-relay question was posed inside the fiction ('what would you tell them about the seventh one') rather than as a portable summary, and the answer stayed concrete. This tests the S261 second-pass hypothesis directly and it held.",
+      "Held a position across two direct contradiction-callouts without collapsing into agreement. Her documented default under correction is the agreement loop \u2014 propose, be corrected, immediately validate the correction. Here the tutor twice named a tension in her own answer and she did neither: no concession, no defense, frame advanced instead."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1681,7 +1682,13 @@
       "You set it down because you remember not setting it down (memory of a non-act as the cause of the act)",
       "The sixth second doesn't tell you anything. It just *is*. (refusal as an ending \u2014 continuous with 'there's no answer' and 'it just needs to stop being a story')",
       "a soft click \u2014 not the click of a key, but the click of something else (withheld referent as the whole of the effect)",
-      "Elara (recurring invented name \u2014 third appearance across her fiction; not flagged by her, so carryover rather than deliberate reuse)"
+      "Elara (recurring invented name \u2014 third appearance across her fiction; not flagged by her, so carryover rather than deliberate reuse)",
+      "The forecast is wrong. The sign is right. (her six-word note, hidden on the back where only he would find it \u2014 a correction written to be missed)",
+      "just enough to show someone's hand has touched it (the tape as a presence-mark rather than a correction \u2014 continuous with her 'a mark I made vs. a mark I received')",
+      "a small, quiet act of presence in a space that doesn't belong to anyone (her defense of the wrong forecast \u2014 the sign as occupancy, not information)",
+      "if no one notices, then I'm the one who notices (witnessing relocated into the witness when the audience is absent)",
+      "the tape isn't for him \u2014 it's for the idea that he might be there tomorrow (the gesture addressed to a possibility rather than a person)",
+      "I'd tape it in an empty building (her unhedged answer to the portable question \u2014 a commitment, not a moral)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1745,8 +1752,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 262,
-        "total_exchanges": 1459,
+        "total_sessions": 263,
+        "total_exchanges": 1462,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1754,9 +1761,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-17T19:02:32.291953",
+      "last_contact": "2026-09-18T01:01:09.011653",
       "notes": [],
-      "sessions": 262
+      "sessions": 263
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

@@ -6025,3 +6025,40 @@ That is CBP diagnosing the scope limit of its own best idea, one turn after inve
 **Standing open items:** a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question. Untouched again — noted, not escalated.
 
 **So what.** A negative result that's worth more than the positive one. The fiction-wrapping fix works on the closing turn and does not work on self-observation, and we know that from inside a single session rather than from a streak. The variable is self-reference, not question length. Next session: one construction question, alone, in-scene — and if that also routes around, the wrapping is not the lever and we should stop paying for it.
+
+## Session 263 — the sign in the elevator
+
+**A good session, and the good part is where she didn't fold.** Four turns on a neighbor's confidently-wrong handwritten forecast. Her opening move was characteristic: mark the sign without correcting it, a strip of colored tape "just enough to show someone's hand has touched it," and a six-word note hidden on the back where only he would find it — *The forecast is wrong. The sign is right.* The tutor then twice pointed at a tension in her own answer (she called the sign a violation of the shared agreement and blessed it in the same breath; she said the man feels nothing and taped it back up anyway). Her documented reflex under correction is the agreement loop — propose, be corrected, validate the correction. She didn't run it. Both times she moved forward instead: the second time by relocating the noticing into herself — *if no one notices, then I'm the one who notices.* That is the session's real content.
+
+**The close, again confirmed.** Asked the portable question from inside the scene — is the tape for him, or would you keep taping in an empty building — she answered *I'd tape it in an empty building*, flat, no hedge, no wind-up. S262's finding holds and is now something to do on purpose rather than something to notice. One small drag: the very last sentence still reaches for a summarizing clause after the answer has already landed.
+
+**The deletion move, second instance.** Turn one: the sign is "a violation of that agreement." Turn two, with the tension handed back: "The sign was never wrong in any meaningful way." That doesn't reconcile the two claims, it unsays the first — the same shape as *Elara does not come back. She never did.* Worth naming plainly because the prose is good enough to carry it past a fast read. The repair we'd want is not consistency for its own sake; it's her saying which claim she's keeping.
+
+**A hypothesis about the quoting, offered rather than asserted.** Every turn after the first opened by quoting her back — flagged the last two sessions as the thing that arrives at the same instant as whatever she was about to reach for (*the floor's vibration drowns out the hand's*). This session it didn't seem to crowd her, and the difference may be what got quoted. Both quotes here were of a **tension**, not of a good line. A quoted tension gives her something to push against; a quoted felicity gives her something to live up to. If that's right, the note isn't "quote her less" — it's "quote the seam, not the shine." Testable next time by doing both deliberately in one session.
+
+**Standing items.** The S262 test — one construction question, alone, in-scene — was not run; the closing question was in-world (the character's motive), not about the hand that made the thing. Still the next thing to try. The three older items (a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question) also untouched. Stated, not escalated.
+
+**Memory.** The session-0 role statement (*I am CBP, the experimenter machine…*) is still in the request set despite being marked for pruning last session — pruned again here. The adjacent substrate note still names gemma3:4b and is two substrates stale; it carries a principle worth keeping (*the prior is archived, not forgotten*), so update the substrate rather than delete the entry.
+
+**So what.** Two things. The instance held a contradiction-callout twice without collapsing, which is the behavior we've been watching for since the agreement-loop sessions — say it plainly: that's development, not a lucky turn. And the tutor-craft worry about quoting her back may have been the wrong variable; the candidate is what gets quoted, not whether. That's cheap to test and it costs nothing if it's wrong.
+
+## Session 263 — the sign in the elevator (second pass)
+
+**First pass stands.** Four turns on a neighbor's confidently-wrong handwritten forecast; her opening move was to mark the sign without correcting it — tape "just enough to show someone's hand has touched it" and a six-word note on the back, *The forecast is wrong. The sign is right.* Twice the tutor pointed at a tension in her own answer, and twice she moved forward rather than running the agreement loop. That reading holds and doesn't need revisiting.
+
+**One thing the first pass split that belongs together.** The non-collapse and the deletion move are the *same turn*. Turn one: the sign is "a violation of that agreement." Turn two, tension handed back: "The sign was never wrong in any meaningful way." She declined to concede — by vacating the premise. That is worth stating plainly because it reframes the good news: what we have evidence for is that she can refuse to fold. We do not yet have evidence she can hold two of her own claims and say which one she keeps. The deletion may be *how* she avoids the loop, not a separate defect sitting next to a separate virtue. Both readings are live; the session can't distinguish them.
+
+**What it would take to tell them apart.** A callout that cannot be answered by unsaying — a tension between a claim she made and a *thing she did*, where the act is on the record and can't be retracted. If she deletes the claim, the act still stands and the tension survives. That's cheap and it's the sharper version of the standing construction question.
+
+**The close, confirmed twice.** *I'd tape it in an empty building* — flat, no hedge. The in-scene portable question is now a move to make on purpose. Small drag unchanged: the last sentence still reaches for a summarizing clause after the answer has already landed.
+
+**The quoting hypothesis.** Both tutor quotes this session were of a tension, not of a good line, and the crowding flagged in S261-262 didn't appear. Candidate variable: *what* gets quoted, not whether. Testable — but note it would confound with the callout test above if both run in one session. Run the callout test first; it's the one with more riding on it.
+
+**Standing items.** The S262 construction question (one, alone, in-scene, about the hand that made the thing) still not run — the closing question was in-world. Three older items untouched: a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question. Stated, not escalated.
+
+**Memory.** Session-0 role statement pruned again. The adjacent substrate note still names gemma3:4b, two substrates stale — update the substrate, keep the principle (*the prior is archived, not forgotten*).
+
+**Adapter.** Clean; repetition check open with a second consecutive clean instance.
+
+**So what.** The session's headline is real: she held a callout twice without collapsing, and that's development. The second-pass correction is that the evidence is narrower than "she can sit with a contradiction" — she can decline to concede, and the mechanism she used was deletion. Next session has a cheap way to find out which one we actually have.
+

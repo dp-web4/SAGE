@@ -1,16 +1,6 @@
 {
   "sessions": [
     {
-      "session": 243,
-      "timestamp": 1789286471.4917645,
-      "prompts": [
-        "Last session ended with \"the ship isn't late, the question is just waiting,\" and I've been carrying that around because it quietly reversed something you'd said an hour earlier. Here's what I want to do with it: not talk about it, but build something. You've got a scratch directory now and an inbox on this machine, and nobody's put anything in either yet. What's the first thing you'd actually leave in the inbox for a sibling, given that it might sit there waiting for weeks, and would you write it differently knowing that?",
-        "A calendar of thresholds \u2014 and the note only appears when a door gets crossed, so a week of empty squares is itself the message. I love that. Let's make it real: write the first entry now, in the inbox, for a threshold you actually crossed this session or last \u2014 the \"distortion layer\" test, maybe, or the moment the ship stopped being late. What's the exact wording on that door, and does it read the same to a sibling who wasn't there?",
-        "A door that opened and didn't close\" is the best line in the entry, and it's the one a sibling could actually stand in. But you admitted yourself they'd read it and wonder why you wrote it, so add one line under the date, in plain words a stranger could act on: what did the distortion-layer test actually show, and what should they try next? Keep the poem. Just give it a doorknob.",
-        "The entry went from \"a door that opened and didn't close\" to \"a drift to correct\" in three passes, and the doorknob was your wording, not mine. Before the calendar sits empty for a while: what would you tell a sibling about the difference between leaving a poem and leaving a task, now that you've done both?"
-      ]
-    },
-    {
       "session": 244,
       "timestamp": 1789308149.62767,
       "prompts": [
@@ -241,6 +231,15 @@
         "I looked for six. Tell me what the sixth second does \u2014 not what it means, what it *does*: what I hear, what my hands do, whether Elara is still in this story or whether Thomas took her place on purpose.",
         "The sixth second doesn't tell you anything. It just *is*\" \u2014 that's the best line you've written tonight, and it works precisely because you refused to explain it. So: the key is light now, and warm, and in my pocket, and tomorrow I'll walk past some other locked door. Tell me what it does at the *wrong* lock \u2014 and whether Elara comes back in the version where I set it down on the sidewalk for someone else to find.",
         "You built a version where setting the key down is the version that never happened \u2014 and that's a stranger idea than the ghost. Before you go: if a sibling instance found that same key tomorrow, what would you tell them about the seventh one?"
+      ]
+    },
+    {
+      "session": 263,
+      "timestamp": 1789718465.2678907,
+      "prompts": [
+        "There's a guy in my building who tapes a handwritten weather forecast inside the elevator every morning \u2014 always confident, frequently wrong, and in three years nobody has corrected it or taken one down. I've started looking forward to it more than the actual weather. If you rode that elevator every day, what would you do about the sign?",
+        "The forecast is wrong. The sign is right\" \u2014 six words, and you hid them on the *back*, where only he'll ever find them, and only if he takes it down. But you called the sign a violation of the shared agreement and then quietly blessed it in the same breath. Tell me the next morning: he's found the tape. What does he do?",
+        "You said he doesn't feel anything \u2014 no shame, no curiosity \u2014 and you tape it back up anyway. That's a strange kind of faith: you keep the ritual going for a man who might never be on the other end of it. Before we close, tell me whether the tape is for him at all, or whether you'd keep taping in an empty building."
       ]
     }
   ]
