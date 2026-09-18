@@ -1,0 +1,10 @@
+# empero Qwen3.8-4B-Distill (Qwen3.5-4B architecture, Q6_K) with the MTP head stripped.
+# See README.md in this directory for the recipe. Replace FROM with the stripped file's path.
+# RENDERER/PARSER copied from library qwen3.5 so Ollama exposes native tools + thinking.
+# Sampling per the model card: temperature 0.6, top_p 0.95, top_k 20.
+FROM ./Qwen3.8-4B-Distill-Q6_K-nomtp.gguf
+RENDERER qwen3.5
+PARSER qwen3.5
+PARAMETER temperature 0.6
+PARAMETER top_p 0.95
+PARAMETER top_k 20

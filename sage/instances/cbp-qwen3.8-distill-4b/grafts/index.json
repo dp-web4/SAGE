@@ -1,0 +1,64 @@
+{
+ "members": {
+  "cbp-being": {
+   "latest": "self-account-cbp-being.v6.json",
+   "versions": [
+    {
+     "file": "self-account-cbp-being.v1.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "first",
+     "source_set_sha256": "4da34c7e8659686305897e5b574317a509c196eee2a4c449da2deb34c4d9e68c",
+     "supersedes": null,
+     "version": 1,
+     "written_at": "2026-09-14T22:16:10Z"
+    },
+    {
+     "file": "self-account-cbp-being.v2.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "15df45026b1d4e768cbf701d46ce86b7b0344bc9e279f0b7c7ec62e26625e63c",
+     "supersedes": "self-account-cbp-being.v1.json",
+     "version": 2,
+     "written_at": "2026-09-15T11:33:13Z"
+    },
+    {
+     "file": "self-account-cbp-being.v3.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "0ef069263310fc98084d8bec060f91e353d4ce50c7669eac9687279fc7f63c75",
+     "supersedes": "self-account-cbp-being.v2.json",
+     "version": 3,
+     "written_at": "2026-09-16T11:34:35Z"
+    },
+    {
+     "file": "self-account-cbp-being.v4.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "9da11e3a09d0b41d4bd83894136463c32d4856135d732a3299569aff0d2179f7",
+     "supersedes": "self-account-cbp-being.v3.json",
+     "version": 4,
+     "written_at": "2026-09-17T11:33:23Z"
+    },
+    {
+     "file": "self-account-cbp-being.v5.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "caffaf3b19dd0d7aa2dcd3936425887edcf9ddea3cfde96dafc41405cbd8eca3",
+     "supersedes": "self-account-cbp-being.v4.json",
+     "version": 5,
+     "written_at": "2026-09-18T04:58:22Z"
+    },
+    {
+     "file": "self-account-cbp-being.v6.json",
+     "instrument_sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+     "reason": "sources_changed",
+     "source_set_sha256": "f273fbf5eb4e940926f9fb1b4f6ce9e10c8c673d860b9f0c315cd8c9367e1f2b",
+     "supersedes": "self-account-cbp-being.v5.json",
+     "version": 6,
+     "written_at": "2026-09-18T11:30:47Z"
+    }
+   ]
+  }
+ },
+ "schema": "graft-index/v1"
+}

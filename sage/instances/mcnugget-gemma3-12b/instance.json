@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "machine": "mcnugget",
-  "model": "gemma3:12b",
+  "model": "gemma4:12b",
   "model_family": "google-gemma",
   "slug": "mcnugget-gemma3-12b",
   "created": "2026-02-28",
@@ -10,5 +10,6 @@
   "device_hint": "mps",
   "has_training_track": false,
   "has_lora": false,
-  "encryption_enabled": false
+  "encryption_enabled": false,
+  "notes": "Model switched gemma3:12b -> gemma4:12b 2026-09-07. The DIRECTORY NAME is historical: the being's identity, memory and sealed key live here and the seal's derivation includes this path, so renaming it would break authorization. Identity is pinned via SAGE_INSTANCE and no longer follows the model."
 }

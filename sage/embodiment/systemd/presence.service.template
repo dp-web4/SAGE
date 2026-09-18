@@ -1,0 +1,32 @@
+################################################################################
+# Presence — the resident feeder (user unit)
+#
+# Makes the being present to its world BETWEEN raising sessions: it watches the
+# cortex's perceptual state and, when a moment is genuinely salient, sends it to
+# the daemon so the being notices near-real-time. Rate-limited (cooldown, hourly
+# cap) so a sustained moment wakes it once.
+#
+# INSTALL: same marker substitution as cortex.service.template.
+################################################################################
+[Unit]
+Description=@MACHINE@ presence — resident feeder; genuinely salient moments wake the being to notice near-real-time
+# Needs the cortex (perception.json) and the sage-daemon (:8760). Tolerates either being
+# briefly absent — it catches errors and skips — so strict ordering isn't required.
+After=@MACHINE@-cortex.service
+Wants=@MACHINE@-cortex.service
+StartLimitIntervalSec=300
+StartLimitBurst=8
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@
+# A file, for the same reason as the cortex: see cortex.service.template.
+StandardOutput=append:@ROOT@/@MACHINE@-presence.log
+StandardError=append:@ROOT@/@MACHINE@-presence.log
+Environment=SAGE_MACHINE=@MACHINE@
+ExecStart=@VENV@/bin/python -m sage.embodiment.presence
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=default.target

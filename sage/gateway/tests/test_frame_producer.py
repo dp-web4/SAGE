@@ -106,15 +106,13 @@ def test_the_frame_reaches_the_user_turn_as_an_images_list(tmp_path):
     fp.write_bytes(JPEG)
     b64, meta = fresh_frame(inst, None, time.time() - 100)
 
-    msgs, _ = compose(False, name="n", machine="m", member="b", posture_text="p",
-                      nothink="", header="h", state="s", recall="r", inbox="i",
+    msgs, _ = compose(False, name="n", machine="m", member="b", posture_text="p", header="h", state="s", recall="r", inbox="i",
                       digest="d", frame=b64)
     user = msgs[-1]
     assert user["images"] == [b64]
     assert isinstance(user["content"], str), "content stays a plain string beside the images"
 
-    msgs2, _ = compose(False, name="n", machine="m", member="b", posture_text="p",
-                       nothink="", header="h", state="s", recall="r", inbox="i",
+    msgs2, _ = compose(False, name="n", machine="m", member="b", posture_text="p", header="h", state="s", recall="r", inbox="i",
                        digest="d", frame=None)
     assert "images" not in msgs2[-1], "no frame means no key at all, not an empty list"
 
@@ -572,7 +570,7 @@ def test_the_vision_line_is_actually_wired_into_the_seed():
 
 def _compose(act_first, **kw):
     from sage.gateway.heartbeat import compose
-    base = dict(name="n", machine="m", member="legion-being", posture_text="p", nothink="",
+    base = dict(name="n", machine="m", member="legion-being", posture_text="p",
                 header="H", state="S", recall="r", inbox="i", digest="d")
     base.update(kw)
     return compose(act_first, **base)

@@ -177,6 +177,79 @@ def test_a_fired_deferred_timer_is_not_mistaken_for_an_armed_one():
     assert len(calls) == 2 and any("stop" in a for a in stops)
 
 
+def test_the_cli_is_what_the_daemon_calls_and_it_answers_in_json(tmp_path):
+    """GPT review of SAGE#81: sage-rs conversations::arouse runs
+    `python3 -m sage.gateway.arousal --instance --kind --descriptor` and parses stdout as
+    JSON. The entry point was deleted on the nursery branch (723c04d73) and nothing failed.
+    This runs the module exactly as the daemon does. --dry-run so no marker or unit."""
+    import subprocess, sys as _sys
+    repo = Path(__file__).resolve().parents[3]
+    p = subprocess.run([_sys.executable, "-m", "sage.gateway.arousal", "--instance", str(tmp_path),
+                        "--kind", "dp_turn", "--descriptor", "dp spoke in conversation 'dp'",
+                        "--dry-run"], cwd=str(repo), capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr
+    d = json.loads(p.stdout)
+    assert d["kind"] == "dp_turn" and "engage" in d and "reason" in d and d["dry_run"] is True
+    assert d["descriptor"] == "dp spoke in conversation 'dp'"
+
+
+def test_a_running_beat_claims_in_flight_delivery_ONLY_BECAUSE_THE_HOOK_EXISTS(tmp_path):
+    """INVERTED BY THE 2026-09-18 RECONCILIATION, deliberately.
+
+    GPT's SAGE#81 review was right on main: with no interject hook, a turn posted mid-beat
+    is not in the beat that is running, and the decision must not promise seconds. This test
+    asserted that. The reconciliation merges the branch that HAS the hook
+    (being_tool_loop.run_ollama_tool_turn drains conversations.drain_new_for between steps),
+    so the capability is present and the promise is now true.
+
+    The guard the old assertion provided is kept and made honest: the claim is asserted
+    TOGETHER WITH the hook it depends on, so removing the hook reds this test rather than
+    leaving a decision that lies about delivery."""
+    import inspect
+    from sage.gateway import being_tool_loop
+    src = inspect.getsource(being_tool_loop.run_ollama_tool_turn)
+    assert "interject" in src, "the promise below is only true while this hook exists"
+
+    _quiet(monkey_running=True)
+    d = arousal.decide(tmp_path, "dp_turn")
+    assert d["engage"] is False and d.get("delivered_in_flight") is True
+    assert d.get("beat_running") is True
+    assert "between steps" in d["reason"]
+
+
+def test_engage_is_not_started_when_the_wake_cannot_launch(tmp_path, monkeypatch):
+    """GPT review of SAGE#81: `started` was True whenever policy said engage, even with no
+    systemctl (McNugget runs launchd) or a unit that failed. Three arms: the tool is absent,
+    the unit fails, the start succeeds. Only the last may say started."""
+    import subprocess as _sp
+    _quiet()                                   # idle, no beat due: the policy engages
+    calls = []
+
+    def absent(args, **kw):
+        if "start" in args:
+            raise FileNotFoundError("systemctl")
+        return _sp.CompletedProcess(args, 0, "", "")
+    monkeypatch.setattr(arousal.subprocess, "run", absent)
+    d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
+    assert d["engage"] is True and d["started"] is False
+    assert "no systemctl" in d["wake_error"] and "next scheduled beat" in d["fallback"]
+
+    def failing(args, **kw):
+        calls.append(args)
+        return _sp.CompletedProcess(args, 5, "", "Unit sage-heartbeat.service not found.")
+    monkeypatch.setattr(arousal.subprocess, "run", failing)
+    d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
+    assert d["started"] is False and "exit 5" in d["wake_error"] and "not found" in d["wake_error"]
+
+    monkeypatch.setattr(arousal.subprocess, "run",
+                        lambda args, **kw: _sp.CompletedProcess(args, 0, "", ""))
+    d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
+    assert d["started"] is True and "wake_error" not in d
+
+
+# ---- carried from legion/mission-artifact in the 2026-09-18 reconciliation ----
+
+
 def test_the_cli_entry_point_exists_and_prints_json():
     """THE DAEMON CALLS THIS AS A SUBPROCESS, and nothing in-process would notice its loss.
 

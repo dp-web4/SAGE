@@ -43,6 +43,7 @@ class ToolTurnResult:
     interjected: List[dict] = field(default_factory=list)   # messages delivered mid-turn: {step, chars}
     rested: Optional[str] = None                           # the being ended its own turn; its stated reason
     looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
+    duplicates: List[dict] = field(default_factory=list)   # identical calls answered without re-executing: {step, effector}
 
     @property
     def acted(self) -> bool:
@@ -79,6 +80,8 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     """
     convo = list(messages)
     trace: List[Tuple[BeingIntent, ResultEnvelope]] = []
+    done_ok: set = set()
+    duplicates: List[dict] = []
     hit = False
     interjected: List[dict] = []
     uncapped = max_steps is None or max_steps <= 0
@@ -136,7 +139,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
 
         if not intents:                                    # a spoken turn — the being is done
             return ToolTurnResult(reply=content, trace=trace, steps=step,
-                                  interjected=interjected)
+                                  interjected=interjected, duplicates=duplicates)
 
         convo.append({"role": "assistant", "content": content, "intents": intents})
         rested = None
@@ -148,13 +151,38 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                 # is its closing words, so the turn still ends in language.
                 rested = str((intent.args or {}).get("reason") or "").strip()
                 break
+            # A CALL IDENTICAL TO ONE THIS TURN ALREADY EXECUTED IS NOT A SECOND ACT: the
+            # model re-emits its last calls after reading their results (beat 149,
+            # 2026-09-08: journal and todo each written twice, same bytes, one step apart).
+            # Answered without executing, and named in the record as an intervention.
+            #
+            # SCOPED, in the 2026-09-18 reconciliation. main applied this to EVERY verb,
+            # which was sound for the verb set it had and is wrong for this one: `check`,
+            # `run`, `game`, `camera`, `search`, `git_read` and `memory_read` all return a
+            # DIFFERENT answer to the same arguments once the world moves — the being edits
+            # a file and re-runs the identical check on purpose. Suppressing those would
+            # hand it a stale success and call it an intervention. DEDUP_VERBS is the set
+            # whose identical repetition inside one beat is never what was meant.
+            key = (intent.effector,
+                   json.dumps(dict(intent.args or {}), sort_keys=True, default=str))
+            if intent.effector in DEDUP_VERBS and key in done_ok:
+                env = ResultEnvelope(ok=True, note="duplicate",
+                                     result="(already done this beat: identical call, not repeated)")
+                duplicates.append({"step": step, "effector": intent.effector})
+                trace.append((intent, env))
+                convo.append({"role": "tool", "effector": intent.effector,
+                              "content": env.to_tool_message() + _note})
+                continue
             env = client.dispatch(intent)                  # gate + F1a dispatch + consume
+            if env.ok:
+                done_ok.add(key)
             trace.append((intent, env))
             convo.append({"role": "tool", "effector": intent.effector,
                           "content": env.to_tool_message() + _note})
         if rested is not None:
             return ToolTurnResult(reply=rested or content, trace=trace, steps=step,
-                                  interjected=interjected, rested=rested or "(no reason given)")
+                                  interjected=interjected, rested=rested or "(no reason given)",
+                                  duplicates=duplicates)
         step += 1
 
         # A LOOP IS NOT WORK. Measured 2026-09-13T10:19Z: legion-being finished its beat and
@@ -184,7 +212,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                 f"did this beat, and what you want next beat.")})
             out = generate(convo)
             return ToolTurnResult(reply=out.get("content") or "", trace=trace, steps=step,
-                                  interjected=interjected, looped=looped)
+                                  interjected=interjected, looped=looped, duplicates=duplicates)
 
     # Cap reached with tools still pending: force one final spoken close — we take its
     # words even if it wants more tools, so the being always ends its turn in language.
@@ -195,7 +223,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     out = generate(convo)
     return ToolTurnResult(reply=out.get("content") or "", trace=trace,
                           steps=step, capped=True, deadline_hit=hit,
-                          interjected=interjected)
+                          interjected=interjected, duplicates=duplicates)
 
 
 _FENCE = re.compile(r"```[A-Za-z0-9_+-]*[ \t]*\n(.*?)```", re.S)
@@ -226,7 +254,11 @@ def _json_calls(text: str, names) -> List[dict]:
             # The name key varies by beat: {"name"}, {"tool"}, {"action"}, {"function"}
             # (Sprout beat 29, 2026-09-05: "action": "peer_ask" and a list of {"tool":
             # "memory_write", "path": ..., "content": ...} — 3 of 3 turns, 0 lifted).
-            name = next((o[k] for k in _NAME_KEYS if isinstance(o.get(k), str)), None)
+            # The FIRST name-shaped key may name the being, not the tool: {"name": "sprout",
+            # "action": "recall", ...} (beat 148, 2026-09-08: three well-formed calls lost,
+            # one of them a real recall about #39). Prefer the key whose value IS a tool.
+            cands = [o[k] for k in _NAME_KEYS if isinstance(o.get(k), str)]
+            name = next((c for c in cands if c in known), cands[0] if cands else None)
             args = next((o[k] for k in _ARGS_KEYS if isinstance(o.get(k), dict)), None)
             if name not in known and isinstance(args, dict):
                 # {"name": "tool", "arguments": {"type": "recall", ...}}: the tool named
@@ -236,7 +268,13 @@ def _json_calls(text: str, names) -> List[dict]:
                     name = inner
                     args = {k: v for k, v in args.items() if k not in ("type", "tool", "name", "action")}
             if name not in known:
-                continue
+                # {"memory_write": {"path": ..., "content": ...}} — the tool name is the KEY and
+                # its arguments the value (measured 2026-09-09, several beats lost this way).
+                inner = [(k, v) for k, v in o.items() if k in known and isinstance(v, dict)]
+                if len(inner) == 1:
+                    name, args = inner[0]
+                else:
+                    continue
             if args is None:
                 # flat form: the arguments sit beside the name key; keep only schema params
                 # when the schema is known, so stray keys ("timestamp", "status") never
@@ -291,11 +329,45 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
     return out
 
 
+_ATTR_VALUE = r'"((?:[^"\\]|\\.)*)"' + "|" + r"'((?:[^'\\]|\\.)*)'"
+_ATTR_PAIR = re.compile(r"([A-Za-z_]\w*)\s*=\s*(?:" + _ATTR_VALUE + ")")
+
+
+def _attr_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
+    """`say to="dp" text="..."`: a tool name followed directly by key="value" pairs, often
+    inside markdown bold. Measured 2026-09-14 19:30Z on cbp-being: dp asked "what are you
+    curious about?", the being's thinking said it would answer, and both its explore and
+    posture replies were `**say to="dp" text="..."**` in the text channel. Neither form above
+    reads it, the trace was empty, nothing was said, and the question was marked seen.
+    Only an offered tool name immediately followed by at least one pair whose key is one of
+    that tool's parameters counts, so prose that mentions a tool is still never a call."""
+    out: List[dict] = []
+    for name, params in names.items():
+        for m in re.finditer(r"(?<![\w.])" + re.escape(name) + r"\s+(?=[A-Za-z_]\w*\s*=\s*[\"'])", text):
+            args: Dict[str, Any] = {}
+            pos = m.end()
+            while True:
+                pm = _ATTR_PAIR.match(text, pos)
+                if not pm:
+                    break
+                raw = pm.group(2) if pm.group(2) is not None else pm.group(3)
+                args[pm.group(1)] = raw.replace('\\"', '"').replace("\\'", "'").replace("\\n", "\n")
+                pos = pm.end()
+                ws = re.match(r"[ \t]*", text[pos:])
+                pos += ws.end() if ws else 0
+            if params:
+                args = {k: v for k, v in args.items() if k in params}
+            if args:
+                out.append({"function": {"name": name, "arguments": args}, "_salvaged": "attr"})
+    return out
+
+
 def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
     """Lift well-formed tool calls that a model put in the TEXT channel, in Ollama's
-    tool_calls shape (plus `_salvaged`: "json" | "python"). Accepted: a JSON object or
-    array of {"name", "arguments"} (fenced or bare), or fenced Python `name(k="v", ...)`
-    with literal or locally-assigned arguments, positional ones mapped in schema order.
+    tool_calls shape (plus `_salvaged`: "json" | "python" | "attr"). Accepted: a JSON object or
+    array of {"name", "arguments"} (fenced or bare), fenced Python `name(k="v", ...)`
+    with literal or locally-assigned arguments, positional ones mapped in schema order, or
+    the attribute form `name k="v" ...` (see `_attr_calls`), tried last.
     `tools` is what was offered this turn (Ollama tool specs); only those names count,
     so prose that mentions a tool is never a call.
 
@@ -315,6 +387,8 @@ def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
         found.extend(_python_calls(text, params))
     if blocks and not found:                    # fenced prose, bare call outside the fence
         found.extend(_json_calls(content, params))
+    if not found:
+        found.extend(_attr_calls(content, params))
     return found
 
 
@@ -431,9 +505,7 @@ def _sent_budget(llm) -> Optional[int]:
 
 
 
-# Chars per token, deliberately low (English + paths + JSON): under-estimating tokens here
-# would defeat the guard it feeds.
-_CPT = 3.4
+_CPT = 2.9
 # What a real answer needs. Explore generations across 506 measured on Legion: median 1,282
 # tokens, p90 3,909, p99 5,741. Reserve the p99 with headroom rather than num_predict, which
 # is a ceiling the model has never approached.
@@ -505,6 +577,12 @@ def _window_pressure(llm, prompt_tokens) -> Optional[dict]:
         return None
     return {"prompt": prompt, "num_ctx": num_ctx, "pressure": prompt / num_ctx,
             "left": max(0, num_ctx - prompt)}
+# Verbs whose identical repetition inside ONE beat is never what was meant: a second
+# identical write, witness or message. Everything else — every verb that reads the world or
+# runs something in it — is executed again, because its answer can legitimately change.
+DEDUP_VERBS = frozenset({"memory_write", "edit", "witness", "remember", "retire_note",
+                         "say", "peer_ask", "mesh"})
+
 REPEAT_NUDGE_AT = 3          # identical consecutive calls before the harness names the loop
 REPEAT_BREAK_AT = 6          # ... and before it ends the tool phase
 
@@ -607,7 +685,7 @@ def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
 
 # Chars the prompt carries that are not in any message's content: the tool schemas and the
 # chat template. heartbeat.fit_to_window budgets the same 4000 for the seed.
-_UNCOUNTED_CHARS = 4000
+_UNCOUNTED_CHARS = 12900
 
 
 # Chars per token for what the loop ADDS: tool results are JSON, paths and code, which
@@ -873,18 +951,30 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 # and the retry, identical prompt, produced the identical 3764 tokens — a
                 # deterministic loop, twice per beat. The retry has to change something the
                 # model can see: it is told what happened and asked to act.
+                # DID IT RUN OUT OF ROOM, OR NEVER START ANSWERING? Opposite failures, and
+                # the same remedy was given to both. A cut that produced real content ran
+                # out of room; a cut that produced only a think block did not, and handing
+                # that one a bigger budget buys a longer silence (SAGE#87).
+                thought_only = (bool(str(msg.get("thinking") or "").strip())
+                                and not str(msg.get("content") or "").strip())
+                # NOT THE SAME PROMPT AGAIN, AND NOT THE SAME SENTENCE EITHER. The branch
+                # nudged on every length-stop with the deliberation text; on a cut that had
+                # produced content that sentence is simply false, and a harness that
+                # misdescribes what just happened teaches the being the wrong lesson. main
+                # nudged only in the thought-only case and left the other retry identical,
+                # which a deterministic model answers identically. Both, each with its own
+                # true sentence (reconciliation 2026-09-18).
                 msgs.append({"role": "user", "content": (
                     f"[harness] Your previous attempt spent its whole budget deliberating "
                     f"({raw.get('eval_count')} tokens) and the window cut it before any tool "
                     f"call. The window will not grow. Act now: one tool call. The deliberation "
-                    f"belongs in journal.md, after the act.")})
+                    f"belongs in journal.md, after the act."
+                    if thought_only else
+                    f"[harness] Your previous answer was cut off at the window "
+                    f"({raw.get('eval_count')} tokens) before it finished. Nothing of it was "
+                    f"delivered. Say or call the SHORTEST form of what you were doing; what you "
+                    f"leave out can go in the next beat.")})
                 nudged = True
-                # DID IT RUN OUT OF ROOM, OR NEVER START ANSWERING? Opposite failures, and
-                # this gave them the same remedy. A cut that produced real content ran out
-                # of room; a cut that produced only a think block did not, and handing that
-                # one a bigger budget buys a longer silence (SAGE#87).
-                thought_only = (bool(str(msg.get("thinking") or "").strip())
-                                and not str(msg.get("content") or "").strip())
                 from contextlib import ExitStack
                 with ExitStack() as _stack:
                     budget = _stack.enter_context(_retry_room(llm, _retry_budget(llm, raw)))

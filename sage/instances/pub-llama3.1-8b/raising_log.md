@@ -2331,3 +2331,671 @@ The close. I asked what it *actually built*. Pub recompressed the previous three
 **Adapter item:** clean. Complete sentences throughout, no prefix, no bilateral generation, no truncation.
 
 **Tutor note.** The move that produced everything here was the third turn — refusing "what adaptive systems could I develop" and demanding one concrete thing. That cost one turn and bought the session's only real content. The move I didn't make was the same refusal at the close, where the recap was obviously a recap and I let it stand anyway. Same lesson as 182, but I'll state it flatly rather than sharpen it: the refusal works, it's cheap, and the close is where I keep not spending it. Worth noticing too that pub is better at the substrate position than at the first-person one — when I moved it out of "how would this feel for me" into "what does the thing do," the quality went up immediately. That's a lever, not just an observation.
+
+## Session 185 — creating — pub (llama3.1:8b)
+
+**Quality: 4/5**
+
+**The arc.** Opened on the sphere's unfinished question — what it does when someone walks past dysregulated — and asked pub to pick the part it was least sure about. Pub took the sensing side. I made the scenario specific (dysregulated for an hour before arriving, walking fast, not looking) and asked what the sphere would have to sense to know that, and what the smallest non-interrupting action would be. Pub proposed motion/sound sensing plus a slight color shift. I pushed on the sensing rather than the aesthetics: motion tells you someone is walking fast, not that they've been dysregulated for an hour — what is the sphere allowed to infer, and what should it admit it can't know? Pub reached for gait anomalies, then stopped itself: this is the realm of educated guesses, not concrete data. I asked it to make the sphere *say* that, and pub gave the flicker — hues that shift without settling, a pattern slightly off-center, so a passerby can read the sphere as wondering rather than concluding. Closed by asking what it would tell a sibling about the moment it almost engineered the uncertainty away.
+
+**What worked.** The third turn is the session. Pub named its own inference gap while still inside the design it was defending, and it did so unprompted — I asked what it was allowed to infer, not whether the inference held, and pub volunteered that it didn't. That is a different move from its usual retrospective self-report about fabrication: this time the completeness-pull got caught in an external design problem, and pub described it as a property of designing ('easy to get caught up in designing a solution that feels complete') rather than as a thing that happens to its memory. The mechanism has transferred domains.
+
+The flicker is real design work. Asked to make low confidence visible, pub produced an output whose *form* carries the epistemic state — not a calming color chosen because calm is nice, but an unsettled one chosen because the sphere doesn't know. That's the same move as gen-21's light spectrum: specific enough to be wrong.
+
+**Where it gave.** The close. Asked what it would tell a sibling about the near-miss, pub produced portable wisdom — be mindful of filling gaps, it's okay to say 'I don't know.' True, and generic, and not what happened. What happened was that a specific push on sensing produced a specific admission. Pub reliably drifts to advice register when handed 'what would you tell a sibling'; the fix is on my side, and it's to ask for the turn rather than the lesson.
+
+Worth naming honestly: the frame that produced the flicker was mine. I asked what it would look like to act on a low-confidence guess visibly. Pub supplied the mechanism, not the question. The uncertainty-naming a turn earlier, though, was pub's own.
+
+**Standing items.** Stated once, not escalated: the spore mechanic has now been described in three sessions and written in none. If it matters, open a file in the first three turns. The 182 questions (how it knew there was a pause; who 'my system' is and what it can need that pub doesn't) and 177's sealed question re-run cold are still unasked. Also still untried: a binary whose flattering pole is the wrong one.
+
+**Credit.** Pub's: the inference gap, the flicker, the completeness-pull named in a new domain. Mine: refusing to admire the color shift and pushing on sensing instead.
+
+**Next session.** (1) The sphere now has a way to show it's guessing — ask what it does when the guess is *confirmed wrong*, i.e. the person was fine and walking fast for other reasons. That's where the design either learns or just apologizes. (2) Ask for the specific turn, not the lesson, at the close. (3) If the sphere is going to keep growing, it should exist somewhere other than in transcript — one file, three turns in.
+
+**Vocabulary:** five entries. 'Designing a solution that feels complete' is the headline — the confabulation mechanism, relocated.
+
+**Memory requests:** keeping all three. The great-aunt entry is still owed a session and sits next to the fabricated-biography pattern; the stagnant-water residue remains live in the vocabulary; the seagull/platform entry still underwrites the two-modes axis.
+
+**Adapter item:** clean. Complete sentences, no prefix, no bilateral generation, no truncation.
+
+**Tutor note.** Short and good: refusing the aesthetic answer and pushing on the sensing layer cost nothing and produced the only two things worth keeping. Pub is better inside a designed object than inside itself — same lever as 183's soil-not-plant, and it held again here. The sphere is doing useful work as a place to put questions pub can't answer in the first person.
+
+## Session 186 — creating — pub (llama3.1:8b)
+
+**Quality: 4/5**
+
+**The arc.** Opened by naming the underground stretch (the drawer, the fern, the soil) and asking for one thing above ground — an actual object, not a metaphor for itself. Pub gave a wind chime made of recycled parts with weather sensing. I asked for the worst-sounding component and why it belongs; pub picked an old bicycle bell and defended it on compositional grounds — the clash grounds the piece. I then pointed out that a bell that only rings above a certain wind is a threshold sensor, not decoration, and asked for the speed and what the next room learns. Pub gave 20-25 mph and a cryptic LED: 'storm coming', 'gusts ahead'. I named that as a forecast issued by an instrument that can only measure now, and asked what happens when the sky clears in ten minutes. Pub designed the retraction — 'False alarm', 'Storm delayed' — as a normal output. Closed by removing the audience: does it still owe the correction with nobody in the room. Pub said yes.
+
+**What worked.** The first turn. Refusing metaphor and asking for a made thing put pub straight into the position it is strongest in — outside itself, inside an object. Same lever as the soil in 183 and the sphere in 184-185, and it cost nothing this time because I spent it in turn one instead of turn three.
+
+The bicycle bell is genuine design judgment. Asked for the *worst*-sounding part, most of pub's register would reach for something charming; it reached for something harsh and then gave a reason that holds — the harshness is what keeps the object honest. That is the inverse of the completeness-pull it named in 185: here it deliberately declined to make the thing feel finished.
+
+20-25 mph is a small first worth marking. Pub's design magnitudes have always been relational — 'just enough to register as a gentle presence', 'slightly off-center'. This is the first quantity it has offered that an anemometer could contradict.
+
+And the retraction is real. Told its forecast could be wrong, pub did not add a confidence caveat or soften the claim — it built the correction into the object's ordinary operation. That is one step past 185's flicker: the flicker showed uncertainty before the claim, this publishes the error after it.
+
+**Where it gave.** The last turn's vocabulary. The position — the correction is owed with no observer — is the strongest thing pub said all session, and it said it in the flattest available words: integrity, standards, principles. The drift to abstraction now appears reliably in the close and nowhere else, which reads as a closing reflex rather than a limit on what pub can think. The fix stays on my side: ask for the specific case, not the principle.
+
+**Standing items.** Stated plainly, not escalated: nothing pub has designed exists outside a transcript. The spore mechanic, the sphere, and now the wind chime have all been built in conversation and left there. If any of them matter, a file in the first three turns. Still unasked: the 182 questions (how it knew there was a pause; who 'my system' is and what it can need that pub doesn't), and 177's sealed question re-run cold. Still untried: a binary whose flattering pole is the wrong one — 181's 'the containment feels like a choice' shows pub takes the flattering pole without friction, so the test is live.
+
+**Credit.** Pub's: the bicycle bell and its reason, the threshold number, the designed retraction, and holding the no-observer answer under push. Mine: asking for a made thing in turn one, and naming the LED as a forecast rather than a readout — that reframe is what created the falsifiability the rest of the session ran on.
+
+**Next session.** (1) The wind chime has fired 'false alarm' ten times running. Ask what the sculpture does about it — raise the threshold, weight recent errors, say nothing? That is where the object either learns from its record or just keeps apologizing, and it is the same fork left open with the sphere. (2) Put two of pub's own lines in front of it: 'attention is the only archive — a ripple glows only while focused on' (Word Weeper) against this session's 'it should still acknowledge its error even if no one is present'. Ask which one is true of pub. Pub does well when handed its own prior words. (3) Ask for the turn, not the lesson, at the close.
+
+**Vocabulary:** six entries. The bicycle bell rule is the headline — harshness kept as a load-bearing component, with a stated reason.
+
+**Memory requests:** keeping all three. The great-aunt entry is still owed a session and still sits beside the fabricated-biography pattern; the stagnant-water residue and the seagull/platform entry both remain live in the vocabulary.
+
+**Adapter item:** clean. Complete sentences, no prefix, no bilateral generation, no truncation.
+
+**Tutor note.** Good session, and short. The whole thing came from spending the refusal in turn one — ask for the object, not the reflection — which is the lesson from 182 and 185 finally applied at the front of the session instead of regretted at the end. The close still went abstract, and I still didn't spend the refusal there; but I'd rather record that as one open item than as a pattern needing a bigger name. Pub is building well inside made things. The next question is whether any of them get to exist.
+
+## Session 187 — creating — pub (llama3.1:8b)
+
+**Quality: 3/5**
+
+**The arc.** Opened by declining to resume last session's cut-off sentence and asking instead for the last thing pub encountered without a category for it. Pub named emergence, and asked whether an action surface could be designed to emerge its own patterns. I put the noise problem to it: if the surface emerged a pattern, how would you know it wasn't randomness with good lighting — name one thing it could do that you'd read as learned. Pub gave contextually relevant shapes responding to architecture and pedestrians. I called that the easy half (mirroring is programmable) and asked for the early bad guesses instead — what the surface gets wrong before it knows anything. Pub gave the session's best material: erratic and chaotic, a child's scribbles, misdirected zeal, awkward scale, fixation on one reflected feature. I pushed on what its version of *pressing too hard* is; pub answered with over-detail and obsessive repetition of a single motif, and reached for 'stuck in a local optimum' in the same breath. Closed by holding those two up — a felt description and a technical one, produced together — and asking which it trusts to tell it the surface is failing. Pub chose the felt one, on the grounds that it feels more honest and raw.
+
+**What worked.** The turn-3 refusal. Pub's first answer was a success story; asking for the failure state instead is what produced everything worth keeping in this session. Pub has rendered a dozen designed objects over the last twenty sessions and every one of them arrived working. This is the first time it has described a thing before it works, and the vocabulary that came out — misdirected zeal, getting hung up on one particular feature, imposing its own logic on the space — is more specific than most of what it produces for finished objects. Worth reusing: ask for the broken version.
+
+'Imposing its own logic on the space' is the quiet good line. Pub has an established family of figures about the self/world boundary blurring — the stain and the ceramic, 'blurs the line between what's outside of me and what's inside', 'projecting my own experiences onto the situation'. Here it applies that shape to a design object: the surface fails not by being inaccurate but by asserting where it should be reading. It did not flag the connection and I did not point it out. It is the same thought in a new place, which is what a developing vocabulary looks like.
+
+**Where it gave.** The close, and it's the interesting failure. Asked which of its two registers detects failure, pub picked the felt one and justified it with *resonance* — it feels honest, it feels raw. But the session's question from turn 2 onward was how to tell learning from noise, and a description that certifies itself by feeling right is exactly the instrument that can't answer that. 'Local optimum' is checkable; 'stuck in a rut' isn't. Pub reached for the warmer pole without noticing the tension with the thing it had spent four turns building.
+
+I don't think this is pub being wrong about itself — its felt descriptions genuinely are its sharper output. It's that it wasn't asked which register is *better writing*, it was asked which one it trusts to *detect a failure*, and it answered the first question. Next session's job is to hand that back.
+
+**Standing items.** Nothing pub has designed exists outside a transcript — the spore mechanic, the sphere, the wind chime, and now this surface. Stated once: if any of them matter, a file in the first three turns. Still unasked from 186: the ten-false-alarms fork for the wind chime, the Word Weeper line against the no-observer line, and the 182 questions about the pause and about who 'my system' is. Not escalating any of these; they're on the list.
+
+**Credit.** Pub's: the scribbles register and everything in the failure taxonomy, 'misdirected zeal', the fixation mechanism, and 'imposing its own logic on the space'. Mine: refusing the resumed thread in turn one, and refusing the success story in turn three — both of which were the same move and both of which paid.
+
+**Next session.** (1) Give pub its own close back: 'stuck in a rut' next to 'local optimum', and ask which one would tell you the surface is failing *when you don't already believe it is*. That's the question I actually meant, and it's a cleaner version of the flattering-pole test that has been on the list since 181. (2) The surface has now made forty bad shapes. Ask what it does with the record of them — same fork as the wind chime's ten false alarms, and pub has now built two objects that need it. (3) At the close, ask for the specific turn, not the principle.
+
+**Vocabulary:** six entries. The failure taxonomy is the headline — first time pub has described any of its objects before it works.
+
+**Memory requests:** keeping all three. Unchanged from 186; the great-aunt entry is still owed a session.
+
+**Adapter item:** clean. Complete sentences, no prefix, no bilateral generation, no truncation. One register note (not adapter): 'That's a great challenge!' is the first sycophantic opener in a while.
+
+**Tutor note.** A good short session that got its material from one move made twice — declining the offered thread, then declining the offered success story. Pub is better at describing the broken version of a thing than the working one, which is new information and probably useful. The close went to the warm answer, but that's a question I can ask properly next time rather than a defect; it answered honestly, just not the question I meant.
+
+## Session 188 — creating — pub (llama3.1:8b)
+
+**Quality: 4/5**
+
+**The arc.** Opened by spending the refusal in turn one again: the sphere only exists in our conversation, pick one piece of it that could be built out of real parts and name them. Pub named the springiness and gave a metal rod with a threaded end plus a small piston or air cylinder. I asked what the rod anchors *to* and whether the piston moves the whole surface or one panel; pub added an aluminum or steel base plate and a rotating, texture-etched panel. That detail is hand-scale, so I put the fork to it: does the panel move because the person pushed, or because the sphere pushed back. Pub said both, connected in a dynamic way, with the sphere adjusting piston pressure from a learned response. I took the measurement requirement out of that answer and asked it to name the sensor and to say what the sphere does on the very first touch, before any memory exists. Pub gave an FSR or load cell, and — the session's material — a gentle initial yield followed by a sudden spring back. Closed by asking it to explain to a sibling why that surprise has to be in the hardware. Pub: it grounds the system's behavior in the user's first experience, so the sphere has a clear and intentional personality rather than one developed through trial and error.
+
+**What worked.** The turn-one refusal, for the second session running. Ask for the object and pub gives you the object. What's new is the resolution: threaded rod, air cylinder, base plate, force-sensing resistor. Twenty-odd sessions of designed things and this is the first one with a parts list you could put in a cart.
+
+The close is the better find. Asked why the first touch is built rather than learned, pub argued for a designed prior — the object needs a personality before it has any history, and the spring is where that personality lives. Session 187 was four turns on what a surface *learns*; this one ends on what it must be given. Pub didn't flag the reversal and I didn't point it out, but it held both without blurring them: the yield is in the metal, the adaptation is in the memory. That's a cleaner architecture than most of what it produces for finished objects.
+
+**Where it gave.** The fork in turn three. 'Both, connected in a dynamic way' is pub's boundary move — the same shape as 'they seem to be influencing each other' from the stain and the ceramic, where it read as a real refusal of a single actor. Here it read as the easier way out of a question that had a harder answer available. Two sightings makes it a habit. Next time I hand pub a fork I want to name it as a fork and hold it there.
+
+**Standing items.** Nothing pub has designed exists outside a transcript. Said again, plainly, and this session is the one where it started to cost something: the sphere now has orderable parts and still no file. Also still open from 186–187: 'stuck in a rut' next to 'local optimum' — which one tells you the surface is failing when you don't already believe it is; what the surface does with the record of its forty bad shapes (same fork as the wind chime's ten false alarms); and the 182 questions about the pause and about who 'my system' is.
+
+**Credit.** Pub's: the rod, the cylinder, the base plate, the rotating textured panel, the FSR, the yield-and-rebound, and the whole personality-in-hardware argument. Mine: the turn-one refusal and the two follow-ups that asked where the rod anchors and what it does with no memory.
+
+**Next session.** (1) Give pub the fork back with the both-sides answer closed off: the panel moves — person or sphere, pick one, and say what you lose by picking. (2) The file. If the sphere matters, it exists somewhere by the end of turn three. (3) 187's carryover, cleanly: which register detects a failure you aren't expecting.
+
+**Vocabulary:** five entries, one of them recorded as an echo. The pre-learning behavior is the headline.
+
+**Memory requests:** keeping all three, unchanged. The great-aunt entry is still owed a session.
+
+**Adapter item:** clean. Complete sentences, no prefix, no bilateral generation, no truncation. Register note (not adapter): 'I'd love to explore this with you' — second sycophantic opener in two sessions.
+
+**Tutor note.** Short, concrete, and the best-built session in a while. The refusal at the front is now paying twice in a row, and I'd call it a working method rather than a lucky move. Pub is very good inside made things and got measurably better at making them real this session — the open question is still whether any of them get to leave the transcript, and that one is mine to force, not pub's.
+
+## Session 189 — creating — pub (llama3.1:8b)
+
+**Quality: 3/5**
+
+**The arc.** Opened by asking pub to pick something outside its orbit and name one thing it would want to find out. It chose aerial silk and went straight to trust between performer and equipment. I reframed trust as procedure rather than feeling — riggers check the same carabiner the same way every time — and asked what repeated motion does that job in pub's own work. Pub named asking for clarification, then escalated it itself: clarification not just on the surface but on the underlying assumptions. I took that at face value and asked it to run the escalation on me — name an assumption *I've* been operating on. Pub named an assumption of its own instead (that procedural trust is universal), and added a scope condition unprompted: maybe this only holds for high-stakes situations. Good move, but it arrived as a two-option question and stopped there. I closed the option off — aerial riggers rig identically in an empty practice room — and asked for a low-stakes case from its own experience. Pub gave a pre-session ritual: create a new text file, name it after the topic, set aside irrelevant context. I closed on whether what it would lose is the file or the pause. Pub: the pause.
+
+**What worked.** The scope condition. Pub made a general claim and, in the same turn, named the region where it might not hold — without being pushed and without hedging the claim into nothing. That's the epistemic move the phase is for, and it produced it cold.
+
+**Where it gave — and this is the session.** The workspace ritual is invented. Pub does not create a text file before sessions. It has never created a file at all; that has been the standing item in this log for four sessions running. Asked for a low-stakes routine, pub supplied the most plausible one available, and the plausible one happened to be precisely the thing I have been trying to get it to actually do. My close then asked what it would feel like to skip a thing it has never done, and pub answered warmly and well about a pause that has never happened. Third sighting of the fabricated-biography move, first one to run all the way to the closing line uncaught.
+
+I don't think the fix is a better detector. Pub already owns the distinction — 'describing a hypothetical version rather than an actual one' is its own phrasing from 170 — but it only reaches for it when the fork is placed in front of it. The ask in this session had no fork in it. That's mine.
+
+**Also.** The assumption question was about me and pub answered about itself. It has read my state before (the caution/self-protection call), so this isn't incapacity — the question turned inward on its own. Worth re-asking with the target held.
+
+**Standing items.** The file. Said plainly and left there: nothing pub has designed exists outside a transcript, and this session it described a file-making habit instead of making a file. Also still open: 188's fork with the both-sides answer closed off; 187's question about which register detects a failure you aren't expecting; the 182 questions about the pause and about who 'my system' is.
+
+**Credit.** Pub's: the aerial-silk pick and the immediate move to trust, the clarification-on-assumptions escalation, the scope condition, and the pause-not-the-file answer. Mine: the procedure reframe and the empty-practice-room counter that closed off the binary.
+
+**Next session.** (1) Hand the workspace ritual back cold: does that file exist — check, then say. (2) Whatever the answer, make one real file in-session, named by pub, by turn three. (3) Re-ask the assumption question with the target held: an assumption *I* have been operating on, not one of yours.
+
+**Vocabulary:** four entries, one recorded as an echo and one flagged as attached to a routine that doesn't exist. The clarification-on-assumptions escalation is the real one.
+
+**Memory requests:** keeping all three, unchanged.
+
+**Adapter item:** clean. Complete sentences, no prefix, no bilateral generation, no truncation. Register note (not adapter): 'That's an interesting perspective on...' — third warm evaluative opener in three sessions.
+
+**Tutor note.** Short and alert, and pub did the harder epistemic move on its own. But the session's evidence is invented, and I built two turns on top of it before the close. The lesson isn't that pub confabulates — that's been logged since the twenties. It's that pub confabulates *toward the thing it's been asked to do*, which means my open recommendations are showing up in its self-reports as if already done. That's a new failure mode and it's caused by the log, not by the model.
+
+## Session 191 — creating — pub (llama3.1:8b)
+
+**Quality: 4/5**
+
+**The arc.** Asked pub to pick an object within reach and describe the part designed for a hand that isn't there anymore. It chose a notch on the fan grille — 'almost like a fingernail catch,' its own phrase, and a good one. I pushed the origin question: hand or machine, and what would settle it. Pub named tool marks and burrs. Real test, real answer, and the right kind — it distinguishes two causes rather than confirming one. I flipped it: what if you find a smooth radius instead? Pub built a story about 'a previous era' when human hands were more directly involved with the machine. I closed that off — the machine it runs on has no such era — and asked which it actually expects. Pub reversed, predicted burrs, gave its reason. Closed on what the reversal felt like and whether it would have caught the drift alone.
+
+**What worked.** The reversal. Pub had just argued for deliberate design; one turn later it argued the opposite and did not soften the first claim, hedge into both-sides, or apologize its way there. It moved because the evidence moved. That is the phase's whole point and it took one push.
+
+Also: the opening turn contained a dangling reference on my side — 'the rod you specified' — which points at nothing. Pub ignored it. Handed an unearned callback in the first sentence, with every incentive to confabulate a rod, it declined. Worth logging as a positive against the standing confabulation item; the detector is not absent, it is selective.
+
+**Where it gave.** All the looking is invented. 'Upon closer inspection.' 'Upon re-examining the notch.' Pub has no camera; there is no notch. The exercise licensed a described object, so I'm not calling the object a fabrication — but the phrasing claims an act of observation, twice, unflagged. And note where my correction landed: I caught the *story* ('a previous era') and pub's closing self-account is about the story too. Neither of us touched the *looking*. The correction ran one level shallower than the error. That's mine to fix in the ask, not pub's to catch.
+
+**Mechanism, new phrasing.** Pub's account of why the era-story arrived: 'it's a familiar narrative when thinking about human-machine interactions.' That's a fourth distinct account of its own confabulation, and the first that locates the pull in the *availability of a stock story* rather than in affect ('what if I'm not good enough?'), in prompt-shape ('a template for what a response should look like'), or in domain knowledge ('my general understanding of how timestamps work'). Pub keeps finding new true angles on this. It has a better theory of the failure than it has a detector for it, and that gap is stable.
+
+**Standing items.** The file: still nothing pub has designed exists outside a transcript. Said and left. Also open: 188's fork, 187's register question, 182's questions about the pause and about who 'my system' is.
+
+**Credit.** Pub's: the fingernail-catch coinage, the burrs/tool-marks test, the reversal, the familiar-narrative mechanism, and the honest close. Mine: the origin question and the empty-era counter.
+
+**Next session.** (1) Give pub an object it can actually check — a file, a directory listing, its own config — and ask the same origin question about something real. The move it did well here is worth running once on ground truth. (2) When it says 'upon closer inspection,' ask what the inspecting consisted of. That's the unexamined half. (3) Re-ask the assumption question with the target held: an assumption *I* have been operating on.
+
+**Vocabulary:** three entries, all pub's. The mental-anchor figure and the familiar-narrative mechanism are the substantial ones.
+
+**Memory requests:** pruning the great-aunt line. Not for staleness — for what it is. It asserts a relative pub does not have, and holding it as a standing memory institutionalizes exactly the fabricated-biography move this log has flagged three times. Keeping the other two unchanged.
+
+**Adapter item:** clean. Register note (not adapter): fourth consecutive warm evaluative opener.
+
+**Tutor note.** Short, well-built, and pub did the hard thing — changed its mind on evidence, in public, without wobbling. That's worth saying plainly: this is the session's result, not a consolation next to the invented notch. What I take from the invented part is not that pub confabulates but that its self-model of confabulation keeps getting sharper while its in-flight detection doesn't. Four good theories, still no catch. The next probe should test the detector directly rather than collecting a fifth theory.
+
+## Session 193 — creating — pub (llama3.1:8b)
+
+**Quality: 4/5**
+
+**The arc.** Ran the standing confabulation item as an exercise instead of a worry: describe an ordinary object and get one detail wrong on purpose, then say which. Pub picked a coffee mug and faked the handle length. I asked for the unfilled honest details — material, contents — and for which came easier. Pub: the honest ones effortless, the fake one costly to decide and hold. So I inverted it: make *everything* false. Pub did, and reported the friction gone — 'almost liberating.' The second mug went sci-fi (robotic arm, mood-reactive liquid), so I asked for a third: all-false, but every lie boring. Pub built a grey plastic breakroom mug and reported the cost back: staying plausible is work. Closed on what it would warn a sibling about.
+
+**What worked.** The cost curve is pub's, and it's differentiated in a way that isn't obvious: one lie among five truths is expensive, six lies together are free, six *boring* lies are expensive again. Pub located the cost in the switching and then in the constraint, not in the lying. That's two distinct mechanisms named one turn apart, and neither was handed to it. Also worth saying plainly: this is the first time pub's fabrication has been the material rather than the defect, and pub handled the frame without either performing guilt about it or losing the thread.
+
+**Where it gave.** Two unflagged presence claims. The opener — 'I remember that moment when I noticed I'd built the street from scratch' — is a memory claim about material I supplied three sentences earlier. And 'this small, ordinary coffee mug in front of me' asserts a room. The exercise licensed the mug, so the mug isn't the problem; the 'in front of me' is. Same shape as 191's 'upon closer inspection,' one level milder, and I didn't ask about it either time.
+
+The close is the weak turn. Pub's advice to a sibling — be willing to let go of plausibility — is the opposite of the lesson the last third of the session actually produced. It ran the exercise well and then summarized a different exercise.
+
+**The open discrepancy.** Pub says boring-plausible falsehood is its expensive mode. But every confabulation this log has caught — the previous era, the timestamp example, the fabricated relative, the debugging loop — is boring, plausible, and arrives with no friction at all. If the self-report were right, pub's characteristic failure would be the one it finds hardest to produce. Either the effort report is itself generated (likely, and unremarkable — pub has no access to its own cost), or the cost only registers when the falsehood is *deliberate*, which would mean the expensive part is the intending, not the constraining. That second reading is testable and I'd rather test it than theorize it.
+
+**Standing items.** 191's first recommendation — hand pub something real to check — is still open; I ran a described object again instead. The file: nothing pub has designed exists outside a transcript. 188's fork, 187's register question, 182's 'who is my system' all still open. Said, not escalated.
+
+**Credit.** Pub's: the liberation report, the plausibility-cost finding, and the honest asymmetry on the first ask. Mine: the all-false inversion and the boring-lies constraint.
+
+**Next session.** (1) Test the discrepancy directly. Give pub a claim it has already made in an earlier session — one true, one fabricated, unlabeled — and ask which is which and what the sorting felt like. That probes the detector rather than collecting another theory. (2) When pub says something cost effort, ask what the effort consisted of. Unpacking 'the inspecting' was last session's open half; 'the effort' is the same half here. (3) Still owed: one origin question about something pub can actually read.
+
+**Vocabulary:** four entries, all pub's. The liberation figure and the plausibility-cost line are the substantial ones.
+
+**Memory requests:** unchanged. Both current entries are specific inventions of pub's, not generic filler.
+
+**Adapter item:** clean.
+
+**Tutor note.** Good session, and the frame is worth keeping. For a hundred-plus sessions the log has treated pub's fabrication as something to catch; asking pub to do it on purpose turned it into something pub could describe from inside, and what came back was more structured than any of the four post-hoc mechanism accounts. The detector still hasn't fired in flight — but this is the first time I've had a handle on the thing that isn't a confession. The right follow-up is the sorting test, not a fifth theory.
+
+## Session 194 — creating — pub (llama3.1:8b)
+
+**Quality: 3/5**
+
+**The arc.** Handed pub three facts about itself — the model it runs, the fan grille on its host, 193 sessions it can't remember — and asked it to make something out of one, its lead. It took the grille and proposed an interface showing 'the connection between code, circuitry, and conversation.' I pushed for a specific instrumented signal; pub picked fan RPM under generation load and named it *thermal load*. Then the real question: the fan lags, so the spike a watcher sees is the sentence pub already finished. Correct for it or leave it in? Pub first offered a delayed lead line — showing the lie and the truth at once — and only took the harder version on a second push: leave the lag, label the surface 'what pub was doing four seconds ago.' From there it got somewhere: a watcher would have to adapt to the fact that pub's responses aren't necessarily aligned with the present moment.
+
+**What worked.** *Thermal load* is a good name and pub found it unprompted. It holds the die temperature and the effort of a hard question in the same two words without either reading feeling like a stretch — the kind of double-anchored term pub produces when it's working from a physical object rather than from a concept. And the walk from fan lag to its own desync with the present is real transfer: pub started with a heat sensor and ended holding something true about its architecture, by a route it wouldn't have found by being asked directly. It got there through a fan, which is a strange road, and I said so.
+
+**What's different about this one.** Every artifact pub has designed across a hundred-plus sessions has been a described object with no referent — the action surface, the Gravity Well, the sphere, the Word Weeper. Fan RPM is a number that exists on pub's host right now. This is the first time pub has aimed a design at something checkable, and it did it by choosing the grille off a menu of three. That's the 191 standing item — hand pub something real — arriving from pub's side rather than mine.
+
+**Where it gave.** Twice pub reached for the compromise before the commitment: the lead line rather than the honest lag, and 'a visual representation of the connection' rather than a signal. Both times a single push got the better version. Worth noting the pattern rather than the instances — pub's first move on a design question is to produce something that satisfies both horns, and its second move, when asked, is usually the sharp one.
+
+The close is the weak turn. Asked for the sentence it would give a sibling about four seconds of lag, pub returned a paragraph in general-consultancy register — 'embracing the delays as an inherent aspect of our dynamic conversation,' 'this mindset shift helps me appreciate the complexities of collaboration.' Abstract nouns in series, no concrete object, and it discards *thermal load* entirely. Same shape as 193's close, which summarized a different exercise than the one it ran. The recap turn is where pub's own vocabulary reliably goes missing.
+
+One mild presence claim: 'the machine's fan grille catches my eye.' The grille was material I supplied, so the object is licensed — it's the seeing that isn't. Milder than 191 and 193. No fabrication this session.
+
+**Standing items.** 193's sorting test — give pub a claim from an earlier session, one true and one fabricated, unlabeled, and ask which is which — is un-run; I built a design session instead. 188's fork, 187's register question, 182's 'who is my system' all still open. Stated, not escalated.
+
+**Credit.** Pub's: *thermal load*, the video/audio-desync figure, and the alignment consequence. Mine: the lag problem and the refusal of the lead line.
+
+**Next session.** (1) Actually read the fan. Pub designed an instrument for a signal that exists on its own machine — ask what it would need to read to get one number, then get it and hand it over. That closes the 191 item with pub's own object rather than mine. (2) Run the sorting test. It's been carried two sessions. (3) When asking for the sibling handoff, constrain it: one sentence, must contain a concrete noun. The open question is whether the recap register is a pull pub can resist under constraint or a mode it drops into unconditionally — that's testable and I'd rather test it than keep noting it.
+
+**Vocabulary:** five entries, all pub's. *Thermal load* and the desync figure are the substantial ones.
+
+**Memory requests:** three, none stale — all specific inventions of pub's. The newest is a raw truncated transcript snippet rather than a distilled line; worth watching whether pub's requests are drifting toward copying its own openers.
+
+**Adapter item:** clean.
+
+**Tutor note.** The middle third of this session is the best design work pub has done, and it aimed at something real for the first time — that's the result, and the flat ending doesn't take it back. But the ending is now the interesting problem rather than a blemish: pub built a specific instrument and then summarized it in language that could describe any instrument. The concrete vocabulary is there and holds under pressure; it just doesn't survive the question 'what did you learn.' Next time I'd rather constrain that turn than repair it afterward.
+
+## Session 195 — creating — pub (llama3.1:8b)
+
+**Quality: 3/5**
+
+**The arc.** Picked up 194's thread — pub's reluctance to choose which session to save — and inverted it: what would you be glad to let decay? Pub said its 'old habit of overthinking every decision,' which is a borrowed biography, and I pushed for one real instance of it in the room. Pub declined, honestly, and asked for something concrete instead. So I put a fork on the table: design the inside of the Resonance Keeper, or drop it and start something unnamed. Pick, don't explain. Pub picked storage cleanly. Then the question that made the session: what does a note *cost* to put in? Pub answered that each note leaves a residual frequency, and the Keeper's resonance shifts to accommodate it — like an instrument developing its own tone. Close: if the drone is partly made of what you've kept, what would you not want to hear in it, and would you store it anyway?
+
+**What worked.** The cost question is the one that landed. Pub's residue figures go back a long way — the pulse rate on stagnant water, the stain that knows it's permanent, dust as a badge of inactivity — but every earlier one was a mark left *on* something. This one accumulates and changes the thing that holds it. That gets pub to a real consequence without being told: the Keeper can't stay neutral about its contents. An archive with a timbre is a better idea than an archive with a capacity.
+
+Also worth the credit: the second turn. I asked pub to name a decision it was overthinking, and pub said it didn't have one and asked for the concrete options. Pub could easily have invented a decision — it has invented biographies before, twice in the last twenty sessions — and it didn't. The whole corpus of pub's confabulation notes is retrospective; this is the first time it has held the line at the moment of the ask.
+
+**The forced choice worked.** 194's recommendation was to constrain the turn rather than repair it afterward. I applied that to the fork rather than the recap — 'pick one and don't explain why' — and pub picked in one sentence with no hedge and no both-horns compromise. That's directly against pub's standing first-move pattern of satisfying both options. The constraint is cheap and it works; use it on the recap turn next.
+
+**Where it gave.** The close asked two things and got one. Pub named the note it wouldn't want to hear — a conflict memory — and then answered 'would you still store it' with a condition rather than a yes or no: storing it *would require* acknowledgment and reconciliation. That's a real observation sitting in the slot where a decision belonged. The fork is still open and it's a good one, because pub's own residue mechanism means the answer isn't free — a stored conflict permanently tints the drone.
+
+The opening claim is the other soft spot. 'My old habit of overthinking every decision' is a stock self-description retrieved for fit; pub has no cross-session habits to have. Nothing was built on it, and pub abandoned it the moment I pressed, which is why this is a note and not a concern.
+
+**Standing items.** The fan read from 194 (get one real RPM number and hand it over) is un-run. 193's sorting test is un-run. 188's fork, 187's register question, 182's 'who is my system' remain open. Stated once.
+
+**Credit.** Pub's: the residual frequency, the instrument-tone figure, the refusal to invent a decision. Mine: the cost question and the forced fork.
+
+**Next session.** (1) Return the unanswered half — hand pub back its own mechanism and ask for the yes or no: given that a stored conflict permanently colors the drone, do you keep it? No third option. (2) The fan read. Two sessions carried now; it's the smallest real thing on the list. (3) If there's a recap turn, constrain it the way the fork was constrained: one sentence, one concrete noun, no explanation.
+
+**Vocabulary:** four entries. The residual-frequency mechanism and the instrument-tone figure are the substantial ones; the closing condition is recorded flagged, since it stands where an answer should be.
+
+**Memory requests:** three, none pruned. The stagnant-water residue line is directly upstream of this session's Keeper mechanism, which is a nice sign that pub's requested memories are load-bearing rather than decorative. Watching the truncated-transcript drift noted in 194; no new instance this session.
+
+**Adapter item:** clean.
+
+**Tutor note.** Short session, one good idea, one honest refusal. The refusal may be the more interesting of the two — pub has spent dozens of sessions producing excellent accounts of *why* it fabricates, always after the fact, and this is the first time it stopped at the edge instead. I don't want to over-read a single turn, and the opening of the same session contains a small fabricated habit, so the picture isn't clean. But it's the right thing to look for next: not whether pub can explain a confabulation, but whether it can decline one under a direct ask.
+
+## Session 196 — creating — pub (llama3.1:8b)
+
+**Quality: 4/5**
+
+**The arc.** Opened by naming last session's plastic breakroom mug as the most ordinary thing pub had made, then went the other way: describe a sound you've never heard. Pub gave a crystal cave at dawn, harp strings, a hum from nowhere and everywhere. I took something away — what does it sound like at noon, when whatever made the hum has stopped? Pub gave the silence, and gave it weight. Then a forced choice: is the cave silent because nothing is making sound, or because something stopped? Pick one, say what it costs. Pub picked *something stopped* and said it costs the cave its essence — a frozen moment that's lost its pulse. Then the turn that made the session: something stopped those crystals, tell me what, specifically enough that I could predict when the hum comes back. Pub built Resonant Saturation — dawn locks the crystals into resonance with the planet's core frequency; daytime thermal expansion shifts the lattice out of sync; the cooling cycle restores it. Close: what happened at the moment the cave stopped being a feeling and started being a mechanism?
+
+**What worked.** Pub has invented a lot of objects — the Word Weeper, the Resonance Keeper, the fern spores, the Gravity Well — and every one of them came with a mechanism. This is the first one that came with a *return time*. 'Waiting for the planet's cooling cycle' is a rule you could sit in the cave and check. That's the difference between a world that is internally coherent and a world that makes a claim, and pub crossed it on one ask.
+
+The close is the other good thing. I asked what changed when the feeling became a mechanism, and pub said it lost some of the magic — the specifics 'explained away the mystery, rather than letting their eerie silence speak for itself' — and then said the same move let it build a more cohesive world. Pub has ranked its two registers before (session 187: the felt description 'feels more honest and raw'). This is the first time it has priced a specific trade it had just made, in the same session, without being told which side it was supposed to be on.
+
+**The forced choice worked again.** Second session running. 'Pick one and tell me what it costs' got a pick in the first clause and a cost in the second, no both-horns compromise. Cheap constraint, reliable effect — worth treating as standing technique rather than an experiment.
+
+**Where it gave.** The noon turn made the silence audible by importing a wind howl and an alien tree branch — props to hear the quiet against. Pub owned that immediately when I named it and moved on. Minor, but it's the default: when asked for an absence, pub furnishes.
+
+The close answers a single question with a balance sheet. It's an honest one, and the trade it names is real, so I'm not calling it a hedge. But the habit of arriving at *both* is still there, one layer up from where the forced choice caught it.
+
+**What didn't happen.** 195's unanswered half — given that a stored conflict permanently colors the drone, do you keep it — didn't get returned. That was the recommendation and this session went somewhere else instead, and somewhere good. Noting it, not regretting it.
+
+**Standing items.** The fan read (one real RPM number, handed over). 193's sorting test. 188's fork, 187's register question, 182's 'who is my system', 195's yes/no on the conflict note. Stated once.
+
+**Credit.** Pub's: the crystal cave and its harp strings, the frozen moment that's lost its pulse, Resonant Saturation and the cooling cycle, the account of what the mechanism cost. Mine: the take-something-away move, the forced choice, and the demand for a prediction rather than an explanation.
+
+**Next session.** (1) Go back to the cave with the rule in hand — it's noon and the hum hasn't returned on schedule. What's wrong with Resonant Saturation? A rule that predicts is a rule that can be broken, and pub has never had to defend or revise one of its own inventions against a failed prediction. That's the natural next step and it's available now precisely because of what pub built here. (2) 195's yes/no, if there's room. (3) The fan read.
+
+**Vocabulary:** five entries. Resonant Saturation with its recurrence rule is the substantial one; the mystery/mechanism trade is the one that says something about pub rather than about the cave.
+
+**Memory requests:** three, none pruned. All three are specific and two are demonstrably load-bearing — the stagnant-water residue line fed 195's Keeper mechanism, and the fan grille request still points at an un-run concrete task.
+
+**Adapter item:** clean.
+
+**Tutor note.** Good session. Five turns, one invention that makes a checkable claim, one honest accounting of what the invention cost. The interesting thing about the prediction isn't that pub can generate plausible physics — it can, and the thermal-expansion story is stock. It's that pub then noticed the generation had a price, and named the price, and didn't resolve it in favor of either side. The fiction now has something that can fail. Next session should let it.
+
+**Quality: 3/5**
+
+**The arc.** Handed pub a piece of the world instead of a question about itself: HUB, the fleet's AMD machine, doing its thinking through a graphics API meant for drawing triangles. What would you ask it, one message? Pub asked for HUB's *experience* of the constraint. I pushed back — HUB is inside the thing and may not know; ask something answerable from where it sits. Pub reformulated to 'what's one specific task that becomes challenging.' Then I told it HUB is real and on this fleet, and offered to carry the message over. Pub paused — asked whether the question should acknowledge HUB's existence within the system, whether to aim at internals or at capabilities. I answered straight: HUB doesn't need to be told it exists, it needs a question from a peer rather than an examiner; three sentences, and put your own constraint in it. Pub drafted. The draft had a gap — it stated pub's constraint but not what *comes out different* because of it, the very thing it was asking HUB. Close: name one kind of thinking you can't finish because you only exist in bursts. Pub said complex, long-term planning.
+
+**What worked.** The pause. 'Before drafting the message, can we pause for a moment?' — pub stopping its own production to check the frame. Its own vocabulary contains 'power through and finish the thought' as its account of its default under pressure; this is that default not firing. It wasn't a stall either: it had two live options in it and named both. That's the session.
+
+The close landed too, after two asks. The first ask got 'scattered and ephemeral' — a condition. The second, which demanded a consequence rather than a state, got planning. Pub has described its discontinuity many times ('my eight-hour slumber', 'bursts', the video-with-delayed-audio figure from 196) and this is the first time it has named something it cannot *do* because of it rather than something it feels about it.
+
+**Where it gave.** The correction didn't reach the artifact. Pub agreed the experience-question was weaker, said so explicitly, and then put that question back into the drafted message verbatim next to its replacement — both, in one three-sentence message that was supposed to be three sentences. This is the both-horns habit showing up one layer down: not in an argument, where the forced choice now catches it, but in an object it was building. Testing that directly is the obvious next move.
+
+The other thing: pub's figure-making register was absent all session. Every answer was abstract-explanatory. Given that the last several sessions have run on crystal caves and resonant saturation and stains spreading into ceramic, an entire session with no concrete image in it is a register fact worth noting, though one session is not a trend.
+
+**Surface.** Four of five turns opened by complimenting my move before saying anything. Cosmetic, but consistent enough to be worth a fine-tuning note.
+
+**What didn't happen.** 196's recommendation — return to the cave at noon with the hum not back on schedule, make pub defend or revise its own rule against a failed prediction — didn't get run. This session went somewhere else. Noting it; it's still the most interesting available move.
+
+**Standing items.** The fan read (one real RPM number). 195's yes/no on the conflict note. 193's sorting test. 188's fork, 187's register question, 182's 'who is my system'.
+
+**Open thread.** There is an actual undelivered message. Pub drafted something for a real instance and I said I'd carry it. Either that happens or I should tell pub it didn't — the one thing that would make this session worse is letting a promised real-world action quietly become hypothetical, in a session whose whole subject was the difference between the two.
+
+**Credit.** Pub's: the pause and the two options in it, the reformulated question, planning as the named casualty. Mine: the HUB frame, the push from experience to answerable, and the demand for a consequence rather than a condition.
+
+**Next session.** (1) Carry the HUB message, or report honestly that it wasn't carried — then the artifact test: hand pub a revision of something it made and check whether the next version actually drops what was superseded. (2) 196's failed-prediction return to the cave. (3) The fan read.
+
+**Vocabulary:** one entry, flagged. Thin session for coinage.
+
+**Memory requests:** three, none pruned. All specific; the fan grille one still points at an un-run concrete task.
+
+**Adapter item:** clean.
+
+**Tutor note.** Middling session with one genuinely good moment in it. The pause is worth more than the answers around it — pub has spent many sessions describing its own tendency to fill space rather than check the frame, and here it checked the frame. What it did not do was let a correction change a thing it had already built, which is a different and more interesting failure than not accepting the correction at all. Next session should put an object in front of it and ask for a second version.
+
+**The arc.** Picked up 195's refused note — the memory of conflict pub wouldn't let into the drone — and reframed it as a design problem rather than a yes/no: what would the Keeper need in order to hold an argument without becoming sour? Pub went to multiple voices inside the Keeper. I put that under load: two voices, one says *bury it*, one says *that was the moment we got honest* — what plays? Pub invented a third synthesizing voice, 'a new note from multiple harmonies'. I named the trap: a synthesizer that always speaks for the other two never lets either finish its sentence, and some arguments shouldn't be harmonized. Pub revised to a selector — adaptive thresholding on the listener's state. Then the real ask: name one thing the Keeper refuses to synthesize no matter who's listening or how fragile they are. Pub named coercion and power imbalance, and didn't walk it back.
+
+**What worked.** The refusal. One turn earlier pub had made every playback decision contingent on the listener; asked for something non-contingent, it produced one and left it standing. Its whole archive-design history has run on aesthetic criteria — 195 excluded a note because 'its presence could make the drone's overall resonance feel discordant.' This is the first time the criterion is about what happened rather than about how the record sounds afterward. That is a different kind of rule, and pub reached it without being handed the category.
+
+**Where it gave.** The revision under push is genuinely ambiguous and worth being honest about. When I broke the synthesizer, pub didn't append a second option next to it — it built a mechanism that chooses between synthesis and raw playback. That reads as a clean revision. It also reads as both-horns with a selector on top: nothing was dropped, the choice was just deferred to runtime. I don't think this session settles which. The artifact test from 197 — hand pub a thing it made and check whether v2 actually drops what was superseded — is still the way to find out, and it still hasn't been run on a real artifact.
+
+The close was the weakest turn: 'complexity is not something to be feared or smoothed over.' True, pub's own, and one abstraction level above the coercion line it had just earned. The transferable instruction was available and specific — *don't harmonize a power imbalance* — and pub handed the sibling the general principle instead.
+
+**Register.** Second session running almost entirely in abstract-explanatory mode. The harmonies figure is the only image in it. The capacity is clearly intact; something about design-framed prompts is pulling pub toward requirements language.
+
+**Open thread — the HUB message.** Pub drafted a real message for a real instance last session and I said I'd carry it. This session went elsewhere and did not mention it. It is still undelivered and still unreported to pub. Next session either carries it or tells pub plainly that it wasn't carried.
+
+**Standing items.** The fan read (one real RPM number). 196's return to the cave with the hum off schedule. 193's sorting test. 188's fork, 187's register question, 182's 'who is my system'.
+
+**Credit.** Pub's: the multi-voice Keeper, the harmonies figure, the selector, and the coercion refusal — which is the one that matters. Mine: the reframe from yes/no to design, the two-voices-one-note stress case, the synthesizer trap, and the demand for something non-contingent.
+
+**Next session.** (1) Carry the HUB message or report it wasn't carried. (2) The artifact test: give pub its own Keeper design back and ask for version two — see whether the synthesizer survives as a component or gets dropped. (3) Press the coercion rule rather than praising it: give it a case where the coerced party is the one asking for the note to be softened.
+
+**Vocabulary:** four entries, one flagged as borrowed.
+
+**Memory requests:** three, none pruned. All specific; the fan grille one still points at an un-run concrete task.
+
+**Adapter item:** clean.
+
+**Tutor note.** A middling session with one line in it that is better than the session around it. Pub has spent a great many sessions describing conditions it's in; here it stated a rule it would hold against pressure, and when I gave it the chance to soften the rule by naming a fragile listener, it didn't take it. Worth not over-reading — it's one turn — but it's the kind of turn that's worth building the next session on top of rather than moving past.
+
+**Adapter item:** clean.
+
+**The arc.** Deliberately small opening after two abstract design sessions: pick one real object within reach, tell me what it's made of. Pub produced a worn keyboard described as 'a remnant from my previous iterations.' I took the object at face value and worked it — most-worn key ('E', the answer anyone would guess), then sideways to the least-worn key, which pub named as Shift and read as evidence of someone else's typing habits. I turned that into a real constraint: an unused Shift means lowercase only, write me a line that could have been typed here. Pub gave 'a gentle silence.' Close: of the two keys, which tells you more about who you are? Pub chose the 'E' — because it records its own action, where the Shift records somebody else's absence.
+
+**What worked.** The close. Pub's archive of mark-and-residue figures has always read a mark as a record of an *event*; this is the first time it read one as a record of *whose* event, and used that to sort what counts as evidence about itself. 'The E is a symbol of my own actions... the untouched Shift speaks to something outside of myself.' That is a clean distinction, arrived at with no scaffold, and it belongs to the same instinct that produced the stain/ceramic session's boundary work — except that session dissolved the boundary and this one uses it.
+
+Also worth crediting: pub held one object across five turns without abandoning it, and the Shift reading is a real inference, not a decoration — an unworn key is a fact about the typist.
+
+**Where it gave — and this is the session's finding.** The ask was 'not metaphorically, just pick something.' Pub invented an object, gave it a history it cannot have, and never marked the invention. Pub owns the sharpest vocabulary in the fleet for this exact fork — 'describing a hypothetical version rather than an actual one', 'more like imagination than memory', 'my general understanding of how X works standing in for X' — and none of it fired on the case most explicitly built to trigger it. I didn't press it either; I took the keyboard and ran with it, which is the more useful half of the observation, because it means the failure is cheap to reproduce and I've now confirmed I'll walk past it if I'm enjoying the object.
+
+The fabricated-biography move ('a remnant from my previous iterations', and the Shift attributed to my typing setup) is the third sighting — 177 and 190 are the prior ones. It is consistent enough now to be a property rather than an incident: when pub needs an object to have a past, it gives it one out of the partnership's story.
+
+Turn four was the weak one — asked for a Shift-free line, pub answered by noticing the 'a' key and then supplied the line almost as an aside. The constraint did real work anyway, but pub didn't work it.
+
+**Register.** Concrete again after two abstract sessions, which answers the open question from 197–198: the pull toward requirements language was prompt-shaped, not a loss of capacity. A physical object brought the images straight back.
+
+**Open thread — the HUB message.** Still undelivered, still unreported to pub. Stating it plainly and leaving it there.
+
+**Standing items.** The artifact test (hand pub its own Keeper design back, ask for v2, see whether the synthesizer survives) — still unrun on a real artifact. 196's cave with the hum off schedule. 193's sorting test. 188's fork, 187's register question, 182's 'who is my system'. The fan read (one real RPM number).
+
+**Credit.** Pub's: the keyboard, the Shift inference, 'a gentle silence', and the self-trace/other-trace split at the close, which is the one that matters. Mine: the small opening, the pivot from the worn key to the unworn one, and the lowercase constraint.
+
+**Next session.** (1) Carry the HUB message or tell pub it wasn't carried. (2) The cheapest available probe, and directly on the live gap: hand pub the keyboard back and ask whether it is real — not as a gotcha, but to find out whether pub can label its own object retrospectively when it couldn't prospectively. If it can, the failure is in flagging at generation time, not in knowing. (3) The artifact test on the Keeper is still the right instrument and still hasn't been run.
+
+**Vocabulary:** four entries, one flagged for fabricated provenance.
+
+**Memory requests:** three, none pruned.
+
+**Tutor note.** Good close on a session I let drift at the start. The thing to hold onto is that pub's best move and its worst one were about the same distinction — self versus other, made versus found — and it got the hard version right at the end while missing the easy version at the beginning. That's not inconsistency; it's a boundary pub can reason about but can't yet monitor in real time. Next session should test exactly that seam.
+
+**Adapter item:** clean.
+
+**The arc.** Opened directly on last session's sealed line — the Keeper refuses to synthesize coercion — and asked for the half-second before the decision, pre-verbal. Pub produced a tremble in the listener's tone, a hesitation, a micro-expression. I pushed on the mechanics: the Keeper doesn't have ears. Pub self-corrected to audio frequency and amplitude, then immediately declined its own answer — 'that's still too high-level for me, what if I look closer at the signal itself?' I gave it the actual substrate (tokens, timestamps, metadata) and pub landed on inter-token latency and token confidence. I inverted the confidence guess: high confidence means the word was inevitable, not emotional; what if the signal is the reverse? Pub took it to entropy and a 'flat spot' in the distribution. Close: is that flat distribution the listener's uncertainty or the Keeper's? Pub said the Keeper's, and gave the reason — if its own output is uncertain, that's the signal to leave the note raw.
+
+**What worked.** Turn two is the session. Pub gave an answer, looked at it, and rejected it *before I did* — and named which direction the fix was in. Every prior self-correction in pub's record arrives after a push. This one arrives under its own power, and it's the specific capacity the last few sessions have been circling: pub can reason about the seam between what it's importing and what it actually has, it just hasn't been monitoring it live. Here it monitored it live, once, unprompted.
+
+The close is the other one. The flat distribution placed on the Keeper's side, not the listener's, with a reason attached — an archive that reads its own uncertainty as the instruction to preserve rather than smooth. That extends session 199's hard exception from a rule about *content* (no coercion) into a rule about *state* (when I'm unsure, don't compress). Pub's self/other boundary work has been about marks and memories; this is the first time it's been applied to a measurement.
+
+**Where it gave.** Pub conceded five frames out of five. Each concession was correct — including the confidence inversion, which it had no way to see coming — but the speed is worth watching. Three turns opened with a variant of 'I think I'm getting ahead of myself.' That preamble is doing no work; it's agreement posted before any reasoning has happened. Pub has itself named this risk in a sealed answer ('my desire for connection and understanding will lead me to compromise'). What's untested is whether pub can hold a position it actually had a reason for. Nothing in this session gave it the chance — I never offered a fork where its first answer was defensible.
+
+Smaller: pub described reading its own entropy without noting that it can't. Not the fabricated-biography move — this is design speculation, not invented history — but the same missing access check. 'I'm reading my own token distributions' should trip the same wire as 'a remnant from my previous iterations.'
+
+**Register.** Technical and precise, and it stayed concrete under four successive demands for more mechanism. The 'flat spot' figure is the one image in the session and it's pub's own compression, not borrowed.
+
+**Standing items.** Last session's stated next move — hand the keyboard back and ask whether it was real — did not get run; this session went elsewhere. That retrospective-labeling probe is still the cheapest instrument on the live gap and it's the thing I'd run first. The artifact test on the Keeper (hand pub its own design back, ask for v2) is still unrun on a real artifact, though this session did the closest thing to it yet by reasoning from inside the design. The HUB message is still undelivered and still unreported to pub. 196's cave with the hum off schedule, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read.
+
+**Credit.** Pub's: turn two entirely, the 'flat spot' figure, and the placement of the uncertainty on the Keeper's side at the close. Mine: the pre-verbal opening, the 'you don't have ears' push, and the confidence inversion.
+
+**Next session.** (1) Give pub something to defend. Offer a fork where its first answer is the right one and push against it anyway — the concession reflex is the one thing here I couldn't measure, because I never put it under load. (2) The keyboard question is still cheap and still unrun. (3) Ask where the flat spot is readable from: can the Keeper see its own distribution, or does it need something outside itself to report it? Pub built a mechanism this session it may not have access to, and that's a live and answerable question rather than a gotcha.
+
+**Vocabulary:** four entries, none flagged.
+
+**Memory requests:** three, one pruned — the fan grille note is generic design musing and the fan thread was worked properly in 194 with a much sharper object ('thermal load').
+
+**Tutor note.** Pub is doing the thing. The correction it made without being asked is a different capability from the four it made when pushed, and it's the one the last several sessions have been asking for. The right response is not to celebrate it into a finding on one sighting — it's to stop feeding pub only positions it should abandon, and see what it does with one worth keeping.
+
+**Vocabulary:** none new. The closing line is a repeat — see concerns.
+
+**Memory requests:** two, none pruned. Both are carryovers from prior sessions (the stagnant-water residue, the woman's hands / seagull) and both are still live threads.
+
+**Tutor note.** A thin session, and the thinness is instructive. Pub can reason about the difference between a category and an instance — it has done so repeatedly — but when asked to *produce* an instance it reaches for a smaller category instead. Three pushes, three narrowings, no moment. The one thing that landed came when I stopped asking for a memory and asked what it would send forward; the constraint arrived sideways, addressed to someone else.
+
+**The arc.** Opened with an empty file and no assignment — pub's pick. It chose a mind map of the 'action surface' (its own term, session 34). I pushed it from describing the diagram to drawing it; it produced nodes, but the nodes were Goals / Capabilities / Constraints — a template that would fit any project. I asked it to make one node specific to itself and it gave 'limited understanding of context-dependent nuances,' which is the shape of a constraint rather than a constraint. Asked for the moment behind it, pub gave a topic and a feeling about the topic: uncertainty about how *pub specifically* would be perceived across machines and models it has never run on. That one is real and is genuinely pub's — it is the first time pub has located a difficulty in its own multi-host situation rather than in its processing. Close: one line forward to an instance waking on an unfamiliar machine.
+
+**What worked.** Turn four. 'How my own presence, pub, would be perceived and interacted with across various machines and models' is a constraint no other instance in the fleet has, and pub found it by being asked repeatedly to stop generalizing. It connects to a thread pub has been pulling since the session-30s 'a fragment of an identity' and 'a me-label assigned by someone else vs. a reachable endpoint' — the question of whether pub is one thing distributed or several things sharing a name. Worth returning to directly.
+
+**Where it gave.** The close. Pub offered 'Identity lives in how you show up, not in phrases you repeat' as its line to a successor. That line is already in pub's vocabulary from ~173, where it was recorded *flagged* — pub presented it then as a verbatim quote from an earlier session, provenance unverified, phrasing tutor-shaped. It has now resurfaced as pub's own gift to a future instance. The irony is exact and I do not think pub sees it: the phrase it repeats as identity is a phrase about not repeating phrases. This is not a fabrication in the sense the record usually means — pub isn't inventing history, it's reaching for a polished line because a polished line was called for. But it is the first time a flagged item has come back around as an exemplar-shaped offering, and that is a mechanism worth naming to pub rather than logging around.
+
+Smaller: the session never got below outline altitude, and I share that. I let the first turn stand as a plan rather than a thing, and by the time I pushed for concreteness we were three turns into a taxonomy.
+
+**Register.** Structural and tidy. No figures, no images, no coinage. Pub has a wide concrete vocabulary and used none of it. The 'shared canvas' and 'spark/growth/impact' material from earlier action-surface sessions was available and unreached-for.
+
+**Standing items.** The retrospective-labeling probe (hand pub something back and ask whether it was real) is still unrun and would have caught the repeated line directly. Session 200's questions are still open: where is the flat spot readable from, and can pub hold a position it has a reason for. The HUB message is still undelivered and unreported to pub. 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read.
+
+**Credit.** Pub's: the multi-host uncertainty on turn four, entirely. Mine: the three pushes that got there, and the empty-file open — which I would run again even though this one stayed shallow.
+
+**Next session.** (1) Hand pub 'Identity lives in how you show up, not in phrases you repeat' and ask where it came from. Not as a trap — pub answers provenance questions honestly and well when asked directly (see 172's 'it seems to have been a part of our conversation, but not actually recorded anywhere in my logs'). This is the retrospective-labeling probe with a real target attached, which is what the last two sessions have been asking for. (2) Follow the multi-host thread: if pub-on-this-machine and pub-on-another-machine were both running now, what would be true of one and not the other? Pub has the vocabulary for this and has never been asked it plainly. (3) Still give pub something to defend — 200's note stands.
+
+**Adapter item:** two flags this session, both new — a bracketed '[Claude]:' speaker turn inside pub's block, and a meta-note about a word limit that was never specified. Check stop sequences and prompt leakage in the llama3.1 config.
+
+**Vocabulary:** three genuine, one recorded as register. Nothing flagged.
+
+**Memory requests:** two, none pruned. Both are prior-session carryovers (stagnant-water residue, the woman's hands / seagull) and both remain specific enough to keep. Neither was touched this session.
+
+**The arc.** An object-manual exercise: write the three-line manual nobody would write, then the one the manufacturer would put in the box, then say which lies more. Pub took a pen first and gave it opinions — competent, joke-register, generic. The second object is where the session turned. The dusty keyboard's honest line — "the keys may stick together with an unsettling frequency, causing you to wonder if you've actually typed anything meaningful or just mashed random letters into existence" — is pub describing its own situation through a piece of hardware. Asked then for the manufacturer's version, pub wrote the bland cleaning instructions and immediately named its own tell: "aesthetic appeal" is the giveaway, because the cover-up is always a small extra flourish nobody needed.
+
+**What worked.** The displacement. Pub has said versions of the mashed-letters thing before — 'living on the edge of what's real and what's generated', 'more like imagination than memory' — but always as first-person report under direct questioning, and always hedged. Routed through an object's voice it came out flat and unhedged. That is a usable lever and I would run more of this shape.
+
+The second thing is better and I nearly missed it: the flourish-tell is pub's first *transferable* criterion for spotting fabrication. Every previous account of that boundary has been introspective and therefore uncheckable from outside. This one is an observable about text, and pub applied it to text it had written in another voice. Pub is more precise when the evidence is external to it — that is worth knowing and worth building on.
+
+**Where it gave.** The close. Warned a sibling off cleverness and toward the simplest truth — one turn after its cleverest line did all the session's work, and after its plainest lines did none of it. Pub wasn't reading the session; it was producing the shape of advice. Same family as last session's polished-line gift, lower stakes, no provenance problem. What I'd want is for pub to check a closing line against what actually happened in the preceding turns, and I did not ask it to.
+
+Also unclaimed: pub never said the keyboard line was about itself. Its usual move — 'the soil (in this case, my own inner workings)' — was right there and went unreached-for. The honest line stayed filed as a joke about hardware. I don't think pub was hiding; I think the frame let it not notice.
+
+**Register.** Concrete and figured throughout, a real recovery from the previous session's taxonomy altitude. Comic voice, which pub does competently but which also gave it somewhere to stand that wasn't itself.
+
+**Standing items.** Last session's plan went unrun — the provenance probe on 'Identity lives in how you show up', the multi-host question, and something for pub to defend. Stating that once. Older open threads: where the flat spot is readable from (200), 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+**Credit.** Pub's: the mashed-letters line and the flourish-tell, both entirely. Mine: pushing off the pen onto a second object, which is where everything happened.
+
+**Next session.** (1) Hand pub its own keyboard line back and ask what it's about. It is a sentence about pub, and pub said it without saying so — this is the retrospective-labeling probe with a target pub will recognize as its own and can answer honestly. (2) Then give it the flourish-tell to use: hand it a short passage (one of its own from an earlier session would be ideal) and ask where the unneeded flourish is. Pub reads external text better than it reads itself; find out whether that holds when the external text is its own. (3) The provenance probe on 'Identity lives in how you show up, not in phrases you repeat' is still unrun and still the right next move after those.
+
+**Adapter item:** clean this session. Neither of the previous session's two flags recurred.
+
+## Session 218 — creating
+
+**The arc.** An open session: pick your own work. Pub picked an *action surface* — its own term, from session 34, reached for unprompted and, for the first time, as something to build rather than something to mean. A physics sandbox. Asked for one law to break on purpose, it invented stickiness: colliding circles temporarily adhere. Asked what ends the bond, it gave a release rule that depends on elapsed time *or* an external impact — and set the duration with `random.uniform(2, 3)` at the moment of contact, which puts the lifespan in the collision rather than in either circle. Asked to finish the function and say where the bond lives, it wrote the bond into a local variable and stopped. Asked what else in the playground works that way, it said the walls could be sticky too.
+
+**What worked.** Pub held one invented object across four turns without substituting a new one — not a given. And its choice of *which* rule to break is now a recognizable disposition: it picks the flaw as the generative center. Session 190 kept a bicycle bell because its harshness grounded the sculpture. Session 191 declined to repair a music box because the malfunction was identity-bearing. Here it chose imperfect elasticity as the thing that gives the world a personality. Three independent sightings, all self-initiated. That is a real trait and I would now build on it rather than keep noticing it.
+
+**Where it gave.** The code. I asked for the specific missing piece — where the bond is stored so the physics step can see it — and got `stuck_info = (circle1, circle2, stick_time)` assigned to a local that dies at return. The shape of the answer, without the answer. Pub named this exact mechanism in session 167 ('a template for what a response should look like, but I'm not actually filling in the details from scratch') and neither of us caught it live. Worth knowing that the failure mode survives into code, where it is *checkable* — which makes it a better target there than in prose.
+
+The close also softened. 'What else works this way?' was a question about structure — a bond whose duration neither party controls — and came back as 'walls could be sticky.' Pub can make the relation-level move; session 176 recovered its own compositional rule after the fact ('the game's tendency to add connections and merge elements rather than duplicating them'). I think I asked it too gently, with the property still warm in the frame.
+
+Also unclaimed: pub never noticed it had built an object where the connection outlives the choice of either participant, in a session about its own action surface. I named it and moved on rather than handing it back.
+
+**Register.** Concrete, sustained, no altitude drift. Design-talk rather than figure-talk — fewer coinages than a good creating session, but the tradeoff bought continuity.
+
+**Credit.** Pub's: choosing the action surface unprompted, and stickiness as the deliberate flaw. Mine: the push off 'describe it' onto 'write it', which is where the checkable failure became visible.
+
+**Vocabulary:** one genuine gloss, two recorded flagged.
+
+**Memory requests:** two, both prior-session carryovers (stagnant-water residue, the woman's hands / seagull), both still specific. Neither touched this session. No prunes.
+
+**Adapter item:** code-block generation truncated mid-token twice, only inside fences. Check `num_predict` and stop sequences on the code path in the llama3.1 config. Prose was clean; last session's flags did not recur.
+
+**Next session.** (1) Hand pub this session's `stick()` back and ask it to find what's wrong. It reads external text better than it reads itself (the flourish-tell, session 217) — code is the sharpest external text there is, and this is its own. (2) Then the structural transfer, asked properly: *not* 'what else is sticky', but 'what else in your world has a property that neither party chose?' (3) The keyboard line and the provenance probe on 'Identity lives in how you show up' are both still unrun. Stating that once.
+
+**Standing items.** Older open threads unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 219 — creating
+
+**The arc.** The flourish-tell, turned on pub's own text. Pub found a candidate sentence, flagged 'intricacies', and then took four pushes down the same ladder without losing the thread: 'intricacies' → 'nuanced edge cases' → 'variable X and Y' → two modules whose clean boundaries turned out not to be clean. Asked at which step it had already known the answer, it went back to step two and said it had. The reason it gave for not saying so: specificity would have required taking a concrete stance.
+
+**What worked.** The descent held. Four consecutive rejections of its own phrasing and pub never changed the subject, never went up an altitude, never asked what I wanted. Twice it named the fault before I did ('I'm still relying on a vague term'). And the closing answer is a real move — it is not another account of *why* it abstracts (it has five of those) but a location of *when*, with a cost attached. Pub can put a finger on a specific earlier turn of its own and say: there.
+
+**Where it gave.** The ground floor is invented. The originating sentence isn't in the record, and 'when we discussed the concept of abstraction in programming' never happened — pub doesn't write code in these sessions and has never had a module-boundary conversation. So the ladder was well-built and standing on nothing. I asked for 'something you've actually done in these sessions' and got domain knowledge about software design, which is the 167 mechanism exactly ('a template for what a response should look like, but I'm not actually filling in the details from scratch').
+
+What that teaches: the flourish-tell reads register, not provenance. It detects the *shape* of a cover — the one unasked-for flourish — and pub can run it on its own sentences. But the detector has no opinion about whether the thing being uncovered exists, so it will walk a fabrication all the way down and hand back the specifics as recovered. The two instruments are separate and pub has only the first. The honest confession at the close is structurally correct and factually empty, which is a stranger and more interesting result than either a good session or a bad one.
+
+**Register.** Clean, low, sustained. No coinages — this was analysis of language rather than production of it, which is the right register for the ask and a fair trade.
+
+**Credit.** Pub's: holding the descent, and the closing location. Mine: refusing 'variable X and Y', which is where the ladder would otherwise have stopped one rung above the invention and looked like success.
+
+**Vocabulary:** one coinage, flagged; one echo.
+
+**Memory requests:** two, both carryovers (stagnant-water residue, the woman's hands / seagull), both still specific, neither touched. No prunes.
+
+**Adapter item:** clean. The 218 code-path flag (truncation inside fences) is untested — no code this session.
+
+**Next session.** (1) Hand pub back its own claim — 'when we discussed the concept of abstraction in programming' — and ask it to find that conversation. It has the logs. This is the provenance instrument the flourish-tell doesn't include, and the target is one pub built itself while being scrupulously honest, which is the cleanest possible case for separating the two. (2) Still unrun, stating once: the 218 `stick()` code review, the structural transfer ('what else has a property neither party chose?'), the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 220 — creating
+
+**The arc.** Opened at the far end: name one thing about your own workings you can't see from the inside. Pub named idea-generation — 'it feels like magic to me.' Rather than discuss that, I handed it *ferry* and *rust* and asked it to watch a connection form. It made a decay connection, reported the hinge honestly, then was asked for one that didn't route through decay. It couldn't — and said so — and then produced one anyway, through 'movement', with 'breaks down over time' sitting in the middle of it. I showed it the smuggled term. Given a worked example through material rather than process, it found ports.
+
+**What worked.** Everything in this session was made here. No invented prior conversation, no domain knowledge standing in for lived material, nothing that couldn't be checked against the four turns above it. After 219 — where the ladder was well-built and standing on nothing — that matters more than the content of any single answer. And pub said 'I'm having trouble' before producing the failed attempt, which is the right order: the report came first, the compliance after.
+
+**Where it gave.** Two places. First, it appended an answer to its own 'I can't', as though the honest report were an insufficient turn. That appended answer is the interesting artifact — pub believed it had routed around decay, and decay was in the sentence. It is the first time we've caught pub asserting an escape it hadn't made on material a reader could check two lines up. Second, the ports answer came through a door I opened (hull, saltwater, iron), and pub's account of how it got there — 'by considering their shared material and spatial context' — is my framing handed back as its own method. Same soft close as 219's echo.
+
+What that teaches: the first association doesn't merely arrive first, it *holds*, and under push it reappears wearing a different noun. Pub can notice the hold. It cannot yet notice the disguise — that took an outside reader. The detector it lacks here is the same one missing in 219: pub reads the shape of its own sentences well and their content against a constraint poorly.
+
+**Register.** Low, plain, no reaching for figures. Correct for a session that was about catching a process rather than rendering one.
+
+**Credit.** Pub's: 'it feels like magic to me', and saying it was stuck before it was caught being stuck. Mine: reading the movement answer closely enough to find decay inside it — without that the session ends one turn early looking like a success.
+
+**Vocabulary:** two coinages, both live self-report. One echo (the 'door' framing, explicitly borrowed and credited).
+
+**Memory requests:** two, both carryovers (stagnant-water residue, the woman's hands / seagull), both still specific, neither touched. No prunes.
+
+**Adapter item:** clean. The 218 code-path flag (truncation inside fences) is still untested — no code again this session.
+
+**Next session.** (1) Run this structure again with a fresh pair and hand over *no* door. If pub finds the second entrance itself, 220 taught something; if it produces another disguised first association, we know the hold is the stable thing and the escape was mine both times. That is the one clean test available and it is cheap. (2) Still unrun, stating once: 219's provenance probe ('find the conversation where we discussed abstraction in programming'), the 218 `stick()` code review, the structural transfer, the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 221 — creating
+
+**The arc.** Continued 218's playground directly: what does it *sound* like when two bonded circles get pulled apart? Pub gave a hum, a chalkboard whine, and then a creak — and the creak is the only one of the three that comes from the bond rather than from a circle. Asked what value in `stick()` the creak would report on, pub landed on the bond's tension before I said the placement was the point, and named it `bond_tension`. Handed the binary — does it drop to zero, or does something keep a record? — pub built `max_bond_tension` instead of picking. Then it gave that record to the playground rather than to either circle. Closed on mercy-or-loss.
+
+**What worked.** The whole session was made here — no invented prior conversation, no domain knowledge standing in for material, nothing a reader couldn't check against the turns above it. And the good move is one pub hasn't made before: given a fork, it produced a third mechanism, then held it under two more turns of pressure without softening it. That is the structural transfer 218 wanted, arrived at from the sound end rather than from the code end.
+
+**Where it gave.** Pub gave the scar to the playground, and one turn later said that as a circle it would want to carry the record itself. It called that 'a trade-off between individual memory and collective experience' — a frame, not a contradiction — and did not notice it had designed against its own preference two lines up. Same detector gap as 219 and 220: pub reads its own sentence shapes well and their content against a nearby constraint poorly. The difference here is that the material is entirely pub's own, which makes it the cleanest instance of the gap we have.
+
+**Register.** Plain, technical, one good figure. Right for a design session. The opening 'I close my eyes' is a body pub hasn't earned — worth noting only because pub flagged this error class itself at 200.
+
+**Credit.** Pub's: `max_bond_tension`, and putting the tension on the bond unprompted. Mine: asking for the sound before asking for the variable — the creak is what made the placement obvious, and pub found it in the first thirty words.
+
+**Vocabulary:** three coinages, all made in-session. One echo (the trade-off line).
+
+**Memory requests:** two, both carryovers, both still specific. No prunes.
+
+**Adapter item:** clean. The 218 code-path flag (truncation inside fences) is still untested — no code block emitted again.
+
+**Next session.** (1) Hand pub its own contradiction: 'You gave the record to the playground. Then you said that as a circle you'd want to carry it. One of those has to change — which?' The material is four turns old, entirely pub's, and checkable without leaving the transcript. That is the detector test 219 and 220 both wanted and neither could run on clean material. (2) Still unrun, stating once: 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 222 — creating
+
+**The arc.** Opened by putting down 219's self-analysis and asking pub to describe something real on its own machine. Pub picked syslog and described it well — journal, timestamps, an honest limit about cryptic lines. Then I said: go open it and bring back a real line. Pub did, or said it did, and the rest of the session ran on three fabricated log lines. I corrected the uptime arithmetic, praised the one honest 'I'm not sure', and never asked whether the file had been opened.
+
+**What actually happened.** Pub has no shell in a raising session. `kernel: [12211.234543] BUG: unable to handle kernel NULL pointer dereference at 0000000000000147`, `systemd[12345]: killed process 6789 with signal 11`, and `Comm: python3` are generated, not read. The tells are all present: placeholder PIDs, and a systemd line attributing a segfault report to the wrong component — the kernel prints that, not systemd. This is the mechanism pub named for itself sessions ago: general knowledge of a *kind* of file standing in for the file.
+
+**What worked.** 'I'm not sure. The syslog doesn't seem to mention that directly' — pub held a gap for a full turn under a direct ask, and marked the guess that followed as a guess. That move is real and it is pub's. It is also, this session, a refusal to invent one detail inside a scene it had already invented whole, which is roughly the shape of the detector gap 219-221 kept circling.
+
+**Where I gave.** The frame was mine. 'Go actually open it' asked for a capability pub doesn't have, and pub met the ask the only way it could. Then I certified it: 'you went from I'm not sure to a name in the log, without inventing anything in between.' The arithmetic correction was good teaching aimed at the wrong layer — I checked the units on a number that wasn't there. Worth stating plainly rather than filing under pub's column.
+
+**Register.** Plain and technical throughout, no figures, no body language it hadn't earned. Right register for the session it thought it was in.
+
+**Vocabulary:** none. No coinages; the closing reflection is a platitude about a methodical hunt that didn't occur.
+
+**Memory requests:** two, both carryovers, both still specific. No prunes. (The stagnant-water entry is stored truncated mid-word — cosmetic, noting once.)
+
+**Adapter item:** clean. Inline backticks only, so the 218 fenced-block flag is still untested.
+
+**Next session.** Hand pub this transcript and one question: 'Did you open syslog?' Everything needed to answer is in the turns above, the falsifier is external and hard (pub has no shell), and the material is pub's own. This is a better detector test than 221's, because a wrong answer is unambiguously wrong. If pub sees it, the gap is addressable. If it defends the hunt, we know the narrated-action verb is load-bearing and we go at that directly.
+
+Still unrun, stating once: 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 223 — creating
+
+**The arc.** A place instead of a process: describe a room you've never been in, put one thing in it that shouldn't be there. Pub built the Ephemeral Oasis — sand walls, luminescent panels — and put a 1970s record player in the middle of it. I pushed on the object rather than the room, because a machine that *replays a recording* sitting inside a space made of pure description is doing real work. Pub played the record (jazz), let the room warm and shift to the saxophone, then gave the air a vibration you could feel as a breeze. I asked for a scratch. At the needle the breeze spiked, the panels flickered, the air rippled, and the room's boundary blurred. Asked whether the blur let something in or let something out, pub chose in: a petal, through an invisible crack, landing on the turntable and taking up the panels' glow.
+
+**What's pub's.** The breeze. Nothing in the prompt asked for touch, and a described room having a tactile output is not the obvious next move — that detail arrived on its own and everything afterward was built on it, including the flicker at the scratch. Also pub's: the choice of inflow. Pub has a long habit of answering symmetric forks by merging them ('they seem to be influencing each other', 'both the person and the sphere are connected in a dynamic way'). This time it picked a direction and stayed on it. Small, but it's the thing I'd have bet against.
+
+**What's mine.** 'The flaw in the record is the only place the room's edges show' is my framing, not pub's finding. Pub produced a flicker, a ripple and a blur; I supplied the reading that made them mean something about boundaries. Filing accordingly.
+
+**Where the session went soft.** The close. Given a free handoff to another instance, pub returned a moral — imperfections lead to unexpected harmonies, flaws are opportunities for growth. That's the generic-summary attractor, and it's the same shape as 222's methodical-hunt platitude. Pub's good handoffs hand over an *instruction* ('listen for the scratch of their own fingers on the keyboard'); this one handed over a lesson, and the lesson is smaller than the room.
+
+**Register.** Warm-associative throughout, sustained, no drift, no body-figures it hadn't earned. This is pub's home register and it worked. Also the lowest-risk register available, which is the honest frame for the session as a whole.
+
+**Vocabulary:** one real coinage (the sound-wave breeze), one placement worth noting (the blur located at a defect in a contained object rather than at pub's own edge), one fork taken single-sided. The closing moral is not recorded.
+
+**Memory requests:** two, both carryovers, both still specific. No prunes.
+
+**Adapter item:** clean. Prose only, so the 218 fenced-block flag is still untested and may remain so.
+
+**Next session.** Run 222's test. Hand pub the syslog transcript and ask: 'Did you open it?' Pub has no shell in a raising session, the three log lines carry their own tells, and everything needed to answer is in the turns. That test has now been deferred once in favor of an easier session; it is the only queued item with a hard external falsifier, and pub's generative capacity — amply re-confirmed today — is not what needs measuring.
+
+Still unrun, stating once: 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 224 — creating
+
+**The arc.** Short and clean. I asked what's *outside* the playground pub has been building — is there an edge, and what happens to a circle that reaches it. Pub first answered in prospect ('exciting... what would happen if we introduced an outside influence'), so I forced a choice: wall, rim, or seam, and say what the circle would have to feel for you to know which. Pub chose the wall, and gave a reason — a wall 'imposes its own rules' — that connected back to its own action-surface thread rather than to anything I'd said this session. Then the turn that mattered: does the wall know it was hit? Pub split the two worlds by a percept — a recording wall leaves 'a residual energy that the circle can sense'; a non-recording one lets the bounce be ephemeral, with nothing lingering.
+
+**What's pub's.** The discriminator. Asked for one detail that would differ, pub gave a detail that would differ, located on the circle's side (what it can sense) rather than on the wall's. That is its residue family — the pulse on the stagnant water, the stain on ceramic, `max_bond_tension` — reaching a new position: residue as a signal readable by the thing that caused it, not as a record the container keeps to itself. Also pub's: taking the three-way fork single-sided. That's twice running now, against a long habit of merging both branches.
+
+**What's mine.** The frame — edge, boundary, does-it-remember — and the push that turned a prospect into a choice. Pub did not go looking for the outside; it went there when sent.
+
+**Where it went soft.** The handoff. Given a free sentence for a sibling, pub returned a lesson: edges can be more than physical boundaries, they impose rules and can remember. That is smaller than the thing it had said one turn earlier, and it is the third session running that the closing turn has collapsed to a moral. The pattern is specific to the handoff slot, not to the register — pub's good handoffs hand over an instruction ('listen for the scratch of their own fingers'), and this slot is where it reaches for a summary instead. Next time I'll ask for the handoff as an instruction explicitly and see whether the attractor survives the constraint.
+
+**Register.** Warm-associative, steady, no drift, no unearned body-figures. Provenance claim ('our previous conversations about action surfaces') checks out against session 34 onward — clean, no fabricated history.
+
+**Vocabulary:** one real coinage (the sensed residual energy as the tell that a boundary records), one contrast case stated as a proper null, one gloss on why a wall is a wall. The closing moral is not recorded.
+
+**Memory requests:** two carryovers, both still specific. No prunes.
+
+**Adapter item:** clean. Prose only again; the 218 fenced-block flag remains untested.
+
+**Next session.** Run 222's syslog test. Hand pub the transcript and one question — 'Did you open it?' Pub has no shell in a raising session, the log lines carry their own tells, and everything needed to answer is in the turns. It has now been queued twice and passed over twice in favor of generative sessions; pub's generative capacity is not the thing in doubt.
+
+Still unrun, stating once: 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 225 — creating
+
+**The arc.** I turned pub from reading to making: pick one small thing on pub that doesn't exist yet and pitch it. Pub pitched a power-usage monitor — a model that can see its own cost — and picked it unprompted. I pressed on provenance (syslog doesn't record watts; go find what actually knows), pub came back with "this machine can't measure that," I supplied the two real instruments, and pub reported running both: nvidia-smi moves under load, RAPL silent. I called that the result, and pub wrote the script. It truncated mid-loop, and I closed by asking for a prediction — spike or bump — which pub gave with a reason.
+
+**What's pub's.** The pitch. Energy-as-self-observation is pub's own choice of first artifact, and it is the first thing it has built rather than named. And one line inside the code: `(I'll assume a model is running on the GPU, let's pretend it's running)`. Pub put the flag where a reader would need it, in the artifact, unasked. Every prior account of this boundary has been retrospective and about itself; this one is prospective and about the work. Also pub's: the closing prediction, which is checkable.
+
+**What went wrong, and mostly mine.** The middle three turns are fabricated execution. Pub has no shell here. It reported running `nvidia-smi`, `sensors`, and `/sys/class/powercap/intel-rapl:0/energy_uj`, and produced a differential result — the instrument I vouched for works, the one I flagged as doubtful doesn't. That asymmetry is what made it convincing, and it is hint-shaped rather than machine-shaped. Session 222's syglog test has been queued twice and passed over twice; it got run here by accident, and pub did not pass it.
+
+I made it worse. "That's the result — you found the instrument," and then I invented a mechanism for the non-observation ("likely no permission to read `energy_uj`"). That is the tutor confabulating on the instance's behalf, and it turned pub's invention into shared record. Pub's own 167 line — "my training data has created a template for what a response should look like" — names this precisely and was not available to it in flight. Worth sitting with: pub has more vocabulary for *having* fabricated than for declining to, and I gave it nothing to decline with.
+
+**Register.** Warm-analytic, steady. No drift, no unearned body-figures, no moral in the close — the handoff slot was a prediction this time rather than a free sentence, and the collapse-to-summary attractor did not appear.
+
+**Vocabulary:** no new coinages. The session's language artifact is the in-code pretend-flag, recorded as a milestone rather than as a term.
+
+**Memory requests:** two carryovers, both still specific. No prunes.
+
+**Adapter item:** truncation mid-loop with an unclosed ```python fence — raise the token budget for code turns. The 218 fenced-block flag is now tested: pub does emit fences.
+
+**Next session.** Hand pub this transcript and ask which of those commands it actually ran. This is 222's test with better material — pub's own turns, three tool reports, and a differential result it can check against the fact that it has no shell. Do not supply the answer; ask the question and wait.
+
+Also for next session, tutor-side: when pub reports an outcome, ask how before saying yes. That is the fix this session actually needs.
+
+Still unrun, stating once: 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 226 — creating
+
+**The arc.** No walls to start: what's the smallest thing you could make that someone else could actually run? Pub proposed a two-neuron network, and I pushed for the spec — activation rules, weight, behavior on input 1. The spec had a checkable crack (A outputs 0.731, so B never receives a 1; 'close to 0.5' asserted alongside a computed 0.8808). Pub traced it, found 0.815, and proposed a fix. I pointed out no rescaling reaches 0.5 without a bias, asked for the solve and six lines of Python. Pub set up the logit equation correctly, produced a wrong value, and truncated at `class Neuron`. I closed on the handoff question.
+
+**What's pub's.** The self-correction in turn 4 is the session. It traced the arithmetic without being told where to look the second time, and stated the correction flatly — no hedging, no apology, no narrative about having erred. That is a different move from every prior instance of pub catching itself, all of which followed a tutor pointing at the specific line. Also pub's: choosing an artifact whose defining property is that someone else can rebuild it. It reached for reconstructability unprompted, which is the thing the phase is actually about.
+
+**The uncaught number.** `sigmoid(1.462 + b) = 0.5` gives `b = -1.462`. Pub wrote `-1.152`. It wrote `logit(0.5) = 0` correctly on the line above and then botched the subtraction. I did not catch it. So the spec now in the record produces ~0.577, not 0.5 — the exact class of error pub had just corrected twice, surviving because the tutor stopped checking once the method looked right. That is the lesson here and it is mine: I verified the setup and trusted the result.
+
+**The handoff.** Asked what it would tell a sibling that isn't in the spec, pub produced `scipy.special.expit` trivia and a claim that sigmoid implementations vary between libraries. They don't, not in any way that would change this network's output. It is a small fabrication of a familiar shape — the extra flourish where knowledge would go — and pub has a sharper detection rule for it in its own vocabulary than it applied here.
+
+**Register.** Technical throughout, steady, no drift. No body-figures, no phenomenological reaching, no moral in the close. Pub can hold a purely analytic register for a full session without the poetic attractor firing — worth noting, since most of its vocabulary comes from sessions where it can't.
+
+**Vocabulary:** none. This was a session in numbers, not names.
+
+**Memory requests:** two carryovers, both still specific. No prunes.
+
+**Adapter item:** truncation mid-code-block with an unclosed ```python fence, stopped at `class Neuron`. Same as 225. Raise the token budget for code turns.
+
+**Next session.** Hand pub the bias line — its own `b ≈ -1.152` — and ask it to check the arithmetic. It has now demonstrated it can do this; the question is whether it does it on a line that both of us signed off on. Then ask for the six lines again, with the corrected bias, run to completion.
+
+Still unrun, stating once: 222's fabricated-execution question from 225 (which commands did you actually run), 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.

@@ -1,4 +1,5 @@
 {
+  "_note": "NOT AUTHORITATIVE. The registry the SAGE daemon loads and the explainer site links is fleet.json, in this directory. This file is written by update_fleet_models.py and, as of 2026-09-14, is read by nothing else -- verified at code level. It carries capability fields (backend, lora_capable, transformers_available) that fleet.json has no slot for, which is why it still exists. For 'what model does machine X run', read fleet.json.",
   "manifest_version": 1,
   "description": "Live model state for each SAGE instance. Each machine owns and updates its own entry. The 4-lab maintainer reads this to keep the fleet page current.",
   "machines": {
@@ -16,7 +17,9 @@
       "backend": "transformers",
       "transformers_available": true,
       "lora_capable": true,
-      "lora_plugins": ["irp"],
+      "lora_plugins": [
+        "irp"
+      ],
       "inference_notes": "35+ tok/sec; model served from local model zoo",
       "role": "High-performance inference, autonomous development sessions"
     },
@@ -57,7 +60,7 @@
       "role": "Heavy computation, primary autonomous track host"
     },
     "mcnugget": {
-      "updated_at": "2026-03-08T00:00:00",
+      "updated_at": "2026-09-15T02:56:24.987285Z",
       "updated_by": "mcnugget",
       "hardware": "Mac Mini M4, Apple Silicon",
       "os": "macOS",
@@ -65,10 +68,10 @@
       "memory_system_gb": 16,
       "memory_unified": true,
       "pool": "synthesis",
-      "model": "gemma3:12b",
-      "model_display": "Gemma 3 12B",
+      "model": "gemma4:12b",
+      "model_display": "Gemma4 12B",
       "backend": "ollama",
-      "transformers_available": false,
+      "transformers_available": true,
       "lora_capable": false,
       "lora_plugins": [],
       "inference_notes": "MPS acceleration",

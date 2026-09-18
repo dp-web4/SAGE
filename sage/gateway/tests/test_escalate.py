@@ -48,6 +48,20 @@ def test_no_wake_files_the_request_but_writes_no_note():
     assert r["escalated"] is True and r["scope_request"]["request_id"] == "scope-x" and filed
     assert "note" not in r and "wake" not in r and os.listdir(d) == []
 
+def test_reask_on_an_already_pending_request_writes_no_note_and_wakes_no_one():
+    # the being re-asking the same path beat after beat must not fire a seat session per beat
+    d = tempfile.mkdtemp(); e.NOTE_DIR = d
+    woke = []
+    orig_f, orig_w = e._file_scope_request, e.wake_seat
+    e._file_scope_request = lambda *a: {"request_id": "scope-x", "status": "already_pending"}
+    e.wake_seat = lambda *a, **k: woke.append(a) or {"sent": True}
+    try:
+        r = e.escalate("b", BeingIntent("memory_read", {"path": "/var/log/x/daemon.log"}), _ref("mrh.path", "outside"), "/x/instances/b")
+    finally:
+        e._file_scope_request, e.wake_seat = orig_f, orig_w
+    assert r["escalated"] is True and r["scope_request"]["status"] == "already_pending"
+    assert woke == [] and "note" not in r and "skipped" in r["wake"] and os.listdir(d) == []
+
 def test_two_notes_in_one_second_get_distinct_files():
     d = tempfile.mkdtemp(); e.NOTE_DIR = d
     orig = e.time.strftime
@@ -93,9 +107,76 @@ def test_home_file_mis_rooted_gets_a_hint_not_an_operator_request():
     assert home_hint(BeingIntent("memory_read", {"path": "/repo/shared/notes.txt"}), root) is None
 
 
+def test_bare_home_filename_is_the_home_file_and_a_real_ask(monkeypatch=None):
+    # cbp-being's first beat (2026-09-12): every write was `path: "journal.md"`, the gate rooted
+    # it in the home and refused on an EMPTY grant, and the router read the bare name against
+    # the process cwd, called it mis-rooted, and filed nothing. A bare home filename IS the
+    # home file: no hint, and the refusal escalates as a scope ask on the home dir.
+    import os, tempfile
+    import sage.gateway.escalate as esc
+    from sage.gateway.escalate import escalate, home_hint
+    from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope, _home_hint
+    from sage.gateway import block_census
+    root = tempfile.mkdtemp(prefix="home-")
+    for rel in ("journal.md", "./todo.md", "notes/../journal.md"):
+        assert home_hint(BeingIntent("memory_write", {"path": rel, "content": "x"}), root) is None, rel
+    class _D:  # what the client's hint sees: a dispatcher that knows the memory root
+        memory_root = root
+    assert _home_hint(BeingIntent("memory_write", {"path": "journal.md", "content": "x"}), _D()) == ""
+    assert "no grant is needed" in _home_hint(BeingIntent("memory_write", {"path": "/repo/sage/journal.md", "content": "x"}), _D())
+    from pathlib import Path
+    assert block_census.classify("memory_write", "mrh.path", "journal.md", Path(root)) != "mis-rooted-home"
+    assert block_census.classify("memory_write", "mrh.path", "/repo/sage/journal.md", Path(root)) == "mis-rooted-home"
+    filed = {}
+    def _fake_file(member, path, why, endpoint):
+        filed.update({"member": member, "path": path}); return {"request_id": "scope-test", "status": "filed"}
+    orig = esc._file_scope_request; esc._file_scope_request = _fake_file
+    try:
+        deny = ResultEnvelope(ok=False, refused=True, verdict=GatewayVerdict("deny", "mrh.path", "outside"),
+                              error="mrh.path: outside your granted scope: 'sage' is not granted (granted: )")
+        r = escalate("cbp-being", BeingIntent("memory_write", {"path": "journal.md", "content": "x"}), deny, root, wake=False)
+    finally:
+        esc._file_scope_request = orig
+    assert filed.get("path") == os.path.abspath(root), (filed, r)
+    assert r.get("escalated") is not False or "hint" not in r, r
+
+
 if __name__ == "__main__":
     n = 0
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_refusal_beneath_an_exact_home_grant_routes_to_the_operator_and_files_nothing():
+    # cbp-being 2026-09-12 (first beat on the new mind): home granted bare after hestia #1002,
+    # journal.md refused, and this module asked the daemon for the home root the being already
+    # held — `already_granted`, request_id null, 22 escalations in one beat, nothing to rule on.
+    root = tempfile.mkdtemp(); d = tempfile.mkdtemp(); e.NOTE_DIR = d
+    real = os.path.realpath(root)
+    i = BeingIntent("memory_write", {"path": "journal.md", "content": "x"})
+    hint = (f"'sage' is not granted (granted: path:{real}); note: your grant path:{real} is EXACT — "
+            f"it reaches that path itself and nothing beneath it.")
+    env = ResultEnvelope(ok=False, refused=True, error=hint,
+                         verdict=GatewayVerdict("deny", "mrh.path", hint, stage="local-law",
+                                                granted=(real,), granted_reach=((real, False),)))
+    assert e.exact_root_above(env, os.path.join(real, "journal.md")) == real
+    # reach absent from the verdict: the gate's own hint names the root
+    assert e.exact_root_above(_ref("mrh.path", hint), os.path.join(real, "journal.md")) == real
+    # a recursive grant is not this case
+    rec = ResultEnvelope(ok=False, refused=True, error="x",
+                         verdict=GatewayVerdict("deny", "mrh.path", "x", granted_reach=((real, True),)))
+    assert e.exact_root_above(rec, os.path.join(real, "journal.md")) is None
+    filed = []
+    orig = e._file_scope_request
+    e._file_scope_request = lambda *a: (filed.append(a) or {"request_id": "scope-x", "status": "pending"})
+    try:
+        r = e.escalate("cbp-being", i, env, root, wake=False)
+    finally:
+        e._file_scope_request = orig
+    assert r["escalated"] is True and not filed, r
+    assert r["scope_request"] == {"request_id": None, "status": "exact_grant", "root": real,
+                                  "needs": "operator: make the standing grant recursive"}
+    t = open(e.write_note("cbp-being", i, env, "scope", r)).read()
+    assert "NO request_id" in t and "standing/recursive" in t and real in t and "Arbiter protocol" in t

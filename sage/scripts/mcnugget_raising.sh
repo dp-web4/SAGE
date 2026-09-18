@@ -5,6 +5,11 @@
 
 set -e
 
+# Resolve a working python3 (see resolve_python.sh). Explicit `|| exit 1`:
+# these scripts do not all `set -e`, and a quiet fallthrough here is exactly
+# how raising died unnoticed for 29 days.
+. "$(dirname "$0")/resolve_python.sh" || exit 1
+
 SAGE_DIR="/Users/dennispalatov/repos/SAGE"
 PYTHONPATH="$SAGE_DIR"
 export PYTHONPATH
@@ -27,7 +32,7 @@ source "$SAGE_DIR/sage/scripts/ensure_daemon.sh"
 echo "[McNugget-Raising] Daemon: version=$SAGE_DAEMON_VERSION updated=$SAGE_DAEMON_UPDATED"
 
 # Run the raising session (continue from last session number)
-/opt/homebrew/bin/python3 -m sage.raising.scripts.ollama_raising_session --machine mcnugget -c 2>&1
+"$SAGE_PY" -m sage.raising.scripts.ollama_raising_session --machine mcnugget -c 2>&1
 
 # Instance directory
 INSTANCE_DIR="sage/instances/mcnugget-gemma3-12b"
@@ -36,17 +41,17 @@ SNAPSHOT_DIR="$INSTANCE_DIR/snapshots"
 # Snapshot live state files into git-tracked snapshots/ directory
 # Uses Python script for archive history + metadata
 echo "[McNugget-Raising] Snapshotting state..."
-/opt/homebrew/bin/python3 -m sage.scripts.snapshot_state --machine mcnugget
+"$SAGE_PY" -m sage.scripts.snapshot_state --machine mcnugget
 
 # Read session number and phase from live identity
 IDENTITY_FILE="$INSTANCE_DIR/identity.json"
-SESSION_NUM=$(/opt/homebrew/bin/python3 -c "
+SESSION_NUM=$("$SAGE_PY" -c "
 import json
 with open('$SAGE_DIR/$IDENTITY_FILE') as f:
     print(json.load(f)['identity']['session_count'])
 " 2>/dev/null || echo "?")
 
-PHASE=$(/opt/homebrew/bin/python3 -c "
+PHASE=$("$SAGE_PY" -c "
 import json
 with open('$SAGE_DIR/$IDENTITY_FILE') as f:
     print(json.load(f)['development']['phase_name'])
@@ -54,7 +59,7 @@ with open('$SAGE_DIR/$IDENTITY_FILE') as f:
 
 # --- Dream consolidation (Claude reviews the session) ---
 echo "[McNugget-Raising] Running dream consolidation..."
-/opt/homebrew/bin/python3 -m sage.raising.scripts.dream_consolidation \
+"$SAGE_PY" -m sage.raising.scripts.dream_consolidation \
     --instance "$INSTANCE_DIR" \
     --session "$SESSION_NUM" 2>&1 || {
     echo "[McNugget-Raising] Dream consolidation skipped (claude --print not available or timed out)"

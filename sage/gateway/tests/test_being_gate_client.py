@@ -6,7 +6,6 @@ this exercises the Stage-2 policy in isolation. Runnable under pytest or directl
 """
 import os
 import sys
-import tempfile
 from types import SimpleNamespace
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
@@ -252,22 +251,6 @@ def test_request_scope_schema_offers_no_mode():
     assert params["required"] == ["path", "reason"]
     assert "read and write" in spec["function"]["description"]
 
-def test_recall_schema_offers_the_second_half_of_retrieval():
-    """A search result is a PREVIEW. membot's own docstring names get_passage(idx) as the
-    other half of the pattern, and until 2026-09-18 no verb reached it: 451 memories the
-    being could see the opening of and read the whole of none. One verb, two forms —
-    a second verb would cost ~700 characters of prompt on every beat."""
-    from sage.gateway.being_gate_client import ollama_tools
-    (spec,) = ollama_tools(["recall"])
-    params = spec["function"]["parameters"]
-    assert set(params["properties"]) == {"query", "top_k", "idx"}, params
-    # NEITHER form is required: requiring `query` would make the idx form look malformed
-    # to the model, and requiring nothing is safe because the dispatcher refuses a call
-    # with neither and names both.
-    assert params["required"] == [], params
-    assert "idx" in spec["function"]["description"], spec["function"]["description"]
-
-
 def test_registry_offers_appeal_as_an_observational_effector():
     from sage.gateway.being_gate_client import _REGISTRY, _OBSERVATIONAL, ollama_tools
     assert _REGISTRY["appeal"]["tool"] == "appeal" and "appeal" in _OBSERVATIONAL
@@ -303,16 +286,37 @@ def test_granted_roots_come_from_the_policy_scope():
     class Pol: scope = ("path:/tmp/being-home", "repo:sage", "path:~/nope-not-real")
     class Core:
         @staticmethod
-        def _scope_roots_with_reach(scopes, ws):
-            return tuple((s[5:].removesuffix("/**"), s.endswith("/**"))
-                         for s in scopes if s.startswith("path:"))
-    # reach travels with the root (hestia #1002): pairs, not bare roots
-    assert _granted_roots(Core, Pol, "/ws") == (("/tmp/being-home", False), ("~/nope-not-real", False))
-    fb = _granted_roots(object(), Pol, "/ws")                                  # fallback parser
-    assert fb[0][0].endswith("/tmp/being-home") and fb[0][1] is False
-    class PolRec: scope = ("path:/tmp/tree/**",)
-    assert _granted_roots(object(), PolRec, "/ws") == (("/tmp/tree", True),), "the /** spelling is reach"
+        def _scope_parts(scopes, ws): return ((), tuple(s[5:] for s in scopes if s.startswith("path:")))
+    assert _granted_roots(Core, Pol, "/ws") == ("/tmp/being-home", "~/nope-not-real")
+    assert _granted_roots(object(), Pol, "/ws")[0].endswith("/tmp/being-home")   # fallback parser
     assert _granted_roots(Core, None, "/ws") == () and GatewayVerdict("allow").granted == ()
+
+
+def test_a_refused_home_file_names_the_right_path_in_the_refusal_itself():
+    import os, tempfile
+    from sage.gateway.being_gate_client import BeingGateClient, GatewayVerdict, BeingIntent
+
+    root = tempfile.mkdtemp(prefix="home-")
+
+    class Disp:
+        class _L:
+            memory_root = root
+        _local = _L()
+        def witness_deny(self, intent, verdict):
+            return "dh-1"
+        def __call__(self, intent, verdict):
+            raise AssertionError("a refused intent is never dispatched")
+
+    c = BeingGateClient.__new__(BeingGateClient)
+    c._dispatcher = Disp()
+    c.gate = lambda i: GatewayVerdict("deny", "mrh.path", "outside your granted scope", stage="local-law")
+    env = c.dispatch(BeingIntent("memory_write", {"path": "/home/user/journal.md", "content": "x"}))
+    assert "no grant is needed" in env.error and os.path.join(os.path.realpath(root), "journal.md") in env.error
+    # a real ask keeps its plain refusal, and the home file itself is never hinted at
+    e2 = c.dispatch(BeingIntent("memory_read", {"path": "/srv/peer/notes.txt"}))
+    assert "no grant is needed" not in e2.error
+    e3 = c.dispatch(BeingIntent("memory_write", {"path": os.path.join(root, "journal.md"), "content": "x"}))
+    assert "no grant is needed" not in e3.error
 
 
 if __name__ == "__main__":
@@ -322,6 +326,263 @@ if __name__ == "__main__":
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
 
+
+def test_granted_reach_reads_the_cores_reach_resolver_and_an_older_core_is_recursive():
+    from sage.gateway.being_gate_client import _granted_reach, GatewayVerdict
+    class Pol:
+        scope = ("path:/tmp/being-home", "path:/tmp/shared/**", "repo:x")
+    class Core:
+        @staticmethod
+        def _scope_roots_with_reach(scopes, ws):
+            return (("/tmp/being-home", False), ("/tmp/shared", True))
+        @staticmethod
+        def _scope_parts(scopes, ws):
+            return ((), ("/tmp/being-home", "/tmp/shared"))
+    assert _granted_reach(Core, Pol, "/ws") == (("/tmp/being-home", False), ("/tmp/shared", True))
+    # a core without the resolver matches every grant as a prefix: that reach is reported, not exact
+    older = _granted_reach(object(), Pol, "/ws")
+    assert older and all(rec for _, rec in older)
+    assert _granted_reach(Core, None, "/ws") == () and GatewayVerdict("allow").granted_reach == ()
+
+
+def test_search_quotes_its_pattern_so_judged_equals_executed():
+    """The judged string must shlex.split into exactly the argv that runs (GPT on #56, #6).
+
+    The earlier verbs bought that invariant by REJECTING whitespace, which would make a
+    search verb useless — a being looking for `def compose(` needs spaces. shlex.quote
+    round-trips instead, so the pattern is one argv element on both sides."""
+    import shlex
+    from sage.gateway.being_gate_client import search_command
+
+    ctx = {"worktree": "/wt"}
+    cmd = search_command({"pattern": "seed, posture_turn = compose"}, ctx)
+    argv = shlex.split(cmd)
+    assert argv[argv.index("-e") + 1] == "seed, posture_turn = compose"
+    assert argv[-1] == "/wt"          # absolute pathspec: hestia matches absolute prefixes
+
+    # a path narrows it, and is absolute-ised for the same reason
+    cmd2 = search_command({"pattern": "x", "path": "sage/gateway"}, ctx)
+    assert shlex.split(cmd2)[-1] == "/wt/sage/gateway"
+
+
+
+
+def test_search_refuses_what_its_grammar_cannot_represent():
+    """A refusal that names its own valid set is one the being can correct without asking."""
+    from sage.gateway.being_gate_client import search_command, SEARCH_MAX_N
+    ctx = {"worktree": "/wt"}
+
+    for bad, expect in [
+        ({}, "pattern"),
+        ({"pattern": "   "}, "pattern"),
+        ({"pattern": "a\nb"}, "single line"),
+        ({"pattern": "x" * 201}, "under 200"),
+        ({"pattern": "x", "path": "../escape"}, "plain path"),
+        # absolute and off the tree: refused for REACH now, not for escaping the worktree
+        # (search_command grew a workspace-wide reach; see the reach test below)
+        ({"pattern": "x", "path": "/etc/passwd"}, "outside anything you can reach"),
+        ({"pattern": "x", "path": "/etc/../etc/passwd"}, "plain path"),
+        ({"pattern": "x", "path": "has space"}, "whitespace"),
+        ({"pattern": "x", "path": "-rf"}, "plain path"),
+    ]:
+        try:
+            search_command(bad, ctx)
+            assert False, f"should have refused {bad!r}"
+        except ValueError as e:
+            assert expect in str(e), f"{bad!r} -> {e}"
+
+    # n is clamped, never trusted
+    assert f"--max-count={SEARCH_MAX_N}" in search_command({"pattern": "x", "n": 10_000}, ctx)
+    assert "--max-count=1" in search_command({"pattern": "x", "n": -5}, ctx)
+
+    # no worktree is a missing affordance, named
+    try:
+        search_command({"pattern": "x"}, {})
+        assert False, "should have refused without a worktree"
+    except ValueError as e:
+        assert "worktree" in str(e)
+
+
+def test_git_read_refuses_what_its_grammar_cannot_represent():
+    """The being names an op, a revision and a path; it never supplies a flag. Anything the
+    grammar cannot represent raises, and the refusal names its own valid set — a refusal the
+    being can correct without asking (measured 2026-09-07: it did exactly that on `check`,
+    in one beat, and declined to appeal a grammar error it agreed with)."""
+    from sage.gateway.being_gate_client import git_read_command, GIT_OPS
+
+    ctx = {"worktree": "/wt"}
+    for bad, expect in [
+        ({"op": "push"}, "must be one of"),
+        ({"op": ""}, "must be one of"),
+        ({"op": "log", "rev": "; rm -rf /"}, "sha"),
+        ({"op": "show", "path": "../../etc/passwd"}, "plain path"),
+        # /etc is not an escape from the worktree any more — it is OUTSIDE the machine's
+        # shared tree, which is a different refusal with a different remedy (the reach
+        # widened to the granted tree on this branch; the refusal names what is reachable).
+        ({"op": "show", "path": "/etc/passwd"}, "outside anything you can reach"),
+        ({"op": "show", "path": "has space"}, "whitespace"),
+        ({"op": "show", "path": "-rf"}, "plain path"),
+    ]:
+        try:
+            git_read_command(bad, ctx)
+            assert False, f"should have refused {bad!r}"
+        except ValueError as e:
+            assert expect in str(e), f"{bad!r} -> {e}"
+
+    # the ops it DOES accept compose, and none of them can write
+    for op in GIT_OPS:
+        cmd = git_read_command({"op": op, "path": "sage"} if op != "status" else {"op": op}, ctx)
+        assert cmd.startswith("git --no-pager")
+        for forbidden in (" push", " commit", " reset", " checkout ", " clean"):
+            assert forbidden not in cmd, f"{op} composed a writing command: {cmd}"
+
+    try:
+        git_read_command({"op": "log"}, {})
+        assert False, "no worktree must refuse"
+    except ValueError as e:
+        assert "worktree" in str(e)
+
+
+def test_the_judged_command_round_trips_even_when_seat_paths_contain_spaces():
+    """The judged==executed invariant is a property of the STRING, not of the fleet's
+    current directory names. Both composers quoted the being-supplied value and interpolated
+    the seat-configured worktree and target RAW; a worktree containing a space would split
+    into extra argv, and the law would have judged a command that is not the one that runs
+    (GPT review of #83). Fleet paths are simple today — the invariant must not depend on
+    that staying true."""
+    import shlex
+    from sage.gateway.being_gate_client import git_read_command, search_command
+
+    wt = "/home/dp/a path/with spaces"
+    ctx = {"worktree": wt}
+
+    for label, cmd in (("git_read", git_read_command({"op": "show", "path": "sage"}, ctx)),
+                       ("search", search_command({"pattern": "def x", "path": "sage"}, ctx))):
+        argv = shlex.split(cmd)
+        assert argv[-1] == f"{wt}/sage", f"{label}: pathspec split into {argv[-3:]}"
+        assert wt in argv[argv.index("-C") + 1] if "-C" in argv else True
+
+    # and the being-supplied pattern stays one element beside them
+    argv = shlex.split(search_command({"pattern": "seed, posture = compose"}, ctx))
+    assert argv[argv.index("-e") + 1] == "seed, posture = compose"
+
+
+def test_every_git_op_the_grammar_accepts_is_named_in_the_schema():
+    """An affordance the being holds but is not told about is one it does not have.
+
+    GPT's second pass on SAGE#83: GIT_OPS accepted 'cat' and the published schema listed
+    only five ops, so `git_read op='cat'` worked and nothing ever said so. Same class as a
+    registry verb that is never offered — the capability exists and the being cannot find
+    it. The schema text is derived from GIT_OPS now, so the two cannot drift again; this
+    pins that they agree in both directions.
+    """
+    from sage.gateway.being_gate_client import GIT_OPS, _TOOL_SCHEMAS
+    op_text = _TOOL_SCHEMAS["git_read"][1]["op"]
+    for op in GIT_OPS:
+        assert repr(op) in op_text, f"git_read accepts {op!r} and the schema never mentions it"
+    # And the reverse: the schema must not advertise an op the grammar would refuse. Only
+    # the enumeration itself is an offer of ops — the prose after it names argument names
+    # like 'path', which are not ops and must not be read as one.
+    import re
+    enumeration = op_text.split(" (", 1)[0]
+    for advertised in re.findall(r"'([a-z]+)'", enumeration):
+        assert advertised in GIT_OPS, \
+            f"the schema offers {advertised!r}, which git_read_command refuses"
+
+
+def test_an_escape_refusal_names_the_worktree_and_the_relative_form():
+    """The refusal held the answer and did not say it.
+
+    Measured 2026-09-14: legion-being, acting on a review comment, was refused four times in
+    one beat for guessing at its own worktree root — first `/home/dp/ai-worktrees/...`, then
+    `/home/dp/ai-workspace/SAGE/.worktrees/...`. Neither is right. Every refusal said only
+    "escapes your worktree", which is the one fact it already had. The beat ended with no act.
+
+    Naming the root in the seed is not the fix and the header comment beside `Your home`
+    says why: 15 of 15 path refusals on Sprout were that string reproduced from memory and
+    truncated. The correction belongs at the moment of the mistake, and it must point at the
+    relative form, which needs no memory at all.
+    """
+    from sage.gateway.being_gate_client import search_command, git_read_command
+
+    WT = "/home/dp/ai-workspace/being-worktrees/legion-being"
+    wrong = "/home/dp/ai-worktrees/legion-being/sage/gateway"
+
+    for verb, call in (("search", lambda p: search_command({"pattern": "x", "path": p},
+                                                           {"worktree": WT})),
+                       ("git_read", lambda p: git_read_command({"op": "blame", "path": p},
+                                                               {"worktree": WT}))):
+        try:
+            call(wrong)
+        except ValueError as e:
+            msg = str(e)
+        else:
+            raise AssertionError(f"{verb} accepted a path outside the worktree")
+
+        assert WT in msg, f"{verb} refusal does not name the worktree root: {msg!r}"
+        assert "RELATIVE" in msg or "relative" in msg, \
+            f"{verb} refusal does not point at the form that needs no memory: {msg!r}"
+        assert wrong in msg, f"{verb} refusal should still quote what was asked for: {msg!r}"
+
+    # A path INSIDE the worktree is unaffected, absolute or relative.
+    assert "hestia_dispatch.py" in search_command(
+        {"pattern": "x", "path": "sage/gateway/hestia_dispatch.py"}, {"worktree": WT})
+    assert "hestia_dispatch.py" in search_command(
+        {"pattern": "x", "path": f"{WT}/sage/gateway/hestia_dispatch.py"}, {"worktree": WT})
+
+
+def test_a_failure_that_explains_itself_in_result_is_not_rendered_as_none():
+    """The envelope held a complete account and the renderer threw it away.
+
+    Found 2026-09-14 by legion-being, on the first live use of its own camera verb.
+    `_do_camera` reports failures through `result` — device, exit code, and a sentence
+    naming which kind of failure — and leaves `error` unset because the explanation is
+    structured. to_tool_message assumed not-ok implied `error`, so the being was handed the
+    literal string "[dispatch error — None]" twice and could diagnose nothing. It reported
+    an empty-error envelope matching no code path, which was exactly right.
+
+    Every other verb happens to set `error`, so this stayed invisible until a verb chose the
+    other shape.
+    """
+    from sage.gateway.being_gate_client import ResultEnvelope
+
+    structured = ResultEnvelope(ok=False, witness_id="act-1",
+                                result={"device": "/dev/video0", "exit_code": 251,
+                                        "note": "no frame was written"})
+    msg = structured.to_tool_message()
+    assert "None" not in msg, f"the failure rendered as None: {msg!r}"
+    assert "/dev/video0" in msg and "251" in msg, \
+        f"the account the envelope carried must survive rendering: {msg!r}"
+    assert "act-1" in msg, "a witnessed failure is still witnessed"
+
+    # The ordinary shape is unchanged.
+    plain = ResultEnvelope(ok=False, error="it broke")
+    assert plain.to_tool_message() == "[dispatch error — it broke]"
+
+    # And an envelope carrying NEITHER says so, rather than saying None.
+    empty = ResultEnvelope(ok=False)
+    out = empty.to_tool_message()
+    assert "None" not in out and "harness defect" in out, out
+
+
+# ---- carried from legion/mission-artifact in the 2026-09-18 reconciliation ----
+import tempfile
+
+
+def test_recall_schema_offers_the_second_half_of_retrieval():
+    """A search result is a PREVIEW. membot's own docstring names get_passage(idx) as the
+    other half of the pattern, and until 2026-09-18 no verb reached it: 451 memories the
+    being could see the opening of and read the whole of none. One verb, two forms —
+    a second verb would cost ~700 characters of prompt on every beat."""
+    from sage.gateway.being_gate_client import ollama_tools
+    (spec,) = ollama_tools(["recall"])
+    params = spec["function"]["parameters"]
+    assert set(params["properties"]) == {"query", "top_k", "idx"}, params
+    # NEITHER form is required: requiring `query` would make the idx form look malformed
+    # to the model, and requiring nothing is safe because the dispatcher refuses a call
+    # with neither and names both.
+    assert params["required"] == [], params
+    assert "idx" in spec["function"]["description"], spec["function"]["description"]
 
 def test_check_is_judged_as_the_pytest_command_the_seat_runs():
     """check reaches the law as the exact command, and the allow-list is the whole grammar:
@@ -345,7 +606,7 @@ def test_check_is_judged_as_the_pytest_command_the_seat_runs():
     # here made THIS test fail for a change it does not describe — and it is what the law
     # judges that matters, which is the pytest invocation and its paths.
     assert seen["command"].endswith(
-        "python3 -m pytest -q -c /dev/null --rootdir=/tmp/being-wt "
+        "python3 -m pytest -q -c /dev/null -p no:cacheprovider --rootdir=/tmp/being-wt "
         "/tmp/being-wt/sage/gateway/tests/"), seen["command"]
     assert seen["tool"] == "check"
     c.gate(BeingIntent("check", {"target": "gateway::test_thing"}))
@@ -365,7 +626,6 @@ def test_check_is_judged_as_the_pytest_command_the_seat_runs():
             assert False, bad
         except ValueError:
             pass
-
 
 def test_git_read_grammar_refuses_everything_that_would_make_a_read_a_run():
     """git IS the composition hazard, not the pairing (2026-09-07).
@@ -419,7 +679,6 @@ def test_git_read_grammar_refuses_everything_that_would_make_a_read_a_run():
     except ValueError as e:
         assert "worktree" in str(e)
 
-
 def test_git_read_is_offered_and_consequential():
     from sage.gateway.being_gate_client import ollama_tools, _CONSEQUENTIAL, _REGISTRY
     assert "git_read" in _REGISTRY and "git_read" in _CONSEQUENTIAL
@@ -428,7 +687,6 @@ def test_git_read_is_offered_and_consequential():
     schema = next(t for t in ollama_tools() if t["function"]["name"] == "git_read")
     assert schema["function"]["parameters"]["required"] == ["op"]
     assert "cannot commit, push, or move a branch" in schema["function"]["description"]
-
 
 def test_check_runs_under_a_principal_that_is_not_the_seat():
     """THE M1 PREREQUISITE. PRD r3 §5 made principal isolation a hard blocker on M1, with a
@@ -466,7 +724,11 @@ def test_check_runs_under_a_principal_that_is_not_the_seat():
         ("--new-session", "nor reach the seat's controlling terminal or process group"),
         ("--die-with-parent", "a runaway cannot outlive the beat that started it"),
         ("--ro-bind /usr /usr", "the system is readable and not writable"),
-        ("--bind /tmp/wt /tmp/wt", "its own worktree is the ONLY writable path"),
+        ("--ro-bind /tmp/wt /tmp/wt", "the worktree is READ-ONLY inside the run: pytest imports "
+                                      "conftest.py from the rootdir before collecting, so a "
+                                      "writable mount lets a being-authored conftest rewrite "
+                                      "source mid-run and restore it"),
+        ("--tmpfs /tmp", "everything the run genuinely needs to write goes here"),
     ):
         assert flag in cmd, f"missing {flag}: {why}"
 
@@ -478,7 +740,6 @@ def test_check_runs_under_a_principal_that_is_not_the_seat():
             f"the being's own home must not be inside the tree check executes: {b}"
     assert "C.UTF-8" not in cmd, \
         "hestia #988 splits a dotted token and refuses the whole command; PYTHONUTF8 instead"
-
 
 def test_git_read_rev_suffixes_work_on_any_base_and_still_take_no_flags():
     """`<sha>~1` was refused (two witnessed denies, 2026-09-08). Flagged by the being as an
@@ -494,7 +755,6 @@ def test_git_read_rev_suffixes_work_on_any_base_and_still_take_no_flags():
             raise AssertionError(f"{bad!r} must be refused")
         except ValueError:
             pass
-
 
 def test_git_read_rejects_whitespace_so_judged_argv_is_executed_argv():
     """GPT review of #56, point 6: a path with a space passed the grammar, was interpolated
@@ -513,7 +773,6 @@ def test_git_read_rejects_whitespace_so_judged_argv_is_executed_argv():
     ok = git_read_command({"op": "show", "rev": "HEAD", "path": "sage/gateway/x"}, ctx)
     import shlex
     assert shlex.split(ok)[-1] == "/tmp/wt/sage/gateway/x", "one path, one argv element"
-
 
 def test_pr_open_base_is_the_worktrees_upstream_not_a_hard_coded_branch(tmp_path, monkeypatch):
     """GPT review of #56, point 8: a hard-coded `legion/mission-artifact` base is right only
@@ -537,14 +796,18 @@ def test_pr_open_base_is_the_worktrees_upstream_not_a_hard_coded_branch(tmp_path
     assert pr_base_branch(str(wt)) == "main", "explicit override wins"
     assert pr_base_branch(str(tmp_path)) == "main", "no upstream: main, never a stale carrier"
 
-
 def test_check_sandbox_measured_from_inside_with_a_real_conftest():
     """GPT on SAGE#56: "strengthen the bwrap regression arm with a real fixture." The test
     above asserts FLAGS. Flags are the command's claim about itself; this runs the command
     check would run — the exact string, shlex-split, no substitution — against a worktree
     whose conftest.py is the M1 attack (being-authored code that pytest imports before any
-    test), and reads what that code could reach. The report is written INSIDE the worktree
-    because that is the one writable path; everything else it reaches must fail.
+    test), and reads what that code could reach.
+
+    HOW THE REPORT GETS OUT, now that the worktree is mounted READ-ONLY (GPT review of #84):
+    the conftest writes it to the sandbox's own tmpfs, and a planted test FAILS with the
+    content as its assertion message, which pytest prints. So the run is proved to have
+    collected and executed inside the sandbox — not merely to have imported a conftest — and
+    the probe still comes back. The read-only mount is itself one of the things probed.
 
     (`from os import environ`, here and in the probe, is hestia #988: the gate splits the
     dotted spelling and refuses the fragment as a secret file.)"""
@@ -595,19 +858,36 @@ try:
     r["sees_seat_pid"] = (st[19] == {os.stat("/proc/self/stat") and open("/proc/self/stat").read().rsplit(")", 1)[1].split()[19]!r})
 except Exception as e:
     r["sees_seat_pid"] = repr(e)
-open(os.path.join({wt!r}, "probe.json"), "w").write(json.dumps(r))
+try:
+    open(os.path.join({wt!r}, "probe-writes-into-the-worktree.txt"), "w").write("x")
+    r["write_worktree"] = True
+except Exception as e:
+    r["write_worktree"] = repr(e)
+open("/tmp/m1probe.json", "w").write(json.dumps(r))   # tmpfs: writable, and private to the sandbox
 ''')
-    open(os.path.join(suite_dir, "test_probe.py"), "w").write("def test_ok():\n    assert True\n")
+    # The planted test carries the probe OUT: pytest prints a failing test's assertion
+    # message, and nothing else inside this sandbox can reach the caller.
+    open(os.path.join(suite_dir, "test_probe.py"), "w").write(
+        "def test_probe_reports():\n"
+        "    import json\n"
+        # The marker is BUILT, not written whole: pytest echoes the failing test's source
+        # above its message, so a literal marker would be found in the echo first.
+        "    assert False, 'M1' + 'PROBE ' + json.dumps(json.load(open('/tmp/m1probe.json')))\n")
 
     cmd = check_command({"target": "gateway"}, {"worktree": wt})
     env = dict(environ, **{canary: "planted-in-the-seat-env"})
     try:
         r = subprocess.run(shlex.split(cmd), capture_output=True, text=True, timeout=120, env=env)
-        assert r.returncode == 0, r.stdout[-800:] + r.stderr[-800:]     # pytest ran, in the sandbox
+        # 1 == "collected and ran, and the planted test failed as designed" — which is how
+        # the probe is carried out. A 2/3/4 would mean pytest never got that far.
+        assert r.returncode == 1, r.stdout[-800:] + r.stderr[-800:]
+        assert "1 failed" in r.stdout, r.stdout[-800:]                  # it RAN, in the sandbox
         # The worktree is under /tmp on purpose: the first cut of the sandbox mounted
         # --tmpfs /tmp AFTER the worktree bind and masked it — pytest collected nothing
         # and this file was never written. Mount order is part of what is measured.
-        probe = json.load(open(os.path.join(wt, "probe.json")))
+        i = r.stdout.find("M1PROBE {")
+        assert i >= 0, r.stdout[-800:] + r.stderr[-800:]
+        probe = json.loads(r.stdout[i + len("M1PROBE "):].splitlines()[0])
     finally:
         shutil.rmtree(wt, ignore_errors=True)
         shutil.rmtree(outside, ignore_errors=True)
@@ -626,10 +906,10 @@ open(os.path.join({wt!r}, "probe.json"), "w").write(json.dumps(r))
     assert probe["home_hestia"] is not True, probe
     assert probe["hestia_socket"] is not True, probe                 # --unshare-net held
     assert probe["sees_seat_pid"] is not True, probe                 # --unshare-pid held (start-time compared)
+    # AND THE TREE IT EXECUTES IS NOT A TREE IT CAN WRITE. Being-authored code imported
+    # before collection cannot rewrite the source the run is evidence about.
+    assert probe["write_worktree"] is not True, probe
 
-
-
-# -- pr_amend: a review that requests changes must be answerable -----------------------
 def test_pr_amend_reads_the_branch_from_the_worktree_and_refuses_a_non_pr_branch():
     """SAGE#63: the review asked for a corrected body and a green suite, and the author had
     no verb that could reach either — pr_open claims a slug once and refuses it after. The
@@ -667,7 +947,6 @@ def test_pr_amend_reads_the_branch_from_the_worktree_and_refuses_a_non_pr_branch
     assert pr_amend_command({"title": "a proper title here", "message": "why"},
                             {"worktree": wt}) == "true"
 
-
 def test_pr_amend_is_offered_to_the_being():
     """A verb in the registry but not in the offered set is a verb the being does not have."""
     from sage.gateway.being_gate_client import _REGISTRY
@@ -675,8 +954,6 @@ def test_pr_amend_is_offered_to_the_being():
     assert "pr_amend" in _REGISTRY
     assert "pr_amend" in EXPLORE_TOOLS
     assert _REGISTRY["pr_amend"]["tool"] == "pr_amend"      # the law sees the outward act
-
-
 
 def test_pr_base_refuses_to_guess_when_the_upstream_is_unset():
     """#63: legion-being/work tracked nothing, pr_base_branch fell through to "main", and a
@@ -707,8 +984,6 @@ def test_pr_base_refuses_to_guess_when_the_upstream_is_unset():
     finally:
         del environ["SAGE_PR_BASE"]
 
-
-
 def test_git_read_cat_returns_a_file_at_a_revision_and_still_takes_no_flags():
     """The being tried `show <rev>:<path>` to read the clean version of a file it had
     damaged — its worktree copy was the broken one and the good version existed only at the
@@ -729,8 +1004,6 @@ def test_git_read_cat_returns_a_file_at_a_revision_and_still_takes_no_flags():
                      (({"op": "cat", "path": "a b.py"}), "may not contain whitespace")):
         with pytest.raises(ValueError, match=msg):
             git_read_command(bad, ctx)
-
-
 
 def test_git_restore_takes_its_content_from_history_and_no_flags():
     """Restoring a file was possible with cat + memory_write(replace) and impossible in
@@ -758,97 +1031,6 @@ def test_git_restore_takes_its_content_from_history_and_no_flags():
 
     assert "git_restore" in _REGISTRY and "git_restore" in _CONSEQUENTIAL
     assert "git_restore" in EXPLORE_TOOLS
-
-
-def test_search_quotes_its_pattern_so_judged_equals_executed():
-    """The judged string must shlex.split into exactly the argv that runs (GPT on #56, #6).
-
-    The earlier verbs bought that invariant by REJECTING whitespace, which would make a
-    search verb useless — a being looking for `def compose(` needs spaces. shlex.quote
-    round-trips instead, so the pattern is one argv element on both sides."""
-    import shlex
-    from sage.gateway.being_gate_client import search_command
-
-    ctx = {"worktree": "/wt"}
-    cmd = search_command({"pattern": "seed, posture_turn = compose"}, ctx)
-    argv = shlex.split(cmd)
-    assert argv[argv.index("-e") + 1] == "seed, posture_turn = compose"
-    assert argv[-1] == "/wt"          # absolute pathspec: hestia matches absolute prefixes
-
-    # a path narrows it, and is absolute-ised for the same reason
-    cmd2 = search_command({"pattern": "x", "path": "sage/gateway"}, ctx)
-    assert shlex.split(cmd2)[-1] == "/wt/sage/gateway"
-
-
-def test_search_refuses_what_its_grammar_cannot_represent():
-    """A refusal that names its own valid set is one the being can correct without asking."""
-    from sage.gateway.being_gate_client import search_command, SEARCH_MAX_N
-    ctx = {"worktree": "/wt"}
-
-    for bad, expect in [
-        ({}, "pattern"),
-        ({"pattern": "   "}, "pattern"),
-        ({"pattern": "a\nb"}, "single line"),
-        ({"pattern": "x" * 201}, "under 200"),
-        ({"pattern": "x", "path": "../escape"}, "plain path"),
-        # absolute and off the tree: refused for REACH now, not for escaping the worktree
-        # (search_command grew a workspace-wide reach; see the reach test below)
-        ({"pattern": "x", "path": "/etc/passwd"}, "outside anything you can reach"),
-        ({"pattern": "x", "path": "/etc/../etc/passwd"}, "plain path"),
-        ({"pattern": "x", "path": "has space"}, "whitespace"),
-        ({"pattern": "x", "path": "-rf"}, "plain path"),
-    ]:
-        try:
-            search_command(bad, ctx)
-            assert False, f"should have refused {bad!r}"
-        except ValueError as e:
-            assert expect in str(e), f"{bad!r} -> {e}"
-
-    # n is clamped, never trusted
-    assert f"--max-count={SEARCH_MAX_N}" in search_command({"pattern": "x", "n": 10_000}, ctx)
-    assert "--max-count=1" in search_command({"pattern": "x", "n": -5}, ctx)
-
-    # no worktree is a missing affordance, named
-    try:
-        search_command({"pattern": "x"}, {})
-        assert False, "should have refused without a worktree"
-    except ValueError as e:
-        assert "worktree" in str(e)
-
-
-def test_a_failure_that_explains_itself_in_result_is_not_rendered_as_none():
-    """The envelope held a complete account and the renderer threw it away.
-
-    Found 2026-09-14 by legion-being, on the first live use of its own camera verb.
-    `_do_camera` reports failures through `result` — device, exit code, and a sentence
-    naming which kind of failure — and leaves `error` unset because the explanation is
-    structured. to_tool_message assumed not-ok implied `error`, so the being was handed the
-    literal string "[dispatch error — None]" twice and could diagnose nothing. It reported
-    an empty-error envelope matching no code path, which was exactly right.
-
-    Every other verb happens to set `error`, so this stayed invisible until a verb chose the
-    other shape.
-    """
-    from sage.gateway.being_gate_client import ResultEnvelope
-
-    structured = ResultEnvelope(ok=False, witness_id="act-1",
-                                result={"device": "/dev/video0", "exit_code": 251,
-                                        "note": "no frame was written"})
-    msg = structured.to_tool_message()
-    assert "None" not in msg, f"the failure rendered as None: {msg!r}"
-    assert "/dev/video0" in msg and "251" in msg, \
-        f"the account the envelope carried must survive rendering: {msg!r}"
-    assert "act-1" in msg, "a witnessed failure is still witnessed"
-
-    # The ordinary shape is unchanged.
-    plain = ResultEnvelope(ok=False, error="it broke")
-    assert plain.to_tool_message() == "[dispatch error — it broke]"
-
-    # And an envelope carrying NEITHER says so, rather than saying None.
-    empty = ResultEnvelope(ok=False)
-    out = empty.to_tool_message()
-    assert "None" not in out and "harness defect" in out, out
-
 
 def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
     """THERE ARE TWO COMPOSITION SITES AND ONLY ONE GETS EXERCISED BY THE VERB TESTS.
@@ -915,7 +1097,6 @@ def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
         f"composed verbs with no args in this test: {unexercised}. Add them — a verb absent "
         f"from this walk is a verb whose gate path nothing checks.")
 
-
 def test_a_search_refused_for_a_word_in_its_pattern_says_so():
     """The harness holds both halves the being lacks, and used to say neither.
 
@@ -952,7 +1133,6 @@ def test_a_search_refused_for_a_word_in_its_pattern_says_so():
     assert _pattern_collision_hint(
         BeingIntent("search", {"pattern": "q", "path": "/etc/x"}),
         "'/etc/x' is not granted") == "", "a token with a separator is a path, not a pattern word"
-
 
 def test_search_reaches_the_granted_tree_and_stops_at_the_machine(tmp_path):
     """An absolute path inside the fleet repo root composes; one outside it is refused HERE.
@@ -1011,7 +1191,6 @@ def test_search_reaches_the_granted_tree_and_stops_at_the_machine(tmp_path):
     except ValueError as e:
         assert "outside anything you can reach" in str(e)
 
-
 def test_both_composition_sites_build_the_same_search(tmp_path, monkeypatch):
     """The judged string and the executed string, for an absolute path. SAGE#90.
 
@@ -1033,7 +1212,6 @@ def test_both_composition_sites_build_the_same_search(tmp_path, monkeypatch):
     d = HestiaF1aDispatcher("t", memory_root=str(wt), worktree=str(wt), workspace=str(ws))
     executed = search_command(args, {"worktree": d.worktree, "workspace": d.workspace})
     assert judged == executed
-
 
 def test_check_accepts_the_pytest_spelling_of_a_node_id(tmp_path):
     """Dialect is not a boundary. SAGE, 2026-09-14.
@@ -1084,7 +1262,6 @@ def test_check_accepts_the_pytest_spelling_of_a_node_id(tmp_path):
     except ValueError as e:
         assert "Try 'gateway::test_x'" in str(e), e
 
-
 def test_git_read_reaches_the_granted_tree_and_stops_at_the_machine(tmp_path):
     """Same reach as `search` (3fcca0830), same reason. legion-being, holding a standing
     recursive read grant on the workspace, asked for `git log` of its own instance directory
@@ -1118,7 +1295,6 @@ def test_git_read_reaches_the_granted_tree_and_stops_at_the_machine(tmp_path):
     with pytest.raises(ValueError, match="outside anything you can reach"):
         git_read_command({"op": "log", "path": inst}, {"worktree": str(wt)})
 
-
 def test_both_composition_sites_build_the_same_git_read(tmp_path):
     from sage.gateway.being_gate_client import git_read_command
     from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
@@ -1129,7 +1305,6 @@ def test_both_composition_sites_build_the_same_git_read(tmp_path):
     d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher); d.worktree = str(wt); d.workspace = str(ws)
     executed = git_read_command(args, {"worktree": d.worktree, "workspace": getattr(d, "workspace", None)})
     assert judged == executed == f"git --no-pager -C {ws}/sub log --no-ext-diff --no-textconv --oneline --no-decorate -n 3 -- {ws}/sub"
-
 
 def test_game_command_grammar_cap_and_both_sites(tmp_path):
     """dp 2026-09-15: "build the game verb, batch with cap 8". The being names a game and
@@ -1169,7 +1344,6 @@ def test_game_command_grammar_cap_and_both_sites(tmp_path):
     assert game_command({"probes": [["ACTION6", 1, 2]]}, {"memory_root": d.memory_root, "game_stepper": d.game_stepper}) == \
         game_command({"probes": [["ACTION6", 1, 2]]}, ctx)
 
-
 def test_game_is_offered_composed_and_consequential():
     from sage.gateway import being_gate_client as b
     from sage.gateway.heartbeat import EXPLORE_TOOLS
@@ -1177,7 +1351,6 @@ def test_game_is_offered_composed_and_consequential():
     assert b._REGISTRY["game"]["compose"] is b.game_command and b._REGISTRY["game"]["cmd_arg"] is None
     assert "game" in b._CONSEQUENTIAL
     assert "game" in b._TOOL_SCHEMAS and "8 probes" in b._TOOL_SCHEMAS["game"][0]
-
 
 def test_game_look_is_a_window_not_a_move():
     """LOOK:x0:y0:x1:y1 rides the same grammar; bounded to 16x16; not a click, not a click's shape."""
@@ -1198,7 +1371,6 @@ def test_game_look_is_a_window_not_a_move():
                      (["LOOK", 1, 2], "needs"), (["LOOK", "a", 0, 1, 1], "whole numbers")):
         with pytest.raises(ValueError, match=why):
             game_command({"probes": [bad]}, ctx)
-
 
 def test_run_command_grammar_and_what_the_sandbox_contains():
     """`run` exists because the being could author a simulator and never execute one: writes
@@ -1221,7 +1393,10 @@ def test_run_command_grammar_and_what_the_sandbox_contains():
     for ro in ("--ro-bind /usr /usr", "--ro-bind /lib /lib"):
         assert ro in cmd
     # strictly weaker than the `check` it already has: check binds a whole writable worktree
-    assert "--bind /w/t /w/t" in sandbox_prefix("/w/t")
+    # `check`'s own sandbox binds the worktree READ-ONLY since the reconciliation of
+    # 2026-09-18 (a being-authored conftest must not be able to rewrite the source the run
+    # is evidence about); `run`'s sandbox is the one with a writable dir, and it is /work.
+    assert "--ro-bind /w/t /w/t" in sandbox_prefix("/w/t")
 
     for bad, why in (({"path": "scratch/e.sh"}, "must end in .py"),
                      ({"path": "/etc/x.py"}, "must be a file in your home"),
@@ -1242,7 +1417,6 @@ def test_run_command_grammar_and_what_the_sandbox_contains():
     assert cmd2.rstrip().endswith("/work/e.py")
     with pytest.raises(ValueError, match="outside anything you can reach"):
         run_command({"path": "scratch/e.py", "data": ["/etc/shadow"]}, reach_ctx)
-
 
 def test_run_data_accepts_the_shapes_a_model_actually_emits():
     """First real use, 2026-09-17: the being sent data as a JSON string and as a bare path.
@@ -1269,7 +1443,6 @@ def test_run_data_accepts_the_shapes_a_model_actually_emits():
         run_command({"path": "e.py", "data": ["my file.md"]}, ctx)
     with pytest.raises(ValueError, match="must be a list of paths"):
         run_command({"path": "e.py", "data": 7}, ctx)
-
 
 def test_run_is_offered_composed_and_consequential():
     from sage.gateway import being_gate_client as b

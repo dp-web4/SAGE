@@ -22,7 +22,13 @@ import json, os, time, urllib.request
 
 PERCEPTION = os.path.expanduser("~/.sprout/perception.json")
 PRESENCE_LOG = os.path.expanduser("~/.sprout/presence_log.jsonl")
-DAEMON_CHAT = "http://127.0.0.1:8760/chat"
+# /chat/raw, not /chat. `/chat` became the governed CONVERSATION route: it files what it is
+# given as a turn spoken by dp and drops salience and coherence on the floor, so a perceptual
+# descriptor arrived in the operator's own channel wearing the operator's name. On Sprout it
+# had been answering 503 since the being's conversation directory did not exist, which is why
+# the consciousness loop had felt nothing at all (SAGE #113). /chat/raw is the path into the
+# loop: the moment is scored by SNARC, moves the metabolism, and comes back voiced.
+DAEMON_CHAT = "http://127.0.0.1:8760/chat/raw"
 DAEMON_STATUS = "http://127.0.0.1:8760/status"
 ENERGY_REFRESH_S = 20.0   # re-read the being's metabolic energy this often
 LOW_ATP = 25.0            # below this (or a resting metabolic state) the being is depleted → less receptive
@@ -56,7 +62,9 @@ SYS_REST = (
 
 def _wake(descriptor: str, resting: bool, salience: float | None = None,
           coherence: float | None = None) -> dict:
-    payload = {"message": descriptor, "system": SYS_REST if resting else SYS_ENGAGED}
+    payload = {"message": descriptor, "system": SYS_REST if resting else SYS_ENGAGED,
+               # the being's own senses are their own stream, never a person speaking
+               "source": "cortex"}
     if salience is not None:
         payload["salience"] = salience   # the cortex's real salience drives the being's felt intensity
     if coherence is not None:

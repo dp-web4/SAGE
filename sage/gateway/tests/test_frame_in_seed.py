@@ -41,7 +41,7 @@ B64_FRAME = base64.b64encode(_PAYLOAD).decode("ascii")
 def _compose_kwargs():
     return dict(
         name="legion-being", machine="legion-gemma3-12b",
-        member="legion-being", posture_text="posture", nothink="",
+        member="legion-being", posture_text="posture",
         header="# Heartbeat", state="state", recall="", inbox="", digest="",
     )
 

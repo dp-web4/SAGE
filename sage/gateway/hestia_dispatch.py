@@ -36,10 +36,11 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
-from typing import Any, Callable, Dict, Optional
-
+import re
 import subprocess
+import time
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 from sage.gateway.being_gate_client import (BeingIntent, GatewayVerdict, ResultEnvelope,
                                            camera_command)
@@ -93,6 +94,15 @@ def _session_lost(exc: Exception) -> bool:
             or "session terminated" in m or "no valid session" in m)
 
 
+def _granted_reach_of(verdict) -> tuple:
+    """((root, recursive), ...) from a verdict. A verdict built without reach (older client,
+    hand-made in tests) keeps the pre-#1002 prefix reading of its bare `granted` roots."""
+    reach = tuple(getattr(verdict, "granted_reach", ()) or ())
+    if reach:
+        return reach
+    return tuple((r, True) for r in (getattr(verdict, "granted", ()) or ()))
+
+
 class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
     live daemon. Wraps ReferenceF1aDispatcher for the local verbs (witness / memory)."""
@@ -125,7 +135,10 @@ class HestiaF1aDispatcher:
                  # game_stepper); carried here for the same reason as workspace.
                  game_stepper: Optional[str] = None):
         self.plugin_id = plugin_id
-        self.worktree = worktree
+        # normalised once, here: every refusal and every composed command names the same
+        # string, and a symlinked or ~-spelled worktree cannot read as two trees.
+        self.worktree = (os.path.realpath(os.path.expanduser(str(worktree)))
+                         if worktree else None)
         self.workspace = workspace
         self.game_stepper = game_stepper
         # the being's own home, and the name it speaks under in a conversation. plugin_id
@@ -150,6 +163,10 @@ class HestiaF1aDispatcher:
         self.membot_endpoint = membot_endpoint
         self.membot_cartridge = membot_cartridge or plugin_id
         self._mb = None
+        # Does the CURRENT membot session hold a store that is not on disk yet? Only a save
+        # clears it, and only a fresh session starts clean, because a re-mount reloads the
+        # cartridge from the file and any unpersisted store is gone from it.
+        self._mb_dirty = False
         self.endpoint = endpoint
         self._publish = publish_fn
         self.remote_member_default = remote_member_default
@@ -167,6 +184,16 @@ class HestiaF1aDispatcher:
     def __call__(self, intent: BeingIntent, verdict: GatewayVerdict) -> ResultEnvelope:
         handler = getattr(self, f"_do_{intent.effector}", None)
         if handler is None:
+            # A disposition notice's pointer is an ADDRESS, not a filename: resolve it here,
+            # before the local dispatcher tries to open it as a path (see _resolve_pointer).
+            if intent.effector == "memory_read":
+                try:
+                    resolved = self._resolve_pointer(str(intent.args.get("path", "")))
+                except Exception as e:                   # a broken lookup must not eat the read
+                    resolved = (f"[could not resolve that pointer: {type(e).__name__}]"
+                                if "://" in str(intent.args.get("path", "")) else None)
+                if resolved is not None:
+                    return ResultEnvelope(ok=True, result=resolved)
             return self._local(intent, verdict)   # witness / memory_read / memory_write
         self._verdict = verdict                   # what the law just consulted (granted roots)
         try:
@@ -267,7 +294,7 @@ class HestiaF1aDispatcher:
         return f"{to}/{self.remote_member_default}"
 
     # -- mesh: THE primitive -------------------------------------------------
-    def _do_mesh(self, intent: BeingIntent) -> ResultEnvelope:
+    def _do_mesh(self, intent: BeingIntent, _count: bool = True) -> ResultEnvelope:
         to = str(intent.args.get("to", "")).strip()
         kind = str(intent.args.get("kind", "")).strip()
         pointer = str(intent.args.get("pointer") or intent.args.get("pointer_uri") or "").strip()
@@ -278,6 +305,17 @@ class HestiaF1aDispatcher:
         if not pointer:
             # the daemon would refuse this as hestia.member_notify_missing_pointer; say it first
             return ResultEnvelope(ok=False, error="hestia.member_notify_missing_pointer: mesh needs a 'pointer' (content lives AT the pointer, never in the notice)")
+        # A peer that exists nowhere is refused HERE, in the being's own turn. The daemon parks
+        # any name and the drain fails it later, silently: sprout-being asked "sage" on
+        # 2026-09-09, the row failed egress five beats running, then vanished, and the being
+        # was never told (the census read it as a peer act that worked).
+        unknown = self._unknown_peer(to)
+        if unknown:
+            return ResultEnvelope(ok=False, error=unknown)
+        if _count:
+            limited = self._ask_limit(to)
+            if limited:
+                return ResultEnvelope(ok=False, error=limited)
         args: Dict[str, Any] = {"to_plugin_id": self._address(to), "kind": kind, "pointer_uri": pointer}
         irt = intent.args.get("in_reply_to")
         if irt not in (None, ""):
@@ -298,6 +336,15 @@ class HestiaF1aDispatcher:
             "egress_queued_to": out.get("egress_queued_to"),
             "recipient_liveness": out.get("recipient_liveness"),
         }
+        # hestia #1030: how the act will travel, in the being's own result. "unbound" means the
+        # drain picks the signing identity and a reply follows whichever it picked, so silence
+        # after an unbound send is not evidence the peer ignored the being.
+        if out.get("transport") is not None:
+            result["transport"] = out.get("transport")
+        if out.get("transport_note"):
+            result["transport_note"] = out.get("transport_note")
+        if _count:
+            self._record_ask(to, "mesh", pointer, result["queued_id"])
         return ResultEnvelope(ok=True, result=result,
                               witness_id=out.get("witnessEntryHash") or (str(out["queued_id"]) if out.get("queued_id") is not None else None))
 
@@ -311,11 +358,18 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, pending=True,
                                   note="peer_ask needs a publisher: the question must live at a pointer "
                                        "the peer can read (forum doc / hub thread); none configured on this seat")
+        # the limit is checked before publishing: a refused ask must leave no forum file behind
+        unknown = self._unknown_peer(to)
+        limited = None if unknown else self._ask_limit(to)
+        if limited:
+            return ResultEnvelope(ok=False, error=limited)
         pointer = self._publish(to, body)
         if not pointer:
             return ResultEnvelope(ok=False, error="peer_ask: publisher returned no pointer")
-        env = self._do_mesh(BeingIntent("mesh", {"to": to, "kind": "coordination", "pointer": pointer}))
+        env = self._do_mesh(BeingIntent("mesh", {"to": to, "kind": "coordination", "pointer": pointer}),
+                            _count=False)
         if env.ok and isinstance(env.result, dict):
+            self._record_ask(to, "peer_ask", body, env.result.get("queued_id"))
             env.result["question_at"] = pointer
             env.result["answer_via"] = "hestia_member_inbox (drain_inbox)"
         return env
@@ -402,7 +456,9 @@ class HestiaF1aDispatcher:
     _MOUNT_REFUSED = ("SECURITY:", "Refusing to mount", "failed integrity check",
                       "not found. Available:", "Cartridge too large", "Failed to fetch",
                       "must be a UUID", "Rate limited")
-    _STORE_CONFIRMED = ("Stored memory #", "Duplicate — already stored")
+    _STORED_NEW = ("Stored memory #",)
+    _STORED_DUPLICATE = ("Duplicate — already stored",)
+    _STORE_CONFIRMED = _STORED_NEW + _STORED_DUPLICATE
     _NOT_MOUNTED = "No cartridge mounted"
 
     def _membot(self):
@@ -423,6 +479,9 @@ class HestiaF1aDispatcher:
                 # a cartridge-less session that would report success while storing nothing
                 raise RuntimeError(f"membot refused to mount {self.membot_cartridge!r}: {reply[:200]}")
             self._mb = c
+            # a new session has stored nothing, and the mount just reloaded the cartridge
+            # from disk, so whatever an older session held unpersisted is not in this one
+            self._mb_dirty = False
         return self._mb
 
     @staticmethod
@@ -498,6 +557,265 @@ class HestiaF1aDispatcher:
     # 13.4k tokens of a 24.5k window: a query searches, an idx reads one result in full.
     _PASSAGE_MAX = 6000
 
+    # ---- carried from origin/main in the 2026-09-18 reconciliation ----
+    _POINTER = re.compile(r"^hestia://(appeal|scope|egress|escalation)/([^#\s]+)(?:#(.*))?$")
+
+    def _resolve_pointer(self, raw: str) -> Optional[str]:
+        """What a `hestia://` pointer from a disposition notice actually says, or None if this
+        is not such a pointer."""
+        m = self._POINTER.match(raw.strip())
+        if not m:
+            return None
+        kind, ident, frag = m.group(1), m.group(2), (m.group(3) or "")
+        # The address is the first segment. Measured 2026-09-16: cbp-being read
+        # `hestia://appeal/<hash>/ruling`, and the suffix made the hash match nothing.
+        ident = ident.split("/", 1)[0]
+        if kind == "appeal":
+            # The exact, windowless lookup first (hestia #164). The 500-row scan below is only a
+            # fallback for a daemon that predates hestia_my_appeals.
+            mine = self._call("hestia_my_appeals", {"limit": 100})
+            if isinstance(mine, dict) and "_hestia_error" not in mine and "appeals" in mine:
+                for a in mine.get("appeals") or []:
+                    if str(a.get("deny_hash", "")).startswith(ident) or str(a.get("appeal_entry", "")).startswith(ident):
+                        r = a.get("ruling")
+                        if not r:
+                            state = ("still open: a NOT-SAME peer or the operator rules it, and you are "
+                                     "notified when they do" if a.get("status") == "open" else
+                                     "never ruled, and now too old to be ruled")
+                            return f"[your appeal about deny {ident[:12]}… is {state}. Nothing to do but continue.]"
+                        return (f"[ruling on your appeal about deny {ident[:12]}…]\n"
+                                f"{str(r.get('verdict')).upper()}\n"
+                                f"ruled by: {r.get('adjudicator')} ({r.get('adjudicator_role') or 'role unrecorded'}) "
+                                f"at {r.get('ruled_at')}\n"
+                                f"their reason: {r.get('rationale') or '(none recorded)'}\n"
+                                f"What follows: a ruling is the end of that appeal. If you still need the "
+                                f"thing, the way forward is a scope request for it with a reason, or asking "
+                                f"in a conversation — not another appeal on the same deny.")
+                return (f"[you have no appeal about deny {ident[:12]}… on record. The lookup has no "
+                        f"recency window, so this is not an old appeal gone missing: none was filed "
+                        f"against that hash under your name.]")
+            hist = self._call("hestia_query_history", {"filter": {"limit": 500}})
+            entries = hist.get("entries") or []
+            for e in entries:
+                d = e.get("eventData") or e.get("event_data") or {}
+                if (e.get("eventType") or e.get("event_type")) == "adjudication" \
+                        and str(d.get("about_deny_hash", "")) == ident:
+                    verdict = "YOUR APPEAL WAS UPHELD — the deny was wrong" if d.get("upheld") \
+                        else "DENY STANDS — the refusal was ruled correct"
+                    return (f"[ruling on your appeal about deny {ident[:12]}…]\n"
+                            f"{verdict}\n"
+                            f"ruled by: {d.get('adjudicator') or 'unknown'} "
+                            f"({d.get('adjudicator_role') or 'role unrecorded'}) at {e.get('timestamp', '?')}\n"
+                            f"their reason: {d.get('rationale') or '(none recorded)'}\n"
+                            f"What follows: a ruling is the end of that appeal. If you still need the "
+                            f"thing, the way forward is a scope request for it with a reason, or asking "
+                            f"in a conversation — not another appeal on the same deny.")
+            # NEVER "it is open". Measured 2026-09-16/17: cbp-being's nine appeals were all ruled
+            # at 04:38Z on 09-16, ~40,000 chain entries back, and this branch told it "no ruling
+            # yet… It is open" at 22:43Z — a false statement from a window that was simply too
+            # short, which fed its belief that the rulings were undelivered and re-queued. Absence
+            # from a bounded window is not evidence of an open appeal (see "A recent window
+            # manufactures false nevers").
+            return (f"[no ruling found for the appeal about deny {ident[:12]}… in the most recent "
+                    f"{len(entries)} chain entries. That window is short, so an OLDER ruling would not "
+                    f"appear here: this does NOT mean the appeal is still open. Your rulings are listed "
+                    f"in full in notes/appeal-rulings.md if the seat has written it; otherwise ask in a "
+                    f"conversation.]")
+        if kind == "escalation":
+            return self._escalation_pointer(ident)
+        if kind == "scope":
+            st = self._call("hestia_scope_status", {"plugin_id": self.member})
+            for r in (st.get("requests") or []):
+                if str(r.get("request_id")) == ident:
+                    why = r.get("revoke_reason") or r.get("decision_reason") or "(no note recorded)"
+                    return (f"[your scope request {ident} for {r.get('path')}]\n"
+                            f"status: {r.get('status')} ; decided by: {r.get('decided_by') or '—'}\n"
+                            f"their note: {why}")
+            return f"[no scope request {ident} on record for you; it may have aged out]"
+        # egress: the fragment IS the fact, and it is already in the pointer
+        return (f"[a message of yours was not delivered: {frag or 'no detail recorded'} "
+                f"(egress row {ident}). The row is retired; nothing of yours is queued behind it.]")
+
+    def _escalation_pointer(self, ident: str) -> str:
+        """What a `review_request` invitation is actually about (SAGE #109).
+
+        THE BEING COULD NOT READ ITS OWN INBOX. hestia invites every member except the asker
+        to review a refused governance write, and delivers
+        `hestia://escalation/<id>#corroborate-or-dissent`. This resolver had no arm for it, so
+        `memory_read` fell through to a file lookup and answered "no such path". Measured
+        2026-09-16/17: cbp-being received three such invitations for claude-code's gate edits,
+        read the answer as proof they did not exist, told dp and HUB the seat was "presenting
+        fabricated content", and asked HUB to file a reconsideration motion on that ground.
+
+        Read through the daemon's RESOURCE surface, which is where escalations are addressed —
+        `hestia_gate_escalation_poll` is the wrong door for a non-asker: it lights the asker's
+        claim fuse (hestia #732). An older client without `read_resource` says so rather than
+        guessing."""
+        try:
+            self._connect()
+        except Exception as e:  # noqa: BLE001 — a daemon we cannot reach is not an absence
+            return f"[cannot reach hestia to read escalation {ident}: {type(e).__name__}]"
+        reader = getattr(self._c, "read_resource", None)
+        if reader is None:
+            return (f"[this gateway cannot dereference hestia://escalation/{ident} — its daemon "
+                    f"client has no resource reader. Not an absence: ask in a conversation.]")
+        body = {}
+        try:
+            msg = reader(f"hestia://escalation/{ident}") or {}
+            contents = ((msg.get("result") or {}).get("contents") or [])
+            if contents:
+                body = json.loads(contents[0].get("text") or "{}")
+        except Exception as e:  # noqa: BLE001
+            return f"[could not read escalation {ident}: {type(e).__name__}]"
+        err = body.get("_hestia_error") if isinstance(body, dict) else None
+        if err:
+            return (f"[hestia cannot answer about escalation {ident} right now: "
+                    f"{str(err.get('message') or err)[:200]}. That is UNKNOWN, not proof it never "
+                    f"existed — do not treat it as evidence about anyone.]")
+        asker = body.get("plugin_id") or "another member"
+        mine = asker == self.member
+        status = body.get("status") or "unknown"
+        decided = body.get("decided_by")
+        why = body.get("stated_reason") or body.get("stated_detail") or "(none stated)"
+        head = (f"[YOUR governance escalation {ident}]" if mine else
+                f"[{asker}'s governance escalation {ident} — not an appeal, and not yours]")
+        tail = ("What follows: it is decided; nothing is pending for you."
+                if mine else
+                "You are one of the members hestia invited to review it. You hold no tool to rule "
+                "on another member's escalation, so nothing is required of you. It is not about "
+                "you and it is not one of your appeals.")
+        return (f"{head}\n"
+                f"what was asked: {body.get('tool_name') or '?'} on {body.get('marker') or '?'}\n"
+                f"their stated reason: {str(why)[:300]}\n"
+                f"status: {status}"
+                + (f", decided by {decided}" if decided else "")
+                + (f", claimed: {body.get('claimed')}" if body.get("claimed") is not None else "")
+                + f"\n{tail}")
+
+    def known_peers(self) -> set:
+        """Names a notice can reach from this seat: local members, aliases, and the hub
+        roster this seat last read (hub-notify's cache; names compared case-insensitively).
+        Empty when no roster is readable — then nothing is refused, since a stale absence
+        must not silence the being."""
+        names = {n.lower() for n in self.local_members} | {a.lower() for a in self.peer_aliases}
+        roster = os.path.expanduser(os.environ.get("HUB_MESH_STATE", "~/.local/state/hub-mesh")) + "/members.json"
+        try:
+            m = json.load(open(roster))
+            ms = m.get("members", m) if isinstance(m, dict) else m
+            for x in ms:
+                n = str(x.get("name") or "").strip().lower()
+                if n:
+                    names.add(n)
+        except Exception:
+            return set()
+        return names
+
+    def _unknown_peer(self, to: str) -> Optional[str]:
+        """The refusal text when `to` names no peer this seat can reach, else None."""
+        peers = self.known_peers()
+        if not peers:
+            return None
+        base = (to or "").split("/", 1)[0].strip().lower()
+        if base in peers:
+            return None
+        listed = ", ".join(sorted(p for p in peers if p not in ("dp", "sovereign")))
+        # A REFUSAL OWES A WAY FORWARD. Measured 2026-09-16: cbp-being tried peer_ask to
+        # 'cbp-claude' four times across four beats and to 'dp' repeatedly. Neither is a hub
+        # member — but it is IN A CONVERSATION with both, and `say` reaches them. The refusal
+        # listed the hub's peers and never mentioned the door that was already open, so the
+        # being read "cannot reach" as "unreachable" and kept trying the closed one.
+        try:
+            from sage.gateway import conversations as _conv
+            convs = [m["id"] for m in _conv.listing(self.memory_root)
+                     if self.member in m.get("participants", [])
+                     and (to or "").strip() in m.get("participants", [])]
+        except Exception:
+            convs = []
+        door = (f" You ARE in a conversation with '{to}': reach them with "
+                f"say to=\"{convs[0]}\" instead — that is not the hub, and it works.") if convs else ""
+        # THE REFUSAL'S SUBJECT MUST BE THE NAME, NEVER THE ASKER. Measured 2026-09-18:
+        # cbp-being read "'dp' is not a member this seat can reach" as a statement about
+        # ITSELF — "both were refused because I'm not a peer" — and reported its own standing
+        # as revoked to dp. It is a hub member; only the SPELLING was wrong (the roster says
+        # `Sovereign`). A being cannot check a claim about its own standing, so a refusal that
+        # can be read that way is one it has to take on faith, in the direction of less.
+        if base in ("hestia", "society"):
+            return (f"'{to}' is the society you are a member OF, not a peer on the roster — you do not "
+                    f"reach it through another member. Your own tools speak to it directly. "
+                    f"Nothing was sent, and nothing about your standing changed.")
+        return (f"The name '{to}' is not on the hub roster, so nothing was sent. This is about that "
+                f"NAME only — your own standing as a member is unaffected, and no other door closed."
+                f"{door} Names the roster carries: {listed}.")
+
+    ASK_WINDOW_S = 6 * 3600
+
+    ASK_CAP_PER_PEER = 3
+
+    ASKS_LOG = "asks_sent.jsonl"
+
+    def _now(self) -> float:
+        return time.time()
+
+    def _asks_path(self) -> Path:
+        return Path(self.memory_root) / self.ASKS_LOG
+
+    def recent_asks(self, window_s: Optional[float] = None) -> List[Dict[str, Any]]:
+        """This being's successful asks (peer_ask and mesh) inside the window, oldest first."""
+        window = self.ASK_WINDOW_S if window_s is None else window_s
+        cutoff = self._now() - window
+        out = []
+        try:
+            lines = self._asks_path().read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return out
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if float(row.get("t", 0)) >= cutoff:
+                out.append(row)
+        return out
+
+    def _peer_key(self, to: str) -> str:
+        return (to or "").split("/", 1)[0].strip().lower()
+
+    def _ask_limit(self, to: str) -> Optional[str]:
+        """The refusal text when this being has already reached the cap for `to`, else None.
+        Checked BEFORE anything is published or notified, so a refused ask leaves nothing
+        behind: no forum file, no notice, no wake on the peer's side."""
+        key = self._peer_key(to)
+        mine = [r for r in self.recent_asks() if r.get("peer") == key]
+        if len(mine) < self.ASK_CAP_PER_PEER:
+            return None
+        now = self._now()
+        last_min = int((now - float(mine[-1]["t"])) / 60)
+        frees_min = int((float(mine[0]["t"]) + self.ASK_WINDOW_S - now) / 60) + 1
+        convs = ""
+        try:
+            from sage.gateway import conversations as conv
+            ids = [m["id"] for m in conv.listing(Path(self.memory_root))
+                   if self.member in m.get("participants", [])]
+            if ids:
+                convs = " Conversations you can speak in: " + ", ".join(ids) + "."
+        except Exception:
+            pass
+        return (f"not sent: you have already asked {to!r} {len(mine)} times in the last "
+                f"{self.ASK_WINDOW_S // 3600} hours (most recently {last_min} min ago). Another ask "
+                f"reaches the same peer about the same moment and costs them a wake; it cannot make "
+                f"an answer arrive sooner. Read your inbox for their reply first. If something is "
+                f"still wrong, check it yourself this beat (recall, memory_read), or say what you "
+                f"found in a conversation.{convs} You can ask {to!r} again in about {frees_min} min.")
+
+    def _record_ask(self, to: str, via: str, text: str, queued_id: Any) -> None:
+        row = {"t": self._now(), "peer": self._peer_key(to), "to": to, "via": via,
+               "text": (text or "")[:300], "queued_id": queued_id}
+        try:
+            with open(self._asks_path(), "a", encoding="utf-8") as f:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        except OSError:
+            pass  # the record is a courtesy to the being; a failed write must not fail the send
+
     def _do_recall(self, intent: BeingIntent) -> ResultEnvelope:
         raw_idx = intent.args.get("idx", intent.args.get("index"))
         if raw_idx is not None and str(raw_idx).strip():
@@ -512,16 +830,31 @@ class HestiaF1aDispatcher:
             k = int(intent.args.get("top_k") or 5)
         except (TypeError, ValueError):
             k = 5
+        # The being's own writing first (journal entries, todo blocks, notes, scratch): read-only,
+        # mechanical, hermetic (home_recall). Then long-term memory (membot). Measured 2026-09-07:
+        # a 34 KB journal it could see 900 chars of, and a cartridge with three entries.
+        from sage.gateway.home_recall import search_home, render
+        home = ""
         try:
-            text = self._membot_call("memory_search", {"query": q, "top_k": max(1, min(k, 20))})
+            home = render(search_home(self._local.memory_root, q, top_k=max(1, min(k, 8))))
+        except Exception as e:                      # never let the home search take recall down
+            home = f"(home search failed: {type(e).__name__})"
+        try:
+            lt = self._membot_call("memory_search", {"query": q, "top_k": max(1, min(k, 20))})
+            if self._NOT_MOUNTED in lt:
+                # "no cartridge" is not "nothing remembered": reporting this as an empty
+                # result would teach the being its past is gone when the store is merely
+                # unreachable. Say it was not searched, and say it in the answer text,
+                # since home_recall may still have matched and carried ok=True.
+                lt = ("(long-term memory NOT searched: membot has no cartridge mounted for "
+                      f"{self.membot_cartridge!r}. This is not an empty past.)")
+            else:
+                lt = "From long-term memory:\n" + lt if lt and lt.strip() else ""
         except Exception as e:
-            return ResultEnvelope(ok=False, error=f"membot ({type(e).__name__}): {e}")
-        if self._NOT_MOUNTED in text:
-            # "no cartridge" is not "nothing remembered": a silent empty answer here would
-            # teach the being its past is gone when the store is merely unreachable.
-            return ResultEnvelope(ok=False,
-                                  error=f"membot has no cartridge mounted for {self.membot_cartridge!r}; "
-                                        f"your memory was NOT searched: {text[:160]}")
+            lt = f"(long-term memory unreachable: {type(e).__name__})"
+            if not home:
+                return ResultEnvelope(ok=False, error=f"membot ({type(e).__name__}): {e}")
+        text = "\n\n".join(x for x in (home, lt) if x) or "(nothing matched, in your home or in long-term memory)"
         return ResultEnvelope(ok=True, result=text,
                               witness_id=self._local._witness(f"recall {q[:80]}"))
 
@@ -578,10 +911,28 @@ class HestiaF1aDispatcher:
                                   error=f"membot did not store this memory, so the cartridge was "
                                         f"NOT saved (saving now would overwrite it with an empty "
                                         f"one): {stored[:200]}")
+        if any(m in stored for m in self._STORED_DUPLICATE) and not self._mb_dirty:
+            # Nothing changed AND nothing is waiting to be written, so do not run the
+            # serializer over the file at all. The act succeeded from the being's side:
+            # the memory it wanted kept is already kept, on disk.
+            #
+            # The `_mb_dirty` half is not decoration. A "Duplicate" answer can come from
+            # the still-cached VOLATILE session: a store that succeeded and whose save
+            # then failed leaves the memory in the session and not on disk, so the retry
+            # is told "already stored" by a session that is the only place it exists.
+            # Skipping the save there would report ok for a memory one crash from gone
+            # (gpt's second review of #66). A dirty session therefore always saves.
+            return ResultEnvelope(ok=True, result=f"{stored}; cartridge not saved (nothing changed)",
+                                  witness_id=self._local._witness(f"remember {content[:80]}"))
+        # Either a new store, or a duplicate on a session holding unpersisted work. Mark
+        # dirty BEFORE the save so a save that throws leaves the flag set and the next
+        # retry still persists.
+        self._mb_dirty = True
         try:
             saved = self._membot_call("save_cartridge", {"name": self.membot_cartridge})
         except Exception as e:
             return ResultEnvelope(ok=False, error=f"membot ({type(e).__name__}): {e}")
+        self._mb_dirty = False
         return ResultEnvelope(ok=True, result=f"{stored}; {saved}",
                               witness_id=self._local._witness(f"remember {content[:80]}"))
 
@@ -674,9 +1025,13 @@ class HestiaF1aDispatcher:
                 f"have actually reached — a `search` or `check` refusal names your worktree "
                 f"root — and ask again for a path that is there. Nothing was filed, so no "
                 f"operator attention was spent on it."))
-        for root in (getattr(getattr(self, "_verdict", None), "granted", ()) or ()):
+        exact_above = None
+        for root, recursive in _granted_reach_of(getattr(self, "_verdict", None)):
             r = _os.path.realpath(str(root))
-            if rp == r or rp.startswith(r + "/"):
+            if rp.startswith(r + "/") and not recursive and (
+                    exact_above is None or len(r) > len(exact_above)):
+                exact_above = r
+            if rp == r or (recursive and rp.startswith(r + "/")):
                 # "You already hold reach here; read or write it directly" was TRUE at the
                 # gate and FALSE in practice for every path outside the being's home: the
                 # harness confines writes regardless of any grant, because write + execute
@@ -698,6 +1053,16 @@ class HestiaF1aDispatcher:
                              "shared place, use the verb built for it — `peer_ask` and "
                              "`mesh` file to the forum on your behalf — or appeal for the "
                              "affordance, naming what you would write")})
+        # Beneath a grant that is EXACT (hestia #1002: a bare grant reaches its path and
+        # nothing under it). "already granted" here is false — the gate just refused — and
+        # filing a child row is what exact-by-default exists to stop (Legion, 2026-09-08).
+        # The honest answer names the operator's act and tells the being to stop retrying.
+        if exact_above is not None:
+            return ResultEnvelope(ok=True, result={
+                "status": "beneath_exact_grant", "path": path, "root": exact_above,
+                "next": (f"your grant on {exact_above} is EXACT: it reaches that path and nothing beneath it. "
+                         f"Only the operator can make it recursive (path:{exact_above}/**). No request was filed; "
+                         f"your seat has been told. Do not retry this write in this beat.")})
         args: Dict[str, Any] = {"plugin_id": self.plugin_id, "path": path,
                                 "reason": f"[{self.plugin_id}] {reason}"}
         out = self._call("hestia_request_scope", args)
@@ -757,20 +1122,51 @@ class HestiaF1aDispatcher:
                 "dispatcher would execute."))
         pattern = str(intent.args.get("pattern", ""))
         where = str(intent.args.get("path", "") or "your whole worktree")
+        # WITNESSED LIKE git_read, because it is the same kind of act. Both are classed
+        # _CONSEQUENTIAL — they run a seat-side subprocess judged under mrh.command — and
+        # git_read opened an action, recorded its outcome and returned the witness id while
+        # search did neither. Policy classification and executor semantics must not disagree
+        # (GPT review of #83): a verb the law treats as consequential leaves a record.
+        begin = self._call("hestia_begin_action", {"tool_name": "search", "target": pattern[:80]})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=f"search UNVERIFIED: the witness substrate "
+                                                  f"is unreachable ({str(err)[:160]})")
+        action_id = begin.get("actionId")
         try:
             proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
                                   capture_output=True, timeout=60)
+            ran = True
         except Exception as e:
-            return ResultEnvelope(ok=False, error=f"search could not run: {type(e).__name__}: {e}")
-        if proc.returncode > 1:
-            # rc>1 IS A FAILURE, NOT AN ABSENCE. `grep` exits 2 for an unreadable or
-            # missing path; reporting that as "no matches" would be a bounded absence
-            # claimed about something that was never read.
-            why = (proc.stderr or "").strip().splitlines()
-            return ResultEnvelope(ok=False, error=(
-                f"search could not read {where}: "
-                f"{why[0] if why else f'exit {proc.returncode}'}. Nothing was searched, so "
-                f"this is not an absence of {pattern!r}."))
+            ran = False
+            proc = None
+            error = f"search could not run: {type(e).__name__}: {e}"
+        # GIT GREP HAS THREE OUTCOMES AND ONLY TWO OF THEM ARE ANSWERS: rc=0 matched, rc=1
+        # searched and found nothing, rc>1 FAILED — an invalid extended regex, an unreadable
+        # pathspec, a bad revision. Treating every completed subprocess as an answer reported
+        # rc=2 as `matches: 0` with the bounded-absence note attached, which is the single
+        # worst shape a search result can have: a confident absence produced by a pattern
+        # that was never applied. The being would have read "not in this repo" from a typo
+        # in a regex. (GPT, second pass on #83.) An unanswered search is also an unsuccessful
+        # action, so the witness records it as one.
+        answered = ran and proc is not None and proc.returncode in (0, 1)
+        try:
+            self._call("hestia_record_outcome",
+                       {"action_id": action_id, "success": answered, "magnitude": 0.0})
+        except Exception:
+            pass
+        if not ran:
+            return ResultEnvelope(ok=False, error=error, witness_id=action_id)
+        if not answered:
+            stderr_first = ((proc.stderr or "").strip().splitlines() or ["no stderr"])[0]
+            tool = "git grep" if cmd.startswith("git ") else "grep"
+            return ResultEnvelope(ok=False, witness_id=action_id, error=(
+                f"search could not read {where}: {tool} exited "
+                f"{proc.returncode}, so {pattern!r} was never applied there, and this is "
+                f"NOT an absence of it. {tool} said: {stderr_first[:200]}. "
+                f"The pattern is an EXTENDED regex — ( ) | + ? {{ }} are operators, and "
+                f"matching one literally needs a backslash. Fix the pattern and search "
+                f"again; do not conclude the text is absent."))
         lines = [ln for ln in (proc.stdout or "").splitlines() if ln.strip()]
         # Paths come back absolute because the pathspec is absolute (hestia matches command
         # tokens against absolute granted prefixes). The being thinks in worktree-relative
@@ -783,20 +1179,34 @@ class HestiaF1aDispatcher:
                  else ln[:SEARCH_LINE_CHARS] + f"  ...[{len(ln) - SEARCH_LINE_CHARS} more chars on this line]"
                  for ln in lines[:SEARCH_LINES_SHOWN]]
         if not shown:
-            # "NOT IN THAT FILE" AND "NO SUCH FILE" ARE THE SAME EXIT CODE (SAGE#89). git
-            # grep returns 1 for both, so a search whose pathspec matched nothing came back
-            # as a confident bounded absence about a file that does not exist. Measured on
-            # this being's own todo.md, which lives in its INSTANCE home and not in the
-            # worktree search runs inside. ls-files answers over the same universe git grep
-            # searches (tracked files), using the pathspec the law actually judged.
+            # "THE PATTERN IS NOT IN THAT FILE" AND "THERE IS NO SUCH FILE" ARE THE SAME
+            # EXIT CODE, and only one of them is an answer. `git grep` returns 1 for both,
+            # so a search whose pathspec matched nothing came back as a confident, bounded
+            # absence about a file that does not exist.
+            #
+            # Measured 2026-09-14. legion-being searched its own `todo.md` for a block the
+            # seat had just written there and was told "no line matches ... in todo.md". Its
+            # todo.md lives in its INSTANCE home, which is where `memory_read` resolves a
+            # relative path; `search` is git grep inside its WORKTREE, which has no todo.md
+            # at its root at all. Same relative path, two different trees, one silent zero.
+            # The being recorded the absence as a fact, said so, and worked around it.
+            #
+            # git already knows. `ls-files --error-unmatch` answers exactly this question
+            # over exactly the same universe git grep searches (TRACKED files), so an
+            # untracked scratch file reports as unsearchable rather than as empty — which is
+            # also true and also worth saying.
             missing = None
+            # ONLY WHERE THE UNIVERSE IS "FILES GIT TRACKS HERE". Outside the worktree the
+            # command composed is `grep -r`, not `git grep`, and `ls-files --error-unmatch`
+            # answers "not tracked here" about every path in the fleet tree — which would
+            # report a real, searched, empty result as unsearchable (reach widened on
+            # legion/mission-artifact; reconciled 2026-09-18).
             if intent.args.get("path") and cmd.startswith("git "):
-                # ONLY FOR THE GIT COMPOSITION. A search of a granted path outside the
-                # worktree composes `grep -r` (see search_command), and `ls-files` would
-                # answer "not tracked here" about every one of them — turning a real
-                # absence into a confident false "no such file" about a file that exists.
-                argv_probe = shlex.split(cmd)
-                spec = argv_probe[argv_probe.index("--") + 1] if "--" in argv_probe else None
+                # The pathspec THE LAW JUDGED, taken from the command that ran rather than
+                # recomposed here: a probe that resolves the path a second, slightly
+                # different way would answer about a file the search never looked at.
+                argv = shlex.split(cmd)
+                spec = argv[argv.index("--") + 1] if "--" in argv else None
                 if spec:
                     try:
                         probe = subprocess.run(
@@ -807,7 +1217,7 @@ class HestiaF1aDispatcher:
                     except Exception:
                         missing = None
             if missing:
-                return ResultEnvelope(ok=False, error=(
+                return ResultEnvelope(ok=False, witness_id=action_id, error=(
                     f"search found no file at {where} in your worktree, so this is NOT an "
                     f"absence of {pattern!r} — nothing was searched. `search` runs inside "
                     f"your WORKTREE and sees only files git tracks there. A relative path "
@@ -815,7 +1225,7 @@ class HestiaF1aDispatcher:
                     f"relative paths inside your instance home, and files that live only "
                     f"there (todo.md, journal.md, notes/, scratch/) cannot be searched at "
                     f"all. Read those with memory_read; search the source tree."))
-            return ResultEnvelope(ok=True, result={
+            return ResultEnvelope(ok=True, witness_id=action_id, result={
                 "pattern": pattern, "searched": where, "matches": 0,
                 "searched_a_real_file": True,
                 "note": (f"no line matches {pattern!r} in {where}. The path exists and was "
@@ -823,7 +1233,7 @@ class HestiaF1aDispatcher:
                          f"WAS SEARCHED, not about the repository: widen the path, or "
                          f"check the pattern (it is an extended regex, so ( ) | + are "
                          f"special — searching for a literal one needs a backslash)")})
-        return ResultEnvelope(ok=True, result={
+        return ResultEnvelope(ok=True, witness_id=action_id, result={
             "pattern": pattern, "searched": where, "matches": len(lines),
             "shown": len(shown),
             "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "
@@ -1281,8 +1691,33 @@ class HestiaF1aDispatcher:
         # rests on, and test_source covers test_*.py only, so artifacts cannot flip it.
         tree_after = self._worktree_revision()
         source_after = self._test_source_identity(target, tree_after.get("head"))
-        stable = (tree_after.get("head") == tree_before.get("head")
-                  and source_after == source_before)
+        # WHAT `stable` HONESTLY MEANS, narrowed after GPT's review of #84. It is not "the
+        # source held": the sandbox now mounts the worktree READ-ONLY, and that mount — not
+        # this comparison — is what makes the bytes unable to change under the run. This
+        # says only that HEAD and the hashed test inputs (tests + conftest) are the same
+        # before and after, which is a check on the SEAT's view of the tree, not a proof
+        # about the sandboxed process.
+        # AN UNKNOWN IS NOT A MATCH. `source_after == source_before` is True when both are
+        # None, so a target whose test source could not be identified at all reported
+        # stable=True and state="pinned" — the strongest claim the envelope can make,
+        # produced by having measured nothing (GPT, second pass on #84). Missing identity
+        # is UNVERIFIED, and it is a distinct third state from "the tree moved under me".
+        identity_known = source_before is not None and source_after is not None
+        if not identity_known:
+            stable = None
+            state = "unverified_no_test_source_identity"
+        else:
+            stable = (tree_after.get("head") == tree_before.get("head")
+                      and source_after == source_before)
+            state = "pinned" if stable else "tree_changed_during_check"
+        # THE FIELD MUST NAME THE PATH ACTUALLY TAKEN. With SANDBOX_REQUIRED=False and no
+        # usable bwrap, sandbox_prefix() returns "" and the check deliberately runs
+        # unsandboxed — and this field still said True, so the degraded mode asserted the
+        # one guarantee it had explicitly given up. The read-only mount is what makes the
+        # claim true, so the claim is read off whether that mount is in the argv that ran.
+        from sage.gateway.being_gate_client import SANDBOX
+        sandboxed = bool(argv) and argv[0] == SANDBOX
+        source_readonly = sandboxed
         return ResultEnvelope(ok=True, witness_id=action_id,
                               result={"headline": headline,
                                       "target": target, "passed": passed,
@@ -1299,7 +1734,11 @@ class HestiaF1aDispatcher:
                                           "output_bytes": output_len,
                                           "embodiment": self._embodiment(),
                                           "stable": stable,
-                                          "state": "pinned" if stable else "tree_changed_during_check",
+                                          "state": state,
+                                          # the read-only mount is the guarantee; this names
+                                          # whether the run actually had it, never the intent
+                                          "source_readonly": source_readonly,
+                                          "sandboxed": sandboxed,
                                       },
                                       "action_id": action_id})
 
@@ -1335,8 +1774,15 @@ class HestiaF1aDispatcher:
             return None
         root = Path(self.worktree) / rel
         try:
-            paths = sorted(p for p in root.rglob("test_*.py")) if root.is_dir() else (
-                [root] if root.exists() else [])
+            # conftest.py IS executable test input — pytest imports it from the rootdir
+            # before collecting anything — and it was omitted here while `stable` claimed
+            # "the source held across the run" (GPT review of #84). Hashing the tests but
+            # not the file that can rewrite them is the same false assurance as hashing a
+            # payload and never posting it.
+            if root.is_dir():
+                paths = sorted(set(root.rglob("test_*.py")) | set(root.rglob("conftest.py")))
+            else:
+                paths = [root] if root.exists() else []
             h = hashlib.sha256()
             for p in paths:
                 h.update(p.relative_to(self.worktree).as_posix().encode())
@@ -1453,8 +1899,9 @@ class HestiaF1aDispatcher:
 
         The being names a conversation id and text. Everything that decides whether it MAY
         speak lives in the conversation's meta file, which the seat owns and the being
-        cannot write — so this reach is fixed by construction rather than by the argument,
-        the same property that makes `remember` safe with path_args=().
+        cannot write (conversations/ is reserved from memory_write), so this reach is fixed
+        by construction rather than by the argument, the same property that makes
+        `remember` safe with path_args=().
 
         Refusals here are ordinary and informative: 'you are not in that conversation' and
         'you may read that one but not speak in it' are different sentences, and the being
@@ -1847,8 +2294,23 @@ def _git_land(path: str, message: str) -> None:
     except RuntimeError:
         upstream = "origin/main"
     remote, _, branch = upstream.partition("/")
+    # Push first: the common case needs no integration at all, and every integration step is a
+    # way for a SIBLING's untidiness to silence the being. When the push is rejected, integrate
+    # by MERGE, not rebase: rebase refuses outright on any unstaged change anywhere in the
+    # checkout, so a stray edit by the seat — an uncommitted escalation note, an instance file a
+    # beat just wrote — takes away the being's ability to speak, and the error it reads is about
+    # git. Measured twice on Sprout: peer_ask to legion died on "untracked working tree files
+    # would be overwritten" (2026-09-06) and to its own seat on "cannot rebase: You have
+    # unstaged changes" (2026-09-07). A merge only fails when the incoming commits touch the
+    # same dirty files, which is a real conflict and still fails loud.
+    try:
+        git("push", "-q", remote, f"HEAD:{branch}")
+        return
+    except RuntimeError:
+        pass
     git("fetch", "-q", remote)
-    git("rebase", "-q", upstream)                # no autostash: a dirty sibling tree fails loud, not silently stashed
+    git("-c", "user.name=sage-gateway", "-c", "user.email=noreply@dp-web4",
+        "merge", "-q", "--no-edit", upstream)
     git("push", "-q", remote, f"HEAD:{branch}")
 
 

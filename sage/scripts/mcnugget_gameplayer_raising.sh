@@ -7,6 +7,11 @@
 
 set -e
 
+# Resolve a working python3 (see resolve_python.sh). Explicit `|| exit 1`:
+# these scripts do not all `set -e`, and a quiet fallthrough here is exactly
+# how raising died unnoticed for 29 days.
+. "$(dirname "$0")/resolve_python.sh" || exit 1
+
 SAGE_DIR="/Users/dennispalatov/repos/SAGE"
 PYTHONPATH="$SAGE_DIR"
 export PYTHONPATH
@@ -40,7 +45,7 @@ source "$SAGE_DIR/sage/scripts/ensure_daemon.sh"
 
 # Run raising session with gemma4:e4b
 # Note: instance resolved automatically from --machine + --model
-/opt/homebrew/bin/python3 -m sage.raising.scripts.ollama_raising_session \
+"$SAGE_PY" -m sage.raising.scripts.ollama_raising_session \
     --machine mcnugget \
     --model gemma4:e4b \
     -c 2>&1
@@ -50,16 +55,16 @@ INSTANCE_DIR="sage/instances/mcnugget-gemma4-e4b"
 
 # Snapshot state
 echo "[McNugget-G4] Snapshotting state..."
-/opt/homebrew/bin/python3 -m sage.scripts.snapshot_state --machine mcnugget --instance mcnugget-gemma4-e4b 2>/dev/null || true
+"$SAGE_PY" -m sage.scripts.snapshot_state --machine mcnugget --instance mcnugget-gemma4-e4b 2>/dev/null || true
 
 # Read session info
-SESSION_NUM=$(/opt/homebrew/bin/python3 -c "
+SESSION_NUM=$("$SAGE_PY" -c "
 import json
 with open('$SAGE_DIR/$INSTANCE_DIR/identity.json') as f:
     print(json.load(f)['identity']['session_count'])
 " 2>/dev/null || echo "?")
 
-PHASE=$(/opt/homebrew/bin/python3 -c "
+PHASE=$("$SAGE_PY" -c "
 import json
 with open('$SAGE_DIR/$INSTANCE_DIR/identity.json') as f:
     print(json.load(f)['development']['phase_name'])
@@ -67,7 +72,7 @@ with open('$SAGE_DIR/$INSTANCE_DIR/identity.json') as f:
 
 # Dream consolidation
 echo "[McNugget-G4] Running dream consolidation..."
-/opt/homebrew/bin/python3 -m sage.raising.scripts.dream_consolidation \
+"$SAGE_PY" -m sage.raising.scripts.dream_consolidation \
     --instance "$INSTANCE_DIR" \
     --session "$SESSION_NUM" 2>&1 || {
     echo "[McNugget-G4] Dream consolidation skipped"
@@ -101,7 +106,9 @@ Role: gameplayer (ARC-AGI-3 competition)
 AI-Instance: OllamaIRP (automated)
 Human-Supervised: no"
 
-git pull --rebase origin main 2>/dev/null || true
+# Same silenced closing pull that lost ten sessions in mcnugget_raising_fluid.sh
+# (see that script and SAGE@05fac6d4a). Dormant script, fixed for the same reason.
+git pull --rebase --autostash origin main 2>&1 | sed 's/^/[McNugget-Gameplayer] pull: /'
 git push origin main 2>&1 || {
     echo "[McNugget-G4] WARNING: push failed, will retry next session"
 }

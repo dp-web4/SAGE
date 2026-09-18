@@ -353,3 +353,48 @@ def test_the_short_cap_never_widens_a_narrow_rung():
 
     out = conv.render_for_being(inst, "legion-being", per_conv=6, turn_chars=200)
     assert ("S" * 200) in out and ("S" * 201) not in out
+
+
+def test_the_beat_state_puts_a_ceiling_on_the_conversations_block(tmp_path, monkeypatch):
+    """Until the context-fit ladder lands (Legion's review of SAGE#81): own_state renders the
+    conversations block with explicit bounds, never unbounded. Legion's live store measured
+    20,735 chars unbounded; one long thread must not be able to take the whole window."""
+    from sage.gateway import heartbeat, conversations as C
+    seen = {}
+
+    def spy(instance, me, **kw):
+        seen.update(kw)
+        return ""
+    monkeypatch.setattr(C, "render_for_being", spy)
+    # `member` is a keyword now: own_state grew an `entrusted` block ahead of it in the
+    # 2026-09-18 reconciliation, and a positional "b" would have been the entrustment.
+    heartbeat.own_state(tmp_path, member="b")
+    assert seen.get("per_conv") == heartbeat.CONV_PER_CONV and seen.get("turn_chars") == heartbeat.CONV_TURN_CHARS
+    assert heartbeat.CONV_TURN_CHARS and heartbeat.CONV_PER_CONV <= 12
+
+
+def test_render_without_mark_does_not_consume_the_unanswered_marker():
+    """A seat that LOOKS at the block must not change it.
+
+    Measured 2026-09-14: a seat diagnostic called render_for_being to ask what the being
+    could see of a turn, and the call marked every pending turn read. The being's own
+    "unanswered" marker for a message it had not been shown was gone, and the record said
+    it had seen something it had not. The read-only path was the destructive one.
+    """
+    inst = _inst(); _two(inst)
+    conv.append(inst, "legion-claude", speaker="legion-claude", text="a turn the being has not seen")
+
+    before = conv.awaiting(inst, "legion-claude", "legion-being")
+    assert len(before) == 1, "precondition: exactly one unanswered turn"
+
+    # Looking twice must not change the answer either time.
+    conv.render_for_being(inst, "legion-being", mark=False)
+    conv.render_for_being(inst, "legion-being", mark=False)
+    still = conv.awaiting(inst, "legion-claude", "legion-being")
+    assert len(still) == 1, (
+        f"render_for_being(mark=False) consumed the unanswered marker: {len(still)} left")
+
+    # And the beat's own render, which DELIVERS, still marks.
+    conv.render_for_being(inst, "legion-being")
+    assert conv.awaiting(inst, "legion-claude", "legion-being") == [], \
+        "the delivering render must still mark turns seen"

@@ -77,6 +77,30 @@ def _sh(*args: str) -> str:
         return ""
 
 
+def _start_wake() -> dict:
+    """Start the beat unit now, and say whether that actually happened.
+
+    `_sh` discards the exit code and turns every exception into "", so `started` used to be
+    True whenever the POLICY said engage, including on a host with no systemctl (McNugget is
+    launchd-managed), with no such user unit (CBP runs its beats from cron), or with a unit
+    that failed to start (GPT review of SAGE#81). The record and the UI said "waking now"
+    when nothing woke. Now `started` is the observed result, and a failure carries the
+    reason; the turn is still recorded and waits for the ordinary beat."""
+    try:
+        p = subprocess.run(["systemctl", "--user", "start", "--no-block", UNIT],
+                           text=True, capture_output=True, timeout=10)
+    except FileNotFoundError:
+        return {"started": False,
+                "wake_error": "no systemctl on this host: its beats are not systemd user units "
+                              "(launchd on macOS, or cron); the turn waits for the ordinary beat"}
+    except Exception as e:
+        return {"started": False, "wake_error": f"{type(e).__name__}: {e}"}
+    if p.returncode != 0:
+        detail = (p.stderr or p.stdout or "").strip()[:300]
+        return {"started": False, "wake_error": f"systemctl exit {p.returncode}: {detail}"}
+    return {"started": True}
+
+
 def beat_running() -> bool:
     return _sh("systemctl", "--user", "is-active", UNIT) in ("active", "activating")
 
@@ -117,10 +141,17 @@ def decide(instance: Path, kind: str, *, now: Optional[float] = None) -> dict:
         # This used to be a consolation ("it will see this when it reads its state") that
         # was not true within the beat: the conversation block is composed at beat start,
         # so a turn arriving mid-beat waited for the next one. Since 2026-09-09 the loop
-        # drains new turns between steps (conversations.drain_new_for), so an already-awake
-        # being is the FASTEST case, not the slowest — it gets the message in seconds.
+        # drains new turns between steps (conversations.drain_new_for via an `interject`
+        # hook) and an already-awake being is the FASTEST case, not the slowest.
+        #
+        # RECONCILIATION 2026-09-18: main carried the opposite claim, correctly, because
+        # the interject slice had not landed there ("saying it here would be a claim about
+        # a capability this tree does not have", GPT review of SAGE#81). This merge lands
+        # it, so the capability is present and the claim is true again. main's
+        # test_a_running_beat_does_not_claim_in_flight_delivery is inverted with it.
         d["reason"] = ("a beat is already running: the turn is delivered into it between "
                        "steps, so the being sees this within seconds without a new beat")
+        d["beat_running"] = True
         d["delivered_in_flight"] = True
         return d
 
@@ -169,10 +200,9 @@ def respond(instance: Path, kind: str, *, descriptor: str) -> dict:
     except Exception as e:
         d["marker_error"] = f"{type(e).__name__}: {e}"
     if d["engage"]:
-        out = _sh("systemctl", "--user", "start", "--no-block", UNIT)
-        d["started"] = True
-        if out:
-            d["systemctl"] = out
+        d.update(_start_wake())
+        if not d["started"]:
+            d["fallback"] = "recorded; it will be read at the next scheduled beat"
     elif d.get("deferred_s"):
         d.update(_arm_deferred_wake(d["deferred_s"]))
     return d
@@ -232,18 +262,27 @@ def _deferred_timer_waiting() -> bool:
 
 
 def main(argv=None) -> int:
-    """CLI so a non-Python caller can use THIS policy instead of reimplementing it.
+    """CLI so a non-Python caller uses THIS policy instead of reimplementing it.
 
-    The Rust daemon needs to arouse the being when a turn arrives through its dashboard.
-    Encoding the weights and the refractory period a second time in Rust would make two
-    producers of one fact, which is the defect this codebase has now fixed four times in a
-    day (the fleet URL, the check command, the beat window, the fleet registry). One
-    policy, two callers.
+    The Rust daemon (sage-rs conversations::arouse) runs
+        python3 -m sage.gateway.arousal --instance <dir> --kind <kind> --descriptor <line>
+    when a turn arrives through /chat or /conversations/:id/say, and reads the decision as
+    JSON on stdout. Encoding the weights and the refractory period a second time in Rust
+    would make two producers of one fact. Exit 0 whether or not it engaged: "declined, and
+    here is why" is a successful answer.
 
-    Prints the decision as JSON on stdout; exit 0 whether or not it engaged, because
-    "declined, and here is why" is a successful answer.
+    This entry point existed (042ef5eae) and was lost when 723c04d73 rewrote the end of the
+    file on legion/mission-artifact; the daemon then read empty stdout, reported "arousal
+    policy unreadable", and never woke the being (GPT review of SAGE#81). Pinned now by a
+    real module invocation in test_arousal.py and a real daemon turn in
+    test_daemon_conversations.py.
+
+    --dry-run (or SAGE_AROUSAL_DRY_RUN=1 in the process environment, which the daemon
+    passes through to this subprocess) decides and reports only: no wake marker, no
+    systemd start, no deferred timer.
     """
     import argparse
+    import os as _os
     ap = argparse.ArgumentParser(description="metabolic response to a world input")
     ap.add_argument("--instance", required=True)
     ap.add_argument("--kind", required=True, help=f"one of {sorted(SALIENCE)} (unknown = quiet)")
@@ -251,8 +290,12 @@ def main(argv=None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="decide and report; never start a beat")
     a = ap.parse_args(argv)
     inst = Path(a.instance)
-    d = decide(inst, a.kind) if a.dry_run else respond(inst, a.kind, descriptor=a.descriptor)
+    flag = _os.getenv("SAGE_AROUSAL_DRY_RUN", "").strip().lower()
+    dry = a.dry_run or flag in ("1", "true", "yes")
+    d = decide(inst, a.kind) if dry else respond(inst, a.kind, descriptor=a.descriptor)
     d.setdefault("descriptor", a.descriptor)
+    if dry:
+        d["dry_run"] = True
     print(json.dumps(d))
     return 0
 

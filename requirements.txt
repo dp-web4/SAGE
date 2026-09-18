@@ -9,3 +9,7 @@ wandb
 omegaconf
 hydra-core
 huggingface_hub
+# gateway: sage/gateway/being_presence.py signs a being's presence with Ed25519.
+# Undeclared until now, so a box that had it only by coincidence ran governed turns
+# and a clean box raised ModuleNotFoundError('nacl') at the dispatch step (Nomad, 09-09).
+PyNaCl

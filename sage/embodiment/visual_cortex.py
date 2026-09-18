@@ -638,6 +638,57 @@ class VisualCortex:
             json.dump(state, f)
         os.replace(tmp, STATE_PATH)  # atomic
 
+    def _sense_blind(self, blind: list, frames: list, gaze: str, target):
+        """One perceptual tick while at least one eye delivers nothing.
+
+        Emits the same state SHAPE with the dark eyes marked stalled, so every consumer
+        downstream (the salience filter, the descriptor, presence, the daemon) sees a being
+        that has lost an eye rather than a being that has stopped perceiving. Then runs the
+        self-heal, which is the whole point: an eye this dead is exactly the one that needs
+        reopening, and the old early-return meant it never was.
+        """
+        now = time.time()
+        eyes = []
+        for i, f in enumerate(frames):
+            if f is None:
+                # count it as stalled so RECOVER_CYCLES can mature and the self-heal fire
+                self._stall[i] += 1
+                eyes.append({"motion": 0.0,
+                             "attention": {"cx": 0.5, "cy": 0.5, "w": 0.5, "h": 0.375},
+                             "trust": 0.0, "frozen": True, "stalled": True,
+                             "sensor": "no-frames", "objects": []})
+            else:
+                e, _gray = self._perceive_one(i, f, gaze, target)
+                e["objects"] = self._objects[i]
+                eyes.append(e)
+        prop = self.prop.state()
+        aud = self.hearing.state()
+        binoc = {"agreement": 0.0, "offset": [0, 0], "depth": "unknown",
+                 "object_agreement": None, "shared_objects": []}
+        dmeta: dict = {}
+        state = {"ts": round(now, 2),
+                 "cameras": {str(i): eyes[i] for i in range(len(eyes))},
+                 "dominant_eye": 0, "binocular": binoc, "proprioception": prop,
+                 "audio": aud, "gaze": gaze,
+                 "descriptor": _object_phrase(self._objects)
+                               + describe(eyes, binoc, prop, gaze, aud, meta=dmeta)}
+        state.update(dmeta)
+        sal = self.salience.score(state)
+        state["salience"] = sal
+        # Coherence with an eye gone: the agreement term is unavailable rather than zero, so
+        # it is dropped and the remaining terms carry their own weight. Reporting 0.4*0 here
+        # would read as "my senses violently disagree" when the truth is "I cannot compare".
+        eyes_live = sum(0.0 if e.get("stalled") else 1.0 for e in eyes) / max(1, len(eyes))
+        liveness = (eyes_live + (1.0 if prop.get("ok") else 0.0)
+                    + (1.0 if aud.get("ok") else 0.0)) / 3.0
+        state["coherence"] = round((0.3 * (1.0 - sal.get("conflict", 0.0))
+                                    + 0.3 * liveness) / 0.6, 3)
+        self._emit(state)
+        self.journal.observe(state, sal)
+        for i in blind:
+            if self._stall[i] >= RECOVER_CYCLES and now - self._last_recover[i] > RECOVER_COOLDOWN_S:
+                self._recover_camera(i)
+
     def run(self):
         self.start()
         period = 1.0 / POLL_HZ
@@ -654,8 +705,21 @@ class VisualCortex:
                         self._draw_closed()
                     time.sleep(period); continue
                 frames = [c.frame for c in self.cams]
-                if any(f is None for f in frames):
-                    time.sleep(0.05); continue
+                blind = [i for i, f in enumerate(frames) if f is None]
+                if blind:
+                    # A dark eye must not halt the whole organ. `Camera.frame` only stays
+                    # None when that camera has never delivered a single frame since it was
+                    # opened, and the self-heal that could reopen it lives BELOW this point
+                    # — so returning here stranded the loop in the one state it exists to
+                    # repair. Measured on Sprout 2026-09-14..17: 3.5 days spinning at 20 Hz,
+                    # perception.json frozen at the restart, `_recover_camera` never reached
+                    # once, and with it every downstream sense — hearing and the inner ear
+                    # are independent organs that were silenced by a camera.
+                    self._sense_blind(blind, frames, gaze, target)
+                    dt = time.time() - t0
+                    if dt < period:
+                        time.sleep(period - dt)
+                    continue
                 perceived = [self._perceive_one(i, frames[i], gaze, target) for i in range(2)]
                 eyes = [p[0] for p in perceived]; grays = [p[1] for p in perceived]
                 binoc = self.binoc.correlate(grays[0], grays[1], eyes[0]["attention"])

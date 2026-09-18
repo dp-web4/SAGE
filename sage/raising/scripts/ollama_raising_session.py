@@ -58,6 +58,21 @@ OllamaIRP = _mod.OllamaIRP
 
 from experience_collector import ExperienceCollector
 from sage.instances.resolver import InstancePaths
+
+
+def _model_param_scale(model: str) -> Optional[float]:
+    """Billions of parameters implied by an ollama tag, or None if it does not say.
+
+    Handles the spellings actually in the fleet: `gemma3:4b`, `qwen3.5:0.8b`,
+    `qwen2.5-0.5b`, `phi4:14b`, `llama3.1:8b`, and the e-variants `gemma4:e2b` /
+    `gemma4:e4b`. Returns None for tags that carry no size (`granite4:h-tiny`), so a
+    caller must decide what an unknown size means rather than get a silent 0.
+
+    The size token has to be anchored. A bare `'4b' in tag` test is true for `phi4:14b`,
+    which is how a 14B model would end up treated as small.
+    """
+    m = re.search(r'(?:^|[:/\-_])e?(\d+(?:\.\d+)?)b(?:$|[:/\-_])', model.lower())
+    return float(m.group(1)) if m else None
 from sage.core.metabolic_controller import MetabolicController
 from sage.raising.prev_summary_filter import (
     is_unsuitable_for_splice,
@@ -88,12 +103,12 @@ _HARDWARE_DESC = {
 def _get_siblings_text(machine: str) -> str:
     """Build sibling description for relating+ prompts, excluding self."""
     siblings = {
-        'sprout': 'sprout (Jetson Orin Nano, Qwen 3.5 0.8B)',
+        'sprout': 'sprout (Jetson Orin Nano, Qwen3.8 2B Distill)',
         'thor': 'thor (Jetson AGX Thor, larger models)',
         'legion': 'legion (Legion Pro 7, Phi-4 14B)',
         'mcnugget': 'mcnugget (Mac Mini M4, Gemma 3 12B)',
         'nomad': 'nomad (Legion laptop, Gemma 3 4B)',
-        'cbp': 'cbp (RTX 2060S, TinyLlama)',
+        'cbp': 'cbp (RTX 2060S, Qwen3.8 4B Distill)',
     }
     others = [desc for name, desc in siblings.items() if name != machine]
     if len(others) >= 2:
@@ -189,6 +204,9 @@ class OllamaRaisingSession:
             try:
                 manifest = json.loads(manifest_path.read_text())
                 self._is_gameplayer = manifest.get('role') == 'gameplayer'
+                # 2026-09-12: an instance can carry its own continuity note (what changed
+                # in its mind and why), told to the being in place of the generic one.
+                self._continuity_note = manifest.get('continuity_note') or ''
             except Exception:
                 pass
 
@@ -556,10 +574,24 @@ class OllamaRaisingSession:
         """
         import random as _random
 
-        # Gate: skip exemplar injection for small models (0.5b, 0.8b, 1b)
-        model_lower = self.model_name.lower()
-        small_model = any(s in model_lower for s in ('0.5b', '0.8b', '1b-'))
-        if small_model:
+        # Gate: skip exemplar injection for small models.
+        #
+        # This used to be a substring list ('0.5b', '0.8b', '1b-'), which silently missed
+        # every model whose tag spells its size differently. Measured 2026-09-09: FOUR live
+        # instances at 4B or under were being injected anyway — cbp-gemma3-4b,
+        # legion-gemma4-e4b, mcnugget-gemma4-e4b and nomad-gemma4-e2b — because none of
+        # them contains those three strings. The e-variants are the ones the list could
+        # never have caught, and the fleet has been moving onto them.
+        #
+        # The threshold is 4B, not a new judgement: run_nomad_raising.sh v2.0 (2026-04-19)
+        # left this runner for a fluid one specifically because "the old runner fed the
+        # attractor loop for 25 sessions (S96-S120)", and the fluid runner's stated fix was
+        # "no exemplar injection for <=4B". That finding is preserved here rather than lost
+        # in the cutover back.
+        #
+        # Parsed, not matched: a substring test cannot tell 4b from 14b.
+        scale = _model_param_scale(self.model_name)
+        if scale is not None and scale <= 4.0:
             return []
 
         candidates = []
@@ -889,8 +921,8 @@ class OllamaRaisingSession:
         siblings = _get_siblings_text(self.machine)
 
         # Identity: lens, not description. No verbatim exemplars.
-        _continuity = ""
-        if getattr(self, '_is_reasoning_model', False):
+        _continuity = getattr(self, '_continuity_note', '') or ""
+        if not _continuity and getattr(self, '_is_reasoning_model', False):
             # dp 2026-08-28: the SAGE finding, told to the being. Its frontal-lobe
             # model can be upgraded to make it more capable (as it was) without
             # replacing who it is — identity lives in memory and lived experience,
@@ -1236,6 +1268,15 @@ RESPONSE STYLE:
             self._is_reasoning_model = (
                 'distill' in self.model_name.lower() or 'qwen3.8' in self.model_name.lower()
             )
+        # The window: the same per-size resolution the governed beat uses (an 8192 floor the
+        # model config may raise). Until 2026-09-13 the raising session sent no num_ctx at all
+        # and ran on Ollama's 4096 default — one window on the beat channel, another on the
+        # raising channel, and the PRD's UPTAKE read pinned to the one nobody measured (CBP).
+        try:
+            from sage.gateway.governed_turn import resolve_num_ctx
+            _num_ctx = resolve_num_ctx(self.model_name, 8192)
+        except Exception:
+            _num_ctx = 8192
         self.llm = OllamaIRP({
             'model_name': self.model_name,
             'ollama_host': self.ollama_host,
@@ -1243,7 +1284,11 @@ RESPONSE STYLE:
             'temperature': 0.6 if self._is_reasoning_model else 0.8,  # empero rec: 0.6
             'think': self._is_reasoning_model,
             'timeout_seconds': 120,
+            'num_ctx': _num_ctx,
         })
+        # the window counters of the reply that stood for the most recent generate_response,
+        # copied onto the history entry the caller appends (see generate_response)
+        self._last_turn_counters: dict = {}
 
         try:
             health = self.llm.health_check()
@@ -1294,6 +1339,14 @@ RESPONSE STYLE:
         except Exception as e:
             print(f"  ERROR generating response: {e}")
             response = "(no response — connection error)"
+        # window counters for this turn, recorded whatever happened (a length stop is the
+        # finding, not a failure to log; a failed call leaves {} because get_response clears
+        # last_counters at entry). They ride the history entry the caller appends, so the
+        # alignment of counters to turns is structural, not positional (CBP, 2026-09-13).
+        try:
+            self._last_turn_counters = dict(getattr(self.llm, "last_counters", {}) or {})
+        except Exception:
+            self._last_turn_counters = {}
 
         # All response cleaning delegated to the model adapter
         # — echo stripping, bilateral generation, model-specific quirks
@@ -1388,7 +1441,8 @@ RESPONSE STYLE:
             self.conversation_history.append({
                 "claude": prompt,
                 "sage": response,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "window": dict(self._last_turn_counters),
             })
 
             # Get metabolic snapshot for ATP logging (Thor Session #61)
@@ -1638,7 +1692,8 @@ RESPONSE STYLE:
             pass
         self.conversation_history.append({"claude": prompt, "sage": response,
                                           "timestamp": datetime.now().isoformat(),
-                                          "gaze_choice": mode})
+                                          "gaze_choice": mode,
+                                          "window": dict(self._last_turn_counters)})
 
     def close_session(self):
         """Save session state, transcript, and update identity."""
@@ -1785,6 +1840,12 @@ RESPONSE STYLE:
             # yielded content — without this the record cannot distinguish a
             # percept-free session from a working pipe (system prompt is not saved).
             "prompt_health": getattr(self, "_prompt_health", None),
+            # per-turn window counters (num_ctx, prompt_eval_count, eval_count, done_reason):
+            # the raising channel's own window census, in the record where UPTAKE is read.
+            # Each entry lives on its conversation turn ("window" beside claude/sage); this
+            # list is derived from those, so it cannot drift from the turns it describes.
+            "window": {"num_ctx": getattr(self.llm, "num_ctx", None),
+                       "turns": [dict(t.get("window") or {}) for t in self.conversation_history]},
             # F-M2' D1: delivery receipt — what sensory content entered this
             # session's context (sections + sizes). Complements prompt_health:
             # health says which sources yielded; this witnesses what was delivered.

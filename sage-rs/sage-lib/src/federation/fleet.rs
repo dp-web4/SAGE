@@ -170,7 +170,10 @@ mod tests {
         assert!(registry.get_peer("thor").is_some());
         assert!(registry.get_peer("legion").is_some());
         assert!(registry.get_self_info().is_some());
-        assert_eq!(registry.get_self_info().unwrap().gateway_port, 8750);
+        // The port is whatever the manifest says, not a literal: the fleet moved from 8750
+        // (Python gateway) to 8760 (sage-rs) after this test was written, and a pinned 8750
+        // failed the moment the test stopped silently skipping.
+        assert_ne!(registry.get_self_info().unwrap().gateway_port, 0);
     }
 
     #[test]
@@ -183,7 +186,8 @@ mod tests {
         let registry = FleetRegistry::load("sprout", &path).unwrap();
         let url = registry.gateway_url("thor").unwrap();
         assert!(url.starts_with("http://"));
-        assert!(url.contains("8750"));
+        let port = registry.get_peer("thor").unwrap().gateway_port;
+        assert!(url.ends_with(&format!(":{port}")), "url {url} must carry the manifest port {port}");
     }
 
     #[test]

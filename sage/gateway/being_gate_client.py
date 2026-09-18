@@ -44,9 +44,34 @@ from typing import Any, Callable, List, Optional
 # Locate the shared hestia gate law portably (env override, then fleet layout).
 # --------------------------------------------------------------------------
 def _resolve_hestia_shared() -> Optional[str]:
-    env = os.environ.get("HESTIA_GATE_SHARED")
-    if env and os.path.isdir(env):
-        return env
+    """Locate the shared law this client imports.
+
+    Order is deliberate: an explicit override, then the INSTALLED law the deploy
+    maintains, then the source checkout. The installed copy is what the seats on
+    this box actually enforce and what `hestia-deploy` keeps current and attests
+    in the manifest, so a being judged by anything else is judged by a different
+    law than its seat.
+
+    `HESTIA_SHARED_DIR` and `HESTIA_HOME` are the fleet's own config vocabulary:
+    the vault projection at `$HESTIA_HOME/seats/<plugin_id>.env` publishes both.
+    Reading them here means a box that is correctly configured for its seats is
+    correctly configured for its beings, with nothing further to set.
+
+    The `~/ai-workspace` entries are kept last for the machines laid out that
+    way; they are one layout, not a location every box has. On a box that checks
+    out elsewhere the old list resolved to None and EVERY intent fail-closed on
+    `gate.unreachable: No module named 'hestia_gate_core'`, which reads like a
+    broken gate rather than an unconfigured path (measured 2026-09-09).
+    """
+    for env_key in ("HESTIA_GATE_SHARED", "HESTIA_SHARED_DIR"):
+        env = os.environ.get(env_key)
+        if env and os.path.isdir(env):
+            return env
+    home = os.environ.get("HESTIA_HOME")
+    if home:
+        p = os.path.join(os.path.expanduser(home), "shared")
+        if os.path.isdir(p):
+            return p
     for base in ("~/ai-workspace/hestia", "~/ai-workspace/HESTIA"):
         p = os.path.join(os.path.expanduser(base), "plugins", "_shared")
         if os.path.isdir(p):
@@ -140,6 +165,7 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
     """
     import re
     import os
+    import shlex
     worktree = (ctx or {}).get("worktree")
     if not worktree:
         raise ValueError(
@@ -147,7 +173,12 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
             "relative path would be judged against a tree you do not hold (PRD M1)")
     target = str(args.get("target", "")).strip()
     if target in CHECK_TARGETS:
-        path = os.path.join(worktree, CHECK_TARGETS[target])
+        # QUOTED for the same reason as --rootdir and --chdir: judged==executed is a
+        # property of the STRING, not of the fleet's current directory names. A worktree path
+        # containing a space splits into extra argv at execution while the law ruled on one
+        # token (GPT, second pass on #84). `node` below needs no quoting — it is
+        # [A-Za-z0-9_]+ by grammar — and the space before `-k` is two argv elements.
+        path = shlex.quote(os.path.join(worktree, CHECK_TARGETS[target]))
     else:
         # A single node id INSIDE a declared suite: "gateway::test_name" — or the ordinary
         # pytest spelling of the same thing, "test_file.py::test_name", which is what anyone
@@ -184,8 +215,11 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
             raise ValueError(
                 f"check test name must be a bare identifier (no parameters, no path); "
                 f"got {node!r}.{hint}")
-        path = f"{os.path.join(worktree, CHECK_TARGETS[suite])} -k {node}"
-    inner = f"python3 -m pytest -q -c /dev/null --rootdir={worktree} {path}"
+        path = f"{shlex.quote(os.path.join(worktree, CHECK_TARGETS[suite]))} -k {node}"
+    # -p no:cacheprovider: the worktree is mounted read-only, so pytest must not try
+    # to write .pytest_cache into it. PYTHONDONTWRITEBYTECODE already covers __pycache__.
+    inner = (f"python3 -m pytest -q -c /dev/null -p no:cacheprovider "
+             f"--rootdir={shlex.quote(worktree)} {path}")
     return sandbox_prefix(worktree) + inner
 
 
@@ -257,6 +291,7 @@ def sandbox_available() -> bool:
 
 
 def sandbox_prefix(worktree: str) -> str:
+    import shlex
     """The bwrap invocation that wraps every executed check, or "" when running unsandboxed
     is explicitly permitted."""
     import os
@@ -280,7 +315,17 @@ def sandbox_prefix(worktree: str) -> str:
         # the sandbox (measured 2026-09-08 by the real-conftest fixture: pytest ran in an
         # empty tree and the probe never wrote). tmpfs first, the worktree over it.
         " --proc /proc --dev /dev --tmpfs /tmp"
-        f" --bind {worktree} {worktree}"
+        # READ-ONLY. This was --bind (read-write), and the adversary this sandbox exists
+        # for is a being-authored conftest.py: pytest imports it from the rootdir BEFORE
+        # collecting, so a writable worktree lets that conftest rewrite product source, run
+        # the suite against transient bytes, and restore them. HEAD never moves, the test
+        # files never move, and the evidence would report stable=True about code that was
+        # not the code on disk either side of the run (GPT review of #84).
+        #
+        # The test process does not need write authority over source. The being edits its
+        # worktree BEFORE invoking check — that is its whole loop — and /tmp above is
+        # writable for anything pytest genuinely needs to spill.
+        f" --ro-bind {shlex.quote(worktree)} {shlex.quote(worktree)}"
         " --unshare-pid --unshare-net --unshare-ipc --unshare-uts"
         " --new-session --die-with-parent"
         # PYTHONUTF8 rather than LANG=C.UTF-8, and the reason is hestia #988: mrh.command
@@ -290,7 +335,7 @@ def sandbox_prefix(worktree: str) -> str:
         # defect has shaped a command; the issue carries the evidence.
         " --setenv HOME /tmp --setenv PYTHONUTF8 1 --setenv PYTHONDONTWRITEBYTECODE 1"
         f" --setenv PATH {interp}/bin:/usr/bin:/bin"
-        f" --chdir {worktree} "
+        f" --chdir {shlex.quote(worktree)} "
     )
 
 
@@ -553,9 +598,9 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
         # the one subtree whose plaintext — config remotes carrying tokens — is worth more
         # than its searchability.
         return (f"grep -rn -I -E --max-count={n} --exclude-dir=.git "
-                f"-e {shlex.quote(pattern)} -- {target}")
-    return (f"git --no-pager -C {worktree} grep -n -I -E --max-count={n} "
-            f"-e {shlex.quote(pattern)} -- {target}")
+                f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
+    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I -E --max-count={n} "
+            f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
 
 
 def _under(path: str, roots) -> bool:
@@ -596,13 +641,18 @@ def _search_reach(worktree: str, workspace) -> tuple:
     return tuple(dict.fromkeys(r for r in roots if r and r != os.sep))
 
 
-def _reach_refusal(verb: str, path, reach) -> str:
-    """Refused for being off the machine's shared tree — say where the line is, once."""
-    return (f"{verb} 'path' is outside anything you can reach: {path!r}. Absolute paths are "
-            f"fine, but only under {' or '.join(reach)} — that tree holds the fleet's repos "
-            f"and your own worktree, and what you may read INSIDE it is decided by your "
-            f"granted scope, not by this message. A path elsewhere on this machine is not "
-            f"something to ask scope for; it is not part of your world.")
+def _reach_refusal(verb: str, path, reach: str) -> str:
+    """Refused for being OUTSIDE the machine's shared tree — with the form that needs no
+    memory at all. The escape refusal has named the relative form since SAGE#90; this one
+    did not, and it is the one a being hits when it guesses at an absolute path (measured
+    2026-09-14: four refusals in one beat, all guesses, none corrected by the refusal)."""
+    return (f"{verb} 'path' is outside anything you can reach: {str(path)!r}. Absolute paths "
+            f"are fine, but only under {reach} — that tree holds the fleet's repos and your "
+            f"own worktree, and what you may read INSIDE it is decided by your granted "
+            f"scope, not by this message. A path elsewhere on this machine is not something "
+            f"to ask scope for; it is not part of your world. If you meant something in your "
+            f"own worktree, a RELATIVE path needs no absolute path at all: "
+            f"'sage/gateway/heartbeat.py' resolves there without your having to hold one.")
 
 
 def _escape_refusal(verb: str, path, worktree: str) -> str:
@@ -775,6 +825,7 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     `check`, in one beat, and explicitly declined to appeal a grammar error)."""
     import os
     import re
+    import shlex
     worktree = (ctx or {}).get("worktree")
     if not worktree:
         raise ValueError("git_read needs a worktree of your own; none is configured on this seat")
@@ -851,16 +902,17 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
                              "elsewhere use memory_read (content) or op='log'/'show' (history)")
         if op == "status":
             raise ValueError("git_read op='status' reports your own worktree and takes no path")
-        base += f" -C {full if os.path.isdir(full) else os.path.dirname(full)}"
+        base += f" -C {shlex.quote(full if os.path.isdir(full) else os.path.dirname(full))}"
     if op == "status":
         return f"{base} status --porcelain=v1 --branch"
     if op == "log":
         cmd = f"{base} log --no-ext-diff --no-textconv --oneline --no-decorate -n {n}"
         if rev:
             cmd += f" {rev}"
-        return cmd + (f" -- {path}" if path else "")
+        return cmd + (f" -- {shlex.quote(path)}" if path else "")
     if op == "show":
-        return f"{base} show --no-ext-diff --no-textconv --stat --patch {rev or 'HEAD'}" + (f" -- {path}" if path else "")
+        return (f"{base} show --no-ext-diff --no-textconv --stat --patch {rev or 'HEAD'}"
+                + (f" -- {shlex.quote(path)}" if path else ""))
     if op == "diff":
         rev2 = str(args.get("rev2", "")).strip()
         if rev2 and not re.fullmatch(_REV, rev2):
@@ -872,7 +924,7 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         # no token that looks like a path escape. The rule is doing its job on a token that
         # genuinely looks like traversal; the command should not hand it one.
         span = f"{rev} {rev2}" if rev and rev2 else (rev or "HEAD~1")
-        return f"{base} diff --no-ext-diff --no-textconv {span}" + (f" -- {path}" if path else "")
+        return f"{base} diff --no-ext-diff --no-textconv {span}" + (f" -- {shlex.quote(path)}" if path else "")
     if op == "cat":
         if not path:
             raise ValueError("git_read op='cat' needs a 'path': the file whose content you want")
@@ -883,10 +935,10 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         rel = os.path.relpath(path, os.path.realpath(worktree))
         if rel.startswith(".."):
             raise ValueError(_escape_refusal("git_read", rel, worktree))
-        return f"{base} show --no-ext-diff --no-textconv {rev or 'HEAD'}:{rel}"
+        return f"{base} show --no-ext-diff --no-textconv {shlex.quote(str(rev or 'HEAD') + ':' + rel)}"
     if not path:
         raise ValueError("git_read op='blame' needs a 'path' inside your worktree")
-    return f"{base} blame --no-textconv -L 1,120 {rev or 'HEAD'} -- {path}"
+    return f"{base} blame --no-textconv -L 1,120 {rev or 'HEAD'} -- {shlex.quote(path)}"
 
 
 
@@ -1130,6 +1182,10 @@ _REGISTRY = {
     # its own included. path_args=() is correct: the target is a conversation, not a path,
     # and the reach is fixed by the meta file the seat owns rather than by the being's args.
     "say":            dict(tool="say",         path_args=(),       cmd_arg=None),
+    # retire_note (from main): a note the being marks as no longer current. Judged as a
+    # write_note like memory_write, because that is what it does — renames one of its own
+    # files inside its own home.
+    "retire_note":    dict(tool="write_note",   path_args=("path",), cmd_arg=None),
     # pr_open: the being's worktree changes become a pull request, attributed to it,
     # for NOT-SAME review. Composed like pr_review — the law rules on the `gh` string.
     "pr_open":        dict(tool="pr_open",     path_args=(),       cmd_arg=None,
@@ -1163,7 +1219,8 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "check", "git_read", "say", "pr_open",
-                            "pr_amend", "camera", "git_restore", "search", "edit", "game", "run"})
+                            "pr_amend", "camera", "git_restore", "search", "edit", "game", "run",
+                            "retire_note"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -1269,7 +1326,8 @@ _TOOL_SCHEMAS = {
                  "with this. Use it to find out whether the tree moved under you between "
                  "beats, and to compare a `check` result's tree block against what is "
                  "actually in the history.",
-                 {"op": "one of 'log', 'show', 'diff', 'status', 'blame'",
+                 {"op": "one of " + ", ".join(repr(o) for o in GIT_OPS)
+                        + " ('cat' reads a file's content at a revision, and needs 'path')",
                   "rev": "optional: a commit sha, HEAD, HEAD~2, or a branch name",
                   "rev2": "optional, for op='diff': the second revision of the span",
                   "path": "optional: a path inside your worktree to narrow the answer to",
@@ -1315,6 +1373,12 @@ _TOOL_SCHEMAS = {
     # pattern would cost ~700 characters of prompt every beat; an extra optional argument
     # costs ~150. required is EMPTY because neither form is the required one — the
     # dispatcher refuses a call with neither and names both.
+    "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
+                    "is renamed to <name>.retired-<date> with a dated header saying why; nothing "
+                    "is lost and you can still read it. Use it when something you wrote has been "
+                    "settled or refuted, so a later beat does not read it as news.",
+                    {"path": "the note, e.g. notes/my-note.md", "reason": "what you know now that the note does not"},
+                    ["path", "reason"]),
     "recall": ("Search your long-term memory (semantic search over everything you have "
                "remembered). Use it before deciding what to do; use it when something "
                "feels familiar. Results are PREVIEWS: each carries (idx:N), and calling "
@@ -1383,30 +1447,36 @@ def parse_tool_calls(tool_calls: list) -> List["BeingIntent"]:
 
 
 def _granted_roots(core, policy, workspace: str) -> tuple:
-    """``((abs_root, recursive), ...)`` for every `path:` scope a resolved policy grants.
-
-    REACH TRAVELS WITH THE ROOT (hestia #1002; GPT review of #56, #2). This used to return
-    bare roots via `_scope_parts(...)[1]`, and the dispatcher then admitted `p == root OR
-    root in p.parents` — so an EXACT hestia grant on /x became recursive /x/** inside SAGE's
-    own defense-in-depth layer, wider than the law that produced it. Now the pair is kept:
-    the core's `_scope_roots_with_reach` when it has one (post-#1002), else parsed here from
-    the `/**` spelling, so an older core still yields exact-by-default rather than a guess."""
+    """The absolute path roots a resolved policy grants ("path:<abs>" scopes), via the
+    core's own resolver when it has one. () when there is no policy or no path scope."""
     if policy is None:
         return ()
     try:
         scopes = list(getattr(policy, "scope", ()) or ())
-        with_reach = getattr(core, "_scope_roots_with_reach", None)
-        if with_reach is not None:
-            return tuple((str(r), bool(rec)) for r, rec in with_reach(scopes, workspace))
-        out = []
+        parts = getattr(core, "_scope_parts", None)
+        if parts is not None:
+            return tuple(parts(scopes, workspace)[1])
+        roots = []
         for sc in scopes:
             if isinstance(sc, str) and sc.startswith("path:"):
-                raw = sc[5:]
-                rec = raw.endswith("/**")
-                if rec:
-                    raw = raw[:-3]
-                out.append((os.path.realpath(os.path.expanduser(raw)), rec))
-        return tuple(out)
+                roots.append(os.path.realpath(os.path.expanduser(sc[5:])))
+        return tuple(roots)
+    except Exception:
+        return ()
+
+
+def _granted_reach(core, policy, workspace: str) -> tuple:
+    """``((root, recursive), ...)`` for every path grant, via the core's own reach resolver
+    (hestia_gate_core._scope_roots_with_reach, since #1002: exact unless spelled `/**`).
+    An older core has no reach resolver and matches every grant as a prefix, so its roots
+    are reported recursive — the reach that gate actually enforces, not a guess."""
+    if policy is None:
+        return ()
+    try:
+        reach = getattr(core, "_scope_roots_with_reach", None)
+        if reach is not None:
+            return tuple((str(r), bool(rec)) for r, rec in reach(list(getattr(policy, "scope", ()) or ()), workspace))
+        return tuple((r, True) for r in _granted_roots(core, policy, workspace))
     except Exception:
         return ()
 
@@ -1426,6 +1496,13 @@ class GatewayVerdict:
     # 2026-09-05 that a shared-context read grant "cannot be used at all" because the local
     # dispatcher confined memory_read to the instance dir before hestia's gate was consulted.
     granted: tuple = ()
+    # The same roots WITH their reach: ((root, recursive), ...). Since hestia #1002 a bare
+    # grant is exact. Measured 2026-09-12 (cbp-being, first beat on the new mind): the
+    # dispatcher's request_scope dedup matched `granted` as prefixes, told the being
+    # "you already hold reach here" for journal.md beneath an EXACT home grant, filed
+    # nothing, and the being retried 22 times in one beat with no request_id anywhere.
+    # reference_f1a._safe_path prefers THIS field and reads a bare entry as exact.
+    granted_reach: tuple = ()
 
     @property
     def blocks(self) -> bool:
@@ -1485,6 +1562,38 @@ class ResultEnvelope:
 # execute it on the being's behalf and return a witnessed ResultEnvelope. Injected,
 # so the real one is hestia's F1a; tests pass a mock; unset means "pending F1a".
 Dispatcher = Callable[["BeingIntent", GatewayVerdict], ResultEnvelope]
+
+
+_HOME_FILENAMES = ("journal.md", "todo.md", "account.json", "notes", "scratch")
+
+
+def _home_hint(intent: "BeingIntent", dispatcher) -> str:
+    """When a refused path names one of the being's OWN home files but is rooted elsewhere,
+    the remedy is the right path, not a grant. Say so in the refusal the being reads, so it
+    can correct inside the same beat (dp, 2026-09-07: "mistakes become lessons"). Measured on
+    Sprout: it wrote journal.md and todo.md to `<repo>/sage/` and to `/home/user/`, a generic
+    placeholder path, while writing its real journal correctly 51 times in the same period."""
+    try:
+        raw = str((intent.args or {}).get("path", "")).strip()
+        name = os.path.basename(raw.rstrip("/"))
+        if not raw or name not in _HOME_FILENAMES:
+            return ""
+        root = getattr(getattr(dispatcher, "_local", None), "memory_root", None) \
+            or getattr(dispatcher, "memory_root", None)
+        if not root:
+            return ""
+        correct = os.path.join(os.path.realpath(str(root)), name)
+        # A relative path is rooted in the being's home by _normalize and the dispatcher,
+        # so judge the same path they touch. realpath(raw) alone resolved a bare
+        # 'journal.md' against the process cwd and told a member with NO grant at all that
+        # no grant was needed (cbp-being's first beat, 2026-09-12: 9 refusals, 0 escalated).
+        cand = raw if os.path.isabs(os.path.expanduser(raw)) else os.path.join(str(root), raw)
+        if os.path.realpath(os.path.expanduser(cand)) == correct:
+            return ""
+        return (f" — no grant is needed for this: your own '{name}' is at {correct}, "
+                f"and a bare '{name}' is resolved inside your home.")
+    except Exception:
+        return ""
 
 
 def _pattern_collision_hint(intent: "BeingIntent", reason: str) -> str:
@@ -1688,6 +1797,7 @@ class BeingGateClient:
                     policy = None
             v = self._core.evaluate(ev, self._profile, self.workspace, policy=policy)
             granted = _granted_roots(self._core, policy, self.workspace)
+            granted_reach = _granted_reach(self._core, policy, self.workspace)
         except Exception as e:
             return GatewayVerdict("deny", "gate.raised", innate=True, stage="local-law",
                                   reason=f"{type(e).__name__}: {e}")
@@ -1726,7 +1836,7 @@ class BeingGateClient:
                                           reason=f"society-safety failed ({type(e).__name__}); consequential act denied")
                 # observational: local law already allowed, soft-pass
         return GatewayVerdict(v.decision, v.rule, v.reason or "ok", v.innate, stage="local-law",
-                              granted=granted)
+                              granted=granted, granted_reach=granted_reach)
 
     # -- the F1a seam: gate, then dispatch, then consume the result ----------
     def dispatch(self, intent: BeingIntent) -> ResultEnvelope:
@@ -1747,6 +1857,7 @@ class BeingGateClient:
             v = _dc.replace(v, witness_id=wid)      # GatewayVerdict is frozen
             err = f"{v.rule}: {v.reason}"
             err += _pattern_collision_hint(intent, v.reason or "")
+            err += _home_hint(intent, self._dispatcher)
             err += (f" (deny witnessed {wid}; if you think this is wrong, appeal with deny_hash={wid})"
                     if wid else " (deny not witnessed: daemon unreachable, so it cannot be appealed yet)")
             return ResultEnvelope(ok=False, refused=True, verdict=v, error=err, witness_id=wid)

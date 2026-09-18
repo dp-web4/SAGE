@@ -32,6 +32,11 @@
 set -e
 
 # --- Resolve paths ---
+# Resolve a working python3 (see resolve_python.sh). Explicit `|| exit 1`:
+# these scripts do not all `set -e`, and a quiet fallthrough here is exactly
+# how raising died unnoticed for 29 days.
+. "$(dirname "$0")/resolve_python.sh" || exit 1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SAGE_DIR="${SAGE_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 SAGE_PORT="${SAGE_PORT:-8760}"
@@ -128,14 +133,7 @@ start_daemon() {
     # Fallback: manual start (env vars above already exported into this shell).
     cd "$SAGE_DIR"
     export PYTHONPATH="$SAGE_DIR"
-    local PYTHON
-    if command -v python3 >/dev/null 2>&1; then
-        PYTHON="python3"
-    elif [ -f /opt/homebrew/bin/python3 ]; then
-        PYTHON="/opt/homebrew/bin/python3"
-    else
-        PYTHON="python"
-    fi
+    local PYTHON="$SAGE_PY"
     local LOG_DIR="$SAGE_DIR/sage/logs"
     mkdir -p "$LOG_DIR"
     local LOG_FILE="$LOG_DIR/daemon_$(date +%Y%m%d_%H%M%S).log"

@@ -11,6 +11,11 @@
 
 set -u
 
+# Resolve a working python3 (see resolve_python.sh). Explicit `|| exit 1`:
+# these scripts do not all `set -e`, and a quiet fallthrough here is exactly
+# how raising died unnoticed for 29 days.
+. "$(dirname "$0")/resolve_python.sh" || exit 1
+
 SAGE_DIR="/Users/dennispalatov/repos/SAGE"
 DEV_SAGE="/Users/dennispalatov/repos/dev-SAGE"
 SHARED="/Users/dennispalatov/repos/shared-context"
@@ -46,10 +51,26 @@ echo "[McNugget-Supervisor] $TIMESTAMP — Starting cycle"
 echo "[McNugget-Supervisor] Model: $MODEL, Stack: v14 canonical"
 
 # === 1. PULL ALL REPOS ===
+# `git reset --hard origin/main` on a tree with an unpushed commit DELETES that
+# commit's files from the working tree. This loop did that to ten raising sessions
+# (2026-06 through 2026-09-14) and once to a set of script fixes: a session commits
+# locally, its push is rejected because origin moved, and four hours later this
+# line erases it. So: never reset over an unpushed commit without first trying to
+# push it, and never erase one without pinning it under refs/backup/ where it can
+# be recovered. A discarded commit is a data loss; a pinned one is a chore.
 for repo in "$DEV_SAGE" "$SAGE_DIR" "$SHARED" "$PRIVATE" "$MEMORY" "$HESTIA"; do
     if [ -d "$repo" ]; then
         cd "$repo"
         git fetch origin 2>/dev/null
+        AHEAD=$(git log origin/main..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
+        if [ "${AHEAD:-0}" != "0" ]; then
+            echo "[McNugget-Supervisor] $(basename "$repo"): $AHEAD unpushed commit(s) -- pushing before reset"
+            if ! git push origin main >/dev/null 2>&1; then
+                BK="refs/backup/supervisor-$(date -u +%Y%m%dT%H%M%SZ)"
+                git update-ref "$BK" HEAD
+                echo "[McNugget-Supervisor] *** $(basename "$repo"): push failed; $AHEAD commit(s) PINNED at $BK before reset ***" >&2
+            fi
+        fi
         git reset --hard origin/main 2>/dev/null
     fi
 done
@@ -87,7 +108,7 @@ else
             export SAGE_GAME_DIAG_DIR="$SWEEP_DIR/diagnostic_games"
 
             cd "$SAGE_DIR"
-            nohup /opt/homebrew/bin/python3 \
+            nohup "$SAGE_PY" \
                 "$DEV_SAGE/arc-agi-3/experiments/sweep_all_25.py" \
                 --model "$MODEL" --max-steps 600 --max-revisions 100 \
                 > "$SWEEP_LOG" 2>&1 &
@@ -164,6 +185,25 @@ else:
 open(p, "w").write("".join(pre + rest))
 PY
 echo "[McNugget-Supervisor] evidence emitted -> supervisor/log_mcnugget.md"
+
+# === 3c. FLEET-FACT DIVERGENCE CHECK ===
+# Compare the published facts against their sources and report, loudly, when two
+# copies of one fact disagree. Writes nothing and fixes nothing by design -- see
+# the module docstring for why a differ rather than a generator.
+#
+# Wired here rather than left as a tool because an unwired mechanism is the exact
+# defect this checks for: update_fleet_models.py was written 2026-03-08 to be
+# "called at the start of raising sessions", was called by nothing on any seat,
+# and fleet.json drifted six months while everyone assumed the mechanism worked.
+# A checker nobody runs is worth less than no checker, because its existence is
+# mistaken for coverage.
+FFC_OUT="$($SAGE_PY "$SAGE_DIR/sage/tools/fleet_fact_check.py" --machine mcnugget 2>&1)"
+FFC_RC=$?
+echo "$FFC_OUT" | tail -1
+if [ "$FFC_RC" -ne 0 ]; then
+    echo "[McNugget-Supervisor] *** FLEET-FACT DIVERGENCE (rc=$FFC_RC) ***"
+    echo "$FFC_OUT" | grep -E '^\s+(!!|\?\?)' -A1
+fi
 
 # === 4. PUSH (if anything changed) ===
 for repo in "$SHARED" "$DEV_SAGE" "$SAGE_DIR" "$PRIVATE"; do

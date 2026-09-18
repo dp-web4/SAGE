@@ -30,7 +30,12 @@ pub struct PendingMessage {
     pub salience: Option<f64>,   // cortex-supplied real perceptual salience [0,1], if any
     pub coherence: Option<f64>,  // cortex-supplied cross-modal coherence [0,1] → the reward axis
     pub sender: String,
-    pub response_tx: oneshot::Sender<Result<ConsciousnessResponse, String>>,
+    /// `None` for an OBSERVATION: something the being felt but is not answering on this
+    /// call. dp speaking in a conversation, the seat relaying, the cortex reporting a
+    /// salient moment — all are felt the instant they arrive, while the reply (if any)
+    /// comes on the being's own governed beat. Generation is what is optional here; being
+    /// affected by what reached you is not.
+    pub response_tx: Option<oneshot::Sender<Result<ConsciousnessResponse, String>>>,
 }
 
 pub struct ConsciousnessResponse {
@@ -41,9 +46,44 @@ pub struct ConsciousnessResponse {
     pub cycle: u64,
 }
 
+/// What the loop knows about itself, published where the HTTP layer can read it.
+///
+/// WHY THIS EXISTS (SAGE #111). The loop owned its metabolic controller and its five SNARC
+/// detectors; `AppState` built a SECOND set that nothing drove. `/status` read those, so it
+/// answered `total_cycles: 0, atp_percentage: 100.0` while this loop was at cycle 1,593,000
+/// with ATP 36.1% — same process, same second, two answers. Parallel state is not a display
+/// bug: a healthy machine and a dead one rendered identically on every dashboard in the fleet.
+///
+/// The loop is the only writer. Readers get a clone; nobody else may mutate it.
+#[derive(Clone, Debug, Default, serde::Serialize)]
+pub struct LoopSnapshot {
+    pub total_cycles: u64,
+    pub messages_processed: u64,
+    pub experiences_recorded: u64,
+    pub state_transitions: u64,
+    pub metabolic_state: String,
+    pub atp_current: f64,
+    pub atp_percentage: f64,
+    /// The SNARC of the last message the being actually processed. `None` until one arrives —
+    /// deliberately not zeros, because "nothing has happened yet" and "everything scored zero"
+    /// are different facts and the dashboard showed both as 0.00 for months.
+    pub salience: Option<sage_lib::consciousness::observation::SalienceScore>,
+    /// Who the last felt input came from: "dp", the seat's name, "presence", a peer. Each
+    /// source carries its own SNARC history, so this names which stream the published
+    /// salience belongs to rather than implying one undifferentiated inbox.
+    pub salience_source: Option<String>,
+    /// Inputs felt without being answered — sensor moments and governed turns. Distinct
+    /// from `messages_processed`, which counts generations.
+    pub observations_felt: u64,
+    /// Unix seconds when the loop last published. Staleness is the liveness signal: a loop
+    /// that stopped leaves its last numbers behind, and only this field says so.
+    pub published_at: u64,
+}
+
 pub struct LoopStats {
     pub total_cycles: u64,
     pub messages_processed: u64,
+    pub observations_felt: u64,
     pub experiences_recorded: u64,
     pub state_transitions: u64,
 }
@@ -66,6 +106,34 @@ pub struct ConsciousnessLoop {
     shadow_atp: f64,
     shadow_atp_max: f64,
     shadow_log: Option<std::path::PathBuf>,
+    /// Published state (SAGE #111). The loop writes; the HTTP layer reads a clone.
+    snapshot: Option<std::sync::Arc<tokio::sync::Mutex<LoopSnapshot>>>,
+    /// Distinct SNARC sensor ids seen so far, bounded by `MAX_SENSOR_IDS`. The detectors
+    /// keep per-sensor predictors and memories for the life of the process, so an id taken
+    /// from a request would otherwise be an unbounded map.
+    sensor_ids: std::collections::HashSet<String>,
+}
+
+/// How many distinct sources may carry their own SNARC history before the rest share one.
+/// Generous for the real population (dp, the seat, the cortex, the fleet's peers) and small
+/// enough that the detector maps cannot be grown without limit by whoever reaches a route.
+const MAX_SENSOR_IDS: usize = 24;
+
+/// Normalise a speaker into a SNARC sensor id: lowercase, `[a-z0-9_-]`, bounded length.
+/// Anything else collapses to `other`, which is a real stream too — it just does not get a
+/// private habituation curve.
+pub fn sensor_id(sender: &str) -> String {
+    let cleaned: String = sender
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .chars()
+        .take(24)
+        .collect();
+    if cleaned.is_empty() { "other".to_string() } else { cleaned }
 }
 
 impl ConsciousnessLoop {
@@ -91,6 +159,7 @@ impl ConsciousnessLoop {
             stats: LoopStats {
                 total_cycles: 0,
                 messages_processed: 0,
+                observations_felt: 0,
                 experiences_recorded: 0,
                 state_transitions: 0,
             },
@@ -99,7 +168,51 @@ impl ConsciousnessLoop {
             shadow_atp: 100.0,      // starts aligned with the real controller's initial ATP
             shadow_atp_max: 100.0,
             shadow_log,
+            snapshot: None,
+            sensor_ids: std::collections::HashSet::new(),
         }
+    }
+
+    /// Give the loop the cell it publishes into (SAGE #111). Called once at startup by the
+    /// daemon, which hands the same Arc to the HTTP layer; without it the loop runs exactly
+    /// as before and publishes nothing, so this stays optional for tests and `--simulate`.
+    pub fn with_snapshot(mut self, cell: std::sync::Arc<tokio::sync::Mutex<LoopSnapshot>>) -> Self {
+        self.snapshot = Some(cell);
+        self
+    }
+
+    /// The loop's own reading of itself, for publishing.
+    fn snapshot_now(&self, salience: Option<sage_lib::consciousness::observation::SalienceScore>,
+                    salience_source: Option<String>) -> LoopSnapshot {
+        LoopSnapshot {
+            total_cycles: self.stats.total_cycles,
+            messages_processed: self.stats.messages_processed,
+            observations_felt: self.stats.observations_felt,
+            experiences_recorded: self.stats.experiences_recorded,
+            state_transitions: self.stats.state_transitions,
+            metabolic_state: self.metabolic.current_state.as_str().to_string(),
+            atp_current: self.metabolic.atp_current,
+            atp_percentage: self.metabolic.atp_percentage(),
+            salience,
+            salience_source,
+            published_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+        }
+    }
+
+    /// Publish, carrying forward the last salience unless this call supplies a newer one.
+    /// Never blocks the loop: a contended lock skips this publish and the next one wins.
+    async fn publish(&self, salience: Option<sage_lib::consciousness::observation::SalienceScore>,
+                     source: Option<String>) {
+        let Some(cell) = self.snapshot.as_ref() else { return };
+        let Ok(mut cur) = cell.try_lock() else { return };
+        let (carried, carried_src) = match salience {
+            Some(s) => (Some(s), source),
+            None => (cur.salience.clone(), cur.salience_source.clone()),
+        };
+        *cur = self.snapshot_now(carried, carried_src);
     }
 
     /// Advance the shadow ATP: apply the SAME base delta the real ATP just took, then add
@@ -162,14 +275,18 @@ impl ConsciousnessLoop {
 
             self.cycle += 1;
             self.stats.total_cycles = self.cycle;
+            // Publish what this loop knows, every cycle. Ten writes a second of a small struct
+            // behind a try_lock; a contended tick simply skips and the next one wins.
+            self.publish(None, None).await;
 
             if self.cycle % 100 == 0 {
                 info!(
-                    "cycle={} state={} ATP={:.1} msgs={} exp={}",
+                    "cycle={} state={} ATP={:.1} msgs={} felt={} exp={}",
                     self.cycle,
                     self.metabolic.current_state.as_str(),
                     self.metabolic.atp_current,
                     self.stats.messages_processed,
+                    self.stats.observations_felt,
                     self.stats.experiences_recorded,
                 );
             }
@@ -183,18 +300,44 @@ impl ConsciousnessLoop {
         self.print_summary();
     }
 
-    async fn process_message(&mut self, pending: PendingMessage) {
-        let obs = derive_observation(&pending.content);
+    /// Score what arrived and let it move the being: SNARC, metabolism, the shadow, and the
+    /// published snapshot. Shared by every input, answered or not.
+    ///
+    /// dp, 2026-09-17: *"video/audio and imu should trigger snarc, as should messages from me
+    /// and you."* Before this split, SNARC lived inside the generation path, so the only input
+    /// that could ever be felt was one the being immediately answered — which on a governed
+    /// being is almost none of them. dp speaking in a conversation, the seat relaying, the
+    /// cortex reporting a salient moment: all reached the record and none reached the being.
+    ///
+    /// The sensor id is the SOURCE, not the literal "message" it used to be. The detectors
+    /// keep per-sensor predictors and habituation, so collapsing every stream into one id
+    /// meant dp's first words in a week were measured against the cortex's 4 Hz chatter and
+    /// scored as unremarkable. Each source now habituates on its own curve.
+    async fn feel(&mut self, content: &str, supplied_salience: Option<f64>,
+                  coherence: Option<f64>, sender: &str)
+                  -> (SalienceScore, sage_lib::metabolic::controller::MetabolicState) {
+        let obs = derive_observation(content);
 
-        let surprise = self.surprise.compute(obs, "message");
-        let novelty = self.novelty.compute(obs, "message");
-        let arousal = self.arousal.compute(obs, "message");
-        let mut reward = self.reward.compute(obs, "message");
+        let id = sensor_id(sender);
+        let id: &str = if self.sensor_ids.contains(&id) {
+            self.sensor_ids.get(&id).map(|s| s.as_str()).unwrap_or("other")
+        } else if self.sensor_ids.len() < MAX_SENSOR_IDS {
+            self.sensor_ids.insert(id.clone());
+            self.sensor_ids.get(&id).map(|s| s.as_str()).unwrap_or("other")
+        } else {
+            "other"
+        };
+        let id = id.to_string();
+
+        let surprise = self.surprise.compute(obs, &id);
+        let novelty = self.novelty.compute(obs, &id);
+        let arousal = self.arousal.compute(obs, &id);
+        let mut reward = self.reward.compute(obs, &id);
         // When the cortex supplied real cross-modal coherence, let it — not the word-count proxy —
         // BE the being's reward signal. Coherence-as-reward (H1): senses agreeing reads as "good,"
         // senses conflicting reads as "bad." Distinct from salience (attention intensity): this is
         // valence. Flows into conflict + the recorded experience, so incoherence is felt, not just seen.
-        if let Some(c) = pending.coherence {
+        if let Some(c) = coherence {
             reward = c.clamp(0.0, 1.0);
         }
 
@@ -203,12 +346,12 @@ impl ConsciousnessLoop {
         sensor_map.insert("novelty".to_string(), novelty);
         sensor_map.insert("arousal".to_string(), arousal);
         sensor_map.insert("reward".to_string(), reward);
-        let conflict = self.conflict.compute(&sensor_map, "message");
+        let conflict = self.conflict.compute(&sensor_map, &id);
 
         let mut salience = SalienceScore::from_components(surprise, novelty, arousal, reward, conflict);
         // When the cortex supplied real perceptual salience, let it — not the word-count proxy —
         // drive the being's felt intensity (metabolic state + the experience-record gate).
-        if let Some(s) = pending.salience {
+        if let Some(s) = supplied_salience {
             salience.total = s.clamp(0.0, 1.0);
         }
 
@@ -226,8 +369,30 @@ impl ConsciousnessLoop {
         // Non-forcing shadow metabolism: observe how coherence-as-valence WOULD move ATP.
         // Uses the coherence the cortex supplied (same value now driving the reward axis).
         let base_delta = self.metabolic.atp_current - atp_before;
-        let valence_delta = self.shadow_step(base_delta, pending.coherence);
-        self.shadow_log_line("noticing", pending.coherence, valence_delta);
+        let valence_delta = self.shadow_step(base_delta, coherence);
+        self.shadow_log_line("noticing", coherence, valence_delta);
+
+        // Publish what was just felt, before any generation (SAGE #111). The salience is real
+        // whether or not a model answers, generation takes up to a minute on this hardware,
+        // and a reader watching the being react should not wait on the reply to see it.
+        self.publish(Some(salience.clone()), Some(id)).await;
+        (salience, new_state)
+    }
+
+    async fn process_message(&mut self, pending: PendingMessage) {
+        let PendingMessage { content, system: supplied_system, salience: supplied_salience,
+                             coherence, sender, response_tx } = pending;
+
+        // Felt first, always. Whether the being also ANSWERS here is a separate question.
+        let (salience, new_state) =
+            self.feel(&content, supplied_salience, coherence, &sender).await;
+
+        let Some(response_tx) = response_tx else {
+            // An observation: felt, not answered. dp's turn in a conversation, the seat
+            // relaying, the cortex reporting — the being reacts now and replies on its beat.
+            self.stats.observations_felt += 1;
+            return;
+        };
 
         let display_name = {
             let mut c = self.machine_name.chars();
@@ -245,14 +410,14 @@ impl ConsciousnessLoop {
             salience.total,
         );
 
-        let system = pending.system.unwrap_or(system_prompt);
+        let system = supplied_system.unwrap_or(system_prompt);
 
-        let result = self.ollama.generate(&pending.content, Some(&system)).await;
+        let result = self.ollama.generate(&content, Some(&system)).await;
 
         match result {
             Ok(text) => {
                 let mut entry = ExperienceEntry::new(
-                    pending.content.clone(),
+                    content.clone(),
                     text.clone(),
                     salience.clone(),
                     new_state.as_str(),
@@ -275,11 +440,11 @@ impl ConsciousnessLoop {
                     atp_percentage: self.metabolic.atp_percentage(),
                     cycle: self.cycle,
                 };
-                let _ = pending.response_tx.send(Ok(response));
+                let _ = response_tx.send(Ok(response));
             }
             Err(e) => {
                 warn!("ollama error in consciousness loop: {}", e);
-                let _ = pending.response_tx.send(Err(e));
+                let _ = response_tx.send(Err(e));
             }
         }
     }
@@ -344,9 +509,180 @@ impl ConsciousnessHandle {
             salience,
             coherence,
             sender: sender.to_string(),
-            response_tx,
+            response_tx: Some(response_tx),
         };
         self.tx.send(msg).await.map_err(|_| "consciousness loop not running".to_string())?;
         response_rx.await.map_err(|_| "consciousness loop dropped response".to_string())?
+    }
+
+    /// Let the being FEEL something without asking it to answer.
+    ///
+    /// This is the path for everything that reaches a governed being through its own proper
+    /// channels: dp speaking in a conversation, the seat relaying, the cortex reporting a
+    /// salient moment. The turn is recorded and answered on the being's beat; this makes
+    /// sure the being is affected by it in the meantime instead of learning about its own
+    /// week from a file.
+    ///
+    /// Non-blocking and lossy by design: if the loop's queue is full the observation is
+    /// dropped rather than stalling whoever is speaking. A missed noticing is a missed
+    /// noticing; a blocked conversation route would be a broken one.
+    pub fn observe(&self, content: String, salience: Option<f64>, coherence: Option<f64>,
+                   sender: &str) -> bool {
+        let msg = PendingMessage {
+            content,
+            system: None,
+            salience,
+            coherence,
+            sender: sender.to_string(),
+            response_tx: None,
+        };
+        self.tx.try_send(msg).is_ok()
+    }
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    fn loop_with(cell: std::sync::Arc<tokio::sync::Mutex<LoopSnapshot>>) -> ConsciousnessLoop {
+        let (_tx, rx) = mpsc::channel(4);
+        ConsciousnessLoop::new(
+            OllamaClient::default_local("test-model"),
+            ExperienceBuffer::new(&std::path::PathBuf::from("/dev/null"), 0.5),
+            rx,
+            "testmachine",
+            "test-model",
+            None,
+        )
+        .with_snapshot(cell)
+    }
+
+    /// dp, 2026-09-17: *"video/audio and imu should trigger snarc, as should messages from me
+    /// and you."* An observation is FELT without being answered: it moves SNARC and the
+    /// metabolism and publishes, and it is not counted as a generation.
+    #[tokio::test]
+    async fn an_observation_is_felt_but_not_answered() {
+        let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
+        let mut l = loop_with(cell.clone());
+
+        let (salience, _state) = l.feel("dp asked a long and unexpected question about the museum",
+                                        None, None, "dp").await;
+        l.stats.observations_felt += 1;
+
+        assert!(salience.total > 0.0, "something that arrived was felt");
+        let snap = cell.lock().await.clone();
+        assert!(snap.salience.is_some(), "and published");
+        assert_eq!(snap.salience_source.as_deref(), Some("dp"), "under the name that caused it");
+        assert_eq!(snap.messages_processed, 0, "feeling is not generating");
+    }
+
+    /// Each source habituates on its own curve. Collapsing every stream into the literal
+    /// "message" meant dp's first words in a week were measured against the cortex's 4 Hz
+    /// chatter, and scored as unremarkable.
+    #[tokio::test]
+    async fn each_source_carries_its_own_snarc_history() {
+        let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
+        let mut l = loop_with(cell.clone());
+
+        // The cortex reports at 4 Hz, and its own stream grows familiar with what it keeps
+        // seeing — novelty is memory-based, so this is the axis that wears down.
+        let same = "the scene is still; clear view";
+        let first_cortex = l.feel(same, None, None, "cortex").await.0.novelty;
+        for _ in 0..12 {
+            l.feel(same, None, None, "cortex").await;
+        }
+        let worn = l.feel(same, None, None, "cortex").await.0.novelty;
+        assert!(worn < first_cortex,
+                "the cortex's own stream grows familiar: {first_cortex} -> {worn}");
+
+        // The very same words arriving from dp are a stream that has heard nothing yet.
+        let from_dp = l.feel(same, None, None, "dp").await.0.novelty;
+        assert!(from_dp > worn,
+                "dp's stream is not worn down by the cortex's: dp {from_dp} vs cortex {worn}");
+        assert!((from_dp - first_cortex).abs() < 1e-9,
+                "a fresh source starts fresh, whatever another source has been doing");
+    }
+
+    /// The detectors keep per-sensor state for the life of the process, so an id taken from a
+    /// request must be normalised and bounded or it is an unbounded map.
+    #[test]
+    fn sensor_ids_are_normalised_and_bounded() {
+        assert_eq!(sensor_id("dp"), "dp");
+        assert_eq!(sensor_id("Sprout-Claude"), "sprout-claude");
+        assert_eq!(sensor_id("  ../../etc/passwd  "), "etc-passwd");
+        assert_eq!(sensor_id(""), "other");
+        assert_eq!(sensor_id("!!!"), "other");
+        assert_eq!(sensor_id(&"x".repeat(200)).len(), 24, "bounded length");
+    }
+
+    #[tokio::test]
+    async fn beyond_the_cap_sources_share_one_stream_instead_of_growing_forever() {
+        let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
+        let mut l = loop_with(cell.clone());
+        for i in 0..(MAX_SENSOR_IDS + 50) {
+            l.feel("hello there", None, None, &format!("caller{i}")).await;
+        }
+        assert_eq!(l.sensor_ids.len(), MAX_SENSOR_IDS, "the map cannot be grown without limit");
+        let snap = cell.lock().await.clone();
+        assert_eq!(snap.salience_source.as_deref(), Some("other"),
+                   "and the overflow says so rather than pretending to be its own stream");
+    }
+
+    /// SAGE #111: `/status` read a controller nothing drove, so it answered 0 cycles / 100% ATP
+    /// while the loop ran at 1.6M cycles / 36% ATP. What the loop publishes must BE the loop's.
+    #[tokio::test]
+    async fn publish_reports_the_loops_own_numbers_not_a_default_controller() {
+        let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
+        let mut l = loop_with(cell.clone());
+
+        assert_eq!(cell.lock().await.total_cycles, 0, "nothing published yet");
+        assert_eq!(cell.lock().await.published_at, 0, "and it says so");
+
+        l.cycle = 1_593_000;
+        l.stats.total_cycles = l.cycle;
+        l.stats.messages_processed = 12;
+        l.publish(None, None).await;
+
+        let s = cell.lock().await.clone();
+        assert_eq!(s.total_cycles, 1_593_000);
+        assert_eq!(s.messages_processed, 12);
+        assert_eq!(s.metabolic_state, l.metabolic.current_state.as_str());
+        assert!(s.published_at > 0, "a publish stamps its time; staleness is the liveness signal");
+    }
+
+    /// No salience is not zero salience — the distinction the dashboard could not draw.
+    #[tokio::test]
+    async fn salience_is_none_until_something_is_felt_then_carries_forward() {
+        let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
+        let l = loop_with(cell.clone());
+
+        l.publish(None, None).await;
+        assert!(cell.lock().await.salience.is_none(), "nothing felt yet");
+
+        let felt = sage_lib::consciousness::observation::SalienceScore::from_components(
+            0.8, 0.6, 0.4, 0.2, 0.1,
+        );
+        l.publish(Some(felt.clone()), Some("test".to_string())).await;
+        let got = cell.lock().await.salience.clone().expect("felt");
+        assert!((got.surprise - 0.8).abs() < 1e-9 && (got.conflict - 0.1).abs() < 1e-9);
+
+        // an idle tick afterwards must not erase what was felt
+        l.publish(None, None).await;
+        assert!(cell.lock().await.salience.is_some(), "an idle cycle is not a forgetting");
+    }
+
+    /// A loop with no cell runs exactly as before and publishes nothing.
+    #[tokio::test]
+    async fn publishing_is_optional() {
+        let (_tx, rx) = mpsc::channel(4);
+        let l = ConsciousnessLoop::new(
+            OllamaClient::default_local("test-model"),
+            ExperienceBuffer::new(&std::path::PathBuf::from("/dev/null"), 0.5),
+            rx,
+            "testmachine",
+            "test-model",
+            None,
+        );
+        l.publish(None, None).await; // must not panic
     }
 }

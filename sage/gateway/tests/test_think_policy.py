@@ -156,3 +156,35 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_last_counters_is_cleared_when_no_reply_stands():
+    """Every failure path of get_response RETURNS a string rather than raising, so a caller
+    that records last_counters after the call would otherwise copy the previous reply's
+    counters under a generate that never happened (CBP's review of 98688aef7, 2026-09-13).
+    A failed call must leave {} — "no reply stood" — not turn N-1's real-looking record."""
+    from sage.irp.plugins.ollama_irp import OllamaIRP
+    keep = OllamaIRP._check_ollama
+    OllamaIRP._check_ollama = lambda self: False      # hermetic: no server
+    try:
+        llm = OllamaIRP({"model_name": "qwen3.8-distill:2b", "num_ctx": 8192})
+        llm.last_counters = {"prompt_eval_count": 5100, "eval_count": 300, "done_reason": "stop", "num_ctx": 8192}
+        out = llm.get_response("hello")
+    finally:
+        OllamaIRP._check_ollama = keep
+    assert out.startswith("[OllamaIRP:")
+    assert llm.last_counters == {}
+
+
+def test_a_ruling_reaches_the_being_with_the_rulers_note():
+    """dp, 2026-09-15: a refusal written to redirect the being reached it as a bare no. The
+    ruler's note now goes into the escalation note, and a revocation counts as a decision."""
+    import tempfile
+    from pathlib import Path
+    d = Path(tempfile.mkdtemp(prefix="ruling-"))
+    (d / "cbp-being-scope-memory_read.md").write_text("routing: scope-e591 pending\n")
+    w = note_resolutions(d, [("scope-e591", "/etc/systemd/system", "refused")], "2026-09-15 22:00 UTC", "hb-1",
+                         reasons={"scope-e591": "That file does not exist; hestia is running."})
+    body = (d / "cbp-being-scope-memory_read.md").read_text()
+    assert w and "**refused**" in body and "Their note: That file does not exist; hestia is running." in body
+    assert decided_requests([("a", "/p", "revoked"), ("b", "/q", "pending")]) == [("a", "/p", "revoked")]

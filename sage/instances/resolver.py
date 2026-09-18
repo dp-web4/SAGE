@@ -67,7 +67,7 @@ _DEFAULT_MODELS = {
     'legion': 'gemma3:12b',
     'mcnugget': 'gemma3:12b',
     'nomad': 'gemma3:4b',
-    'cbp': 'tinyllama:latest',
+    'cbp': 'qwen3.8-distill:4b',  # 2026-09-12: upgraded frontal lobe (empero Qwen3.8-4B-Distill, reasoning+tools). Same being — identity/memory carried from cbp-gemma3-4b (retained for rollback).
 }
 
 

@@ -38,12 +38,13 @@ _MODEL_TIERS: Dict[str, str] = {
     'qwen2.5': 'T1',
     'qwen2': 'T1',
     'qwen3': 'T1',
-    'qwen3.5': 'T2',  # Ollama template lacks {{.Tools}}, but JSON block grammar works
+    'qwen3.5': 'T1',  # measured 2026-09-07: /api/chat returns structured tool_calls
     'mistral': 'T1',
     'mixtral': 'T1',
     'command-r': 'T1',
 
     # T2: Grammar-guided (structured output capable)
+    'gemma4': 'T1',  # measured 2026-09-07: native tool_calls, incl. multi-turn
     'gemma3': 'T2',
     'gemma2': 'T2',
     'phi4': 'T2',
@@ -112,7 +113,31 @@ class ToolCapability:
         # 2. Extract model family from name
         cap.model_family = _extract_family(model_name)
 
-        # 3. Check known tiers
+        # 3a. AUTHORITATIVE FIRST: ollama publishes a per-model `capabilities` array on
+        # /api/show. If it lists "tools", the model natively renders the tools parameter
+        # and the tier is T1 — no table lookup can be more correct than the runtime's own
+        # answer. The hand-maintained _MODEL_TIERS below had drifted in BOTH directions
+        # on this box (measured 2026-09-07): gemma4 was absent entirely and defaulted to
+        # T3 while natively emitting structured tool_calls, and qwen3.5 was pinned T2 by
+        # a comment ("Ollama template lacks {{.Tools}}") that is no longer true. Note the
+        # old template-sniff is also unreliable now — gemma4, gemma3 and qwen3.5 ALL
+        # report `.Tools` absent from the template while two of them do native calls.
+        # A table of families is a snapshot; capabilities is the live fact.
+        caps = []
+        try:
+            caps = (_query_model_info(model_name, ollama_host) or {}).get("capabilities") or []
+        except Exception:
+            caps = []
+        if "tools" in caps:
+            cap.native_tools = True
+            cap.grammar_tools = True
+            cap.tier = "T1"
+            cap.grammar_id = "native_ollama"
+            cap.detection_method = "ollama_capabilities"
+            cls._save_cache(instance_dir, cap) if instance_dir else None
+            return cap
+
+        # 3b. Fall back to the family table for runtimes that do not publish capabilities.
         known_tier = _MODEL_TIERS.get(cap.model_family, None)
 
         if known_tier == 'T1':

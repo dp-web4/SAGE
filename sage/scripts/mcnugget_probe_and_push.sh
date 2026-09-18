@@ -5,6 +5,11 @@
 
 set -e
 
+# Resolve a working python3 (see resolve_python.sh). Explicit `|| exit 1`:
+# these scripts do not all `set -e`, and a quiet fallthrough here is exactly
+# how raising died unnoticed for 29 days.
+. "$(dirname "$0")/resolve_python.sh" || exit 1
+
 SAGE_DIR="/Users/dennispalatov/repos/SAGE"
 PYTHONPATH="$SAGE_DIR"
 export PYTHONPATH
@@ -15,7 +20,7 @@ cd "$SAGE_DIR"
 source "$SAGE_DIR/sage/scripts/ensure_daemon.sh"
 
 # Run the probe
-/opt/homebrew/bin/python3 -m sage.experiments.cross_family_probe 2>&1
+"$SAGE_PY" -m sage.experiments.cross_family_probe 2>&1
 
 # Check if there are new results to commit
 if git diff --quiet sage/experiments/cross_family_logs/ 2>/dev/null && \

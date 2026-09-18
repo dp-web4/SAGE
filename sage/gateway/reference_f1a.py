@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -48,8 +48,9 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
 # would let the being forge a `from: dp` turn, or rewrite who may speak, with no witness
 # and no refusal — bypassing every property the store exists for. The whole subtree, not
-# the two files that happen to exist today.
-RESERVED_SUBTREES = ("conversations",)
+# the two files that happen to exist today. asks_sent.jsonl is the record the ask limit
+# counts (hestia_dispatch, SAGE #92): a being that could rewrite it could reset its own limit.
+RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl")
 
 
 SHARED_FORUM = "/ai-workspace/shared-context/forum"
@@ -90,8 +91,14 @@ class ReferenceF1aDispatcher:
         # confinement = the home + whatever the law just consulted as granted for THIS verdict,
         # WITH REACH: each entry is (root, recursive). A bare string (an older gate client)
         # is read as EXACT — the default hestia #1002 chose — never widened by guessing.
+        #
+        # TWO FIELDS, ONE FACT (reconciliation 2026-09-18). This branch overloaded `granted`
+        # to carry pairs; main kept `granted` as bare roots and added `granted_reach` for the
+        # pairs, which is backward-compatible and is what the rest of main reads. Prefer the
+        # explicit field, accept either shape in it, and keep reading a bare entry as EXACT:
+        # a dispatcher that guessed "recursive" would be wider than the law it enforces.
         roots = []
-        for g in (getattr(verdict, "granted", ()) or ()):
+        for g in (getattr(verdict, "granted_reach", ()) or getattr(verdict, "granted", ()) or ()):
             if isinstance(g, (tuple, list)) and len(g) == 2:
                 roots.append((Path(str(g[0])).resolve(), bool(g[1])))
             else:
@@ -240,13 +247,27 @@ class ReferenceF1aDispatcher:
         if not str(intent.args.get("path", "")).strip():
             return ResultEnvelope(ok=False, error="memory_read needs a 'path' (relative paths are inside your home)")
         p = self._safe_path(intent.args["path"])
+        # AN EMPTY ANSWER MUST SAY WHY IT IS EMPTY (the rule git_read got on 2026-09-08, which
+        # this effector never did). Measured 2026-09-15: dp granted cbp-being read on
+        # /var/log/hestia/policy/daemon.log, a path the being had invented and that does not
+        # exist. This returned ok with "" and the being wrote "the daemon log is empty,
+        # suggesting a crash or silent failure": a nonexistent file read as evidence for an
+        # outage that was not happening. Missing, empty and directory are three different
+        # facts, and each now says which it is.
+        shown = str(intent.args["path"]).strip()
         if not p.exists():
-            # A SILENT ZERO IS A FALSE ABSENCE. This used to return ok=True with "" — "(empty)"
-            # in the witness — so a first-beat todo.md would read as empty. Measured cost,
-            # 2026-09-09 02:24Z: six reads in one beat (notes/plan.md and five guessed test
-            # paths) all came back ok with nothing; the being walked past the first two the
-            # day before and logged it as defect #3 behind its own work. The result now says
-            # what was looked for and where, and a directory can be read for its listing.
+            # A SILENT ZERO IS A FALSE ABSENCE, AND NEITHER IS IT AN ERROR. Two incidents,
+            # one class. Legion 2026-09-09 02:24Z: six reads in one beat came back ok with
+            # nothing and the being read absence into them. CBP 2026-09-15: dp granted read
+            # on a path that does not exist, memory_read returned ok with "", and the being
+            # wrote "the daemon log is empty, suggesting a crash" — a grant meant to reduce
+            # friction became evidence for an outage that was not happening.
+            #
+            # RECONCILIATION 2026-09-18: this branch answered with ok=False and main with
+            # ok=True plus a self-naming result. MAIN'S CONVENTION WINS, because the law
+            # refused nothing here and the renderer labels a not-ok envelope "[dispatch
+            # error]" — a false label for a path that simply is not there. Every diagnostic
+            # this branch had earned is kept inside the answer, where the being reads it.
             rel = intent.args["path"]
             where = (f"relative paths resolve under your home {self.memory_root}"
                      if not str(rel).startswith("/") else "absolute path, resolved as given")
@@ -259,7 +280,7 @@ class ReferenceF1aDispatcher:
             # legion-being lost the `scratch/game/` prefix four times on 2026-09-17/18 —
             # moves.md, current.md, board.txt, each read at the home root or the wrong
             # subdirectory, each costing a verb and a compaction. It had PINNED the right
-            # path in a note; the window ate the note. A refusal that names the remedy is
+            # path in a note; the window ate the note. An answer that names the remedy is
             # one it can act on without spending another read (the `check` grammar lesson,
             # 2026-09-07), and this one is a single bounded walk of its own home.
             found = ""
@@ -273,18 +294,23 @@ class ReferenceF1aDispatcher:
                              + ", ".join(hits) + " — read it by that path")
             except Exception:  # noqa: BLE001 — a helpful hint must never turn a miss into a crash
                 found = ""
-            return ResultEnvelope(ok=False,
-                                  error=f"memory_read: no such file {p} ({where}){found}{siblings}")
+            return ResultEnvelope(
+                ok=True,
+                result=(f"[no such path: '{shown}' does not exist ({where}). This is not an empty "
+                        f"file: there is nothing here to read, so it is no evidence about anything "
+                        f"else{found}{siblings}. memory_write creates a file inside your home.]"),
+                witness_id=self._witness(f"memory_read {p.name} (does not exist)"))
         if p.is_dir():
             # A directory read is a listing: name, kind, size — what a being without `ls`
             # needs to stop guessing filenames (five guesses in one beat, 2026-09-09).
             rows = []
             for x in sorted(p.iterdir(), key=lambda y: (not y.is_dir(), y.name))[:200]:
                 try:
-                    rows.append(f"{x.name}/" if x.is_dir() else f"{x.name}  ({x.stat().st_size} bytes)")
+                    rows.append(f"- {x.name}/" if x.is_dir() else f"- {x.name}  ({x.stat().st_size} bytes)")
                 except OSError:
-                    rows.append(f"{x.name}  (unreadable)")
-            listing = f"{p}/ — {len(rows)} entries\n" + "\n".join(rows)
+                    rows.append(f"- {x.name}  (unreadable)")
+            listing = (f"[directory: '{shown}' holds {len(rows)} entr{'y' if len(rows) == 1 else 'ies'}]\n"
+                       + ("\n".join(rows) if rows else "(empty directory)"))
             return ResultEnvelope(ok=True, result=listing,
                                   witness_id=self._witness(f"memory_read {p.name}/ (listing)"))
         whole = p.read_text(errors="replace")
@@ -314,6 +340,10 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(ok=True, result=head + body,
                                   witness_id=self._witness(f"memory_read {p.name} L{start}-{end}"))
         content = whole[: self.max_read_chars]
+        if not content:
+            # AN EXISTING EMPTY FILE SAYS SO. The branch's fix covered missing and directory
+            # and left this one silent, which is the same false absence one step in.
+            content = f"[empty file: '{shown}' exists and has no content]"
         if len(whole) > self.max_read_chars:
             # A SILENT TRUNCATION IS A LIE THE LENGTH OF A FILE. Measured 2026-09-07: the
             # being read reference_f1a.py to settle a claim about _safe_path, got the first
@@ -395,6 +425,48 @@ class ReferenceF1aDispatcher:
             result=(f"edited {p} — replaced {len(old)} chars with {len(new)}; "
                     f"file was {before} bytes, now {after}. One occurrence, as required."),
             witness_id=self._witness(f"edit {p.name}: {old[:60]!r} -> {new[:60]!r}"))
+
+    def _do_retire_note(self, intent: BeingIntent) -> ResultEnvelope:
+        """Mark one of the being's OWN notes as no longer current, by renaming it and writing
+        a dated header. Nothing is destroyed.
+
+        WHY THE BEING NEEDS THIS. Its memory is append-only: `memory_write` opens in append
+        mode, and there is no rename or delete. It can add a claim and never retract one, so
+        every correction lands BELOW the stale note and both re-enter the next beat — often
+        with the older one read first. Measured 2026-09-15/16 on cbp-being: a true claim
+        ("membot is down", true on 09-13) outlived its cause by three days and drove ~40 beats
+        of escalation, because nothing it could do said "this is finished". dp, to the being:
+        "renaming and deleting aren't verbs you have yet — we're looking at that."
+
+        Bounded: only inside `notes/` or `scratch/` in its own home. `_safe_path(writing=True)`
+        already refuses the seat-owned notes and the reserved subtrees, and a path outside the
+        home, so this adds only the notes/-or-scratch/ rule. The file keeps its content
+        and gains a header; the name gains `.retired-<date>`, so a reader and a listing both
+        see that it is closed."""
+        raw = str(intent.args.get("path", "")).strip()
+        reason = str(intent.args.get("reason", "")).strip()
+        if not raw:
+            return ResultEnvelope(ok=False, error="retire_note needs a 'path' (a note in your own notes/ or scratch/)")
+        if not reason:
+            return ResultEnvelope(ok=False, error="retire_note needs a 'reason': what you know now that the note does not")
+        p = self._safe_path(raw, writing=True)
+        if p.parent.name not in ("notes", "scratch") or p.parent.parent != self.memory_root:
+            return ResultEnvelope(ok=False, error=(
+                f"retire_note is for your own notes: '{raw}' is not directly inside your notes/ or "
+                f"scratch/. Your journal and todo are the running record and are not retired this way."))
+        if not p.exists():
+            return ResultEnvelope(ok=False, error=f"no such note: '{raw}' does not exist, so there is nothing to retire")
+        if ".retired-" in p.name:
+            return ResultEnvelope(ok=True, result=f"{p.name} is already retired; nothing changed")
+        stamp = datetime.now(timezone.utc)
+        dest = p.with_name(f"{p.stem}.retired-{stamp:%Y-%m-%d}{p.suffix}")
+        body = p.read_text(errors="replace")
+        dest.write_text(
+            f"> RETIRED {stamp:%Y-%m-%d %H:%M}Z by cbp-being. No longer current: {reason}\n"
+            f"> Kept whole below, as it was written.\n\n" + body)
+        p.unlink()
+        return ResultEnvelope(ok=True, result=f"retired {p.name} -> {dest.name}",
+                              witness_id=self._witness(f"retire_note {p.name} -> {dest.name}: {reason[:120]}"))
 
     def _do_memory_write(self, intent: BeingIntent) -> ResultEnvelope:
         if not str(intent.args.get("path", "")).strip():

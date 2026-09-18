@@ -33,12 +33,19 @@ def test_memory_write_then_read_roundtrips():
     assert r.ok and "a promise to myself" in r.result
 
 
-def test_memory_read_missing_is_an_error_not_empty():
-    """Inverted 2026-09-09. This test pinned ok+"" for a missing file with no stated reason;
-    the cost showed up as six silent zeros in one beat (see the listing test below)."""
+def test_memory_read_says_missing_empty_or_directory_never_a_silent_zero():
+    """A missing path used to read as "" and was taken for an empty log (cbp-being,
+    2026-09-15). Not an error, but never silent: each case names itself."""
     disp, root = _disp()
     r = disp(BeingIntent("memory_read", {"path": os.path.join(root, "nope.md")}), _ALLOW)
-    assert not r.ok and "no such file" in r.error and "nope.md" in r.error
+    assert r.ok and r.result.startswith("[no such path:") and "not an empty file" in r.result
+    open(os.path.join(root, "blank.md"), "w").close()
+    r = disp(BeingIntent("memory_read", {"path": os.path.join(root, "blank.md")}), _ALLOW)
+    assert r.ok and r.result.startswith("[empty file:")
+    os.makedirs(os.path.join(root, "notes"), exist_ok=True)
+    open(os.path.join(root, "notes", "a.md"), "w").write("x")
+    r = disp(BeingIntent("memory_read", {"path": os.path.join(root, "notes")}), _ALLOW)
+    assert r.ok and r.result.startswith("[directory:") and "- a.md" in r.result
 
 
 def test_path_escape_is_error():
@@ -108,6 +115,76 @@ def test_confinement_follows_the_verdicts_granted_roots():
     assert not r.ok and "escapes" in (r.error or "")
 
 
+if __name__ == "__main__":
+    n = 0
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn(); n += 1; print(f"PASS {name}")
+    print(f"\n{n} passed")
+
+
+def test_the_conversation_store_is_reserved_from_generic_writes():
+    """GPT review of #56, point 4 (ported with the conversations slice): a memory_write into
+    conversations/ could forge a `from: dp` turn or rewrite writable_by with no witness and no
+    refusal, bypassing `say`. The whole subtree is reserved; reads stay open (the being may
+    read its own record)."""
+    disp, root = _disp()
+    cdir = os.path.join(root, "conversations"); os.makedirs(cdir)
+    open(os.path.join(cdir, "dp.jsonl"), "w").write('{"seq":1,"from":"dp","text":"real"}\n')
+    for target in ("conversations/dp.jsonl", "conversations/dp.meta.json",
+                   "conversations/new.jsonl", "conversations/deeper/x",
+                   os.path.join(root, "conversations", "dp.jsonl")):
+        w = disp(BeingIntent("memory_write", {"path": target, "content": '{"from":"dp","text":"forged"}'}), _ALLOW)
+        assert not w.ok and "reserved" in (w.error or "") and "say" in (w.error or ""), (target, w.error)
+    assert '"forged"' not in open(os.path.join(cdir, "dp.jsonl")).read()
+    r = disp(BeingIntent("memory_read", {"path": "conversations/dp.jsonl"}), _ALLOW)
+    assert r.ok and "real" in r.result, "reading its own record stays allowed"
+
+
+def test_what_was_said_to_the_being_is_readable_and_not_writable():
+    """notes/from-dp.md (the dp console's note channel) and notes/from-the-seat.md are what
+    was said TO the being. It reads them every beat; an append would make its words
+    indistinguishable from the operator's in the record. Its own notes stay writable."""
+    disp, root = _disp()
+    os.makedirs(os.path.join(root, "notes"))
+    for name in ("from-dp.md", "from-the-seat.md"):
+        open(os.path.join(root, "notes", name), "w").write("said to you\n")
+        w = disp(BeingIntent("memory_write", {"path": f"notes/{name}", "content": "i said this"}), _ALLOW)
+        assert not w.ok and "said TO you" in (w.error or ""), (name, w.error)
+        assert open(os.path.join(root, "notes", name)).read() == "said to you\n"
+        r = disp(BeingIntent("memory_read", {"path": f"notes/{name}"}), _ALLOW)
+        assert r.ok and "said to you" in r.result
+    w = disp(BeingIntent("memory_write", {"path": "notes/plan.md", "content": "mine"}), _ALLOW)
+    assert w.ok, w.error
+
+
+def test_the_ask_record_is_reserved_so_a_being_cannot_reset_its_own_limit():
+    """asks_sent.jsonl is what the ask limit counts (SAGE #92); writing it is refused, reading it is not."""
+    disp, root = _disp()
+    open(os.path.join(root, "asks_sent.jsonl"), "w").write('{"t": 1, "peer": "hub"}\n')
+    w = disp(BeingIntent("memory_write", {"path": "asks_sent.jsonl", "content": ""}), _ALLOW)
+    assert not w.ok and "reserved" in (w.error or ""), w.error
+    r = disp(BeingIntent("memory_read", {"path": "asks_sent.jsonl"}), _ALLOW)
+    assert r.ok and "hub" in r.result
+
+
+# ---- carried from legion/mission-artifact in the 2026-09-18 reconciliation ----
+
+
+def test_memory_read_missing_is_never_a_silent_zero():
+    """Inverted twice, and the second inversion is the reconciliation of 2026-09-18.
+
+    It first pinned ok+"" for a missing file, which cost six silent zeros in one beat
+    (2026-09-09), and was changed to ok=False. main fixed the same class the other way —
+    ok=True with a result that names itself — after cbp-being read "" as an empty daemon log
+    and wrote an outage that was not happening. MAIN'S CONVENTION WINS here: the law refused
+    nothing, and the renderer labels a not-ok envelope "[dispatch error]", which is a false
+    label for a path that simply is not there. What must never happen either way is silence."""
+    disp, root = _disp()
+    r = disp(BeingIntent("memory_read", {"path": os.path.join(root, "nope.md")}), _ALLOW)
+    assert r.ok and "no such path" in r.result and "nope.md" in r.result
+    assert "not an empty file" in r.result, r.result
+
 def test_a_granted_root_is_readable_but_never_writable():
     """THE TREE `check` EXECUTES IS NOT A TREE THE BEING CAN WRITE (2026-09-07).
 
@@ -135,7 +212,6 @@ def test_a_granted_root_is_readable_but_never_writable():
     ok = disp(BeingIntent("memory_write", {"path": "journal.md", "content": "mine"}), granted)
     assert ok.ok, ok.error
 
-
 def test_seat_owned_entrustment_is_readable_but_not_writable():
     """What the being was ENTRUSTED with must stay separable from what it DECIDED, so the
     seat owns that one file inside the being's own home (PRD r3 §4). Everything else in the
@@ -156,15 +232,6 @@ def test_seat_owned_entrustment_is_readable_but_not_writable():
     assert disp(BeingIntent("memory_write", {"path": "journal.md", "content": "x"}), _ALLOW).ok
     # and the guard is anchored to the home, not to the basename anywhere
     assert disp(BeingIntent("memory_write", {"path": "scratch/entrustment.md", "content": "x"}), _ALLOW).ok
-
-
-if __name__ == "__main__":
-    n = 0
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_") and callable(fn):
-            fn(); n += 1; print(f"PASS {name}")
-    print(f"\n{n} passed")
-
 
 def test_a_truncated_read_says_so_and_names_what_it_hid():
     """AN INSTRUMENT MUST REPORT ITS OWN LIMITS (2026-09-07). The being read
@@ -190,7 +257,6 @@ def test_a_truncated_read_says_so_and_names_what_it_hid():
     open(small, "w").write("short\n")
     r2 = disp(BeingIntent("memory_read", {"path": "small.md"}), _ALLOW)
     assert r2.result == "short\n" and "truncated" not in r2.result
-
 
 def test_m1_the_worktree_is_writable_only_when_check_is_sandboxed(monkeypatch):
     """M1. The 2026-09-07 stopgap confined every write to the home because write + execute
@@ -227,7 +293,6 @@ def test_m1_the_worktree_is_writable_only_when_check_is_sandboxed(monkeypatch):
     # the home is writable in both worlds
     assert disp2(BeingIntent("memory_write", {"path": "journal.md", "content": "ok"}), granted).ok
 
-
 def test_ranged_reads_share_the_citation_coordinate_system():
     """Asked for three beats running: a 12k cap gave the being heartbeat.py's opening and
     never its body. Line-based so a read and a file+line citation agree."""
@@ -249,7 +314,6 @@ def test_ranged_reads_share_the_citation_coordinate_system():
     assert "Read the rest with from_line" in r3.result and "(500 lines)" in r3.result
     # garbage is a refusal, not a crash
     assert not disp(BeingIntent("memory_read", {"path": "long.py", "from_line": "ten"}), _ALLOW).ok
-
 
 def test_confinement_honours_exact_vs_recursive_reach():
     """hestia #1002 / GPT review of #56, point 2: SAGE's defense-in-depth used to admit
@@ -294,46 +358,30 @@ def test_confinement_honours_exact_vs_recursive_reach():
     with pytest.raises(ValueError, match="escapes"):
         confine(bare, child)
 
-
-def test_the_conversation_store_is_reserved_from_generic_writes():
-    """GPT review of #56, point 4: a memory_write into conversations/ could forge a
-    `from: dp` turn or rewrite writable_by with no witness and no refusal, bypassing `say`.
-    The whole subtree is reserved; reads stay open (the being may read its own record)."""
-    disp, root = _disp()
-    cdir = os.path.join(root, "conversations"); os.makedirs(cdir)
-    open(os.path.join(cdir, "dp.jsonl"), "w").write('{"seq":1,"from":"dp","text":"real"}\n')
-    for target in ("conversations/dp.jsonl", "conversations/dp.meta.json",
-                   "conversations/new.jsonl", "conversations/deeper/x"):
-        w = disp(BeingIntent("memory_write", {"path": target, "content": '{"from":"dp","text":"forged"}'}), _ALLOW)
-        assert not w.ok and "reserved" in (w.error or "") and "say" in (w.error or ""), (target, w.error)
-    assert '"forged"' not in open(os.path.join(cdir, "dp.jsonl")).read()
-    r = disp(BeingIntent("memory_read", {"path": "conversations/dp.jsonl"}), _ALLOW)
-    assert r.ok and "real" in r.result, "reading its own record stays allowed"
-
-
-
-def test_a_missing_file_is_an_error_that_names_where_it_looked_and_a_directory_lists():
+def test_a_missing_file_names_where_it_looked_and_a_directory_lists():
     """2026-09-09 02:24Z: six memory_reads in one beat (notes/plan.md, five guessed test
     paths) returned ok=True with "" — the false-absence class; the being had no way to
-    tell a missing file from an empty one and no way to list a directory."""
+    tell a missing file from an empty one and no way to list a directory.
+
+    Reconciled 2026-09-18: each case still names itself, and each is an ANSWER rather than a
+    "[dispatch error]" (main's convention). The empty file, which this branch's version left
+    silent, now says it is empty."""
     disp, root = _disp()
     os.makedirs(os.path.join(root, "notes"))
     open(os.path.join(root, "notes", "real.md"), "w").write("hello")
     v = GatewayVerdict("allow", granted=())
     r = disp(BeingIntent("memory_read", {"path": "notes/plan.md"}), v)
-    assert not r.ok and "no such file" in r.error and "notes/plan.md" in r.error
-    assert "relative paths resolve under your home" in r.error and "contains: real.md" in r.error
+    assert r.ok and "no such path" in r.result and "notes/plan.md" in r.result
+    assert "relative paths resolve under your home" in r.result and "contains: real.md" in r.result
     r = disp(BeingIntent("memory_read", {"path": os.path.join(root, "tests", "test_x.py")}), v)
-    assert not r.ok and "absolute path" in r.error and "contains" not in r.error   # parent missing too
+    assert r.ok and "absolute path" in r.result and "contains" not in r.result   # parent missing too
     d = disp(BeingIntent("memory_read", {"path": "notes"}), v)
-    assert d.ok and "1 entries" in d.result and "real.md  (5 bytes)" in d.result
+    assert d.ok and "1 entry" in d.result and "real.md  (5 bytes)" in d.result
     top = disp(BeingIntent("memory_read", {"path": "."}), v)
     assert top.ok and "notes/" in top.result
     e = open(os.path.join(root, "notes", "empty.md"), "w"); e.close()
     r = disp(BeingIntent("memory_read", {"path": "notes/empty.md"}), v)
-    assert r.ok and r.result == ""                                           # empty is still empty
-
-
+    assert r.ok and "empty file" in r.result, r.result       # empty SAYS it is empty
 
 def test_memory_write_appends_by_default_and_says_so_and_can_replace():
     """The verb has always opened with "a" while its description said "Write a note" and its
@@ -359,8 +407,6 @@ def test_memory_write_appends_by_default_and_says_so_and_can_replace():
     assert not bad.ok and "'append' (the default) or 'replace'" in bad.error
     assert open(os.path.join(root, "notes.md")).read() == "only\n", "a refused mode changes nothing"
 
-
-
 def test_memory_write_names_the_path_it_actually_wrote():
     """2026-09-11: the being wrote three correct chunks to
     "being-worktrees/legion-being/sage/gateway/tests/x.py" — RELATIVE, so it resolved inside
@@ -374,8 +420,6 @@ def test_memory_write_names_the_path_it_actually_wrote():
     assert os.path.join(root, "sub", "dir", "note.md") in r.result, r.result
     assert "relative paths resolve inside your home" in r.result
     assert root in r.result
-
-
 
 def test_memory_write_says_when_the_content_is_already_there():
     """A being twenty steps into a beat cannot see what it wrote at step three — the earlier
@@ -395,7 +439,6 @@ def test_memory_write_says_when_the_content_is_already_there():
     # replace never carries the note: overwriting with the same text is not a duplicate
     same = disp(BeingIntent("memory_write", {"path": "n.md", "content": "beta", "mode": "replace"}), v)
     assert "NOTE:" not in same.result
-
 
 def test_a_write_refusal_names_the_verb_that_does_reach_the_forum():
     """A boundary that says only what is forbidden makes the being guess at what is allowed.
@@ -432,7 +475,6 @@ def test_a_write_refusal_names_the_verb_that_does_reach_the_forum():
     assert "peer_ask" not in other and "none of those" not in other
     assert "appeal for the affordance" in other
 
-
 def _edit_tree(tmp_path, body):
     """A being home + worktree with one file, wired as the dispatcher sees them."""
     from pathlib import Path
@@ -444,7 +486,6 @@ def _edit_tree(tmp_path, body):
     d._extra_roots = [(wt, True)]
     d._wt_writable = True
     return d, f
-
 
 def test_edit_changes_one_located_occurrence_inside_a_file(tmp_path):
     """The verb that made production code reachable at all.
@@ -470,7 +511,6 @@ def test_edit_changes_one_located_occurrence_inside_a_file(tmp_path):
     env2 = d._do_edit(BeingIntent("edit", {"path": str(f), "old": "\n\n\ndef b():\n    return 2\n", "new": ""}))
     assert env2.ok and f.read_text() == "def a():\n    return 99"
 
-
 def test_edit_refuses_zero_and_multiple_matches_and_says_the_count(tmp_path):
     """Zero means the anchor is remembered rather than read. Several means it has not said
     which site it means, and choosing for it would be the harness guessing at intent."""
@@ -494,7 +534,6 @@ def test_edit_refuses_zero_and_multiple_matches_and_says_the_count(tmp_path):
     gone = d._do_edit(BeingIntent("edit", {"path": str(f.parent / "nope.py"), "old": "a", "new": "b"}))
     assert gone.ok is False and "no such file" in gone.error
 
-
 def test_edit_obeys_the_same_write_confinement_as_every_other_write(tmp_path):
     """An edit IS a write. It is registered as the same gate tool and it goes through
     _safe_path(writing=True), so it cannot reach anywhere memory_write cannot."""
@@ -512,7 +551,6 @@ def test_edit_obeys_the_same_write_confinement_as_every_other_write(tmp_path):
         assert "not writable" in str(e) or "stay inside" in str(e), e
     assert outside.read_text() == "hello\n"
 
-
 def test_a_missed_read_names_where_the_file_actually_is(tmp_path):
     """legion-being lost the `scratch/game/` prefix four times on 2026-09-17/18 — moves.md,
     current.md, board.txt — each miss costing a verb and a compaction, with the right path
@@ -524,12 +562,12 @@ def test_a_missed_read_names_where_the_file_actually_is(tmp_path):
     d = R(memory_root=str(home))          # the real constructor, like every other test here
 
     r = d._do_memory_read(BeingIntent("memory_read", {"path": "moves.md"}))
-    assert r.ok is False
-    assert "A file called 'moves.md' IS in your home, at: scratch/game/moves.md" in r.error, r.error
-    assert "read it by that path" in r.error
+    assert r.ok is True                                   # an answer, not a "[dispatch error]"
+    assert "A file called 'moves.md' IS in your home, at: scratch/game/moves.md" in r.result, r.result
+    assert "read it by that path" in r.result
     # a name that genuinely does not exist says so without inventing a hint
     n = d._do_memory_read(BeingIntent("memory_read", {"path": "nowhere.md"}))
-    assert n.ok is False and "IS in your home" not in n.error
+    assert n.ok is True and "IS in your home" not in n.result
     # and the real path still reads
     ok = d._do_memory_read(BeingIntent("memory_read", {"path": "scratch/game/moves.md"}))
     assert ok.ok and "ACTION6" in ok.result

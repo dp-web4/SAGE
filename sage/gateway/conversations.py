@@ -215,6 +215,11 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
     return turn
 
 
+# Words that make a sentence a claim about something being down. Shared with the heartbeat's
+# `service_contradictions` so the two agree on what counts as such a claim.
+_DOWN_WORDS = re.compile(r"offline|\bdown\b|unreachable|not reachable|connection refused|"
+                         r"not responding|outage", re.I)
+
 SEEN_FILE = ".seen.json"
 
 
@@ -231,6 +236,20 @@ def mark_seen(instance: Path, me: str, conv_id: str, upto_seq: int) -> None:
         seen[key] = upto_seq
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps(seen, indent=1) + "\n")
+
+
+def latest_seqs(instance: Path, me: str) -> dict:
+    """{conversation id: its latest seq} for every conversation `me` is in: what a beat composed
+    now would show. Captured at compose time and handed to `mark_seen` only after the beat has
+    shown it could act on it (heartbeat.mark_conversations_after_beat)."""
+    out = {}
+    for m in listing(instance):
+        if me not in m.get("participants", []):
+            continue
+        turns = recent(instance, m["id"], limit=1)
+        if turns:
+            out[m["id"]] = int(turns[-1].get("seq", 0))
+    return out
 
 
 def last_seen(instance: Path, me: str, conv_id: str) -> int:
@@ -330,11 +349,42 @@ def _cap_for(turn: dict, me: str, answered_upto: int, turn_chars: Optional[int])
     return min(ANSWERED_TURN_CHARS, turn_chars)
 
 
+def _refuted_mark(text: str, refuted) -> str:
+    """The marker for a turn of the being's OWN that asserts something a measurement taken
+    this beat contradicts. `refuted` is [(keys, note)] from the heartbeat: keys identify the
+    subject (a port, host:port, a service word) and note says what was measured.
+
+    WHY THE MARKER IS ON THE TURN. Measured 2026-09-16 on cbp-being: its state carried 24
+    lines asserting "the hestia policy daemon has been unreachable for ~21 hours" and 2 lines
+    measuring both services as reachable. The 24 were its OWN past messages, replayed from
+    its conversations every beat; the 2 were the services block. One line cannot outvote a
+    dozen of the being's own sentences, and adding more lines beside them does not change the
+    ratio — so the refutation goes ON each claim, where the claim is read."""
+    if not refuted:
+        return ""
+    low = text.lower()
+    if not _DOWN_WORDS.search(text):
+        return ""
+    for keys, note in refuted:
+        if any(k and k.lower() in low for k in keys):
+            return f"  _[refuted: {note}]_"
+    return ""
+
+
 def render_for_being(instance: Path, me: str, per_conv: int = 12,
-                     turn_chars: Optional[int] = None) -> str:
+                     turn_chars: Optional[int] = None, *, mark: bool = True,
+                     refuted=None) -> str:
     """The conversations block in a beat: every conversation the being is in, its recent
     turns, and what is unanswered — marked, because 'someone spoke and I have not replied'
-    is the single fact that should never require inference."""
+    is the single fact that should never require inference.
+
+    `mark=False` RENDERS WITHOUT CONSUMING, and exists because a seat that inspects this
+    block changes it. Measured 2026-09-14: I called this from a diagnostic to ask what the
+    being could see of a turn, and the call itself marked every pending turn read — so the
+    being's own "unanswered" marker for a message it had not yet been shown was gone, and
+    the record said it had seen something it had not. `drain_new_for` already took this
+    flag; the beat's own render did not, which made the read-only path the dangerous one.
+    Any caller that is looking rather than delivering passes mark=False."""
     convs = [m for m in listing(instance) if me in m.get("participants", [])]
     if not convs:
         return ""
@@ -343,7 +393,7 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
         turns = recent(instance, m["id"], limit=per_conv)
         # what the being is shown NOW is what it has seen; the marker below and the next
         # beat's "unanswered" both key off this, not off whether it spoke afterwards
-        if turns:
+        if turns and mark:
             pend_before = awaiting(instance, m["id"], me)
         else:
             pend_before = []
@@ -367,11 +417,19 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
         # being was paying rent on its own finished conversations.
         mine = [int(t.get("seq", 0)) for t in turns if t.get("from") == me]
         answered_upto = max(mine) if mine else 0
-        lines = [f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}: "
-                 f"{_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
+        # The refutation goes in the turn's HEADER, before its text. A turn is often several
+        # paragraphs, and a marker appended to the end is read last, after the claim has
+        # already been taken as current — measured 2026-09-16 on the live render: 5 of
+        # cbp-being's 9 replayed outage claims put the marker on a later physical line than
+        # the sentence it refutes. Only the being's OWN claims are marked: another speaker's
+        # words are theirs to stand behind, and a marker on them would be the seat editing
+        # what was said.
+        lines = [f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}"
+                 + (_refuted_mark(t.get("text", ""), refuted) if t.get("from") == me else "")
+                 + f": {_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
                  for t in turns]
         pend = pend_before
-        if turns:
+        if turns and mark:
             mark_seen(instance, me, m["id"], max(int(t.get("seq", 0)) for t in turns))
         if pend:
             who = ", ".join(sorted({t["from"] for t in pend}))

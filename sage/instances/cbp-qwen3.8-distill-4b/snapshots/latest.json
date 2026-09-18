@@ -1,0 +1,12 @@
+{
+  "timestamp": "20260918_070302",
+  "slug": "cbp-qwen3.8-distill-4b",
+  "files": [
+    "identity",
+    "experience_buffer",
+    "peer_trust",
+    "peer_trust_rs",
+    "daemon_state",
+    "chat_history"
+  ]
+}

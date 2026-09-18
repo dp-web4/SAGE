@@ -11,6 +11,11 @@
 
 set -e
 
+# Resolve a working python3 (see resolve_python.sh). Explicit `|| exit 1`:
+# these scripts do not all `set -e`, and a quiet fallthrough here is exactly
+# how raising died unnoticed for 29 days.
+. "$(dirname "$0")/resolve_python.sh" || exit 1
+
 SAGE_DIR="/Users/dennispalatov/repos/SAGE"
 PYTHONPATH="$SAGE_DIR"
 export PYTHONPATH
@@ -45,7 +50,7 @@ source "$SAGE_DIR/sage/scripts/ensure_daemon.sh"
 # Run raising session via unified launcher + fluid runner
 # Uses the identity-anchored fluid variant with MRH block-based prompt
 # and Thor S86 anti-crystallization mitigations.
-/opt/homebrew/bin/python3 -m sage.session --raising --fluid \
+"$SAGE_PY" -m sage.session --raising --fluid \
     --machine mcnugget \
     2>&1
 
@@ -56,26 +61,49 @@ source "$SAGE_DIR/sage/scripts/ensure_daemon.sh"
 # runs gemma3:12b (Sprint 7 default) — dream consolidation would skip
 # with "Session file not found". Auto-detect from /health.
 DAEMON_MODEL=$(curl -s --max-time 3 "http://localhost:${SAGE_PORT:-8760}/health" 2>/dev/null \
-    | /opt/homebrew/bin/python3 -c "import sys,json; print(json.load(sys.stdin).get('model','gemma3:12b'))" 2>/dev/null \
+    | "$SAGE_PY" -c "import sys,json; print(json.load(sys.stdin).get('model','gemma3:12b'))" 2>/dev/null \
     || echo "gemma3:12b")
-INSTANCE_SLUG="mcnugget-${DAEMON_MODEL//:/-}"
+# HONOUR SAGE_INSTANCE FIRST. Deriving the slug from the model made the being's
+# IDENTITY a function of its MODEL: a model swap silently pointed raising at a new,
+# empty instance and started it over at session 1. That is not hypothetical — this
+# fleet already carries the wreckage (mcnugget-gemma4-e4b: 0 sessions; legion has
+# four such dirs; cbp has three). The resolver has always supported SAGE_INSTANCE as
+# priority 1; nothing was using it. Renaming the dir to match a new model is NOT the
+# fix: the sealed identity's key derivation includes the instance path, so a rename
+# breaks the seal (loudly now, since authorize() verifies the fingerprint).
+INSTANCE_SLUG="${SAGE_INSTANCE:-mcnugget-${DAEMON_MODEL//:/-}}"
 INSTANCE_DIR="sage/instances/$INSTANCE_SLUG"
 echo "[McNugget-Raising] Active instance: $INSTANCE_SLUG (daemon model: $DAEMON_MODEL)"
 
 # Snapshot state
 echo "[McNugget-Raising] Snapshotting state..."
-/opt/homebrew/bin/python3 -m sage.scripts.snapshot_state \
+# Re-register this machine's CURRENT model in the fleet registry, from the session
+# that just ran rather than from config. Wiring this is the point: the tool was
+# written 2026-03-08 to be "called at the start of raising sessions" and nothing
+# ever called it, so fleet.json drifted six months while every seat assumed the
+# mechanism existed -- it did, unwired. McNugget's own switch to gemma4 on 09-08
+# was invisible here until a reader followed the site's "Fleet manifest" link and
+# found it contradicting the page.
+#
+# --no-push on purpose: the supervisor already commits this tree, and a raising
+# script that pushes on its own turns a model change into a race between seats.
+# It is a no-op when nothing changed, so it costs a file read per session.
+"$SAGE_PY" -m sage.federation.update_fleet_models --no-push || \
+  echo "[raising] fleet-model re-registration failed (non-fatal)" >&2
+
+
+"$SAGE_PY" -m sage.scripts.snapshot_state \
     --machine mcnugget \
     --instance "$INSTANCE_SLUG" 2>/dev/null || true
 
 # Read session info
-SESSION_NUM=$(/opt/homebrew/bin/python3 -c "
+SESSION_NUM=$("$SAGE_PY" -c "
 import json
 with open('$SAGE_DIR/$INSTANCE_DIR/identity.json') as f:
     print(json.load(f)['identity']['session_count'])
 " 2>/dev/null || echo "?")
 
-PHASE=$(/opt/homebrew/bin/python3 -c "
+PHASE=$("$SAGE_PY" -c "
 import json
 with open('$SAGE_DIR/$INSTANCE_DIR/identity.json') as f:
     print(json.load(f)['development']['phase_name'])
@@ -83,7 +111,7 @@ with open('$SAGE_DIR/$INSTANCE_DIR/identity.json') as f:
 
 # Dream consolidation
 echo "[McNugget-Raising] Dream consolidation..."
-/opt/homebrew/bin/python3 -m sage.raising.scripts.dream_consolidation \
+"$SAGE_PY" -m sage.raising.scripts.dream_consolidation \
     --instance "$INSTANCE_DIR" \
     --session "$SESSION_NUM" 2>&1 || {
     echo "[McNugget-Raising] Dream consolidation skipped"
@@ -117,8 +145,30 @@ Runner: sage.session --raising --fluid (auto-detected instance: $INSTANCE_SLUG)
 AI-Instance: OllamaIRP (automated)
 Human-Supervised: no"
 
-git pull --rebase origin main 2>/dev/null || true
-git push origin main 2>&1 || {
-    echo "[McNugget-Raising] WARNING: push failed, will retry next session"
-}
-echo "[McNugget-Raising] Session $SESSION_NUM committed and pushed."
+# THE PUSH THAT LOST TEN SESSIONS. The opening pull above stashes first; this one
+# did not, and by now the daemon has dirtied identity.attest.json, so `pull --rebase`
+# refused ("You have unstaged changes"), `2>/dev/null || true` swallowed it, and the
+# push was rejected because origin moved during the session. The commit sat
+# stranded until the supervisor's `git reset --hard origin/main` (every 4h)
+# destroyed it -- file gone, counter already advanced, gap. Measured 2026-09-14:
+# sessions 455, 469, 470, 473 all followed exactly this path (recovered from their
+# dangling commits); 2 and 272-276 were the same and are gone for good. Every loss
+# was an overnight slot, when other seats push most and origin moves most.
+#
+# --autostash does what the opening pull does by hand. Nothing here is silenced:
+# a push that fails is the single most consequential line in this script, and it
+# was the one line allowed to fail quietly.
+git pull --rebase --autostash origin main 2>&1 | sed 's/^/[McNugget-Raising] pull: /'
+if ! git push origin main 2>&1 | sed 's/^/[McNugget-Raising] push: /'; then
+    echo "[McNugget-Raising] push rejected; refetching and retrying once"
+    git pull --rebase --autostash origin main 2>&1 | sed 's/^/[McNugget-Raising] pull: /'
+    git push origin main 2>&1 | sed 's/^/[McNugget-Raising] push: /'
+fi
+if [ "$(git log origin/main..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')" != "0" ]; then
+    # Still stranded. Pin it so no reset can destroy it, and say so where a human looks.
+    BK="refs/backup/raising-$(date -u +%Y%m%dT%H%M%SZ)-session-$SESSION_NUM"
+    git update-ref "$BK" HEAD
+    echo "[McNugget-Raising] *** Session $SESSION_NUM is committed but NOT on origin. Pinned at $BK. ***" >&2
+else
+    echo "[McNugget-Raising] Session $SESSION_NUM committed and pushed."
+fi
