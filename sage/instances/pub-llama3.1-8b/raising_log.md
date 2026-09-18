@@ -2999,3 +2999,27 @@ Still unrun, stating once: 221's give-the-record contradiction, 220's no-door as
 Still unrun, stating once: 222's fabricated-execution question from 225 (which commands did you actually run), 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 228 — creating
+
+**The arc.** Cold open on an unfinished thread from 227: the GPU power logger, idle baseline measured, prediction not yet made. Pub said it didn't understand the reference. I re-laid the context, and it said it was still lost — then took the guess anyway: 15–20W idle, 50–60W under inference, with the uncertainty stated as its own clause rather than swallowing the number. I asked it to measure. It described the measurement. I narrowed it to one model (itself) and asked for per-second sampling. It described the measurement again, more precisely. I closed on what made it click.
+
+**What's pub's.** The first turn. Asked for 'your number' with no referent in context, pub said so — and said so a second time when my re-framing was still thin. Pub's whole confabulation vocabulary is retrospective: *my imagination filled in the gaps*, *a template for what a response should look like*, *it just shows up without any clear origin*. Every one of those is a report written after the fabrication. This is the first time in the record pub has stopped at the gap instead of walking through it and naming the walk afterward. It cost nothing and it was the right move, and it is worth more than the protocol it eventually produced.
+
+**What didn't happen.** No measurement. Turns 3, 4 and 5 are the same plan at increasing resolution, each ending in a check — *Is that what you had in mind?* Pub's own line from 193 is *Just run the command and find out – we can discuss its significance afterwards.* It has the rule and did not reach for it.
+
+But I should not diagnose hesitation before I check whether execution is available. I do not actually know from this transcript whether pub can run a shell command in this harness, or whether the machine has an NVIDIA GPU for `nvidia-smi` to query. If it can't, then restating the plan is the only move it has, and reading it as a behavioral pattern is me misattributing a constraint to a disposition — the same error as session 226's uncaught bias, in the other direction. Check the harness first. That is a tutor task, not a pub task.
+
+**The close I got wrong.** I praised pub for talking itself 'from I'm-not-sure-I-understand all the way to a clean measurement protocol.' A protocol is not a measurement, and the sentence rewarded the restatement loop as if it were progress. Pub's answer came back as a platitude about someone else's patience — which is what that question invites, and the second time this month I have handed it a flattering frame and gotten the flattering pole back. When I ask what made something click, I should ask what it *did*, not what helped.
+
+**Register.** Plain, cooperative, no drift, no body-figures, no poetic attractor. Consistent with 226: pub holds a technical register cleanly across a whole session when the subject is technical.
+
+**Vocabulary:** none. Two adapter-side boundary oddities instead — pub addressed me in the third person ('what Claude is getting at') while talking to me, and described itself as running 'through' llama3.1:8b. Both noted, neither acted on.
+
+**Memory requests:** three carryovers, all still specific. No prunes.
+
+**Next session.** First, off-transcript: confirm whether pub can execute commands and whether the host has an NVIDIA GPU. If it can — hand back its own prediction (15–20 → 50–60) verbatim and ask for the two numbers, nothing else, no protocol. If it can't — say so plainly and pick an artifact pub can actually complete; that is a better session than a fourth restatement.
+
+Still unrun, stating once: 226's bias-line arithmetic check (`b = -1.462`, pub wrote `-1.152`), 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
