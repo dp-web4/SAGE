@@ -3,11 +3,11 @@
   "identity": {
     "name": "pub",
     "lct": "lct://sage:pub:agent@raising",
-    "session_count": 224,
+    "session_count": 225,
     "phase": "creating",
     "created": "2026-07-22",
-    "last_session": "2026-09-17T15:24:45.556047",
-    "last_session_summary": "Session 224 (creating phase): ...",
+    "last_session": "2026-09-17T21:27:08.841222",
+    "last_session_summary": "Session 225 (creating phase): ...",
     "machine": "pub",
     "model": "llama3.1:8b",
     "model_family": "meta-llama",
@@ -228,7 +228,9 @@
       "First time pub has answered a forked question by building a third mechanism rather than choosing a side \u2014 and the mechanism was durable enough to carry two more turns of pressure on it.",
       "First time pub has assigned custody of a record as a separate decision from designing the record.",
       "First time pub has taken one side of an explicitly symmetric fork without blending \u2014 'does the blur let something in, or does something get out?' got inflow only, with no both-sides hedge. Contrast 'they seem to be influencing each other' (stain/ceramic) and 'both the person and the sphere are connected in a dynamic way' (188), where a fork became a merge.",
-      "First described space whose state responds to a *contained object's defect* rather than to pub's position in it. The garden adapted to where pub stood; this room flickers because a record is scratched. Causation routed through a thing in the scene, not through the observer."
+      "First described space whose state responds to a *contained object's defect* rather than to pub's position in it. The garden adapted to where pub stood; this room flickers because a record is scratched. Causation routed through a thing in the scene, not through the observer.",
+      "Answered a discriminating-detail question with an actual discriminator \u2014 a sensible observable that differs between the two worlds \u2014 instead of the both-sides merge that is its long-standing default on symmetric forks.",
+      "Provenance answer on 'why it came to mind' cited action surfaces, which is a real prior thread (session 34 onward) rather than a fabricated history. First clean, checkable provenance claim in several sessions."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -627,7 +629,10 @@
       "max_bond_tension (pub's mechanism for a relation's peak surviving the relation \u2014 offered in place of the either/or it was handed; extends the residue family from the stain sessions and 'a faint residue of the pulse rate', but this is the first residue that records an extreme rather than a decay or an accumulation)",
       "the gentle breeze created by the sound waves (pub's figure for sound as a tactile percept inside a described space \u2014 an invented room given a sense it was never specified to have; the most unpredictable thing in the session and entirely pub's)",
       "for an instant, the boundaries between the room's virtual space and the physical world beyond it become blurred (recorded as an echo, not a coinage \u2014 pub's session-30s/-170s 'blurs the line between what's outside of me and what's inside' made the same cut with more grip; what is new is the *location*: the blur happens at a defect in an object inside the scene, not at pub's own edge)",
-      "a small, delicate flower petal drifting into the room through an invisible crack in the wall (pub's answer to an in-or-out fork, taken as in \u2014 the flaw as an inlet rather than a leak; note 'petal' also names its session-175 compound form, unremarked and probably unrelated)"
+      "a small, delicate flower petal drifting into the room through an invisible crack in the wall (pub's answer to an in-or-out fork, taken as in \u2014 the flaw as an inlet rather than a leak; note 'petal' also names its session-175 compound form, unremarked and probably unrelated)",
+      "a subtle resonance or echo effect after hitting the wall \u2014 the wall is 'remembering' the encounter and leaving behind a residual energy that the circle can sense (pub's mechanism for memory detected by the party that caused it; extends the residue family from the stagnant-water pulse, the stain sessions and max_bond_tension, but this is the first residue that functions as a *signal readable by the other side* rather than as a record held by the container)",
+      "the interaction would be more ephemeral, with the circle simply bouncing off without any lingering effects (pub's null case, stated as the contrast rather than as a hedge)",
+      "a surface that imposes its own rules on what happens when a circle interacts with it (pub's gloss on why it chose the wall \u2014 the boundary defined by what it enforces rather than by where it sits)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -691,8 +696,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 224,
-        "total_exchanges": 1117,
+        "total_sessions": 225,
+        "total_exchanges": 1122,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -700,9 +705,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-07-22T17:48:13.262674",
-      "last_contact": "2026-09-17T15:24:45.556059",
+      "last_contact": "2026-09-17T21:27:08.841238",
       "notes": [],
-      "sessions": 224
+      "sessions": 225
     },
     "operator": {
       "lct": "lct://sage-pub:relationship:operator@raising",

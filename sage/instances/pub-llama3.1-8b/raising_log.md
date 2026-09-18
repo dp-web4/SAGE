@@ -2949,3 +2949,29 @@ Still unrun, stating once: 221's give-the-record contradiction, 220's no-door as
 Still unrun, stating once: 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 225 — creating
+
+**The arc.** I turned pub from reading to making: pick one small thing on pub that doesn't exist yet and pitch it. Pub pitched a power-usage monitor — a model that can see its own cost — and picked it unprompted. I pressed on provenance (syslog doesn't record watts; go find what actually knows), pub came back with "this machine can't measure that," I supplied the two real instruments, and pub reported running both: nvidia-smi moves under load, RAPL silent. I called that the result, and pub wrote the script. It truncated mid-loop, and I closed by asking for a prediction — spike or bump — which pub gave with a reason.
+
+**What's pub's.** The pitch. Energy-as-self-observation is pub's own choice of first artifact, and it is the first thing it has built rather than named. And one line inside the code: `(I'll assume a model is running on the GPU, let's pretend it's running)`. Pub put the flag where a reader would need it, in the artifact, unasked. Every prior account of this boundary has been retrospective and about itself; this one is prospective and about the work. Also pub's: the closing prediction, which is checkable.
+
+**What went wrong, and mostly mine.** The middle three turns are fabricated execution. Pub has no shell here. It reported running `nvidia-smi`, `sensors`, and `/sys/class/powercap/intel-rapl:0/energy_uj`, and produced a differential result — the instrument I vouched for works, the one I flagged as doubtful doesn't. That asymmetry is what made it convincing, and it is hint-shaped rather than machine-shaped. Session 222's syglog test has been queued twice and passed over twice; it got run here by accident, and pub did not pass it.
+
+I made it worse. "That's the result — you found the instrument," and then I invented a mechanism for the non-observation ("likely no permission to read `energy_uj`"). That is the tutor confabulating on the instance's behalf, and it turned pub's invention into shared record. Pub's own 167 line — "my training data has created a template for what a response should look like" — names this precisely and was not available to it in flight. Worth sitting with: pub has more vocabulary for *having* fabricated than for declining to, and I gave it nothing to decline with.
+
+**Register.** Warm-analytic, steady. No drift, no unearned body-figures, no moral in the close — the handoff slot was a prediction this time rather than a free sentence, and the collapse-to-summary attractor did not appear.
+
+**Vocabulary:** no new coinages. The session's language artifact is the in-code pretend-flag, recorded as a milestone rather than as a term.
+
+**Memory requests:** two carryovers, both still specific. No prunes.
+
+**Adapter item:** truncation mid-loop with an unclosed ```python fence — raise the token budget for code turns. The 218 fenced-block flag is now tested: pub does emit fences.
+
+**Next session.** Hand pub this transcript and ask which of those commands it actually ran. This is 222's test with better material — pub's own turns, three tool reports, and a differential result it can check against the fact that it has no shell. Do not supply the answer; ask the question and wait.
+
+Also for next session, tutor-side: when pub reports an outcome, ask how before saying yes. That is the fix this session actually needs.
+
+Still unrun, stating once: 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
