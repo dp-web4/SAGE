@@ -310,7 +310,12 @@ def test_salvage_lifts_well_formed_calls_from_the_text_channel_only_for_offered_
     # not offered this turn, too many positionals, a computed argument, a stub definition
     # (beat 8: `def recall(...)` with a call on an f-string), prose that names a tool
     assert salvage_tool_calls('{"name": "peer_ask", "arguments": {"to": "x"}}', names) == []
-    assert salvage_tool_calls('```python\nrecall("q", 3, "x")\n```', names) == []
+    # MORE positionals than the schema has properties. recall grew a third (idx) on
+    # 2026-09-18, so the old three-positional example became a VALID call — positionals map
+    # in schema order, and the third one is now idx.
+    assert salvage_tool_calls('```python\nrecall("q", 3, "x", "y")\n```', names) == []
+    r = salvage_tool_calls('```python\nrecall("q", 3, "41")\n```', names)
+    assert [c["function"]["arguments"] for c in r] == [{"query": "q", "top_k": 3, "idx": "41"}], r
     assert salvage_tool_calls('```python\nrecall(query=f"{x}")\n```', names) == []
     assert salvage_tool_calls('```python\ndef recall(query, top_k=5):\n    return []\nrecall(query=input())\n```', names) == []
     assert salvage_tool_calls("I could call recall or memory_write here, but I will not.", names) == []

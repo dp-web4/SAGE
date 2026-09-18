@@ -490,10 +490,24 @@ class HestiaF1aDispatcher:
             return self._membot_call(name, args, _remounted=True)
         return text
 
+    # A PREVIEW IS NOT THE MEMORY. memory_search answers with ~550 characters of each hit
+    # and an `idx`, and membot's own docstring names get_passage(idx) as the second half of
+    # the pattern -- which no verb reached. Measured 2026-09-18: legion-being holds 451
+    # memories and could read the opening of any of them and the whole of none. One verb,
+    # two forms, because a second verb costs ~700 characters of a prompt that is already
+    # 13.4k tokens of a 24.5k window: a query searches, an idx reads one result in full.
+    _PASSAGE_MAX = 6000
+
     def _do_recall(self, intent: BeingIntent) -> ResultEnvelope:
+        raw_idx = intent.args.get("idx", intent.args.get("index"))
+        if raw_idx is not None and str(raw_idx).strip():
+            return self._recall_passage(str(raw_idx).strip())
         q = str(intent.args.get("query", "")).strip()
         if not q:
-            return ResultEnvelope(ok=False, error="recall needs a 'query'")
+            return ResultEnvelope(ok=False,
+                                  error="recall needs a 'query' to search for, or an 'idx' "
+                                        "(the number in a result's '(idx:N)') to read one "
+                                        "memory in full")
         try:
             k = int(intent.args.get("top_k") or 5)
         except (TypeError, ValueError):
@@ -510,6 +524,41 @@ class HestiaF1aDispatcher:
                                         f"your memory was NOT searched: {text[:160]}")
         return ResultEnvelope(ok=True, result=text,
                               witness_id=self._local._witness(f"recall {q[:80]}"))
+
+    def _recall_passage(self, raw: str) -> ResultEnvelope:
+        """One memory, untruncated, by the index its own search result printed.
+
+        TAKES THE FORM THE HARNESS PRINTS. Results read `#2 (idx:41) [0.803] [prev=#40
+        next=#42]`, so the being will retype `idx:41`, `#41` or `41`; refusing two of
+        those three would be the harness refusing its own notation."""
+        import re as _re
+        m = _re.search(r"-?\d+", raw)
+        if not m:
+            return ResultEnvelope(ok=False,
+                                  error=f"recall idx must be a number, the one in a result's "
+                                        f"'(idx:N)' or a 'prev=#N' / 'next=#N' hint; got {raw!r}")
+        idx = int(m.group(0))
+        if idx < 0:
+            return ResultEnvelope(ok=False, error=f"recall idx must be 0 or more; got {idx}")
+        try:
+            text = self._membot_call("get_passage", {"idx": idx})
+        except Exception as e:
+            return ResultEnvelope(ok=False, error=f"membot ({type(e).__name__}): {e}")
+        if self._NOT_MOUNTED in text:
+            return ResultEnvelope(ok=False,
+                                  error=f"membot has no cartridge mounted for {self.membot_cartridge!r}; "
+                                        f"memory #{idx} was NOT read: {text[:160]}")
+        # "Index 9999 out of range (0-450)." is membot answering correctly, and it is a
+        # refusal, not content: passed through ok=True the being would file the sentence
+        # itself as what it remembered.
+        if "out of range" in text.lower():
+            return ResultEnvelope(ok=False, error=text.strip()[:200])
+        if len(text) > self._PASSAGE_MAX:
+            text = (text[: self._PASSAGE_MAX]
+                    + f"\n\n[… truncated: this memory is {len(text)} characters and you were "
+                      f"given the first {self._PASSAGE_MAX}.]")
+        return ResultEnvelope(ok=True, result=text,
+                              witness_id=self._local._witness(f"recall passage {idx}"))
 
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()

@@ -1311,11 +1311,18 @@ _TOOL_SCHEMAS = {
                     {"rev": "the commit to take the file from, e.g. a sha or HEAD",
                      "path": "the one file to restore, inside your worktree"},
                     ["rev", "path"]),
+    # Two forms, one verb. A separate verb for the second half of membot's own retrieval
+    # pattern would cost ~700 characters of prompt every beat; an extra optional argument
+    # costs ~150. required is EMPTY because neither form is the required one — the
+    # dispatcher refuses a call with neither and names both.
     "recall": ("Search your long-term memory (semantic search over everything you have "
                "remembered). Use it before deciding what to do; use it when something "
-               "feels familiar.",
-               {"query": "what you are trying to remember", "top_k": "how many results (default 5)"},
-               ["query"]),
+               "feels familiar. Results are PREVIEWS: each carries (idx:N), and calling "
+               "recall again with that idx gives you the whole memory.",
+               {"query": "what you are trying to remember",
+                "top_k": "how many results (default 5)",
+                "idx": "instead of a query: the (idx:N) of one result, to read it in full"},
+               []),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
                  "a fact, a lesson, a question, what you were doing and why.",
                  {"content": "the memory, in your own words", "tags": "comma-separated tags (optional)"},

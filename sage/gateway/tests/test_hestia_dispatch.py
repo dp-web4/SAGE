@@ -76,8 +76,13 @@ class FakeMembot(FakeMcp):
             "memory_search": "No cartridge mounted. Use mount_cartridge first.",
             "save_cartridge": "Saved 'x': 0 memories, 0.0 MB, fingerprint=5feceb66ffc86f38"}
 
+    # get_passage is the second half of membot's documented retrieval pattern: search
+    # gives ~550-char previews + an idx, get_passage(idx) gives the whole passage.
+    PASSAGES = ["memory zero, whole", "memory one, whole", "x" * 9000]
+
     def call(self, name, args):
-        if name not in ("memory_search", "memory_store", "save_cartridge", "mount_cartridge"):
+        if name not in ("memory_search", "memory_store", "save_cartridge", "mount_cartridge",
+                        "get_passage"):
             return super().call(name, args)
         FakeMcp.calls.append((name, args))
         how = self.fail.get(name)
@@ -88,6 +93,13 @@ class FakeMembot(FakeMcp):
                                "isError": True}}
         if how == "soft":
             t = self.SOFT[name]
+            return {"result": {"content": [{"type": "text", "text": t}],
+                               "structuredContent": {"result": t}}}
+        if name == "get_passage":
+            i = args.get("idx")
+            t = (f"Passage #{i} [prev=#{i-1} next=#{i+1}] from 'sprout-being':\n\n{self.PASSAGES[i]}"
+                 if isinstance(i, int) and 0 <= i < len(self.PASSAGES)
+                 else f"Index {i} out of range (0-{len(self.PASSAGES)-1}).")
             return {"result": {"content": [{"type": "text", "text": t}],
                                "structuredContent": {"result": t}}}
         text = {"memory_search": "1. something remembered",
@@ -315,6 +327,62 @@ def test_recall_sends_query_and_clamps_top_k():
     assert _mb_calls("memory_search")[-1]["top_k"] == 5
     env = d(BeingIntent("recall", {"query": "  "}), _ALLOW)
     assert not env.ok and "query" in env.error and len(_mb_calls("memory_search")) == 4
+
+
+def test_recall_with_an_idx_reads_the_whole_memory_not_the_preview():
+    """The verb's second form. A search result is ~550 characters of a memory and an
+    `idx`; this is how the being reads the rest of it."""
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {"idx": 1}), _ALLOW)
+    assert env.ok and "memory one, whole" in env.result and env.witness_id, env
+    assert _mb_calls("get_passage") == [{"idx": 1}]
+    assert not _mb_calls("memory_search")          # an idx SEARCHES NOTHING
+    # The forms the harness itself prints: "(idx:1)", a "prev=#1"/"next=#1" hint, or the
+    # bare number. Refusing two of the three would be the harness refusing its own notation.
+    for form in ("idx:1", "#1", " 1 ", "next=#1"):
+        env = d(BeingIntent("recall", {"idx": form}), _ALLOW)
+        assert env.ok and "memory one, whole" in env.result, (form, env)
+        assert _mb_calls("get_passage")[-1] == {"idx": 1}, form
+    # idx 0 is a real index, not an absent one
+    env = d(BeingIntent("recall", {"idx": 0}), _ALLOW)
+    assert env.ok and "memory zero, whole" in env.result, env
+
+
+def test_recall_with_neither_query_nor_idx_names_both_forms():
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {}), _ALLOW)
+    assert not env.ok and "query" in env.error and "idx" in env.error, env
+    assert not _mb_calls("memory_search") and not _mb_calls("get_passage")
+    # an empty idx is not an idx: it falls through to the query form, which is also empty
+    env = d(BeingIntent("recall", {"idx": "  "}), _ALLOW)
+    assert not env.ok and "query" in env.error, env
+    env = d(BeingIntent("recall", {"idx": "the third one"}), _ALLOW)
+    assert not env.ok and "number" in env.error, env
+    env = d(BeingIntent("recall", {"idx": -2}), _ALLOW)
+    assert not env.ok and "0 or more" in env.error, env
+    assert not _mb_calls("get_passage")
+
+
+def test_recall_idx_out_of_range_is_a_refusal_not_a_memory():
+    """membot answers "Index 99 out of range (0-2)." — correct, and NOT content. Passed
+    through as a result the being would file that sentence as what it remembered."""
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {"idx": 99}), _ALLOW)
+    assert not env.ok and "out of range" in env.error, env
+
+
+def test_recall_idx_truncates_a_giant_passage_and_says_how_much():
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {"idx": 2}), _ALLOW)
+    assert env.ok, env
+    assert len(env.result) < 9000 and "truncated" in env.result, len(env.result)
+    assert "9" in env.result.split("truncated")[1]        # the true size is named
+
+
+def test_recall_idx_without_a_cartridge_is_an_error_not_an_empty_memory():
+    d, _ = _mdisp(fail={"mount_cartridge": "soft"})
+    env = d(BeingIntent("recall", {"idx": 1}), _ALLOW)
+    assert not env.ok, env
 
 
 def test_remember_stores_then_saves_the_seat_fixed_cartridge():
