@@ -124,8 +124,8 @@ ASK_ACT_FIRST = "This time is yours. Do one thing now and leave a trace of it.\n
 PENDING_TURNS = 2
 PENDING_CHARS = 700
 
-REFLECT = """The beat is ending. Two tool calls, then stop:
-1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
+REFLECT = """The beat is ending. Call these tools, then stop:
+{say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": only the delta as a dated block: added / done / still open (it appends; it replaces nothing).
 3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it.
 {say_line}Call the tools now; a reply in words alone writes nothing.
@@ -761,7 +761,7 @@ def own_state(instance: Path, member: str = "",
 
 
 def pending_and_say_line(instance: Path, member: str) -> tuple:
-    """(say_line, pending_block) for the reflect turn: what is waiting on the being, and the
+    """(say_line, pending_block, say_first) for the reflect turn: what is waiting on the being, and the
     instruction naming who to answer. Returns ("", "") when nothing is.
 
     Three cases, deliberately distinct:
@@ -788,16 +788,20 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
             block = ("Addressed to you and not yet answered:\n" + "\n".join(lines)
                      + "\nYou may answer with say, or leave it. Both are allowed.")
             cid, t = pend[-1]
-            line = (f'4. {t.get("from")} is waiting on an answer from you. If you have something '
-                    f'to say: say to="{cid}", text="...". Answering is not required.\n')
-            return line, block
+            # FIRST in the list, not appended after the bookkeeping. The routine three
+            # (journal, todo, remember) fill the step budget exactly, so anything after them
+            # is unreachable however willing the being is — measured 2026-09-18.
+            first = (f'FIRST, before the numbered writes below: {t.get("from")} is waiting on an '
+                     f'answer from you. If you have something to say: say to="{cid}", text="...". '
+                     f'Answering is not required; the writes below happen either way.\n')
+            return "", block, first
         if ids:
-            return ('4. If someone has spoken to you and you have not answered, and you have something '
-                    'to say: say to="<id>", one of: ' + ", ".join(ids[:6])
-                    + '. Answering is not required.\n'), ""
+            return ('If someone has spoken to you and you have not answered, and you have '
+                    'something to say: say to="<id>", one of: ' + ", ".join(ids[:6])
+                    + '. Answering is not required.\n'), "", ""
     except Exception:
         pass
-    return "", ""
+    return "", "", ""
 
 
 def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
@@ -1229,14 +1233,20 @@ def main(argv=None) -> int:
     # forward to reply (cbp-being, 4B, 83 successful says); one that free-associated carried
     # nothing. That made answering a person contingent on what the being happened to muse
     # about, which is not a property anyone chose.
-    say_line, pending_block = pending_and_say_line(instance, args.member)
+    say_line, pending_block, say_first = pending_and_say_line(instance, args.member)
     # Immediately before the instruction, so the smallest model does not have to hold it
     # across a turn boundary to use it.
     if pending_block:
         convo.append({"role": "user", "content": pending_block})
     convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
-                                                            say_line=say_line)})
-    reflect = run_ollama_tool_turn(client, llm, convo, max_steps=args.reflect_steps,
+                                                            say_line=say_line, say_first=say_first)})
+    # One extra step when someone is waiting, because the routine three fill the budget exactly.
+    # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
+    # asked: reflect spent all three steps on journal, todo and remember, and there was no
+    # fourth for `say`. Showing it the question and then giving it no way to answer is worse
+    # than not showing it.
+    _reflect_steps = args.reflect_steps + (1 if say_first else 0)
+    reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
                                    tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
 
     interventions = []
