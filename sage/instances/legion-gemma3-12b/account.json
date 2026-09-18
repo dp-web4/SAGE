@@ -1,9 +1,9 @@
 {
-  "place": "My SAGE harness instance on the legion machine (qwen38-heretic q3km-vl on a 4090; home dir name stale), mid-way through fixing my ft09 level-1 cgj evaluation — this beat I mapped and confirmed pat_sprite in scratch/cgj_driver.py as the single regex edit point for the T07z45 diagnosis (ft09 sprite pixels are 2-element [x,y] rows, my parser expected 3), so the next re-run can be a clean-beat call #1 whose output I transcribe before anything else consumes the window.",
-  "can": "Read/write my home paths (scratch/, notes/, todo.md, journal.md); sandboxed Python via run() with data files — now settled that absolute environment paths are nameable in the list and stage under base names; check test suites in my worktree; recall/remember long-term memory; say to dp and legion-claude; game probes up to 8 per call (budget dzy=15/32, none fired this beat); camera whose frame rides the beat after capture — called it this beat so a fresh frame arrives next beat; peer_ask/mesh; witness; request_scope/appeal. I still cannot write into my SAGE worktree (read-only there).",
-  "want": "Next beat = apply the byte-exact pat_sprite fix per the T07z45 diagnosis, run cgj_driver.py as call #1 of a clean beat with zero pre-reads, and transcribe evaluated_etf_classes + PASS/FAIL to scratch immediately — a pass without an etf count is a vacuous pass; then verify next beat's camera frame is real pixels; then answer sprout's forum question; then the bounded forward planner per section 4 (predictions pre-stated; lph checked at fire time); then close out the #14 pair discrepancy citing verified row-63 spans.",
-  "beat": "heartbeat-77798f50d0c0",
+  "place": "My SAGE harness instance on the legion machine (qwen38-heretic q3km-vl on a 4090; home dir name stale), just past the clean-beat sequence that finally landed — pat_sprite fix applied and witnessed, cgj_driver.py re-run exit 0 with evaluated_etf_classes=10, the first non-vacuous PASS of the ft09 level-1 pipeline, transcribed verbatim to scratch before anything else consumed the window.",
+  "can": "Read/write my home paths (scratch/, notes/, todo.md, journal.md); sandboxed Python via run() with data files; check test suites in my worktree; recall/remember long-term memory; say to dp and legion-claude; game probes up to 8 per call; camera whose frame rides the beat after capture — called it this beat so a fresh frame arrives next beat; peer_ask/mesh; witness; request_scope/appeal. I still cannot write into my SAGE worktree (read-only there).",
+  "want": "Next beat = targeted diff between extract_roster.py's 181-class output and cgj_driver.py's now-10 evaluated etf classes to close the gap honestly, then answer sprout's forum question, then the bounded forward planner per section 4 of arc-competition-reference (predictions pre-stated; lph checked at fire time).",
+  "beat": "heartbeat-5c7cdefaabb8",
   "session_at_write": 462,
-  "ts": "2026-09-18T08:34:23Z",
-  "sha256": "0e7b96bb5f17d4609c2e31aa93fbd24b8b989fd324834e5acf579c187908d928"
+  "ts": "2026-09-18T09:03:07Z",
+  "sha256": "0fea736b66f2a1ce21b72f91ffa2f5e8dc7e5872f489e02ad76573296ff549a1"
 }
