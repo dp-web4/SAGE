@@ -255,8 +255,26 @@ class ReferenceF1aDispatcher:
             if parent.is_dir():
                 names = sorted(x.name for x in parent.iterdir())[:40]
                 siblings = f"; {parent} contains: " + (", ".join(names) if names else "(nothing)")
+            # WHERE IT ACTUALLY IS, if a file of that name exists anywhere in its home.
+            # legion-being lost the `scratch/game/` prefix four times on 2026-09-17/18 —
+            # moves.md, current.md, board.txt, each read at the home root or the wrong
+            # subdirectory, each costing a verb and a compaction. It had PINNED the right
+            # path in a note; the window ate the note. A refusal that names the remedy is
+            # one it can act on without spending another read (the `check` grammar lesson,
+            # 2026-09-07), and this one is a single bounded walk of its own home.
+            found = ""
+            try:
+                base = p.name
+                root = Path(self.memory_root)
+                hits = [str(q.relative_to(root)) for q in root.rglob(base)
+                        if q.is_file() and ".git" not in q.parts][:3]
+                if hits:
+                    found = (f". A file called {base!r} IS in your home, at: "
+                             + ", ".join(hits) + " — read it by that path")
+            except Exception:  # noqa: BLE001 — a helpful hint must never turn a miss into a crash
+                found = ""
             return ResultEnvelope(ok=False,
-                                  error=f"memory_read: no such file {p} ({where}){siblings}")
+                                  error=f"memory_read: no such file {p} ({where}){found}{siblings}")
         if p.is_dir():
             # A directory read is a listing: name, kind, size — what a being without `ls`
             # needs to stop guessing filenames (five guesses in one beat, 2026-09-09).

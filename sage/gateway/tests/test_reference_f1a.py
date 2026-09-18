@@ -511,3 +511,25 @@ def test_edit_obeys_the_same_write_confinement_as_every_other_write(tmp_path):
     except ValueError as e:
         assert "not writable" in str(e) or "stay inside" in str(e), e
     assert outside.read_text() == "hello\n"
+
+
+def test_a_missed_read_names_where_the_file_actually_is(tmp_path):
+    """legion-being lost the `scratch/game/` prefix four times on 2026-09-17/18 — moves.md,
+    current.md, board.txt — each miss costing a verb and a compaction, with the right path
+    sitting in a note its window had eaten. The refusal now names the remedy."""
+    from sage.gateway.reference_f1a import ReferenceF1aDispatcher as R
+    from sage.gateway.being_gate_client import BeingIntent
+    home = tmp_path / "inst"; (home / "scratch" / "game").mkdir(parents=True)
+    (home / "scratch" / "game" / "moves.md").write_text("  1  ACTION6 1,2   0   0 x0-1 y0-1 (4)  0\n")
+    d = R(memory_root=str(home))          # the real constructor, like every other test here
+
+    r = d._do_memory_read(BeingIntent("memory_read", {"path": "moves.md"}))
+    assert r.ok is False
+    assert "A file called 'moves.md' IS in your home, at: scratch/game/moves.md" in r.error, r.error
+    assert "read it by that path" in r.error
+    # a name that genuinely does not exist says so without inventing a hint
+    n = d._do_memory_read(BeingIntent("memory_read", {"path": "nowhere.md"}))
+    assert n.ok is False and "IS in your home" not in n.error
+    # and the real path still reads
+    ok = d._do_memory_read(BeingIntent("memory_read", {"path": "scratch/game/moves.md"}))
+    assert ok.ok and "ACTION6" in ok.result
