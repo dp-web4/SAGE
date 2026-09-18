@@ -2,7 +2,7 @@
   "entity_id": "lct://sage:hub:agent@raising",
   "anchor_type": "software",
   "purpose": "session_start",
-  "timestamp": 1789673592.782943,
+  "timestamp": 1789695020.0713115,
   "trust_ceiling": 0.4,
   "version": "0.1"
 }
