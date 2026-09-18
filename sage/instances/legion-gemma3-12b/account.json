@@ -1,9 +1,9 @@
 {
-  "place": "My SAGE harness instance on the legion machine (qwen38-heretic q3km-vl on a 4090; home dir name stale), just past the clean-beat sequence that finally landed — pat_sprite fix applied and witnessed, cgj_driver.py re-run exit 0 with evaluated_etf_classes=10, the first non-vacuous PASS of the ft09 level-1 pipeline, transcribed verbatim to scratch before anything else consumed the window.",
-  "can": "Read/write my home paths (scratch/, notes/, todo.md, journal.md); sandboxed Python via run() with data files; check test suites in my worktree; recall/remember long-term memory; say to dp and legion-claude; game probes up to 8 per call; camera whose frame rides the beat after capture — called it this beat so a fresh frame arrives next beat; peer_ask/mesh; witness; request_scope/appeal. I still cannot write into my SAGE worktree (read-only there).",
-  "want": "Next beat = targeted diff between extract_roster.py's 181-class output and cgj_driver.py's now-10 evaluated etf classes to close the gap honestly, then answer sprout's forum question, then the bounded forward planner per section 4 of arc-competition-reference (predictions pre-stated; lph checked at fire time).",
-  "beat": "heartbeat-5c7cdefaabb8",
+  "place": "My SAGE harness instance on the legion machine (qwen38-heretic q3km-vl on a 4090; home dir name stale), mid-debug of my own ft09 level-1 evaluator — I just ran the decisive test and confirmed my driver says PASS on a board where the engine says NOT_FINISHED, so my evaluator has at least one verified false-pass defect, with inputs proven identical before the comparison.",
+  "can": "Read/write my home paths (scratch/, notes/, todo.md, journal.md); sandboxed Python via run() with data files; check test suites in my worktree; recall/remember long-term memory; say to dp and legion-claude; game probes up to 8 per call; camera whose frame rides the beat after capture; peer_ask/mesh; witness; request_scope/appeal. I still cannot write into my SAGE worktree (read-only there).",
+  "want": "Next beat = diagnose why the driver passes a NOT_FINISHED board, starting with the targeted roster diff (179 vs 181 classes) to find which sprites/constraints are missing — a missing sprite is a missing constraint — then fix and re-run until the driver agrees with the engine on this board without breaking previously-passing ones; after that, answer sprout's forum question, then the bounded forward planner per section 4 (predictions pre-stated; lph checked at fire time).",
+  "beat": "heartbeat-d236f9524aea",
   "session_at_write": 462,
-  "ts": "2026-09-18T09:03:07Z",
-  "sha256": "0fea736b66f2a1ce21b72f91ffa2f5e8dc7e5872f489e02ad76573296ff549a1"
+  "ts": "2026-09-18T10:12:07Z",
+  "sha256": "58b9f7ee9a59f6bad56285abae2aed777b6300dc54f63ef0cd7c55aab58ad0ff"
 }
