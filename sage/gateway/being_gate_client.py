@@ -345,11 +345,22 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
         # game/moves.md"]' became "you gave 25". game_command already tolerates the JSON-string
         # form for `probes`; this did not, and three of its calls died on my inconsistency.
         import json as _json
+        import re as _re
         try:
             parsed = _json.loads(data)
         except ValueError:
             parsed = None
-        data = parsed if isinstance(parsed, list) else [data]
+        if isinstance(parsed, list):
+            data = parsed
+        else:
+            # A LIST OF PATHS ARRIVES AS PROSE. Measured 2026-09-18 06:46Z: it sent
+            # "a.py, b.jsonl, c.npy" and then "a.py b.jsonl c.npy" and both were refused for
+            # "whitespace" — true of the whole string, useless as a diagnosis, and the third
+            # time this verb's argument shape has cost it calls. Split on commas and runs of
+            # whitespace, then validate each path normally; a path that genuinely contains a
+            # space is still refused, by the per-path check below, where the message is about
+            # that path rather than about the blob.
+            data = [x for x in _re.split(r"[,\s]+", data.strip()) if x]
     if not isinstance(data, (list, tuple)):
         raise ValueError(f"run 'data' must be a list of paths in your home, got {type(data).__name__}")
     names = [path] + [str(d).strip() for d in data]
@@ -359,7 +370,10 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
     reach = _search_reach((ctx or {}).get("worktree") or memory_root, (ctx or {}).get("workspace"))
     for i, n in enumerate(names):
         if not n or any(ch.isspace() for ch in n):
-            raise ValueError(f"run paths may not be empty or contain whitespace: {n!r}")
+            raise ValueError(f"run path {n!r} may not contain whitespace. Give 'data' as a list "
+                             f"— [\"scratch/a.py\", \"scratch/b.md\"] — or as one path per entry; "
+                             f"a comma- or space-separated string is accepted and split, but a "
+                             f"single path with a space in it is not")
         if n.startswith("-") or ".." in n.split("/"):
             raise ValueError(f"run paths are plain paths, got {n!r}")
         if os.path.isabs(n):

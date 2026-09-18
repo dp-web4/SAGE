@@ -820,11 +820,12 @@ class HestiaF1aDispatcher:
         _d = intent.args.get("data") or []
         if isinstance(_d, str):
             import json as _json
+            import re as _re
             try:
                 _p = _json.loads(_d)
             except ValueError:
                 _p = None
-            _d = _p if isinstance(_p, list) else [_d]
+            _d = _p if isinstance(_p, list) else [x for x in _re.split(r"[,\s]+", _d.strip()) if x]
         names = [str(intent.args.get("path", "")).strip()] + [str(x).strip() for x in _d]
         staged, seen = [], set()
         for n in names:

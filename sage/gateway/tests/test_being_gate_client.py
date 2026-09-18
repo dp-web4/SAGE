@@ -1242,6 +1242,15 @@ def test_run_data_accepts_the_shapes_a_model_actually_emits():
         assert cmd.rstrip().endswith("/work/e.py"), (shape, cmd)
     # a bare path and a one-element list must compose identically
     assert run_command({"path": "e.py", "data": "m.md"}, ctx) == run_command({"path": "e.py", "data": ["m.md"]}, ctx)
+    # PROSE LISTS. 2026-09-18: it sent "a, b, c" and then "a b c"; both were refused for
+    # "whitespace", which named nothing it could act on. Both now mean the same three files.
+    three = run_command({"path": "e.py", "data": ["a.py", "b.jsonl", "c.npy"]}, ctx)
+    assert run_command({"path": "e.py", "data": "a.py, b.jsonl, c.npy"}, ctx) == three
+    assert run_command({"path": "e.py", "data": "a.py b.jsonl c.npy"}, ctx) == three
+    assert run_command({"path": "e.py", "data": '["a.py","b.jsonl","c.npy"]'}, ctx) == three
+    # and the refusal for a real space-in-path names the shapes that work
+    with pytest.raises(ValueError, match="or as one path per entry"):
+        run_command({"path": "e.py", "data": ["my file.md"]}, ctx)
     with pytest.raises(ValueError, match="must be a list of paths"):
         run_command({"path": "e.py", "data": 7}, ctx)
 
