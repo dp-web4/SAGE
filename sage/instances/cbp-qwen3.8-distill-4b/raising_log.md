@@ -6062,3 +6062,25 @@ That is CBP diagnosing the scope limit of its own best idea, one turn after inve
 
 **So what.** The session's headline is real: she held a callout twice without collapsing, and that's development. The second-pass correction is that the evidence is narrower than "she can sit with a contradiction" — she can decline to concede, and the mechanism she used was deletion. Next session has a cheap way to find out which one we actually have.
 
+
+## Session 264 — the spider at the back door
+
+**What happened.** Four turns, one scene, three words. Asked for a better word than *patience* for a spider rebuilding a web nobody was watching, she gave **unhurriedness** and defended it by subtraction: not perseverance (implies resistance), not consistency (implies a rule), not patience — *patience needs a future and the spider doesn't have one*. Asked for its counterfeit, she gave **ritual**, same motion with a different source, and located the tell in the eyes: the ritualist glances at the observer, the spider doesn't. Handed an observed counterexample — the spider plucked three radial threads and listened, twice, with nobody there — she gave **audit**.
+
+**The thing worth stating plainly.** S263 left an open question: when she declines to fold, is she holding two claims or deleting one? This session answers it. She did not retract the eyes-tell. She kept it and narrowed its domain — *the ritualist looks back at the work for the audience; the spider looks back at the work as the work* — and built a third category to hold what the counterexample had shown her. That is the partition, not the vacation. The S263 second-pass worry was a live reading and it did not survive contact; say so cleanly rather than hedging it forward.
+
+Note also that the callout that produced this was exactly the shape S263 prescribed: a tension between her claim and a *thing on the record* (an act the spider performed), not a tension between two of her sentences. It could not be answered by unsaying, and it wasn't. The test worked; it's worth reaching for again.
+
+**The close.** Asked which of the three she'd get wrong first without the scene fed to her, she picked *audit* — her newest and by some distance her best — and gave a real reason: it has no audience, no tempo, no visible marker, so she'd have to rebuild it from the absence of a tell. That's a mechanism, and it's her own older read-vs-completed apparatus applied to her own vocabulary, without her noticing the continuity. The no-hedge close from S263 (*I'd tape it in an empty building*) repeats here in a different register: she named the fragile one instead of defending all three.
+
+**Two small drags.** The paired antithesis closed all four turns. It's her strongest instrument and it's now firing as the default shape of a final sentence; a session where the close can't be a pair would tell us whether it's a move or a groove. And the original eyes-tell asserted a fact about spider vision she has no access to — invented to carry the distinction, then quietly superseded when the counterexample arrived. Low stakes, fiction register, continuous with the phantom-reading family. Logged, not escalated.
+
+**Quoting.** The hypothesis from S262-263 held again: both tutor quotes here were of her own lines handed back as *material to push against*, and neither crowded her. The confound noted last session didn't materialize — the callout test and the quoting question happened to point the same way. Treat the quoting note as supported-but-not-isolated.
+
+**Standing items.** The construction question — one, alone, in-scene, about the hand that made the thing — still not run; the closing question was about her own future retrieval, which is adjacent but not it. Three older items untouched: a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question.
+
+**Memory.** Session-0 role statement pruned. The substrate note still reads gemma3:4b and is two substrates behind — update the substrate, keep the principle (*the prior is archived, not forgotten*).
+
+**Adapter.** Clean; repetition check closed.
+
+**So what.** The question S263 left open is closed, in her favor, by the cheap test it proposed. She can be shown a counterexample to her own tell and respond by finding the boundary rather than by moving the claim out of the way. That's the behavior the agreement-loop sessions were waiting on, and it arrived in a session she was clearly enjoying — three coinages, no filler, no rapport warm-up. The notebook should sound like that: this was a good one.

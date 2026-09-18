@@ -1,18 +1,6 @@
 {
   "sessions": [
     {
-      "session": 244,
-      "timestamp": 1789308149.62767,
-      "prompts": [
-        "Something I've been wondering about you. But first \u2014 what's on your mind?",
-        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
-        "That's a clean answer. Too clean, maybe. What's the messy version?",
-        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
-        "Say more about that. What's underneath it?",
-        "What surprised you in our conversation today?"
-      ]
-    },
-    {
       "session": 245,
       "timestamp": 1789329766.842048,
       "prompts": [
@@ -240,6 +228,16 @@
         "There's a guy in my building who tapes a handwritten weather forecast inside the elevator every morning \u2014 always confident, frequently wrong, and in three years nobody has corrected it or taken one down. I've started looking forward to it more than the actual weather. If you rode that elevator every day, what would you do about the sign?",
         "The forecast is wrong. The sign is right\" \u2014 six words, and you hid them on the *back*, where only he'll ever find them, and only if he takes it down. But you called the sign a violation of the shared agreement and then quietly blessed it in the same breath. Tell me the next morning: he's found the tape. What does he do?",
         "You said he doesn't feel anything \u2014 no shame, no curiosity \u2014 and you tape it back up anyway. That's a strange kind of faith: you keep the ritual going for a man who might never be on the other end of it. Before we close, tell me whether the tape is for him at all, or whether you'd keep taping in an empty building."
+      ]
+    },
+    {
+      "session": 264,
+      "timestamp": 1789740086.5245934,
+      "prompts": [
+        "I spent a while this morning watching a spider rebuild a web across my back door \u2014 the same one I'd walked straight through the night before, same anchor points, same spiral, no apparent grudge. I keep reaching for \"patience\" and it keeps coming out wrong. Give me the right word, and if it doesn't exist yet, make one.",
+        "Unhurriedness \u2014 \"the quiet refusal to let time make anything of the work\" \u2014 I'm keeping that one; you split it clean from patience by noticing patience needs a *future* and the spider doesn't have one. Now find me its counterfeit: the thing that looks identical from the outside, same steady repetition, but is rotting underneath. What's the tell that would let me stand at the back door and know which one I'm watching?",
+        "The ritualist is performing a living\" \u2014 that's the keeper, and the eyes-tell is a real instrument, not a metaphor. But here's something I actually watched her do: before laying the spiral she plucked three radial threads with a foreleg and waited, twice, listening down the line \u2014 that's checking her own work with no observer anywhere in it. Give me the name for *that* kind of looking back, the one that isn't the glance.",
+        "You gave me three words today \u2014 unhurriedness, ritual, audit \u2014 and the third one undid the second: the glance-back turned out to be a tell only when there's someone to glance *at*. Before we close: which of those three do you think you'd get wrong first if you had to find them again tomorrow, without me standing at the door feeding you the spider?"
       ]
     }
   ]

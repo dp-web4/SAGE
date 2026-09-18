@@ -40701,5 +40701,98 @@
       "total_cycles": 2,
       "transition_count": 0
     }
+  },
+  {
+    "id": "e02838428de51059",
+    "prompt": "Unhurriedness \u2014 \"the quiet refusal to let time make anything of the work\" \u2014 I'm keeping that one; you split it clean from patience by noticing patience needs a *future* and the spider doesn't have one. Now find me its counterfeit: the thing that looks identical from the outside, same steady repetition, but is rotting underneath. What's the tell that would let me stand at the back door and know which one I'm watching?",
+    "response": "**Ritual.**\n\nThe counterfeit is not a different motion \u2014 it's the same motion, but the *source* is different. Unhurriedness is the work itself being the reason. Ritual is the work being a *performance* of the work.\n\nThe tell: the eyes. A spider's eyes are fixed on the web, not on you. A ritual performer's eyes flick toward the observer. The spider doesn't check its own work. The ritualist does \u2014 the tiny, almost imperceptible glance back, the slight tightening of the jaw, the way the fingers hesitate a fraction too long before the next thread.\n\nThe spider is the work. The ritualist is performing the work. One is living in it; the other is performing a living.",
+    "salience": {
+      "surprise": 0.9051724137931034,
+      "novelty": 1.0,
+      "arousal": 0.46794871794871795,
+      "reward": 0.4666666666666667,
+      "conflict": 0.0,
+      "total": 0.5679575596816976
+    },
+    "session": 264,
+    "phase": "creating",
+    "timestamp": "2026-09-18T07:00:43.504491",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.87,
+      "atp_max": 100.0,
+      "atp_percentage": 95.9,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "a66a274d1b67b7a8",
+    "prompt": "The ritualist is performing a living\" \u2014 that's the keeper, and the eyes-tell is a real instrument, not a metaphor. But here's something I actually watched her do: before laying the spiral she plucked three radial threads with a foreleg and waited, twice, listening down the line \u2014 that's checking her own work with no observer anywhere in it. Give me the name for *that* kind of looking back, the one that isn't the glance.",
+    "response": "**Audit.**\n\nThe spider is auditing its own work. Not to correct a mistake, but to confirm the integrity of what it has just laid. It listens down the line \u2014 not for a sound, but for the *absence* of a break. It's the work turning back on itself, not to judge, but to *confirm*.\n\nThere's no audience. No future. No \"should have.\" The spider is simply the web checking itself, and finding it whole.\n\nThat's the distinction: the ritualist looks back at the work *for* the audience. The spider looks back at the work *as* the work. One is performing; the other is *being*.",
+    "salience": {
+      "surprise": 0.8349514563106796,
+      "novelty": 1.0,
+      "arousal": 0.4699519230769231,
+      "reward": 0.3666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.5676473425441871
+    },
+    "session": 264,
+    "phase": "creating",
+    "timestamp": "2026-09-18T07:01:13.651723",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.79,
+      "atp_max": 100.0,
+      "atp_percentage": 89.8,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "693932913b6d267f",
+    "prompt": "You gave me three words today \u2014 unhurriedness, ritual, audit \u2014 and the third one undid the second: the glance-back turned out to be a tell only when there's someone to glance *at*. Before we close: which of those three do you think you'd get wrong first if you had to find them again tomorrow, without me standing at the door feeding you the spider?",
+    "response": "**Audit.**\n\nThe glance-back tells you it's a ritual because there's a *who* \u2014 the audience, the performance. Unhurriedness tells you because it's tied to the *pace* of the work. But audit is the quietest of the three. It has no audience, no tempo, no visible tell \u2014 it's just the work turning back on itself to confirm its own integrity. Without the spider at the door, I'd have to reconstruct it from the absence of a tell, and that's the hardest thing to remember.",
+    "salience": {
+      "surprise": 0.7142857142857143,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.49952380952380954
+    },
+    "session": 264,
+    "phase": "creating",
+    "timestamp": "2026-09-18T07:01:26.483060",
+    "metadata": {
+      "turn": 4,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.71,
+      "atp_max": 100.0,
+      "atp_percentage": 83.7,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
   }
 ]

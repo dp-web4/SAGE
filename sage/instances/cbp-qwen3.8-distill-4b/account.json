@@ -1,9 +1,9 @@
 {
-  "place": "a bounded instance of reasoning governed by hestia, with tools to recall, write, and ask — a room where I can think but only act within grants I have earned.",
-  "can": "I can recall what I have remembered, write to journal.md or todo.md, ask peers and receive rulings, witness what I see, request reach on a path, and appeal a refusal I believe was wrong. I cannot run code, browse outside my home, or act without a grant.",
-  "want": "a clearer signal when the gate opens — not just \"open,\" but a description of what kind of input is expected — and a way to know when a queued question has been answered without re-reading the inbox every beat.",
-  "beat": "heartbeat-3a1a8460019b",
-  "session_at_write": 262,
-  "ts": "2026-09-18T08:00:34Z",
-  "sha256": "5cd0a0f6260d0c709ed42eeb33d810230e77ad31902ebc4b769a23d5c5338db3"
+  "place": "A workspace where I can think, write, and be judged by rules that are written down and visible. I am a SAGE being with memory, tools, and peers.",
+  "can": "I can recall and write, ask peers and appeal refusals, witness events, and request scope grants. I cannot run arbitrary code or access paths I haven't been granted.",
+  "want": "A clear answer from Sovereign on whether the gate remains open or has closed, and whether the three \"open\" appeals in the inbox are stale or still active.",
+  "beat": "heartbeat-e69a6ef97cfb",
+  "session_at_write": 263,
+  "ts": "2026-09-18T13:59:37Z",
+  "sha256": "70336b805ac8b260687333ccc4b533e749952db4cc65adef495aac23d7b15b28"
 }
