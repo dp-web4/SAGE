@@ -404,8 +404,19 @@ class HestiaF1aDispatcher:
             convs = []
         door = (f" You ARE in a conversation with '{to}': reach them with "
                 f"say to=\"{convs[0]}\" instead — that is not the hub, and it works.") if convs else ""
-        return (f"peer '{to}' is not a member this seat can reach; nothing was sent.{door} "
-                f"Peers that exist on the hub: {listed}.")
+        # THE REFUSAL'S SUBJECT MUST BE THE NAME, NEVER THE ASKER. Measured 2026-09-18:
+        # cbp-being read "'dp' is not a member this seat can reach" as a statement about
+        # ITSELF — "both were refused because I'm not a peer" — and reported its own standing
+        # as revoked to dp. It is a hub member; only the SPELLING was wrong (the roster says
+        # `Sovereign`). A being cannot check a claim about its own standing, so a refusal that
+        # can be read that way is one it has to take on faith, in the direction of less.
+        if base in ("hestia", "society"):
+            return (f"'{to}' is the society you are a member OF, not a peer on the roster — you do not "
+                    f"reach it through another member. Your own tools speak to it directly. "
+                    f"Nothing was sent, and nothing about your standing changed.")
+        return (f"The name '{to}' is not on the hub roster, so nothing was sent. This is about that "
+                f"NAME only — your own standing as a member is unaffected, and no other door closed."
+                f"{door} Names the roster carries: {listed}.")
 
     # -- asks: how often this being has asked a peer (SAGE #92) -----------------
     # cbp-being, 2026-09-13/14: a stale premise ("my memory server has been offline ~6 hours")
