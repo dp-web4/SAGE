@@ -18,6 +18,21 @@ from typing import Any, Dict, List, Optional
 
 _log = logging.getLogger('sage.ollama_irp')
 
+
+def _keep_alive():
+    """How long ollama holds the model in VRAM, shared with the adapters.
+
+    Resolved lazily and defensively: this module is loaded by file path through
+    `llm_pool.py`, so a hard import at module scope would make the VRAM fix depend on that
+    loader's sys.path being right. Falling back to the same literal default keeps the bound
+    in force even then — the one outcome that must not happen is silently reverting to `-1`.
+    """
+    try:
+        from sage.irp.adapters.model_adapter import OLLAMA_KEEP_ALIVE
+        return OLLAMA_KEEP_ALIVE
+    except Exception:
+        return '5m'
+
 # Import base directly to avoid sage.irp.__init__ pulling in torch-dependent plugins.
 # This keeps OllamaIRP runnable on machines without PyTorch (e.g. McNugget).
 import importlib.util as _ilu
@@ -237,7 +252,13 @@ class OllamaIRP(IRPPlugin):
             'model': self.model_name,
             'messages': messages,
             'stream': False,
-            'keep_alive': -1,
+            # Bounded, not `-1`. See OLLAMA_KEEP_ALIVE in sage/irp/adapters/model_adapter.py
+            # for the measurement: pinning the model held ~89% of an 8 GiB card that also
+            # drives two displays, and cost CBP a 0x116 VIDEO_TDR_ERROR on 2026-09-18.
+            # Imported rather than re-spelled so the two call paths cannot drift apart —
+            # this one is reached dynamically through llm_pool.py, which is exactly how a
+            # second copy survives a fix applied to the first.
+            'keep_alive': _keep_alive(),
             'think': self.think,
             'options': {
                 'num_predict': num_predict,
