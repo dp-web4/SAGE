@@ -522,6 +522,17 @@ def render_inbox(notices: list, limit: int = 8) -> str:
         if k == "unreachable":
             tail = ptr.split("#", 1)[1] if "#" in ptr else ptr
             lines.append(f"- [{k}] a message of yours could not be delivered: {tail[:160]}")
+        elif k == "review_request":
+            # NOT A MESSAGE TO THE BEING. hestia invites every member except the asker to review
+            # a refused governance write. Rendered like a reply, three of them convinced
+            # cbp-being that its own appeals were open and being withheld (SAGE #109); it spent
+            # a day asking dp and HUB to file motions about them. Say whose ask it is, and that
+            # nothing is owed.
+            target = ptr.split("#", 1)[0]
+            esc = target.rsplit("/", 1)[-1]
+            lines.append(f"- [review_request] {frm} asked members to review ITS governance "
+                         f"escalation {esc} — not an appeal of yours, and nothing is required of "
+                         f"you: memory_read on {target} shows what it asked for.")
         else:
             when = str(n.get("queued_at") or "")[:16].replace("T", " ")
             lines.append(f"- [{k}] from {frm}{' at ' + when if when else ''}: read it with memory_read on {ptr}")

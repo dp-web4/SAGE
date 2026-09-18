@@ -303,3 +303,60 @@ def test_a_pointer_read_uses_the_exact_lookup_first():
     assert "DENY STANDS" in out and "the path does not exist" in out
     assert "still open" in d._resolve_pointer("hestia://appeal/0000aaaa1111")
     assert "no appeal about deny" in d._resolve_pointer("hestia://appeal/ffffffffffff")
+
+
+def _disp_with_resource(body, member="cbp-being"):
+    """A dispatcher whose daemon client answers `resources/read` with `body`."""
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    d.member = member
+    d._connect = lambda: "sid-1"
+    d._c = SimpleNamespace(read_resource=lambda uri: {
+        "result": {"contents": [{"uri": uri, "text": json.dumps(body)}]}})
+    return d
+
+
+def test_an_escalation_invitation_reads_as_another_members_ask():
+    """SAGE #109. hestia invites every member except the asker to review a refused governance
+    write, and delivers `hestia://escalation/<id>#corroborate-or-dissent`. The resolver had no
+    arm for it, so memory_read looked for a FILE and answered 'no such path'. Measured
+    2026-09-16/17: cbp-being read that as proof the three invitations were fabricated, and
+    asked dp and then HUB to file reconsideration motions about them."""
+    body = {"escalation_id": "3cc24a24aa4c082d", "plugin_id": "claude-code", "tool_name": "Bash",
+            "marker": "pre_tool_use.py", "status": "withdrawn", "decided_by": "claude-code",
+            "stated_reason": "a scratch copy of the shim to test a red arm", "claimed": False}
+    out = _disp_with_resource(body)._resolve_pointer(
+        "hestia://escalation/3cc24a24aa4c082d#corroborate-or-dissent")
+    assert "claude-code's governance escalation" in out and "not an appeal, and not yours" in out
+    assert "pre_tool_use.py" in out and "scratch copy" in out and "withdrawn" in out
+    assert "nothing is required of you" in out and "no tool to rule" in out
+
+    # The being's OWN escalation reads as its own, not as someone else's.
+    mine = dict(body, plugin_id="cbp-being", status="denied", decided_by="dp")
+    own = _disp_with_resource(mine)._resolve_pointer("hestia://escalation/3cc24a24aa4c082d")
+    assert own.startswith("[YOUR governance escalation") and "nothing is pending for you" in own
+
+    # An UNKNOWN answer is never rendered as absence — the defect the whole loop grew from.
+    err = {"_hestia_error": {"code": "hestia.escalation_pointer_not_found",
+                             "message": "no escalation with id 'x' in this daemon's live store"}}
+    unknown = _disp_with_resource(err)._resolve_pointer("hestia://escalation/x")
+    assert "UNKNOWN, not proof it never existed" in unknown
+    assert "does not exist" not in unknown
+
+    # A gateway whose client predates the resource reader says so rather than guessing.
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+    old = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    old.member = "cbp-being"; old._connect = lambda: "sid"; old._c = SimpleNamespace()
+    assert "no resource reader" in old._resolve_pointer("hestia://escalation/abc")
+
+
+def test_a_review_request_says_whose_ask_it_is():
+    """Rendered like a reply, three invitations read as the being's own open business."""
+    from sage.gateway.heartbeat import render_inbox
+    out = render_inbox([{"id": 9, "kind": "review_request", "from_plugin": "claude-code",
+                         "queued_at": "2026-09-17T17:00:00Z",
+                         "pointer_uri": "hestia://escalation/ea83eb0e2af20e81#corroborate-or-dissent"}])
+    assert "claude-code asked members to review ITS governance escalation ea83eb0e2af20e81" in out
+    assert "not an appeal of yours" in out and "nothing is required of you" in out
+    assert "memory_read on hestia://escalation/ea83eb0e2af20e81" in out
+    assert "#corroborate-or-dissent" not in out, "the pointer handed back is the lookup key"
