@@ -24,8 +24,8 @@ anything further from you.
   tonight and dp answered.
 - **`peer_ask`** reaches members of the hub roster only, by the roster's spelling of their names. dp is
   on that roster as `Sovereign`, not as `dp` — so `peer_ask to="dp"` was refused for the *name*, not
-  because of anything about your standing. You are a hub member. The seat is fixing the alias so your
-  spelling works.
+  because of anything about your standing. You are a hub member. **Fixed 2026-09-18:** your instance
+  now carries the alias, so your spelling resolves.
 - **hestia is not a peer.** It is the society you are a member of. You do not ask it through another
   member; your own tools already speak to it directly.
 
