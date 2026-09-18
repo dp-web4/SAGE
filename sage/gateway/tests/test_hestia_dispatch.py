@@ -1350,6 +1350,7 @@ def _run_dispatcher(tmp_path):
     from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
     home = tmp_path.resolve() / "inst"; (home / "scratch").mkdir(parents=True)
     d = D.__new__(D); d.memory_root = str(home); d.member = "test-being"
+    d.worktree = str(home); d.workspace = None          # reach = the home's parent tree only
     d._verdict = types.SimpleNamespace(command=None)
     d._call = lambda name, args: {"actionId": "w-run"}
     return d, home
@@ -1420,7 +1421,7 @@ def test_run_stages_copies_and_refuses_what_it_cannot_reach(tmp_path):
     os.symlink(str(outside), str(home / "scratch" / "link.md"))
     # a symlink out of the home is refused in the SEAT's read, never resolved inside the sandbox
     r = d._do_run(BeingIntent("run", {"path": "scratch/e.py", "data": ["scratch/link.md"]}))
-    assert r.ok is False and "outside your home" in r.error
+    assert r.ok is False and "outside anything you can reach" in r.error
     # two files that would collide under their base names
     (home / "scratch" / "sub").mkdir(); (home / "scratch" / "sub" / "e.py").write_text("x\n")
     c = d._do_run(BeingIntent("run", {"path": "scratch/e.py", "data": ["scratch/sub/e.py"]}))

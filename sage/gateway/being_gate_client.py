@@ -356,11 +356,26 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
     if len(names) - 1 > RUN_MAX_DATA:
         raise ValueError(f"run takes at most {RUN_MAX_DATA} 'data' files beside the script "
                          f"(you gave {len(names) - 1}); the sandbox has nothing else in it")
-    for n in names:
+    reach = _search_reach((ctx or {}).get("worktree") or memory_root, (ctx or {}).get("workspace"))
+    for i, n in enumerate(names):
         if not n or any(ch.isspace() for ch in n):
             raise ValueError(f"run paths may not be empty or contain whitespace: {n!r}")
-        if n.startswith("-") or n.startswith("/") or ".." in n.split("/"):
-            raise ValueError(f"run paths are plain relative paths inside your home, got {n!r}")
+        if n.startswith("-") or ".." in n.split("/"):
+            raise ValueError(f"run paths are plain paths, got {n!r}")
+        if os.path.isabs(n):
+            # A FILE IT CAN READ IS A FILE ITS CODE CAN READ. 2026-09-18 00:57Z: it wrote a
+            # script to extract a function from ft09.py — a file its own `memory_read` reaches
+            # under a standing grant — and `run` refused because the path was not under its
+            # home. Its only alternative was to pull 64KB through a 24k window by hand. The
+            # seat stages a COPY, read with the seat's own reach, so no authority is added:
+            # same reasoning as the `search` (3fcca0830) and `git_read` widenings. The script
+            # itself still must be the being's own, inside its home — code it executes is code
+            # it wrote.
+            if i == 0:
+                raise ValueError("run 'path' (the script) must be a file in your home; only "
+                                 "'data' files may come from elsewhere in your reach")
+            if not _under(os.path.realpath(n), reach):
+                raise ValueError(_reach_refusal("run", n, reach))
     if not path.endswith(".py"):
         raise ValueError(f"run executes a Python file; 'path' must end in .py, got {path!r}")
     if not sandbox_available():
@@ -1218,9 +1233,8 @@ _TOOL_SCHEMAS = {
             "no home, no worktree. Nothing it does persists, so PRINT what you want to keep. "
             "This is how a rule becomes testable without spending a move.",
             {"path": "a .py file in your home, e.g. 'scratch/evaluator.py'",
-             "data": "optional: up to 8 more files from your home to place beside it, e.g. "
-                     "['scratch/game/moves.md'] — they arrive in the working directory under "
-                     "their base names"},
+             "data": "optional: up to 8 more files to place beside it — relative to your home, "
+                     "or any absolute path you can read; they arrive under their base names"},
             ["path"]),
     # KEPT SHORT ON PURPOSE. Measured 2026-09-17: the 21 offered schemas cost 14,968 chars of
     # the being's prompt — more than its whole state block — and this verb's description was the

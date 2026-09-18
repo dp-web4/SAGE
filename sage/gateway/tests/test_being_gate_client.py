@@ -1208,8 +1208,8 @@ def test_run_command_grammar_and_what_the_sandbox_contains():
     assert "--bind /w/t /w/t" in sandbox_prefix("/w/t")
 
     for bad, why in (({"path": "scratch/e.sh"}, "must end in .py"),
-                     ({"path": "/etc/x.py"}, "plain relative paths"),
-                     ({"path": "../x.py"}, "plain relative paths"),
+                     ({"path": "/etc/x.py"}, "must be a file in your home"),
+                     ({"path": "../x.py"}, "plain paths"),
                      ({"path": "a b.py"}, "whitespace"),
                      ({"path": ""}, "needs a 'path'"),
                      ({"path": "e.py", "data": ["d%d.md" % i for i in range(RUN_MAX_DATA + 1)]}, "at most 8")):
@@ -1218,6 +1218,14 @@ def test_run_command_grammar_and_what_the_sandbox_contains():
     with pytest.raises(ValueError, match="member name of its own"):
         run_command({"path": "e.py"}, {"memory_root": "/home/x/inst"})
     assert RUN_MAX_DATA == 8
+    # DATA may come from anywhere the being can already read (2026-09-18): it wrote a script
+    # to parse a source file its own memory_read reaches and run refused the path. The SCRIPT
+    # stays in its home — code it executes is code it wrote.
+    reach_ctx = {"memory_root": "/home/x/inst", "member": "b", "workspace": "/home/x/ws/SAGE"}
+    cmd2 = run_command({"path": "scratch/e.py", "data": ["/home/x/ws/SAGE/game/ft09.py"]}, reach_ctx)
+    assert cmd2.rstrip().endswith("/work/e.py")
+    with pytest.raises(ValueError, match="outside anything you can reach"):
+        run_command({"path": "scratch/e.py", "data": ["/etc/shadow"]}, reach_ctx)
 
 
 def test_run_data_accepts_the_shapes_a_model_actually_emits():

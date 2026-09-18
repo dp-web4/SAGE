@@ -804,7 +804,9 @@ class HestiaF1aDispatcher:
         from sage.gateway.being_gate_client import run_command, STAGE_ROOT, RUN_TIMEOUT_S
         try:
             cmd = run_command(intent.args, {"memory_root": self.memory_root,
-                                            "member": getattr(self, "member", None)})
+                                            "member": getattr(self, "member", None),
+                                            "worktree": getattr(self, "worktree", None),
+                                            "workspace": getattr(self, "workspace", None)})
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         judged = getattr(getattr(self, "_verdict", None), "command", None)
@@ -832,10 +834,16 @@ class HestiaF1aDispatcher:
                     f"run: two files would arrive as {base!r} in the working directory; they are "
                     f"placed under their base names, so give files whose names differ"))
             seen.add(base)
-            full = os.path.realpath(os.path.join(root, n))
+            full = os.path.realpath(n if os.path.isabs(n) else os.path.join(root, n))
             if not (full == root or full.startswith(root + os.sep)):
-                return ResultEnvelope(ok=False, error=(
-                    f"run: {n!r} resolves outside your home and will not be copied in"))
+                # outside the home: allowed for DATA files within the granted reach, staged as
+                # a copy the seat reads (run_command judged the same set; see its comment)
+                from sage.gateway.being_gate_client import _search_reach, _under
+                reach = _search_reach(getattr(self, "worktree", None) or root,
+                                      getattr(self, "workspace", None))
+                if n is names[0] or not _under(full, reach):
+                    return ResultEnvelope(ok=False, error=(
+                        f"run: {n!r} resolves outside anything you can reach and will not be copied in"))
             if not os.path.isfile(full):
                 return ResultEnvelope(ok=False, error=f"run: no such file in your home: {n}")
             size = os.path.getsize(full)
