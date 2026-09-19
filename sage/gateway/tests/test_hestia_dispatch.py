@@ -1467,6 +1467,54 @@ def test_a_placeholder_is_not_a_turn_and_leaves_no_trace():
     assert conv.count(home, "dp") == 1
 
 
+_DP_2057Z = ("empty journal simply means there were no anomalies - no denies, no pending appeals.  "
+             "it means things are working.  if you are able to act, hestia is live and functional "
+             "because your every act goes through it.  only check the journal if you're waiting for "
+             "a ruling on a denied act.  you don't need to explicitly check hestia health because "
+             "simply being able to do things is confirmation that all is good.")
+_BEING_2104Z = ("The empty journal simply means there were no anomalies — no denies, no pending "
+                "appeals. It means things are working. If you are able to act, hestia is live and "
+                "functional because your every act goes through it. You don't need to explicitly "
+                "check hestia health because simply being able to do things is confirmation that "
+                "all is good.")
+
+
+def test_the_other_partys_words_sent_back_are_not_a_reply():
+    """The real exchange, 2026-09-19: dp answered cbp-being's question at 20:57Z and at 21:04Z
+    the being sent dp's answer back to dp. Same pressure as the ".." turns — a prompt claiming
+    an answer was owed — with the next-cheapest filler once placeholders were refused."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    conv.append(home, "dp", speaker="dp", text=_DP_2057Z)
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "dp", "text": _BEING_2104Z}), _ALLOW)
+    assert not r.ok and "dp's own message" in r.error and "nothing was sent" in r.error, r
+    assert "not required" in r.error and "of your own" in r.error, "boundary AND way forward"
+    assert not [n for n, _ in FakeMcp.calls if n == "hestia_begin_action"], "no witness row"
+    assert conv.count(home, "dp") == 1
+    # CONTROLS — each is a thing an honest speaker does, and each must still land.
+    quoting = ('You said "if you are able to act, hestia is live and functional". That changes '
+               "what I do: I will stop reading the journal each beat and only open it after a "
+               "deny. Is there a way for me to see a ruling when it arrives, without polling?")
+    for ok_text in ("Understood, thank you.", quoting):
+        r = d(BeingIntent("say", {"to": "dp", "text": ok_text}), _ALLOW)
+        assert r.ok, (ok_text, r)
+    # asked to pick a line, it picks one: mostly the other party's words, and a reply
+    conv.append(home, "dp", speaker="dp", text=(
+        "of everything we built today, what is the one line you would keep? was it 'it was "
+        "not seeing, it was feeling the absence of seeing', or the one about the threshold?"))
+    r = d(BeingIntent("say", {"to": "dp", "text": (
+        "It was not seeing, it was feeling the absence of seeing. Let that be the echo.")}), _ALLOW)
+    assert r.ok, r
+    # repeating ITSELF is not this defect: the guard reads other speakers only
+    r = d(BeingIntent("say", {"to": "dp", "text": quoting}), _ALLOW)
+    assert r.ok, r
+
+
 def test_an_ask_aimed_at_a_conversation_partner_is_pointed_at_say_and_costs_nothing():
     """The seat aliased `dp` to the hub roster's `Sovereign` on 2026-09-18, meaning to help.
     It made `peer_ask to="dp"` SUCCEED: 15 questions in 48 h went to a hub inbox dp does not

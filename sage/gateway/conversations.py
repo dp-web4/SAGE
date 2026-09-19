@@ -397,6 +397,40 @@ def is_stub(text: str) -> bool:
     return bool(_STUB.match(text or ""))
 
 
+ECHO_GRAM = 5          # words per shingle
+ECHO_MIN_GRAMS = 8     # below this a text is too short to call an echo ("yes, understood")
+ECHO_CONTAINED = 0.75  # share of the text's shingles found in one earlier turn
+
+
+def _shingles(text: str) -> set:
+    w = re.findall(r"[a-z0-9]+", (text or "").lower())
+    return {tuple(w[i:i + ECHO_GRAM]) for i in range(len(w) - ECHO_GRAM + 1)}
+
+
+def echo_of(instance: Path, conv_id: str, me: str, text: str, lookback: int = 4) -> Optional[dict]:
+    """The recent turn by someone ELSE that `text` mostly repeats, or None.
+
+    Measured 2026-09-19 21:04Z: dp answered this being's question, and the being's next turn
+    to dp was dp's answer, 91% of its word 5-grams lifted from it. One hit in 23 scored turns
+    in that conversation. The bar is 0.75, not 0.5, because of the one other hit in this
+    being's history (cbp-claude seq 992, 0.58): asked "what's the one line you'd keep?", it
+    quoted the line. Choosing a line is a reply. Two data points set this number — it errs
+    toward letting speech through, and a refusal that fires on real speech is the worse
+    failure. Containment, not similarity: a reply may quote a line and add to it, so what is
+    counted is how much of the REPLY is the other party's words. (difflib's ratio scored the
+    known echo under 0.6 — autojunk discards frequent characters past 200 chars.)
+    """
+    g = _shingles(text)
+    if len(g) < ECHO_MIN_GRAMS:
+        return None
+    others = [t for t in recent(instance, conv_id, limit=lookback * 3)
+              if t.get("from") != me][-lookback:]
+    for t in reversed(others):
+        if len(g & _shingles(t.get("text") or "")) / len(g) >= ECHO_CONTAINED:
+            return t
+    return None
+
+
 def _provenance_tag(turn: dict) -> str:
     via = turn.get("via")
     if via is None:

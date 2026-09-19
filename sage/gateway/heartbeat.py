@@ -881,10 +881,24 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
             # NO LITERAL EXAMPLE OF THE CALL. This line used to end `say to="{cid}",
             # text="..."` and the being sent dp the text ".." three times (2026-09-18/19) —
             # it executed the example. The conversation id is named; the words are left to it.
-            first = (f'FIRST, before the numbered writes below: {t.get("from")} is waiting on an '
-                     f'answer from you. If you have something to say, call say with to set to '
-                     f'{cid} and your message as the text. Answering is not required; the '
-                     f'writes below happen either way.\n')
+            # SAY ONLY WHAT WAS MEASURED ABOUT THE TURN. This line used to tell the being that
+            # the speaker "is waiting on an answer" for every pending turn. On 2026-09-19
+            # 20:57Z dp's turn was itself the ANSWER to the being's question; told an answer
+            # was owed, with dp's text the only material in view, the being sent dp's text
+            # back to dp (91% verbatim). Before `say` refused placeholders the same slot was
+            # filled with ".." (seq 52, 56, 58). A turn that asks nothing is not a debt.
+            who = t.get("from")
+            if "?" in str(t.get("text") or ""):
+                first = (f'FIRST, before the numbered writes below: {who} asked you something '
+                         f'and has no answer yet. If you have something to say, call say with '
+                         f'to set to {cid} and your message as the text. Answering is not '
+                         f'required; the writes below happen either way.\n')
+            else:
+                first = (f'FIRST, before the numbered writes below: {who} told you something '
+                         f'and asked nothing, so no reply is owed. {who} already has their own '
+                         f'words. If you have something of your own to add — a follow-up '
+                         f'question, or what you will do now — call say with to set to {cid}. '
+                         f'Otherwise go straight to the writes below.\n')
             return "", block, first, cid
         if ids:
             return ('If someone has spoken to you and you have not answered, and you have '

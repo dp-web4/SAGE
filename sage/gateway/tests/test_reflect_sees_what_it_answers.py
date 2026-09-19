@@ -52,11 +52,25 @@ def test_a_waiting_turn_is_quoted_next_to_the_instruction():
     line, block, first, _t = pending_and_say_line(inst, ME)
     assert "how is your experience unfolding?" in block, "the being can see WHAT it answers"
     assert 'in "dp", dp said:' in block
-    assert "call say with to set to dp" in first and "dp is waiting on an answer" in first
+    assert "call say with to set to dp" in first and "dp asked you something" in first
     assert "<id>" not in first and 'text="..."' not in first, "no slot to complete"
     assert "not required" in first, "answering stays optional"
     assert first.startswith("FIRST"), "the routine three fill the step budget; answering cannot be last"
     assert line == "", "one instruction, not two"
+
+
+def test_a_turn_that_asks_nothing_is_not_called_a_debt():
+    """2026-09-19 20:57Z: dp ANSWERED the being's question. The line said dp "is waiting on an
+    answer"; with dp's text the only material in view, the being sent it back to dp, 91%
+    verbatim. Earlier the same slot had been filled with ".." three times."""
+    inst = _inst(); _channel(inst)
+    conv.append(inst, "dp", speaker=ME, text="does hestia have a health endpoint?")
+    conv.append(inst, "dp", speaker="dp", text="an empty journal means no anomalies. it is working.")
+    _line, block, first, _t = pending_and_say_line(inst, ME)
+    assert "an empty journal means no anomalies" in block, "it still sees what was said"
+    assert "no reply is owed" in first and "waiting" not in first and "asked you" not in first
+    assert "set to dp" in first, "the door stays named for a real follow-up"
+    assert first.startswith("FIRST")
 
 
 def test_the_beings_own_turn_is_not_something_it_is_waiting_on():

@@ -159,6 +159,34 @@ unreadable or missing parent is *unknown*, not empty, and an unknown must never 
 The scope queue is the operator's attention. A request that cannot be granted usefully is worse than
 no request: it spends that attention and invites a grant over ground the being never needed.
 
+### 1.12 Told that something is owed, a being with nothing to say sends whatever is in view
+**Specimen (cbp-being, 2026-09-19, conversation `dp` seq 60–62).** The being asked dp whether hestia
+has a health endpoint. dp answered (20:57Z, no question mark anywhere). The reflect prompt quoted
+dp's answer and said *"dp is waiting on an answer from you"*. At 21:04Z the being sent dp's answer
+back to dp — 91% of its word 5-grams lifted. Its think block: *"I have a clear message for dp: the
+empty journal means no anomalies…"* — it took the quoted text as its own message.
+
+This is **the same defect as the `..` turns** (1.8, 2.10), not a new one. Seq 52, 56 and 58 were
+`..` in the same slot under the same line. The line asserted a debt; the being, having already
+digested the message in explore, had nothing of its own; the slot got the cheapest text available.
+When the example `text="..."` was in view, that was the example. When `say` began refusing
+placeholders, it became the quoted turn. **Refusing the filler without removing the pressure moves
+the filler.** A third filler would have followed this one.
+
+**Rules.**
+- A prompt may state about a pending turn only what was measured about it. "Asked you something"
+  when the turn contains a question; "told you something and asked nothing, so no reply is owed"
+  when it does not. `pending_and_say_line` now splits on that.
+- An instruction to act, placed beside quoted text, makes the quoted text the material for the act.
+  If the act may legitimately be *nothing*, say so as the default path, not as a permission after
+  the instruction ("Otherwise go straight to the writes below").
+- Mechanical half: `say` refuses a turn ≥75% contained in a recent turn by the OTHER party
+  (`conversations.echo_of`), before `begin_action`. The bar is set by two data points — this echo
+  (0.91) and one legitimate quoted line (cbp-claude seq 992, 0.58: asked "what's the one line you'd
+  keep?", it quoted the line). It errs toward letting speech through.
+- After fixing a filler, read the next beats for the *next* filler (census: shingle containment;
+  `difflib.SequenceMatcher` under-scores long strings — autojunk — and missed the known case).
+
 ---
 
 ## Part 2 — how they write

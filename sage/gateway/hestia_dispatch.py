@@ -1521,6 +1521,21 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(
                 ok=False, error=f"you may read {to!r} and not speak in it "
                                 f"(writable_by: {meta.get('writable_by')})")
+        # THEIR WORDS ARE NOT A REPLY. Measured 2026-09-19 21:04Z: dp answered the being's
+        # question and the being sent dp's answer back to dp, 91% verbatim. This is the same
+        # pressure that produced ".." — the reflect line said someone was waiting on an
+        # answer when nobody was, and the being filled the slot with the cheapest text in
+        # view. Refusing the placeholder moved the filler from the example to the quoted
+        # turn. The prompt no longer makes that claim (pending_and_say_line); this is the
+        # mechanical half. Refused before begin_action: no witness row, no line.
+        src = conv.echo_of(self.memory_root, to, self.member, text)
+        if src is not None:
+            return ResultEnvelope(ok=False, error=(
+                f"that text is {src.get('from')}'s own message, nearly word for word, and it "
+                f"is already in the conversation, so nothing was sent. You are not required "
+                f"to reply, and silence is not held against you. If you have something of "
+                f"your own to add — a follow-up question, or what you will do now — call say "
+                f"with that instead."))
         begin = self._call("hestia_begin_action", {"tool_name": "say", "target": to})
         err = _hestia_error(begin)
         if err:
