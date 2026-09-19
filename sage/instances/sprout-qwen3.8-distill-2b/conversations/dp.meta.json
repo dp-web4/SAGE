@@ -11,10 +11,10 @@
   ],
   "summary": "The operator's own channel. dp is asynchronous by rule; a gap here is reachability, not judgement.",
   "created": "2026-09-17T22:09:07Z",
-  "high_water_seq": 14,
+  "high_water_seq": 15,
   "restored": {
     "on": "2026-09-19",
-    "from": "git stash 53642902c",
-    "why": "a seat's rebase over a dirty tree reverted this log to its committed 1-turn snapshot; 13 turns recovered and merged with the 1 newer turn"
+    "count": 2,
+    "why": "twice reverted to a committed snapshot by `git pull --rebase` run across this live directory (a seat's rebase, then the raising cron rebasing a checked-out feature branch into a conflict); recovered from stashes both times, 15 turns"
   }
 }
