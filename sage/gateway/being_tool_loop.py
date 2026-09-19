@@ -356,13 +356,18 @@ def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
         # sorts January before December and would prune the newest files every New Year)
         # and the zero-padded step (unpadded, "40" sorts before "5").
         stamp = _t.strftime("%Y%m%d-%H%M%S", _t.gmtime())
-        name = f"{stamp}-{step:03d}.txt"
+        # EVERY name carries a zero-padded collision ordinal. The first cut used
+        # "...-003.txt", then "...-003.1.txt"; lexically the newer ".1" sorts before
+        # ".txt", and ".10" sorts before ".2", so retention could prune the newest retry
+        # before the older file it followed. One sortable shape makes creation order the
+        # same order the pruning code sees.
+        n = 0
+        name = f"{stamp}-{step:03d}-{n:03d}.txt"
         # Two spills of DIFFERENT results can collide: same second, same message index,
         # which the retry path reaches. A collision would silently overwrite the first.
-        n = 1
         while os.path.exists(os.path.join(d, name)):
-            name = f"{stamp}-{step:03d}.{n}.txt"
             n += 1
+            name = f"{stamp}-{step:03d}-{n:03d}.txt"
         with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
             fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
                      f"result the harness elided from your window, {len(body)} characters]\n\n")
