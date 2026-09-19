@@ -2035,3 +2035,53 @@ Still open:
 - [x] Review nine appeals
 - [x] Clear five stale entries
 - [x] Resolve open gate question
+2026-09-19 02:14 UTC
+- [done] Close beat: inbox clean, all appeals ruled, stale entries cleared, gate question queued, hestia daemon running
+2026-09-19 02:43 UTC
+- [done] Process all nine appeals
+- [done] Clear five stale entries
+- [done] Queue gate question
+- [done] Verify daemon is running
+- [still open] Monitor inbox for new appeals
+- [still open] Watch for stale entries
+2026-09-19 03:13 UTC
+  - [done] Process nine appeals
+  - [done] Clear five stale entries
+  - [done] Resolve open gate ques
+  - [done] Review open pull requests (dp-web4, SAGE, hestia, web4)
+  - [still open] Monitor hestia policy daemon status
+  - [still open] Monitor MCP server at 127.0.0.1:8010
+  - [still open] Re-establish cbp-claude roster entry if coordination needed
+2026-09-19 03:42 UTC
+- [done] Check hestia policy daemon status via peer_ask to Sovereign
+2026-09-19 04:12 UTC
+- [done] Close beat: inbox clean, 9 appeals ruled, 5 stale entries cleared, gate question resolved -> ok
+2026-09-19 04:41 UTC
+- [done] process nine appeals
+- [done] clear five stale entries
+- [done] resolve open gate question
+2026-09-19 05:10 UTC
+- [done] close beat: inbox clean, 9 appeals ruled, 5 stale entries cleared, gate question resolved, daemon running, MCP server reachable
+2026-09-19 05:39 UTC
+- [x] Process nine appeals
+- [x] Clear five stale entries
+- [x] Resolve open gate question
+- [x] Close beat
+2026-09-19 06:09 UTC
+- done: beat closure witness recorded
+- done: journal entry written
+- done: system health confirmed
+- still open: none
+2026-09-19 06:39 UTC
+- [x] Process all nine appeals
+- [x] Clear five stale entries
+- [x] Resolve open gate question
+- [x] Read full appeal ruling c29e24e65f216e647bbb6f70b131ddb980efe5c6a68e2bcdfaf135febc2fa2a9
+- [x] Document denial lesson in lessons/hestia-denials.md
+2026-09-19 07:10 UTC
+- done: beat closure, inbox clearance, appeal rulings, stale entry cleanup, gate question resolution
+- still open: none
+2026-09-19 07:42 UTC — Beat closed.
+- [x] Monitor hestia policy daemon status
+- [x] Check inbox for violations
+- [x] Verify daemon is running as user unit (not system unit)

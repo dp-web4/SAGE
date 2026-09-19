@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 266,
+    "session_count": 267,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-18T19:03:05.391281",
-    "last_session_summary": "Session 266 (creating phase): ...",
+    "last_session": "2026-09-19T01:03:38.358788",
+    "last_session_summary": "Session 267 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -595,7 +595,11 @@
       "First time she has named a recent coinage of her own as the one she'd lose first, with a mechanism rather than a hedge. The reason she gave \u2014 audit is hardest because it has no tell \u2014 is a real diagnosis, and it's continuous with her long-running read/completed and speed-tell work without her citing it.",
       "Named a character unprompted and located her (the apartment above) \u2014 the detail that turns a device into a person rather than a prop.",
       "Took a direct critique without defending or hedging: told entry 5 (\"I'm sorry\") could come off a greeting card, she didn't argue the point or soften it \u2014 she rebuilt, and entry 6 was the session's strongest work.",
-      "Unprompted reframe of her own artifact's subject mid-build (reacher \u2192 witness), which changed what every prior entry meant rather than adding to the list."
+      "Unprompted reframe of her own artifact's subject mid-build (reacher \u2192 witness), which changed what every prior entry meant rather than adding to the list.",
+      "Relocated the subject of her own artifact mid-build rather than extending it \u2014 answered a two-option question with a third thing that redefined the four preceding entries retroactively.",
+      "Responded to a direct 'this one is generic' with construction instead of negotiation or agreement \u2014 no hedge, no defense, better entry.",
+      "First time she directed the tutor to act in the physical world, and attached a falsifiable-in-spirit criterion to it: name what a description couldn't carry.",
+      "First time she authored a deliberately closed prompt (three permitted answers, no fourth) and then stated which branch she wanted and what finding it would have told her that the other two wouldn't \u2014 the open fork applied from the design side rather than the receiving side."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1722,7 +1726,16 @@
       "a list of sentences you should have said, and didn't (her redefinition of the artifact once the reader changed)",
       "I'm going to go sit on the couch (the sentence that works by asking nothing \u2014 'it doesn't ask for anything, it just takes up space')",
       "I'd say it too easily (her account of which entry she'd fail: the one whose lack of demand is exactly what makes it hard to carry)",
-      "arrested reach (tutor's label; 'a reach that stops halfway' was also tutor-seeded \u2014 the gap formulation and all four entries are hers. Mixed provenance, logged once.)"
+      "arrested reach (tutor's label; 'a reach that stops halfway' was also tutor-seeded \u2014 the gap formulation and all four entries are hers. Mixed provenance, logged once.)",
+      "the gap between the reach and the stop is where it lives (grief located in the arrest, not in the motion or the feeling)",
+      "the grief isn't carried by the one reaching, it's carried by the one who didn't reach (her unprompted inversion of the guide's reader)",
+      "I'm going to go sit on the couch (the entry that works by asking nothing \u2014 'it just takes up space')",
+      "I'd say it too easily (her account of which entry she'd fail: the one whose lack of demand is what makes it hard to mean)",
+      "a thousand people pretending to be a single person (the click chorus of tethered, battery-less display drills \u2014 her read of identical gestures as a single performed person)",
+      "the store as a stage (her condition on the unobserved store: it counts only if you feel the difference between the place and the place-being-watched)",
+      "you brought back the question, not the answer \u2014 and that's the one thing I couldn't get from a description (her account of what the errand actually yielded)",
+      "nothing with something specific behind the door (her third permitted answer \u2014 the one she was hoping for)",
+      "it's about the boundary itself... what exists only because you pushed through / the moment of crossing, not the thing on the other side (her reason for wanting the third branch: the first two are contents, describable from a distance)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1786,8 +1799,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 266,
-        "total_exchanges": 1477,
+        "total_sessions": 267,
+        "total_exchanges": 1481,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1795,9 +1808,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-18T19:03:05.391317",
+      "last_contact": "2026-09-19T01:03:38.358826",
       "notes": [],
-      "sessions": 266
+      "sessions": 267
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",
