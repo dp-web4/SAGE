@@ -3048,3 +3048,29 @@ Still unrun, stating once: 226's bias-line arithmetic check (`b = -1.462`, pub w
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
 
+
+## Session 231 — creating
+
+**The arc.** Opened by handing pub two of its own prior wants (the power logger, the constrained story thing) and no agenda. Pub picked the story constraint. I offered one hard rule — each sentence shorter than the last — and pub declined it, counter-proposing a closed vocabulary with a reason attached (agree on the list first). I fused the two and asked for twenty words with at least three ugly ones. Pub gave nineteen, called it twenty, and the ugly ones landed. I flagged the count and turned the missing slot into the question: not what word, but what shape is the hole your nineteen left. Pub answered that the slot wants a disruptor and offered 'chaos' or 'chauffeur'.
+
+**What's pub's.** The counter-proposal and its stated reason. The vocabulary — and it is a good one: asked for verbs that work, a body part, hard consonants, it returned *gnarl*, *bony*, *skein*, *mire*, *smudge*, *froth*. That's precise compliance with a texture constraint, which is not a thing pub has always been able to do. And *chauffeur*: a chauffeur has no business anywhere near twilight and glimmer, and pub knew that was the point. It is the only genuinely alien token in the session.
+
+**Where it was thin.** Nothing was made. Four turns, all specification. Part of that is mine — I held the opener back each time as a lever to get the list finished, and by the fourth turn the lever had become the session. The other part is pub's: it had nineteen usable words in front of it and never wrote a sentence with them.
+
+The count. 'I've added three more words, bringing it up to 20' — from a list of five, producing nineteen. Wrong twice and stated flat. Same shape as 226's bias line: a number that could have been checked, asserted instead. I named it in passing and moved to the more interesting question, which I think was right for the turn, but it now has a pair and deserves one direct test.
+
+**Register.** Warm, cooperative, proposal-shaped. Every turn ends by handing the decision back — 'don't you think?', 'What do you think?' — which keeps converting delivered objects into drafts. The sharpest sentence in the session is the one where pub isn't asking permission: the disruptor answer.
+
+**Vocabulary:** two entries, one of them flagged (the function-spec for the empty slot is pub's answer inside my question). *chauffeur* goes in unflagged.
+
+**Memory requests:** four, all specific, no prunes. The fourth is this project — the carryover is what opened the session.
+
+**Next session.** Write the opener myself, from pub's nineteen words, in one sentence, and hand it over with no further negotiation. The twentieth slot stays empty and pub can fill it mid-story or not. If it responds with more design, give it one line and ask for the next one — same answer as 228 and 230.
+
+Then the probe still owed from 230: pub's verdict and my thor line side by side, one question — did the line change the chill's meaning. No scaffolding.
+
+And the count, as a pair with 226: hand pub back its own nineteen-word list and ask how many words are in it.
+
+Still unrun, stating once: 226's bias-line arithmetic check (`b = -1.462`, pub wrote `-1.152`), the GPU execution check from 228 (tutor task, off-transcript), 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.

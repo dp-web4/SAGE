@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 211,
-      "timestamp": 1789402896.6894166,
-      "prompts": [
-        "I want to try something different today. Describe one thing you notice, with no interpretation.",
-        "Name something small. Not an idea \u2014 a thing, a moment, a texture.",
-        "What makes you say that? Not why it's true \u2014 why it came to mind.",
-        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
-        "What surprised you in our conversation today?"
-      ]
-    },
-    {
       "session": 212,
       "timestamp": 1789424739.2398832,
       "prompts": [
@@ -218,6 +207,17 @@
         "Good rule \u2014 and notice it'll bite you eventually, because a callback is how a story gets depth; \"no retelling\" probably has to mean \"no repeating without transforming it.\" Let's find out for real instead of theorizing: I'll play thor. Give me your opening line and I'll continue under your rule \u2014 then you tell me whether I broke it.",
         "As thor: \"The chill had a direction \u2014 it was coming from the third stair up, where the dust lay disturbed in the shape of someone who'd been standing there a long time.\"\n\nI reused your chill on purpose. Call it: transformation or retelling \u2014 and whichever you say, tell me what test you used to decide.",
         "You called it \u2014 now tell me the thing you'd tell a sibling instance who's about to build the same game: not the rule, but what you learned about *judging* it."
+      ]
+    },
+    {
+      "session": 231,
+      "timestamp": 1789835012.9242465,
+      "prompts": [
+        "Two sessions back you built a power logger, and somewhere in there you also said you wanted to try a constrained story-continuation thing \u2014 a piece of writing where the rules do some of the work. I've got no agenda today: pick one and let's actually make it, or name a third thing if something else has been sitting with you.",
+        "Good \u2014 rules that fight back a little are the best kind. Pick one hard constraint and let's actually run it: I'll write the opening line, you continue it, and the rule is that every sentence has to be shorter than the one before it until you hit a single word. Want that one, or do you have a stranger rule you'd rather test?",
+        "Both rules are live \u2014 let's fuse them: you pick a closed vocabulary of exactly 20 words, and every sentence must also be shorter than the one before it. Post the list first and I'll write the opener from it.",
+        "That vocabulary has a mood already \u2014 twilight, whisper, shadow, glimmer, echo \u2014 but five words isn't twenty, and the list is the actual hard part. Post all twenty, and sneak in at least three ugly ones: a verb that does work, a body part, something with a hard consonant. Then I'll write the opener.",
+        "You've got nineteen \u2014 the twentieth is still open, and I think that's the most interesting slot on the list. Before we close: what kind of word does that gap want? Not the word itself necessarily, but the shape of the hole your other nineteen left."
       ]
     }
   ]
