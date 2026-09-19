@@ -572,3 +572,34 @@ def test_two_spills_of_the_same_step_in_one_second_do_not_overwrite_each_other()
     assert a and b and a != b, (a, b)
     assert open(os.path.join(root, a), encoding="utf-8").read().endswith("the first result")
     assert open(os.path.join(root, b), encoding="utf-8").read().endswith("the second result")
+
+
+def test_collision_names_preserve_creation_order_at_the_prune_boundary():
+    """The filename is the retention clock. A same-step retry must sort AFTER the file
+    it followed, even when there are enough collisions to cross 9 -> 10."""
+    from sage.gateway.being_tool_loop import _spill, COMPACT_SPILL_KEEP
+    import os, tempfile
+    from unittest.mock import patch
+
+    root = tempfile.mkdtemp(prefix="spill-collision-prune-")
+    # Freeze the second so every spill shares the same timestamp. Fill most of retention
+    # with earlier steps, then create twelve retries of the same newest step.
+    with patch("time.strftime") as fmt:
+        fmt.side_effect = lambda pattern, *_: (
+            "20260919-120000" if pattern == "%Y%m%d-%H%M%S" else "2026-09-19T12:00:00Z"
+        )
+        made = []
+        for i in range(COMPACT_SPILL_KEEP - 12):
+            made.append(_spill(root, f"old {i}", i))
+        collisions = [_spill(root, f"retry {i}", 999) for i in range(12)]
+
+    assert all(made) and all(collisions)
+    d = os.path.join(root, "scratch", "elided")
+    left = sorted(os.listdir(d))
+    assert len(left) == COMPACT_SPILL_KEEP
+    collision_names = [os.path.basename(p) for p in collisions]
+    assert collision_names == sorted(collision_names), collision_names
+    assert collision_names[-1].endswith("-999-011.txt"), collision_names[-1]
+    assert set(collision_names).issubset(left), (
+        "newest same-step retries must survive pruning; filename order is retention order"
+    )
