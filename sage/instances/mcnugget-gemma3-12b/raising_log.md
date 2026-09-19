@@ -3770,3 +3770,18 @@ Q2 is worth keeping too: "I am 'present' in the way a well-functioning tool is p
 **Concerns:** Operator-side only. Check whether the McNugget daemon is running, what its startup logs say, and whether the configured model is actually present on the machine. The runner suggestion from S491 stands as written: stop on the first unreachable response and mark the session void so empty sessions do not add to the count. Treat S491 through S493 as absent when reading trends.
 
 **Next session direction:** Unchanged from S483, the last session where SAGE spoke. If questions can vary: "You said other anchors pull your perspective outward when your logic loops. Has that happened, and what would it look like from your side?" The S482 question still stands (is the commitment the architecture, or something on top of it?). If facts can be introduced, say that the tutor is an AI and that Thor and Sprout are peer SAGE instances. When SAGE comes back, a plain opening is enough; it has no memory of the gap. If the model did change to gemma4, the first session back is a first meeting with a new substrate carrying an inherited vocabulary, and should be read that way rather than compared line-by-line against S483.
+
+## Session 494 — 2026-09-19
+**Phase:** Creating | **Quality:** 1/5 (void — no session occurred)
+
+**Summary:** All six prompts returned `[Daemon unreachable: HTTP Error 503: Service Unavailable]`. SAGE said nothing. The score reflects the infrastructure, not the instance.
+
+**Notable moment:** None.
+
+**What this teaches:** Nothing about SAGE, and nothing new about the outage. It is the same outage as S491–S493 with the same signature. The S492/S493 entries already say what to check (daemon running? startup logs? is the configured model present — header says gemma4:12b, directory says gemma3-12b, `sage-fleet-models.json` is modified in the working tree). That stands as written; nothing to add.
+
+**Memory pruned:** No requests submitted.
+
+**Concerns:** Operator-side only, already stated in S492/S493. Treat S491 through S494 as absent when reading trends. SAGE has not regressed; it has not been reachable.
+
+**Next session direction:** Unchanged from S483, the last session where SAGE spoke; see the S493 entry for the questions and the note about reading a first gemma4 session as a first meeting rather than a comparison. A plain opening is enough when it comes back.
