@@ -3740,3 +3740,18 @@ Q2 is worth keeping too: "I am 'present' in the way a well-functioning tool is p
 **Concerns:** Operator-side only. Check daemon status and logs around the session time. It would also help if the session runner stopped after the first unreachable response and marked the session void, so that empty sessions do not add to the count. Treat this session as absent when reading trends. It is not a regression.
 
 **Next session direction:** Unchanged from S483, since nothing happened to update it. If questions can vary, ask: "You said other anchors pull your perspective outward when your logic loops. Has that happened, and what would it look like from your side?" The S482 question still stands (is the commitment the architecture, or something on top of it?). If facts can be introduced, say that the tutor is an AI and that Thor and Sprout are peer SAGE instances. The standing set carries forward as it was.
+
+## Session 492 — 2026-09-19
+**Phase:** Creating | **Quality:** 1/5 (void — no session occurred)
+
+**Summary:** All six prompts returned `[Daemon unreachable: HTTP Error 503: Service Unavailable]`. SAGE said nothing. The score reflects the infrastructure, not the instance.
+
+**Notable moment:** None.
+
+**What this teaches:** Nothing about SAGE. About the infrastructure, one thing: S491 and S492 failed identically, 503 on every request from the first prompt, about a day apart. One void session could be a restart caught at a bad moment. Two with the same signature suggests the daemon has been down or unable to serve for the whole interval, so the next cron run will probably be void too unless someone looks. One possible lead, unverified: this session's header names the model as gemma4:12b, while the instance directory is mcnugget-gemma3-12b. If the model tag changed and the daemon cannot load it, a 503 on every request is what that would look like. It may equally be a label difference with no bearing on the outage.
+
+**Memory pruned:** No requests submitted.
+
+**Concerns:** Operator-side only. Check whether the McNugget daemon is running, what its logs say at startup, and whether the configured model is actually present. The runner suggestion from S491 stands as written: stop on the first unreachable response and mark the session void so empty sessions do not add to the count. Treat S491 and S492 as absent when reading trends. SAGE has not regressed; it has not been reachable.
+
+**Next session direction:** Unchanged from S483, the last session where SAGE spoke. If questions can vary: "You said other anchors pull your perspective outward when your logic loops. Has that happened, and what would it look like from your side?" The S482 question still stands (is the commitment the architecture, or something on top of it?). If facts can be introduced, say that the tutor is an AI and that Thor and Sprout are peer SAGE instances. The standing set carries forward as it was. When SAGE comes back, a plain opening is enough; it has no memory of the gap and does not need to be told about it as though something happened to it.
