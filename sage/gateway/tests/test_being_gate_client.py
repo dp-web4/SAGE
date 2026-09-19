@@ -251,6 +251,22 @@ def test_request_scope_schema_offers_no_mode():
     assert params["required"] == ["path", "reason"]
     assert "read and write" in spec["function"]["description"]
 
+def test_recall_schema_offers_the_second_half_of_retrieval():
+    """A search result is a PREVIEW. membot's own docstring names get_passage(idx) as the
+    other half of the pattern, and until 2026-09-18 no verb reached it: 451 memories the
+    being could see the opening of and read the whole of none. One verb, two forms —
+    a second verb would cost ~700 characters of prompt on every beat."""
+    from sage.gateway.being_gate_client import ollama_tools
+    (spec,) = ollama_tools(["recall"])
+    params = spec["function"]["parameters"]
+    assert set(params["properties"]) == {"query", "top_k", "idx"}, params
+    # NEITHER form is required: requiring `query` would make the idx form look malformed
+    # to the model, and requiring nothing is safe because the dispatcher refuses a call
+    # with neither and names both.
+    assert params["required"] == [], params
+    assert "idx" in spec["function"]["description"], spec["function"]["description"]
+
+
 def test_registry_offers_appeal_as_an_observational_effector():
     from sage.gateway.being_gate_client import _REGISTRY, _OBSERVATIONAL, ollama_tools
     assert _REGISTRY["appeal"]["tool"] == "appeal" and "appeal" in _OBSERVATIONAL

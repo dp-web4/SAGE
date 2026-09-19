@@ -742,11 +742,18 @@ _TOOL_SCHEMAS = {
             {"to": "the conversation id, shown beside each conversation in your state",
              "text": "what you want to say"},
             ["to", "text"]),
+    # Two forms, one verb. A separate verb for the second half of membot's own retrieval
+    # pattern would cost ~700 characters of prompt every beat; an extra optional argument
+    # costs ~150. required is EMPTY because neither form is the required one — the
+    # dispatcher refuses a call with neither and names both.
     "recall": ("Search your long-term memory (semantic search over everything you have "
                "remembered). Use it before deciding what to do; use it when something "
-               "feels familiar.",
-               {"query": "what you are trying to remember", "top_k": "how many results (default 5)"},
-               ["query"]),
+               "feels familiar. Results are PREVIEWS: each carries (idx:N), and calling "
+               "recall again with that idx gives you the whole memory.",
+               {"query": "what you are trying to remember",
+                "top_k": "how many results (default 5)",
+                "idx": "instead of a query: the (idx:N) of one result, to read it in full"},
+               []),
     "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
                     "is renamed to <name>.retired-<date> with a dated header saying why; nothing "
                     "is lost and you can still read it. Use it when something you wrote has been "
