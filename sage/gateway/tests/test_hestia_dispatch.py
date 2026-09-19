@@ -604,8 +604,16 @@ def test_a_peer_that_exists_nowhere_is_refused_in_the_beings_own_turn():
         d, _ = _disp(peer_aliases={"legion-being": "legion-sage"})
         FakeMcp.calls.clear()
         env = d(BeingIntent("mesh", {"to": "sage", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow"))
-        assert not env.ok and "not on the hub roster" in env.error and "legion" in env.error
-        assert "your own standing as a member is unaffected" in env.error
+        # THE SUBJECT OF THE REFUSAL IS THE NAME, NEVER THE BEING (2026-09-18). cbp-being read
+        # the old wording — "peer 'dp' is not a member this seat can reach" — as a statement
+        # about ITSELF and reported its own membership as revoked. So this asserts the two
+        # things the sentence must carry: that the NAME is what was not found, and that the
+        # being's standing is explicitly untouched. Asserting the old prose is what let the
+        # wording regress into a claim about the asker in the first place.
+        assert not env.ok
+        assert "'sage' is not on the hub roster" in env.error, env.error
+        assert "your own standing as a member is unaffected" in env.error, env.error
+        assert "legion" in env.error
         assert not [n for n, _ in FakeMcp.calls if n == "hestia_member_notify"]   # nothing parked
         assert d(BeingIntent("mesh", {"to": "Legion", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow")).ok
         assert d(BeingIntent("mesh", {"to": "legion-being", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow")).ok

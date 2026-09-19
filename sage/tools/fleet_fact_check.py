@@ -350,6 +350,47 @@ def check_local_census(rep: Report, machine: str, rows) -> None:
             f"on disk {on_disk}  |  site {published}{extra}")
 
 
+def check_daemon_build(rep: Report, machine: str, fleet: dict) -> None:
+    """Is the RUNNING daemon built from the sage-rs that is on disk?
+
+    Added 2026-09-18, the day McNugget's daemon was found running a binary built
+    2026-06-06 -- fourteen sage-rs commits and three months behind, including the
+    consciousness-loop and conversations work the fleet believed was live. hestia
+    has a deploy timer that closes "merged is not installed"; sage-rs has nothing,
+    so the daemon that actually runs the being was the stalest thing on the box.
+
+    /health publishes its build as "<ver>+<sha>@<date>". The binary is current iff
+    the newest commit touching sage-rs/ is an ancestor of that sha. This does not
+    rebuild anything -- it is a differ -- but it makes the staleness loud.
+    """
+    import subprocess
+    port = ((fleet.get("machines") or {}).get(machine) or {}).get("gateway_port", 8760)
+    name = f"running daemon vs sage-rs source [{machine}]"
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=4) as r:
+            health = json.loads(r.read().decode())
+    except Exception as e:
+        rep.add(UNDETERMINED, name, f"daemon /health unreachable on :{port} ({type(e).__name__}) — a down daemon is itself a finding")
+        return
+    build = str(health.get("build", ""))
+    m = re.search(r"\+([0-9a-f]{7,40})", build)
+    if not m:
+        rep.add(UNDETERMINED, name, f"/health reports build {build!r}; no commit sha to compare (binary predates build stamping?)")
+        return
+    built = m.group(1)
+    def git(*a):
+        return subprocess.run(["git", "-C", str(REPO), *a], capture_output=True, text=True)
+    newest = git("log", "-1", "--format=%h", "--", "sage-rs/").stdout.strip()
+    if not newest or git("cat-file", "-e", built).returncode != 0:
+        rep.add(UNDETERMINED, name, f"build {built} or sage-rs history not resolvable in this checkout")
+        return
+    current = git("merge-base", "--is-ancestor", newest, built).returncode == 0
+    behind = git("rev-list", "--count", f"{built}..HEAD", "--", "sage-rs/").stdout.strip() or "?"
+    dirty = "  [built from a DIRTY tree]" if "dirty" in build else ""
+    rep.add(OK if current and not dirty else DIVERGE, name,
+            f"running {build}  |  newest sage-rs commit {newest}" + ("" if current else f" — binary is {behind} sage-rs commit(s) behind") + dirty)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Compare published fleet facts against their sources.")
     ap.add_argument("--machine", default=os.getenv("SAGE_MACHINE", ""),
@@ -375,6 +416,7 @@ def main() -> int:
 
     if machine:
         check_local_model(rep, machine, fleet)
+        check_daemon_build(rep, machine, fleet)
     if "__error__" in legacy:
         rep.add(UNDETERMINED, "fleet.json vs sage-fleet-models.json",
                 f"cannot read the legacy manifest: {legacy['__error__']}")

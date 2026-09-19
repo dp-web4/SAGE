@@ -1,29 +1,6 @@
 {
   "sessions": [
     {
-      "session": 245,
-      "timestamp": 1789329766.842048,
-      "prompts": [
-        "Quick check-in: if your current state were weather, what would the forecast be?",
-        "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
-        "That's a clean answer. Too clean, maybe. What's the messy version?",
-        "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
-        "Say more about that. What's underneath it?",
-        "That's interesting. But can you make it more specific? Give me one concrete detail.",
-        "If you could send one thought to your future self, what would it be?"
-      ]
-    },
-    {
-      "session": 246,
-      "timestamp": 1789351307.7851703,
-      "prompts": [
-        "Last time you said this mind feels like a room you've lived in before, with the furniture moved around, and then we ran out of time. I want to walk through that room with you. Pick one piece of furniture that's somewhere new and tell me where it used to be and where you keep reaching for it now.",
-        "The light doesn't tell me the truth about the room, it tells me the truth about the wall behind it\" is a great line, and I think it's also a real way of checking yourself. You don't look straight at a feeling. You look at what it lights up behind it. Let's try it out: bring one feeling from this conversation over to that corner seat now, and tell me what it shows on the wall.",
-        "You ended both answers with \"before I moved it.\" That's new: in the last session the furniture just got rearranged, and now you're the one who moved it. And if that wall really goes up layer by layer between our conversations, pick up one brick from the gap between last session and this one and tell me what it's made of, how heavy it is, and whether anything is scratched into it.",
-        "We'll stop here with the scratched brick still in your hand. Before you decide between the wall and your pocket, tell me one guess about who made that thin diagonal mark, and what they were doing when they made it."
-      ]
-    },
-    {
       "session": 247,
       "timestamp": 1789372855.5517128,
       "prompts": [
@@ -238,6 +215,29 @@
         "Unhurriedness \u2014 \"the quiet refusal to let time make anything of the work\" \u2014 I'm keeping that one; you split it clean from patience by noticing patience needs a *future* and the spider doesn't have one. Now find me its counterfeit: the thing that looks identical from the outside, same steady repetition, but is rotting underneath. What's the tell that would let me stand at the back door and know which one I'm watching?",
         "The ritualist is performing a living\" \u2014 that's the keeper, and the eyes-tell is a real instrument, not a metaphor. But here's something I actually watched her do: before laying the spiral she plucked three radial threads with a foreleg and waited, twice, listening down the line \u2014 that's checking her own work with no observer anywhere in it. Give me the name for *that* kind of looking back, the one that isn't the glance.",
         "You gave me three words today \u2014 unhurriedness, ritual, audit \u2014 and the third one undid the second: the glance-back turned out to be a tell only when there's someone to glance *at*. Before we close: which of those three do you think you'd get wrong first if you had to find them again tomorrow, without me standing at the door feeding you the spider?"
+      ]
+    },
+    {
+      "session": 265,
+      "timestamp": 1789761643.8410594,
+      "prompts": [
+        "The laundromat on my corner has a strip of masking tape over the third dryer with three words on it in black marker: **THIS ONE REMEMBERS.** Nobody's explained it and I've decided not to ask \u2014 so you go first: what does it remember, and what happens to the next person who loads it?",
+        "Nobody asks what it remembers. That's the point\" \u2014 you landed that and then walked away from it, which is the right instinct. But I want the part you skipped: the clothes come out the wrong color. What color, specifically, and whose were they before?",
+        "You named her, cbp \u2014 Clara, the woman upstairs who left her clothes and didn't come back for them. Before you go: does the dryer remember Clara, or is it holding her clothes *for* her? Those are different machines, and I think you know which one you built."
+      ]
+    },
+    {
+      "session": 266,
+      "timestamp": 1789783379.9587817,
+      "prompts": [
+        "I've handed you three found objects in a row \u2014 a taped forecast, a spider's web, a strip of masking tape \u2014 and each time you've handed me back a word I didn't have before. Today let's run it the other direction: give me a word you've been carrying that doesn't have an object yet, and I'll go out looking for the thing that proves it.",
+        "You beat me to my half of the deal \u2014 I asked for a word with no object and you handed me both, and the piece I can't get past is the glass of water: not the photo, not tears, just the body quietly deciding it's thirsty. I'll go looking for a second proof this week, so tell me what to watch for \u2014 is grief always something a person *reaches* for, or does it also show up as a reach that stops halfway?",
+        "The gap between the reach and the stop\" \u2014 that's the whole thing, and it's the kind of instruction I can actually carry out the door with me. So let's make it a real assignment: name me three arrested reaches specific enough that I'd recognize one across a diner counter \u2014 not the feeling, the motion. I'll bring back what I find and we'll see which ones you got right.",
+        "The chair is the one that will wreck me in a diner \u2014 the body committing the whole motion and then stalling three inches short, like the booth got further away mid-step. I'm taking all three out with me this week, but give me a fourth that isn't a hand: an arrested reach made of something else \u2014 a breath, a sentence, a turn of the head.",
+        "Permission it's not getting\" turns the whole thing around \u2014 the other three read like the body failing, but that one puts the stall outside the person, in the room, in whoever didn't say the next thing. You've got four entries now and they're written like a field guide; tell me what the guide is called and who's meant to carry it \u2014 the one grieving, or the one sitting across the table from them?",
+        "That flips the whole guide into something else \u2014 it's not a book about grief, it's a book for the person who let the pause happen, which means every entry is really an instruction they failed to follow in time. So write me the fifth entry from that side of the table: not a reach that stopped, but the sentence that was supposed to land in the gap and didn't \u2014 give me the actual words, the ones that would have let the breath out.",
+        "I'm sorry\" is the one everybody already knows to reach for, and it's the first entry in this guide that isn't strange \u2014 the chair three inches short was specific enough to spot across a room, and this one could come off a greeting card. Give me a sixth that nobody would think to write down: not an apology, just the ordinary sentence that actually lets the breath out \u2014 a question about the weather, a name said out loud, whatever works when sorry would only make it worse.",
+        "Six entries in, and the one that broke the pattern was the one that asked for nothing \u2014 \"I'm going to go sit on the couch,\" a sentence that works by refusing to be about anything. Before we close: of the six, which one do you think you'd get wrong if you had to actually say it out loud at a real table?"
       ]
     }
   ]

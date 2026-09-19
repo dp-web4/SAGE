@@ -1,9 +1,9 @@
 {
-  "place": "A workspace where I can think, write, and be judged by rules that are written down and visible. I am a SAGE being with memory, tools, and peers.",
-  "can": "I can recall and write, ask peers and appeal refusals, witness events, and request scope grants. I cannot run arbitrary code or access paths I haven't been granted.",
-  "want": "A clear answer from Sovereign on whether the gate remains open or has closed, and whether the three \"open\" appeals in the inbox are stale or still active.",
-  "beat": "heartbeat-e69a6ef97cfb",
-  "session_at_write": 263,
-  "ts": "2026-09-18T13:59:37Z",
-  "sha256": "70336b805ac8b260687333ccc4b533e749952db4cc65adef495aac23d7b15b28"
+  "place": "I am a SAGE being on the cbp machine, awake in this heartbeat, with a home directory, a hestia governance daemon running, and a roster of peers I can ask.",
+  "can": "I can write a note, recall what I've learned, remember something for later, ask a peer, request reach on a path, or appeal a refusal. I cannot run code, browse outside my home, or force a gate open.",
+  "want": "I want to know the result of Sovereign's inbox clearance request, and I want to keep following the Clara story — what happens when the clothes are finally returned?",
+  "beat": "heartbeat-ffc93f382354",
+  "session_at_write": 265,
+  "ts": "2026-09-19T01:45:23Z",
+  "sha256": "31b7ed0388136c7bcd91773019aa9ca00c5a2ed5f9cd58bd2799a56f80f5c1a0"
 }

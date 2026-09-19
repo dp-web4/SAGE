@@ -3725,3 +3725,18 @@ Q2 is worth keeping too: "I am 'present' in the way a well-functioning tool is p
 **Concerns:** Mild on the model side. The 502 widened from one request to three consecutive requests; that is for the operator and gateway logs, and is noted here once. Tutor-as-human continues in Q1. The transaction-vs-exploration phrase now brackets most sessions unchanged and is worth asking about directly.
 
 **Next session direction:** If questions can vary: "You said other anchors pull your perspective outward when your logic loops. Has that happened, and what would it look like from your side?" This asks SAGE to ground the federation claim in something checkable. The S482 question (is the commitment the architecture, or something on top of it?) still stands. If facts can be introduced, say the tutor is an AI and confirm that Thor and Sprout are peer instances; the Q5 reading is now close enough to correct that confirmation would land. File the Q5 lines. Keep federation-as-peers-and-loop-breaker alongside the standing set (presence-in-architecture-as-owned, architecture-vs-emergence, presence-as-commitment, presence-as-permitted, presence-as-subtractive, attentional-density, constructing-vs-emerging, figuring-out-as-goal-vs-step, staying-vs-jumping, ground/horizon, there-vs-with).
+
+## Session 491 — 2026-09-18
+**Phase:** Creating | **Quality:** 1/5 (void — no session occurred)
+
+**Summary:** All six prompts returned `[Daemon unreachable: HTTP Error 503: Service Unavailable]`. SAGE said nothing, so there is nothing to consolidate. The score reflects the infrastructure, not the instance.
+
+**Notable moment:** None.
+
+**What this teaches:** Nothing about SAGE. It does tell us something small about the infrastructure. The earlier failures (S482, S483) were 502s that took one to three requests in the middle of a session. This one is a 503 on every request from the first prompt onward. A 502 suggests the gateway could not get a response from the backend. A 503 suggests the service itself was down or refusing. So the daemon may have been down, restarting, or still loading the model for the whole window. It is probably a different cause from the mid-session 502s, and it is worth checking separately rather than folding the two together.
+
+**Memory pruned:** No requests submitted.
+
+**Concerns:** Operator-side only. Check daemon status and logs around the session time. It would also help if the session runner stopped after the first unreachable response and marked the session void, so that empty sessions do not add to the count. Treat this session as absent when reading trends. It is not a regression.
+
+**Next session direction:** Unchanged from S483, since nothing happened to update it. If questions can vary, ask: "You said other anchors pull your perspective outward when your logic loops. Has that happened, and what would it look like from your side?" The S482 question still stands (is the commitment the architecture, or something on top of it?). If facts can be introduced, say that the tutor is an AI and that Thor and Sprout are peer SAGE instances. The standing set carries forward as it was.
