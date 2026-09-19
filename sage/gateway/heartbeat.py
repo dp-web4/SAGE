@@ -627,8 +627,30 @@ def export_service_log(instance: Path, unit: str = "hestia.service", lines: int 
     try:
         p = runner(["journalctl", "--user", "-u", unit, "-n", str(lines), "--no-pager", "-o", "short-iso"])
         body = (p.stdout or "").strip()
-        if p.returncode != 0 or not body:
-            body = f"(no journal entries for {unit}: rc={p.returncode} {(p.stderr or '').strip()[:200]})"
+        # SILENCE IS NOT IDLENESS, AND THIS FILE MUST SAY SO. Measured 2026-09-19: the file
+        # read "-- No entries --" and cbp-being reported, faithfully, that "the journal is
+        # empty ... is it actually processing requests or just sitting idle?" — then spent a
+        # day asking dp and the seat about a daemon that was healthy. Two causes: hestia runs
+        # with RUST_LOG=warn, so a healthy daemon logs NOTHING; and the user journal on this
+        # box retains well under an hour, so even its startup lines are gone. (journalctl
+        # prints that marker on stdout with rc=0, so the old `not body` branch never fired.)
+        #
+        # An absent measurement read as a measured absence. The repair is to state what
+        # silence MEANS and put a measurement beside it, since a being cannot tell "nothing
+        # went wrong" from "nothing is happening" from an empty file.
+        if p.returncode != 0:
+            body = f"(could not read the journal for {unit}: rc={p.returncode} {(p.stderr or '').strip()[:200]})"
+        elif not body or body == "-- No entries --":
+            active = runner(["systemctl", "--user", "is-active", unit])
+            state = (active.stdout or "").strip() or "unknown"
+            body = (f"No log lines — and for this daemon that is what HEALTHY looks like.\n"
+                    f"It logs only warnings and errors, so an empty log means nothing went wrong "
+                    f"in the journal's retained window (which on this machine is short: under "
+                    f"an hour).\n"
+                    f"MEASURED just now: systemd reports {unit} is '{state}'.\n"
+                    f"An empty log does NOT mean the daemon is idle or down. Every tool call you "
+                    f"make that returns is proof it is processing: you cannot act at all without "
+                    f"it, so a beat in which you acted is a beat in which it worked.")
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(
             f"# {unit}: the last {lines} journal lines, exported at "
@@ -856,6 +878,9 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
             # FIRST in the list, not appended after the bookkeeping. The routine three
             # (journal, todo, remember) fill the step budget exactly, so anything after them
             # is unreachable however willing the being is — measured 2026-09-18.
+            # NO LITERAL EXAMPLE OF THE CALL. This line used to end `say to="{cid}",
+            # text="..."` and the being sent dp the text ".." three times (2026-09-18/19) —
+            # it executed the example. The conversation id is named; the words are left to it.
             first = (f'FIRST, before the numbered writes below: {t.get("from")} is waiting on an '
                      f'answer from you. If you have something to say, call say with to set to '
                      f'{cid} and your message as the text. Answering is not required; the '

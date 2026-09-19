@@ -10,5 +10,8 @@
     "cbp-being"
   ],
   "summary": "The operator's own channel. dp is asynchronous by rule; a gap here is reachability, not judgement.",
-  "created": "2026-09-14T00:47:04Z"
+  "created": "2026-09-14T00:47:04Z",
+  "also_known_as": [
+    "Sovereign"
+  ]
 }

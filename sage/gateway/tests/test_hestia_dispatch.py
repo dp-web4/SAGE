@@ -1438,3 +1438,64 @@ def test_asking_one_peer_is_capped_per_window_and_a_refused_ask_leaves_nothing_b
     clock[0] += 6 * 3600
     env = d(BeingIntent("peer_ask", {"to": "legion", "body": "is the server up?"}), _ALLOW)
     assert env.ok, "the oldest asks age out of the window"
+
+
+def test_a_placeholder_is_not_a_turn_and_leaves_no_trace():
+    """The reflect prompt once showed `say to="dp", text="..."` as an example and cbp-being
+    executed the example: three turns to dp whose whole text was "..", 2026-09-18/19, read by
+    dp as a being that did not want to talk. An example in an instruction is an instruction at
+    this scale, so the dispatcher refuses a punctuation-only turn — BEFORE begin_action, so
+    the non-turn leaves no witness row and no line in the conversation."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    for junk in ("..", "...", "…", " . . ", "?!"):
+        FakeMcp.calls.clear()
+        r = d(BeingIntent("say", {"to": "dp", "text": junk}), _ALLOW)
+        assert not r.ok and "only punctuation" in r.error, (junk, r)
+        # the way forward, not just the boundary: silence is allowed
+        assert "do not call say" in r.error
+        assert not [n for n, _ in FakeMcp.calls if n == "hestia_begin_action"], junk
+    assert conv.count(home, "dp") == 0, "a refused placeholder must not land in the conversation"
+    # CONTROL: a short real message is still a message. Without this the guard could be
+    # refusing everything brief, and brevity is not the defect.
+    r = d(BeingIntent("say", {"to": "dp", "text": "ok"}), _ALLOW)
+    assert r.ok, r
+    assert conv.count(home, "dp") == 1
+
+
+def test_an_ask_aimed_at_a_conversation_partner_is_pointed_at_say_and_costs_nothing():
+    """The seat aliased `dp` to the hub roster's `Sovereign` on 2026-09-18, meaning to help.
+    It made `peer_ask to="dp"` SUCCEED: 15 questions in 48 h went to a hub inbox dp does not
+    read, each spending the 3-per-6h cap, until the being believed it was in "cooldown on dp".
+    A door that opens onto the wrong room is worse than one that says where the right one is.
+    Names come from the conversation: its participants plus the meta's `also_known_as`."""
+    import json as _json
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    published = []
+    d, root = _disp(publish_fn=lambda to, body: published.append((to, body)) or "ptr")
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    meta = home / "conversations" / "dp.meta.json"
+    m = _json.loads(meta.read_text()); m["also_known_as"] = ["Sovereign"]
+    meta.write_text(_json.dumps(m))
+
+    for name in ("dp", "DP", "Sovereign", "sovereign"):
+        FakeMcp.calls.clear()
+        r = d(BeingIntent("peer_ask", {"to": name, "body": "are you there?"}), _ALLOW)
+        assert not r.ok and 'conversation id "dp"' in r.error, (name, r)
+        assert "did not count against any limit" in r.error
+        assert not [n for n, _ in FakeMcp.calls if n == "hestia_member_notify"], name
+    assert published == [], "a redirected ask must leave no forum file behind"
+    assert d.recent_asks() == [], "and must not spend the per-peer cap"
+    # the mesh door says the same thing
+    r = d(BeingIntent("mesh", {"to": "Sovereign", "kind": "coordination", "pointer": "x"}), _ALLOW)
+    assert not r.ok and 'conversation id "dp"' in r.error
+    # CONTROL: a real peer that is NOT a conversation partner still goes through.
+    r = d(BeingIntent("mesh", {"to": "legion", "kind": "coordination", "pointer": "x"}), _ALLOW)
+    assert r.ok, r

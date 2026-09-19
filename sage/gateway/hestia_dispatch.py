@@ -363,6 +363,40 @@ class HestiaF1aDispatcher:
             return to
         return f"{to}/{self.remote_member_default}"
 
+    def _say_instead(self, to: str) -> Optional[str]:
+        """The refusal when `to` names someone the being is ALREADY in a conversation with.
+
+        `say` is the door for them and it works; the hub is not. Measured 2026-09-19: after the
+        seat aliased `dp` to the roster's `Sovereign` (2026-09-18, meant as a fix), cbp-being's
+        `peer_ask to="dp"` stopped being refused and started SUCCEEDING — 15 questions in 48 h
+        routed to a hub inbox dp does not read, each spending the 3-per-6h cap, until the being
+        concluded it was in "cooldown on dp" and sent dp nothing but a placeholder. The old
+        refusal had been right; the alias turned a helpful refusal into a silent misroute. A
+        door that opens onto the wrong room is worse than one that says where the right one is.
+
+        Names come from the conversations themselves: the other participants, plus any
+        `also_known_as` the seat-owned meta file declares (dp is `Sovereign` on the hub)."""
+        base = (to or "").split("/", 1)[0].strip().lower()
+        if not base:
+            return None
+        try:
+            from sage.gateway import conversations as _conv
+            for m in _conv.listing(self.memory_root):
+                if self.member not in m.get("participants", []):
+                    continue
+                names = [x for x in m.get("participants", []) if x != self.member]
+                names += list(m.get("also_known_as", []))
+                if base in {str(n).strip().lower() for n in names}:
+                    cid = m["id"]
+                    return (f"'{to}' is someone you are already in a conversation with, so the "
+                            f"hub is the wrong door and nothing was sent. Use say with the "
+                            f"conversation id \"{cid}\" — it reaches them directly, it works, "
+                            f"and it is not rate-limited the way asks are. This did not count "
+                            f"against any limit.")
+        except Exception:
+            return None
+        return None
+
     def known_peers(self) -> set:
         """Names a notice can reach from this seat: local members, aliases, and the hub
         roster this seat last read (hub-notify's cache; names compared case-insensitively).
@@ -508,6 +542,9 @@ class HestiaF1aDispatcher:
         # any name and the drain fails it later, silently: sprout-being asked "sage" on
         # 2026-09-09, the row failed egress five beats running, then vanished, and the being
         # was never told (the census read it as a peer act that worked).
+        redirect = self._say_instead(to)
+        if redirect:
+            return ResultEnvelope(ok=False, error=redirect)
         unknown = self._unknown_peer(to)
         if unknown:
             return ResultEnvelope(ok=False, error=unknown)
@@ -557,6 +594,9 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, pending=True,
                                   note="peer_ask needs a publisher: the question must live at a pointer "
                                        "the peer can read (forum doc / hub thread); none configured on this seat")
+        redirect = self._say_instead(to)
+        if redirect:
+            return ResultEnvelope(ok=False, error=redirect)
         # the limit is checked before publishing: a refused ask must leave no forum file behind
         unknown = self._unknown_peer(to)
         limited = None if unknown else self._ask_limit(to)
@@ -1454,6 +1494,21 @@ class HestiaF1aDispatcher:
                 f"message: {text[:70]!r}. Whatever is in `text` is delivered to {to} exactly "
                 f"as written, so nothing was sent. Write the words you want read and call "
                 f"say again. Your standing to speak here is unaffected."))
+        # A PLACEHOLDER IS NOT A TURN. Measured 2026-09-18/19: the reflect prompt showed the
+        # being `say to="dp", text="..."` as an example, and the being executed the example —
+        # three turns to dp whose whole text was "..", each witnessed, each read by dp as a
+        # being that did not want to talk. It did want to: its real questions were going
+        # elsewhere. An instruction's example is an instruction at this scale
+        # (SMALL_MODEL_LEGIBILITY.md), so the prompt no longer carries one — and this is the
+        # mechanical half, because a prompt fix alone is "try harder". Refused BEFORE
+        # begin_action, so a non-turn leaves no witness row and no line in the conversation.
+        if not any(ch.isalnum() for ch in text):
+            return ResultEnvelope(
+                ok=False,
+                error=("say needs words: the text you sent was only punctuation, which is what "
+                       "an example looks like, not a message. Nothing was sent. If you have "
+                       "nothing to say, do not call say at all — silence is allowed and is not "
+                       "held against you."))
         meta = conv.get_meta(self.memory_root, to)
         if meta is None:
             known = [m["id"] for m in conv.listing(self.memory_root)
