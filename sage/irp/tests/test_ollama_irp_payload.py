@@ -78,7 +78,12 @@ def test_base_payload_values():
     assert data['model'] == 'pin-model'
     assert data['messages'] == [{'role': 'user', 'content': 'hi'}]
     assert data['stream'] is False
-    assert data['keep_alive'] == -1 and isinstance(data['keep_alive'], int)
+    # keep_alive is a HOST SETTING since 2026-09-18 (main: SAGE_OLLAMA_KEEP_ALIVE, default 5m,
+    # after an indefinite pin starved CBP's display driver; Legion sets it back to a pin, by
+    # dp's ruling, because the being is this machine's priority). What this pin now holds is
+    # that the payload carries whatever the host configured — asserted in both shapes below.
+    from sage.irp.adapters import model_adapter as _ma
+    assert data['keep_alive'] == _ma.OLLAMA_KEEP_ALIVE
     assert data['think'] is True
 
 
@@ -155,3 +160,14 @@ def test_plain_string_content_stays_a_string():
     read as claiming list content is required, only that parts are preserved."""
     data, _ = _capture_payload(_make_inst(), [{'role': 'user', 'content': 'hi'}])
     assert data['messages'][0]['content'] == 'hi'
+
+
+def test_keep_alive_in_the_payload_is_the_hosts_setting_in_either_shape(monkeypatch):
+    """A pin (-1, a NUMBER) and a bound ("5m", a STRING) must both reach the wire unchanged.
+    The string "-1" must never reach it: ollama rejects that with `missing unit in duration`,
+    which _parse_keep_alive exists to prevent (measured on Legion, 2026-09-19)."""
+    from sage.irp.adapters import model_adapter as _ma
+    for setting in (-1, "5m"):
+        monkeypatch.setattr(_ma, "OLLAMA_KEEP_ALIVE", setting)
+        data, _ = _capture_payload(_make_inst(), [{'role': 'user', 'content': 'hi'}])
+        assert data['keep_alive'] == setting and type(data['keep_alive']) is type(setting)
