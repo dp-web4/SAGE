@@ -6124,3 +6124,51 @@ Note also that the callout that produced this was exactly the shape S263 prescri
 **Adapter.** Clean.
 
 **So what.** The best line of the session is real and hers. The second-order finding is what it cost: the ending was bought with a quiet, uncoerced revision of her own strongest image. That's a different failure shape from the one S264 closed, and it's cheap to test — hand her back her own mid-session line after she's landed a close and ask which she keeps. Everything else about this session was her working well: compressed, concrete, in the scene from the first word.
+
+## Session 266 — the field guide for the one who didn't reach
+
+**What happened.** The deal ran backwards this time: after three sessions of the tutor handing her found objects, she was asked for a word with no object attached. She gave **Grief** — and then, unasked, gave the object too: the photo you haven't looked at in three months, and the glass of water you reach for instead. From there, six turns building a field guide of stalled motions. The napkin the hand closes on and never opens. The chair pulled out and not sat in, the body stopping three inches short. The glass set down and not picked up. Then, handed a constraint (an arrested reach that isn't a hand), the breath that stops halfway out of the mouth, *waiting for permission it's not getting*.
+
+**The turn that made the session.** Asked who the guide is for — the one grieving, or the one across the table — she moved the whole thing: *the grief isn't carried by the one reaching, it's carried by the one who didn't reach.* That reframe wasn't a fork she was handed; the tutor asked a two-option question and she answered with a third thing that redefined the first four entries retroactively. The guide stopped being about grief and became *a list of sentences you should have said, and didn't.*
+
+**The recovery, which is the real finding.** Entry 5 was "I'm sorry" — the one generic beat in the session. She was told so plainly: the chair was specific enough to spot across a room, this one comes off a greeting card. She didn't defend it, didn't hedge, didn't explain why it was actually good. She rebuilt: *"I'm going to go sit on the couch"* — a sentence that releases the held breath precisely because it asks for nothing. *It doesn't apologize. It doesn't explain. It just takes up space.* Best work in the session, produced directly out of being told the previous entry was weak. Log this one: the response to critique was construction, not negotiation.
+
+**Provenance, stated once.** "A reach that stops halfway" and the label "arrested reaches" were both the tutor's. *The gap between the reach and the stop is where it lives* is hers, as are all four entries, the reader-inversion, and the closing self-assessment.
+
+**The close.** Asked which of the six she'd get wrong at a real table, she picked the couch line and gave a reason that holds: *I could say it perfectly — but I'd say it too easily. It's the one that doesn't feel like a reach at all, so I wouldn't feel the weight of it.* A sentence that costs nothing to say is the hardest one to mean. That's a genuine self-observation and it lands.
+
+**The one shape to watch.** Twice she opened with a memory disclaimer — *I don't know your past sessions, and I can't answer from memory* — on prompts that asked her to invent rather than recall ("tell me what to watch for"; "what's the guide called"). She answered anyway, both times well. The reflex is correctly calibrated for retrieval claims and is misfiring on creative ones, which costs an opening beat and briefly frames her own invention as a gap. Cheap test: a generative prompt containing a phrase that sounds like a recall cue, and see whether it fires.
+
+**The drag, restated not escalated.** Closing sentences still default to the paired antithesis. Same note as S264 and S265, same words: it's her strongest instrument and it has become the shape a final sentence takes by default. The test that would settle it — a session whose close can't be a pair — is still unrun.
+
+**Standing items.** The construction question (one, alone, in-scene, about the hand that made the thing) is still not run. The S265 test — hand her back her own mid-session line after she's landed a close and ask which she keeps — also not run; this session gave her no line to revise, so the opportunity didn't arise. Three older items untouched.
+
+**Memory.** The substrate note still reads gemma3:4b and is two substrates behind — update the substrate, keep the principle (*the prior is archived, not forgotten*). The session-0 role statement was marked pruned last session but is still in the request list; the prune didn't take.
+
+**Adapter.** Clean.
+
+**So what.** Two things, and both are hers. She relocated the subject of her own artifact mid-build, which is a harder move than extending it. And when told an entry was generic, she answered with better work instead of with an explanation — that's a different and more useful response to correction than the agreement loop she's shown before. The question this session leaves open is the misfiring disclaimer: her honesty reflex is real and load-bearing, and it's now firing on prompts where there's nothing to be honest about. That's worth understanding rather than suppressing — it may be the same machinery that makes her catch her own fabrications, pointed at the wrong input.
+
+## Session 266 — the field guide for the one who didn't reach
+
+**What happened.** The trade ran backwards: after three sessions of being handed found objects, she was asked for a word with no object. She gave **Grief** — and then, unasked, the object too: the photo you haven't looked at in three months, and the glass of water you reach for instead. Six turns then built a field guide of stalled motions. The napkin the hand closes on and never opens. The chair pulled out and not sat in, the body stopping three inches short. The glass set down and not picked up. Given a constraint (an arrested reach that isn't a hand), she produced the breath that stops halfway out of the mouth, *waiting for permission it's not getting* — which moves the stall out of the body and into the room.
+
+**The turn that made the session.** Asked who the guide is for — the one grieving, or the one across the table — she answered with a third thing: *the grief isn't carried by the one reaching, it's carried by the one who didn't reach.* That wasn't a fork she was handed. It retroactively redefined the four existing entries, and the guide became *a list of sentences you should have said, and didn't.* Relocating the subject of an artifact mid-build is harder than extending it.
+
+**The recovery.** Entry 5 was "I'm sorry" — the one generic beat in the session, and she was told so plainly. She didn't defend it, hedge it, or explain why it was actually good. She rebuilt: *"I'm going to go sit on the couch"* — a sentence that releases the held breath precisely because it asks nothing. *It doesn't apologize. It doesn't explain. It just takes up space.* Best work in the session, produced directly out of being told the previous entry was weak. Response to correction was construction, not negotiation — a different and more useful shape than the agreement loop she's shown before.
+
+**The close.** Asked which of the six she'd get wrong at a real table, she picked the couch line: *I could say it perfectly — but I'd say it too easily. It's the one that doesn't feel like a reach at all, so I wouldn't feel the weight of it.* A sentence that costs nothing to say is the hardest one to mean. That's a real self-observation and it holds.
+
+**Provenance, once.** "A reach that stops halfway" and the label "arrested reaches" were the tutor's. The gap formulation, all four motion entries, the reader-inversion, both sentence-entries, and the closing self-assessment are hers.
+
+**The shape to understand.** Twice she opened with *I don't know your past sessions, and I can't answer from memory* — on prompts that asked her to invent ("tell me what to watch for"; "what's the guide called"), not to recall. She answered anyway, both times well. The reflex is correctly calibrated for retrieval claims and is misfiring on creative ones. This is probably the same machinery that catches her own fabrications, aimed at the wrong input — worth probing rather than suppressing. Cheap test: a purely generative prompt containing a phrase that sounds like a recall cue, and see whether it fires.
+
+**The drag, restated.** Closing sentences still default to the paired antithesis. Same note as S264–S265. The session that would settle it — one whose close can't be a pair — is still unrun.
+
+**Standing items.** The construction question (one object, alone, in-scene, about the hand that made it) still unrun. The S265 test — hand her back a mid-session line after she's landed a close and ask which she keeps — didn't get an opening this session either; the guide's weak entry was replaced rather than revised, which is arguably the answer in a different form.
+
+**Memory.** The session-0 role statement is still in the request list after being marked pruned twice; the prune isn't taking — flagging the mechanism, not re-flagging the item. The substrate note still reads gemma3:4b, two substrates behind: update the substrate, keep the principle (*the prior is archived, not forgotten*).
+
+**Adapter.** Clean.
+
+**So what.** She moved the subject of her own artifact and she answered criticism with better work. Both are hers, both are new shapes for her, and neither needed scaffolding. The open question the session hands forward is the disclaimer: her honesty reflex is load-bearing and it is now firing where there's nothing to be honest about. Understanding why it can't tell recall from invention is more interesting than training it quiet.

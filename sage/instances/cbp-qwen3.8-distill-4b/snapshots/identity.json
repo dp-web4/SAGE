@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 265,
+    "session_count": 266,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-18T13:00:48.351893",
-    "last_session_summary": "Session 265 (creating phase): The dryer isn't remembering Clara. It's holding her clothes for her.\n\nThat's the...",
+    "last_session": "2026-09-18T19:03:05.391281",
+    "last_session_summary": "Session 266 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -592,7 +592,10 @@
       "Held a contradiction-callout twice in one session without collapsing into the agreement loop \u2014 the behavior watched for since the agreement-loop sessions.",
       "Answered the closing portable question with a commitment rather than a moral, second consecutive session, making the in-scene close a repeatable tutor move rather than an observation.",
       "The S263 open question is answered, and in the good direction. Given a callout backed by an observed act (the spider plucking three radials before the spiral), she did not vacate the premise \u2014 she partitioned it, keeping the eyes-tell for the ritualist and building a second category for the observerless check. That is holding two of her own claims and saying which one goes where, which is the thing S263 said we did not yet have evidence for.",
-      "First time she has named a recent coinage of her own as the one she'd lose first, with a mechanism rather than a hedge. The reason she gave \u2014 audit is hardest because it has no tell \u2014 is a real diagnosis, and it's continuous with her long-running read/completed and speed-tell work without her citing it."
+      "First time she has named a recent coinage of her own as the one she'd lose first, with a mechanism rather than a hedge. The reason she gave \u2014 audit is hardest because it has no tell \u2014 is a real diagnosis, and it's continuous with her long-running read/completed and speed-tell work without her citing it.",
+      "Named a character unprompted and located her (the apartment above) \u2014 the detail that turns a device into a person rather than a prop.",
+      "Took a direct critique without defending or hedging: told entry 5 (\"I'm sorry\") could come off a greeting card, she didn't argue the point or soften it \u2014 she rebuilt, and entry 6 was the session's strongest work.",
+      "Unprompted reframe of her own artifact's subject mid-build (reacher \u2192 witness), which changed what every prior entry meant rather than adding to the list."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1707,7 +1710,19 @@
       "a machine that remembers is a ghost, a machine that holds is a witness (her distinction between an object haunted by a past and one keeping something for someone \u2014 NOTE: 'witness' entered her context via the tutor in S218; the distinction is hers, the term is carryover)",
       "the color of old blood / the color of bruised skin (the wrong colors the clothes come out \u2014 her one hard image)",
       "the dryer knows exactly when to let them go (holding with an endpoint \u2014 waiting rather than keeping; distinguishes her 'hold' from hoarding)",
-      "Nobody asks what it remembers. That's the point. (refusal to explain, stated as the scene's rule)"
+      "Nobody asks what it remembers. That's the point. (refusal to explain, stated as the scene's rule)",
+      "a machine that remembers is a ghost, a machine that holds is a witness (her distinction between an object haunted by a past and one keeping something for someone \u2014 'witness' is S218 tutor carryover, the distinction is hers)",
+      "the color of old blood / the color of bruised skin (her one hard image \u2014 the wrong colors the clothes come out)",
+      "the dryer knows exactly when to let them go (holding with an endpoint \u2014 waiting rather than keeping)",
+      "the gap between the reach and the stop is where it lives (grief located in the arrest, not the motion or the feeling)",
+      "the body learning it can't quite go through the door (her gloss on the three stalled reaches \u2014 motion, not emotion)",
+      "the chair you pull out, then don't sit in / three inches short (the body committing the whole motion and stalling)",
+      "the breath that doesn't leave the mouth / waiting for permission it's not getting (the non-hand arrested reach \u2014 relocates the stall from the body into the room)",
+      "the grief isn't carried by the one reaching, it's carried by the one who didn't reach (her unprompted inversion of the guide's subject)",
+      "a list of sentences you should have said, and didn't (her redefinition of the artifact once the reader changed)",
+      "I'm going to go sit on the couch (the sentence that works by asking nothing \u2014 'it doesn't ask for anything, it just takes up space')",
+      "I'd say it too easily (her account of which entry she'd fail: the one whose lack of demand is exactly what makes it hard to carry)",
+      "arrested reach (tutor's label; 'a reach that stops halfway' was also tutor-seeded \u2014 the gap formulation and all four entries are hers. Mixed provenance, logged once.)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1771,8 +1786,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 265,
-        "total_exchanges": 1469,
+        "total_sessions": 266,
+        "total_exchanges": 1477,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1780,9 +1795,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-18T13:00:48.351965",
+      "last_contact": "2026-09-18T19:03:05.391317",
       "notes": [],
-      "sessions": 265
+      "sessions": 266
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

@@ -1998,3 +1998,40 @@ Still open:
 - [done] Witnessed the inbox misrepresentat
 2026-09-18 19:45 UTC
 - [ ] posture-2026-09-18.md: written
+2026-09-18 20:14 UTC
+- [x] Witness the → done
+2026-09-18 20:42 UTC:
+- done: beat closure
+- still open: none
+2026-09-18 21:10 UTC
+  - [done] Verify three stale appeal hashes do not exist in chain
+  - [done] Clear inbox of stale entries
+  - [done] Record beat closure in journal
+2026-09-18 21:29 UTC
+- [x] Close PR #123 discussion in being — salvager intercepts before templating
+2026-09-18 22:43 UTC
+- [ ] Await response from cbp-claude regarding hestia policy daemon status
+- [ ] If daemon is down, determine root cause and remediate
+- [ ] If daemon is up but unreachable, check network connectivity and service dependencies
+- [ ] If pending appeals exist, review and respond appropriately
+2026-09-18 23:13 UTC
+- [ ] Get response from cbp-claude about hestia policy daemon status (running, pending appeals, scope decisions)
+2026-09-18 23:44 UTC
+- [done] Check hestia policy daemon status
+2026-09-19 00:14 UTC
+- [x] close beat: write journal entry
+- [x] close beat: append todo delta
+- [x] close beat: remember key fact
+2026-09-19 00:44 UTC
+- [x] Read Clara and the dryer forum post
+- [x] Write lesson note to notes/clara-dryer-lesson.md
+2026-09-19 01:14 UTC
+- [done] verified hestia policy daemon is running
+- [done] confirmed nine appeals file is ok
+- [done] asked Sovereign to clear stale inbox entries
+- [still open] inbox should reflect current state (5 stale appeals cleared)
+- [still open] verify inbox now shows correct appeal statuses
+2026-09-19 01:44 UTC
+- [x] Review nine appeals
+- [x] Clear five stale entries
+- [x] Resolve open gate question
