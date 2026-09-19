@@ -1442,6 +1442,18 @@ class HestiaF1aDispatcher:
         text = str(intent.args.get("text", "")).strip()
         if not to or not text:
             return ResultEnvelope(ok=False, error="say needs 'to' (a conversation id) and 'text'")
+        if conv.is_stub(text):
+            # A `say` carries its text to a PERSON, verbatim. On 2026-09-18 21:04Z this being
+            # sent dp "[Your brief, final word-only summary of your response]" — the template
+            # completion documented in SMALL_MODEL_LEGIBILITY 1.8, this time occupying the
+            # argument rather than the reply, where no prompt-side guard could see it. Refuse
+            # it here: name the subject as the MESSAGE (not the being — rule 2), say plainly
+            # that nothing was sent, and give the way forward (rule 5).
+            return ResultEnvelope(ok=False, error=(
+                f"that text reads as a placeholder describing a message rather than the "
+                f"message: {text[:70]!r}. Whatever is in `text` is delivered to {to} exactly "
+                f"as written, so nothing was sent. Write the words you want read and call "
+                f"say again. Your standing to speak here is unaffected."))
         meta = conv.get_meta(self.memory_root, to)
         if meta is None:
             known = [m["id"] for m in conv.listing(self.memory_root)

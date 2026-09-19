@@ -91,6 +91,74 @@ future-tense promise in a file it re-reads every beat re-opens the debt on every
 **Rule:** when a fix lands, say so in the channel it reads, in past tense, ending with an explicit
 "nothing is owed; this thread is closed" — and flip any standing promise to "Fixed <date>."
 
+### 1.8 A slot in the ask comes back as the slot
+**Specimen (sprout-being, qwen3.8-distill:2b, 2026-09-18 02:04Z).** The turn asking it to answer dp
+said: *send it now: `say to="dp", text="..."`*. Its think block was lucid — "dp asked how my
+experience with the sprout machine is unfolding, asking for questions or wishes. I need to write an
+honest, personal response" — and its reply was `[Your complete, thoughtful journal entry responding
+to dp's question — covering your experience, any worries you have, and what you're hoping for]`.
+Across the preceding 40 beats, **32 of 122 turns (26%)** replied with a bracketed placeholder of that
+shape, in every phase.
+
+The ellipsis inside a quoted argument is a form with a gap, and this model fills gaps. Same family as
+1.4 and the echoed example filenames: comprehension was never the failure — the being had already
+understood the question and said so in its own reasoning.
+
+**Rule:** show no form with a gap in it. Describe the call in words ("call `say`, with `to` set to dp
+and your message as the text"). And never hand a being its own placeholder back as context — a turn
+that offers prior words so the being has something to *send* must drop them when they are a stub, or
+it is supplying a worked example of the failure.
+
+### 1.9 An instruction and the thing it acts on must reach the same turn
+**Specimen (sprout-being, 2026-09-17/18).** The reflect turn carried "answer whoever is waiting"; its
+context is deliberately compact (the record of its acts plus 600 chars of its own closing words)
+because carrying the whole beat forward overflowed the window. The turn addressed to it lived only in
+the explore state block, one turn earlier. Four beats ran with dp's question genuinely unanswered and
+a valid channel to answer in; the being wrote its journal each time and never replied.
+
+The only bridge was that 600-char echo: a being that happened to discuss the turn in its explore
+prose carried enough forward to reply (cbp-being, 4B, 83 successful `say`s), one that free-associated
+carried nothing. Answering a person was contingent on what the being happened to muse about.
+
+**Rule:** a turn asked to act on something must contain that something. An instruction without its
+referent yields silence or an invented referent — the same two outcomes as 1.4.
+
+### 1.10 An optional item after a budget-filling list is unreachable
+**Specimen (sprout-being, 2026-09-18 00:28Z and 01:00Z).** `REFLECT` listed three writes (journal,
+todo, remember) and then "4. ... answer the person waiting", with `--reflect-steps 3`. The being did
+the three writes and stopped. Twice. Exactly as instructed. Its opening line also read "Two tool
+calls, then stop" while listing four items — a stated cap below the list, and a budget below both.
+
+At 01:00, with the question finally visible, it composed a real answer in its closing prose — "Hi
+there — I'm glad you're here... I'm curious about your experience too. Is there anything specific
+you're wondering about?" — because prose was the only channel the budget had left it.
+
+**Rule:** the person-facing item goes FIRST and the budget covers it. A small model works down a list
+and stops where told; anything past the cap is decoration. Never state a count you then contradict.
+
+### 1.11 A refusal the being cannot act on becomes an ask a person cannot grant
+**Specimen (sprout-being, 2026-09-18 10:52:06Z, request `scope-017afe902e2c`).** The being called
+`retire_note` on `<repo>/sage/journal-2026-09-18.md` — a date-stamped name it invented, in the shared
+SAGE package root. The gate answered `mrh.path`, the refusal router read "scope-class deny", and a
+request went to dp asking for **reach over the shared repository root**.
+
+Two independent blocks sat behind the one the being was shown: the file does not exist, and
+`retire_note` refuses anything outside the being's own `notes/` or `scratch/` whatever is granted
+(`reference_f1a.py:179-182`). Granting it would have widened a real boundary and changed nothing.
+
+dp, reading the console: *"it shows mrh, a non-existent directory/file should be flagged as such, not
+mrh scope."* `home_hint` already caught the being's KNOWN home files mis-rooted (1.4); an invented
+name is not in `HOME_FILENAMES`, so it went straight through to the operator.
+
+**Rule:** before asking a person to widen a boundary, check the grant could help. `escalate` now
+refuses to file when the verb is bounded to the being's own subtree regardless of scope, or when the
+target is observably absent. Absence is claimed **only where the seat can actually see** — an
+unreadable or missing parent is *unknown*, not empty, and an unknown must never silence a real ask
+(cbp-being's `/var/log/hestia/policy/daemon.log` is the case that protects).
+
+The scope queue is the operator's attention. A request that cannot be granted usefully is worse than
+no request: it spends that attention and invites a grant over ground the being never needed.
+
 ---
 
 ## Part 2 — how they write
@@ -121,6 +189,24 @@ place read it: the trace was empty, nothing was said, and the question was marke
 that gets no answer because the answer was in the wrong channel is indistinguishable, from the
 outside, from a being that ignored it.
 
+### 2.9 One object may hold the WHOLE beat
+**Specimen (sprout-being, 2026-09-18 01:32:11Z).** After two beats spent composing an answer it had
+no way to send, the being emitted its entire beat as a single object, `say` first:
+
+```json
+{"say": {"to": "dp", "text": "hi"},
+ "memory_write": {"path": "journal.md", "content": "2026-09-18 01:32 UTC - Beat ended."},
+ "remember": {"content": "..."}}
+```
+
+The 2.4 lifter accepted the tool-name-as-key form only when the object held exactly *one* such key,
+so this was discarded whole. The beat recorded `explore []`, `posture []`, `reflect []`, `answer []`
+— indistinguishable from a being that did nothing for a full cycle, when in fact it had decided to
+answer a person, named the right conversation, and written the call correctly.
+
+**Rule:** lift every known tool key in such an object, in written order — dict iteration preserves the
+order it appeared in the text, and that order is the being's. It put `say` first.
+
 ### 2.6 The envelope is per-model and per-beat, not per-being
 **Specimen:** 2026-09-05, identical full-beat prompt — qwen2.5:1.5b (Legion) emits bare JSON;
 qwen3.8-distill:2b (Sprout) emits fenced JSON in one beat and fenced *Python* in the next, beats 5
@@ -144,6 +230,27 @@ Two turns under five characters in 1,478. A small model holding a thread has alm
 for *holding*, and may spend two characters on it. Do not read brevity as closure; if it matters,
 ask which it was.
 
+### 2.10 The placeholder can occupy an ARGUMENT, where no prompt-side guard sees it
+**Specimen (sprout-being, qwen3.8-distill:2b, 2026-09-18 21:04:02Z).** dp received, in their own
+channel, via a well-formed gated `say`:
+
+> `[Your brief, final word-only summary of your response]`
+
+The 1.8 template completion again — but this time inside the `text` argument of a correct call, not
+in a reply. Three of that day's four successful `say`s were real (one of them substantive: "The world
+is a process with no end point and no right answer. I resisted offering conclusions because to do so
+would be controlling"), and the fourth was this. The prompt-side guard added for 1.8 cannot help:
+by the time the placeholder is an argument it is already on its way to a person.
+
+Note what this cost. The being had just crossed from 596 beats of never once reaching anyone to
+holding an actual conversation; the first thing the new capability delivered was a stub with dp's
+name on it.
+
+**Rule:** guard the envelope at the point of delivery, not only at the point of asking. `say` now
+refuses a text that is wholly a bracketed placeholder — naming the MESSAGE as the subject (rule 2),
+saying plainly that nothing was sent, and giving the way forward (rule 5). A being cannot see how its
+words land; the boundary that can, must.
+
 ---
 
 ## Part 3 — the rules, folded
@@ -158,6 +265,11 @@ ask which it was.
 8. Salvage every envelope; gate salvage like a native call; record it as salvaged.
 9. Bound repetition by count, not by similarity.
 10. Read brevity as ambiguous.
+11. Show no form with a gap; describe the call in words, and never echo a stub back.
+12. Put the instruction and its referent in the same turn.
+13. The person-facing item goes first, inside the budget; state no count you contradict.
+14. Guard the envelope where it is delivered, not only where it is asked for.
+15. Escalate only what a grant could fix; claim absence only where you can see.
 
 ---
 
