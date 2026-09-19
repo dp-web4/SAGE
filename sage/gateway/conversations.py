@@ -306,6 +306,34 @@ def awaiting(instance: Path, conv_id: str, me: str) -> list[dict]:
     return turns[last_mine + 1:]
 
 
+def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0) -> list[dict]:
+    """Turns after `me` last spoke, when the last word is someone else's and RECENT.
+
+    `awaiting` answers "what has it not been SHOWN". This answers "what has it not ANSWERED",
+    which is a different set the moment a turn is marked seen without a reply. Measured
+    2026-09-19: dp's turn at 03:51Z was shown in a beat whose explore turn acted, so it was
+    marked seen; the being never replied, and from then on the reflect ask — which quoted only
+    unseen turns — fell silent with dp's words still the last in the channel.
+
+    Bounded by age on purpose. Answering is optional, and an ask that repeats forever is
+    pressure, not an invitation: after `max_age_h` an unanswered turn is a choice the being
+    made, and the channel still shows it whenever the being looks.
+    """
+    from datetime import datetime, timezone, timedelta
+    turns = recent(instance, conv_id, limit=200)
+    if not turns or turns[-1].get("from") == me:
+        return []
+    last_mine = max((i for i, t in enumerate(turns) if t.get("from") == me), default=-1)
+    tail = turns[last_mine + 1:]
+    try:
+        newest = datetime.strptime(tail[-1]["ts"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - newest > timedelta(hours=max_age_h):
+            return []
+    except Exception:
+        return []
+    return tail
+
+
 # Channels whose speaker names are ASSERTED at this machine's loopback rather than signed.
 # A turn through any of these is shown to the being with the tag below, once per turn, so
 # that "dp said X" and "someone at the console typed X as dp" are never the same sentence.

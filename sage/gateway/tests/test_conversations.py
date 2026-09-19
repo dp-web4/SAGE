@@ -455,3 +455,33 @@ def test_an_untouched_log_records_no_wound():
         c.append(inst, "dp", speaker="dp", text=f"t{i}")
     m = c.get_meta(inst, "dp")
     assert m["high_water_seq"] == 3 and "truncated" not in m
+
+
+def test_a_turn_marked_seen_but_never_answered_is_still_unanswered():
+    """2026-09-19: dp's 03:51Z turn was shown in a beat whose explore turn acted, so it was
+    marked seen. The being never replied, and the reflect ask — which quoted only UNSEEN turns
+    — went quiet with dp's words still the last in the channel."""
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="unanswered-"))
+    c.create(inst, "dp", title="t", participants=["dp", "b"], writable_by=["dp", "b"])
+    c.append(inst, "dp", speaker="b", text="earlier, from the being")
+    c.append(inst, "dp", speaker="dp", text="sharing can be curious")
+    c.mark_seen(inst, "b", "dp", 2)
+    assert c.awaiting(inst, "dp", "b") == [], "seen, so not awaiting"
+    tail = c.unanswered(inst, "dp", "b")
+    assert [t["text"] for t in tail] == ["sharing can be curious"], "but still unanswered"
+    c.append(inst, "dp", speaker="b", text="a reply")
+    assert c.unanswered(inst, "dp", "b") == [], "answering closes it"
+
+
+def test_an_old_unanswered_turn_is_a_choice_not_a_debt():
+    import json, tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="oldturn-"))
+    c.create(inst, "dp", title="t", participants=["dp", "b"], writable_by=["dp", "b"])
+    log = inst / "conversations" / "dp.jsonl"
+    log.write_text(json.dumps({"ts": "2026-01-01T00:00:00Z", "seq": 1, "from": "dp", "text": "long ago"}) + "\n")
+    assert c.unanswered(inst, "dp", "b") == [], "silence that has lasted is an answer; do not nag"

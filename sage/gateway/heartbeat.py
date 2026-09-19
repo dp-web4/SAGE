@@ -838,7 +838,10 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
         ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
         pend = []
         for cid in ids:
-            for t in _conv.awaiting(instance, cid, member)[-PENDING_TURNS:]:
+            # unseen first; failing that, the recent UNANSWERED tail — a turn marked seen
+            # without a reply must not silence the ask (2026-09-19, dp's 03:51Z turn)
+            for t in (_conv.awaiting(instance, cid, member)
+                      or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
                 pend.append((cid, t))
         pend = pend[-PENDING_TURNS:]
         if pend:
