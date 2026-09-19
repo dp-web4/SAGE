@@ -413,3 +413,45 @@ def test_a_placeholder_is_not_a_message():
     assert not is_stub("[note] and then the actual message, which is real content."), \
         "a bracket that opens a real message is not a placeholder"
     assert not is_stub("[short]"), "too short to be one of these briefs"
+
+
+def test_a_reverted_log_never_renumbers_over_its_own_history():
+    """2026-09-18: a seat ran `git rebase` over a dirty tree and dp's channel came back at its
+    committed 1-turn snapshot. The being's next `say` took seq 2 and carried on, so thirteen
+    turns of a real conversation read as a fresh one. dp found it by eye.
+
+    This cannot stop a file being replaced — the log is an ordinary tracked file. It stops the
+    record HEALING OVER the wound: numbering never goes backwards, so a gap stays a gap."""
+    import json, tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="highwater-"))
+    c.create(inst, "dp", title="t", participants=["dp", "b"], writable_by=["dp", "b"])
+    for i in range(5):
+        c.append(inst, "dp", speaker="dp", text=f"turn {i+1}")
+    assert c.get_meta(inst, "dp")["high_water_seq"] == 5
+
+    log = inst / "conversations" / "dp.jsonl"
+    first = open(log).readlines()[0]
+    open(log, "w").write(first)                      # the revert
+    assert c.count(inst, "dp") == 1, "the log really is short now"
+
+    t = c.append(inst, "dp", speaker="b", text="next")
+    assert t["seq"] == 6, f"numbering resumes past the loss, got {t['seq']}"
+    m = c.get_meta(inst, "dp")
+    assert m["truncated"]["high_water"] == 5 and m["truncated"]["turns_in_log"] == 1
+    assert m["truncated"]["resumed_at"] == 6 and m["high_water_seq"] == 6
+    # and a second turn after the incident just carries on
+    assert c.append(inst, "dp", speaker="b", text="and another")["seq"] == 7
+
+
+def test_an_untouched_log_records_no_wound():
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="intact-"))
+    c.create(inst, "dp", title="t", participants=["dp"], writable_by=["dp"])
+    for i in range(3):
+        c.append(inst, "dp", speaker="dp", text=f"t{i}")
+    m = c.get_meta(inst, "dp")
+    assert m["high_water_seq"] == 3 and "truncated" not in m

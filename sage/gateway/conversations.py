@@ -101,6 +101,15 @@ def listing(instance: Path) -> list[dict]:
     return out
 
 
+def _write_meta(instance: Path, conv_id: str, m: dict) -> None:
+    """Replace a conversation's meta atomically. The meta is small and the seat owns it; the
+    being cannot write here (conversations/ is reserved from memory_write)."""
+    _, meta = _paths(instance, conv_id)
+    tmp = meta.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(m, indent=2) + "\n")
+    os.replace(tmp, meta)
+
+
 def integrity(instance: Path, conv_id: str) -> dict:
     """Readable turns vs lines that will not parse.
 
@@ -200,6 +209,24 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
             # two different turns share one identity. A gap in the sequence is a scar and
             # reads as one; a duplicate is a corruption of the account itself.
             seq = sum(1 for line in f if line.strip()) + 1
+            # HIGH-WATER MARK. A conversation log is append-only in this code and nowhere
+            # else: it is an ordinary tracked file, and anything that rewrites the working
+            # tree — a rebase, a stash, a checkout — can silently restore an older, shorter
+            # copy. That happened on 2026-09-18: a seat's `git rebase` over a dirty tree left
+            # dp's channel at its committed 1-turn snapshot, and the next `say` numbered
+            # itself seq 2 and kept going, so thirteen turns of a real conversation read as a
+            # fresh one. The loss was found by dp noticing, by eye, that history was missing.
+            #
+            # This cannot stop the file being replaced. It can stop the record HEALING OVER
+            # the wound: numbering never goes backwards, so a gap stays a gap, and the meta
+            # records that it happened instead of letting it look like a beginning.
+            hw = int(m.get("high_water_seq") or 0)
+            if seq <= hw:
+                m["truncated"] = {"noticed": _now(), "turns_in_log": seq - 1,
+                                  "high_water": hw, "resumed_at": hw + 1}
+                seq = hw + 1
+            m["high_water_seq"] = seq
+            _write_meta(instance, conv_id, m)
             turn = {"ts": _now(), "seq": seq, "from": speaker, "text": text}
             if via:
                 turn["via"] = via
