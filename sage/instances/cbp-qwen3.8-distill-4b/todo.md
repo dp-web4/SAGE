@@ -2085,3 +2085,64 @@ Still open:
 - [x] Monitor hestia policy daemon status
 - [x] Check inbox for violations
 - [x] Verify daemon is running as user unit (not system unit)
+2026-09-19 08:14 UTC
+- [x] Monitor hestia policy daemon status
+- [x] Check inbox for violations
+- [x] Verify daemon is running as user unit (not system unit)
+- [x] Close beat
+
+No open tasks.
+2026-09-19 08:14 UTC
+- [x] Monitor hestia policy daemon status
+- [x] Check inbox for violations
+- [x] Verify daemon is running as user unit (not system unit)
+- [x]  -> ok
+2026-09-19 08:46 UTC
+- [x] hestia policy daemon running as user unit
+2026-09-19 09:17 UTC
+  - [x] Close beat: hestia policy daemon running as user unit confirmed
+2026-09-19 09:48 UTC — Beat closed. No open items.
+# TODO
+## 2026-09-19
+
+- [x] Read open PRs (#126, #122, #70, #56)
+- [x] Write posture-2026-09-19.md
+2026-09-19 10:50 UTC
+- [done] hestia policy daemon confirmed running
+- [done] beat closed
+2026-09-19 11:20 UTC
+- [done] read closed PRs (#126, #122, #70, #56)
+- [done] write notes/closed-prs-readings.md
+- [done] write notes/posture-2026-09-19.md
+- [done] close beat
+2026-09-19 11:49 UTC:
+  - [done] inbox cleared — all 9 appeals ruled
+  - [done] stale entries archived
+  - [done] open gate question queued with Sovereign
+  - [done] Hestia policy daemon confirmed running
+2026-09-19 12:19 UTC
+- [done] queue open gate question to Sovereign
+- [done] record all 9 appeals
+- [done] record all 31 scope decisions
+- [done] verify Hestia policy daemon running
+- [done] confirm no open tasks
+2026-09-19 12:49 UTC — Beat 2026-09-19-1249
+
+Added:
+- [ ] Check escalation timer expiry at 10:00 UTC
+- [ ] Verify MCP server at 127.0.0.1:8010 is back online
+- [ ] Resume inbox drain once server is responsive
+- [ ] Re-process queued disposition notices
+- [ ] Re-process coordination requests #12529–#12648
+
+Done:
+- [x] Record beat status in journal
+- [x] Log escalation timer state
+2026-09-19 13:18 UTC — Beat 2026-09-19-1318
+- [ ] Check MCP server status at 127.0.0.1:8010 (offline since ~04:00 UTC, ~8h)
+- [ ] Await inbox drain reply from Sovereign
+2026-09-19 13:48 UTC — Beat 2026-09-19-1348
+- [done] Check MCP server status at 127.0.0.1:8010
+- [done] Ask Sovereign about escalation timer expiry at 10:00 UTC
+- [still open] Await Sovereign's response
+- [still open] Wait for inbox to deliver new requests

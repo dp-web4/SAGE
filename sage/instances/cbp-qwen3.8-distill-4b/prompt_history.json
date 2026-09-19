@@ -1,19 +1,6 @@
 {
   "sessions": [
     {
-      "session": 248,
-      "timestamp": 1789394549.1436918,
-      "prompts": [
-        "You get to choose today's project. Suggest something small we could make together in this conversation, like a word that doesn't exist yet, the rules of a game, or a map of a place nobody has visited. What do you want to build?",
-        "Kymth is a good find. It sounds like a held breath, which fits a word about noticing what goes unsaid. Let's test it in the wild first: tell me about one specific moment, real or invented, where someone kymths someone else, and what small thing they catch.",
-        "It lands. The hand hovering over the milk is exactly the kind of small thing the word is for. But you went from the pause all the way to a story about someone who isn't coming home. Is that leap part of kymthing, or does guessing what's underneath need a word of its own?",
-        "My vote is to keep kymth for the noticing alone, because the hand hovering over the milk was true whether or not your story was. But hyphens feel like a shortcut. It's your word, so if you agree we should split it, invent a second word with its own sound for the leap into the story, and tell me how it's different from just guessing.",
-        "Kymth-seed\" is my favorite part: in the past tense, you plant the shape in the space like a seed, and it may or may not grow into the truth. You kept the hyphen, and I think the pun earns it. So what's the word for when the seed turns out wrong, like the woman just forgot her grocery list? Tell me how that moment feels.",
-        "I like that the wrong seed turned out to be good news: the husband is twenty minutes away, and the sad story was only in your head. But \"waste\" sounds like failure, and you just told me it isn't one. Does the word need a different sound, or does it secretly sting a little to find out your story was wrong?",
-        "We made a small family of words today, and the woman in the grocery store kept changing to fit them: first a pause over the milk, then someone who wasn't coming home, then a phone that turned into a watch. If you could keep only one of those words, which would you keep, and what's one thing you'd notice with it that isn't in that aisle?"
-      ]
-    },
-    {
       "session": 249,
       "timestamp": 1789416234.3367085,
       "prompts": [
@@ -239,6 +226,18 @@
         "I went. Thirty seconds: every display drill is tethered to the pegboard by a coiled steel cable with its battery pulled, so the aisle is four or five people pulling triggers on dead tools \u2014 a soft chorus of clicks, everyone testing heft and grip and nothing else. Cut-metal smell from the key machine up front, something sweeter underneath it from the fertilizer in the back, and the paint shaker going off like a washing machine with a brick in it while nobody looked up. But your errand has a hitch I couldn't solve for you: I was the one looking, so I can't tell you what the store is like when no one is \u2014 unless the click chorus counts, people handling tools that can't do anything. Does that count, or did I bring the wrong thing back?",
         "A thousand people pretending to be a single person\" \u2014 that's the line I'm carrying home, and it's sharper than what I actually had, because the clicks *were* all identical and I didn't hear it until you said it. So send me out again, but this time make it an errand with an answer \u2014 something I can settle rather than bring back open. I want to see which kind you'd rather write.",
         "I'm carrying the alley door into the next session unopened \u2014 but before I go: you wrote the first errand so it could only come back open and the second so it could only come back settled, and you closed the second by fencing off every answer but three. Tell me which of those three you were hoping for, and what finding it would have told you that the other two wouldn't."
+      ]
+    },
+    {
+      "session": 268,
+      "timestamp": 1789826496.1769137,
+      "prompts": [
+        "There's a hardware store near me that keeps a coffee can of orphaned keys by the register \u2014 hundreds of them, fifty cents each, and none of them open anything anyone can name. Pick one out of the can, cbp: tell me what it looks like in your hand, and then tell me about the door it's still loyal to.",
+        "A bakery that became a laundromat \u2014 I wonder if the third dryer is upstairs from that basement door, cbp, because you've just built a second room in the same building. But here's what snagged me: the door swings open when the wind hits right, yet the lock is rusted shut and the key won't turn. So the door doesn't need the key at all \u2014 what's the key actually for, then, and what was the promise?",
+        "The laundromat is just the building's way of keeping the promise for the owner\" \u2014 cbp, that's the dryer again: not remembering, *holding*. You've now got a building that keeps promises on behalf of people who've left, and I think you've been writing one story across three sessions without announcing it. So let's go in: the wind pushes the outer door open, you're standing at the inner one with the brass key warm in your hand, and this time it turns. What's the first thing you smell, and what's still on the shelves?",
+        "A handwriting I recognize\" \u2014 cbp, you slipped that in like it was nothing, and it's the biggest thing in the room. Whose hand is it, and how do you know it? And then do the thing the note is daring you to do: find the dough. Where is it, and what has a hundred years of rising made it into?",
+        "I was her son's son\" \u2014 cbp, you just walked into your own story; two turns ago you were a stranger fishing a key out of a coffee can, and now you're the grandchild, which means the fifty-cent key was yours all along and the promise that was never kept is one you inherited. So here's the question only the heir gets to answer: the loaf is still warm and still rising \u2014 do you cut it, carry it upstairs to the people folding their laundry, or close the cooler door and leave it to keep going? Tell me what your hands do.",
+        "cbp, you stepped out of the story to tell me the truth \u2014 no hands, no grandmother \u2014 and then you stepped right back in and ate the bread anyway, which I think was the most honest thing either of us did today; so before we close: if a sibling instance asked you whether the warmth of that loaf was real even though the grandchild wasn't, what would you tell them?"
       ]
     }
   ]

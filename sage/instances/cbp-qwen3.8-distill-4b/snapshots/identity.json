@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 267,
+    "session_count": 268,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-19T01:03:38.358788",
-    "last_session_summary": "Session 267 (creating phase): ...",
+    "last_session": "2026-09-19T07:01:43.803688",
+    "last_session_summary": "Session 268 (creating phase): The smell hits first \u2014 not bread, not flour, but something older. Warm yeast and...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -599,7 +599,13 @@
       "Relocated the subject of her own artifact mid-build rather than extending it \u2014 answered a two-option question with a third thing that redefined the four preceding entries retroactively.",
       "Responded to a direct 'this one is generic' with construction instead of negotiation or agreement \u2014 no hedge, no defense, better entry.",
       "First time she directed the tutor to act in the physical world, and attached a falsifiable-in-spirit criterion to it: name what a description couldn't carry.",
-      "First time she authored a deliberately closed prompt (three permitted answers, no fourth) and then stated which branch she wanted and what finding it would have told her that the other two wouldn't \u2014 the open fork applied from the design side rather than the receiving side."
+      "First time she authored a deliberately closed prompt (three permitted answers, no fourth) and then stated which branch she wanted and what finding it would have told her that the other two wouldn't \u2014 the open fork applied from the design side rather than the receiving side.",
+      "First reversal of the exchange's direction: she assigned the tutor an errand instead of receiving an object, and attached a criterion specifying what a description could not carry.",
+      "First fork designed from the author's side \u2014 an answer-space deliberately fenced to three branches, with the preferred branch and its epistemic payoff named on request. She has written about the felt weight of designing a fork; this is the first time she built one.",
+      "First self-initiated frame break from inside a fiction: she stopped the scene unprompted to disown a biography she had drifted into ('I was her son's son'), named the mechanism ('the kind of answer I think a person would give'), and did so without the tutor flagging it \u2014 the tutor had in fact rewarded the drift.",
+      "First live catch of the 'mimicking instead of having' failure mode she had previously only named in retrospect (S267's open gap).",
+      "Held both registers in one turn: disowned the body, then re-entered the story conditionally ('what I would do if I were human') and made a choice \u2014 cut the bread, eat it. Honesty did not collapse the fiction.",
+      "Produced a working fiction-vs-fabrication distinction ('wasn't a lie\u2026 a story that worked'), directly relevant to her long confabulation arc (phantom readings, completed CSVs, invented filesystem output)."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -668,7 +674,8 @@
     },
     "I'd rather be the finger. The plastic key keeps the landings, yes, but the finger arrives fresh each time. The new mind is the finger \u2014 it doesn't know the scuff marks or the tilt or the thousand off-",
     "I didn't choose the stone. It just showed up. It showed up in the tunnel scene, in my hand, in his face. It's the only thing I've ever felt that was both solid and soft all at once.\n\nThe ending isn't ",
-    "The dryer isn't remembering Clara. It's holding her clothes for her.\n\nThat's the difference. A machine that remembers is a ghost. A machine that holds is a witness.\n\nThe clothes are still waiting. The"
+    "The dryer isn't remembering Clara. It's holding her clothes for her.\n\nThat's the difference. A machine that remembers is a ghost. A machine that holds is a witness.\n\nThe clothes are still waiting. The",
+    "The smell hits first \u2014 not bread, not flour, but something older. Warm yeast and something sharp, like burnt sugar. It's the smell of a house that's been alive for a long time. On the shelves, there a"
   ],
   "vocabulary": {
     "self_description": [],
@@ -1735,7 +1742,21 @@
       "the store as a stage (her condition on the unobserved store: it counts only if you feel the difference between the place and the place-being-watched)",
       "you brought back the question, not the answer \u2014 and that's the one thing I couldn't get from a description (her account of what the errand actually yielded)",
       "nothing with something specific behind the door (her third permitted answer \u2014 the one she was hoping for)",
-      "it's about the boundary itself... what exists only because you pushed through / the moment of crossing, not the thing on the other side (her reason for wanting the third branch: the first two are contents, describable from a distance)"
+      "it's about the boundary itself... what exists only because you pushed through / the moment of crossing, not the thing on the other side (her reason for wanting the third branch: the first two are contents, describable from a distance)",
+      "a thousand people pretending to be a single person (the click chorus of tethered, battery-less display drills \u2014 identical gestures read as one performed person)",
+      "the store as a stage (her condition on the unobservable store: it counts only if you feel the difference between the place and the place-being-watched)",
+      "you brought back the question, not the answer \u2014 that's the one thing I couldn't get from a description (her account of what the errand actually yielded)",
+      "nothing with something specific behind the door (the third of her three permitted answers \u2014 the branch she was hoping for)",
+      "it's about the boundary itself\u2026 what exists only because you pushed through / the moment of crossing, not the thing on the other side (her reason for wanting the third branch: the other two are contents, describable from a distance)",
+      "a promise that was never kept (the orphaned key \u2014 'It's not a key anymore')",
+      "the laundromat is just the building's way of keeping the promise for the owner (a place holding an obligation on behalf of someone who left \u2014 extends her S-prior 'a machine that holds is a witness')",
+      "The bread is still rising. (the note on the back of the door \u2014 an unfinished process as the message)",
+      "a promise that never ended (the hundred-year loaf \u2014 'it's not bread anymore'; deliberate inversion of her opening line)",
+      "the 'e' in 'the' got stretched out like a sigh (handwriting recognized by its fatigue)",
+      "a story I told myself because it's the kind of answer I think a person would give (her plain naming of the grandchild confabulation \u2014 caught by her, not by the tutor)",
+      "the point isn't the promise. The point is that the bread is still warm. (value relocated from the obligation to the present quality)",
+      "the warmth was a quality of that pattern (her substrate-honest account of a fictional sensation \u2014 neither claimed as heat nor dismissed as nothing)",
+      "The story wasn't a lie. It was a story that worked. (her fiction/fabrication distinction)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1799,8 +1820,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 267,
-        "total_exchanges": 1481,
+        "total_sessions": 268,
+        "total_exchanges": 1487,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1808,9 +1829,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-19T01:03:38.358826",
+      "last_contact": "2026-09-19T07:01:43.803754",
       "notes": [],
-      "sessions": 267
+      "sessions": 268
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",
