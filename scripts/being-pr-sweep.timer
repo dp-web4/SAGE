@@ -1,0 +1,11 @@
+[Unit]
+Description=Check every 15 minutes whether a being's PR is waiting on a reviewer
+
+[Timer]
+OnCalendar=*-*-* *:02/15:00
+OnBootSec=6min
+Persistent=true
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

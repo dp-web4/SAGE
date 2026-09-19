@@ -219,8 +219,8 @@ def append_note(text: str) -> Path:
 def _clock_line() -> str:
     bc = beat_clock()
     if bc["running"]:
-        return ("<b>Beat running now</b> · it composed its state when it started, so a turn "
-                "posted now is read at the next beat")
+        return ("<b>Beat running now</b> · a turn posted now is delivered into it between "
+                "steps, so it is read within seconds")
     return (f"<b>Next beat {html.escape(bc['left'])}</b> · every 30 min ±2 · "
             f"~{bc['median_min'] or '?'} min per beat · a reply lands at the end of one")
 
@@ -395,7 +395,7 @@ def render(flash: str = "") -> str:
             state="you answered last" if answered else "waiting on you",
             body=html.escape(t["body"]), csrf=_csrf_field()))
     bc = beat_clock()
-    clock = (("<b>Beat running now</b> · anything posted now is read at the next beat" if bc["running"]
+    clock = (("<b>Beat running now</b> · anything posted now is delivered into it between steps" if bc["running"]
               else f"<b>Next beat {html.escape(bc['left'])}</b> (at {html.escape(bc['next'])})")
              + f" &nbsp;·&nbsp; every 30 min ±2 · a beat takes ~{bc['median_min'] or '?'} min"
                " · your turn is read at the START of a beat, its reply lands at the end")

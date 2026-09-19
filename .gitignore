@@ -295,6 +295,8 @@ sage/instances/*/grafts/*.own-index.jsonl
 # files under sage/memory/ (found adding sage/memory/consolidation.py, 2026-09-05). Re-include it.
 !sage/memory/
 
+# being worktree scratch (transient working files; SAGE#93's probe JPEG rode in via pr_open's git add -A, 2026-09-14)
+scratch/
 # Private Ed25519 seeds are never tracked (hub-to-fleet, 2026-09-15): three were committed
 # to this PUBLIC repo on 2025-11-29/12-04 and are compromised for good; removal from the index
 # does not remove them from history.

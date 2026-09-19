@@ -138,16 +138,21 @@ def decide(instance: Path, kind: str, *, now: Optional[float] = None) -> dict:
                        f"it will be read at the next scheduled beat")
         return d
     if beat_running():
-        # The conversation block is composed at beat START, so a turn arriving mid-beat is
-        # not in the beat that is running. On legion/mission-artifact the tool loop drains
-        # new turns between steps (conversations.drain_new_for via an `interject` hook) and
-        # this branch said so; that hook is not on main, so saying it here would be a claim
-        # about a capability this tree does not have (GPT review of SAGE#81). Until the
-        # interject slice lands: recorded, read at the next beat, and no in-flight delivery.
-        d["reason"] = ("a beat is already running and composed its state before this turn "
-                       "arrived; the turn is recorded and will be read at the next beat")
+        # This used to be a consolation ("it will see this when it reads its state") that
+        # was not true within the beat: the conversation block is composed at beat start,
+        # so a turn arriving mid-beat waited for the next one. Since 2026-09-09 the loop
+        # drains new turns between steps (conversations.drain_new_for via an `interject`
+        # hook) and an already-awake being is the FASTEST case, not the slowest.
+        #
+        # RECONCILIATION 2026-09-18: main carried the opposite claim, correctly, because
+        # the interject slice had not landed there ("saying it here would be a claim about
+        # a capability this tree does not have", GPT review of SAGE#81). This merge lands
+        # it, so the capability is present and the claim is true again. main's
+        # test_a_running_beat_does_not_claim_in_flight_delivery is inverted with it.
+        d["reason"] = ("a beat is already running: the turn is delivered into it between "
+                       "steps, so the being sees this within seconds without a new beat")
         d["beat_running"] = True
-        d["delivered_in_flight"] = False
+        d["delivered_in_flight"] = True
         return d
 
     since = None

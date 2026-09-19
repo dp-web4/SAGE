@@ -1,0 +1,14 @@
+{
+  "id": "dp",
+  "title": "dp and legion-being",
+  "participants": [
+    "dp",
+    "legion-being"
+  ],
+  "writable_by": [
+    "dp",
+    "legion-being"
+  ],
+  "summary": "The operator's own channel. dp is asynchronous by rule; a gap here is reachability, not judgement.",
+  "created": "2026-09-07T22:09:30Z"
+}

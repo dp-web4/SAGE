@@ -1,0 +1,10 @@
+[Unit]
+Description=Dead-man's switch for legion-being's beat (fires if the being goes quiet)
+Documentation=file:///home/dp/ai-workspace/SAGE/scripts/beat_watchdog.sh
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /home/dp/ai-workspace/SAGE/scripts/beat_watchdog.sh
+# exit 3 = the watchdog had to intervene. That is a fault and must show as a failed unit.
+TimeoutStartSec=120
+Nice=15

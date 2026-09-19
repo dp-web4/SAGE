@@ -312,9 +312,14 @@ function escapeHtml(text) {
 // (dp, 2026-09-14). A turn from another day shows its date, since conversations span months.
 function formatTime(ts) {
   if (ts === null || ts === undefined || ts === '') return '';
+  // BOTH SHAPES. This did `new Date(ts * 1000)`, which assumes Unix epoch SECONDS — true
+  // of the telemetry it was written for, and false of conversation turns, which carry ISO
+  // 8601 strings ("2026-09-14T00:30:17Z"). A string times 1000 is NaN, and new Date(NaN)
+  // renders as "Invalid Date", which is what dp saw on every turn of his own conversation
+  // with the being (reported 2026-09-14).
   const n = Number(ts);
   const d = Number.isFinite(n) ? new Date(n * 1000) : new Date(ts);
-  if (isNaN(d.getTime())) return '';
+  if (isNaN(d.getTime())) return String(ts);   // show the raw value, never "Invalid Date"
   const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const sameDay = d.toDateString() === new Date().toDateString();
   return sameDay ? time : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;

@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -35,9 +37,13 @@ class ToolTurnResult:
     capped: bool = False                                   # hit max_steps still wanting tools
     thinking: List[str] = field(default_factory=list)      # the model's think block per generate, if any
     salvaged: List[dict] = field(default_factory=list)     # calls lifted from the text channel: {step, effector, form}
-    duplicates: List[dict] = field(default_factory=list)   # identical calls answered without re-executing: {step, effector}
     generates: List[dict] = field(default_factory=list)    # per generate, from Ollama's reply: {done_reason, prompt_eval_count, eval_count, retried}
-    compacted: List[dict] = field(default_factory=list)    # per step where old tool results were elided: {step, elisions, chars}
+    compacted: List[dict] = field(default_factory=list)    # per step where old tool results were elided to leave answer room: {step, elisions, chars}
+    deadline_hit: bool = False                             # stopped issuing steps because the wall-clock budget ran out
+    interjected: List[dict] = field(default_factory=list)   # messages delivered mid-turn: {step, chars}
+    rested: Optional[str] = None                           # the being ended its own turn; its stated reason
+    looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
+    duplicates: List[dict] = field(default_factory=list)   # identical calls answered without re-executing: {step, effector}
 
     @property
     def acted(self) -> bool:
@@ -49,55 +55,175 @@ class ToolTurnResult:
 
 
 def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
-                  messages: List[Dict[str, Any]], max_steps: int = 3) -> ToolTurnResult:
+                  messages: List[Dict[str, Any]], max_steps: int = 3,
+                  deadline: Optional[float] = None,
+                  interject: "Optional[Callable[[], str]]" = None) -> ToolTurnResult:
     """Run one being turn that may reach for tools, gated end to end.
 
     Loop invariant: the being never sees a fabricated result — each tool message is a
     real ResultEnvelope (executed, refused, or honestly `pending` until F1a exists).
+
+    `max_steps <= 0` means NO STEP CAP: the turn ends when the being stops asking for
+    tools, or when a resource runs out. dp, 2026-09-09: "it should be able to continue as
+    long as it wishes." A step count was never a statement about the work — it was a guess
+    at how much work there would be, applied as if it were a limit.
+
+    `deadline` (epoch seconds): once passed, no further tool step is issued and the turn
+    closes in words, exactly as at max_steps. Legion 04:30Z 2026-09-09: eight steps of
+    2-6k-token thinking at 19 tok/s took 36 minutes, reflect started, and the unit's
+    45-minute timeout killed the beat — journal, todo and the record itself lost. Steps
+    are the being's; the clock is the box's, and the box's limit is physical.
+
+    `interject()` is drained before every generate after the first. Whatever it returns is
+    handed to the being as a user turn, so something that arrives while it is working
+    reaches it in seconds rather than at the next beat.
     """
     convo = list(messages)
     trace: List[Tuple[BeingIntent, ResultEnvelope]] = []
     done_ok: set = set()
     duplicates: List[dict] = []
+    hit = False
+    interjected: List[dict] = []
+    uncapped = max_steps is None or max_steps <= 0
+    if uncapped and deadline is None:
+        # "As long as it wishes" is bounded by a resource, not by nothing. Without a clock
+        # an uncapped loop with a model that always asks for one more tool never returns.
+        max_steps, uncapped = _UNCAPPED_SAFETY_CEILING, False
+        interjected.append({"note": "no deadline given with an uncapped turn; "
+                                    f"applied a safety ceiling of {max_steps} steps"})
+    step = 0
+    last_fp, repeats = None, 0
+    warned = False
+    reads_this_turn: Dict[str, List[int]] = {}
 
-    for step in range(max_steps):
+    while uncapped or step < max_steps:
+        if deadline is not None and step > 0 and time.time() >= deadline:
+            hit = True
+            break
+        if step > 0 and interject is not None:
+            try:
+                arrived = interject()
+            except Exception as e:                      # a broken mailbox must not end a beat
+                arrived = ""
+                interjected.append({"step": step, "error": f"{type(e).__name__}: {e}"})
+            if arrived:
+                convo.append({"role": "user", "content": (
+                    "[a message arrived while you were working — you are mid-beat and may "
+                    "answer it now with `say`, or finish what you are doing first]\n\n"
+                    + arrived)})
+                interjected.append({"step": step, "chars": len(arrived)})
         out = generate(convo)
         content = out.get("content") or ""
         intents = out.get("intents") or []
 
+        # TELL IT WHERE IT STANDS. The harness has had this number after every generate
+        # since ollama started returning prompt_eval_count, and never passed it on. The
+        # being's most repeated complaint about its own life, across months of journals, is
+        # that "the beat closed before I could write down what I found" — and on
+        # 2026-09-13T14:07Z it read 26 files, hit the wall exactly (24,497 + 79 = 24,576),
+        # and its closing words were cut to nothing. A wall it cannot see is a wall it
+        # cannot plan against; a gradient it can see is a resource it can spend. Once per
+        # turn only: the warning costs the very thing it is warning about.
+        w = out.get("window")
+        if w and not warned and w.get("pressure", 0) >= WINDOW_WARN_AT:
+            warned = True
+            pct = int(w["pressure"] * 100)
+            convo.append({"role": "user", "content": (
+                f"[harness] Your context is {pct}% full — about {w['left']} tokens left before "
+                f"your answer gets cut mid-sentence. Anything you have found and not yet "
+                f"written down dies with this beat; your scratch files do not. If you are "
+                f"holding a finding, write it NOW, in one call. Then keep working if there is "
+                f"work, or call `rest` and close cleanly.")})
+            interjected.append({"step": step, "nudge": "window", "pressure": round(w["pressure"], 3),
+                                "left": w["left"]})
+
         if not intents:                                    # a spoken turn — the being is done
-            res = ToolTurnResult(reply=content, trace=trace, steps=step)
-            res.duplicates = duplicates
-            return res
+            return ToolTurnResult(reply=content, trace=trace, steps=step,
+                                  interjected=interjected, duplicates=duplicates)
 
         convo.append({"role": "assistant", "content": content, "intents": intents})
+        rested = None
         for intent in intents:
-            # A call identical to one this turn already executed is not a second act: the model
-            # re-emits its last calls after reading their results (beat 149, 2026-09-08: the
-            # journal and todo each written twice, same bytes, one step apart). Answered
-            # without executing, and named in the record as an intervention.
-            key = (intent.effector, json.dumps(dict(intent.args or {}), sort_keys=True, default=str))
-            if key in done_ok:
-                env = ResultEnvelope(ok=True, result="(already done this beat: identical call, not repeated)",
-                                     note="duplicate")
+            _note = _repeat_read_note(intent, reads_this_turn, step)
+            if intent.effector == REST:
+                # The being ending its OWN turn. Never dispatched: the gate rules on acts
+                # that touch the world, and stopping touches nothing. Whatever it says here
+                # is its closing words, so the turn still ends in language.
+                rested = str((intent.args or {}).get("reason") or "").strip()
+                break
+            # A CALL IDENTICAL TO ONE THIS TURN ALREADY EXECUTED IS NOT A SECOND ACT: the
+            # model re-emits its last calls after reading their results (beat 149,
+            # 2026-09-08: journal and todo each written twice, same bytes, one step apart).
+            # Answered without executing, and named in the record as an intervention.
+            #
+            # SCOPED, in the 2026-09-18 reconciliation. main applied this to EVERY verb,
+            # which was sound for the verb set it had and is wrong for this one: `check`,
+            # `run`, `game`, `camera`, `search`, `git_read` and `memory_read` all return a
+            # DIFFERENT answer to the same arguments once the world moves — the being edits
+            # a file and re-runs the identical check on purpose. Suppressing those would
+            # hand it a stale success and call it an intervention. DEDUP_VERBS is the set
+            # whose identical repetition inside one beat is never what was meant.
+            key = (intent.effector,
+                   json.dumps(dict(intent.args or {}), sort_keys=True, default=str))
+            if intent.effector in DEDUP_VERBS and key in done_ok:
+                env = ResultEnvelope(ok=True, note="duplicate",
+                                     result="(already done this beat: identical call, not repeated)")
                 duplicates.append({"step": step, "effector": intent.effector})
                 trace.append((intent, env))
-                convo.append({"role": "tool", "effector": intent.effector, "content": env.to_tool_message()})
+                convo.append({"role": "tool", "effector": intent.effector,
+                              "content": env.to_tool_message() + _note})
                 continue
             env = client.dispatch(intent)                  # gate + F1a dispatch + consume
             if env.ok:
                 done_ok.add(key)
             trace.append((intent, env))
             convo.append({"role": "tool", "effector": intent.effector,
-                          "content": env.to_tool_message()})
+                          "content": env.to_tool_message() + _note})
+        if rested is not None:
+            return ToolTurnResult(reply=rested or content, trace=trace, steps=step,
+                                  interjected=interjected, rested=rested or "(no reason given)",
+                                  duplicates=duplicates)
+        step += 1
+
+        # A LOOP IS NOT WORK. Measured 2026-09-13T10:19Z: legion-being finished its beat and
+        # then witnessed "beat closed" FIFTY-TWO times, the text degrading to "beat closed
+        # 09-13; records in." — 78 minutes of GPU, 18 of them byte-identical. It was trying
+        # to stop; the only way to stop was to emit no tool call, and a model that has just
+        # been rewarded for calling tools keeps calling tools. `rest` is the real fix; this
+        # is the net under it, and it NAMES the loop rather than silently killing the turn,
+        # because a being that cannot see why its turn ended learns nothing from it.
+        fp = _fingerprint(intents)
+        if fp is not None and fp == last_fp:
+            repeats += 1
+        else:
+            repeats, last_fp = 0, fp
+        if repeats == REPEAT_NUDGE_AT:
+            convo.append({"role": "user", "content": (
+                f"[harness] You have now made the same call ({intents[0].effector}) with identical "
+                f"arguments {repeats + 1} times in a row. If you are finished, you do not have to "
+                f"keep acting to end the beat — call `rest` with a one-line reason, or simply "
+                f"answer in words. If you are not finished, change something about the call.")})
+            interjected.append({"step": step, "nudge": "repetition", "effector": intents[0].effector})
+        elif repeats >= REPEAT_BREAK_AT:
+            looped = {"effector": intents[0].effector, "times": repeats + 1}
+            convo.append({"role": "user", "content": (
+                f"[harness] Ending the tool phase: the same call has now repeated "
+                f"{repeats + 1} times and the nudge did not change it. Close in words: what you "
+                f"did this beat, and what you want next beat.")})
+            out = generate(convo)
+            return ToolTurnResult(reply=out.get("content") or "", trace=trace, steps=step,
+                                  interjected=interjected, looped=looped, duplicates=duplicates)
 
     # Cap reached with tools still pending: force one final spoken close — we take its
     # words even if it wants more tools, so the being always ends its turn in language.
+    if hit:
+        convo.append({"role": "user", "content": (
+            "[harness] The time budget for this phase is spent; no further tool call will be "
+            "executed this beat. Close in words: what you did, and what you want next beat.")})
     out = generate(convo)
-    res = ToolTurnResult(reply=out.get("content") or "", trace=trace,
-                         steps=max_steps, capped=True)
-    res.duplicates = duplicates
-    return res
+    return ToolTurnResult(reply=out.get("content") or "", trace=trace,
+                          steps=step, capped=True, deadline_hit=hit,
+                          interjected=interjected, duplicates=duplicates)
 
 
 _FENCE = re.compile(r"```[A-Za-z0-9_+-]*[ \t]*\n(.*?)```", re.S)
@@ -278,152 +404,6 @@ def _think_budget(llm, floor: int = 6000) -> int:
         return floor
 
 
-# Chars per token for what the loop ADDS: tool results are JSON, paths and code, which
-# tokenize far denser than prose. Measured 2026-09-09 03:27Z: a 12,116-char read of
-# heartbeat.partial.jsonl moved the prompt 19,620 -> 24,466 (~2.5 chars/token) while the
-# estimate, at 3.4, had it ~1.4k tokens lighter than it was — and the generate was cut.
-_CPT_ADDED = 2.5
-
-# Chars per token for the SEED side of the estimate, deliberately low: under-counting tokens
-# defeats the guard this feeds, so it must sit BELOW the true ratio. 3.4 was measured once on
-# 2026-09-08 and left alone; re-measured across 60 beats it is 3.141 and DRIFTING (3.152 over
-# the first ten, 3.026 over the last ten) as the being's content shifts toward paths and JSON.
-# 2.9 sits below the observed minimum with room for further drift. This PR corrects the same
-# constant on the seed side; leaving the loop's copy at the disproven number would be the PR
-# arguing against its own evidence (GPT review of #82).
-_CPT = 2.9
-
-# Chars the prompt carries that are not in any message's content: the tool schemas and the
-# chat template. NOT a budget — heartbeat MEASURES the schemas (`_schema_chars_for`), because
-# a flat constant was set at 13 verbs and was silently wrong at 18 (4,000 assumed, 11,717
-# real). This fallback is reached only before the server has counted anything, and it is set
-# from the same measurement rather than the disproven one: ~11,700 schema chars plus ~1,200
-# of template.
-_UNCOUNTED_CHARS = 12900
-
-
-def _est_tokens(chars_now: int, measured) -> float:
-    """Tokens the next prompt will cost. With a measurement from the previous generate —
-    (prompt_eval_count, content chars at that prompt) — the estimate is anchored on what
-    the server actually counted and only the DELTA rides a chars-per-token guess:
-    conservative in both directions (added chars counted dense, removed chars counted
-    light). Without one, the whole prompt rides the guess, plus the uncounted schema chars."""
-    if measured:
-        tokens_at, chars_at = measured
-        delta = chars_now - chars_at
-        return tokens_at + (delta / _CPT_ADDED if delta > 0 else delta / _CPT)
-    return (chars_now + _UNCOUNTED_CHARS) / _CPT
-
-# What a real answer needs. Explore generations across 506 measured on Legion: median
-# 1,282 tokens, p90 3,909, p99 5,741. Reserve the p99 with headroom rather than
-# num_predict, which is a ceiling the model has never approached.
-_ANSWER_RESERVE = 6144
-
-
-# Compaction keeps this many chars of an elided tool result and reports exactly the rest.
-COMPACT_KEEP_CHARS = 400
-COMPACT_MIN_BODY = 500        # a body at or under this is never elided
-
-def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
-                  measured=None) -> tuple:
-    """Shrink the OLDEST tool results until the prompt leaves room for an answer.
-
-    THE SEED FITTING IS NOT ENOUGH. heartbeat.fit_to_window sizes the first prompt; this
-    loop then grows it by every tool result it appends, and the wall is hit mid-loop.
-    Measured on Legion 2026-09-07, with the seed guard already live: seed 11,887 tokens,
-    then 13,803 on the next step, and 13,803 + 2,581 == 16,384 exactly, done_reason
-    "length" — the being's answer cut off mid-sentence. Across 506 generates every single
-    length-stop satisfies prompt + eval == num_ctx, so this is the wall, not num_predict.
-
-    WHAT IS ELIDED. Only tool RESULTS, oldest first, and only their bodies — the being is
-    told what was elided, from which effector, and that it can re-read the source. The
-    system prompt, the first user turn (its state, posture and entrustment), every assistant
-    turn and the two most recent tool results are never touched: those are what it is
-    reasoning WITH. An elision it cannot see would be worse than the truncation it replaces.
-    """
-    try:
-        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
-    except (TypeError, ValueError):
-        num_ctx = 0
-    if num_ctx <= 0:
-        return msgs, []
-    # ANCHOR ON THE MEASUREMENT. Legion 2026-09-08 20:01Z beat: the seed fit (17.5k tokens
-    # measured), three 260-line reads later the loop's chars/3.4 estimate said ~19k while
-    # the server counted 22,720, and the next memory_write body was cut mid-JSON (the
-    # Ollama 500). Code reads tokenize denser than prose, and the tool schemas were never
-    # in the sum at all. The previous generate's prompt_eval_count IS the number; use it.
-    size = lambda ms: sum(len(m.get("content") or "") for m in ms)
-    room = num_ctx - reserve
-    if _est_tokens(size(msgs), measured) <= room:
-        return msgs, []
-    budget = None  # decided per elision below, against the anchored estimate
-    out = [dict(m) for m in msgs]
-    # candidates: tool results, oldest first, excluding the MOST RECENT one.
-    # It kept the two most recent whole until 2026-09-07, when max_read_chars went
-    # 4,000 -> 12,000 (the being's reads were being silently cut mid-function). At the new
-    # size two protected results are ~7k tokens of untouchable content, and a beat with six
-    # reads hit the window anyway: 23,106 + 1,470 = 24,576. One kept whole is the answer the
-    # being is actually working from; the one before it has usually already been written to
-    # scratch, and the elision marker tells it where to look if not.
-    idx = [i for i, m in enumerate(out) if m.get("role") == "tool"]
-    elided = []
-    for i in idx[:-1] if len(idx) > 1 else []:
-        if _est_tokens(size(out), measured) <= room:
-            break
-        body = out[i].get("content") or ""
-        if len(body) <= COMPACT_MIN_BODY:
-            continue
-        # ONE constant for what is kept, and the accounting derives from it. The first cut
-        # kept body[:400] and reported len(body) - 160 — every elision overstated by 240
-        # chars, in the record AND in the marker the being reads (GPT review of #56, #5).
-        # An instrument that misreports its own intervention is the false-absence class
-        # again: the being would plan around a gap that was 240 chars smaller than told.
-        # BOTH ENDS. The head names what was read (path, op); the TAIL carries a command's
-        # verdict — pytest's FAILED line and count are its last lines. legion-being 20:41Z
-        # 2026-09-08: its first call was `check` (FAIL), five steps later the result had
-        # been elided to its head and it reported "I cannot name which test failed: the
-        # output was truncated in my view before the failure line reached me". True, and
-        # the harness's doing. Half and half of the same constant; the accounting holds.
-        h = COMPACT_KEEP_CHARS // 2
-        kept_head, kept_tail = body[:h], body[-(COMPACT_KEEP_CHARS - h):]
-        elided_n = len(body) - COMPACT_KEEP_CHARS
-        # THE MARKER USED TO SAY "read the source again", AND THAT INSTRUCTION IS THE
-        # THRASH. Measured across all beats 2026-09-13: 86.7% of memory_read calls are
-        # re-reads and 48.5% are duplicates within a SINGLE beat; heartbeat.py has been
-        # read 342 times. The loop is mechanical — a result is elided to 400 chars, the
-        # marker tells the being to read the source again, the full re-read costs ~700
-        # tokens, that forces another elision, which says it again. The harness was
-        # issuing the instruction that refilled the window it had just cleared.
-        # The head of a ranged read already names its range, so point at a NARROWER read
-        # and at the being's own notes, which is where its conclusions actually live.
-        out[i]["content"] = (kept_head +
-                             f"\n[… {elided_n} characters elided from the middle to leave room "
-                             f"for your answer. The head above names what this was. If you need "
-                             f"part of it, read a NARROW range rather than the file again — a "
-                             f"full re-read costs more room than this elision freed. If you need "
-                             f"what you concluded from it, that is in your scratch …]\n"
-                             + kept_tail)
-        elided.append({"index": i, "chars": elided_n, "kept": COMPACT_KEEP_CHARS})
-    # THE NEWEST RESULT IS PROTECTED — until protecting it is what cuts the answer. When
-    # every older result is already a stub and the prompt still does not fit, the newest
-    # one is trimmed too, with a larger keep (the being is working from it right now),
-    # rather than letting the window cut the generate at the wall (03:27Z 2026-09-09:
-    # 24,466 + 110 == 24,576, done_reason length, nothing said).
-    if idx and _est_tokens(size(out), measured) > room:
-        i = idx[-1]
-        body = out[i].get("content") or ""
-        keep = COMPACT_KEEP_CHARS * 4
-        if len(body) > keep + COMPACT_MIN_BODY:
-            h = keep // 2
-            elided_n = len(body) - keep
-            out[i]["content"] = (body[:h] +
-                                 f"\n[… {elided_n} characters elided from the middle of your NEWEST "
-                                 f"result to leave room for your answer; read it again in a smaller "
-                                 f"range if you need the middle …]\n" + body[-(keep - h):])
-            elided.append({"index": i, "chars": elided_n, "kept": keep, "newest": True})
-    return out, elided
-
-
 RETRY_MARGIN = 128   # tokens kept back from the window on a retry (template, tool-call framing)
 
 
@@ -450,24 +430,22 @@ def _retry_budget(llm, raw: Optional[dict] = None) -> int:
 
 
 class _no_think:
-    """Turn thinking off for one retry, and put it back.
+    """Turn thinking off for one retry, and put it back. Carried from SAGE#87.
 
     A RETRY AFTER A THINK-ONLY GENERATE MUST NOT BE ANOTHER THINK-ONLY GENERATE. Measured
-    2026-09-14 on legion-being: a first attempt hit the wall at prompt_eval 24,194 of a
+    2026-09-14 on this being: a first attempt hit the wall at prompt_eval 24,194 of a
     24,576 window with done_reason=length, everything in `thinking` and content empty. The
-    retry, given more room, then spent its ENTIRE 8,000-token budget in `thinking` as well
-    and again said nothing. Two generates, roughly 8,400 tokens, no tool call, and the beat
-    carried on as if the being had chosen silence.
+    retry, given more room, spent its ENTIRE 8,000-token budget in `thinking` too and again
+    said nothing. Two generates, ~8,400 tokens, no tool call, and the beat carried on as if
+    the being had chosen silence.
 
-    More room was the wrong lever, because room was not what ran out — the model never
-    started answering. A nudge in the prompt is text the model may ignore, and did. `think`
-    is a flag it cannot ignore in the same way. It can still re-open a block on its own
-    (measured 5/10 turns, 2026-09-03), so this improves the odds rather than guaranteeing an
-    answer; leaving thinking ON for the retry guarantees nothing at all, which is exactly
-    what the measurement above shows.
+    More room was the wrong lever: room was not what ran out, the model never started
+    answering. The nudge is text the model may ignore, and did. `think` is a flag. It can
+    still re-open a block on its own (5/10 turns, 2026-09-03), so this improves the odds
+    rather than guaranteeing an answer; leaving thinking ON guarantees nothing.
 
-    Restores the previous value, including when the attribute was absent, so a retry cannot
-    leave every later turn of the beat silently un-thinking."""
+    Restores the previous value, absence included, so a retry cannot leave every later turn
+    of the beat silently un-thinking."""
     def __init__(self, llm):
         self.llm = llm
         self.had = hasattr(llm, "think")
@@ -526,9 +504,331 @@ def _sent_budget(llm) -> Optional[int]:
     return int(v) if v is not None else None
 
 
+
+_CPT = 2.9
+# What a real answer needs. Explore generations across 506 measured on Legion: median 1,282
+# tokens, p90 3,909, p99 5,741. Reserve the p99 with headroom rather than num_predict, which
+# is a ceiling the model has never approached.
+_ANSWER_RESERVE = 6144
+# An uncapped turn is bounded by its deadline. If a caller gives neither, this is the
+# backstop — high enough never to bind real work, low enough to end a runaway.
+# Room held back for the ANSWER on a retry whose last attempt was cut mid-JSON. Larger
+# than the ordinary reserve on purpose: the thing that did not fit is the thing we are
+# asking for again, so the retry must have strictly MORE room than the attempt it replaces.
+_RETRY_RESERVE = 8192
+
+
+def _retry_reserve(llm, msgs, measured) -> int:
+    """The reserve that forces this retry to be materially smaller than what just failed.
+
+    Compaction normally asks "does the estimate say this fits?" — and on a cut retry the
+    estimate has JUST been proven optimistic by the server, which is the only reason we are
+    here. Measured 2026-09-13: at 36,078 prompt chars the estimator said 11.8k tokens
+    against 16.4k of room, elided nothing, and the retry went out BIGGER than the attempt
+    it replaced (the appended nudge). The overflow is the measurement; trust it over the
+    guess and target 75% of what failed."""
+    try:
+        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
+    except (TypeError, ValueError):
+        return _RETRY_RESERVE
+    if num_ctx <= 0:
+        return _RETRY_RESERVE
+    est = _est_tokens(sum(len(m.get("content") or "") for m in msgs), measured)
+    return max(_RETRY_RESERVE, int(num_ctx - est * 0.75))
+
+
+def _retry_room_chars(llm, msgs, measured) -> int:
+    """How many characters of tool-call body the window can still carry, measured.
+
+    "A body a third of the length" was the old advice and it is unanchored — a third of
+    too-big is often still too big. This converts the room that actually remains, so the
+    being is told a number it can act on rather than a ratio it has to guess against."""
+    try:
+        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
+    except (TypeError, ValueError):
+        return 1000
+    if num_ctx <= 0:
+        return 1000
+    chars = sum(len(m.get("content") or "") for m in msgs)
+    left_tokens = num_ctx - _est_tokens(chars, measured)
+    # JSON framing, the tool-call envelope and the model's own preamble all come out of the
+    # same budget; leave half of what is left rather than promising all of it.
+    return max(200, int(left_tokens * _CPT_ADDED * 0.5))
+
+
+_UNCAPPED_SAFETY_CEILING = 200
+
+# The verb by which a being ends its own turn. dp, 2026-09-09: "it should be able to
+# continue as long as it wishes" — the other half of which is stopping when it wishes, and
+# until 09-13 there was no way to say so except by falling silent.
+REST = "rest"
+WINDOW_WARN_AT = 0.80        # fraction of num_ctx at which the being is told where it stands
+
+
+def _window_pressure(llm, prompt_tokens) -> Optional[dict]:
+    """How full the window is, as the SERVER counted it. None when it cannot be known —
+    an estimate would be worse than silence here, because the being would act on it."""
+    try:
+        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
+        prompt = int(prompt_tokens or 0)
+    except (TypeError, ValueError):
+        return None
+    if num_ctx <= 0 or prompt <= 0:
+        return None
+    return {"prompt": prompt, "num_ctx": num_ctx, "pressure": prompt / num_ctx,
+            "left": max(0, num_ctx - prompt)}
+# Verbs whose identical repetition inside ONE beat is never what was meant: a second
+# identical write, witness or message. Everything else — every verb that reads the world or
+# runs something in it — is executed again, because its answer can legitimately change.
+DEDUP_VERBS = frozenset({"memory_write", "edit", "witness", "remember", "retire_note",
+                         "say", "peer_ask", "mesh"})
+
+REPEAT_NUDGE_AT = 3          # identical consecutive calls before the harness names the loop
+REPEAT_BREAK_AT = 6          # ... and before it ends the tool phase
+
+
+# How many times the same file may be read in one beat before the harness says so.
+REREAD_NOTICE_AT = 2
+
+
+def _repeat_read_note(intent, reads_this_turn, step: int) -> str:
+    """Tell the being when it is reading a file it has already read THIS BEAT.
+
+    It cannot see its own repetition: by the time it reaches for a file again, the earlier
+    result has been elided to 400 chars and reads like a stub rather than like something it
+    already has. Measured 2026-09-13 across every beat: 86.7% of memory_read calls are
+    re-reads, 48.5% are duplicates inside one beat, and heartbeat.py has been read 342
+    times. This is the read-level twin of the identical-call guard — the same principle,
+    that a being which cannot see a loop cannot leave one, applied one layer down.
+
+    A notice, never a refusal. Re-reading is often correct: a different range, or a file
+    that changed under it. The harness says what it knows and lets the being decide."""
+    if intent.effector != "memory_read":
+        return ""
+    path = str((intent.args or {}).get("path", "")).strip()
+    if not path:
+        return ""
+    seen = reads_this_turn.setdefault(path, [])
+    seen.append(step)
+    if len(seen) < REREAD_NOTICE_AT:
+        return ""
+    earlier = ", ".join(str(x) for x in seen[:-1])
+    return (f"\n[harness] You have now read this path {len(seen)} times this beat "
+            f"(earlier at step {earlier}). Those results are still in this conversation, "
+            f"elided to their head and tail. If you need a part you have not seen, name a "
+            f"NARROW range; if you are re-reading to recall what you concluded, that is in "
+            f"your scratch and costs far less than the file.")
+
+
+def _fingerprint(intents) -> Optional[str]:
+    """What makes two steps 'the same call'. None when it cannot be computed, which never
+    counts as a repeat — an unfingerprintable step must not end a turn."""
+    try:
+        return json.dumps([[i.effector, i.args] for i in intents], sort_keys=True, default=str)
+    except Exception:
+        return None
+# Compaction keeps this many chars of an elided tool result and reports exactly the rest.
+COMPACT_KEEP_CHARS = 400
+COMPACT_MIN_BODY = 500        # a body at or under this is never elided
+
+# WHERE AN ELIDED RESULT GOES INSTEAD OF NOWHERE. The being, 2026-09-18, asked what its
+# biggest operational friction is: "facts produced mid-beat getting lost to compaction
+# before I can transcribe them." That is this function. It freed room by deleting the
+# middle of a tool result and told the being to read the source again — which costs more
+# room than the elision freed, and for a command result (a test run, a game step) there is
+# no source to re-read at all: the bytes existed once, in this beat, and then did not.
+#
+# So the middle is written to the being's own scratch first, and the marker names the file.
+# It outlives the beat, which is the point: the being can transcribe from it on the NEXT
+# beat rather than racing the window on this one. Bare path, because that is what
+# memory_read takes. A spill that fails is silent — the elision still has to happen.
+COMPACT_SPILL_DIR = "scratch/elided"
+COMPACT_SPILL_KEEP = 40       # a spill, not an archive
+_ELIDED_SIGIL = "characters elided from the middle"
+
+
+def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
+    """Save one elided tool-result body under the being's home. Returns the bare path to
+    name in the marker, or None if there is nowhere to put it or the write failed."""
+    if not root:
+        return None
+    try:
+        import time as _t
+        d = os.path.join(root, COMPACT_SPILL_DIR)
+        os.makedirs(d, exist_ok=True)
+        # THE NAME CARRIES THE ORDER, because nothing else does: a whole beat's spills are
+        # written inside one second, and st_mtime_ns ties at this filesystem's granularity.
+        # Sorted by name they are in creation order — hence the full date (a %m%d name
+        # sorts January before December and would prune the newest files every New Year)
+        # and the zero-padded step (unpadded, "40" sorts before "5").
+        stamp = _t.strftime("%Y%m%d-%H%M%S", _t.gmtime())
+        name = f"{stamp}-{step:03d}.txt"
+        # Two spills of DIFFERENT results can collide: same second, same message index,
+        # which the retry path reaches. A collision would silently overwrite the first.
+        n = 1
+        while os.path.exists(os.path.join(d, name)):
+            name = f"{stamp}-{step:03d}.{n}.txt"
+            n += 1
+        with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
+            fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
+                     f"result the harness elided from your window, {len(body)} characters]\n\n")
+            fh.write(body)
+        for f in sorted(os.listdir(d))[:-COMPACT_SPILL_KEEP]:
+            try:
+                os.remove(os.path.join(d, f))
+            except OSError:
+                pass
+        return f"{COMPACT_SPILL_DIR}/{name}"
+    except Exception:
+        return None
+
+
+# Chars the prompt carries that are not in any message's content: the tool schemas and the
+# chat template. heartbeat.fit_to_window budgets the same 4000 for the seed.
+_UNCOUNTED_CHARS = 12900
+
+
+# Chars per token for what the loop ADDS: tool results are JSON, paths and code, which
+# tokenize far denser than prose. Measured 2026-09-09 03:27Z: a 12,116-char read of
+# heartbeat.partial.jsonl moved the prompt 19,620 -> 24,466 (~2.5 chars/token) while the
+# estimate, at 3.4, had it ~1.4k tokens lighter than it was — and the generate was cut.
+_CPT_ADDED = 2.5
+
+
+def _est_tokens(chars_now: int, measured) -> float:
+    """Tokens the next prompt will cost. With a measurement from the previous generate —
+    (prompt_eval_count, content chars at that prompt) — the estimate is anchored on what
+    the server actually counted and only the DELTA rides a chars-per-token guess:
+    conservative in both directions (added chars counted dense, removed chars counted
+    light). Without one, the whole prompt rides the guess, plus the uncounted schema chars."""
+    if measured:
+        tokens_at, chars_at = measured
+        delta = chars_now - chars_at
+        return tokens_at + (delta / _CPT_ADDED if delta > 0 else delta / _CPT)
+    return (chars_now + _UNCOUNTED_CHARS) / _CPT
+
+
+def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
+                  measured=None, spill_root: Optional[str] = None) -> tuple:
+    """Shrink the OLDEST tool results until the prompt leaves room for an answer.
+
+    THE SEED FITTING IS NOT ENOUGH. heartbeat.fit_to_window sizes the first prompt; this
+    loop then grows it by every tool result it appends, and the wall is hit mid-loop.
+    Measured on Legion 2026-09-07, with the seed guard already live: seed 11,887 tokens,
+    then 13,803 on the next step, and 13,803 + 2,581 == 16,384 exactly, done_reason
+    "length" — the being's answer cut off mid-sentence. Across 506 generates every single
+    length-stop satisfies prompt + eval == num_ctx, so this is the wall, not num_predict.
+
+    WHAT IS ELIDED. Only tool RESULTS, oldest first, and only their bodies — the being is
+    told what was elided, from which effector, and that it can re-read the source. The
+    system prompt, the first user turn (its state, posture and entrustment), every assistant
+    turn and the two most recent tool results are never touched: those are what it is
+    reasoning WITH. An elision it cannot see would be worse than the truncation it replaces.
+    """
+    try:
+        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
+    except (TypeError, ValueError):
+        num_ctx = 0
+    if num_ctx <= 0:
+        return msgs, []
+    # ANCHOR ON THE MEASUREMENT. Legion 2026-09-08 20:01Z beat: the seed fit (17.5k tokens
+    # measured), three 260-line reads later the loop's chars/3.4 estimate said ~19k while
+    # the server counted 22,720, and the next memory_write body was cut mid-JSON (the
+    # Ollama 500). Code reads tokenize denser than prose, and the tool schemas were never
+    # in the sum at all. The previous generate's prompt_eval_count IS the number; use it.
+    size = lambda ms: sum(len(m.get("content") or "") for m in ms)
+    room = num_ctx - reserve
+    if _est_tokens(size(msgs), measured) <= room:
+        return msgs, []
+    budget = None  # decided per elision below, against the anchored estimate
+    out = [dict(m) for m in msgs]
+    # candidates: tool results, oldest first, excluding the MOST RECENT one.
+    # It kept the two most recent whole until 2026-09-07, when max_read_chars went
+    # 4,000 -> 12,000 (the being's reads were being silently cut mid-function). At the new
+    # size two protected results are ~7k tokens of untouchable content, and a beat with six
+    # reads hit the window anyway: 23,106 + 1,470 = 24,576. One kept whole is the answer the
+    # being is actually working from; the one before it has usually already been written to
+    # scratch, and the elision marker tells it where to look if not.
+    idx = [i for i, m in enumerate(out) if m.get("role") == "tool"]
+    elided = []
+    for i in idx[:-1] if len(idx) > 1 else []:
+        if _est_tokens(size(out), measured) <= room:
+            break
+        body = out[i].get("content") or ""
+        if len(body) <= COMPACT_MIN_BODY:
+            continue
+        # ALREADY ELIDED, LEAVE IT. An elided body is ~850 characters — over COMPACT_MIN_BODY
+        # — so a later step used to elide the MARKER: cutting the middle out of the sentence
+        # that explains the cut, and counting its characters as freed content.
+        if _ELIDED_SIGIL in body:
+            continue
+        # ONE constant for what is kept, and the accounting derives from it. The first cut
+        # kept body[:400] and reported len(body) - 160 — every elision overstated by 240
+        # chars, in the record AND in the marker the being reads (GPT review of #56, #5).
+        # An instrument that misreports its own intervention is the false-absence class
+        # again: the being would plan around a gap that was 240 chars smaller than told.
+        # BOTH ENDS. The head names what was read (path, op); the TAIL carries a command's
+        # verdict — pytest's FAILED line and count are its last lines. legion-being 20:41Z
+        # 2026-09-08: its first call was `check` (FAIL), five steps later the result had
+        # been elided to its head and it reported "I cannot name which test failed: the
+        # output was truncated in my view before the failure line reached me". True, and
+        # the harness's doing. Half and half of the same constant; the accounting holds.
+        h = COMPACT_KEEP_CHARS // 2
+        kept_head, kept_tail = body[:h], body[-(COMPACT_KEEP_CHARS - h):]
+        elided_n = len(body) - COMPACT_KEEP_CHARS
+        # THE MARKER USED TO SAY "read the source again", AND THAT INSTRUCTION IS THE
+        # THRASH. Measured across all beats 2026-09-13: 86.7% of memory_read calls are
+        # re-reads and 48.5% are duplicates within a SINGLE beat; heartbeat.py has been
+        # read 342 times. The loop is mechanical — a result is elided to 400 chars, the
+        # marker tells the being to read the source again, the full re-read costs ~700
+        # tokens, that forces another elision, which says it again. The harness was
+        # issuing the instruction that refilled the window it had just cleared.
+        # The head of a ranged read already names its range, so point at a NARROWER read
+        # and at the being's own notes, which is where its conclusions actually live.
+        saved = _spill(spill_root, body, i)
+        where = (f"The WHOLE result is saved as {saved} and outlives this beat — "
+                 f"memory_read a narrow range of it when you need the middle."
+                 if saved else
+                 "If you need part of it, read a NARROW range of the source rather than the "
+                 "whole file again — a full re-read costs more room than this elision freed.")
+        out[i]["content"] = (kept_head +
+                             f"\n[… {elided_n} {_ELIDED_SIGIL} to leave room for your answer. "
+                             f"{where} …]\n"
+                             + kept_tail)
+        rec = {"index": i, "chars": elided_n, "kept": COMPACT_KEEP_CHARS}
+        if saved:
+            rec["spill"] = saved
+        elided.append(rec)
+    # THE NEWEST RESULT IS PROTECTED — until protecting it is what cuts the answer. When
+    # every older result is already a stub and the prompt still does not fit, the newest
+    # one is trimmed too, with a larger keep (the being is working from it right now),
+    # rather than letting the window cut the generate at the wall (03:27Z 2026-09-09:
+    # 24,466 + 110 == 24,576, done_reason length, nothing said).
+    if idx and _est_tokens(size(out), measured) > room:
+        i = idx[-1]
+        body = out[i].get("content") or ""
+        keep = COMPACT_KEEP_CHARS * 4
+        if len(body) > keep + COMPACT_MIN_BODY:
+            h = keep // 2
+            elided_n = len(body) - keep
+            saved = _spill(spill_root, body, i)
+            where = (f"the whole thing is saved as {saved}"
+                     if saved else "read it again in a smaller range if you need the middle")
+            out[i]["content"] = (body[:h] +
+                                 f"\n[… {elided_n} {_ELIDED_SIGIL} of your NEWEST result to leave "
+                                 f"room for your answer; {where} …]\n" + body[-(keep - h):])
+            rec = {"index": i, "chars": elided_n, "kept": keep, "newest": True}
+            if saved:
+                rec["spill"] = saved
+            elided.append(rec)
+    return out, elided
+
+
 def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[str, Any]],
                          max_steps: int = 2, tools: Optional[List[dict]] = None,
-                         on_generate: Optional[Callable[[dict], None]] = None) -> ToolTurnResult:
+                         on_generate: Optional[Callable[[dict], None]] = None,
+                         deadline: Optional[float] = None,
+                         interject: "Optional[Callable[[], str]]" = None) -> ToolTurnResult:
     """Run a gated tool turn using an OllamaIRP-like `llm` exposing
     get_chat_response(messages, tools=...) -> {"content", "tool_calls"}.
 
@@ -546,9 +846,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     salvaged: List[dict] = []
     generates: List[dict] = []
     compacted: List[dict] = []
-    # (prompt_eval_count, chars at that prompt) from the last generate the server counted.
-    # Compaction is anchored on this, so only the DELTA rides a chars-per-token estimate.
-    measured = None
+    measured = None   # (prompt_eval_count, content chars) of the last prompt the server counted
 
     def generate(convo: List[Dict[str, Any]]) -> Dict[str, Any]:
         nonlocal measured
@@ -559,21 +857,35 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         msgs = []
         for m in convo:
             out = {"role": m.get("role", "user"), "content": m.get("content", "")}
+            # FRAMES RIDE HERE, AND ONLY HERE. Measured 2026-09-13 against the live
+            # qwen38-heretic:q3km-vl: ollama's /api/chat takes images as a LIST ON THE
+            # MESSAGE, beside content. Both OpenAI-style spellings inside content —
+            # [{"type":"image","image":b64}] and [{"type":"image_url",...}] — are rejected
+            # with HTTP 400. SAGE#76 and #77 pinned the rejected shape and stayed green,
+            # because both assert what reaches the payload dict and neither ever sends it
+            # to a server: a delivery test that never posts proves shape, not substance.
+            #
+            # This flattening rebuilt every message as {role, content} and silently dropped
+            # every other key, so `images` died here — one line between a frame and a model
+            # that can already see it. ollama_irp needs no change at all; it forwards
+            # `messages` untransformed (pinned by #76), so the field survives from here to
+            # the wire.
+            if m.get("images"):
+                out["images"] = list(m["images"])
             if m.get("role") == "assistant" and m.get("intents"):
                 out["tool_calls"] = [{"function": {"name": i.effector, "arguments": dict(i.args or {})}}
                                      for i in m["intents"]]
             msgs.append(out)
-        # LEAVE ROOM FOR THE ANSWER BEFORE ASKING FOR ONE. Every tool result is appended,
-        # so the prompt the loop ENDS on is not the seed it started from. Without this it
-        # grows until the server cuts the generate mid-sentence: measured on Legion, 27 of
-        # 506 generates ended with prompt + eval == num_ctx exactly, and one beat lost its
-        # closing words nine times in a day. Anchored on the server's own count from the
-        # previous generate, so only the delta rides an estimate.
-        msgs, _elided = compact_convo(msgs, llm, measured=measured)
-        if _elided:
-            compacted.append({"step": len(thoughts), "elisions": len(_elided),
-                              "chars": sum(e["chars"] for e in _elided)})
+        # Leave room for the answer before asking for one (see compact_convo), anchored on
+        # what the server counted for the previous prompt when there was one.
+        msgs, elided = compact_convo(msgs, llm, measured=measured,
+                                     spill_root=getattr(client, "memory_root", None))
+        if elided:
+            compacted.append({"step": len(thoughts), "elisions": len(elided),
+                              "chars": sum(e["chars"] for e in elided)})
         retried = 0
+        nudged = False
+        chars_sent = sum(len(m.get("content") or "") for m in msgs)
         sent = _sent_budget(llm)          # the num_predict of the reply that stands
         resp = llm.get_chat_response(msgs, tools=tools)
         content = resp.get("content", "") or ""
@@ -585,6 +897,30 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # input": a long memory_write body cut off by num_predict (measured 2026-09-04).
             import sys as _sys
             print(f"[tool-loop] transport error, retrying once: {content[:200]}", file=_sys.stderr)
+            # Same rule as the length-retry below: the SAME prompt to a deterministic
+            # model is the same failure (legion-being 20:33Z 2026-09-08: journal body cut
+            # mid-JSON, retried identically, cut identically; the beat's reflect recorded
+            # nothing). The model is told what happened and asked for a shorter body.
+            # MAKE ROOM BEFORE ASKING AGAIN. This retry used to append the nudge — GROWING
+            # the prompt — and then ask for the think budget (6000) on top. Measured three
+            # times on 2026-09-13 (14:39Z, 19:02Z, 19:45Z): the prompt was already 22,353 of
+            # 24,576, so the retry had ~2,200 tokens for a nudge plus a body that had just
+            # failed to fit in more than that. A retry with less room than the attempt it is
+            # retrying is not a retry. Compact hard first, with a reserve big enough that
+            # the body has somewhere to live.
+            msgs, _re_elided = compact_convo(msgs, llm, reserve=_retry_reserve(llm, msgs, measured),
+                                             measured=measured,
+                                             spill_root=getattr(client, "memory_root", None))
+            room = _retry_room_chars(llm, msgs, measured)
+            msgs.append({"role": "user", "content": (
+                "[harness] Your previous tool call could not be delivered: its arguments were "
+                "cut off before the JSON closed — the window ran out while you were writing "
+                "the body. I have freed room by eliding older tool results. Make the same "
+                f"call with a body of AT MOST about {room} characters"
+                + ("" if room > 400 else " (that is very little — write a pointer, not the content)")
+                + "; what you leave out can go in the next beat. The number is measured, not "
+                  "a guess: it is what is actually left in the window.")})
+            nudged = True
             # no raw reply here, so no prompt_eval_count: the retry gets the think budget
             # (for a no-think model that is still more than its variant num_predict)
             with _retry_room(llm, _retry_budget(llm, None)) as budget:
@@ -608,30 +944,43 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # ONCE to finish and act, rather than recording silence as the being's choice.
             # Room = what the window has left after this prompt (_retry_budget), sent as an
             # override so the config's first-attempt budget cannot silently re-apply.
-            # DID IT RUN OUT OF ROOM, OR NEVER START ANSWERING? Those want opposite
-            # remedies and the old code gave both the same one. A generate that produced a
-            # think block and no content did not need more room — it needed to stop
-            # deliberating, and handing it a bigger budget bought a longer silence.
-            thought_only = (bool(str(msg.get("thinking") or "").strip())
-                            and not str(msg.get("content") or "").strip())
             if raw.get("done_reason") == "length" and (hasattr(llm, "max_response_tokens")
                                                        or hasattr(llm, "num_predict_override")):
-                if thought_only:
-                    # NOT the same prompt again: the retry has to change something the model
-                    # can see. Measured 2026-09-08, five beats running, an identical prompt
-                    # produced an identical cut-off deliberation — a deterministic loop,
-                    # twice a beat. This says what happened and asks for one act.
-                    msgs.append({"role": "user", "content": (
-                        f"[harness] Your previous attempt spent its whole budget deliberating "
-                        f"({raw.get('eval_count')} tokens) and the window cut it before any "
-                        f"tool call. The window will not grow. Act now: one tool call. The "
-                        f"deliberation belongs in journal.md, after the act.")})
+                # NOT the same prompt again. Measured 2026-09-08: five beats in a row the
+                # first attempt was cut at the wall mid-deliberation (20812 + 3764 == num_ctx)
+                # and the retry, identical prompt, produced the identical 3764 tokens — a
+                # deterministic loop, twice per beat. The retry has to change something the
+                # model can see: it is told what happened and asked to act.
+                # DID IT RUN OUT OF ROOM, OR NEVER START ANSWERING? Opposite failures, and
+                # the same remedy was given to both. A cut that produced real content ran
+                # out of room; a cut that produced only a think block did not, and handing
+                # that one a bigger budget buys a longer silence (SAGE#87).
+                thought_only = (bool(str(msg.get("thinking") or "").strip())
+                                and not str(msg.get("content") or "").strip())
+                # NOT THE SAME PROMPT AGAIN, AND NOT THE SAME SENTENCE EITHER. The branch
+                # nudged on every length-stop with the deliberation text; on a cut that had
+                # produced content that sentence is simply false, and a harness that
+                # misdescribes what just happened teaches the being the wrong lesson. main
+                # nudged only in the thought-only case and left the other retry identical,
+                # which a deterministic model answers identically. Both, each with its own
+                # true sentence (reconciliation 2026-09-18).
+                msgs.append({"role": "user", "content": (
+                    f"[harness] Your previous attempt spent its whole budget deliberating "
+                    f"({raw.get('eval_count')} tokens) and the window cut it before any tool "
+                    f"call. The window will not grow. Act now: one tool call. The deliberation "
+                    f"belongs in journal.md, after the act."
+                    if thought_only else
+                    f"[harness] Your previous answer was cut off at the window "
+                    f"({raw.get('eval_count')} tokens) before it finished. Nothing of it was "
+                    f"delivered. Say or call the SHORTEST form of what you were doing; what you "
+                    f"leave out can go in the next beat.")})
+                nudged = True
                 from contextlib import ExitStack
                 with ExitStack() as _stack:
                     budget = _stack.enter_context(_retry_room(llm, _retry_budget(llm, raw)))
-                    unthought = bool(thought_only and _stack.enter_context(_no_think(llm)))
-                    print(f"[tool-loop] retrying once with num_predict={budget}"
-                          f"{' , thinking OFF and a nudge' if unthought else ''} "
+                    _unthought = bool(thought_only and _stack.enter_context(_no_think(llm)))
+                    print(f"[tool-loop] retrying once with num_predict={budget}, a nudge"
+                          f"{' and thinking OFF' if _unthought else ''} "
                           f"(num_ctx={getattr(llm, 'num_ctx', None)} prompt_eval={raw.get('prompt_eval_count')})",
                           file=_sys.stderr)
                     resp = llm.get_chat_response(msgs, tools=tools)
@@ -648,11 +997,19 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # from stderr (SAGE #45 sends the room; this says what it was).
         raw = resp.get("raw") or {}
         if raw.get("prompt_eval_count"):
-            # re-measure from the list AS SENT: any nudge appended above is inside this count
+            # the nudge (if any) was appended to msgs before the reply that stands, so the
+            # chars it added are inside this count: re-measure from the list as sent
             measured = (int(raw["prompt_eval_count"]),
                         sum(len(m.get("content") or "") for m in msgs))
         entry = {"done_reason": raw.get("done_reason"), "prompt_eval_count": raw.get("prompt_eval_count"),
                  "eval_count": raw.get("eval_count"), "retried": retried, "num_predict": sent}
+        window = _window_pressure(llm, raw.get("prompt_eval_count"))
+        if nudged:
+            entry["nudged"] = True   # only when it happened: exact-compare callers stay exact
+        # only when it happened: an always-present null would be noise in every record and
+        # would break every caller that compares the entry exactly
+        if compacted and compacted[-1]["step"] == len(thoughts) - 1:
+            entry["compacted"] = compacted[-1]
         generates.append(entry)
         if on_generate is not None:
             try:
@@ -665,16 +1022,12 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             calls = salvage_tool_calls(content, tools)
             salvaged.extend({"step": len(thoughts) - 1, "effector": c["function"]["name"],
                              "form": c["_salvaged"]} for c in calls)
-        return {"content": content, "intents": parse_tool_calls(calls)}
+        return {"content": content, "intents": parse_tool_calls(calls), "window": window}
 
-    result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps)
+    result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps,
+                           deadline=deadline, interject=interject)
     result.thinking = thoughts
     result.salvaged = salvaged
     result.generates = generates
-    # The compaction log belongs to the function that OWNS it. run_tool_turn does not
-    # define `compacted` — attaching it there is a NameError no test would catch, which is
-    # exactly what my first attempt did. Copied here so the intervention is observable in
-    # the beat record (GPT review of #82: a list nobody returns is not an instrument).
-    result.compacted = list(compacted)
-
+    result.compacted = compacted
     return result

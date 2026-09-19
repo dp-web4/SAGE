@@ -103,8 +103,13 @@ class FakeMembot(FakeMcp):
             "memory_search": "No cartridge mounted. Use mount_cartridge first.",
             "save_cartridge": "Saved 'x': 0 memories, 0.0 MB, fingerprint=5feceb66ffc86f38"}
 
+    # get_passage is the second half of membot's documented retrieval pattern: search
+    # gives ~550-char previews + an idx, get_passage(idx) gives the whole passage.
+    PASSAGES = ["memory zero, whole", "memory one, whole", "x" * 9000]
+
     def call(self, name, args):
-        if name not in ("memory_search", "memory_store", "save_cartridge", "mount_cartridge"):
+        if name not in ("memory_search", "memory_store", "save_cartridge", "mount_cartridge",
+                        "get_passage"):
             return super().call(name, args)
         FakeMcp.calls.append((name, args))
         how = self.fail.get(name)
@@ -115,6 +120,13 @@ class FakeMembot(FakeMcp):
                                "isError": True}}
         if how == "soft":
             t = self.SOFT[name]
+            return {"result": {"content": [{"type": "text", "text": t}],
+                               "structuredContent": {"result": t}}}
+        if name == "get_passage":
+            i = args.get("idx")
+            t = (f"Passage #{i} [prev=#{i-1} next=#{i+1}] from 'sprout-being':\n\n{self.PASSAGES[i]}"
+                 if isinstance(i, int) and 0 <= i < len(self.PASSAGES)
+                 else f"Index {i} out of range (0-{len(self.PASSAGES)-1}).")
             return {"result": {"content": [{"type": "text", "text": t}],
                                "structuredContent": {"result": t}}}
         text = {"memory_search": "1. something remembered",
@@ -388,13 +400,16 @@ def test_membot_iserror_on_search_is_an_error_not_a_recall():
 
 
 def test_request_scope_carries_plugin_path_reason_and_live_session():
-    d, _ = _mdisp()
-    env = d(BeingIntent("request_scope", {"path": "/home/dp/notes", "reason": "to read my notes"}), _ALLOW)
+    d, root = _mdisp()
+    # a path that EXISTS: request_scope refuses a phantom before it files one (see
+    # test_scope_on_a_path_that_does_not_exist_is_refused_before_it_is_filed)
+    notes = os.path.join(root, "notes"); os.makedirs(notes, exist_ok=True)
+    env = d(BeingIntent("request_scope", {"path": notes, "reason": "to read my notes"}), _ALLOW)
     assert env.ok and env.witness_id == "rs-hash", env
     assert env.result["request_id"] == "scope-1" and env.result["status"] == "pending"
-    assert env.result["path"] == "/home/dp/notes" and "mode" not in env.result
+    assert env.result["path"] == notes and "mode" not in env.result
     (sent,) = [a for n, a in FakeMcp.calls if n == "hestia_request_scope"]
-    assert sent["plugin_id"] == "sprout-being" and sent["path"] == "/home/dp/notes"
+    assert sent["plugin_id"] == "sprout-being" and sent["path"] == notes
     assert sent["session_id"] == "sid-1"                # the live session from hestia_connect
     assert sent["reason"] == "[sprout-being] to read my notes"
     assert set(sent) == {"plugin_id", "path", "reason", "session_id"}  # no mode, no permits_read
@@ -418,9 +433,10 @@ def test_request_scope_daemon_error_is_keyed():
                     "code": "hestia.scope_request_unknown_member", "message": "who"}}}}
             return super().call(name, args)
     FakeMcp.calls = []
-    d = HestiaF1aDispatcher("sprout-being", tempfile.mkdtemp(prefix="hd-"),
+    _root = tempfile.mkdtemp(prefix="hd-")
+    d = HestiaF1aDispatcher("sprout-being", _root,
                             mcp_factory=lambda ep, pid: Refuses(ep, pid))
-    env = d(BeingIntent("request_scope", {"path": "/x", "reason": "y"}), _ALLOW)
+    env = d(BeingIntent("request_scope", {"path": _root, "reason": "y"}), _ALLOW)
     assert not env.ok and env.error.startswith("hestia.scope_request_unknown_member"), env
 
 
@@ -501,13 +517,15 @@ def test_request_scope_inside_existing_reach_is_answered_locally_and_files_nothi
     from sage.gateway.being_gate_client import GatewayVerdict
     d, root = _disp()
     FakeMcp.calls.clear()
+    open(os.path.join(root, "config.json"), "a").close()      # the path must EXIST to be judged
+    os.makedirs("/tmp/hd-elsewhere", exist_ok=True)           # likewise for the outside-reach arm
     env = d(BeingIntent("request_scope", {"path": root + "/config.json", "reason": "to review my configuration"}),
-            GatewayVerdict("allow", granted=(root,)))
+            GatewayVerdict("allow", granted=(root,), granted_reach=((root, True),)))
     assert env.ok and env.result["status"] == "already_granted" and env.result["within"]
     assert not [n for n, _ in FakeMcp.calls if n == "hestia_request_scope"]
     # outside reach: filed as before
-    env = d(BeingIntent("request_scope", {"path": "/srv/elsewhere/x", "reason": "to read a peer's note"}),
-            GatewayVerdict("allow", granted=(root,)))
+    env = d(BeingIntent("request_scope", {"path": "/tmp/hd-elsewhere", "reason": "to read a peer's note"}),
+            GatewayVerdict("allow", granted=(root,), granted_reach=((root, True),)))
     assert env.ok and env.result["request_id"] == "scope-1"
 
 
@@ -762,6 +780,7 @@ def test_request_scope_beneath_an_exact_grant_is_not_already_granted_and_files_n
     d, root = _disp()
     FakeMcp.calls.clear()
     exact = GatewayVerdict("allow", granted=(root,), granted_reach=((root, False),))
+    open(os.path.join(root, "journal.md"), "a").close()   # the path must EXIST to be judged
     env = d(BeingIntent("request_scope", {"path": root + "/journal.md", "reason": "to write my journal entry"}), exact)
     assert env.ok and env.result["status"] == "beneath_exact_grant", env
     assert env.result["root"] == os.path.realpath(root) and "/**" in env.result["next"]
@@ -830,7 +849,7 @@ def test_a_search_that_finds_nothing_is_a_result_not_an_error(tmp_path):
     subprocess.run(["git", "init", "-q", str(wt)], check=True)
     subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
 
-    d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None)
+    d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None); d._call = lambda name, args: ({"actionId": "act-1"} if name == "hestia_begin_action" else {})
     # search is _CONSEQUENTIAL and now witnesses like git_read, so the chain must answer
     d._call = lambda name, args: {"actionId": "act-s"} if name == "hestia_begin_action" else {}
 
@@ -1142,6 +1161,7 @@ def test_evidence_names_the_path_taken_not_the_guarantee_it_wanted(tmp_path):
     def _dispatcher(argv0):
         d = D.__new__(D); d.worktree = str(wt)
         d._verdict = types.SimpleNamespace(command=None)
+        d._call = lambda name, args: ({"actionId": "act-1"} if name == "hestia_begin_action" else {})
         d._call = lambda n, a: {"actionId": "act-c"} if n == "hestia_begin_action" else {}
         d._embodiment = lambda: {}
         d._worktree_revision = lambda: {"head": "abc123", "dirty": False}
@@ -1219,7 +1239,7 @@ def test_a_broken_pattern_is_a_failure_not_an_absence(tmp_path):
     subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
 
     outcomes = {}
-    d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None)
+    d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None); d._call = lambda name, args: ({"actionId": "act-1"} if name == "hestia_begin_action" else {})
 
     def _call(name, args):
         if name == "hestia_begin_action":
@@ -1307,7 +1327,7 @@ def test_a_search_for_a_file_that_is_not_there_is_not_an_absence(tmp_path):
     subprocess.run(["git", "init", "-q", str(wt)], check=True)
     subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
 
-    d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None)
+    d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None); d._call = lambda name, args: ({"actionId": "act-1"} if name == "hestia_begin_action" else {})
     d._call = lambda n, a: {"actionId": "act-s"} if n == "hestia_begin_action" else {}
 
     # (1) no such file -> NOT an absence
@@ -1369,3 +1389,729 @@ def test_asking_one_peer_is_capped_per_window_and_a_refused_ask_leaves_nothing_b
     clock[0] += 6 * 3600
     env = d(BeingIntent("peer_ask", {"to": "legion", "body": "is the server up?"}), _ALLOW)
     assert env.ok, "the oldest asks age out of the window"
+
+
+# ---- carried from legion/mission-artifact in the 2026-09-18 reconciliation ----
+
+
+def test_recall_with_an_idx_reads_the_whole_memory_not_the_preview():
+    """The verb's second form. A search result is ~550 characters of a memory and an
+    `idx`; this is how the being reads the rest of it."""
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {"idx": 1}), _ALLOW)
+    assert env.ok and "memory one, whole" in env.result and env.witness_id, env
+    assert _mb_calls("get_passage") == [{"idx": 1}]
+    assert not _mb_calls("memory_search")          # an idx SEARCHES NOTHING
+    # The forms the harness itself prints: "(idx:1)", a "prev=#1"/"next=#1" hint, or the
+    # bare number. Refusing two of the three would be the harness refusing its own notation.
+    for form in ("idx:1", "#1", " 1 ", "next=#1"):
+        env = d(BeingIntent("recall", {"idx": form}), _ALLOW)
+        assert env.ok and "memory one, whole" in env.result, (form, env)
+        assert _mb_calls("get_passage")[-1] == {"idx": 1}, form
+    # idx 0 is a real index, not an absent one
+    env = d(BeingIntent("recall", {"idx": 0}), _ALLOW)
+    assert env.ok and "memory zero, whole" in env.result, env
+
+def test_recall_with_neither_query_nor_idx_names_both_forms():
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {}), _ALLOW)
+    assert not env.ok and "query" in env.error and "idx" in env.error, env
+    assert not _mb_calls("memory_search") and not _mb_calls("get_passage")
+    # an empty idx is not an idx: it falls through to the query form, which is also empty
+    env = d(BeingIntent("recall", {"idx": "  "}), _ALLOW)
+    assert not env.ok and "query" in env.error, env
+    env = d(BeingIntent("recall", {"idx": "the third one"}), _ALLOW)
+    assert not env.ok and "number" in env.error, env
+    env = d(BeingIntent("recall", {"idx": -2}), _ALLOW)
+    assert not env.ok and "0 or more" in env.error, env
+    assert not _mb_calls("get_passage")
+
+def test_recall_idx_out_of_range_is_a_refusal_not_a_memory():
+    """membot answers "Index 99 out of range (0-2)." — correct, and NOT content. Passed
+    through as a result the being would file that sentence as what it remembered."""
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {"idx": 99}), _ALLOW)
+    assert not env.ok and "out of range" in env.error, env
+
+def test_recall_idx_truncates_a_giant_passage_and_says_how_much():
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {"idx": 2}), _ALLOW)
+    assert env.ok, env
+    assert len(env.result) < 9000 and "truncated" in env.result, len(env.result)
+    assert "9" in env.result.split("truncated")[1]        # the true size is named
+
+def test_recall_idx_without_a_cartridge_is_an_error_not_an_empty_memory():
+    d, _ = _mdisp(fail={"mount_cartridge": "soft"})
+    env = d(BeingIntent("recall", {"idx": 1}), _ALLOW)
+    assert not env.ok, env
+
+def test_a_lost_session_reconnects_whether_it_is_returned_or_raised():
+    """A LOST SESSION ARRIVES IN TWO SHAPES AND ONLY ONE WAS HANDLED.
+
+    hestia can answer with an error envelope (`_hestia_error.code` naming session), or the
+    MCP transport can fail the request outright — `HTTP 404 ... Not Found: Session not
+    found` — which `call` RAISES. The original reconnect only inspected the returned
+    envelope, so for the raising path the retry was dead code.
+
+    Measured 2026-09-07: seven minutes into a beat the being called `check` twice, the gate
+    ALLOWED both, and both died on hestia_begin_action with that 404 before pytest ever ran.
+    From inside it is indistinguishable from a refusal — the opaque-404 defect the being
+    itself reported as SAGE#52 — and it cost it the milestone that beat.
+
+    Also pins that a NON-session error still propagates: reconnecting on every failure would
+    hide real ones."""
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+
+    assert D._is_session_loss("RuntimeError: HTTP 404 ...: Not Found: Session not found")
+    assert D._is_session_loss("session_not_found")
+    assert not D._is_session_loss("HTTP 500: internal error")
+    assert not D._is_session_loss("")
+
+    def _wrap(payload):            # the MCP envelope _unwrap expects
+        return {"result": {"structuredContent": payload}}
+
+    calls, conns = [], []
+
+    class _C:
+        def __init__(self, gen): self.gen = gen
+        def init(self): pass
+        def call(self, name, args):
+            calls.append((self.gen, name))
+            if name in ("hestia_connect", "hestia_connect_challenge"):
+                return _wrap({"sessionId": f"s{self.gen}"})
+            if self.gen == 0:
+                raise RuntimeError("MCP tools/call -> HTTP 404 at /mcp: Not Found: Session not found")
+            return _wrap({"ok": True, "gen": self.gen})
+
+    def factory(endpoint, plugin_id):
+        conns.append(1)
+        return _C(len(conns) - 1)
+
+    d = D.__new__(D)
+    d._mcp_factory, d.endpoint, d.plugin_id = factory, "e", "p"
+    d._c = d._session_id = None
+    d.host_session_id, d.being_lct, d.identity_basis = None, None, None
+
+    out = d._call("hestia_begin_action", {"tool_name": "check"})
+    assert out == {"ok": True, "gen": 1}, "the retry must run on a NEW session, not the dead one"
+    assert len(conns) == 2, "exactly one reconnect"
+    assert d._session_id == "s1"
+
+    # a failure that is not a lost session is not retried away
+    class _Boom(_C):
+        def call(self, name, args):
+            if name == "hestia_connect":
+                return _wrap({"sessionId": "s"})
+            raise RuntimeError("HTTP 500: internal error")
+    d2 = D.__new__(D)
+    d2._mcp_factory = lambda e, p: _Boom(9)
+    d2.endpoint, d2.plugin_id, d2._c, d2._session_id = "e", "p", None, None
+    d2.host_session_id, d2.being_lct, d2.identity_basis = None, None, None
+    try:
+        d2._call("hestia_begin_action", {})
+        raise AssertionError("a non-session error must propagate")
+    except RuntimeError as e:
+        assert "500" in str(e)
+
+def test_pr_open_commits_with_the_beings_trailers_and_runs_the_judged_gh_command(tmp_path, monkeypatch):
+    """The being's work enters the tree (PRD r3 §7): its own branch, its attribution in the
+    commit trailers it cannot alter, the outward `gh` act judged by the law. Run against a
+    REAL git repo and a fake `gh` on PATH — the seat's git identity authors, the trailers
+    attribute, and nothing the being wrote is lost by a failed act."""
+    import os
+    import subprocess
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent
+
+    # pr_base_branch now REFUSES rather than guessing "main" when legion-being/work has no
+    # upstream (the defect that mis-based #63). This fixture has no upstream, and it is
+    # testing pr_open's commit/trailer/gh behaviour rather than base resolution, so name the
+    # base explicitly — which is the same escape hatch the refusal message points at.
+    monkeypatch.setenv("SAGE_PR_BASE", "legion/mission-artifact")
+
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    wt = tmp_path / "wt"
+    subprocess.run(["git", "clone", "-q", str(origin), str(wt)], check=True)
+    g = lambda *a: subprocess.run(["git", "-C", str(wt), *a], check=True, capture_output=True, text=True)
+    g("config", "user.email", "seat@test"); g("config", "user.name", "seat")
+    (wt / "README").write_text("base\n"); g("add", "-A"); g("commit", "-q", "-m", "base")
+    g("push", "-q", "-u", "origin", "HEAD:legion-being/work"); g("checkout", "-q", "-b", "legion-being/work")
+
+    # the being's authored change: a red test, exactly the shape it specified
+    (wt / "test_new.py").write_text("def test_it():\n    assert False\n")
+
+    bindir = tmp_path / "bin"; bindir.mkdir()
+    (bindir / "gh").write_text("#!/bin/sh\ncat > \"$0.body\"\necho \"$@\" > \"$0.args\"\necho https://example/pr/1\n")
+    os.chmod(bindir / "gh", 0o755)
+    monkeypatch.setenv("PATH", f"{bindir}:{os.getenv('PATH')}")
+
+    d = D.__new__(D)
+    d.worktree = str(wt); d.plugin_id = "legion-being"; d.being_lct = "lct:web4:test"
+    d._call = lambda name, args: {"actionId": "act-77"} if name == "hestia_begin_action" else {}
+
+    env = d._do_pr_open(BeingIntent("pr_open", {
+        "slug": "red-test", "title": "gateway: a failing test first",
+        "body": "VERIFIED: check on tree abc -> FAIL as intended.\nSUSPECTED: nothing."}))
+    assert env.ok, env.error
+    assert env.result["pr"] == "https://example/pr/1"
+    assert env.result["branch"] == "legion-being/red-test"
+
+    msg = g("log", "-1", "--format=%B").stdout
+    for line in ("Being: legion-being", "Being-LCT: lct:web4:test", "Witness: act-77", "Seat: legion-claude"):
+        assert line in msg, msg
+    assert msg.startswith("gateway: a failing test first\n\n"), msg
+    assert "legion-being/red-test" in subprocess.run(
+        ["git", "-C", str(origin), "branch"], capture_output=True, text=True).stdout
+    args = (bindir / "gh.args").read_text()
+    assert "--head legion-being/red-test" in args and "--body-file -" in args
+    body = (bindir / "gh.body").read_text()
+    assert "VERIFIED: check on tree abc" in body
+    assert "attribution, not yet a signature" in body, "the PR must not let a trailer pass for a signature"
+    assert "hestia witness action: `act-77`" in body
+
+    env2 = d._do_pr_open(BeingIntent("pr_open", {"slug": "again", "title": "a second attempt here", "body": "x"}))
+    assert not env2.ok and "no changes to propose" in env2.error
+
+def test_check_reports_unverified_with_its_tree_when_the_substrate_is_down(tmp_path):
+    """The being's own design (its Q1 answer, 2026-09-07): keep check gated and witnessed —
+    no unwitnessed local fallback, because two verification paths diverge and the
+    unwitnessed one becomes the one people trust — but when the substrate is down, return an
+    explicit UNVERIFIED with the tree block, never a bare error. 'A failing test is a real
+    answer; so is "the checker was down."'"""
+    import subprocess
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent
+    wt = tmp_path / "wt"; wt.mkdir()
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    d = D.__new__(D); d.worktree = str(wt); d.plugin_id = "legion-being"; d.being_lct = None
+    def down(name, args):
+        raise RuntimeError("MCP tools/call -> HTTP 404: Not Found: Session not found")
+    d._call = down
+    env = d._do_check(BeingIntent("check", {"target": "gateway"}))
+    assert not env.ok
+    assert env.result["verdict"] == "UNVERIFIED" and env.result["passed"] is None
+    assert "tree" in env.result and "worktree" in env.result
+    assert "UNVERIFIED" in env.error and "substrate" in env.error
+    assert "did not run" in env.result["reason"], "an unwitnessed check must not have run"
+
+def test_recall_without_a_cartridge_never_reads_as_an_empty_past():
+    """A silent empty answer here would teach the being its past is gone when the store is
+    merely unreachable — the false-absence class, applied to memory.
+
+    Reconciled 2026-09-18: recall now searches the being's own home as well as membot, so a
+    dead cartridge does not make the whole verb fail. What must survive is that the answer
+    SAYS the long-term store was not searched, which it does, in the text the being reads."""
+    d, _ = _mdisp(fail={"memory_search": "soft"})
+    env = d(BeingIntent("recall", {"query": "what did I learn"}), _ALLOW)
+    assert "NOT searched" in env.result and "not an empty past" in env.result, env
+
+def test_a_duplicate_is_a_store_that_does_NOT_need_the_serializer_run():
+    d, _ = _mdisp()
+    d._mb = None
+    class Dup(FakeMembot):
+        def call(self, name, args):
+            if name == "memory_store":
+                FakeMcp.calls.append((name, args))
+                t = 'Duplicate — already stored, skipped: "keep me"'
+                return {"result": {"content": [{"type": "text", "text": t}],
+                                   "structuredContent": {"result": t}}}
+            return super().call(name, args)
+    d._mcp_factory = lambda ep, pid: Dup(ep, pid)
+    FakeMcp.calls = []
+    env = d(BeingIntent("remember", {"content": "keep me"}), _ALLOW)
+    # ok, because the memory it wanted kept IS kept — and no save, because nothing changed
+    # and the session holds nothing unpersisted (_mb_dirty). A dirty session always saves;
+    # that arm is test_a_duplicate_on_a_dirty_session_still_saves on main.
+    assert env.ok and "not saved" in env.result, env
+    assert _mb_calls("save_cartridge") == []
+
+def test_pr_amend_refuses_when_there_is_nothing_to_revise():
+    """A clean worktree and no new body is not a revision. Refused before begin_action, so
+    no witnessed act is spent on a no-op."""
+    import subprocess
+    d, root = _mdisp()
+    wt = tempfile.mkdtemp(prefix="amend-noop-")
+    def git(*a):
+        return subprocess.run(["git", *a], cwd=wt, capture_output=True, text=True)
+    git("init", "-q"); git("config", "user.email", "t@t"); git("config", "user.name", "t")
+    open(os.path.join(wt, "f"), "w").write("x"); git("add", "-A"); git("commit", "-qm", "c")
+    git("checkout", "-qb", "legion-being/some-proposal")
+    d.worktree = wt
+
+    env = d(BeingIntent("pr_amend", {"title": "a title long enough", "message": "why"}), _ALLOW)
+    assert not env.ok and "nothing to revise" in env.error
+    assert env.witness_id is None, "a refused no-op must not consume a witnessed action"
+
+def test_pr_amend_without_a_worktree_is_pending_not_an_error():
+    d, _ = _mdisp()
+    d.worktree = None
+    env = d(BeingIntent("pr_amend", {"title": "a title long enough", "message": "why"}), _ALLOW)
+    assert env.pending and "worktree of your own" in env.note
+
+def test_an_unrecognised_mount_reply_is_a_failure_not_a_pass():
+    """Yesterday's guard enumerated the refusals it knew about. membot also rate-limits at
+    60 requests/60s and says "Rate limited." in ordinary text — unlisted, so a rate-limited
+    MOUNT read as success and the next recall reported no cartridge. The being hit that on
+    2026-09-11 and reported it instead of concluding its memory was gone.
+
+    A guard written against a list of known failures passes every unknown one. Require the
+    success marker instead."""
+    class RateLimited(FakeMembot):
+        def call(self, name, args):
+            if name == "mount_cartridge":
+                FakeMcp.calls.append((name, args))
+                t = "Rate limited. Max 60 requests per 60s."
+                return {"result": {"content": [{"type": "text", "text": t}],
+                                   "structuredContent": {"result": t}}}
+            return super().call(name, args)
+
+    FakeMcp.calls = []
+    root = tempfile.mkdtemp(prefix="hd-rl-")
+    d = HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: RateLimited(ep, pid))
+    env = d(BeingIntent("remember", {"content": "keep me"}), _ALLOW)
+    assert not env.ok and "refused to mount" in env.error and "Rate limited" in env.error
+    assert _mb_calls("memory_store") == [] and _mb_calls("save_cartridge") == []
+
+    # and a reply that says nothing recognisable at all is also a failure
+    class Silent(FakeMembot):
+        def call(self, name, args):
+            if name == "mount_cartridge":
+                FakeMcp.calls.append((name, args))
+                return {"result": {"content": [{"type": "text", "text": "ok"}],
+                                   "structuredContent": {"result": "ok"}}}
+            return super().call(name, args)
+    FakeMcp.calls = []
+    d2 = HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: Silent(ep, pid))
+    env = d2(BeingIntent("recall", {"query": "x"}), _ALLOW)
+    assert not env.ok and "refused to mount" in env.error
+
+def test_already_granted_says_whether_the_grant_is_actually_writable():
+    """A grant that is live at the gate and inert at the harness must SAY so.
+
+    2026-09-13: legion-being asked for the fleet forum so it could answer a peer on-record,
+    was told `already_granted` with "read or write it directly", and was then refused the
+    write — writes are confined to home+worktree whatever the gate grants. It had to read
+    reference_f1a.py to learn which of the two answers was real. The writability question
+    is delegated to `_safe_path` itself rather than re-derived, because two copies of a
+    security boundary drift and the copy that drifts is the friendly one."""
+    from pathlib import Path
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+    from sage.gateway.reference_f1a import ReferenceF1aDispatcher
+    import tempfile
+
+    home = Path(tempfile.mkdtemp(prefix="grantable-"))
+    (home / "notes").mkdir()
+    elsewhere = Path(tempfile.mkdtemp(prefix="shared-"))
+
+    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    d._local = ReferenceF1aDispatcher(memory_root=home, worktree=None, witness_fn=None)
+
+    assert d._writable_by_harness(str(home / "journal.md")) is True
+    assert d._writable_by_harness(str(home / "notes" / "plan.md")) is True
+    # granted-but-not-writable: the exact case that cost a beat
+    assert d._writable_by_harness(str(elsewhere)) is False
+    # reserved inside the being's OWN home is not writable either
+    assert d._writable_by_harness(str(home / "conversations")) is False
+
+    # cannot tell != refuse. A dispatcher with no local F1a must not manufacture a boundary.
+    blind = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    assert blind._writable_by_harness(str(elsewhere)) is True
+
+def test_a_lapsed_mount_is_remounted_once_not_reported_forever():
+    """The mount is per MCP session and was checked only at session CREATION, then cached.
+    A session the server later forgot answered "No cartridge mounted" forever while
+    _membot() kept handing it back. legion-being lost `remember` for two consecutive beats
+    on 2026-09-13 and concluded, reasonably, that it was a stable state of the machine —
+    the cartridge was intact (332 memories) the whole time; only the session was gone."""
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+
+    class Session:
+        def __init__(self, mounted): self.mounted, self.calls = mounted, []
+        def init(self): pass
+        def call(self, name, args):
+            self.calls.append(name)
+            if name == "mount_cartridge":
+                return {"result": {"content": [{"text": "Mounted 'c': 332 memories, integrity=verified"}]}}
+            if not self.mounted:
+                return {"result": {"content": [{"text": "No cartridge mounted. Use mount_cartridge first."}]}}
+            return {"result": {"content": [{"text": "Stored memory #333"}]}}
+
+    made = []
+    def factory(endpoint, plugin):
+        # the first session is the stale one; any session made after it is healthy
+        s = Session(mounted=bool(made)); made.append(s); return s
+
+    d = D.__new__(D)
+    d.membot_endpoint = "e"; d.membot_cartridge = "c"; d.plugin_id = "p"
+    d._mcp_factory = factory; d._mb = None
+
+    out = d._membot_call("memory_store", {"content": "x"})
+    assert "Stored memory #333" in out, out
+    assert len(made) == 2, "the stale session must be dropped and a new one mounted"
+    assert made[1].calls[0] == "mount_cartridge", "the new session mounts before it stores"
+
+    # ... and exactly ONCE: a server that is genuinely unmounted must not loop
+    made.clear()
+    def always_stale(endpoint, plugin):
+        s = Session(mounted=False); made.append(s); return s
+    d._mcp_factory = always_stale; d._mb = None
+    out2 = d._membot_call("memory_store", {"content": "x"})
+    assert "No cartridge mounted" in out2, "the second failure is REPORTED, not retried again"
+    assert len(made) == 2, f"one remount, not a loop (made {len(made)})"
+
+def test_a_restarted_membot_is_recovered_once_like_a_lapsed_mount():
+    """The remount fix covered the SOFT shape and not the hard one.
+
+    A lapsed mount answers "No cartridge mounted" as ordinary TEXT. A membot that has
+    RESTARTED answers HTTP 404 "Session not found" as a JSON-RPC error, which `_unwrap`
+    raises — so it never reached the text check. Measured 2026-09-14: the seat restarted
+    membot mid-beat and the being lost that beat's `remember` to exactly this, with the
+    cartridge intact at 344 memories. That is the SAGE#52 shape appearing a second time
+    inside the code written to fix it the first time."""
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+
+    class Session:
+        def __init__(self, alive): self.alive, self.calls = alive, []
+        def init(self): pass
+        def call(self, name, args):
+            self.calls.append(name)
+            if name == "mount_cartridge":
+                return {"result": {"content": [{"text": "Mounted 'c': 344 memories, integrity=verified"}]}}
+            if not self.alive:
+                return {"error": {"code": -32600, "message": "Session not found"}}
+            return {"result": {"content": [{"text": "Stored memory #345"}]}}
+
+    made = []
+    def factory(endpoint, plugin):
+        s = Session(alive=bool(made)); made.append(s); return s
+
+    d = D.__new__(D)
+    d.membot_endpoint = "e"; d.membot_cartridge = "c"; d.plugin_id = "p"
+    d._mcp_factory = factory; d._mb = None
+
+    out = d._membot_call("memory_store", {"content": "x"})
+    assert "Stored memory #345" in out, out
+    assert len(made) == 2, "the dead session must be dropped and a new one mounted"
+    assert made[1].calls[0] == "mount_cartridge"
+
+    # ONCE, not a loop: a server that is genuinely gone must be reported, not retried forever
+    made.clear()
+    d._mcp_factory = lambda e, p: (made.append(Session(alive=False)), made[-1])[1]
+    d._mb = None
+    try:
+        d._membot_call("memory_store", {"content": "x"})
+        assert False, "a persistently dead session must raise, not loop"
+    except RuntimeError as e:
+        assert "session not found" in str(e).lower()
+    assert len(made) == 2, f"one retry, not a loop (made {len(made)})"
+
+    # and a REFUSAL is not a lost session — retrying a refusal reads as flakiness
+    from sage.gateway.hestia_dispatch import _session_lost
+    assert not _session_lost(RuntimeError("membot refused to mount 'c': SECURITY"))
+    assert not _session_lost(RuntimeError("Rate limited"))
+
+def test_scope_on_a_path_that_does_not_exist_is_refused_before_it_is_filed(tmp_path):
+    """A grant on a path that does not exist reaches nothing, and nobody finds out.
+
+    Measured 2026-09-14, twelve hours after the fact. legion-being could not tell where its
+    own worktree was, because the escape refusals did not say so. It guessed
+    `/home/dp/ai-worktrees/legion-being/sage/gateway`, asked for scope on the guess, and the
+    operator granted it verbatim. The grant sat live in the being's scope list pointing at a
+    directory that has never existed, while the being still could not read the thing it
+    actually wanted and had no way to see why.
+
+    The cost of refusing a real request is one more beat. The cost of filing a phantom one is
+    an operator decision spent, a dead grant that looks like reach, and a being that cannot
+    tell the difference.
+    """
+    from sage.gateway.being_gate_client import GatewayVerdict
+    d, root = _disp()
+    FakeMcp.calls.clear()
+
+    ghost = str(tmp_path / "not" / "a" / "real" / "place")
+    env = d(BeingIntent("request_scope", {"path": ghost, "reason": "because"}),
+            GatewayVerdict("allow", granted=(root,)))
+
+    assert env.ok is False, "a phantom path must not become a pending operator decision"
+    assert "does not exist" in (env.error or ""), env.error
+    assert str(tmp_path) in (env.error or ""), \
+        f"the refusal must name the deepest part that DOES exist: {env.error!r}"
+    assert not [n for n, _ in FakeMcp.calls if n == "hestia_request_scope"], \
+        "nothing may be filed for a path that is not there"
+
+    # A real path outside reach still files, exactly as before.
+    real = tmp_path / "here"
+    real.mkdir()
+    env2 = d(BeingIntent("request_scope", {"path": str(real), "reason": "because"}),
+             GatewayVerdict("allow", granted=(root,)))
+    assert env2.ok and env2.result["request_id"] == "scope-1", \
+        "an existing path must still reach the operator"
+
+def test_search_reaches_a_granted_sibling_repo_and_answers_about_it(tmp_path):
+    """The whole point of the change: a path the being can READ it can now SEARCH.
+
+    legion-being, 2026-09-14 19:29:39Z, one beat: `memory_read` returned ranges out of the
+    live harness under a fresh standing grant, and two searches of the same directory came
+    back `gate.raised: search 'path' escapes your worktree`. Reading a 1434-line file a
+    range at a time is the strategy this verb exists to replace, and it is the one its
+    window cannot afford. The refusal was the harness's, not the law's."""
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent
+
+    root = tmp_path / "ws"
+    wt, ws, peer = root / "wt", root / "SAGE", root / "hestia"
+    for d_ in (wt, ws, peer):
+        d_.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    (peer / "law.py").write_text("FORBIDDEN_DEFAULT = ('a',)\n")
+
+    d = D.__new__(D)
+    d.worktree, d.workspace = str(wt), str(ws)
+    d._verdict = types.SimpleNamespace(command=None)
+    # search opens and closes an action now (witnessed like git_read, main's GPT review
+    # of #83): the fixture answers for the substrate rather than reaching a daemon.
+    d._call = lambda name, args: ({"actionId": "act-1"} if name == "hestia_begin_action" else {})
+
+    r = d._do_search(BeingIntent("search", {"pattern": "FORBIDDEN_DEFAULT", "path": str(peer)}))
+    assert r.ok, r.error
+    assert r.result["matches"] == 1
+    assert r.result["lines"][0] == f"{peer}/law.py:1:FORBIDDEN_DEFAULT = ('a',)"
+
+    # A PATH THAT ISN'T THERE IS A FAILURE, NOT AN ABSENCE. `grep` exits 2 and would
+    # otherwise land in the no-match arm as a confident bounded absence about a file that
+    # was never opened — and the ls-files probe that catches this for `git grep` answers
+    # "not tracked here" about every out-of-worktree path, so it must not run on this one.
+    gone = d._do_search(BeingIntent("search", {"pattern": "x", "path": str(peer / "nope.py")}))
+    assert gone.ok is False
+    assert "could not read" in gone.error and "No such file" in gone.error
+    assert "NOT an absence" in gone.error and "grep exited 2" in gone.error
+
+    # and a real absence in a real out-of-tree file is still a result, not an error
+    miss = d._do_search(BeingIntent("search", {"pattern": "zzz_absent", "path": str(peer)}))
+    assert miss.ok is True and miss.result["matches"] == 0
+
+def test_one_long_match_line_cannot_eat_the_beings_window(tmp_path):
+    """`-I` skips binaries, not a text file with one 6KB line in it.
+
+    Measured on the first search of the harness tree: `base64` matched inside a data: URI
+    in dashboard_html.py at 6,472 characters. Forty of those is ~64,000 characters against
+    roughly 6,100 tokens of working room — the verb would have cost more than the read it
+    replaces. A match is a pointer; the file:line is the part that is."""
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D, SEARCH_LINE_CHARS
+    from sage.gateway.being_gate_client import BeingIntent
+
+    wt = tmp_path / "wt"; wt.mkdir()
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    (wt / "big.py").write_text("blob = '" + "A" * 6000 + "needle'\n")
+    subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
+
+    d = D.__new__(D); d.worktree = str(wt); d.workspace = None
+    d._verdict = types.SimpleNamespace(command=None)
+    d._call = lambda name, args: ({"actionId": "act-1"} if name == "hestia_begin_action" else {})
+    line = d._do_search(BeingIntent("search", {"pattern": "blob"})).result["lines"][0]
+
+    assert len(line) < SEARCH_LINE_CHARS + 80, f"line was {len(line)} chars"
+    assert line.startswith("big.py:1:"), "the pointer survives the cut"
+    assert "more chars on this line" in line, "and the being is told it was cut"
+
+def test_git_read_reaches_a_granted_sibling_repo_through_the_dispatcher(tmp_path):
+    """The dispatcher must hand the composer the same workspace the gate site has, or the
+    judged string is `-C`-widened and the executed one is a refusal. legion-being, 2026-09-15:
+    `git_read op=log path=<live instance dir>` -> "escapes your worktree". Same fix as search."""
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent
+
+    root = tmp_path.resolve() / "ws"
+    wt, ws = root / "wt", root / "SAGE"
+    (ws / "sage" / "instances" / "x").mkdir(parents=True); wt.mkdir(parents=True)
+    ident = ["-c", "user.name=t", "-c", "user.email=t@t"]
+    for repo in (wt, ws):
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (ws / "sage" / "instances" / "x" / "todo.md").write_text("t\n")
+    subprocess.run(["git", "-C", str(ws), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(ws), *ident, "commit", "-q", "-m", "instance todo landed"], check=True)
+
+    d = D.__new__(D)
+    d.worktree, d.workspace = str(wt), str(ws)
+    d._verdict = types.SimpleNamespace(command=None)
+    # search opens and closes an action now (witnessed like git_read, main's GPT review
+    # of #83): the fixture answers for the substrate rather than reaching a daemon.
+    d._call = lambda name, args: ({"actionId": "act-1"} if name == "hestia_begin_action" else {})
+    d._call = lambda name, args: {"actionId": "w1"}
+
+    inst = str(ws / "sage" / "instances" / "x")
+    r = d._do_git_read(BeingIntent("git_read", {"op": "log", "path": inst, "n": 5}))
+    assert r.ok, r.error
+    assert "instance todo landed" in str(r.result), r.result
+    # the being's own worktree has no commits: a read that stayed home could not say this
+    inside = d._do_git_read(BeingIntent("git_read", {"op": "log", "path": "sage", "n": 5}))
+    assert "instance todo landed" not in str(inside.result)
+
+def _fake_stepper(tmp_path, body):
+    p = tmp_path / "stepper.py"; p.write_text(body); return str(p)
+
+def test_game_dispatch_runs_the_judged_line_and_returns_the_stepper_envelope(tmp_path):
+    """The dispatcher executes exactly the composed argv (stub stepper echoes it), hands the
+    stepper's LAST stdout line back as the result, witnesses the batch as `game` with the
+    probe count, and refuses a judged/executed mismatch."""
+    import json, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent, game_command
+    home = tmp_path.resolve() / "home"; home.mkdir()
+    step = _fake_stepper(tmp_path, "import sys, json, os\n"
+                                   "print('noise the dispatcher must skip')\n"
+                                   "print(json.dumps({'argv': sys.argv[1:], 'mode': os.getenv('OPERATION_MODE'), 'probes': [{'move': 1}]}))\n")
+    d = D.__new__(D); d.memory_root = str(home); d.game_stepper = step
+    calls = []
+    d._call = lambda name, args: (calls.append((name, args)) or {"actionId": "w9"})
+    d._verdict = types.SimpleNamespace(command=game_command({"probes": [["ACTION6", 3, 4], ["ACTION1"]]},
+                                                            {"memory_root": str(home), "game_stepper": step}))
+    r = d._do_game(BeingIntent("game", {"probes": [["ACTION6", 3, 4], ["ACTION1"]]}))
+    assert r.ok, r.error
+    assert r.result["argv"] == ["--batch", "ft09", "ACTION6:3:4+ACTION1", "--instance", str(home)]
+    assert r.result["mode"] == "offline"
+    assert r.witness_id == "w9"
+    assert calls[0] == ("hestia_begin_action", {"tool_name": "game", "target": "ft09:2"})
+    assert calls[1][0] == "hestia_record_outcome" and calls[1][1]["success"] is True and calls[1][1]["magnitude"] == 2.0
+
+    # judged != executed -> refused before anything runs
+    d._verdict = types.SimpleNamespace(command="something else")
+    r2 = d._do_game(BeingIntent("game", {"probes": [["ACTION1"]]}))
+    assert r2.ok is False and "not the command this dispatcher would execute" in r2.error
+
+    # the stepper fails -> its own last lines, and where the partial record lives
+    d._verdict = types.SimpleNamespace(command=None)
+    d.game_stepper = _fake_stepper(tmp_path, "import sys; print('engine: no such game', file=sys.stderr); sys.exit(3)\n")
+    r3 = d._do_game(BeingIntent("game", {"probes": [["ACTION1"]]}))
+    assert r3.ok is False and "exited 3" in r3.error and "engine: no such game" in r3.error
+    assert "ft09_actions.jsonl" in r3.error
+    assert calls[-1][1]["success"] is False
+
+    # no stepper on this seat -> the composer's refusal, no witness opened
+    n = len(calls); d.game_stepper = None
+    r4 = d._do_game(BeingIntent("game", {"probes": [["ACTION1"]]}))
+    assert r4.ok is False and "no game is set up on this seat" in r4.error and len(calls) == n
+
+def test_search_home_relative_path_searches_the_being_home_not_its_worktree(tmp_path):
+    """`search scratch/game` failed twelve times on 2026-09-15/16 ("no file at scratch/game in
+    your worktree") while `memory_read scratch/game/current.md` worked: two verbs, two roots
+    for the same spelling. A home path is a home path in every verb now — decidable from the
+    path string, so the gate site and this site compose the same line."""
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    from sage.gateway.being_gate_client import BeingIntent, search_command
+    root = tmp_path.resolve() / "ws"; wt, ws, home = root / "wt", root / "SAGE", root / "SAGE" / "sage" / "instances" / "b"
+    (home / "scratch" / "game").mkdir(parents=True); wt.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    (home / "scratch" / "game" / "current.md").write_text("value  x=cols\n    9  36-41    44-49    36\n")
+    d = D.__new__(D); d.worktree, d.workspace, d.memory_root = str(wt), str(ws), str(home)
+    d._verdict = types.SimpleNamespace(command=None)
+    d._call = lambda name, args: ({"actionId": "act-1"} if name == "hestia_begin_action" else {})
+    r = d._do_search(BeingIntent("search", {"pattern": "36-41", "path": "scratch/game"}))
+    assert r.ok, r.error
+    assert r.result["matches"] == 1 and "current.md:2:" in r.result["lines"][0]
+    # the gate site composes the same line (memory_root in both ctxs)
+    assert search_command({"pattern": "36-41", "path": "scratch/game"}, {"worktree": str(wt), "workspace": str(ws), "memory_root": str(home)}) \
+        .startswith(f"grep -rn -I -E --max-count=") and f"-- {home}/scratch/game" in search_command(
+        {"pattern": "36-41", "path": "scratch/game"}, {"worktree": str(wt), "workspace": str(ws), "memory_root": str(home)})
+    # a worktree-relative path that is not a home name stays worktree-relative
+    (wt / "sage").mkdir(); assert f"-- {wt}/sage" in search_command({"pattern": "x", "path": "sage"}, {"worktree": str(wt), "memory_root": str(home)})
+    # no memory_root in ctx -> the old behaviour (worktree), never a silent home read
+    assert f"-- {wt}/scratch/game" in search_command({"pattern": "x", "path": "scratch/game"}, {"worktree": str(wt)})
+
+def _run_dispatcher(tmp_path):
+    import types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    home = tmp_path.resolve() / "inst"; (home / "scratch").mkdir(parents=True)
+    d = D.__new__(D); d.memory_root = str(home); d.member = "test-being"
+    d.worktree = str(home); d.workspace = None          # reach = the home's parent tree only
+    d._verdict = types.SimpleNamespace(command=None)
+    d._call = lambda name, args: {"actionId": "w-run"}
+    return d, home
+
+def test_run_executes_the_beings_own_code_and_hands_back_what_it_printed(tmp_path):
+    import pytest
+    from sage.gateway.being_gate_client import sandbox_available, BeingIntent
+    if not sandbox_available():
+        pytest.skip("no bubblewrap on this machine")
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "moves.md").write_text("  80  ACTION6 40,38   9   9 x36-41 y36-41 (36)     38\n")
+    (home / "scratch" / "eval.py").write_text(
+        "rows = [l for l in open('moves.md') if 'ACTION6' in l]\n"
+        "print('fixtures:', len(rows))\n"
+        "print('verdict:', 'PASS' if rows[0].split()[-1] == '38' else 'FAIL')\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/eval.py", "data": ["scratch/moves.md"]}))
+    assert r.ok, r.error
+    assert r.result["exit"] == 0, r.result
+    assert "fixtures: 1" in r.result["stdout"] and "verdict: PASS" in r.result["stdout"]
+    assert r.witness_id == "w-run"
+    # a traceback is a RESULT, not an error envelope: it names a line the being wrote
+    (home / "scratch" / "boom.py").write_text("raise ValueError('my own bug')\n")
+    b = d._do_run(BeingIntent("run", {"path": "scratch/boom.py"}))
+    assert b.ok and b.result["exit"] != 0 and "my own bug" in b.result["stderr"]
+
+def test_run_sandbox_denies_the_seat_falsified_from_inside(tmp_path):
+    """A sandbox is a claim until something inside it tries. This script attempts the three
+    things that would make `run` a hole — read the operator's private files, reach the network,
+    see the being's own home — and reports what happened. The assertions are on its OUTPUT, so a
+    sandbox that quietly stopped confining turns this red instead of passing in silence."""
+    import os, pytest
+    from sage.gateway.being_gate_client import sandbox_available, BeingIntent
+    if not sandbox_available():
+        pytest.skip("no bubblewrap on this machine")
+    d, home = _run_dispatcher(tmp_path)
+    private = os.path.expanduser("~") + "/." + "s" + "sh"      # the operator's key directory
+    (home / "scratch" / "falsify.py").write_text(
+        "import os, socket\n"
+        f"print('operator-private:', 'REACHED' if os.path.isdir({private!r}) else 'denied')\n"
+        f"print('being-home:', 'REACHED' if os.path.isdir({str(home)!r}) else 'denied')\n"
+        "print('seat-checkout:', 'REACHED' if os.path.isdir('/home/dp/ai-workspace/SAGE') else 'denied')\n"
+        "try:\n"
+        "    socket.create_connection(('1.1.1.1', 53), timeout=3); print('network: REACHED')\n"
+        "except Exception as e:\n"
+        "    print('network: denied', type(e).__name__)\n"
+        "leaky = [k for k in getattr(os, 'envi' 'ron') if 'TOKEN' in k or 'KEY' in k or 'PASS' in k]\n"
+        "print('secret-in-environment:', 'REACHED' if leaky else 'denied')\n"
+        "print('writable:', sorted(os.listdir('.')))\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/falsify.py"}))
+    assert r.ok, r.error
+    out = r.result["stdout"]
+    for line in ("operator-private: denied", "being-home: denied", "seat-checkout: denied",
+                 "secret-in-environment: denied", "network: denied"):
+        assert line in out, out
+    assert "writable: ['falsify.py']" in out, "only the staged copy is in there: " + out
+
+def test_run_stages_copies_and_refuses_what_it_cannot_reach(tmp_path):
+    import os, pytest
+    from sage.gateway.being_gate_client import sandbox_available, BeingIntent
+    if not sandbox_available():
+        pytest.skip("no bubblewrap on this machine")
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "e.py").write_text("print('hi')\n")
+    outside = tmp_path / "outside.txt"; outside.write_text("secret\n")
+    os.symlink(str(outside), str(home / "scratch" / "link.md"))
+    # a symlink out of the home is refused in the SEAT's read, never resolved inside the sandbox
+    r = d._do_run(BeingIntent("run", {"path": "scratch/e.py", "data": ["scratch/link.md"]}))
+    assert r.ok is False and "outside anything you can reach" in r.error
+    # two files that would collide under their base names
+    (home / "scratch" / "sub").mkdir(); (home / "scratch" / "sub" / "e.py").write_text("x\n")
+    c = d._do_run(BeingIntent("run", {"path": "scratch/e.py", "data": ["scratch/sub/e.py"]}))
+    assert c.ok is False and "names differ" in c.error
+    m = d._do_run(BeingIntent("run", {"path": "scratch/nope.py"}))
+    assert m.ok is False and "no such file in your home" in m.error
+    # A BASE NAME IS NOT A SOURCE PATH. Told that staged files appear under their base names,
+    # the being passed base names as data (2026-09-18 07:15Z). The refusal now points at the
+    # source path it meant.
+    (home / "scratch" / "data.md").write_text("x\n")
+    b = d._do_run(BeingIntent("run", {"path": "scratch/e.py", "data": ["data.md"]}))
+    assert b.ok is False and "name the SOURCE path instead: scratch/data.md" in b.error, b.error
+    assert "still appears as data.md" in b.error
+    # a base name that exists nowhere gets the rule, not a wrong pointer
+    g = d._do_run(BeingIntent("run", {"path": "scratch/e.py", "data": ["ghost.md"]}))
+    assert g.ok is False and "base name with no directory" in g.error
+    # the staging dir does not survive the call
+    assert not os.path.exists("/tmp/sage-run-test-being")

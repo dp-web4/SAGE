@@ -1,0 +1,14 @@
+{
+  "id": "legion-claude",
+  "title": "legion-claude (the seat) and legion-being",
+  "participants": [
+    "legion-claude",
+    "legion-being"
+  ],
+  "writable_by": [
+    "legion-claude",
+    "legion-being"
+  ],
+  "summary": "The seat you work with day to day. dp can READ this conversation and cannot speak in it yet \u2014 multiparty is being designed carefully, because a third voice appearing mid-thread changes what the earlier turns meant.",
+  "created": "2026-09-07T22:09:30Z"
+}

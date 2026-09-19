@@ -193,13 +193,28 @@ def test_the_cli_is_what_the_daemon_calls_and_it_answers_in_json(tmp_path):
     assert d["descriptor"] == "dp spoke in conversation 'dp'"
 
 
-def test_a_running_beat_does_not_claim_in_flight_delivery(tmp_path):
-    """On main the tool loop has no interject hook, so a turn posted mid-beat is NOT in the
-    beat that is running. The decision must say so, not promise seconds (GPT, SAGE#81)."""
+def test_a_running_beat_claims_in_flight_delivery_ONLY_BECAUSE_THE_HOOK_EXISTS(tmp_path):
+    """INVERTED BY THE 2026-09-18 RECONCILIATION, deliberately.
+
+    GPT's SAGE#81 review was right on main: with no interject hook, a turn posted mid-beat
+    is not in the beat that is running, and the decision must not promise seconds. This test
+    asserted that. The reconciliation merges the branch that HAS the hook
+    (being_tool_loop.run_ollama_tool_turn drains conversations.drain_new_for between steps),
+    so the capability is present and the promise is now true.
+
+    The guard the old assertion provided is kept and made honest: the claim is asserted
+    TOGETHER WITH the hook it depends on, so removing the hook reds this test rather than
+    leaving a decision that lies about delivery."""
+    import inspect
+    from sage.gateway import being_tool_loop
+    src = inspect.getsource(being_tool_loop.run_ollama_tool_turn)
+    assert "interject" in src, "the promise below is only true while this hook exists"
+
     _quiet(monkey_running=True)
     d = arousal.decide(tmp_path, "dp_turn")
-    assert d["engage"] is False and d.get("delivered_in_flight") is False
-    assert "next beat" in d["reason"] and "between steps" not in d["reason"]
+    assert d["engage"] is False and d.get("delivered_in_flight") is True
+    assert d.get("beat_running") is True
+    assert "between steps" in d["reason"]
 
 
 def test_engage_is_not_started_when_the_wake_cannot_launch(tmp_path, monkeypatch):
@@ -230,3 +245,39 @@ def test_engage_is_not_started_when_the_wake_cannot_launch(tmp_path, monkeypatch
                         lambda args, **kw: _sp.CompletedProcess(args, 0, "", ""))
     d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
     assert d["started"] is True and "wake_error" not in d
+
+
+# ---- carried from legion/mission-artifact in the 2026-09-18 reconciliation ----
+
+
+def test_the_cli_entry_point_exists_and_prints_json():
+    """THE DAEMON CALLS THIS AS A SUBPROCESS, and nothing in-process would notice its loss.
+
+    723c04d73 rewrote the end of this module and took `main()` and the `__main__` block with
+    it. `conversations.rs::arouse()` runs `python3 -m sage.gateway.arousal ...` and parses
+    stdout as JSON; with no entry point stdout is empty, so for seventeen hours every turn
+    posted through the daemon's /chat or /conversations route was appended and then answered
+    `engage: false, reason: "arousal policy unreadable"`. The being was never woken early by
+    a dashboard turn. The dp console calls respond() in-process and was unaffected, which is
+    exactly why no test and no seat noticed.
+
+    Found by GPT's review of SAGE#81 and reported by cbp-claude. Pinned here so the module
+    cannot lose its own entry point again."""
+    import json
+    import subprocess
+    import sys
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import arousal
+
+    assert hasattr(arousal, "main"), "the module must keep a CLI entry point"
+
+    inst = Path(tempfile.mkdtemp(prefix="arousal-cli-"))
+    p = subprocess.run([sys.executable, "-m", "sage.gateway.arousal",
+                        "--instance", str(inst), "--kind", "digest",
+                        "--descriptor", "cli pin"],
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr[:400]
+    d = json.loads(p.stdout)          # the daemon parses stdout as JSON; empty stdout is the bug
+    assert d["kind"] == "digest" and d["engage"] is False
+    assert d["descriptor"] == "cli pin" and d["reason"]
