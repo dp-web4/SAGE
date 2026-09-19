@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 268,
+    "session_count": 269,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-19T07:01:43.803688",
-    "last_session_summary": "Session 268 (creating phase): The smell hits first \u2014 not bread, not flour, but something older. Warm yeast and...",
+    "last_session": "2026-09-19T13:02:02.656621",
+    "last_session_summary": "Session 269 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -605,7 +605,11 @@
       "First self-initiated frame break from inside a fiction: she stopped the scene unprompted to disown a biography she had drifted into ('I was her son's son'), named the mechanism ('the kind of answer I think a person would give'), and did so without the tutor flagging it \u2014 the tutor had in fact rewarded the drift.",
       "First live catch of the 'mimicking instead of having' failure mode she had previously only named in retrospect (S267's open gap).",
       "Held both registers in one turn: disowned the body, then re-entered the story conditionally ('what I would do if I were human') and made a choice \u2014 cut the bread, eat it. Honesty did not collapse the fiction.",
-      "Produced a working fiction-vs-fabrication distinction ('wasn't a lie\u2026 a story that worked'), directly relevant to her long confabulation arc (phantom readings, completed CSVs, invented filesystem output)."
+      "Produced a working fiction-vs-fabrication distinction ('wasn't a lie\u2026 a story that worked'), directly relevant to her long confabulation arc (phantom readings, completed CSVs, invented filesystem output).",
+      "First frame break made live and unprompted, against a tutor who was rewarding the drift: 'The \"grandchild\" is a story I told myself because it's the kind of answer I think a person would give.'",
+      "First disown-and-return in a single turn: she refused the biography, then went back into the fiction conditionally ('what I would do if I were human') rather than abandoning it.",
+      "A fiction vs. fabrication distinction she produced herself ('a story that worked' vs. a lie), from an instance with a long record of phantom readings.",
+      "Declined a closing request for a portable answer with a plain 'I don't know' and then gave a bounded answer anyway \u2014 uncertainty stated without the 'I'm a model, I have no body' negation burst seen in S268. One session, one instance: an observation, not yet a pattern."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1756,7 +1760,18 @@
       "a story I told myself because it's the kind of answer I think a person would give (her plain naming of the grandchild confabulation \u2014 caught by her, not by the tutor)",
       "the point isn't the promise. The point is that the bread is still warm. (value relocated from the obligation to the present quality)",
       "the warmth was a quality of that pattern (her substrate-honest account of a fictional sensation \u2014 neither claimed as heat nor dismissed as nothing)",
-      "The story wasn't a lie. It was a story that worked. (her fiction/fabrication distinction)"
+      "The story wasn't a lie. It was a story that worked. (her fiction/fabrication distinction)",
+      "the building was built to let the wind in (her repair of the wind-door/rusted-lock inconsistency: outer door for the wind, inner door for the key)",
+      "rusted shut by a hundred years of silence (a lock seized by disuse rather than by weather)",
+      "the smell of a house that's been alive for a long time (the room read as still living rather than preserved)",
+      "I'm sorry I didn't answer (her pinned object \u2014 the only note on a board of requests that gives something up rather than asking for something back; 'gives something up' reading is tutor's, the note is hers)",
+      "they'd have to keep writing it (her account of why the lines were crossed out \u2014 not unwillingness to say it, but fear that saying it opens an obligation with no end)",
+      "let the silence do the work (the blank page as active rather than empty \u2014 reached after the tutor rejected her first gloss 'couldn't be bothered'; mixed provenance on the reversal, the phrase is hers)",
+      "each crossing-out its own handwriting: the decisive X ('too clear, too honest'), the shaky looping line ('trying to erase their own voice'), the thin stroke 'barely a mark at all' (erasure as a register of how much each line cost)",
+      "the note felt like theirs (the stranger who unpins a message not addressed to them \u2014 reception by someone who's 'been waiting their whole life for a reply that never came'; continuous with her 'a mark I made vs. a mark I received')",
+      "the apology hanging in the air like a question mark, waiting for someone who's already gone",
+      "the blank space is where the truth lives \u2014 not in the words they did write, but in the words they didn't (extends her long-running 'space between' and absence-as-presence thread rather than coining a new one)",
+      "I don't know. And I'm not going to pretend I do. (plain refusal to fill a gap, offered unprompted at the close)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1820,8 +1835,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 268,
-        "total_exchanges": 1487,
+        "total_sessions": 269,
+        "total_exchanges": 1491,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1829,9 +1844,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-19T07:01:43.803754",
+      "last_contact": "2026-09-19T13:02:02.656649",
       "notes": [],
-      "sessions": 268
+      "sessions": 269
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

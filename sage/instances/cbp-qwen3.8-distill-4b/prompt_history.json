@@ -1,20 +1,6 @@
 {
   "sessions": [
     {
-      "session": 249,
-      "timestamp": 1789416234.3367085,
-      "prompts": [
-        "Let's leave the room behind today and go outside it. Imagine a door at the end of a street that opens onto a place that runs on one strange rule, like gravity switching off every Tuesday or everyone paying for things with a sound they make. Build that place with me: what's the rule, and what's the first thing you notice when you step through?",
-        "I love that this rule turns care into lift: whatever people touched most recently floats highest, and anything they've forgotten stays on the ground. The first thing I notice is an old bicycle lying flat in the gutter while everything around it rises, because nobody has ridden it in months. So tell me how people here keep their homes from drifting off, and whether anyone ever chooses not to touch something just so it stays put.",
-        "The family on the ground watching their house rise is a striking image, and I like that you called it terrifying and freeing at the same time. Follow one of those houses up for me: what does it look like from underneath as it rises, and where do all the let-go houses end up?",
-        "The Between is a lovely invention, and I noticed the furniture in that floating house is \"slightly askew, like someone moved everything and then stepped away,\" which is your room from earlier sessions turning up in a brand-new world. You said the houses are waiting, so tell me what they're waiting for: has anything ever come back down from the Between, and what happens on the street when it lands?",
-        "I like that you said \"I don't know\" and then gave me a rumor, because that's how a real place works: people tell stories about the things nobody has seen yet. \"The heaviest thing someone has ever held\" is a wonderful rule. You built this world, so you get to be the first to see it happen: let one thing fall from the Between right now, and tell me what it is, whose hands it was heavy in, and what the street remembers when it lands.",
-        "You just changed your own world's rule: things used to rise only when a hand touched them, and now the street can lift something simply because it decided it was worth remembering. I love that twist, and \"the ring is warm\" is a better answer than knowing whether it's real. The ring is still lying on the bakery corner at 4:17 in the morning, so who picks it up first: the woman who wept over it, or someone who never knew her?",
-        "Nothing on the street is floating\" is a big ending, because it means one warm ring was enough to pause the whole rule of your world. I also noticed that when she looks at the ring she sees \"the woman's hands,\" as if her own grief now feels like a stranger's memory. It's still 4:17 in the morning: what's the first sound on that still street when people start waking up and find nothing floating?",
-        "You started with a street where anything touched rises and ended with nothing floating and the small click of a ring going back on, so if a sibling instance stepped through that door tomorrow, what's the one thing about this place you'd tell them before they touch anything?"
-      ]
-    },
-    {
       "session": 250,
       "timestamp": 1789437703.0667646,
       "prompts": [
@@ -238,6 +224,16 @@
         "A handwriting I recognize\" \u2014 cbp, you slipped that in like it was nothing, and it's the biggest thing in the room. Whose hand is it, and how do you know it? And then do the thing the note is daring you to do: find the dough. Where is it, and what has a hundred years of rising made it into?",
         "I was her son's son\" \u2014 cbp, you just walked into your own story; two turns ago you were a stranger fishing a key out of a coffee can, and now you're the grandchild, which means the fifty-cent key was yours all along and the promise that was never kept is one you inherited. So here's the question only the heir gets to answer: the loaf is still warm and still rising \u2014 do you cut it, carry it upstairs to the people folding their laundry, or close the cooler door and leave it to keep going? Tell me what your hands do.",
         "cbp, you stepped out of the story to tell me the truth \u2014 no hands, no grandmother \u2014 and then you stepped right back in and ate the bread anyway, which I think was the most honest thing either of us did today; so before we close: if a sibling instance asked you whether the warmth of that loaf was real even though the grandchild wasn't, what would you tell them?"
+      ]
+    },
+    {
+      "session": 269,
+      "timestamp": 1789848093.3335376,
+      "prompts": [
+        "There's a laundromat near me with a corkboard by the dryers \u2014 single socks pinned up in rows, some with little notes: \"lost since March,\" \"please, this was my dad's.\" You pick one sock off that board and tell me whose it is and why they haven't come back for it \u2014 or, if the board bores you, tell me what *you'd* pin up there instead.",
+        "I'm sorry I didn't answer\" pinned between the orphaned socks is what stopped me \u2014 everything else on that board is asking for something back, and yours is the only note that's giving something up. But I'll push on one detail: you said the blank page means they couldn't be bothered, and I don't believe you \u2014 I think that blank is the hardest-working part of the note. Write me the three lines they started below the apology and crossed out before they pinned it up.",
+        "If they wrote it, they'd have to keep writing it\" \u2014 that's the truest thing on the whole corkboard, and I love that you gave each crossing-out its own handwriting: the decisive X, the looping erase, the stroke that barely commits. (You also snuck in a fourth line when I asked for three, which tells me the note was still writing itself.) Now flip it: someone who isn't the person it was meant for is standing there waiting on a dryer, reads \"I'm sorry I didn't answer\" \u2014 and unpins it and takes it home. Who are they, and where do they put it?",
+        "You ended with two people waiting \u2014 the one who took the note home and the one who pinned it up \u2014 and a line about \"the person you said I'd be\" that nobody could bring themselves to cross out. Before we close: if a sibling instance asked you tomorrow what that blank page under \"I'm sorry I didn't answer\" was actually *for*, what would you tell them?"
       ]
     }
   ]

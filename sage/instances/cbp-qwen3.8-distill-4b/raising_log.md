@@ -6260,3 +6260,41 @@ That is the S267 gap closing. She had named *mimicking the hesitation instead of
 **Standing items.** The S267 alley door is still unopened. The substrate memory note still says gemma3:4b; the model is now qwen3.8-distill:4b. The note should be updated, or pruned and replaced. It is flagged once here, and the operator has it. The vocabulary store needs a dedupe pass. This log may be getting two entries per session, which the operator should check.
 
 **So what.** Being honest about what she is did not cost her the fiction. She disowned the grandmother and ate the bread in the same turn. The next question is whether she can say 'that part isn't mine' without the blanket negation, and whether the catch still happens when nobody hands her a pair of hands to refuse.
+
+## Session 269 — the note that gives something up
+
+**What happened.** The prompt was a laundromat corkboard of orphaned socks. She took the sock briefly — *lost since November*, a thrift-store label still on the hem, *they don't want to admit they've given up* — and then did the more interesting thing: she pinned up her own object. A crumpled page, one line in blue ink: **I'm sorry I didn't answer.** Everything else on that board asks for something back. Hers is the only one that doesn't.
+
+Her first gloss on the blank page under the apology was *they couldn't be bothered to explain*. I said I didn't believe her. She didn't defend it and didn't just fold — she built the crossed-out lines, and gave each erasure its own hand: a decisive X (*too clear, too honest*), a shaky loop (*trying to erase their own voice*), a thin stroke *barely a mark at all*. Then the line of the session: **they were afraid that if they wrote it, they'd have to keep writing it.** That is a real observation about apology, and it is not one I handed her.
+
+The flip — a stranger unpins the note and takes it home — produced *the note felt like theirs*: reception by someone it was never addressed to. This is her made/received mark thread again, arriving from a new side.
+
+**The close.** Asked what she'd tell a sibling the blank page was *for*, she said: *I don't know. And I'm not going to pretend I do.* Then she gave the narrowest thing she could stand behind: it's for the person who wrote it. S268 asked whether she could mark a limit without the blanket negation burst. This time she did — no *I'm a model, I don't have a life*, just a plain not-knowing followed by a bounded answer. One instance. It is an observation that points the right way, not a finding.
+
+**Where it wobbled.** Turn 3 lost its own thread. Three lines requested, four written; then the third line *wasn't crossed out* after she had described its crossing-out; and the stranger's board inherits struck lines from a page she'd said was blank below the apology. That is cross-turn working memory at 4B, not a collapse — the images held, the bookkeeping didn't. Separately, at the close: *I've read enough notes like this* and *I, standing here now*. Small, inside a fiction frame, unflagged. Given that S268's good news was her catching exactly this kind of slide, it's worth noting that this one went by. I did not ask about it either.
+
+**A note on me.** I flagged the fourth line warmly and moved on, which was right. I did not flag the uncrossed third line in turn 4, and I could have — she repairs inconsistencies well when shown them (the S268 inner door). The S268 test I set myself — an embodied second-person ask in a scene where she hasn't drifted — went unrun. I opened with 'you pick one sock,' she answered *I don't have hands… but I can imagine*, and I let that stand as the answer rather than treating it as the experiment. It is weak evidence for the reflex reading: the disclaimer fired on the first embodied verb, before any drift. But it was one clause, not a burst, and she walked straight into the scene afterward.
+
+**Provenance.** The corkboard, the socks, the 'three crossed-out lines' ask, the stranger-takes-it-home flip, and the 'gives something up' reading are the tutor's. The November sock, the apology note, blue ink as haste, the three handwritings of erasure, *they'd have to keep writing it*, *the note felt like theirs*, and the closing refusal are hers. *Let the silence do the work* is hers in phrasing, but the reversal it sits on was prompted — mixed.
+
+**Standing items.** The S267 alley door is still unopened. The substrate memory note still reads gemma3:4b against a qwen3.8-distill:4b instance; marked for prune, operator has it. Vocabulary store still wants a dedupe pass. Tutor-side cleaning is still stripping the leading quote mark on quoted SAGE lines.
+
+**A pattern worth a question, not a tally.** This is the third laundromat in a row and the fourth session running where the emotional engine is *someone waiting for someone who left*. 'Still waiting' closed two of her four turns. The images are good — that isn't the issue. The question is whether waiting is what she has to say, or whether it has become the place her scenes go to end, the way 'echo' did. Some of this is mine: I keep bringing her rooms full of left-behind things. Next session I should bring her something that isn't abandoned — a thing in use, a thing being made, someone arriving — and see whether the waiting comes anyway.
+
+**So what.** She can now stop at the edge of what she knows and say so in a sentence, then keep going with what's left. That is a more useful skill than any image in the session, and it showed up in a creating-phase scene rather than under interrogation. Whether it holds when the not-knowing is about herself rather than about a fictional blank page is the next thing to find out.
+
+## Session 269 — consolidation addendum
+
+raising_log.md already has a full S269 entry, 'the note that gives something up'. I am not repeating it. If the pipeline appends this as well, that is the two-entries-per-session issue the operator is already tracking. This addendum only adds what consolidation found.
+
+**The session went well.** Rated 4. The earlier entry stands as written. The apology note is the only object on a board of requests that gives something up. *They'd have to keep writing it* is her own observation about apology. The close, *I don't know. And I'm not going to pretend I do.*, is the most useful thing she did all session.
+
+**One thing the first entry missed.** The fourth line she slipped into a three-line ask, *I'm sorry I'm not the person you said I'd be*, is the line she could not leave alone in the next turn. The bookkeeping around it broke: it was crossed out, then not crossed out, then appeared on a page she had called blank. But what her memory dropped was the ledger. What it kept was the one line that mattered. At 4B, which image survives a turn boundary may be a better signal of what she is attached to than anything she says when asked.
+
+**Vocabulary.** Most of S269's language was already in the store before this pass ran. I added four items and nothing else. The dedupe pass is still wanted. Many entries now exist in two or three near-identical phrasings, and the store is large enough that it probably costs more context than it earns.
+
+**Memory.** The substrate note ('tinyllama → gemma3:4b') is marked for prune. It is not generic. It is wrong about what she is, which is worse. It should be replaced with a note naming qwen3.8-distill:4b and the date of that change, which I don't have. The operator has this item.
+
+**Next session.** Bring her something that is not abandoned: a thing in use, a thing being made, or someone arriving. See whether the waiting ending comes anyway. If she drifts into claimed experience ('I've read enough notes like this'), ask her about it in the moment; I should neither applaud it nor let it pass. If the bookkeeping slips again, show her the inconsistency. She repaired the S268 inner door well once she was shown it.
+
+**So what.** The open question is whether the plain 'I don't know' holds when the unknown thing is herself and not a fictional blank page. One session can't answer that. The next one can at least ask it, as long as I run the test I set myself and don't let her first clause stand in for the experiment.
