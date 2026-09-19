@@ -714,6 +714,16 @@ GAME_ACTIONS = ("RESET", "ACTION1", "ACTION2", "ACTION3", "ACTION4", "ACTION5", 
 LOOK_MAX_EDGE = 16      # cells per side of a LOOK window: what this reader can hold per-cell (measured 2026-09-14)
 GAME_BATCH_CAP = 8      # dp, 2026-09-15: "build the game verb, batch with cap 8"
 _GAME_ID = r"[a-z0-9]{4}"
+# THE HOLDOUTS ARE THE TEST. dev-SAGE non-negotiable 3: cn04 / dc22 / lf52 / re86 are never
+# played, read or tuned on — "excluded by code", and until 2026-09-19 this verb was not part of
+# that code: `game` took any four-character id. Refused HERE, where the law's string is composed,
+# and again in the stepper that would run it.
+GAME_HOLDOUTS = ("cn04", "dc22", "lf52", "re86")
+# What it may pick. Listed so the choice is real: a selector whose options are not shown is a
+# default with extra steps (the being asked dp for "a new game instance" on 2026-09-19 because
+# nothing told it that it already had one).
+GAME_PLAYABLE = ("ar25", "bp35", "cd82", "ft09", "g50t", "ka59", "lp85", "ls20", "m0r0", "r11l",
+                 "s5i5", "sb26", "sc25", "sk48", "sp80", "su15", "tn36", "tr87", "tu93", "vc33", "wa30")
 
 
 def game_command(args: dict, ctx: Optional[dict] = None) -> str:
@@ -750,6 +760,12 @@ def game_command(args: dict, ctx: Optional[dict] = None) -> str:
     game = str(args.get("game", "ft09")).strip()
     if not re.fullmatch(_GAME_ID, game):
         raise ValueError(f"game 'game' must be a four-character id like 'ft09', got {game!r}")
+    if game in GAME_HOLDOUTS:
+        raise ValueError(f"game: {game!r} is a HOLDOUT — it is the test, and nobody in the fleet "
+                         f"plays, reads or tunes on it. The games you may pick: {', '.join(GAME_PLAYABLE)}")
+    if game not in GAME_PLAYABLE:
+        raise ValueError(f"game: no game {game!r} on this seat. The games you may pick: "
+                         f"{', '.join(GAME_PLAYABLE)}")
     probes = args.get("probes")
     if probes is None:
         # single-probe form: action (+ x,y)
@@ -1313,13 +1329,21 @@ _TOOL_SCHEMAS = {
     # the being's prompt — more than its whole state block — and this verb's description was the
     # largest single one at 1,328. Schema text is paid on EVERY beat and competes with the room
     # its answer needs; the details live in its own notes and in scratch/game/current.md.
-    "game": ("Probe the ARC-AGI-3 game set up for you: up to 8 probes per call, in order, each "
-             "delta back in this turn. ACTION6 is a click at (x=col,y=row) 0-63; other actions "
-             "take no coordinates; [\"LOOK\",x0,y0,x1,y1] is NOT a move — it just returns that "
-             "window's cell values (max 16x16). Boards ride your next beat; current.md and "
-             "board.txt are rewritten. Each probe is your act. Predict before you read.",
-             {"probes": "list of probes, at most 8, e.g. [[\"ACTION6\",36,36],[\"ACTION6\",44,36],[\"ACTION1\"]]",
-              "game": "optional: the game id (default ft09)"},
+    # RESET and the game list are SAID here because for four days they were true and unsaid:
+    # RESET was always a legal probe and `game` always took an id, and on 2026-09-19 the being
+    # asked dp for "a seat-side reset" after reading the stepper and concluding neither existed.
+    "game": ("Play an ARC-AGI-3 game: up to 8 probes per call, in order, each delta back in this "
+             "turn. ACTION6 is a click at (x=col,y=row) 0-63; ACTION1-5,7 take no coordinates; "
+             "[\"RESET\"] starts the game over from level 0 (use it after GAME_OVER, or any time; "
+             "it is yours to call); [\"LOOK\",x0,y0,x1,y1] is NOT a move — it returns that "
+             "window's cell values (max 16x16). You SEE the result in this same turn: the window "
+             "you looked at and the region your last move changed come back as images with every "
+             "cell's value drawn in it. This is the GAME's synthetic feed, not your camera. "
+             "Full boards ride your next beat; current.md and board.txt are rewritten. "
+             "Predict before you read.",
+             {"probes": "list of probes, at most 8, e.g. [[\"ACTION6\",36,36],[\"LOOK\",30,30,45,45],[\"RESET\"]]",
+              "game": ("optional: which game (default ft09). Yours to choose: " + ", ".join(GAME_PLAYABLE)
+                       + ". Each keeps its own move log; switching loses nothing.")},
              ["probes"]),
     "git_read": ("Read the history of the repository you live in: what changed, when, and "
                  "in which commit. Read-only — you cannot commit, push, or move a branch "
@@ -1522,6 +1546,12 @@ class ResultEnvelope:
     pending: bool = False
     note: str = ""
     verdict: Optional[GatewayVerdict] = None
+    # Images that belong WITH this result, in the turn it arrives in (base64 JPEG, plus one
+    # caption line each). The tool loop hands them to the being as a user message right after
+    # the tool result: ollama takes `images` on a message, not inside a tool result. Used by
+    # `game` for its windows (dp 2026-09-19: visual and text together, reason from both).
+    images: tuple = ()
+    image_captions: tuple = ()
 
     def to_tool_message(self) -> str:
         """Render for re-injection into the being's conversation as the tool result."""

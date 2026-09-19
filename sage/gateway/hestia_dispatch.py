@@ -1447,7 +1447,36 @@ class HestiaF1aDispatcher:
                 f"result was recorded — {tail or '(it said nothing)'}. If a probe was applied "
                 f"before the failure it is in scratch/game/{game}_actions.jsonl; read that, not "
                 f"this message, for what happened."))
-        return ResultEnvelope(ok=True, witness_id=action_id, result=payload)
+        images, captions = self._game_windows(payload)
+        return ResultEnvelope(ok=True, witness_id=action_id, result=payload,
+                              images=images, image_captions=captions)
+
+    GAME_WINDOW_MAX = 2                 # images per call; the stepper renders at most this many
+    GAME_WINDOW_MAX_BYTES = 400_000     # a window is ~60 KB; anything far past that is not one
+
+    def _game_windows(self, payload) -> tuple:
+        """The window images the stepper rendered for THIS call, as (base64, ...), (caption, ...).
+
+        Read only from scratch/game/windows/ under the being's own home, by the relative names
+        the stepper reported — never from a path the being supplied. A missing or oversized
+        file costs the picture, never the probe result: the text deltas are the authority and
+        the image is the second modality beside them."""
+        import base64
+        imgs, caps = [], []
+        try:
+            root = os.path.realpath(os.path.join(self.memory_root, "scratch", "game", "windows"))
+            for w in (payload.get("windows") or [])[: self.GAME_WINDOW_MAX]:
+                full = os.path.realpath(os.path.join(self.memory_root, str(w.get("file", ""))))
+                if not full.startswith(root + os.sep) or not os.path.isfile(full):
+                    continue
+                if os.path.getsize(full) > self.GAME_WINDOW_MAX_BYTES:
+                    continue
+                with open(full, "rb") as fh:
+                    imgs.append(base64.b64encode(fh.read()).decode("ascii"))
+                caps.append(f"x {w['x'][0]}-{w['x'][1]}, y {w['y'][0]}-{w['y'][1]}: {w.get('what', 'a window of the board')}")
+        except Exception:
+            return (), ()
+        return tuple(imgs), tuple(caps)
 
     # -- camera: one frame on demand from this body's device --------------------
     def _do_camera(self, intent: BeingIntent) -> ResultEnvelope:

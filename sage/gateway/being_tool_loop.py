@@ -82,6 +82,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     trace: List[Tuple[BeingIntent, ResultEnvelope]] = []
     done_ok: set = set()
     duplicates: List[dict] = []
+    images_attached = 0
     hit = False
     interjected: List[dict] = []
     uncapped = max_steps is None or max_steps <= 0
@@ -179,6 +180,33 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
             trace.append((intent, env))
             convo.append({"role": "tool", "effector": intent.effector,
                           "content": env.to_tool_message() + _note})
+            # IMAGES THAT BELONG WITH A RESULT ARRIVE WITH IT (dp, 2026-09-19: "you look at the
+            # visual and the text, reason from both"). Until now a rendered board could only ride
+            # the NEXT beat, because frames were attached when the seed was composed and the
+            # being's `game` call happens after that. ollama takes `images` on a message, not
+            # inside a tool result, so they follow as a user turn — and the flattening in
+            # run_ollama_tool_turn already carries `images` through to the wire.
+            #
+            # BOUNDED PER TURN, because an image stays in the window for every later generate
+            # of the beat (~600 tokens each, measured). Past the cap the being is TOLD the
+            # pictures stopped and why; the text deltas never stop.
+            _imgs = list(getattr(env, "images", ()) or ())
+            if _imgs:
+                room = max(0, MIDTURN_IMAGES_MAX - images_attached)
+                if room <= 0:
+                    convo.append({"role": "user", "content": (
+                        f"[harness] No pictures with that result: this beat has already carried "
+                        f"{images_attached} window images and each one stays in your context. The "
+                        f"text above is complete and exact; pictures resume next beat.")})
+                else:
+                    _imgs = _imgs[:room]
+                    caps = list(getattr(env, "image_captions", ()) or ())[:len(_imgs)]
+                    convo.append({"role": "user", "images": _imgs, "content": (
+                        "[harness] What you just did, as pictures — the GAME's synthetic feed, not "
+                        "your camera. Every cell shows its value; x is along the top, y down the "
+                        "left.\n" + "\n".join(f"  image {k + 1}: {c}" for k, c in enumerate(caps)))})
+                    images_attached += len(_imgs)
+                    interjected.append({"step": step, "images": len(_imgs), "effector": intent.effector})
         if rested is not None:
             return ToolTurnResult(reply=rested or content, trace=trace, steps=step,
                                   interjected=interjected, rested=rested or "(no reason given)",
@@ -533,7 +561,7 @@ def _retry_reserve(llm, msgs, measured) -> int:
         return _RETRY_RESERVE
     if num_ctx <= 0:
         return _RETRY_RESERVE
-    est = _est_tokens(sum(len(m.get("content") or "") for m in msgs), measured)
+    est = _est_tokens(_convo_chars(msgs), measured)
     return max(_RETRY_RESERVE, int(num_ctx - est * 0.75))
 
 
@@ -549,7 +577,7 @@ def _retry_room_chars(llm, msgs, measured) -> int:
         return 1000
     if num_ctx <= 0:
         return 1000
-    chars = sum(len(m.get("content") or "") for m in msgs)
+    chars = _convo_chars(msgs)
     left_tokens = num_ctx - _est_tokens(chars, measured)
     # JSON framing, the tool-call envelope and the model's own preamble all come out of the
     # same budget; leave half of what is left rather than promising all of it.
@@ -582,6 +610,22 @@ def _window_pressure(llm, prompt_tokens) -> Optional[dict]:
 # runs something in it — is executed again, because its answer can legitimately change.
 DEDUP_VERBS = frozenset({"memory_write", "edit", "witness", "remember", "retire_note",
                          "say", "peer_ask", "mesh"})
+
+def _convo_chars(msgs) -> int:
+    """The size of a conversation in estimator characters — ONE function for every site.
+
+    An image is prompt too, and it is not characters: it is charged at its measured token cost,
+    converted at the dense rate. Every site that sizes a conversation uses THIS, including the
+    (tokens, chars) anchor taken from the server's count — if the anchor counted content only
+    while the estimate counted images, every image would be charged twice: once inside the
+    server's prompt_eval_count and again as "added chars" on every later step."""
+    return sum(len(m.get("content") or "")
+               + int(len(m.get("images") or ()) * MIDTURN_IMAGE_TOKENS * _CPT_ADDED)
+               for m in msgs)
+
+
+MIDTURN_IMAGES_MAX = 6       # window images per turn; each stays in context for the rest of it
+MIDTURN_IMAGE_TOKENS = 600   # measured 2026-09-19: a 669px window + a question = 627 prompt tokens
 
 REPEAT_NUDGE_AT = 3          # identical consecutive calls before the harness names the loop
 REPEAT_BREAK_AT = 6          # ... and before it ends the tool phase
@@ -736,7 +780,9 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # the server counted 22,720, and the next memory_write body was cut mid-JSON (the
     # Ollama 500). Code reads tokenize denser than prose, and the tool schemas were never
     # in the sum at all. The previous generate's prompt_eval_count IS the number; use it.
-    size = lambda ms: sum(len(m.get("content") or "") for m in ms)
+    # AN IMAGE IS PROMPT TOO. It is not characters, so until the server has counted it the
+    # estimate was blind to it; charged here at its measured cost, converted at the dense rate.
+    size = _convo_chars
     room = num_ctx - reserve
     if _est_tokens(size(msgs), measured) <= room:
         return msgs, []
@@ -885,7 +931,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                               "chars": sum(e["chars"] for e in elided)})
         retried = 0
         nudged = False
-        chars_sent = sum(len(m.get("content") or "") for m in msgs)
+        chars_sent = _convo_chars(msgs)
         sent = _sent_budget(llm)          # the num_predict of the reply that stands
         resp = llm.get_chat_response(msgs, tools=tools)
         content = resp.get("content", "") or ""
@@ -1000,7 +1046,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # the nudge (if any) was appended to msgs before the reply that stands, so the
             # chars it added are inside this count: re-measure from the list as sent
             measured = (int(raw["prompt_eval_count"]),
-                        sum(len(m.get("content") or "") for m in msgs))
+                        _convo_chars(msgs))
         entry = {"done_reason": raw.get("done_reason"), "prompt_eval_count": raw.get("prompt_eval_count"),
                  "eval_count": raw.get("eval_count"), "retried": retried, "num_predict": sent}
         window = _window_pressure(llm, raw.get("prompt_eval_count"))
