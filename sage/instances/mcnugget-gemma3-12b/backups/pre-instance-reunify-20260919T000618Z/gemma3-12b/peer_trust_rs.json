@@ -1,0 +1,47 @@
+{
+  "peers": {
+    "sprout": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 262940,
+      "last_updated": 1788828271.865309
+    },
+    "nomad": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 262940,
+      "last_updated": 1788828271.91798
+    },
+    "cbp": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 262940,
+      "last_updated": 1788828271.918648
+    },
+    "hub": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 109945,
+      "last_updated": 1788828271.916977
+    },
+    "legion": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 262940,
+      "last_updated": 1788828271.866422
+    },
+    "thor": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 262940,
+      "last_updated": 1788828271.86703
+    }
+  },
+  "last_updated": 1788828271.918649
+}
