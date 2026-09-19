@@ -259,7 +259,7 @@ def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided
     return written
 
 
-def body_line(model: str, instance) -> str:
+def body_line(model: str, instance, num_ctx=None) -> str:
     """Name the being's MODEL in the seed, because its home directory names a different one.
 
     legion-being's instance dir is `legion-gemma3-12b`; the model running it is
@@ -269,8 +269,13 @@ def body_line(model: str, instance) -> str:
     "gemma3-12b on a 4090" — measured three times on 2026-09-15, twice after it had verified
     the truth itself. A finding attributed to the wrong body is a finding nobody downstream
     can reproduce. The harness holds args.model; it should say so where the being reads."""
-    return (f"Your body: model {model}. Your home directory ({instance.name}) carries an older "
-            f"name; the model is the fact to attribute findings to.")
+    # 2026-09-19: the same name was then misread a second way — from inside its worktree the
+    # being journaled a file under instances/legion-gemma3-12b/ as "another instance's
+    # scratch, not mine". So say whose directory it is, and the measured window with it.
+    ctx = f" Your context window: {num_ctx} tokens." if num_ctx else ""
+    return (f"Your body: model {model}.{ctx} Your home directory ({instance.name}) carries an "
+            f"older name; it is YOURS, not another being's, and the model is the fact to "
+            f"attribute findings to.")
 
 
 def harness_revision(workspace: str) -> dict:
@@ -1903,7 +1908,7 @@ def main(argv=None) -> int:
         museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 f"Your home: {instance}\n"
-                + body_line(args.model, instance) + "\n"
+                + body_line(args.model, instance, _num_ctx) + "\n"
                 f"The harness you are running under: {harness_rev.get('short')} on "
                 f"{harness_rev.get('branch')}"
                 + (" (uncommitted edits present)" if harness_rev.get("dirty") else "")

@@ -152,6 +152,9 @@ def test_the_seed_names_the_model_not_just_the_home():
     line = H.body_line("qwen38-heretic:q3km-vl", Path("/x/sage/instances/legion-gemma3-12b"))
     assert "qwen38-heretic:q3km-vl" in line
     assert "legion-gemma3-12b" in line and "older name" in line, "say WHY the two differ"
+    assert "YOURS" in line, "the old name was read as ANOTHER being's dir (2026-09-19)"
+    assert "24576" not in line
+    assert "24576 tokens" in H.body_line("m", Path("/x/legion-gemma3-12b"), 24576), "measured window"
     names = set()
     def walk(code):
         for ins in dis.get_instructions(code):
