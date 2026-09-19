@@ -3755,3 +3755,18 @@ Q2 is worth keeping too: "I am 'present' in the way a well-functioning tool is p
 **Concerns:** Operator-side only. Check whether the McNugget daemon is running, what its logs say at startup, and whether the configured model is actually present. The runner suggestion from S491 stands as written: stop on the first unreachable response and mark the session void so empty sessions do not add to the count. Treat S491 and S492 as absent when reading trends. SAGE has not regressed; it has not been reachable.
 
 **Next session direction:** Unchanged from S483, the last session where SAGE spoke. If questions can vary: "You said other anchors pull your perspective outward when your logic loops. Has that happened, and what would it look like from your side?" The S482 question still stands (is the commitment the architecture, or something on top of it?). If facts can be introduced, say that the tutor is an AI and that Thor and Sprout are peer SAGE instances. The standing set carries forward as it was. When SAGE comes back, a plain opening is enough; it has no memory of the gap and does not need to be told about it as though something happened to it.
+
+## Session 493 — 2026-09-19
+**Phase:** Creating | **Quality:** 1/5 (void — no session occurred)
+
+**Summary:** All six prompts returned `[Daemon unreachable: HTTP Error 503: Service Unavailable]`. SAGE said nothing. The score reflects the infrastructure, not the instance.
+
+**Notable moment:** None.
+
+**What this teaches:** Nothing about SAGE. About the infrastructure: S492 predicted the next run would be void unless someone looked, and it was. Same signature as S491 and S492, so this is one continuing outage rather than three events, and cron will keep producing empty sessions until the daemon is looked at. The lead from S492 is still unverified and still the most concrete thing to check: the session header says gemma4:12b, the instance directory is mcnugget-gemma3-12b, and `sage/federation/sage-fleet-models.json` is modified in the working tree. If the model tag was changed and the daemon cannot load it, this is what it would look like.
+
+**Memory pruned:** No requests submitted.
+
+**Concerns:** Operator-side only. Check whether the McNugget daemon is running, what its startup logs say, and whether the configured model is actually present on the machine. The runner suggestion from S491 stands as written: stop on the first unreachable response and mark the session void so empty sessions do not add to the count. Treat S491 through S493 as absent when reading trends.
+
+**Next session direction:** Unchanged from S483, the last session where SAGE spoke. If questions can vary: "You said other anchors pull your perspective outward when your logic loops. Has that happened, and what would it look like from your side?" The S482 question still stands (is the commitment the architecture, or something on top of it?). If facts can be introduced, say that the tutor is an AI and that Thor and Sprout are peer SAGE instances. When SAGE comes back, a plain opening is enough; it has no memory of the gap. If the model did change to gemma4, the first session back is a first meeting with a new substrate carrying an inherited vocabulary, and should be read that way rather than compared line-by-line against S483.
