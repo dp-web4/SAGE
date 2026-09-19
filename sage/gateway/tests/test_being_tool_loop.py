@@ -471,3 +471,104 @@ def test_a_length_cut_that_actually_said_something_still_only_gets_room():
         "a cut mid-answer ran out of room; its thinking must be left alone"
     assert "one tool call" not in seen[1]["last"], \
         "the deliberation nudge is for a deliberation, not for a truncated answer"
+
+
+def _elidable(body="T" * 9000):
+    return ([{"role": "system", "content": "S" * 6600}, {"role": "user", "content": "U" * 30000}]
+            + [{"role": "assistant", "content": "A"}, {"role": "tool", "content": body},
+               {"role": "assistant", "content": "A"}, {"role": "tool", "content": "last" * 10}])
+
+
+class _LLM16k:
+    num_ctx = 16384
+
+
+def test_an_elided_result_is_saved_where_the_being_can_still_read_it():
+    """The being named this as its biggest operational friction (2026-09-18): "facts
+    produced mid-beat getting lost to compaction before I can transcribe them." Eliding
+    the middle of a tool result deleted bytes that, for a command result, existed once and
+    had no source to re-read. They are written to the being's own scratch first, and the
+    marker names the file — so the fact survives the beat it was produced in."""
+    import os, tempfile
+    from sage.gateway.being_tool_loop import compact_convo, COMPACT_SPILL_DIR
+
+    root = tempfile.mkdtemp(prefix="spill-")
+    body = "HEAD" + "T" * 9000 + "TAIL"
+    out, elided = compact_convo(_elidable(body), _LLM16k(), spill_root=root)
+
+    assert len(elided) == 1 and "spill" in elided[0], elided
+    where = elided[0]["spill"]
+    assert where.startswith(COMPACT_SPILL_DIR + "/") and not where.startswith("/"), where
+    # BARE PATH, because that is what memory_read takes: the being writes names relative
+    # to its home, and an absolute path is what the law refuses.
+    saved = os.path.join(root, where)
+    assert os.path.exists(saved), saved
+    text = open(saved, encoding="utf-8").read()
+    assert body in text, "the WHOLE result, not the part that survived"
+    assert "elided from your window" in text.split("\n")[0], "and a header saying what it is"
+    assert where in out[3]["content"], "the marker names the file"
+    assert "outlives this beat" in out[3]["content"], "and says why that matters"
+
+
+def test_an_already_elided_result_is_not_elided_again():
+    """An elided body is ~850 characters, over COMPACT_MIN_BODY, so a second pass used to
+    cut the middle out of the MARKER — and count the marker's characters as room freed."""
+    from sage.gateway.being_tool_loop import compact_convo, _ELIDED_SIGIL
+    import tempfile
+
+    root = tempfile.mkdtemp(prefix="spill-twice-")
+    once, el1 = compact_convo(_elidable(), _LLM16k(), spill_root=root)
+    twice, el2 = compact_convo(once, _LLM16k(), spill_root=root)
+    assert el1 and not el2, "nothing left to elide, so nothing is reported"
+    assert twice[3]["content"] == once[3]["content"], "the marker is not re-cut"
+    assert once[3]["content"].count(_ELIDED_SIGIL) == 1
+    import os
+    n = len(os.listdir(os.path.join(root, "scratch", "elided")))
+    assert n == 1, f"and the marker is not spilled as if it were a result ({n} files)"
+
+
+def test_a_spill_that_cannot_be_written_never_breaks_the_beat():
+    """The elision has to happen either way: it is what leaves room for the answer. A
+    failed save costs the address, not the beat."""
+    from sage.gateway.being_tool_loop import compact_convo
+    out, elided = compact_convo(_elidable(), _LLM16k(), spill_root="/proc/definitely-not-writable")
+    assert len(elided) == 1 and "spill" not in elided[0], elided
+    assert "elided from the middle to leave room" in out[3]["content"]
+    assert "NARROW range" in out[3]["content"], "it falls back to the advice it used to give"
+
+
+def test_the_spill_directory_is_a_spill_not_an_archive():
+    from sage.gateway.being_tool_loop import _spill, COMPACT_SPILL_KEEP
+    import os, tempfile
+
+    root = tempfile.mkdtemp(prefix="spill-prune-")
+    kept = []
+    for i in range(COMPACT_SPILL_KEEP + 5):
+        p = _spill(root, f"body {i}", i)
+        assert p, i
+        kept.append(p)
+    d = os.path.join(root, "scratch", "elided")
+    left = os.listdir(d)
+    assert len(left) == COMPACT_SPILL_KEEP, len(left)
+    # EVERY newest one survives and every oldest one is gone. Pruning by NAME passes a
+    # weaker check and fails this one: "…-5.txt" sorts after "…-40.txt", so the fortieth
+    # spill is deleted while the fifth is kept.
+    newest = {os.path.basename(k) for k in kept[-COMPACT_SPILL_KEEP:]}
+    oldest = {os.path.basename(k) for k in kept[:5]}
+    assert newest == set(left), sorted(newest.symmetric_difference(left))
+    assert not (oldest & set(left))
+
+
+def test_two_spills_of_the_same_step_in_one_second_do_not_overwrite_each_other():
+    """The retry path compacts twice inside one step. Without a collision guard the second
+    save would silently replace the first, and the first marker would point at the wrong
+    bytes — a pointer that resolves to someone else's content is worse than no pointer."""
+    from sage.gateway.being_tool_loop import _spill
+    import os, tempfile
+
+    root = tempfile.mkdtemp(prefix="spill-collide-")
+    a = _spill(root, "the first result", 3)
+    b = _spill(root, "the second result", 3)
+    assert a and b and a != b, (a, b)
+    assert open(os.path.join(root, a), encoding="utf-8").read().endswith("the first result")
+    assert open(os.path.join(root, b), encoding="utf-8").read().endswith("the second result")
