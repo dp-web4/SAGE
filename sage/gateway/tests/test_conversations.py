@@ -396,3 +396,116 @@ def test_render_without_mark_does_not_consume_the_unanswered_marker():
     conv.render_for_being(inst, "legion-being")
     assert conv.awaiting(inst, "legion-claude", "legion-being") == [], \
         "the delivering render must still mark turns seen"
+
+
+def test_a_placeholder_is_not_a_message():
+    """Specimen (sprout-being, qwen3.8-distill:2b, 2026-09-18 21:04:02Z): dp received
+    "[Your brief, final word-only summary of your response]" through `say`. The template
+    completion documented in SMALL_MODEL_LEGIBILITY 1.8, occupying the ARGUMENT rather than
+    the reply — where no prompt-side guard could see it, because by then it is already an
+    argument on its way to a person."""
+    from sage.gateway.conversations import is_stub
+    assert is_stub("[Your brief, final word-only summary of your response]")
+    assert is_stub("  [Your complete, thoughtful journal entry responding to dp's question]  ")
+    assert not is_stub("The world is a process with no end point and no right answer.")
+    assert not is_stub("I'm here, listening. No pressure on me.")
+    assert not is_stub(""), "empty is caught by the empty check, not this one"
+    assert not is_stub("[note] and then the actual message, which is real content."), \
+        "a bracket that opens a real message is not a placeholder"
+    assert not is_stub("[short]"), "too short to be one of these briefs"
+
+
+def test_a_reverted_log_never_renumbers_and_the_scar_is_recorded_once():
+    """2026-09-18: a `git rebase` across the live tree reverted dp's channel to a committed
+    1-turn snapshot; the next `say` took seq 2 and thirteen turns read as a fresh start.
+
+    GPT's review of SAGE#126 found the first repair wrong three ways; this pins two of them.
+    (1) seq came from the LINE COUNT, which after one gap is behind the high-water forever, so
+    every later append re-detected a truncation and rewrote the scar — and the old test passed
+    because it never asserted the scar stayed put. (3) the witness lived in the tracked meta,
+    the same rollback domain as the log."""
+    import json, os, tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="highwater-"))
+    c.create(inst, "dp", title="t", participants=["dp", "b"], writable_by=["dp", "b"])
+    for i in range(5):
+        c.append(inst, "dp", speaker="dp", text=f"turn {i+1}")
+    wp = c.witness_path(inst, "dp")
+    assert json.loads(wp.read_text())["high_water_seq"] == 5
+    assert not str(wp).startswith(str(inst.resolve())), "the witness is OUTSIDE the tree Git rewrites"
+
+    log = inst / "conversations" / "dp.jsonl"
+    meta = inst / "conversations" / "dp.meta.json"
+    old_meta = meta.read_text()
+    log.write_text(log.read_text().splitlines()[0] + "\n")     # roll back EVERY tracked artifact
+    meta.write_text(old_meta)
+
+    assert c.append(inst, "dp", speaker="b", text="after the rollback")["seq"] == 6
+    w = json.loads(wp.read_text())
+    assert len(w["truncations"]) == 1 and w["truncations"][0]["high_water"] == 5
+    scar = json.dumps(w["truncations"])
+    # the convergence GPT's finding 1 is about: the log is now [1, 6]; line count says 3
+    assert c.append(inst, "dp", speaker="b", text="next")["seq"] == 7
+    assert c.append(inst, "dp", speaker="dp", text="and next")["seq"] == 8
+    w = json.loads(wp.read_text())
+    assert json.dumps(w["truncations"]) == scar, "ONE event, recorded once, never rewritten"
+    assert w["high_water_seq"] == 8
+    assert "high_water_seq" not in json.loads(meta.read_text()), "nothing of this lives in the tracked meta"
+
+
+def test_an_untouched_log_records_no_wound_and_a_fresh_clone_falls_back_to_the_log():
+    import json, tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="intact-"))
+    c.create(inst, "dp", title="t", participants=["dp"], writable_by=["dp"])
+    for i in range(3):
+        c.append(inst, "dp", speaker="dp", text=f"t{i}")
+    wp = c.witness_path(inst, "dp")
+    assert "truncations" not in json.loads(wp.read_text())
+    wp.unlink()                                                # a machine with no witness yet
+    assert c.append(inst, "dp", speaker="dp", text="t3")["seq"] == 4
+
+
+def test_a_damaged_line_still_occupies_its_position():
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="damaged-"))
+    c.create(inst, "dp", title="t", participants=["dp"], writable_by=["dp"])
+    c.append(inst, "dp", speaker="dp", text="one")
+    with open(inst / "conversations" / "dp.jsonl", "a") as f:
+        f.write("{not json\n")
+    c.witness_path(inst, "dp").unlink()
+    assert c.append(inst, "dp", speaker="dp", text="three")["seq"] == 3, "no number is reused"
+
+
+def test_a_turn_marked_seen_but_never_answered_is_still_unanswered():
+    """2026-09-19: dp's 03:51Z turn was shown in a beat whose explore turn acted, so it was
+    marked seen. The being never replied, and the reflect ask — which quoted only UNSEEN turns
+    — went quiet with dp's words still the last in the channel."""
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="unanswered-"))
+    c.create(inst, "dp", title="t", participants=["dp", "b"], writable_by=["dp", "b"])
+    c.append(inst, "dp", speaker="b", text="earlier, from the being")
+    c.append(inst, "dp", speaker="dp", text="sharing can be curious")
+    c.mark_seen(inst, "b", "dp", 2)
+    assert c.awaiting(inst, "dp", "b") == [], "seen, so not awaiting"
+    tail = c.unanswered(inst, "dp", "b")
+    assert [t["text"] for t in tail] == ["sharing can be curious"], "but still unanswered"
+    c.append(inst, "dp", speaker="b", text="a reply")
+    assert c.unanswered(inst, "dp", "b") == [], "answering closes it"
+
+
+def test_an_old_unanswered_turn_is_a_choice_not_a_debt():
+    import json, tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="oldturn-"))
+    c.create(inst, "dp", title="t", participants=["dp", "b"], writable_by=["dp", "b"])
+    log = inst / "conversations" / "dp.jsonl"
+    log.write_text(json.dumps({"ts": "2026-01-01T00:00:00Z", "seq": 1, "from": "dp", "text": "long ago"}) + "\n")
+    assert c.unanswered(inst, "dp", "b") == [], "silence that has lasted is an answer; do not nag"

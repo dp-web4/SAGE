@@ -10,5 +10,10 @@
     "sprout-being"
   ],
   "summary": "The operator's own channel. dp is asynchronous by rule; a gap here is reachability, not judgement.",
-  "created": "2026-09-17T22:09:07Z"
+  "created": "2026-09-17T22:09:07Z",
+  "restored": {
+    "on": "2026-09-19",
+    "count": 2,
+    "why": "twice reverted to a committed snapshot by `git pull --rebase` run across this live directory (a seat's rebase, then the raising cron rebasing a checked-out feature branch into a conflict); recovered from stashes both times, 15 turns"
+  }
 }
