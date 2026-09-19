@@ -103,7 +103,13 @@ TARGET9="$(git -C "$CK" rev-parse --short=9 "$TARGET")"
 # ── what is running, what is on disk — neither by executing the binary ─────────────────
 stamp_of() {  # <ver>+<sha9>[-dirty]@<date> embedded by build.rs; read, never run
   [ -f "$1" ] || { echo none; return; }
-  strings "$1" 2>/dev/null | grep -m1 -oE '[0-9]+\.[0-9]+\.[0-9]+\+[0-9a-f]{9}(-dirty)?@[0-9TZ:-]+' || echo unstamped
+  # No early-exit reader in this pipeline, on purpose. The first version used `grep -m1 ...
+  # || echo unstamped`: grep quit after its match, strings died of SIGPIPE, `pipefail` called
+  # that a failure, and the fallback fired ALONGSIDE the real stamp -- every stamp logged as
+  # two lines, "0.1.0+<sha>@<date>" then "unstamped". The first deploy still compared the
+  # right sha only because sed happened to read line one. `sed -n 1p` consumes all its input.
+  local s; s="$(strings "$1" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\+[0-9a-f]{9}(-dirty)?@[0-9TZ:-]+' | sed -n '1p' || true)"
+  echo "${s:-unstamped}"
 }
 sha_of() { echo "$1" | sed -nE 's/^[^+]*\+([0-9a-f]{9}).*/\1/p'; }
 RUNNING="$(curl -s -m 4 "http://127.0.0.1:$PORT/health" 2>/dev/null | grep -oE '"build":"[^"]+"' | cut -d'"' -f4)"
