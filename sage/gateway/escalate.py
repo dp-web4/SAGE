@@ -292,7 +292,11 @@ def ungrantable(intent: BeingIntent, memory_root: str) -> Optional[Dict[str, Any
         # /var/log/hestia/policy/daemon.log is the case this protects: a genuine ask for reach
         # over a file this process has no business resolving.
         parent = os.path.dirname(target)
-        if os.path.isdir(parent) and os.access(parent, os.R_OK):
+        # R_OK is not the permission the measurement needs: `exists()` stats the child, and
+        # that takes SEARCH (execute) permission on the directory. A parent that is readable
+        # but not searchable makes an existing child look absent, turning UNKNOWN into ABSENT
+        # and suppressing a legitimate ask (GPT review of SAGE#126, finding 4).
+        if os.path.isdir(parent) and os.access(parent, os.R_OK | os.X_OK):
             reasons.append(f"nothing exists at {target}, and a grant cannot create it")
     if not reasons:
         return None

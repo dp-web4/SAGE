@@ -101,6 +101,65 @@ def listing(instance: Path) -> list[dict]:
     return out
 
 
+def witness_path(instance: Path, conv_id: str) -> Path:
+    """Where a conversation's high-water witness lives: OUTSIDE the repository.
+
+    GPT's review of SAGE#126 (2026-09-19), finding 3: the first cut kept the high-water mark in
+    the tracked `.meta.json` beside the log, so the rebase/checkout/reset that rolls the log
+    back rolls the witness back with it, and the next append sees a self-consistent old pair
+    and detects nothing. A witness in the same rollback domain as the thing it witnesses is not
+    a witness. This one is machine-local runtime state (SAGE #124's boundary): no Git command
+    in the working tree can touch it. A fresh clone has none, and falls back to the log.
+
+    The Rust daemon computes the same path (`conversations.rs::witness_path`); they must agree.
+    """
+    base = os.environ.get("SAGE_CONV_WITNESS_DIR") or os.path.join(
+        os.path.expanduser("~"), ".sage", "conversation-witness")
+    return Path(base) / Path(instance).resolve().name / f"{conv_id}.json"
+
+
+def next_seq(instance: Path, conv_id: str, lines) -> int:
+    """The next sequence number, and the ONLY place it is decided. Call under the log's lock.
+
+    `max(max seq in the log, the witness's high-water) + 1` — never the line count. GPT's
+    review, finding 1: after one gap the line count is behind the high-water mark forever, so
+    the line-count version re-detected a "truncation" on every later append and rewrote the
+    scar each time; the test passed because it never asserted the scar stayed put. With the
+    maximum, the turn written after a rollback makes the log's max equal the high-water again,
+    and the event is recorded exactly once.
+    """
+    max_in_log = 0
+    occupied = 0
+    for line in lines:
+        if not line.strip():
+            continue
+        # A damaged line still OCCUPIES a position: reusing its number would make two turns
+        # share one identity. A gap in the sequence is a scar and reads as one; a duplicate is
+        # a corruption of the account itself. So the raw count is a floor, never the answer.
+        occupied += 1
+        try:
+            max_in_log = max(max_in_log, int(json.loads(line).get("seq", 0)))
+        except Exception:
+            continue
+    wp = witness_path(instance, conv_id)
+    try:
+        w = json.loads(wp.read_text())
+    except Exception:
+        w = {}
+    hw = int(w.get("high_water_seq") or 0)
+    if max_in_log < hw:
+        w.setdefault("truncations", []).append(
+            {"noticed": _now(), "max_seq_in_log": max_in_log, "high_water": hw,
+             "resumed_at": hw + 1})
+    seq = max(max_in_log, hw, occupied) + 1
+    w["high_water_seq"] = seq
+    wp.parent.mkdir(parents=True, exist_ok=True)
+    tmp = wp.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(w, indent=2) + "\n")
+    os.replace(tmp, wp)
+    return seq
+
+
 def _write_meta(instance: Path, conv_id: str, m: dict) -> None:
     """Replace a conversation's meta atomically. The meta is small and the seat owns it; the
     being cannot write here (conversations/ is reserved from memory_write)."""
@@ -204,29 +263,11 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         try:
             f.seek(0)
-            # RAW line count on purpose, not the readable count: a damaged line still
-            # occupies a position in the record, and reusing its sequence number would make
-            # two different turns share one identity. A gap in the sequence is a scar and
-            # reads as one; a duplicate is a corruption of the account itself.
-            seq = sum(1 for line in f if line.strip()) + 1
-            # HIGH-WATER MARK. A conversation log is append-only in this code and nowhere
-            # else: it is an ordinary tracked file, and anything that rewrites the working
-            # tree — a rebase, a stash, a checkout — can silently restore an older, shorter
-            # copy. That happened on 2026-09-18: a seat's `git rebase` over a dirty tree left
-            # dp's channel at its committed 1-turn snapshot, and the next `say` numbered
-            # itself seq 2 and kept going, so thirteen turns of a real conversation read as a
-            # fresh one. The loss was found by dp noticing, by eye, that history was missing.
-            #
-            # This cannot stop the file being replaced. It can stop the record HEALING OVER
-            # the wound: numbering never goes backwards, so a gap stays a gap, and the meta
-            # records that it happened instead of letting it look like a beginning.
-            hw = int(m.get("high_water_seq") or 0)
-            if seq <= hw:
-                m["truncated"] = {"noticed": _now(), "turns_in_log": seq - 1,
-                                  "high_water": hw, "resumed_at": hw + 1}
-                seq = hw + 1
-            m["high_water_seq"] = seq
-            _write_meta(instance, conv_id, m)
+            # SEQUENCE = max(what the log holds, what the witness remembers) + 1. See
+            # `next_seq`: line count is wrong after any gap, and the witness lives outside
+            # Git's rewrite domain so a rollback of every tracked file is still detected.
+            f.seek(0)
+            seq = next_seq(instance, conv_id, f.read().splitlines())
             turn = {"ts": _now(), "seq": seq, "from": speaker, "text": text}
             if via:
                 turn["via"] = via

@@ -218,6 +218,29 @@ def test_a_path_the_seat_cannot_see_is_unknown_not_absent():
     assert why and "nothing exists at" in why["reasons"][0]
 
 
+
+def test_a_readable_but_unsearchable_parent_is_unknown_not_absent():
+    """GPT review of SAGE#126, finding 4. `exists()` needs search (x) permission on the parent;
+    with r-- only, an EXISTING child stats as absent. That must not suppress the ask."""
+    import os, stat, tempfile
+    import pytest
+    from sage.gateway.escalate import ungrantable
+    from sage.gateway.being_gate_client import BeingIntent
+    if os.geteuid() == 0:
+        pytest.skip("root bypasses directory permissions")
+    root = tempfile.mkdtemp(prefix="perm-home-")
+    parent = tempfile.mkdtemp(prefix="perm-parent-")
+    child = os.path.join(parent, "real.md")
+    open(child, "w").write("it exists")
+    os.chmod(parent, stat.S_IRUSR)                      # r-- : listable, not traversable
+    try:
+        assert not os.path.exists(child), "precondition: the existing child looks absent"
+        assert ungrantable(BeingIntent("memory_read", {"path": child}), root) is None, \
+            "unknown must not be reported as absent"
+    finally:
+        os.chmod(parent, stat.S_IRWXU)
+
+
 if __name__ == "__main__":
     n = 0
     for name, fn in sorted(globals().items()):

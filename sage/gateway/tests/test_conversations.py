@@ -415,46 +415,70 @@ def test_a_placeholder_is_not_a_message():
     assert not is_stub("[short]"), "too short to be one of these briefs"
 
 
-def test_a_reverted_log_never_renumbers_over_its_own_history():
-    """2026-09-18: a seat ran `git rebase` over a dirty tree and dp's channel came back at its
-    committed 1-turn snapshot. The being's next `say` took seq 2 and carried on, so thirteen
-    turns of a real conversation read as a fresh one. dp found it by eye.
+def test_a_reverted_log_never_renumbers_and_the_scar_is_recorded_once():
+    """2026-09-18: a `git rebase` across the live tree reverted dp's channel to a committed
+    1-turn snapshot; the next `say` took seq 2 and thirteen turns read as a fresh start.
 
-    This cannot stop a file being replaced — the log is an ordinary tracked file. It stops the
-    record HEALING OVER the wound: numbering never goes backwards, so a gap stays a gap."""
-    import json, tempfile
+    GPT's review of SAGE#126 found the first repair wrong three ways; this pins two of them.
+    (1) seq came from the LINE COUNT, which after one gap is behind the high-water forever, so
+    every later append re-detected a truncation and rewrote the scar — and the old test passed
+    because it never asserted the scar stayed put. (3) the witness lived in the tracked meta,
+    the same rollback domain as the log."""
+    import json, os, tempfile
     from pathlib import Path
     from sage.gateway import conversations as c
     inst = Path(tempfile.mkdtemp(prefix="highwater-"))
     c.create(inst, "dp", title="t", participants=["dp", "b"], writable_by=["dp", "b"])
     for i in range(5):
         c.append(inst, "dp", speaker="dp", text=f"turn {i+1}")
-    assert c.get_meta(inst, "dp")["high_water_seq"] == 5
+    wp = c.witness_path(inst, "dp")
+    assert json.loads(wp.read_text())["high_water_seq"] == 5
+    assert not str(wp).startswith(str(inst.resolve())), "the witness is OUTSIDE the tree Git rewrites"
 
     log = inst / "conversations" / "dp.jsonl"
-    first = open(log).readlines()[0]
-    open(log, "w").write(first)                      # the revert
-    assert c.count(inst, "dp") == 1, "the log really is short now"
+    meta = inst / "conversations" / "dp.meta.json"
+    old_meta = meta.read_text()
+    log.write_text(log.read_text().splitlines()[0] + "\n")     # roll back EVERY tracked artifact
+    meta.write_text(old_meta)
 
-    t = c.append(inst, "dp", speaker="b", text="next")
-    assert t["seq"] == 6, f"numbering resumes past the loss, got {t['seq']}"
-    m = c.get_meta(inst, "dp")
-    assert m["truncated"]["high_water"] == 5 and m["truncated"]["turns_in_log"] == 1
-    assert m["truncated"]["resumed_at"] == 6 and m["high_water_seq"] == 6
-    # and a second turn after the incident just carries on
-    assert c.append(inst, "dp", speaker="b", text="and another")["seq"] == 7
+    assert c.append(inst, "dp", speaker="b", text="after the rollback")["seq"] == 6
+    w = json.loads(wp.read_text())
+    assert len(w["truncations"]) == 1 and w["truncations"][0]["high_water"] == 5
+    scar = json.dumps(w["truncations"])
+    # the convergence GPT's finding 1 is about: the log is now [1, 6]; line count says 3
+    assert c.append(inst, "dp", speaker="b", text="next")["seq"] == 7
+    assert c.append(inst, "dp", speaker="dp", text="and next")["seq"] == 8
+    w = json.loads(wp.read_text())
+    assert json.dumps(w["truncations"]) == scar, "ONE event, recorded once, never rewritten"
+    assert w["high_water_seq"] == 8
+    assert "high_water_seq" not in json.loads(meta.read_text()), "nothing of this lives in the tracked meta"
 
 
-def test_an_untouched_log_records_no_wound():
-    import tempfile
+def test_an_untouched_log_records_no_wound_and_a_fresh_clone_falls_back_to_the_log():
+    import json, tempfile
     from pathlib import Path
     from sage.gateway import conversations as c
     inst = Path(tempfile.mkdtemp(prefix="intact-"))
     c.create(inst, "dp", title="t", participants=["dp"], writable_by=["dp"])
     for i in range(3):
         c.append(inst, "dp", speaker="dp", text=f"t{i}")
-    m = c.get_meta(inst, "dp")
-    assert m["high_water_seq"] == 3 and "truncated" not in m
+    wp = c.witness_path(inst, "dp")
+    assert "truncations" not in json.loads(wp.read_text())
+    wp.unlink()                                                # a machine with no witness yet
+    assert c.append(inst, "dp", speaker="dp", text="t3")["seq"] == 4
+
+
+def test_a_damaged_line_still_occupies_its_position():
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="damaged-"))
+    c.create(inst, "dp", title="t", participants=["dp"], writable_by=["dp"])
+    c.append(inst, "dp", speaker="dp", text="one")
+    with open(inst / "conversations" / "dp.jsonl", "a") as f:
+        f.write("{not json\n")
+    c.witness_path(inst, "dp").unlink()
+    assert c.append(inst, "dp", speaker="dp", text="three")["seq"] == 3, "no number is reused"
 
 
 def test_a_turn_marked_seen_but_never_answered_is_still_unanswered():
