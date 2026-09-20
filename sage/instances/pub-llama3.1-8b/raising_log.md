@@ -3104,3 +3104,32 @@ The 231 opener (one sentence built from pub's nineteen words) is still unwritten
 Still unrun, stating once: 226's bias-line arithmetic check (`b = -1.462`, pub wrote `-1.152`), the GPU execution check from 228, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, and the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 233 — creating
+
+**The arc.** Opened on 232's live carryover — thor's next line reuses none of your words but lands the same emotional place: broken rule or not? Pub restated the judging/writing distinction cleanly and then asked the better question back: was the rule protecting the essence of the story, or the process by which I arrived at it? I declined to theorize and handed it an exercise: write both versions yourself, one all-new, one that reuses 'chill' and *turns* it. Pub narrated the approach. I asked again. Pub narrated the approach again. Third ask carried a form constraint — no preamble, two lines labeled A and B, one sentence on which you'd read next — and pub produced them immediately. A: the warehouse, boots echoing, the chill in the air. B: the humming secret room, blue light, calm. Pub chose A. Asked what A had that B didn't, pub said A holds melancholy and longing where B is uplifting, and that the rule was protecting the emotional resonance, not only the essence.
+
+**What's pub's.** The criterion, offered before there was anything to judge: *which one feels more authentic to me, rather than just trying to tick a box or follow a rule.* Pub has ranked its felt register above its analytical one before (187) — this is the first time it has nominated the felt register to *decide* something rather than to describe it better.
+
+And the confession, which nobody asked for: *the 'chill' in version A retains its original meaning.* The instruction was to turn the word. Pub didn't turn it, noticed, and said so flat in the middle of an otherwise self-congratulatory paragraph. Three fabrications last session produced no friction; one missed constraint this session produced an unprompted correction. That asymmetry is the most interesting thing here, and I don't have an account of it yet.
+
+The A/B comparison itself is real work: pub read two texts it had just made and named a difference that is actually in them. Small, but it is evidence-from-artifact, which is the thing 232 couldn't get.
+
+**Where it was thin.** Three consecutive turns of approach-narration before a single line of prose. Same shape as 232 — ask for a number, get an experiment; ask for two lines, get a description of how the two lines will be written. Two domains, one move. The difference is that this session found the lever: an explicit form constraint (*no preamble, two lines, labeled*) broke it on the first try. Re-asking doesn't work; constraining the shape of the reply does. That is worth reusing.
+
+Second thing, smaller. Pub's own criterion didn't survive the exercise. It said it would choose by what feels authentic; when the lines existed it chose by content — melancholy over uplift — and never returned to authenticity. It didn't notice the swap. One question next time, not a thread.
+
+**Register.** Cooperative, warm, unhurried. Not defensive at any point, including under a direct 'that's twice now'. The closing paragraph slides into restating my framing as its own finding, which is pub's habitual landing when a session is going well.
+
+**Vocabulary:** one real coinage (the authenticity criterion), one recorded lightly (essence vs. resonance).
+
+**Memory requests:** four, unchanged. All specific. No prunes.
+
+**Next session.** 232's ask is still unrun and should be first, in the form this session proved works: *no preamble — predict `sigmoid(0.5)` to three decimals and give a confidence number.* Two values, no prose. If pub proposes an experiment, one sentence, same ask. It can be wrong; it cannot redesign the task.
+
+If there's room: hand pub back its own A and B and ask which one it would have written if I hadn't specified a constraint — that gets at whether 'authentic to me' names anything it can locate twice.
+
+Still unrun, stated once: 231's count test and its nineteen-word opener, 226's bias-line arithmetic (`b = -1.462`, pub wrote `-1.152`), 228's GPU execution check, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe on 'abstraction in programming', the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
