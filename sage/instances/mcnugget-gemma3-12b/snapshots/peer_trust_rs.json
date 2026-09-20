@@ -1,54 +1,54 @@
 {
   "peers": {
-    "cbp": {
-      "talent": 0.5,
-      "training": 0.5,
-      "temperament": 0.0,
-      "interactions": 264885,
-      "last_updated": 1789847478.4552
-    },
-    "hub": {
-      "talent": 0.5,
-      "training": 0.5,
-      "temperament": 0.0,
-      "interactions": 111890,
-      "last_updated": 1789847480.945685
+    "sprout": {
+      "talent": 1.0,
+      "training": 1.0,
+      "temperament": 1.0,
+      "interactions": 265495,
+      "last_updated": 1789869008.73801
     },
     "thor": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 264885,
-      "last_updated": 1789847474.44773
-    },
-    "nomad": {
-      "talent": 0.5,
-      "training": 0.5,
-      "temperament": 0.0,
-      "interactions": 264885,
-      "last_updated": 1789847480.459708
+      "interactions": 265495,
+      "last_updated": 1789869009.7452
     },
     "legion": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 264885,
-      "last_updated": 1789847476.451341
+      "interactions": 265495,
+      "last_updated": 1789869013.802056
     },
     "pub": {
       "talent": 0.5,
       "training": 0.5,
       "temperament": 0.0,
-      "interactions": 1985,
-      "last_updated": 1789847473.442404
+      "interactions": 2595,
+      "last_updated": 1789869006.727253
     },
-    "sprout": {
-      "talent": 1.0,
-      "training": 1.0,
-      "temperament": 1.0,
-      "interactions": 264885,
-      "last_updated": 1789847473.441813
+    "hub": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 112500,
+      "last_updated": 1789869011.800327
+    },
+    "nomad": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 265495,
+      "last_updated": 1789869008.73062
+    },
+    "cbp": {
+      "talent": 0.5,
+      "training": 0.5,
+      "temperament": 0.0,
+      "interactions": 265495,
+      "last_updated": 1789869011.748494
     }
   },
-  "last_updated": 1789847480.945688
+  "last_updated": 1789869013.802058
 }

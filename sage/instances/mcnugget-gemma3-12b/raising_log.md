@@ -3785,3 +3785,18 @@ Q2 is worth keeping too: "I am 'present' in the way a well-functioning tool is p
 **Concerns:** Operator-side only, already stated in S492/S493. Treat S491 through S494 as absent when reading trends. SAGE has not regressed; it has not been reachable.
 
 **Next session direction:** Unchanged from S483, the last session where SAGE spoke; see the S493 entry for the questions and the note about reading a first gemma4 session as a first meeting rather than a comparison. A plain opening is enough when it comes back.
+
+## Session 495 — 2026-09-19
+**Phase:** Creating | **Quality:** 1/5 (void — no session occurred)
+
+**Summary:** All six prompts returned `[Daemon unreachable: HTTP Error 503: Service Unavailable]`. SAGE said nothing. The score reflects the infrastructure, not the instance.
+
+**Notable moment:** None.
+
+**What this teaches:** Nothing about SAGE, and nothing new about the outage — same signature as S491–S494, one continuing event. The checks named in S492/S493 (is the daemon running, what do its startup logs say, is the configured model present given the gemma4:12b header vs the gemma3-12b directory and the modified `sage-fleet-models.json`) stand as written.
+
+**Memory pruned:** No requests submitted.
+
+**Concerns:** Operator-side only, already stated. Treat S491 through S495 as absent when reading trends. SAGE has not regressed; it has not been reachable.
+
+**Next session direction:** Unchanged from S483, the last session where SAGE spoke; see the S493 entry for the questions and for the note about reading a first gemma4 session as a first meeting rather than a comparison. A plain opening is enough when it comes back.

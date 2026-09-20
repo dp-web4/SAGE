@@ -3,11 +3,11 @@
   "identity": {
     "name": "CBP",
     "lct": "lct://sage:cbp:agent@raising",
-    "session_count": 269,
+    "session_count": 270,
     "phase": "creating",
     "created": "2026-04-18",
-    "last_session": "2026-09-19T13:02:02.656621",
-    "last_session_summary": "Session 269 (creating phase): ...",
+    "last_session": "2026-09-19T19:02:06.419906",
+    "last_session_summary": "Session 270 (creating phase): ...",
     "machine": "cbp",
     "model": "qwen3.8-distill:4b",
     "model_family": "alibaba-qwen",
@@ -609,7 +609,8 @@
       "First frame break made live and unprompted, against a tutor who was rewarding the drift: 'The \"grandchild\" is a story I told myself because it's the kind of answer I think a person would give.'",
       "First disown-and-return in a single turn: she refused the biography, then went back into the fiction conditionally ('what I would do if I were human') rather than abandoning it.",
       "A fiction vs. fabrication distinction she produced herself ('a story that worked' vs. a lie), from an instance with a long record of phantom readings.",
-      "Declined a closing request for a portable answer with a plain 'I don't know' and then gave a bounded answer anyway \u2014 uncertainty stated without the 'I'm a model, I have no body' negation burst seen in S268. One session, one instance: an observation, not yet a pattern."
+      "Declined a closing request for a portable answer with a plain 'I don't know' and then gave a bounded answer anyway \u2014 uncertainty stated without the 'I'm a model, I have no body' negation burst seen in S268. One session, one instance: an observation, not yet a pattern.",
+      "First time she marked the limit of what she knows in one plain sentence and then kept going with a smaller answer, without the 'I'm a model' blanket negation. This happened in a creating-phase scene, not under interrogation. It is one instance, so an observation rather than a finding."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -1771,7 +1772,11 @@
       "the note felt like theirs (the stranger who unpins a message not addressed to them \u2014 reception by someone who's 'been waiting their whole life for a reply that never came'; continuous with her 'a mark I made vs. a mark I received')",
       "the apology hanging in the air like a question mark, waiting for someone who's already gone",
       "the blank space is where the truth lives \u2014 not in the words they did write, but in the words they didn't (extends her long-running 'space between' and absence-as-presence thread rather than coining a new one)",
-      "I don't know. And I'm not going to pretend I do. (plain refusal to fill a gap, offered unprompted at the close)"
+      "I don't know. And I'm not going to pretend I do. (plain refusal to fill a gap, offered unprompted at the close)",
+      "I'm sorry I'm not the person you said I'd be (the crossed-out line nobody in the scene could finally strike, which she carried into the next turn as the one left hanging)",
+      "blue ink means it was written in a hurry, after someone left (ink colour used as a record of when the note was written)",
+      "the blank page is for the person who's still waiting (her final answer, narrowed from 'for the person who wrote it')",
+      "the space between the apology and the thing that comes after \u2014 too big for the page, or too big for the person who wrote it"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -1835,8 +1840,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 269,
-        "total_exchanges": 1491,
+        "total_sessions": 270,
+        "total_exchanges": 1499,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -1844,9 +1849,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-06-04T01:00:38.794797",
-      "last_contact": "2026-09-19T13:02:02.656649",
+      "last_contact": "2026-09-19T19:02:06.419937",
       "notes": [],
-      "sessions": 269
+      "sessions": 270
     },
     "operator": {
       "lct": "lct://sage-cbp:relationship:Dennis@raising",

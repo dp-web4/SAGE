@@ -1,4 +1,4 @@
-# hestia.service as systemd resolves it, exported at 2026-09-19 19:52Z.
+# hestia.service as systemd resolves it, exported at 2026-09-20 01:45Z.
 # FragmentPath: /home/dp/.config/systemd/user/hestia.service
 # This is a USER unit: it lives under the running user's home, not /etc/systemd/system.
 
