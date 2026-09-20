@@ -393,6 +393,52 @@ impl IdentityProvider {
         Sha256::digest(format!("sage-seal-v2:{}:{}", anchor, lct_id).as_bytes()).to_vec()
     }
 
+    /// MACs, as the decimal integers python's `uuid.getnode()` returns, from `ifconfig -a` /
+    /// `ip link` text: every `ether aa:bb:cc:dd:ee:ff` token.
+    fn parse_ether_lines(text: &str) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let toks: Vec<&str> = text.split_whitespace().collect();
+        for w in toks.windows(2) {
+            if w[0].ends_with("ether") {
+                let hexs = w[1].replace(':', "");
+                if hexs.len() == 12 && w[1].matches(':').count() == 5 {
+                    if let Ok(v) = u64::from_str_radix(&hexs, 16) {
+                        if v != 0 && !out.contains(&v.to_string()) {
+                            out.push(v.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Every interface MAC on this machine. Linux: sysfs. macOS and anything else: parse
+    /// `ifconfig -a` — there is no sysfs there, and without this a Mac whose python
+    /// `uuid.getnode()` drifted could not recover its own v1 seal. Best effort.
+    fn interface_macs() -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        if let Ok(rd) = std::fs::read_dir("/sys/class/net") {
+            let mut names: Vec<_> = rd.flatten().map(|e| e.path()).collect();
+            names.sort();
+            for n in names {
+                if let Ok(a) = std::fs::read_to_string(n.join("address")) {
+                    if let Ok(v) = u64::from_str_radix(&a.trim().replace(':', ""), 16) {
+                        if v != 0 && !out.contains(&v.to_string()) {
+                            out.push(v.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        if out.is_empty() {
+            if let Ok(o) = std::process::Command::new("ifconfig").arg("-a").output() {
+                out = Self::parse_ether_lines(&String::from_utf8_lossy(&o.stdout));
+            }
+        }
+        out
+    }
+
     /// Every key a v1 file on this machine could have been sealed with:
     ///   rust   : sha256("<hostname>:0:<instance_dir as passed>")
     ///   python : sha256("<hostname>:<uuid.getnode()>:<instance_dir>") — getnode is some
@@ -404,18 +450,9 @@ impl IdentityProvider {
         let host = hostname::get().map(|h| h.to_string_lossy().to_string())
             .unwrap_or_else(|_| "unknown".to_string());
         let mut macs: Vec<String> = vec!["0".to_string()];
-        if let Ok(rd) = std::fs::read_dir("/sys/class/net") {
-            let mut names: Vec<_> = rd.flatten().map(|e| e.path()).collect();
-            names.sort();
-            for n in names {
-                if let Ok(a) = std::fs::read_to_string(n.join("address")) {
-                    let hexs = a.trim().replace(':', "");
-                    if let Ok(v) = u64::from_str_radix(&hexs, 16) {
-                        if v != 0 && !macs.contains(&v.to_string()) {
-                            macs.push(v.to_string());
-                        }
-                    }
-                }
+        for m in Self::interface_macs() {
+            if !macs.contains(&m) {
+                macs.push(m);
             }
         }
         let mut paths: Vec<String> = vec![self.instance_dir.display().to_string()];
@@ -724,6 +761,18 @@ mod tests {
         assert!(again.authorize().is_none());
         assert!(fs::read(dir.join("identity.sealed")).unwrap().starts_with(b"SAGE_SEALED_v1"));
         cleanup(&dir);
+    }
+
+    /// No sysfs on macOS: MACs come from `ifconfig -a`. Same sample, same expected values as
+    /// python's test_macos_ifconfig_macs_are_candidates_for_v1_recovery.
+    #[test]
+    fn macos_ifconfig_macs_parse_to_getnode_decimals() {
+        let sample = "lo0: flags=8049<UP> mtu 16384\n\tinet 127.0.0.1 netmask 0xff000000\n\
+                      en0: flags=8863<UP> mtu 1500\n\tether f0:18:98:aa:bb:cc\n\
+                      en1: flags=8963<UP> mtu 1500\n\tether 36:6f:24:00:11:22\n\
+                      bridge0: flags=8863 mtu 1500\n\tether 36:6f:24:00:11:22\n";
+        assert_eq!(IdentityProvider::parse_ether_lines(sample),
+                   vec![0xf01898aabbccu64.to_string(), 0x366f24001122u64.to_string()]);
     }
 
     /// Pins the bytes the python provider mirrors (test_v2_key_is_the_documented_bytes).

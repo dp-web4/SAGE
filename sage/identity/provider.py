@@ -471,6 +471,42 @@ class IdentityProvider:
         lct = lct_id if lct_id is not None else (self._manifest.lct_id if self._manifest else '')
         return hashlib.sha256(f"sage-seal-v2:{self._machine_anchor()}:{lct}".encode()).digest()
 
+    @staticmethod
+    def _parse_ether_lines(text: str) -> list:
+        """MACs (as the decimal integers `uuid.getnode()` would return) from `ifconfig -a` /
+        `ip link` output: every `ether aa:bb:cc:dd:ee:ff` / `link/ether …` token."""
+        import re
+        out = []
+        for a in re.findall(r"ether\s+((?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2})", text or ""):
+            v = int(a.replace(":", ""), 16)
+            if v and str(v) not in out:
+                out.append(str(v))
+        return out
+
+    def _interface_macs(self) -> list:
+        """Every interface MAC this machine has, as decimal strings. Linux: sysfs. macOS and
+        anything else: parse `ifconfig -a` (no sysfs there — without this a Mac whose
+        `uuid.getnode()` drifted could not recover its own v1 seal). Best effort, never raises."""
+        import glob
+        out = []
+        for f in sorted(glob.glob('/sys/class/net/*/address')):
+            try:
+                a = open(f).read().strip()
+                if a and a != '00:00:00:00:00:00':
+                    m = str(int(a.replace(':', ''), 16))
+                    if m not in out:
+                        out.append(m)
+            except (OSError, ValueError):
+                pass
+        if not out:
+            try:
+                import subprocess
+                txt = subprocess.run(['ifconfig', '-a'], capture_output=True, text=True, timeout=5).stdout
+                out = self._parse_ether_lines(txt)
+            except Exception:
+                pass
+        return out
+
     def _legacy_keys(self):
         """Every key a v1 file on this machine could have been sealed with, most likely first.
 
@@ -482,19 +518,12 @@ class IdentityProvider:
         recorded in instance.json — so a renamed home heals itself on first authorize."""
         import socket
         import uuid
-        import glob
         import json as _json
         host = socket.gethostname()
         macs = [str(uuid.getnode())]
-        for f in sorted(glob.glob('/sys/class/net/*/address')):
-            try:
-                a = open(f).read().strip()
-                if a and a != '00:00:00:00:00:00':
-                    m = str(int(a.replace(':', ''), 16))
-                    if m not in macs:
-                        macs.append(m)
-            except (OSError, ValueError):
-                pass
+        for m in self._interface_macs():
+            if m not in macs:
+                macs.append(m)
         macs.append('0')   # the Rust provider's literal
         paths = [str(self.instance_dir)]
         try:

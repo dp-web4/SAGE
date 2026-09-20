@@ -216,6 +216,26 @@ class IdentityAnchorTests(unittest.TestCase):
         with open(self.instance_dir / 'identity.sealed', 'rb') as f:
             self.assertEqual(f.readline().strip(), b'SAGE_SEALED_v1', 'an unverified file is never rewritten')
 
+    def test_macos_ifconfig_macs_are_candidates_for_v1_recovery(self):
+        """No sysfs on macOS: the MACs come from `ifconfig -a`. Parser pinned on real-shaped
+        output; the decimal form must equal what uuid.getnode() would have sealed with."""
+        sample = ("lo0: flags=8049<UP,LOOPBACK,RUNNING,MULTICAST> mtu 16384\n"
+                  "\tinet 127.0.0.1 netmask 0xff000000\n"
+                  "en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500\n"
+                  "\tether f0:18:98:aa:bb:cc\n"
+                  "en1: flags=8963<UP> mtu 1500\n\tether 36:6f:24:00:11:22\n"
+                  "bridge0: flags=8863 mtu 1500\n\tether 36:6f:24:00:11:22\n")
+        macs = IdentityProvider._parse_ether_lines(sample)
+        self.assertEqual(macs, [str(0xf01898aabbcc), str(0x366f24001122)])
+        # and a v1 sealed with a MAC that only ifconfig reports is recovered
+        provider, manifest = self._init('software')
+        self._write_v1(provider, str(0xf01898aabbcc), str(self.instance_dir))
+        again = IdentityProvider(str(self.instance_dir))
+        again._interface_macs = lambda: macs
+        ctx = again.authorize()
+        self.assertIsNotNone(ctx)
+        self.assertEqual(ctx.public_key_fingerprint, manifest.public_key_fingerprint)
+
     def test_v2_key_is_the_documented_bytes(self):
         """Pins the derivation the Rust provider mirrors; change one, change both."""
         import hashlib
