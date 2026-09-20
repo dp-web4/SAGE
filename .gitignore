@@ -308,3 +308,13 @@ sage-rs/daemon.log
 # legion-being lives here since 2026-09-19 (dp ruling: <machine>-being/, private going forward,
 # mirrored to private-context). sage/instances/legion-gemma3-12b/ stays as the frozen public record.
 sage/instances/legion-being/
+
+# GPT convergence sweep 2026-09-19 (#56): runtime traces, nested worktrees and the frozen legacy home's
+# working residue are not source. The legacy dir keeps its raising record and history; these stay on disk.
+sage/instances/*/heartbeat.partial.jsonl
+sage/instances/*/being-worktrees/
+sage/instances/legion-gemma3-12b/scratch/
+sage/instances/legion-gemma3-12b/backups/
+sage/instances/legion-gemma3-12b/m.md
+sage/instances/legion-gemma3-12b/review_queue.jsonl
+sage/instances/legion-gemma3-12b/long_term_memory_recovered.jsonl
