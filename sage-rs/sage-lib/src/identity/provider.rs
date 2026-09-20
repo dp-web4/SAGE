@@ -160,17 +160,17 @@ impl IdentityProvider {
         let manifest = self.manifest.as_ref()?;
 
         // VERIFY the unsealed secret produces the identity the manifest claims. XOR sealing
-        // is unauthenticated: a wrong key (different machine, relocated instance dir, or a
-        // file sealed by the Python provider, whose machine-key derivation differs) yields
-        // plausible bytes, not an error. Without this, the context below asserts the
+        // is unauthenticated: a wrong key (a different machine, a different LCT id, or a v1
+        // file whose former home was never recorded) yields plausible bytes, not an error. Without this, the context below asserts the
         // manifest's fingerprint alongside a secret that may not produce it, and the
         // attestation publishes that unverified claim. Fail closed.
         let actual = SigningContext::fingerprint(&secret);
         if !manifest.public_key_fingerprint.is_empty() && actual != manifest.public_key_fingerprint {
             eprintln!(
                 "[identity] AUTHORIZATION REFUSED: unsealed secret does not match the manifest \
-                 identity (fingerprint {} != {}). Sealed file written by another machine, \
-                 another instance path, or the other language's provider.",
+                 identity (fingerprint {} != {}). Sealed on a different machine, under a different \
+                 LCT id, or a v1 file whose former home is not in instance.json `former_homes`. \
+                 (A renamed home and the other language's provider are NOT causes under v2.)",
                 actual, manifest.public_key_fingerprint
             );
             return None;
@@ -254,8 +254,9 @@ impl IdentityProvider {
 
     /// Seal the root secret. Returns the anchor ACTUALLY ACHIEVED.
     ///
-    /// This provider has no hardware path: the secret is always XORed against
-    /// sha256(hostname:0:instance_dir). So the achieved anchor is always "software",
+    /// This provider has no hardware path: the secret is always XORed against the v2
+    /// machine key (`derive_machine_key_v2`: machine anchor + LCT id — not the hostname, not
+    /// a MAC, not the instance path). So the achieved anchor is always "software",
     /// and a request for tpm2/fido2/secure_enclave is a downgrade, reported as one.
     ///
     /// The return value is load-bearing — the caller records it as the manifest's
@@ -317,14 +318,29 @@ impl IdentityProvider {
                 first = Some(secret.clone());
             }
             if !expected.is_empty() && SigningContext::fingerprint(&secret) == expected {
+                // INVARIANT (same in the python provider): the live v1 is replaced only after
+                // `identity.sealed.v1` exists as a regular file whose bytes EQUAL the live v1.
+                // A copy whose result is discarded is not that, and neither is "something is
+                // already there" — a stale or unrelated file at that name would be blessed as
+                // "the original" while the only real v1 specimen is overwritten. Authorization
+                // is unaffected either way: the verified secret is returned below regardless.
                 let keep = self.sealed_path.with_file_name("identity.sealed.v1");
                 if !keep.exists() {
                     let _ = std::fs::copy(&self.sealed_path, &keep);
                 }
-                self.seal_secret(&secret, if anchor.is_empty() { "software" } else { &anchor }, &lct);
-                eprintln!(
-                    "[identity] sealed file migrated v1 -> v2 (unsealed with legacy '{}'; original \
-                     kept as identity.sealed.v1). Same secret, same fingerprint.", label);
+                let preserved = std::fs::symlink_metadata(&keep).map(|m| m.is_file()).unwrap_or(false)
+                    && std::fs::read(&keep).map(|b| b == data).unwrap_or(false);
+                if preserved {
+                    self.seal_secret(&secret, if anchor.is_empty() { "software" } else { &anchor }, &lct);
+                    eprintln!(
+                        "[identity] sealed file migrated v1 -> v2 (unsealed with legacy '{}'; original \
+                         kept as identity.sealed.v1). Same secret, same fingerprint.", label);
+                } else {
+                    eprintln!(
+                        "[identity] v1 seal verified with '{}' but NOT migrated: identity.sealed.v1 is \
+                         not a byte-identical regular-file copy of the live v1. The v1 file is left in \
+                         place. Move identity.sealed.v1 aside to allow migration.", label);
+                }
                 return Some(secret);
             }
         }
@@ -536,8 +552,8 @@ mod tests {
 
     /// A requested anchor this provider cannot actually deliver must NOT be recorded.
     ///
-    /// There is no hardware sealing here — every secret is XORed against
-    /// sha256(hostname:0:instance_dir). Recording the REQUESTED anchor would publish
+    /// There is no hardware sealing here — every secret is XORed against the v2 machine key
+    /// (machine anchor + LCT id). Recording the REQUESTED anchor would publish
     /// trust_ceiling 1.0 (tpm2) for a software-sealed secret, i.e. let a caller mint
     /// the fleet's highest trust ceiling by passing a string.
     #[test]
@@ -643,6 +659,57 @@ mod tests {
         let kept = fs::read(dir.join("identity.sealed.v1")).expect("original v1 kept");
         assert!(kept.starts_with(b"SAGE_SEALED_v1"));
         assert!(IdentityProvider::new(&dir).authorize().is_some(), "migrated file authorizes alone");
+        cleanup(&dir);
+    }
+
+    // --- the backup-before-rewrite invariant, three arms (same three in the python suite) ---
+
+    fn v1_fixture(tag: &str) -> (std::path::PathBuf, String, Vec<u8>) {
+        let dir = temp_dir(tag);
+        let mut provider = IdentityProvider::new(&dir);
+        let manifest = provider.initialize("test", "lct://test", "m", "model:1b", "software");
+        let secret = provider.unseal_secret().unwrap();
+        write_v1(&dir, &secret, "0", dir.to_str().unwrap());
+        let original = fs::read(dir.join("identity.sealed")).unwrap();
+        (dir, manifest.public_key_fingerprint, original)
+    }
+
+    #[test]
+    fn migration_arm1_no_backup_creates_a_byte_identical_one_then_rewrites() {
+        let (dir, fp, original) = v1_fixture("mig_arm1");
+        let mut again = IdentityProvider::new(&dir);
+        let ctx = again.authorize().expect("verified v1 authorizes");
+        assert_eq!(ctx.fingerprint, fp);
+        assert_eq!(fs::read(dir.join("identity.sealed.v1")).unwrap(), original);
+        assert!(fs::read(dir.join("identity.sealed")).unwrap().starts_with(b"SAGE_SEALED_v2"));
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn migration_arm2_backup_impossible_authorizes_but_does_not_rewrite() {
+        let (dir, fp, original) = v1_fixture("mig_arm2");
+        fs::create_dir(dir.join("identity.sealed.v1")).unwrap(); // a directory: cannot be the backup
+        let mut again = IdentityProvider::new(&dir);
+        let ctx = again.authorize().expect("a verified v1 still authorizes");
+        assert_eq!(ctx.fingerprint, fp);
+        assert_eq!(fs::read(dir.join("identity.sealed")).unwrap(), original,
+            "the live v1 was replaced with no backup of it");
+        cleanup(&dir);
+    }
+
+    /// HUB induced this on a real seal 2026-09-20 (python provider, same guard): unrelated
+    /// bytes already at identity.sealed.v1, the live v1 replaced anyway, the v1 bytes
+    /// surviving nowhere.
+    #[test]
+    fn migration_arm3_stale_backup_is_not_blessed_as_the_original() {
+        let (dir, fp, original) = v1_fixture("mig_arm3");
+        fs::write(dir.join("identity.sealed.v1"), b"NOT THE ORIGINAL").unwrap();
+        let mut again = IdentityProvider::new(&dir);
+        let ctx = again.authorize().expect("a verified v1 still authorizes");
+        assert_eq!(ctx.fingerprint, fp);
+        assert_eq!(fs::read(dir.join("identity.sealed")).unwrap(), original,
+            "the live v1 was replaced beside a stale backup");
+        assert_eq!(fs::read(dir.join("identity.sealed.v1")).unwrap(), b"NOT THE ORIGINAL");
         cleanup(&dir);
     }
 

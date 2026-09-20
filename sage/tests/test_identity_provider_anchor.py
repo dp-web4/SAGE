@@ -154,6 +154,49 @@ class IdentityAnchorTests(unittest.TestCase):
         # and the migrated file authorizes on its own
         self.assertIsNotNone(IdentityProvider(str(self.instance_dir)).authorize())
 
+    # --- the backup-before-rewrite invariant, three arms (same three in the Rust suite) ---
+
+    def _live(self):
+        return (self.instance_dir / 'identity.sealed').read_bytes()
+
+    def test_migration_arm1_no_backup_creates_a_byte_identical_one_then_rewrites(self):
+        provider, _ = self._init('software')
+        self._write_v1(provider, '0', str(self.instance_dir))
+        original = self._live()
+        self.assertIsNotNone(IdentityProvider(str(self.instance_dir)).authorize())
+        self.assertEqual((self.instance_dir / 'identity.sealed.v1').read_bytes(), original)
+        self.assertTrue(self._live().startswith(b'SAGE_SEALED_v2'))
+
+    def test_migration_arm2_backup_impossible_authorizes_but_does_not_rewrite(self):
+        provider, manifest = self._init('software')
+        self._write_v1(provider, '0', str(self.instance_dir))
+        original = self._live()
+        (self.instance_dir / 'identity.sealed.v1').mkdir()   # a directory: cannot be the backup
+        ctx = IdentityProvider(str(self.instance_dir)).authorize()
+        self.assertIsNotNone(ctx, 'a verified v1 still authorizes when it cannot be migrated')
+        self.assertEqual(ctx.public_key_fingerprint, manifest.public_key_fingerprint)
+        self.assertEqual(self._live(), original, 'the live v1 was replaced with no backup of it')
+
+    def test_migration_arm3_stale_backup_is_not_blessed_as_the_original(self):
+        """HUB induced this on a real seal 2026-09-20: unrelated bytes already at
+        identity.sealed.v1, the live v1 replaced anyway, the log saying 'original kept',
+        and the v1 bytes surviving nowhere."""
+        import contextlib
+        import io
+        provider, manifest = self._init('software')
+        self._write_v1(provider, '0', str(self.instance_dir))
+        original = self._live()
+        (self.instance_dir / 'identity.sealed.v1').write_bytes(b'NOT THE ORIGINAL')
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ctx = IdentityProvider(str(self.instance_dir)).authorize()
+        self.assertIsNotNone(ctx)
+        self.assertEqual(ctx.public_key_fingerprint, manifest.public_key_fingerprint)
+        self.assertEqual(self._live(), original, 'the live v1 was replaced beside a stale backup')
+        self.assertEqual((self.instance_dir / 'identity.sealed.v1').read_bytes(), b'NOT THE ORIGINAL')
+        self.assertNotIn('original kept', out.getvalue(), 'success was claimed for a migration that did not happen')
+        self.assertIn('NOT migrated', out.getvalue())
+
     def test_v1_sealed_under_a_former_home_heals_through_instance_json(self):
         """Legion's real case: sealed 2026-03-28 at .../legion-gemma3-12b, home renamed."""
         import json

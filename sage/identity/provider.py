@@ -207,8 +207,10 @@ class IdentityProvider:
         if expected and actual != expected:
             print(f"[Identity] AUTHORIZATION REFUSED: unsealed secret does not match the "
                   f"manifest identity (fingerprint {actual} != {expected}). The sealed file "
-                  f"was written by a different machine, a different instance path, or the "
-                  f"other language's provider. Not constructing a signing context.")
+                  f"was sealed on a different machine, under a different LCT id, or is a v1 file whose "
+                  f"former home is not recorded in instance.json `former_homes`. (A renamed home "
+                  f"and the other language's provider are NOT causes under v2.) "
+                  f"Not constructing a signing context.")
             return None
 
         self._context = SigningContext(
@@ -403,12 +405,27 @@ class IdentityProvider:
 
     def _migrate_to_v2(self, secret: bytes, anchor_type: str, label: str):
         """Rewrite a verified v1 seal as v2, keeping the original beside it. Best effort:
-        a read-only instance dir leaves the v1 file in place and it unseals again next time."""
+        anything that stops the original being preserved leaves the v1 file in place, and it
+        unseals again next time.
+
+        INVARIANT (same in the Rust provider): the live v1 is replaced only after
+        `identity.sealed.v1` exists as a regular file whose bytes EQUAL the live v1. "The copy
+        did not raise" is not enough, and neither is "something is already there": a stale or
+        unrelated file at that name — an interrupted earlier migration, a copied-in home —
+        would otherwise be blessed as "the original" while the only real v1 specimen is
+        overwritten. Authorization is unaffected either way; the caller already holds the
+        verified secret."""
         try:
             keep = self.sealed_path.with_name('identity.sealed.v1')
+            live = self.sealed_path.read_bytes()
             if not keep.exists():
                 import shutil
                 shutil.copy2(self.sealed_path, keep)
+            if not keep.is_file() or keep.is_symlink() or keep.read_bytes() != live:
+                print(f"[Identity] v1 seal verified with '{label}' but NOT migrated: "
+                      f"{keep.name} exists and is not a byte-identical copy of the live v1 file. "
+                      f"The v1 file is left in place. Move {keep.name} aside to allow migration.")
+                return
             self._seal_secret(secret, anchor_type)
             print(f"[Identity] sealed file migrated v1 -> v2 (it unsealed with the legacy "
                   f"'{label}' key; original kept as {keep.name}). Same secret, same fingerprint.")
