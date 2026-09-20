@@ -457,6 +457,22 @@ class IdentityProvider:
             print(f"[Identity] v1 seal verified with '{label}' but could not be rewritten as v2: {e}")
 
     @staticmethod
+    def _system_tool(name: str) -> str:
+        """Absolute path of a system tool, WITHOUT consulting PATH; the bare name if not found.
+
+        Measured on McNugget (macOS, 2026-09-20): `ioreg` is /usr/sbin/ioreg and `ifconfig` is
+        /sbin/ifconfig, and a launchd agent with no PATH key runs with `/usr/bin:/bin`. Looked
+        up by bare name, both were found from a shell and NOT from the daemon's unit -- so one
+        machine produced two anchors (IOPlatformUUID vs `host:<name>`), i.e. two v2 keys, and a
+        seal written by either process was unreadable to the other. The failure was silent in
+        both directions: the fallback is a valid anchor, just a different one."""
+        for d in ('/usr/sbin', '/sbin', '/usr/bin', '/bin'):
+            cand = os.path.join(d, name)
+            if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                return cand
+        return name
+
+    @staticmethod
     def _machine_anchor() -> str:
         """A per-install identifier that does not move: /etc/machine-id (Linux, WSL),
         IOPlatformUUID (macOS), else the hostname. NOT a MAC: `uuid.getnode()` returns
@@ -471,7 +487,7 @@ class IdentityProvider:
                 pass
         try:
             import subprocess
-            out = subprocess.run(['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'],
+            out = subprocess.run([IdentityProvider._system_tool('ioreg'), '-rd1', '-c', 'IOPlatformExpertDevice'],
                                  capture_output=True, text=True, timeout=5).stdout
             for line in out.splitlines():
                 if 'IOPlatformUUID' in line:
@@ -525,7 +541,7 @@ class IdentityProvider:
         if not out:
             try:
                 import subprocess
-                txt = subprocess.run(['ifconfig', '-a'], capture_output=True, text=True, timeout=5).stdout
+                txt = subprocess.run([self._system_tool('ifconfig'), '-a'], capture_output=True, text=True, timeout=5).stdout
                 out = self._parse_ether_lines(txt)
             except Exception:
                 pass

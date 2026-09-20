@@ -272,5 +272,58 @@ class IdentityAnchorTests(unittest.TestCase):
                          hashlib.sha256(b'sage-seal-v2:ANCHOR:lct://sage:test:agent@test').digest())
 
 
+class SystemToolLookupTests(unittest.TestCase):
+    """The machine anchor is an INPUT TO THE SEALING KEY, so how `ioreg` is found is not a
+    detail. Measured on McNugget (macOS, 2026-09-20): /usr/sbin/ioreg and /sbin/ifconfig are
+    outside the `/usr/bin:/bin` a launchd agent gets by default. By bare name, a shell found
+    them and the daemon's unit did not -- one machine, two anchors (IOPlatformUUID vs
+    `host:<name>`), two v2 keys, and zero MACs for healing a v1 seal. Silent both ways: the
+    fallback is a valid anchor, just a different one. Mirrors the rust
+    `system_tool_is_resolved_without_path`."""
+
+    @staticmethod
+    def _with_path(value):
+        import os
+        from unittest import mock
+        return mock.patch.dict(os.environ, {'PATH': value})
+
+    def test_system_tool_ignores_path(self):
+        import os
+        for path in ('/usr/bin:/bin', '', '/nonexistent'):
+            with self._with_path(path):
+                for tool in ('ioreg', 'ifconfig'):
+                    got = IdentityProvider._system_tool(tool)
+                    if sys.platform == 'darwin':
+                        self.assertTrue(os.path.isabs(got) and os.access(got, os.X_OK),
+                                        f"{tool} under PATH={path!r} -> {got!r}")
+        if sys.platform == 'darwin':
+            self.assertEqual(IdentityProvider._system_tool('ioreg'), '/usr/sbin/ioreg')
+            self.assertEqual(IdentityProvider._system_tool('ifconfig'), '/sbin/ifconfig')
+        self.assertEqual(IdentityProvider._system_tool('no-such-tool-xyz'), 'no-such-tool-xyz',
+                         "not found: the bare name, as before")
+
+    def test_the_anchor_does_not_depend_on_path(self):
+        """The property itself, end to end, on whatever platform this runs on."""
+        import hashlib
+        # Compared as digests: the anchor is a hardware identifier and a key input, and a
+        # failing assertEqual would print both values into whatever log runs this.
+        d8 = lambda a: ('host' if a.startswith('host:') else 'id') + ':' + hashlib.sha256(a.encode()).hexdigest()[:8]
+        full = IdentityProvider._machine_anchor()
+        for path in ('/usr/bin:/bin', ''):
+            with self._with_path(path):
+                self.assertEqual(d8(IdentityProvider._machine_anchor()), d8(full),
+                                 f"PATH={path!r} changed the anchor, and with it the sealing key")
+        if sys.platform == 'darwin':
+            self.assertFalse(full.startswith('host:'),
+                             "a Mac must anchor on IOPlatformUUID, not fall through to the hostname")
+
+    @unittest.skipUnless(sys.platform == 'darwin', "sysfs covers Linux; this is the ifconfig branch")
+    def test_macs_are_found_under_the_launchd_path(self):
+        p = IdentityProvider.__new__(IdentityProvider)
+        with self._with_path('/usr/bin:/bin'):
+            self.assertGreater(len(p._interface_macs()), 0,
+                               "no MACs under launchd's PATH: a v1 seal on this Mac could never heal")
+
+
 if __name__ == '__main__':
     unittest.main()

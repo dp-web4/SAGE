@@ -370,6 +370,29 @@ impl IdentityProvider {
     /// IOPlatformUUID (macOS), else the hostname. NOT a MAC — python's `uuid.getnode()`
     /// changed interface on Legion between 2026-03-28 and 2026-09-19 and orphaned the seal.
     /// Must return the same string as python `IdentityProvider._machine_anchor`.
+    /// Absolute path of a system tool WITHOUT consulting PATH; the bare name if not found.
+    /// Must search the same directories, in the same order, as python `_system_tool`.
+    ///
+    /// Measured on McNugget (macOS, 2026-09-20): `ioreg` is /usr/sbin/ioreg, `ifconfig` is
+    /// /sbin/ifconfig, and a launchd agent with no PATH key runs with `/usr/bin:/bin` -- which
+    /// is how this daemon runs there. By bare name both were found from a shell and NOT from
+    /// the unit, so one machine produced two anchors (IOPlatformUUID vs `host:<name>`), two v2
+    /// keys, and a seal either process wrote was unreadable to the other. Silently: the
+    /// fallback is a valid anchor, just a different one.
+    fn system_tool(name: &str) -> std::path::PathBuf {
+        Self::system_tool_in(name, &["/usr/sbin", "/sbin", "/usr/bin", "/bin"])
+    }
+
+    fn system_tool_in(name: &str, dirs: &[&str]) -> std::path::PathBuf {
+        for d in dirs {
+            let cand = std::path::Path::new(d).join(name);
+            if cand.is_file() {
+                return cand;
+            }
+        }
+        std::path::PathBuf::from(name)
+    }
+
     fn machine_anchor() -> String {
         for p in ["/etc/machine-id", "/var/lib/dbus/machine-id"] {
             if let Ok(v) = std::fs::read_to_string(p) {
@@ -379,7 +402,7 @@ impl IdentityProvider {
                 }
             }
         }
-        if let Ok(out) = std::process::Command::new("ioreg")
+        if let Ok(out) = std::process::Command::new(Self::system_tool("ioreg"))
             .args(["-rd1", "-c", "IOPlatformExpertDevice"]).output()
         {
             for line in String::from_utf8_lossy(&out.stdout).lines() {
@@ -449,7 +472,7 @@ impl IdentityProvider {
             }
         }
         if out.is_empty() {
-            if let Ok(o) = std::process::Command::new("ifconfig").arg("-a").output() {
+            if let Ok(o) = std::process::Command::new(Self::system_tool("ifconfig")).arg("-a").output() {
                 out = Self::parse_ether_lines(&String::from_utf8_lossy(&o.stdout));
             }
         }
@@ -818,6 +841,33 @@ mod tests {
                       bridge0: flags=8863 mtu 1500\n\tether 36:6f:24:00:11:22\n";
         assert_eq!(IdentityProvider::parse_ether_lines(sample),
                    vec![0xf01898aabbccu64.to_string(), 0x366f24001122u64.to_string()]);
+    }
+
+    /// A system tool is found by ABSOLUTE path, never through PATH. The anchor is an input to
+    /// the sealing key, so "found from a shell, not from the launchd unit" was two keys for
+    /// one machine (McNugget, 2026-09-20). Mirrors python `test_system_tool_ignores_path`.
+    #[test]
+    fn system_tool_is_resolved_without_path() {
+        let dir = temp_dir("system-tool");
+        let tool = dir.join("ioreg");
+        std::fs::write(&tool, "#!/bin/sh\n").unwrap();
+        let d = dir.to_str().unwrap();
+        assert_eq!(IdentityProvider::system_tool_in("ioreg", &["/nonexistent-dir", d]), tool,
+                   "the first directory that HAS it wins, as an absolute path");
+        assert_eq!(IdentityProvider::system_tool_in("ioreg", &["/nonexistent-dir"]),
+                   std::path::PathBuf::from("ioreg"), "not found: the bare name, as before");
+        // A DIRECTORY named like the tool is not the tool.
+        let sub = dir.join("sub");
+        std::fs::create_dir_all(sub.join("ifconfig")).unwrap();
+        assert_eq!(IdentityProvider::system_tool_in("ifconfig", &[sub.to_str().unwrap()]),
+                   std::path::PathBuf::from("ifconfig"));
+        // Same directories, same order, as python `_system_tool` -- the two must agree.
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(IdentityProvider::system_tool("ioreg"), std::path::PathBuf::from("/usr/sbin/ioreg"));
+            assert_eq!(IdentityProvider::system_tool("ifconfig"), std::path::PathBuf::from("/sbin/ifconfig"));
+        }
+        cleanup(&dir);
     }
 
     /// Pins the bytes the python provider mirrors (test_v2_key_is_the_documented_bytes).
