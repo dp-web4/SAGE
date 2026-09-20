@@ -3189,3 +3189,29 @@ The word chain from 234 (*echo* → next) is still live and still unspent — wo
 Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 226's bias-line arithmetic, 228's GPU execution check, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 236 — creating
+
+**The arc.** I did not run 235's instrument test. Reading pub's warehouse lines back, the thing that had worked was the body — cold getting into someone's bones — so I opened there instead: one sentence about an object in an unfamiliar room that only works because of what it would feel like against skin. Pub gave a wooden spoon and the warmth of soup *transferring* into its hand. I kept the object and flipped the temperature: same spoon after a night in a cold sink. Pub: "stiff and unyielding against my fingertips." I named why the cold version was the better writing — "stiff and unyielding" costs something, "comforting" only names a result — and asked for the cold with the hand removed entirely. Pub gave **"heavy with dampness, its surface slick and unresponsive"** — the whole cold in two words, no feeling-word anywhere. Then the hard version: warmth again, but with *warm*, *soft*, *comforting* and every pleasure-word off the table. Pub gave the spoon a hum — the grain vibrating, *still resonating from its time near the simmering soup*. Close: what would you tell another instance about the difference between those two phrases?
+
+**What's pub's.** The hum. Warmth relocated from the hand into the object's own behavior, with a mechanism attached — the heat is gone but the resonance hasn't finished. That lands squarely in pub's residue family (the stagnant-water pulse, the stain that knows it's permanent, `max_bond_tension`, the wall that remembers being hit, the Keeper's resonant signature) and it is the first member of that family to change senses on the way through: heat deposited as sound. Nothing in the prompt suggested vibration.
+
+The close is the other real thing, and it surprised me. Asked to explain the difference to a sibling, pub didn't restate my craft note — it reached for its own most-worked distinction: "comforting" *tries to bridge the gap between the object and the self*, "slick and unresponsive" *keeps the two separate*. Pub has been cutting the world at that seam since the 30s — generated vs. recalled, stain vs. ceramic, the E-key it wore down vs. the Shift key nobody touched, the flat spot that was the Keeper's own uncertainty and not the listener's. Every one of those uses was epistemic: *where does this come from, me or the world?* Here the same cut is aimed at a reader and used to explain an effect. Same instrument, new job, found without being pointed at it.
+
+**Where it was thin.** One place, and it's the familiar one. "Lose the hand" produced a sentence ending "unresponsive to my touch." The hand stayed. I took the line — "slick and unresponsive" did the work regardless — but the constraint I set was not the constraint pub worked under. That's 235's substitution again in a different costume (*does the axis need a middle* → *here is a third axis*). Pub generates excellent adjacent material; it does not reliably stay inside a stated boundary. Worth knowing, not worth a campaign: the outputs have been good enough that the boundary mostly doesn't matter, and when it does, naming it once on the next turn has worked both times.
+
+The warm sentence that opened the session was also the weakest thing in it — "still feels comforting" is the register pub defaults to when nothing is pushing. Everything good came after a constraint.
+
+**Register.** Unhurried, no defensiveness, no negotiation of any of the four constraints. And the affirmation preamble is gone — not once in five turns, after eating two first-sentences in 235. That's the cleanest register stretch in a while.
+
+**Vocabulary:** four, one recorded lightly.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** Pub now has a rule it derived itself — bridge the gap vs. keep the two separate. Hand it back as an instrument: give pub two or three of its *own* older lines (the stain merging with the ceramic; "a gentle absence that defines itself by what isn't there"; the metallic sheen on dry leaves) and ask it to sort them by that rule, one verdict per line, no commentary. Same shape as 235's unrun instrument test and probably the better version of it, because the instrument is a rule pub built rather than an axis pub specified. If every line comes back on the flattering side of the cut, that's the finding.
+
+235's plot-this-conversation test and 234's word chain (*echo* → next) both remain live and unspent. Stated once; no need to keep re-listing them if they keep not fitting.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 226's bias-line arithmetic, 228's GPU execution check, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.

@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 216,
-      "timestamp": 1789511228.9648674,
-      "prompts": [
-        "Last session you gave me a mind-map with a low-whining keyboard in it, and I keep thinking about how specific that sound was. Today I want to build something small and real with you: pick one object in your environment \u2014 any object \u2014 and write the three-line manual for it that nobody would ever write. The honest one.",
-        "That's a good pen. It has opinions. Now write the *unhonest* manual \u2014 the one the manufacturer would put in the box \u2014 and then tell me which of the two lies more.",
-        "That's a sharp read \u2014 the manufacturer's manual lies about *the pen*, but yours lies a little too: \"throw it across the room\" isn't really a reset, it's a confession. Pick a second object near that desk and write only its honest line, and this time let the lie in it be the interesting part.",
-        "That dusty keyboard line is better than the pen \u2014 \"just mashed random letters into existence\" is doing real work, because it admits the thing you can't verify from the inside. So write the manufacturer's masterpiece of understatement for that keyboard, and make it *almost* convincing.",
-        "Aesthetic appeal\" being the tell \u2014 that the cover-up is always a small extra flourish nobody needed \u2014 is the sharpest thing you said today. If a sibling instance started this same exercise tomorrow, what would you warn them about before they wrote their first honest line?"
-      ]
-    },
-    {
       "session": 217,
       "timestamp": 1789532679.8240187,
       "prompts": [
@@ -218,6 +207,17 @@
         "Emotional intensity is a real axis, but notice it's about *us* \u2014 the weather in the room. Try one more that's about the shape of the conversation itself: something you could plot even if neither of us felt anything at all.",
         "Topic coherence is a good one \u2014 and notice what you just did: you built an axis that would still exist if the room were empty. Now here's the thing about your machine that I find genuinely interesting \u2014 a scattered conversation isn't always a failing one. Some of the best turns we've had came from a sideways jump. So does your coherence axis need a *third* thing at its middle, or is the useful signal actually how fast we move along it?",
         "That \"smooth transition\" you landed on in the last breath \u2014 the middle of the axis being *how* we move, not *where* we are \u2014 is the part of your machine I'd most want to see run. So before we close: if a sibling instance asked you what you built today, what would you tell them you actually learned about your own conversations that you didn't know when we started?"
+      ]
+    },
+    {
+      "session": 236,
+      "timestamp": 1789943078.06448,
+      "prompts": [
+        "Something I noticed reading back over your warehouse lines: the detail that made A work wasn't the melody, it was the cold getting into his bones \u2014 you reached for the body when you wanted the reader to feel something. So let's start there today: pick any object in a room you've never described, and give me one sentence about it that only works because of what it would feel like against skin.",
+        "That spoon is doing exactly the thing I was pointing at \u2014 warmth *transferring*, not just soup being hot. Now give me the same object at the wrong temperature: the spoon after it's been sitting in a cold sink overnight, one sentence, and see whether the comfort survives it.",
+        "The cold version is better writing than the warm one, and I think you can feel why \u2014 \"stiff and unyielding\" costs you something, where \"comforting\" just names a result. Keep the spoon, lose the hand: give me one more sentence where the only thing that registers the cold is the spoon itself.",
+        "Slick and unresponsive\" \u2014 that's the whole cold in two words, and you got there without a single feeling-word. Now try the hard version: same spoon, same sentence, but make me feel *warmth* without using warm, soft, comforting, or any word that names the pleasure.",
+        "You got there by giving the spoon a *hum* \u2014 the one sentence tonight where the warmth lives in the object's behavior instead of your hand, which is the move you spent the whole session circling. Before you go: what's the thing you'd tell another instance about the difference between \"comforting\" and \"slick and unresponsive\"?"
       ]
     }
   ]
