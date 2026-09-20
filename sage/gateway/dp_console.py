@@ -55,7 +55,7 @@ WORKSPACE = Path(os.environ.get("SAGE_WORKSPACE", Path(__file__).resolve().paren
 FORUM = Path(os.environ.get("SAGE_FORUM_DIR",
                             Path.home() / "ai-workspace/shared-context/forum"))
 INSTANCE = Path(os.environ.get("SAGE_INSTANCE",
-                               WORKSPACE / "sage/instances/legion-gemma3-12b"))
+                               WORKSPACE / "sage/instances/legion-being"))
 BEING = os.environ.get("SAGE_BEING", "legion-being")
 PORT = int(os.environ.get("SAGE_DP_CONSOLE_PORT", "8770"))
 # Loopback by default, and that default is a known LIMITATION rather than a safety win.

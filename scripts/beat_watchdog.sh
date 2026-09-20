@@ -24,7 +24,7 @@
 # which is what lets a two-hour beat run without this firing underneath it.
 set -uo pipefail
 
-INSTANCE="${SAGE_INSTANCE:-/home/dp/ai-workspace/SAGE/sage/instances/legion-gemma3-12b}"
+INSTANCE="${SAGE_INSTANCE:-/home/dp/ai-workspace/SAGE/sage/instances/legion-being}"
 UNIT="${SAGE_BEAT_UNIT:-sage-heartbeat.service}"
 TIMER="${SAGE_BEAT_TIMER:-sage-heartbeat.timer}"
 IDLE_S="${SAGE_IDLE_S:-1800}"           # the beat interval the timer is set to

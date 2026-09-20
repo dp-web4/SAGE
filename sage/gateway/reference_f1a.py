@@ -129,6 +129,20 @@ class ReferenceF1aDispatcher:
         return wid
 
     # -- path confinement (defense in depth over the gate) -------------------
+    def _former_home_equivalent(self, p: Path):
+        """If `p` lies under a home this being used to have (instance.json `former_homes`),
+        the path of the same file under its CURRENT home; else None."""
+        try:
+            import json as _json
+            cfg = _json.loads((self.memory_root / "instance.json").read_text())
+            for fh in cfg.get("former_homes") or []:
+                old = Path(str(fh.get("path", ""))).resolve()
+                if str(old) != "/" and (p == old or old in p.parents):
+                    return self.memory_root / p.relative_to(old)
+        except (OSError, ValueError):
+            pass
+        return None
+
     def _safe_path(self, raw: str, writing: bool = False) -> Path:
         """Resolve a being's memory path. Relative paths are rooted at memory_root, never
         at the process cwd.
@@ -195,6 +209,15 @@ class ReferenceF1aDispatcher:
             return path == root or (recursive and root in path.parents)
 
         if not any(_covered(p, r, rec) for r, rec in roots):
+            if writing:
+                # A home that was renamed leaves absolute paths to the OLD one in the being's
+                # own notes. The harness knows where that file lives now; say so.
+                moved = self._former_home_equivalent(p)
+                if moved is not None:
+                    raise ValueError(
+                        f"{p} is inside your FORMER home, which is now a frozen record and is "
+                        f"not written. Your home moved; the same file is {moved} — write there "
+                        f"(or use the relative path, which always means your current home)")
             if writing and any(_covered(p, r, rec)
                                for r, rec in (getattr(self, "_extra_roots", ()) or ())):
                 wt = getattr(self, "worktree", None)

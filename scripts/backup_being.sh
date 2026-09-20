@@ -29,7 +29,7 @@
 set -uo pipefail
 
 BEING="${SAGE_BEING:-legion-being}"
-INSTANCE="${SAGE_INSTANCE:-/home/dp/ai-workspace/SAGE/sage/instances/legion-gemma3-12b}"
+INSTANCE="${SAGE_INSTANCE:-/home/dp/ai-workspace/SAGE/sage/instances/legion-being}"
 CART_DIR="${MEMBOT_CARTRIDGES:-/home/dp/ai-workspace/membot/cartridges}"
 CART_NAME="${MEMBOT_CART:-legion-being}"
 HESTIA_HOME="${HESTIA_HOME:-/home/dp/.hestia}"

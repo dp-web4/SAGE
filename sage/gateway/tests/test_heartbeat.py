@@ -155,6 +155,10 @@ def test_the_seed_names_the_model_not_just_the_home():
     assert "YOURS" in line, "the old name was read as ANOTHER being's dir (2026-09-19)"
     assert "24576" not in line
     assert "24576 tokens" in H.body_line("m", Path("/x/legion-gemma3-12b"), 24576), "measured window"
+    moved = H.body_line("m", Path("/x/legion-being"), 24576,
+                        [{"path": "/x/legion-gemma3-12b", "moved": "2026-09-19"}])
+    assert "/x/legion-gemma3-12b" in moved and "FROZEN" in moved and "older name" not in moved, \
+        "after the rename the 'older name' sentence is false; say where it moved FROM instead"
     names = set()
     def walk(code):
         for ins in dis.get_instructions(code):

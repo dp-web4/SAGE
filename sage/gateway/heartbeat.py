@@ -259,7 +259,7 @@ def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided
     return written
 
 
-def body_line(model: str, instance, num_ctx=None) -> str:
+def body_line(model: str, instance, num_ctx=None, former_homes=None) -> str:
     """Name the being's MODEL in the seed, because its home directory names a different one.
 
     legion-being's instance dir is `legion-gemma3-12b`; the model running it is
@@ -273,6 +273,17 @@ def body_line(model: str, instance, num_ctx=None) -> str:
     # being journaled a file under instances/legion-gemma3-12b/ as "another instance's
     # scratch, not mine". So say whose directory it is, and the measured window with it.
     ctx = f" Your context window: {num_ctx} tokens." if num_ctx else ""
+    # 2026-09-19 cutover (dp ruling: <machine>-being/, private going forward): once the home
+    # IS named for the being, the "older name" sentence would be false. What the being needs
+    # then is the opposite fact — where it used to live, and that the old place is a frozen
+    # copy, because its own notes still hold absolute paths into it.
+    if former_homes:
+        f0 = former_homes[-1]
+        return (f"Your body: model {model}.{ctx} Your home moved on {f0.get('moved', '?')} from "
+                f"{f0.get('path', '?')} to {instance}. Everything came with you, byte for byte. "
+                f"The old directory is a FROZEN copy kept as the public record: do not write "
+                f"there (it will be refused) and do not trust what you read there — a path in "
+                f"your older notes that names it means the same file HERE.")
     return (f"Your body: model {model}.{ctx} Your home directory ({instance.name}) carries an "
             f"older name; it is YOURS, not another being's, and the model is the fact to "
             f"attribute findings to.")
@@ -1908,7 +1919,8 @@ def main(argv=None) -> int:
         museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 f"Your home: {instance}\n"
-                + body_line(args.model, instance, _num_ctx) + "\n"
+                + body_line(args.model, instance, _num_ctx,
+                            instance_config(instance).get("former_homes")) + "\n"
                 f"The harness you are running under: {harness_rev.get('short')} on "
                 f"{harness_rev.get('branch')}"
                 + (" (uncommitted edits present)" if harness_rev.get("dirty") else "")

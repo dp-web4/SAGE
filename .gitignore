@@ -304,3 +304,7 @@ sage/data/keys/*.key
 
 # The daemon log (SAGE #111 finding 5): rotated by the operator, never committed.
 sage-rs/daemon.log
+
+# legion-being lives here since 2026-09-19 (dp ruling: <machine>-being/, private going forward,
+# mirrored to private-context). sage/instances/legion-gemma3-12b/ stays as the frozen public record.
+sage/instances/legion-being/
