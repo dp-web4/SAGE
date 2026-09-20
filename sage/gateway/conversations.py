@@ -29,6 +29,14 @@ mid-thread changes what the earlier turns meant.
 The being replies with the `say` verb, which is gated and witnessed like every other act of
 consequence. It cannot create a conversation, cannot write into one it is not in, and
 cannot edit a turn once spoken — including its own.
+
+A TURN WAKES WHOEVER IT IS ADDRESSED TO, in both directions. The daemon's
+`/conversations/:id/say` has always run the arousal policy, so a seat speaking wakes the
+being in seconds; the being's `say` only appended, and its words landed in a file with no
+reader. The meta's optional `notify` map — `{"<participant>": "<mesh plugin id>"}`, written
+by the seat, which the being cannot edit — says who to wake and under which mesh id, since a
+conversation id ("cbp-claude") and a mesh member id ("claude-code") are not the same name.
+No map means no wake, which is right for a conversation whose other party is a person.
 """
 from __future__ import annotations
 
@@ -405,6 +413,58 @@ ECHO_CONTAINED = 0.75  # share of the text's shingles found in one earlier turn
 def _shingles(text: str) -> set:
     w = re.findall(r"[a-z0-9]+", (text or "").lower())
     return {tuple(w[i:i + ECHO_GRAM]) for i in range(len(w) - ECHO_GRAM + 1)}
+
+
+def unanswered_run_start(instance: Path, conv_id: str, speaker: str) -> Optional[int]:
+    """The seq that OPENED the speaker's current unanswered run, or None if it is not waiting.
+
+    A "run" is the block of consecutive turns by `speaker` at the tail of the conversation —
+    everything it has said since anyone else last spoke. The run's first seq is the only thing
+    a wake should be keyed on: cbp-being sent six turns to its seat between 16:08 and 18:02 on
+    2026-09-20, all one unanswered question, and six wakes for one question is how an
+    always-on responder becomes something a machine's owner turns off.
+    """
+    turns = recent(instance, conv_id, limit=200)
+    if not turns or turns[-1].get("from") != speaker:
+        return None
+    start = None
+    for t in reversed(turns):
+        if t.get("from") != speaker:
+            break
+        start = int(t.get("seq", 0))
+    return start
+
+
+def notify_state_path(instance: Path, conv_id: str, speaker: str) -> Path:
+    """Where "I already woke someone about this run" is remembered: OUTSIDE the repository,
+    for the reason in `witness_path` — a rollback of the log must not silently re-arm a wake,
+    and a wake ledger is machine state, not part of the being's record."""
+    base = os.environ.get("SAGE_CONV_NOTIFY_DIR") or os.path.join(
+        os.path.expanduser("~"), ".sage", "conversation-notify")
+    return Path(base) / Path(instance).resolve().name / f"{conv_id}.{speaker}.json"
+
+
+def wake_is_owed(instance: Path, conv_id: str, speaker: str) -> Optional[int]:
+    """The run-start seq a wake is owed for, or None. Idempotent per run, and retried if the
+    last attempt failed — `record_wake` is called only on success, so a notice that never left
+    is owed again on the speaker's next turn rather than lost."""
+    start = unanswered_run_start(instance, conv_id, speaker)
+    if start is None:
+        return None
+    try:
+        done = int(json.loads(notify_state_path(instance, conv_id, speaker).read_text())
+                   .get("woke_for_run_starting_at") or 0)
+    except (OSError, ValueError):
+        done = 0
+    return start if start > done else None
+
+
+def record_wake(instance: Path, conv_id: str, speaker: str, run_start: int) -> None:
+    p = notify_state_path(instance, conv_id, speaker)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps({"woke_for_run_starting_at": run_start, "at": _now()}, indent=2) + "\n")
+    os.replace(tmp, p)
 
 
 def echo_of(instance: Path, conv_id: str, me: str, text: str, lookback: int = 4) -> Optional[dict]:

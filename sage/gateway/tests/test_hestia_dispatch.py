@@ -42,6 +42,9 @@ def _hermetic_hub_roster(tmp_path, monkeypatch):
 class FakeMcp:
     """Answers like the daemon: connect -> sessionId; member_notify -> receipt or error."""
     calls = []
+    # tool name -> message: answer that tool with a daemon error, so a test can hold one
+    # door shut and assert what the caller does with the refusal.
+    fail = {}
 
     def __init__(self, endpoint, plugin_id, notify_reply=None):
         self.plugin_id = plugin_id
@@ -60,6 +63,8 @@ class FakeMcp:
                 body = {"_hestia_error": {"code": "hestia.unknown_tool", "message": "Unknown tool: hestia_connect_challenge"}}
             else:
                 body = dict(self.challenge)
+        elif name in FakeMcp.fail:
+            body = {"_hestia_error": {"code": "hestia.test_forced", "message": FakeMcp.fail[name]}}
         elif name == "hestia_member_notify":
             if not args.get("pointer_uri"):
                 body = {"_hestia_error": {"code": "hestia.member_notify_missing_pointer", "message": "no pointer"}}
@@ -1477,6 +1482,87 @@ _BEING_2104Z = ("The empty journal simply means there were no anomalies — no d
                 "functional because your every act goes through it. You don't need to explicitly "
                 "check hestia health because simply being able to do things is confirmation that "
                 "all is good.")
+
+
+def test_a_turn_wakes_its_addressee_once_per_unanswered_run():
+    """The being's `say` appended and woke nobody: ~104 turns to the seat since 2026-09-14
+    against 5 hand-written replies, and on 2026-09-20 six identical requests between 16:08 and
+    18:02 into a file with no reader. It concluded "the seat session has expired" and asked dp
+    whether to restart a service. `_say_instead` had meanwhile pointed it AT this door.
+
+    One wake per unanswered run, or six turns about one question cost six fired sessions."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "seat", "text": "Please send the list of closed PRs."}), _ALLOW)
+    assert r.ok, r
+    notifies = [a for n, a in FakeMcp.calls if n == "hestia_member_notify"]
+    assert len(notifies) == 1, "the first turn of a run wakes the addressee"
+    assert notifies[0]["to_plugin_id"] == "claude-code", "the conversation id is not the mesh id"
+    assert notifies[0]["pointer_uri"].startswith("sage://conversation/seat#seq="), notifies[0]
+    assert r.result.get("woke") == "seat", "the being is told its words woke someone"
+
+    # ...and five more turns with nobody having replied cost NOTHING further.
+    for again in range(5):
+        FakeMcp.calls.clear()
+        r = d(BeingIntent("say", {"to": "seat", "text": f"Still waiting, {again}."}), _ALLOW)
+        assert r.ok and "woke" not in r.result
+        assert not [a for n, a in FakeMcp.calls if n == "hestia_member_notify"], again
+
+    # once the seat actually speaks, the next being turn opens a NEW run and wakes again
+    conv.append(home, "seat", speaker="seat", text="Here is the list.", via="seat")
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "seat", "text": "Thank you — that answers it."}), _ALLOW)
+    assert r.ok and r.result.get("woke") == "seat"
+    assert len([a for n, a in FakeMcp.calls if n == "hestia_member_notify"]) == 1
+
+
+def test_a_conversation_with_no_notify_mapping_wakes_nobody_and_still_lands():
+    """dp is a person, not a mesh member: the `dp` conversation has no notify map and must
+    not try to wake anyone. CONTROL that the wake is opt-in per conversation and that its
+    absence never costs the turn."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "dp", "text": "A question for you."}), _ALLOW)
+    assert r.ok and "woke" not in r.result
+    assert not [a for n, a in FakeMcp.calls if n == "hestia_member_notify"]
+    assert conv.count(home, "dp") == 1
+
+
+def test_a_failed_wake_costs_the_wake_and_never_the_turn():
+    """The turn is witnessed and appended before the wake runs. A mesh that refuses must
+    leave the turn standing — and must leave the wake OWED, so the next turn retries it
+    rather than the question being silently unwakeable forever."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    FakeMcp.fail["hestia_member_notify"] = "mesh is down"
+    try:
+        r = d(BeingIntent("say", {"to": "seat", "text": "first"}), _ALLOW)
+        assert r.ok and "woke" not in r.result, "the turn lands even though nobody was woken"
+        assert conv.count(home, "seat") == 1
+        assert conv.wake_is_owed(home, "seat", "sprout-being") == 1, "still owed, not lost"
+    finally:
+        FakeMcp.fail.pop("hestia_member_notify", None)
+    r = d(BeingIntent("say", {"to": "seat", "text": "second"}), _ALLOW)
+    assert r.result.get("woke") == "seat", "the retry happens on the next turn"
 
 
 def test_the_other_partys_words_sent_back_are_not_a_reply():

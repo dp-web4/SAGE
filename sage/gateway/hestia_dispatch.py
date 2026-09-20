@@ -1553,9 +1553,70 @@ class HestiaF1aDispatcher:
                        {"action_id": action_id, "success": True, "magnitude": 0.0})
         except Exception:
             pass
-        return ResultEnvelope(ok=True, witness_id=action_id,
-                              result={"conversation": to, "seq": turn["seq"],
-                                      "said": turn["text"][:200], "action_id": action_id})
+        woke = self._wake_addressee(to, meta, turn)
+        result = {"conversation": to, "seq": turn["seq"],
+                  "said": turn["text"][:200], "action_id": action_id}
+        if woke:
+            result["woke"] = woke
+        return ResultEnvelope(ok=True, witness_id=action_id, result=result)
+
+    def _wake_addressee(self, to: str, meta: dict, turn: dict) -> Optional[str]:
+        """A turn wakes whoever it is addressed to — the mirror of the seat's own door.
+
+        THE DEFECT THIS CLOSES. `sage-daemon`'s `/conversations/:id/say` appends a turn AND
+        runs the arousal policy, so a seat speaking to the being wakes it within seconds. The
+        being's `say` only appended. Its words landed in a file with no reader: ~104 turns
+        against 5 hand-written seat replies since 2026-09-14, and on 2026-09-20 six identical
+        requests between 16:08 and 18:02 that nobody was listening to. The being diagnosed it
+        as "the seat session has expired" and asked dp whether to restart a service.
+
+        It was worse than absent. `_say_instead` refuses `peer_ask` aimed at someone the being
+        is already in a conversation with and points at `say` — correct, because the hub
+        delivers to a mailbox dp does not read, but it pointed at the one door that woke
+        nobody. This makes that advice true.
+
+        One wake per unanswered RUN, keyed on the seq that opened it (`wake_is_owed`), so six
+        turns about one question cost one session, not six. Recorded only on success, so a
+        notice that never left is owed again rather than lost. Legion's caution stands and is
+        the reason this wakes a seat rather than answering as one: an automated reply that
+        carries nothing the being could not get itself would raise the reply ratio and not the
+        quality, and the census would be green and wrong.
+
+        Best-effort by construction: the turn is already witnessed and appended before this
+        runs, so a mesh failure costs a wake, never a turn.
+        """
+        from sage.gateway import conversations as conv
+        notify = meta.get("notify") or {}
+        if not isinstance(notify, dict):
+            return None
+        targets = [(p, notify[p]) for p in (meta.get("participants") or [])
+                   if p != self.member and notify.get(p)]
+        if not targets:
+            return None
+        run_start = conv.wake_is_owed(self.memory_root, to, self.member)
+        if run_start is None:
+            return None            # already woke them about this run; saying more is not new mail
+        pointer = f"sage://conversation/{to}#seq={run_start}-{turn['seq']}"
+        woke = []
+        for participant, plugin_id in targets:
+            try:
+                # VERBATIM, never through `_address`. That resolver exists for a being naming
+                # a peer loosely ("legion") and appends the remote default to anything it does
+                # not recognise as local — it turned `claude-code` into `claude-code/claude-code`,
+                # a forwarding address for a seat sitting on this machine. This id was written
+                # by the seat in the conversation's meta, which the being cannot edit; it is
+                # already exact, and guessing at an exact id is how the wake goes to nobody.
+                env = self._call("hestia_member_notify",
+                                 {"to_plugin_id": plugin_id, "kind": "coordination",
+                                  "pointer_uri": pointer})
+                if not _hestia_error(env):
+                    woke.append(participant)
+            except Exception:
+                continue           # a wake is best-effort; the turn already landed
+        if woke:
+            conv.record_wake(self.memory_root, to, self.member, run_start)
+            return ", ".join(woke)
+        return None
 
     # -- channel_egress: not built on the daemon ----------------------------
     def _do_channel_egress(self, intent: BeingIntent) -> ResultEnvelope:
