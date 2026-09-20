@@ -27,9 +27,9 @@ rsync -a --delete \
   "$INSTANCE/" "$DEST/" || die "rsync"
 mkdir -p "$DEST/heartbeats"   # excluded above, so --delete leaves it alone
 
-# heartbeats.jsonl -> heartbeats/YYYY-MM-DD.jsonl ; only days whose content changed are rewritten
+# heartbeats.jsonl -> heartbeats/YYYY-MM-DD.jsonl.gz ; only days whose content changed are rewritten
 python3 - "$INSTANCE/heartbeats.jsonl" "$DEST/heartbeats" <<'PY' || die "heartbeat split"
-import sys, os, json, collections
+import sys, os, json, collections, gzip, io
 src, out = sys.argv[1], sys.argv[2]
 if not os.path.exists(src): sys.exit(0)
 months = collections.OrderedDict(); n = 0
@@ -41,9 +41,16 @@ for line in open(src, encoding="utf-8", errors="replace"):
     months.setdefault(m, []).append(line if line.endswith("\n") else line + "\n")
 total = 0
 for m, lines in months.items():
-    p = os.path.join(out, f"{m}.jsonl"); body = "".join(lines); total += len(lines)
-    if not os.path.exists(p) or open(p, encoding="utf-8", errors="replace").read() != body:
-        open(p + ".tmp", "w", encoding="utf-8").write(body); os.replace(p + ".tmp", p)
+    # gzip with mtime=0: identical beats -> identical bytes, so an unchanged day is no diff.
+    # Compressed because private-context's pre-commit guard refuses files over 10 MB and a
+    # busy day of beats is 13 MB raw (~1 MB gzipped). The guard is right; the mirror adapts.
+    p = os.path.join(out, f"{m}.jsonl.gz"); total += len(lines)
+    raw = "".join(lines).encode("utf-8")
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0, compresslevel=6) as g: g.write(raw)
+    blob = buf.getvalue()
+    if not os.path.exists(p) or open(p, "rb").read() != blob:
+        open(p + ".tmp", "wb").write(blob); os.replace(p + ".tmp", p)
 assert total == n, (total, n)
 print(f"heartbeats: {n} beats in {len(months)} day file(s)")
 PY
@@ -53,9 +60,9 @@ src_n=$(cd "$INSTANCE" && find . -type f ! -name 'identity.sealed*' ! -name hear
 dst_n=$(cd "$DEST" && find . -type f ! -path './heartbeats/*' | wc -l)
 [ "$src_n" = "$dst_n" ] || die "count mismatch: instance $src_n vs mirror $dst_n"
 src_b=$(wc -l < "$INSTANCE/heartbeats.jsonl" 2>/dev/null || echo 0)
-dst_b=$(cat "$DEST"/heartbeats/*.jsonl 2>/dev/null | wc -l)
+dst_b=$(zcat "$DEST"/heartbeats/*.jsonl.gz 2>/dev/null | wc -l)
 [ "$src_b" = "$dst_b" ] || die "beat count mismatch: $src_b vs $dst_b"
-big=$(find "$DEST" -type f -size +90M | head -1); [ -z "$big" ] || die "file over 90MB would be refused by GitHub: $big"
+big=$(find "$DEST" -type f -size +9M | head -1); [ -z "$big" ] || die "file over 9MB would be refused by private-context's pre-commit size guard: $big"
 
 cd "$PC" || die "cd"
 git add -A "beings/$BEING" || die "git add"
