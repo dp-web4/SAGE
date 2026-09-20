@@ -27,7 +27,14 @@ done
 INSTANCE="$SAGE_INSTANCE"; PC="$PRIVATE_CONTEXT"; BEING="$SAGE_BEING"; SEAT="$SEAT_ID"
 # The mirror directory is named by SAGE_BEING, the source by SAGE_INSTANCE. If they disagree, one
 # being's record lands under another's name — refuse rather than guess which was meant.
-[ "$(basename "$INSTANCE")" = "$BEING" ] || die "SAGE_INSTANCE ends in '$(basename "$INSTANCE")' but SAGE_BEING is '$BEING'"
+# TRANSITION: a machine that has not yet moved its being still has a model-named home, and "private
+# going forward" should not wait for the move. Such a machine declares the legacy name explicitly
+# (and in shared-context/fleet/<machine>.md); the mismatch is then logged, not guessed at.
+if [ "$(basename "$INSTANCE")" != "$BEING" ]; then
+  [ "${SAGE_INSTANCE_LEGACY_NAME:-}" = "$(basename "$INSTANCE")" ] || die \
+    "SAGE_INSTANCE ends in '$(basename "$INSTANCE")' but SAGE_BEING is '$BEING'. If this being has not moved yet, set SAGE_INSTANCE_LEGACY_NAME='$(basename "$INSTANCE")' to say so."
+  say "legacy home '$(basename "$INSTANCE")' mirrored as '$BEING' (declared; not yet moved)"
+fi
 DEST="$PC/beings/$BEING"
 
 [ -d "$INSTANCE" ] || die "no instance at $INSTANCE"
