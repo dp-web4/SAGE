@@ -325,8 +325,25 @@ impl IdentityProvider {
                 // "the original" while the only real v1 specimen is overwritten. Authorization
                 // is unaffected either way: the verified secret is returned below regardless.
                 let keep = self.sealed_path.with_file_name("identity.sealed.v1");
-                if !keep.exists() {
-                    let _ = std::fs::copy(&self.sealed_path, &keep);
+
+                // Do not use Path::exists() here: it follows symlinks, so a dangling final
+                // component looks absent. create_new is O_CREAT|O_EXCL semantics; a symlink,
+                // directory, stale file, or a racing creator makes it fail rather than being
+                // followed/reused as the backup destination.
+                let absent = match std::fs::symlink_metadata(&keep) {
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+                    _ => false,
+                };
+                if absent {
+                    use std::io::Write;
+                    if let Ok(mut out) = std::fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&keep)
+                    {
+                        let _ = out.write_all(&data);
+                        let _ = out.sync_all();
+                    }
                 }
                 let preserved = std::fs::symlink_metadata(&keep).map(|m| m.is_file()).unwrap_or(false)
                     && std::fs::read(&keep).map(|b| b == data).unwrap_or(false);
@@ -699,7 +716,7 @@ mod tests {
         cleanup(&dir);
     }
 
-    // --- the backup-before-rewrite invariant, three arms (same three in the python suite) ---
+    // --- the backup-before-rewrite invariant, four arms (same four in the python suite) ---
 
     fn v1_fixture(tag: &str) -> (std::path::PathBuf, String, Vec<u8>) {
         let dir = temp_dir(tag);
@@ -747,6 +764,34 @@ mod tests {
         assert_eq!(fs::read(dir.join("identity.sealed")).unwrap(), original,
             "the live v1 was replaced beside a stale backup");
         assert_eq!(fs::read(dir.join("identity.sealed.v1")).unwrap(), b"NOT THE ORIGINAL");
+        cleanup(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn migration_arm4_dangling_symlink_is_never_followed() {
+        use std::os::unix::fs::symlink;
+
+        let (dir, fp, original) = v1_fixture("mig_arm4");
+        let target = dir.parent().unwrap().join(format!(
+            "{}-must-not-be-created",
+            dir.file_name().unwrap().to_string_lossy()
+        ));
+        let _ = fs::remove_file(&target);
+        let keep = dir.join("identity.sealed.v1");
+        symlink(&target, &keep).unwrap();
+
+        let mut again = IdentityProvider::new(&dir);
+        let ctx = again.authorize().expect("a verified v1 still authorizes");
+        assert_eq!(ctx.fingerprint, fp);
+        assert_eq!(fs::read(dir.join("identity.sealed")).unwrap(), original,
+            "the live v1 changed beside a dangling symlink");
+        assert!(std::fs::symlink_metadata(&keep).unwrap().file_type().is_symlink(),
+            "the backup symlink itself was replaced");
+        assert!(!target.exists(),
+            "migration followed the dangling symlink outside the being home");
+
+        let _ = fs::remove_file(&target);
         cleanup(&dir);
     }
 
