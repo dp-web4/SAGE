@@ -77,6 +77,9 @@ class SigningContext:
         return time.time() - self.authorized_at
 
 
+SEAL_V2 = b'SAGE_SEALED_v2'
+
+
 class IdentityProvider:
     """
     Three-layer identity provider with hardware authorization gating.
@@ -143,7 +146,7 @@ class IdentityProvider:
         # Seal the secret. Everything below records the anchor ACHIEVED, not the one
         # requested — trust_ceiling prices how the secret is actually held, and no
         # hardware path is implemented yet, so a 'tpm2' request seals in software.
-        anchor_type = self._seal_secret(identity_secret, anchor_type)
+        anchor_type = self._seal_secret(identity_secret, anchor_type, lct_id=lct_id)
 
         # Create manifest (Layer A)
         manifest = IdentityManifest(
@@ -318,7 +321,7 @@ class IdentityProvider:
         with open(self.manifest_path, 'w') as f:
             json.dump(asdict(self._manifest), f, indent=2)
 
-    def _seal_secret(self, secret: bytes, anchor_type: str) -> str:
+    def _seal_secret(self, secret: bytes, anchor_type: str, lct_id: Optional[str] = None) -> str:
         """Seal the identity root secret. Returns the anchor ACTUALLY ACHIEVED.
 
         For software: XOR with machine-derived key (weak but functional).
@@ -346,44 +349,157 @@ class IdentityProvider:
         # Software fallback: derive a machine key and XOR
         # This is NOT secure — it's a placeholder that makes the file
         # non-trivially copyable while the real TPM path is implemented
-        machine_key = self._derive_machine_key()
+        machine_key = self._derive_machine_key_v2(lct_id)
         sealed = bytes(a ^ b for a, b in zip(secret, machine_key))
-        with open(self.sealed_path, 'wb') as f:
-            f.write(b'SAGE_SEALED_v1\n')
+        tmp = self.sealed_path.with_suffix('.sealed.tmp')
+        with open(tmp, 'wb') as f:
+            f.write(SEAL_V2 + b'\n')
             f.write(anchor_type.encode() + b'\n')
             f.write(sealed)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, self.sealed_path)
         return anchor_type
 
     def _unseal_secret(self) -> Optional[bytes]:
-        """Unseal the identity root secret."""
+        """Unseal the identity root secret.
+
+        v2 files unseal with the one stable key. v1 files were sealed by one of THREE
+        derivations that never agreed (see `_legacy_keys`), so every candidate is tried and
+        the manifest's fingerprint picks the right one — XOR has no authentication of its
+        own, the fingerprint is the only thing that can tell a right key from a wrong one.
+        A v1 file that unseals is rewritten as v2 (the original kept as `identity.sealed.v1`).
+        """
         if not self.sealed_path.exists():
             return None
-
         try:
             with open(self.sealed_path, 'rb') as f:
-                header = f.readline()  # SAGE_SEALED_v1
+                header = f.readline().strip()
                 anchor_line = f.readline().strip()
                 sealed = f.read()
-
-            if not header.startswith(b'SAGE_SEALED_v1'):
-                return None
-
-            # Software unsealing
-            machine_key = self._derive_machine_key()
-            secret = bytes(a ^ b for a, b in zip(sealed, machine_key))
-            return secret
-
         except IOError:
             return None
 
-    def _derive_machine_key(self) -> bytes:
-        """Derive a machine-specific key for software sealing.
+        self._unsealed_with = None
+        if header == SEAL_V2:
+            self._unsealed_with = 'v2'
+            return bytes(a ^ b for a, b in zip(sealed, self._derive_machine_key_v2()))
+        if not header.startswith(b'SAGE_SEALED_v1'):
+            return None
 
-        Uses hostname + MAC + instance dir as entropy sources.
-        This is NOT cryptographically strong — it's a placeholder
-        that makes naive file copying fail while real hardware
-        sealing is implemented.
-        """
+        expected = self._manifest.public_key_fingerprint if self._manifest else ''
+        first = None
+        for label, key in self._legacy_keys():
+            secret = bytes(a ^ b for a, b in zip(sealed, key))
+            if first is None:
+                first = secret
+            if expected and hashlib.sha256(secret).hexdigest()[:16] == expected:
+                self._unsealed_with = label
+                self._migrate_to_v2(secret, anchor_line.decode(errors='replace') or 'software', label)
+                return secret
+        # Nothing matched (or no fingerprint to match against): hand back the historical
+        # first candidate so authorize()'s fingerprint check refuses it exactly as before.
+        return first
+
+    def _migrate_to_v2(self, secret: bytes, anchor_type: str, label: str):
+        """Rewrite a verified v1 seal as v2, keeping the original beside it. Best effort:
+        a read-only instance dir leaves the v1 file in place and it unseals again next time."""
+        try:
+            keep = self.sealed_path.with_name('identity.sealed.v1')
+            if not keep.exists():
+                import shutil
+                shutil.copy2(self.sealed_path, keep)
+            self._seal_secret(secret, anchor_type)
+            print(f"[Identity] sealed file migrated v1 -> v2 (it unsealed with the legacy "
+                  f"'{label}' key; original kept as {keep.name}). Same secret, same fingerprint.")
+        except OSError as e:
+            print(f"[Identity] v1 seal verified with '{label}' but could not be rewritten as v2: {e}")
+
+    @staticmethod
+    def _machine_anchor() -> str:
+        """A per-install identifier that does not move: /etc/machine-id (Linux, WSL),
+        IOPlatformUUID (macOS), else the hostname. NOT a MAC: `uuid.getnode()` returns
+        whichever interface it enumerates first, and that changed on Legion between
+        2026-03-28 and 2026-09-19 (wifi -> a bridge), silently orphaning the seal."""
+        for p in ('/etc/machine-id', '/var/lib/dbus/machine-id'):
+            try:
+                v = open(p).read().strip()
+                if v:
+                    return v
+            except OSError:
+                pass
+        try:
+            import subprocess
+            out = subprocess.run(['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'],
+                                 capture_output=True, text=True, timeout=5).stdout
+            for line in out.splitlines():
+                if 'IOPlatformUUID' in line:
+                    return line.split('"')[-2]
+        except Exception:
+            pass
+        import socket
+        return 'host:' + socket.gethostname()
+
+    def _derive_machine_key_v2(self, lct_id: Optional[str] = None) -> bytes:
+        """The v2 sealing key: sha256("sage-seal-v2:<machine anchor>:<lct id>").
+
+        Bound to the MACHINE and the IDENTITY — not to the instance directory's path and
+        not to a network interface. v1 bound the seal to `str(instance_dir)`, so renaming a
+        being's home (the fleet's 2026-09-19 move to `<machine>-being/`) would have made a
+        being raised since March unable to prove it was itself. Copying the files to another
+        MACHINE is still refused; moving them on the same machine no longer is. This is still
+        a placeholder, not security — the secret sits XORed beside a derivable key — and the
+        Rust provider derives the identical bytes (sage-rs identity/provider.rs)."""
+        # initialize() seals BEFORE the manifest exists, so it passes the lct explicitly
+        lct = lct_id if lct_id is not None else (self._manifest.lct_id if self._manifest else '')
+        return hashlib.sha256(f"sage-seal-v2:{self._machine_anchor()}:{lct}".encode()).digest()
+
+    def _legacy_keys(self):
+        """Every key a v1 file on this machine could have been sealed with, most likely first.
+
+        Three derivations existed and never agreed:
+          python : sha256("<hostname>:<uuid.getnode()>:<instance_dir as passed>")
+          rust   : sha256("<hostname>:0:<instance_dir as passed>")
+          …and `uuid.getnode()` is not stable across boots when several interfaces exist.
+        Path spellings tried: as passed, resolved absolute, and any `former_homes[].path`
+        recorded in instance.json — so a renamed home heals itself on first authorize."""
+        import socket
+        import uuid
+        import glob
+        import json as _json
+        host = socket.gethostname()
+        macs = [str(uuid.getnode())]
+        for f in sorted(glob.glob('/sys/class/net/*/address')):
+            try:
+                a = open(f).read().strip()
+                if a and a != '00:00:00:00:00:00':
+                    m = str(int(a.replace(':', ''), 16))
+                    if m not in macs:
+                        macs.append(m)
+            except (OSError, ValueError):
+                pass
+        macs.append('0')   # the Rust provider's literal
+        paths = [str(self.instance_dir)]
+        try:
+            r = str(self.instance_dir.resolve())
+            if r not in paths:
+                paths.append(r)
+        except OSError:
+            pass
+        try:
+            cfg = _json.loads((self.instance_dir / 'instance.json').read_text())
+            for fh in cfg.get('former_homes') or []:
+                if fh.get('path') and fh['path'] not in paths:
+                    paths.append(str(fh['path']))
+        except (OSError, ValueError):
+            pass
+        for p in paths:
+            for m in macs:
+                yield (f"v1 mac={m} path={p}", hashlib.sha256(f"{host}:{m}:{p}".encode()).digest())
+
+    def _derive_machine_key(self) -> bytes:
+        """The ORIGINAL v1 python derivation, kept only so old tests and tools can name it.
+        New seals use `_derive_machine_key_v2`."""
         import socket
         import uuid
         machine_id = f"{socket.gethostname()}:{uuid.getnode()}:{self.instance_dir}"
