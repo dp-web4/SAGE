@@ -217,10 +217,17 @@ if [ "$FFC_RC" -ne 0 ]; then
 fi
 
 # === 4. PUSH (if anything changed) ===
+# Being records are private going forward (shared-context/FLEET_BROADCAST_being_records_private.md,
+# dp 2026-09-19/20). Until 2026-09-20 the `git add -A` below swept sage/instances/ into public SAGE
+# every 4 h -- a second publisher beside the raising launcher, and the one a grep for
+# `git add "$INSTANCE_DIR"` does not find. In SAGE this step now neither looks at nor stages
+# anything under sage/instances/; the raising launcher mirrors the home to private-context.
 for repo in "$SHARED" "$DEV_SAGE" "$SAGE_DIR" "$PRIVATE"; do
     cd "$repo"
-    if ! git diff --quiet 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
-        git add -A 2>/dev/null
+    SPEC=(.)
+    [ "$repo" = "$SAGE_DIR" ] && SPEC=(. ':(exclude)sage/instances')
+    if ! git diff --quiet -- "${SPEC[@]}" 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard -- "${SPEC[@]}" 2>/dev/null)" ]; then
+        git add -A -- "${SPEC[@]}" 2>/dev/null
         git commit -m "[McNugget-Supervisor] Autonomous cycle — $TIMESTAMP" 2>/dev/null
         git push origin main 2>&1 || true
     fi

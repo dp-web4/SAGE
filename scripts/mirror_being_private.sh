@@ -78,9 +78,14 @@ PY
 # counts: what the being has vs what the mirror holds (the two known exclusions aside)
 src_n=$(cd "$INSTANCE" && find . -type f ! -name 'identity.sealed*' ! -name heartbeat.log ! -name heartbeats.jsonl ! -path '*/__pycache__/*' ! -name '*.tmp' | wc -l)
 dst_n=$(cd "$DEST" && find . -type f ! -path './heartbeats/*' | wc -l)
+# BSD `wc -l` (macOS) pads its count with spaces, and the `|| echo 0` arm below does not, so a
+# being with no heartbeats.jsonl failed here as "0 vs        0" (McNugget, 2026-09-20). Compare numbers.
+src_n=$((src_n)); dst_n=$((dst_n))
 [ "$src_n" = "$dst_n" ] || die "count mismatch: instance $src_n vs mirror $dst_n"
 src_b=$(wc -l < "$INSTANCE/heartbeats.jsonl" 2>/dev/null || echo 0)
-dst_b=$(zcat "$DEST"/heartbeats/*.jsonl.gz 2>/dev/null | wc -l)
+# `gzip -dc`, not `zcat`: macOS zcat only opens .Z and reports 0 beats for every .gz day file.
+dst_b=$(gzip -dc "$DEST"/heartbeats/*.jsonl.gz 2>/dev/null | wc -l)
+src_b=$((src_b)); dst_b=$((dst_b))
 [ "$src_b" = "$dst_b" ] || die "beat count mismatch: $src_b vs $dst_b"
 big=$(find "$DEST" -type f -size +9M | head -1); [ -z "$big" ] || die "file over 9MB would be refused by private-context's pre-commit size guard: $big"
 
