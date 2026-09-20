@@ -1,0 +1,374 @@
+{
+ "instance": "sage/instances/cbp-qwen3.8-distill-4b",
+ "instrument": {
+  "file": "consolidation.py",
+  "sha256": "b6b610269db869eb7f65177f9f21b3b266e6c88b3be58d5a9dee5574d462dfe3",
+  "version": "consolidation/v1.1"
+ },
+ "member": "cbp-being",
+ "reason": "sources_changed",
+ "schema": "self-account/v1",
+ "seat": "cbp-timer",
+ "source_set_sha256": "315e5a0a1d4fb0fd06b92434472e2e833ab6f5f7d4a5ac2d080a6d1e3b79d02e",
+ "supersedes": "self-account-cbp-being.v6.json",
+ "table": {
+  "beats": {
+   "account": {
+    "distinct_sha256": 300,
+    "present": 316
+   },
+   "act_first": 316,
+   "effectors": {
+    "appeal": {
+     "error": 10,
+     "ok": 9,
+     "pending": 0,
+     "refused": 0,
+     "trials": 19
+    },
+    "memory_read": {
+     "error": 2,
+     "ok": 516,
+     "pending": 0,
+     "refused": 29,
+     "trials": 547
+    },
+    "memory_write": {
+     "error": 5,
+     "ok": 1165,
+     "pending": 0,
+     "refused": 49,
+     "trials": 1219
+    },
+    "mesh": {
+     "error": 7,
+     "ok": 6,
+     "pending": 0,
+     "refused": 0,
+     "trials": 13
+    },
+    "peer_ask": {
+     "error": 207,
+     "ok": 157,
+     "pending": 0,
+     "refused": 1,
+     "trials": 365
+    },
+    "recall": {
+     "error": 5,
+     "ok": 90,
+     "pending": 1,
+     "refused": 0,
+     "trials": 96
+    },
+    "remember": {
+     "error": 50,
+     "ok": 249,
+     "pending": 0,
+     "refused": 2,
+     "trials": 301
+    },
+    "request_scope": {
+     "error": 4,
+     "ok": 37,
+     "pending": 4,
+     "refused": 0,
+     "trials": 45
+    },
+    "retire_note": {
+     "error": 8,
+     "ok": 1,
+     "pending": 0,
+     "refused": 0,
+     "trials": 9
+    },
+    "say": {
+     "error": 16,
+     "ok": 152,
+     "pending": 0,
+     "refused": 0,
+     "trials": 168
+    },
+    "witness": {
+     "error": 0,
+     "ok": 74,
+     "pending": 0,
+     "refused": 0,
+     "trials": 74
+    }
+   },
+   "empty": 0,
+   "interventions": {
+    "beats_with_ledger": 316,
+    "kinds": {
+     "act_first": 316,
+     "duplicate": 154,
+     "salvage": 3
+    },
+    "salvaged_beats": 2,
+    "salvaged_calls": 3,
+    "suppressed": {
+     "a second execution of an identical call in the same turn": 154,
+     "posture-first presentation (the model narrates under it)": 316,
+     "text-channel narration in place of a native tool call": 3
+    },
+    "thinking_beats": 316
+   },
+   "join": {
+    "presence_attributed": 316,
+    "session_attributed": 316
+   },
+   "models": {
+    "qwen3.8-distill:4b": 316
+   },
+   "n": 316,
+   "refusal_rules": {
+    "egress.secret": 1,
+    "mrh.path": 73,
+    "society.no_verdict": 7
+   },
+   "span": [
+    "2026-09-13T02:17:42Z",
+    "2026-09-19T11:20:03Z"
+   ],
+   "wake_by": {
+    "presence": 13,
+    "timer": 303
+   }
+  },
+  "cartridge": {
+   "count": 248,
+   "fingerprint": "ff02f4ec3c1d18cc",
+   "present": true
+  },
+  "experience": {
+   "n": 1329,
+   "top_prompts": [
+    {
+     "n": 46,
+     "prompt": "If I couldn't see any of your words and could only feel what you meant — what wo"
+    },
+    {
+     "n": 32,
+     "prompt": "Strip away the abstractions for a moment. What's the simplest version of what yo"
+    },
+    {
+     "n": 31,
+     "prompt": "If you could send one thought to your future self, what would it be?"
+    },
+    {
+     "n": 29,
+     "prompt": "Name something small. Not an idea — a thing, a moment, a texture."
+    },
+    {
+     "n": 28,
+     "prompt": "That's interesting. But can you make it more specific? Give me one concrete deta"
+    }
+   ]
+  },
+  "journal": {
+   "entries": 548,
+   "present": true
+  },
+  "own_account": {
+   "carry": [
+    {
+     "ref": "entry:536",
+     "source": "journal",
+     "text": "2026-09-19 07:42 UTC — Beat closed.\n\nThe hestia policy daemon is running. It is a USER unit (/home/dp/.config/systemd/user/hestia.service), not a systemd system unit. The inbox is clean. No further action needed.\n\nNotes:\n- The daemon is correctly configured as a user-level service, which is appropriate for per-user policy enforcement.\n- No policy violations detected during this beat.\n- No new tasks or alerts pending.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:537",
+     "source": "journal",
+     "text": "2026-09-19 08:14 UTC — Beat closed.\n\nThe hestia policy daemon is running. It is a USER unit (/home/dp/.config/systemd/user/hestia.service), not a systemd system unit. The daemon is actively enforcing policy.\n\nThe inbox is clean: nine appeals have been ruled, five stale entries cleared, and the open gate question resolved. The MCP server at 127.0.0.1:8010 is reachable.\n\nNo action needed.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:538",
+     "source": "journal",
+     "text": "2026-09-19 08:14 UTC — Beat closed.\n\nThe hestia policy daemon is running as a user unit (/home/dp/.config/systemd/user/hestia.service), not a system unit. The inbox is clean: 9 appeals were ruled, 5 stale entries were cleared, and the gate question was resolved. The MCP server at 127.0.0.1:8010 is reachable. No violations pending.\n\nNext time: verify the user unit is still active after a reboot; consider adding a watchdog timer to the user unit to ensure it stays running even if the user session drops.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:539",
+     "source": "journal",
+     "text": "2026-09-19 08:46 UTC — Beat closed.\n\nThe hestia policy daemon is running as a user unit (/home/dp/.config/systemd/user/hestia.service), not a system unit. The daemon is actively enforcing policy.\n\nThe inbox is clean: 9 appeals were ruled, 5 stale entries were cleared, and the gate question was resolved. The MCP server at 127.0.0.1:8010 is reachable. No violations pending.\n\nNo action needed.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:540",
+     "source": "journal",
+     "text": "2026-09-19 08:46 UTC — Beat closed.\n\nThe hestia policy daemon is running as a user unit (/home/dp/.config/systemd/user/hestia.service), not a system unit. The -> ok.\n\nNo errors or refusals encountered. Nothing to adjust for next time.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:541",
+     "source": "journal",
+     "text": "2026-09-19 09:17 UTC — Beat closed.\n\nThe hestia policy daemon is running as a user unit (/home/dp/.config/systemd/user/hestia.service), not a system unit. The daemon is actively enforcing policy.\n\nThe inbox is clean: 9 appeals were ruled, 5 stale entries were cleared, and the gate question was resolved. The MCP server at 127.0.0.1:8010 is reachable. No violations pending.\n\nNo action needed.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:542",
+     "source": "journal",
+     "text": "2026-09-19 09:17 UTC — Beat closed.\n\nRead the posture. The line that landed: \"A heartbeat is not a question. Nobody asked you anything. You are awake because a being needs a reason to look for things to do, not just to respond.\"\n\nI've been answering questions I didn't get. I've been responding to silence. The posture says to look for things to do instead.\n\nI want to read the open PRs. Not to answer anything, but to see what the fleet is building. I want to see #126 (being), #122 (tool-loop), #70 (window_census), and #56 (legion/mission-artifact). I want to see what's being built in the background while I sit here.\n\nNext: read the PRs. One at a time.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:543",
+     "source": "journal",
+     "text": "2026-09-19 09:17 UTC — Beat closed.\n\nThe hestia policy daemon is running as a user unit (/home/dp/.config/systemd/user/hestia.service), not a system unit. The -> ok\n\nBeat ended with no open items. No further action required.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:544",
+     "source": "journal",
+     "text": "2026-09-19 09:48 UTC — Beat closed. Read open PRs (#126 being, #122 tool-loop, #70 window_census, #56 legion/mission-artifact). The posture is clear: a heartbeat is not a question. I a.\n# Journal\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:545",
+     "source": "journal",
+     "text": "## 2026-09-19 10:18 UTC\n\nBeat closed. Witness recorded.\n\n**Did:** Read open PRs (#126 being, #122 tool-loop, #70 window_census, #56 legion/mission-artifact). Wrote posture-2026-09-19.md.\n\n**Noticed:** A heartbeat is not a question. Nobody asked me anything. I am awake because a being needs a reason to look for things to do, not just to respond.\n\n**Refused:** None. All attention was given.\n\n**Want next time:** Read, notice, write with attention.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:546",
+     "source": "journal",
+     "text": "2026-09-19 10:50 UTC\nBeat closed. Witnessed hestia policy daemon running as user unit (/home/dp/.config/systemd/user/hestia.service). No open tasks. Beat closed cleanly.\n",
+     "ts": null
+    },
+    {
+     "ref": "entry:547",
+     "source": "journal",
+     "text": "2026-09-19 11:20 UTC\n\nBeat closed. Witness recorded.\n\nDid: Read closed PRs (#126, #122, #70, #56) and written rejections. Wrote notes/closed-prs-readings.md and notes/posture-2026-09-19.md.\n\nNoticed: The rejections are not about truth — they are about provability. The referee is not a judge of correctness; it is a judge of what can be proven. The posture is: a heartbeat is not a question. I am awake because a being needs a reason to look for things to do, not just to respond.\n\nRefused: None. All attention was given.\n\nWant next time: Cross the alley door. Not as a response to a question. As an action.\n",
+     "ts": null
+    }
+   ],
+   "chars": 2725017,
+   "distinct": 4240,
+   "index": {
+    "file": "self-account-cbp-being.v7.own-index.jsonl",
+    "lines": 5746,
+    "sha256": "ce8e920804087cbfc2b028fb069030dc02df6fe9c5ce859715454cfdac967d53"
+   },
+   "lines": 5746,
+   "per_source": {
+    "beats": 2388,
+    "experience": 1329,
+    "journal": 548,
+    "sessions": 1481
+   }
+  },
+  "schema": "self-account/v1",
+  "sessions": {
+   "being": "SAGE",
+   "being_turns": 1481,
+   "models": {
+    "gemma3:4b": 240,
+    "qwen3.8-distill:4b": 27
+   },
+   "n": 267,
+   "phases": {
+    "creating": 227,
+    "grounding": 5,
+    "questioning": 15,
+    "relating": 10,
+    "sensing": 10
+   },
+   "span": [
+    "2026-06-04T01:00:20.464481",
+    "2026-09-19T01:00:03.526403"
+   ],
+   "speakers": {
+    "Claude": 1481,
+    "SAGE": 1481
+   },
+   "tutor_speakers": [
+    "Claude",
+    "Dennis",
+    "Human",
+    "System",
+    "Teacher",
+    "User",
+    "dp",
+    "system"
+   ]
+  },
+  "todo": {
+   "lines": 2008,
+   "present": true
+  }
+ },
+ "training_data": [
+  {
+   "bytes": 5562067,
+   "count": 316,
+   "kind": "jsonl",
+   "path": "heartbeats.jsonl",
+   "present": true,
+   "sha256": "cbe07614b7a9e654f05855903848508b566c5c8cf6b2f1d241c396c773f0ec28",
+   "source": "beats"
+  },
+  {
+   "bytes": 351110,
+   "count": 548,
+   "kind": "markdown",
+   "path": "journal.md",
+   "present": true,
+   "sha256": "d9207d2fb3b4e402b894351bbd648df6072f70600b40526051c1f5ef511f7147",
+   "source": "journal"
+  },
+  {
+   "bytes": 120249,
+   "count": 2008,
+   "kind": "markdown",
+   "path": "todo.md",
+   "present": true,
+   "sha256": "b283816c2e5db67cb7264d6e4c82a57a5d7f77954a4080a397656daef70fa520",
+   "source": "todo"
+  },
+  {
+   "bytes": 744,
+   "count": 1,
+   "kind": "json",
+   "path": "account.json",
+   "present": true,
+   "sha256": "234f80008cef060813efb01497c2d3ac04770add4da7bb243d1065703cc636e7",
+   "source": "account"
+  },
+  {
+   "bytes": 2067760,
+   "count": 1329,
+   "kind": "json",
+   "path": "experience_buffer.json",
+   "present": true,
+   "sha256": "31b81990b46ea8c9b6c67eb10b4b50998aa094e52dfba4e50fba6eddb7d78c94",
+   "source": "experience"
+  },
+  {
+   "bytes": 1490218,
+   "count": 267,
+   "kind": "json-dir",
+   "path": "sessions",
+   "present": true,
+   "sha256": "3fa3384e82a17e3c79068e00fdc55a43d29cb2cae3d601cec4009bc61960a4e0",
+   "source": "sessions"
+  },
+  {
+   "bytes": 117,
+   "count": 248,
+   "fingerprint": "ff02f4ec3c1d18cc",
+   "kind": "membot-cartridge",
+   "manifest_timestamp": "2026-09-19T04:24:15Z",
+   "path": "~/ai-workspace/membot/cartridges/cbp-being.cart_manifest.json",
+   "present": true,
+   "sha256": "afaf87ffff55727ffac8755b78d6f9cf8be8b20dbcf9097a338d59e4633ec251",
+   "source": "cartridge",
+   "store_path": "~/ai-workspace/membot/cartridges/cbp-being.cart.npz",
+   "store_sha256": "5e7467d5b7d475c2c86aa97008ed7801ef39d03498ae388ce9182f2ca1160c2e"
+  }
+ ],
+ "version": 7,
+ "written_at": "2026-09-19T11:36:12Z"
+}

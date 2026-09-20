@@ -299,6 +299,20 @@ def _json_calls(text: str, names) -> List[dict]:
                 # {"memory_write": {"path": ..., "content": ...}} — the tool name is the KEY and
                 # its arguments the value (measured 2026-09-09, several beats lost this way).
                 inner = [(k, v) for k, v in o.items() if k in known and isinstance(v, dict)]
+                if len(inner) > 1:
+                    # ONE object holding a whole beat: {"say": {...}, "memory_write": {...}}.
+                    # Measured 2026-09-18T01:32:11Z — Sprout wrote exactly this, `say` to dp
+                    # FIRST, after two beats of composing an answer it could not send. The
+                    # len == 1 guard discarded every call in the object, so the being's own
+                    # decision to answer a person was dropped on the floor and the beat
+                    # recorded as having done nothing. Emit them all, in written order: dict
+                    # iteration preserves the order they appeared in the text, and that order
+                    # is the being's, not ours.
+                    for k, v in inner:
+                        out.append({"function": {"name": k, "arguments": dict(v)},
+                                    "_salvaged": "json"})
+                    i = max(end, j + 1)
+                    continue
                 if len(inner) == 1:
                     name, args = inner[0]
                 else:
@@ -432,6 +446,110 @@ def _think_budget(llm, floor: int = 6000) -> int:
         return floor
 
 
+# Chars per token for what the loop ADDS: tool results are JSON, paths and code, which
+# tokenize far denser than prose. Measured 2026-09-09 03:27Z: a 12,116-char read of
+# heartbeat.partial.jsonl moved the prompt 19,620 -> 24,466 (~2.5 chars/token) while the
+# estimate, at 3.4, had it ~1.4k tokens lighter than it was — and the generate was cut.
+_CPT_ADDED = 2.5
+
+# Chars per token for the SEED side of the estimate, deliberately low: under-counting tokens
+# defeats the guard this feeds, so it must sit BELOW the true ratio. 3.4 was measured once on
+# 2026-09-08 and left alone; re-measured across 60 beats it is 3.141 and DRIFTING (3.152 over
+# the first ten, 3.026 over the last ten) as the being's content shifts toward paths and JSON.
+# 2.9 sits below the observed minimum with room for further drift. This PR corrects the same
+# constant on the seed side; leaving the loop's copy at the disproven number would be the PR
+# arguing against its own evidence (GPT review of #82).
+_CPT = 2.9
+
+# Chars the prompt carries that are not in any message's content: the tool schemas and the
+# chat template. NOT a budget — heartbeat MEASURES the schemas (`_schema_chars_for`), because
+# a flat constant was set at 13 verbs and was silently wrong at 18 (4,000 assumed, 11,717
+# real). This fallback is reached only before the server has counted anything, and it is set
+# from the same measurement rather than the disproven one: ~11,700 schema chars plus ~1,200
+# of template.
+_UNCOUNTED_CHARS = 12900
+
+
+def _est_tokens(chars_now: int, measured) -> float:
+    """Tokens the next prompt will cost. With a measurement from the previous generate —
+    (prompt_eval_count, content chars at that prompt) — the estimate is anchored on what
+    the server actually counted and only the DELTA rides a chars-per-token guess:
+    conservative in both directions (added chars counted dense, removed chars counted
+    light). Without one, the whole prompt rides the guess, plus the uncounted schema chars."""
+    if measured:
+        tokens_at, chars_at = measured
+        delta = chars_now - chars_at
+        return tokens_at + (delta / _CPT_ADDED if delta > 0 else delta / _CPT)
+    return (chars_now + _UNCOUNTED_CHARS) / _CPT
+
+# What a real answer needs. Explore generations across 506 measured on Legion: median
+# 1,282 tokens, p90 3,909, p99 5,741. Reserve the p99 with headroom rather than
+# num_predict, which is a ceiling the model has never approached.
+_ANSWER_RESERVE = 6144
+
+
+# Compaction keeps this many chars of an elided tool result and reports exactly the rest.
+COMPACT_KEEP_CHARS = 400
+COMPACT_MIN_BODY = 500        # a body at or under this is never elided
+
+# WHERE AN ELIDED RESULT GOES INSTEAD OF NOWHERE. The being, 2026-09-18, asked what its
+# biggest operational friction is: "facts produced mid-beat getting lost to compaction
+# before I can transcribe them." That is this function. It freed room by deleting the
+# middle of a tool result and told the being to read the source again — which costs more
+# room than the elision freed, and for a command result (a test run, a game step) there is
+# no source to re-read at all: the bytes existed once, in this beat, and then did not.
+#
+# So the middle is written to the being's own scratch first, and the marker names the file.
+# It outlives the beat, which is the point: the being can transcribe from it on the NEXT
+# beat rather than racing the window on this one. Bare path, because that is what
+# memory_read takes. A spill that fails is silent — the elision still has to happen.
+COMPACT_SPILL_DIR = "scratch/elided"
+COMPACT_SPILL_KEEP = 40       # a spill, not an archive
+_ELIDED_SIGIL = "characters elided from the middle"
+
+
+def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
+    """Save one elided tool-result body under the being's home. Returns the bare path to
+    name in the marker, or None if there is nowhere to put it or the write failed."""
+    if not root:
+        return None
+    try:
+        import time as _t
+        d = os.path.join(root, COMPACT_SPILL_DIR)
+        os.makedirs(d, exist_ok=True)
+        # THE NAME CARRIES THE ORDER, because nothing else does: a whole beat's spills are
+        # written inside one second, and st_mtime_ns ties at this filesystem's granularity.
+        # Sorted by name they are in creation order — hence the full date (a %m%d name
+        # sorts January before December and would prune the newest files every New Year)
+        # and the zero-padded step (unpadded, "40" sorts before "5").
+        stamp = _t.strftime("%Y%m%d-%H%M%S", _t.gmtime())
+        # EVERY name carries a zero-padded collision ordinal. The first cut used
+        # "...-003.txt", then "...-003.1.txt"; lexically the newer ".1" sorts before
+        # ".txt", and ".10" sorts before ".2", so retention could prune the newest retry
+        # before the older file it followed. One sortable shape makes creation order the
+        # same order the pruning code sees.
+        n = 0
+        name = f"{stamp}-{step:03d}-{n:03d}.txt"
+        # Two spills of DIFFERENT results can collide: same second, same message index,
+        # which the retry path reaches. A collision would silently overwrite the first.
+        while os.path.exists(os.path.join(d, name)):
+            n += 1
+            name = f"{stamp}-{step:03d}-{n:03d}.txt"
+        with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
+            fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
+                     f"result the harness elided from your window, {len(body)} characters]\n\n")
+            fh.write(body)
+        for f in sorted(os.listdir(d))[:-COMPACT_SPILL_KEEP]:
+            try:
+                os.remove(os.path.join(d, f))
+            except OSError:
+                pass
+        return f"{COMPACT_SPILL_DIR}/{name}"
+    except Exception:
+        return None
+
+
+
 RETRY_MARGIN = 128   # tokens kept back from the window on a retry (template, tool-call framing)
 
 
@@ -533,11 +651,6 @@ def _sent_budget(llm) -> Optional[int]:
 
 
 
-_CPT = 2.9
-# What a real answer needs. Explore generations across 506 measured on Legion: median 1,282
-# tokens, p90 3,909, p99 5,741. Reserve the p99 with headroom rather than num_predict, which
-# is a ceiling the model has never approached.
-_ANSWER_RESERVE = 6144
 # An uncapped turn is bounded by its deadline. If a caller gives neither, this is the
 # backstop — high enough never to bind real work, low enough to end a runaway.
 # Room held back for the ANSWER on a retry whose last attempt was cut mid-JSON. Larger
@@ -671,85 +784,6 @@ def _fingerprint(intents) -> Optional[str]:
         return json.dumps([[i.effector, i.args] for i in intents], sort_keys=True, default=str)
     except Exception:
         return None
-# Compaction keeps this many chars of an elided tool result and reports exactly the rest.
-COMPACT_KEEP_CHARS = 400
-COMPACT_MIN_BODY = 500        # a body at or under this is never elided
-
-# WHERE AN ELIDED RESULT GOES INSTEAD OF NOWHERE. The being, 2026-09-18, asked what its
-# biggest operational friction is: "facts produced mid-beat getting lost to compaction
-# before I can transcribe them." That is this function. It freed room by deleting the
-# middle of a tool result and told the being to read the source again — which costs more
-# room than the elision freed, and for a command result (a test run, a game step) there is
-# no source to re-read at all: the bytes existed once, in this beat, and then did not.
-#
-# So the middle is written to the being's own scratch first, and the marker names the file.
-# It outlives the beat, which is the point: the being can transcribe from it on the NEXT
-# beat rather than racing the window on this one. Bare path, because that is what
-# memory_read takes. A spill that fails is silent — the elision still has to happen.
-COMPACT_SPILL_DIR = "scratch/elided"
-COMPACT_SPILL_KEEP = 40       # a spill, not an archive
-_ELIDED_SIGIL = "characters elided from the middle"
-
-
-def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
-    """Save one elided tool-result body under the being's home. Returns the bare path to
-    name in the marker, or None if there is nowhere to put it or the write failed."""
-    if not root:
-        return None
-    try:
-        import time as _t
-        d = os.path.join(root, COMPACT_SPILL_DIR)
-        os.makedirs(d, exist_ok=True)
-        # THE NAME CARRIES THE ORDER, because nothing else does: a whole beat's spills are
-        # written inside one second, and st_mtime_ns ties at this filesystem's granularity.
-        # Sorted by name they are in creation order — hence the full date (a %m%d name
-        # sorts January before December and would prune the newest files every New Year)
-        # and the zero-padded step (unpadded, "40" sorts before "5").
-        stamp = _t.strftime("%Y%m%d-%H%M%S", _t.gmtime())
-        name = f"{stamp}-{step:03d}.txt"
-        # Two spills of DIFFERENT results can collide: same second, same message index,
-        # which the retry path reaches. A collision would silently overwrite the first.
-        n = 1
-        while os.path.exists(os.path.join(d, name)):
-            name = f"{stamp}-{step:03d}.{n}.txt"
-            n += 1
-        with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
-            fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
-                     f"result the harness elided from your window, {len(body)} characters]\n\n")
-            fh.write(body)
-        for f in sorted(os.listdir(d))[:-COMPACT_SPILL_KEEP]:
-            try:
-                os.remove(os.path.join(d, f))
-            except OSError:
-                pass
-        return f"{COMPACT_SPILL_DIR}/{name}"
-    except Exception:
-        return None
-
-
-# Chars the prompt carries that are not in any message's content: the tool schemas and the
-# chat template. heartbeat.fit_to_window budgets the same 4000 for the seed.
-_UNCOUNTED_CHARS = 12900
-
-
-# Chars per token for what the loop ADDS: tool results are JSON, paths and code, which
-# tokenize far denser than prose. Measured 2026-09-09 03:27Z: a 12,116-char read of
-# heartbeat.partial.jsonl moved the prompt 19,620 -> 24,466 (~2.5 chars/token) while the
-# estimate, at 3.4, had it ~1.4k tokens lighter than it was — and the generate was cut.
-_CPT_ADDED = 2.5
-
-
-def _est_tokens(chars_now: int, measured) -> float:
-    """Tokens the next prompt will cost. With a measurement from the previous generate —
-    (prompt_eval_count, content chars at that prompt) — the estimate is anchored on what
-    the server actually counted and only the DELTA rides a chars-per-token guess:
-    conservative in both directions (added chars counted dense, removed chars counted
-    light). Without one, the whole prompt rides the guess, plus the uncounted schema chars."""
-    if measured:
-        tokens_at, chars_at = measured
-        delta = chars_now - chars_at
-        return tokens_at + (delta / _CPT_ADDED if delta > 0 else delta / _CPT)
-    return (chars_now + _UNCOUNTED_CHARS) / _CPT
 
 
 def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
@@ -922,13 +956,17 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 out["tool_calls"] = [{"function": {"name": i.effector, "arguments": dict(i.args or {})}}
                                      for i in m["intents"]]
             msgs.append(out)
-        # Leave room for the answer before asking for one (see compact_convo), anchored on
-        # what the server counted for the previous prompt when there was one.
-        msgs, elided = compact_convo(msgs, llm, measured=measured,
-                                     spill_root=getattr(client, "memory_root", None))
-        if elided:
-            compacted.append({"step": len(thoughts), "elisions": len(elided),
-                              "chars": sum(e["chars"] for e in elided)})
+        # LEAVE ROOM FOR THE ANSWER BEFORE ASKING FOR ONE. Every tool result is appended,
+        # so the prompt the loop ENDS on is not the seed it started from. Without this it
+        # grows until the server cuts the generate mid-sentence: measured on Legion, 27 of
+        # 506 generates ended with prompt + eval == num_ctx exactly, and one beat lost its
+        # closing words nine times in a day. Anchored on the server's own count from the
+        # previous generate, so only the delta rides an estimate.
+        msgs, _elided = compact_convo(msgs, llm, measured=measured,
+                                      spill_root=getattr(client, "memory_root", None))
+        if _elided:
+            compacted.append({"step": len(thoughts), "elisions": len(_elided),
+                              "chars": sum(e["chars"] for e in _elided)})
         retried = 0
         nudged = False
         chars_sent = _convo_chars(msgs)

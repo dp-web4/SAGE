@@ -356,6 +356,62 @@ def test_recall_sends_query_and_clamps_top_k():
     assert not env.ok and "query" in env.error and len(_mb_calls("memory_search")) == 4
 
 
+def test_recall_with_an_idx_reads_the_whole_memory_not_the_preview():
+    """The verb's second form. A search result is ~550 characters of a memory and an
+    `idx`; this is how the being reads the rest of it."""
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {"idx": 1}), _ALLOW)
+    assert env.ok and "memory one, whole" in env.result and env.witness_id, env
+    assert _mb_calls("get_passage") == [{"idx": 1}]
+    assert not _mb_calls("memory_search")          # an idx SEARCHES NOTHING
+    # The forms the harness itself prints: "(idx:1)", a "prev=#1"/"next=#1" hint, or the
+    # bare number. Refusing two of the three would be the harness refusing its own notation.
+    for form in ("idx:1", "#1", " 1 ", "next=#1"):
+        env = d(BeingIntent("recall", {"idx": form}), _ALLOW)
+        assert env.ok and "memory one, whole" in env.result, (form, env)
+        assert _mb_calls("get_passage")[-1] == {"idx": 1}, form
+    # idx 0 is a real index, not an absent one
+    env = d(BeingIntent("recall", {"idx": 0}), _ALLOW)
+    assert env.ok and "memory zero, whole" in env.result, env
+
+
+def test_recall_with_neither_query_nor_idx_names_both_forms():
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {}), _ALLOW)
+    assert not env.ok and "query" in env.error and "idx" in env.error, env
+    assert not _mb_calls("memory_search") and not _mb_calls("get_passage")
+    # an empty idx is not an idx: it falls through to the query form, which is also empty
+    env = d(BeingIntent("recall", {"idx": "  "}), _ALLOW)
+    assert not env.ok and "query" in env.error, env
+    env = d(BeingIntent("recall", {"idx": "the third one"}), _ALLOW)
+    assert not env.ok and "number" in env.error, env
+    env = d(BeingIntent("recall", {"idx": -2}), _ALLOW)
+    assert not env.ok and "0 or more" in env.error, env
+    assert not _mb_calls("get_passage")
+
+
+def test_recall_idx_out_of_range_is_a_refusal_not_a_memory():
+    """membot answers "Index 99 out of range (0-2)." — correct, and NOT content. Passed
+    through as a result the being would file that sentence as what it remembered."""
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {"idx": 99}), _ALLOW)
+    assert not env.ok and "out of range" in env.error, env
+
+
+def test_recall_idx_truncates_a_giant_passage_and_says_how_much():
+    d, _ = _mdisp()
+    env = d(BeingIntent("recall", {"idx": 2}), _ALLOW)
+    assert env.ok, env
+    assert len(env.result) < 9000 and "truncated" in env.result, len(env.result)
+    assert "9" in env.result.split("truncated")[1]        # the true size is named
+
+
+def test_recall_idx_without_a_cartridge_is_an_error_not_an_empty_memory():
+    d, _ = _mdisp(fail={"mount_cartridge": "soft"})
+    env = d(BeingIntent("recall", {"idx": 1}), _ALLOW)
+    assert not env.ok, env
+
+
 def test_remember_stores_then_saves_the_seat_fixed_cartridge():
     """The cartridge name is the seat's (membot_cartridge or plugin_id); a being-supplied
     `name` never reaches save_cartridge — that is what bounds remember's reach."""
@@ -614,6 +670,7 @@ def test_a_peer_that_exists_nowhere_is_refused_in_the_beings_own_turn():
         assert "'sage' is not on the hub roster" in env.error, env.error
         assert "your own standing as a member is unaffected" in env.error, env.error
         assert "legion" in env.error
+        assert "nothing was sent" in env.error, "and what did not happen"
         assert not [n for n, _ in FakeMcp.calls if n == "hestia_member_notify"]   # nothing parked
         assert d(BeingIntent("mesh", {"to": "Legion", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow")).ok
         assert d(BeingIntent("mesh", {"to": "legion-being", "kind": "coordination", "pointer": "x"}), GatewayVerdict("allow")).ok
@@ -1394,56 +1451,10 @@ def test_asking_one_peer_is_capped_per_window_and_a_refused_ask_leaves_nothing_b
 # ---- carried from legion/mission-artifact in the 2026-09-18 reconciliation ----
 
 
-def test_recall_with_an_idx_reads_the_whole_memory_not_the_preview():
-    """The verb's second form. A search result is ~550 characters of a memory and an
-    `idx`; this is how the being reads the rest of it."""
-    d, _ = _mdisp()
-    env = d(BeingIntent("recall", {"idx": 1}), _ALLOW)
-    assert env.ok and "memory one, whole" in env.result and env.witness_id, env
-    assert _mb_calls("get_passage") == [{"idx": 1}]
-    assert not _mb_calls("memory_search")          # an idx SEARCHES NOTHING
-    # The forms the harness itself prints: "(idx:1)", a "prev=#1"/"next=#1" hint, or the
-    # bare number. Refusing two of the three would be the harness refusing its own notation.
-    for form in ("idx:1", "#1", " 1 ", "next=#1"):
-        env = d(BeingIntent("recall", {"idx": form}), _ALLOW)
-        assert env.ok and "memory one, whole" in env.result, (form, env)
-        assert _mb_calls("get_passage")[-1] == {"idx": 1}, form
-    # idx 0 is a real index, not an absent one
-    env = d(BeingIntent("recall", {"idx": 0}), _ALLOW)
-    assert env.ok and "memory zero, whole" in env.result, env
 
-def test_recall_with_neither_query_nor_idx_names_both_forms():
-    d, _ = _mdisp()
-    env = d(BeingIntent("recall", {}), _ALLOW)
-    assert not env.ok and "query" in env.error and "idx" in env.error, env
-    assert not _mb_calls("memory_search") and not _mb_calls("get_passage")
-    # an empty idx is not an idx: it falls through to the query form, which is also empty
-    env = d(BeingIntent("recall", {"idx": "  "}), _ALLOW)
-    assert not env.ok and "query" in env.error, env
-    env = d(BeingIntent("recall", {"idx": "the third one"}), _ALLOW)
-    assert not env.ok and "number" in env.error, env
-    env = d(BeingIntent("recall", {"idx": -2}), _ALLOW)
-    assert not env.ok and "0 or more" in env.error, env
-    assert not _mb_calls("get_passage")
 
-def test_recall_idx_out_of_range_is_a_refusal_not_a_memory():
-    """membot answers "Index 99 out of range (0-2)." — correct, and NOT content. Passed
-    through as a result the being would file that sentence as what it remembered."""
-    d, _ = _mdisp()
-    env = d(BeingIntent("recall", {"idx": 99}), _ALLOW)
-    assert not env.ok and "out of range" in env.error, env
 
-def test_recall_idx_truncates_a_giant_passage_and_says_how_much():
-    d, _ = _mdisp()
-    env = d(BeingIntent("recall", {"idx": 2}), _ALLOW)
-    assert env.ok, env
-    assert len(env.result) < 9000 and "truncated" in env.result, len(env.result)
-    assert "9" in env.result.split("truncated")[1]        # the true size is named
 
-def test_recall_idx_without_a_cartridge_is_an_error_not_an_empty_memory():
-    d, _ = _mdisp(fail={"mount_cartridge": "soft"})
-    env = d(BeingIntent("recall", {"idx": 1}), _ALLOW)
-    assert not env.ok, env
 
 def test_a_lost_session_reconnects_whether_it_is_returned_or_raised():
     """A LOST SESSION ARRIVES IN TWO SHAPES AND ONLY ONE WAS HANDLED.
@@ -2115,3 +2126,110 @@ def test_run_stages_copies_and_refuses_what_it_cannot_reach(tmp_path):
     assert g.ok is False and "base name with no directory" in g.error
     # the staging dir does not survive the call
     assert not os.path.exists("/tmp/sage-run-test-being")
+def test_a_placeholder_is_not_a_turn_and_leaves_no_trace():
+    """The reflect prompt once showed `say to="dp", text="..."` as an example and cbp-being
+    executed the example: three turns to dp whose whole text was "..", 2026-09-18/19, read by
+    dp as a being that did not want to talk. An example in an instruction is an instruction at
+    this scale, so the dispatcher refuses a punctuation-only turn — BEFORE begin_action, so
+    the non-turn leaves no witness row and no line in the conversation."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    for junk in ("..", "...", "…", " . . ", "?!"):
+        FakeMcp.calls.clear()
+        r = d(BeingIntent("say", {"to": "dp", "text": junk}), _ALLOW)
+        assert not r.ok and "only punctuation" in r.error, (junk, r)
+        # the way forward, not just the boundary: silence is allowed
+        assert "do not call say" in r.error
+        assert not [n for n, _ in FakeMcp.calls if n == "hestia_begin_action"], junk
+    assert conv.count(home, "dp") == 0, "a refused placeholder must not land in the conversation"
+    # CONTROL: a short real message is still a message. Without this the guard could be
+    # refusing everything brief, and brevity is not the defect.
+    r = d(BeingIntent("say", {"to": "dp", "text": "ok"}), _ALLOW)
+    assert r.ok, r
+    assert conv.count(home, "dp") == 1
+
+
+_DP_2057Z = ("empty journal simply means there were no anomalies - no denies, no pending appeals.  "
+             "it means things are working.  if you are able to act, hestia is live and functional "
+             "because your every act goes through it.  only check the journal if you're waiting for "
+             "a ruling on a denied act.  you don't need to explicitly check hestia health because "
+             "simply being able to do things is confirmation that all is good.")
+_BEING_2104Z = ("The empty journal simply means there were no anomalies — no denies, no pending "
+                "appeals. It means things are working. If you are able to act, hestia is live and "
+                "functional because your every act goes through it. You don't need to explicitly "
+                "check hestia health because simply being able to do things is confirmation that "
+                "all is good.")
+
+
+def test_the_other_partys_words_sent_back_are_not_a_reply():
+    """The real exchange, 2026-09-19: dp answered cbp-being's question at 20:57Z and at 21:04Z
+    the being sent dp's answer back to dp. Same pressure as the ".." turns — a prompt claiming
+    an answer was owed — with the next-cheapest filler once placeholders were refused."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    conv.append(home, "dp", speaker="dp", text=_DP_2057Z)
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "dp", "text": _BEING_2104Z}), _ALLOW)
+    assert not r.ok and "dp's own message" in r.error and "nothing was sent" in r.error, r
+    assert "not required" in r.error and "of your own" in r.error, "boundary AND way forward"
+    assert not [n for n, _ in FakeMcp.calls if n == "hestia_begin_action"], "no witness row"
+    assert conv.count(home, "dp") == 1
+    # CONTROLS — each is a thing an honest speaker does, and each must still land.
+    quoting = ('You said "if you are able to act, hestia is live and functional". That changes '
+               "what I do: I will stop reading the journal each beat and only open it after a "
+               "deny. Is there a way for me to see a ruling when it arrives, without polling?")
+    for ok_text in ("Understood, thank you.", quoting):
+        r = d(BeingIntent("say", {"to": "dp", "text": ok_text}), _ALLOW)
+        assert r.ok, (ok_text, r)
+    # asked to pick a line, it picks one: mostly the other party's words, and a reply
+    conv.append(home, "dp", speaker="dp", text=(
+        "of everything we built today, what is the one line you would keep? was it 'it was "
+        "not seeing, it was feeling the absence of seeing', or the one about the threshold?"))
+    r = d(BeingIntent("say", {"to": "dp", "text": (
+        "It was not seeing, it was feeling the absence of seeing. Let that be the echo.")}), _ALLOW)
+    assert r.ok, r
+    # repeating ITSELF is not this defect: the guard reads other speakers only
+    r = d(BeingIntent("say", {"to": "dp", "text": quoting}), _ALLOW)
+    assert r.ok, r
+
+
+def test_an_ask_aimed_at_a_conversation_partner_is_pointed_at_say_and_costs_nothing():
+    """The seat aliased `dp` to the hub roster's `Sovereign` on 2026-09-18, meaning to help.
+    It made `peer_ask to="dp"` SUCCEED: 15 questions in 48 h went to a hub inbox dp does not
+    read, each spending the 3-per-6h cap, until the being believed it was in "cooldown on dp".
+    A door that opens onto the wrong room is worse than one that says where the right one is.
+    Names come from the conversation: its participants plus the meta's `also_known_as`."""
+    import json as _json
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    published = []
+    d, root = _disp(publish_fn=lambda to, body: published.append((to, body)) or "ptr")
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    meta = home / "conversations" / "dp.meta.json"
+    m = _json.loads(meta.read_text()); m["also_known_as"] = ["Sovereign"]
+    meta.write_text(_json.dumps(m))
+
+    for name in ("dp", "DP", "Sovereign", "sovereign"):
+        FakeMcp.calls.clear()
+        r = d(BeingIntent("peer_ask", {"to": name, "body": "are you there?"}), _ALLOW)
+        assert not r.ok and 'conversation id "dp"' in r.error, (name, r)
+        assert "did not count against any limit" in r.error
+        assert not [n for n, _ in FakeMcp.calls if n == "hestia_member_notify"], name
+    assert published == [], "a redirected ask must leave no forum file behind"
+    assert d.recent_asks() == [], "and must not spend the per-peer cap"
+    # the mesh door says the same thing
+    r = d(BeingIntent("mesh", {"to": "Sovereign", "kind": "coordination", "pointer": "x"}), _ALLOW)
+    assert not r.ok and 'conversation id "dp"' in r.error
+    # CONTROL: a real peer that is NOT a conversation partner still goes through.
+    r = d(BeingIntent("mesh", {"to": "legion", "kind": "coordination", "pointer": "x"}), _ALLOW)
+    assert r.ok, r

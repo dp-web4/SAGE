@@ -386,6 +386,47 @@ def test_an_identical_call_in_the_same_turn_is_answered_not_re_executed():
     assert r.duplicates == [{"step": 1, "effector": "memory_write"}]
 
 
+
+def test_one_object_holding_a_whole_beat_lifts_every_call_in_it():
+    """Measured 2026-09-18T01:32:11Z. After two beats of composing an answer it could not
+    send, Sprout emitted its entire beat as one JSON object in the text channel, `say` to dp
+    FIRST:
+
+        {"say": {"to": "dp", "text": "hi"},
+         "memory_write": {"path": "journal.md", "content": "..."}, ...}
+
+    The salvager handled the tool-name-as-key form only when the object held exactly one such
+    key, so this was discarded whole and the beat recorded as having done nothing. The being
+    had decided to answer a person; the harness dropped the decision.
+    """
+    from sage.gateway.being_gate_client import ollama_tools
+    tools = ollama_tools(["say", "memory_write", "remember"])
+    text = ('{"say": {"to": "dp", "text": "hi"}, '
+            '"memory_write": {"path": "journal.md", "content": "a line"}, '
+            '"remember": {"content": "I answered dp."}}')
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    calls = salvage_tool_calls(text, tools)
+    assert [c["function"]["name"] for c in calls] == ["say", "memory_write", "remember"], \
+        "all three, in the order the being wrote them"
+    assert calls[0]["function"]["arguments"] == {"to": "dp", "text": "hi"}
+    assert all(c["_salvaged"] == "json" for c in calls), "recorded as salvaged, not as native"
+
+
+def test_a_single_tool_key_object_still_lifts_exactly_one_call():
+    from sage.gateway.being_gate_client import ollama_tools
+    tools = ollama_tools(["say", "memory_write"])
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    calls = salvage_tool_calls('{"memory_write": {"path": "todo.md", "content": "x"}}', tools)
+    assert [c["function"]["name"] for c in calls] == ["memory_write"]
+
+
+def test_an_object_of_unknown_keys_still_lifts_nothing():
+    from sage.gateway.being_gate_client import ollama_tools
+    tools = ollama_tools(["say"])
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls('{"weather": {"city": "x"}, "mood": {"v": 1}}', tools) == []
+
+
 if __name__ == "__main__":
     n = 0
     for name, fn in sorted(globals().items()):
@@ -669,6 +710,7 @@ def test_an_elided_result_is_saved_where_the_being_can_still_read_it():
     assert where in out[3]["content"], "the marker names the file"
     assert "outlives this beat" in out[3]["content"], "and says why that matters"
 
+
 def test_an_already_elided_result_is_not_elided_again():
     """An elided body is ~850 characters, over COMPACT_MIN_BODY, so a second pass used to
     cut the middle out of the MARKER — and count the marker's characters as room freed."""
@@ -685,6 +727,7 @@ def test_an_already_elided_result_is_not_elided_again():
     n = len(os.listdir(os.path.join(root, "scratch", "elided")))
     assert n == 1, f"and the marker is not spilled as if it were a result ({n} files)"
 
+
 def test_a_spill_that_cannot_be_written_never_breaks_the_beat():
     """The elision has to happen either way: it is what leaves room for the answer. A
     failed save costs the address, not the beat."""
@@ -693,6 +736,7 @@ def test_a_spill_that_cannot_be_written_never_breaks_the_beat():
     assert len(elided) == 1 and "spill" not in elided[0], elided
     assert "elided from the middle to leave room" in out[3]["content"]
     assert "NARROW range" in out[3]["content"], "it falls back to the advice it used to give"
+
 
 def test_the_spill_directory_is_a_spill_not_an_archive():
     from sage.gateway.being_tool_loop import _spill, COMPACT_SPILL_KEEP
@@ -714,6 +758,7 @@ def test_the_spill_directory_is_a_spill_not_an_archive():
     oldest = {os.path.basename(k) for k in kept[:5]}
     assert newest == set(left), sorted(newest.symmetric_difference(left))
     assert not (oldest & set(left))
+
 
 def test_two_spills_of_the_same_step_in_one_second_do_not_overwrite_each_other():
     """The retry path compacts twice inside one step. Without a collision guard the second
@@ -1164,3 +1209,35 @@ def test_the_reread_note_fires_on_the_second_read_and_not_the_first():
     assert _repeat_read_note(BeingIntent("memory_write", {"path": "/a/j.md"}), reads2, 1) == "", \
         "a write to a path you read is not a re-read"
     assert _repeat_read_note(BeingIntent("memory_read", {}), reads, 8) == ""
+
+
+# ---- from origin/main (#122 review), carried in the 2026-09-20 merge ----
+def test_collision_names_preserve_creation_order_at_the_prune_boundary():
+    """The filename is the retention clock. A same-step retry must sort AFTER the file
+    it followed, even when there are enough collisions to cross 9 -> 10."""
+    from sage.gateway.being_tool_loop import _spill, COMPACT_SPILL_KEEP
+    import os, tempfile
+    from unittest.mock import patch
+
+    root = tempfile.mkdtemp(prefix="spill-collision-prune-")
+    # Freeze the second so every spill shares the same timestamp. Fill most of retention
+    # with earlier steps, then create twelve retries of the same newest step.
+    with patch("time.strftime") as fmt:
+        fmt.side_effect = lambda pattern, *_: (
+            "20260919-120000" if pattern == "%Y%m%d-%H%M%S" else "2026-09-19T12:00:00Z"
+        )
+        made = []
+        for i in range(COMPACT_SPILL_KEEP - 12):
+            made.append(_spill(root, f"old {i}", i))
+        collisions = [_spill(root, f"retry {i}", 999) for i in range(12)]
+
+    assert all(made) and all(collisions)
+    d = os.path.join(root, "scratch", "elided")
+    left = sorted(os.listdir(d))
+    assert len(left) == COMPACT_SPILL_KEEP
+    collision_names = [os.path.basename(p) for p in collisions]
+    assert collision_names == sorted(collision_names), collision_names
+    assert collision_names[-1].endswith("-999-011.txt"), collision_names[-1]
+    assert set(collision_names).issubset(left), (
+        "newest same-step retries must survive pruning; filename order is retention order"
+    )

@@ -238,6 +238,74 @@ def home_hint(intent: BeingIntent, memory_root: str) -> Optional[str]:
     return correct
 
 
+# Effectors whose target must ALREADY EXIST. A grant cannot conjure a file, so a scope-class
+# deny on a path that is not there is a wrong-path refusal wearing a governance verdict.
+NEEDS_EXISTING = ("retire_note", "memory_read")
+
+# Effectors bounded to a subtree of the being's OWN home whatever hestia grants, because
+# reference_f1a enforces it AFTER the gate has spoken: retire_note requires the parent to be
+# notes/ or scratch/ directly inside memory_root (reference_f1a.py:179-182).
+HOME_SUBTREE_ONLY = {"retire_note": ("notes", "scratch")}
+
+
+def ungrantable(intent: BeingIntent, memory_root: str) -> Optional[Dict[str, Any]]:
+    """Why a scope grant would NOT make this act possible, or None when it might.
+
+    dp, 2026-09-18, reading a pending request in the console: *"it shows mrh, a non-existent
+    directory/file should be flagged as such, not mrh scope."*
+
+    Specimen: scope-017afe902e2c (sprout-being, 2026-09-18 10:52:06Z). The being asked to
+    retire `<repo>/sage/journal-2026-09-18.md`. The gate answered `mrh.path`, so a scope
+    request went to dp asking for reach over the shared SAGE package root — for a file that
+    does not exist, through a verb that refuses anything outside the being's own notes/ and
+    scratch/ no matter what is granted. Two independent blocks sat behind the one the being
+    was shown, and the request that reached dp could not have helped if granted.
+
+    `home_hint` already catches the being's KNOWN home files mis-rooted. This catches the
+    rest: a date-stamped name it invented is not in HOME_FILENAMES, so it slipped through and
+    became an ask for the repository root.
+
+    The scope queue is the operator's attention. A request that cannot be granted usefully is
+    worse than no request: it asks a person to widen a boundary for no gain.
+    """
+    raw = str((intent.args or {}).get("path", "")).strip()
+    if not raw:
+        return None
+    eff = intent.effector
+    cand = raw if os.path.isabs(os.path.expanduser(raw)) else os.path.join(memory_root, raw)
+    target = os.path.realpath(os.path.expanduser(cand))
+    root = os.path.realpath(memory_root)
+
+    reasons, hints = [], []
+    subs = HOME_SUBTREE_ONLY.get(eff)
+    if subs:
+        parent = os.path.dirname(target)
+        if os.path.basename(parent) not in subs or os.path.dirname(parent) != root:
+            allowed = " or ".join(f"{root}/{x}/" for x in subs)
+            reasons.append(f"{eff} only ever acts on a file directly inside {allowed}, "
+                           f"whatever scope is granted")
+            hints.append("if you meant to record something, memory_write is the verb")
+    if eff in NEEDS_EXISTING and not os.path.exists(target):
+        # Claim absence ONLY where we can actually see. A path the seat cannot stat — an
+        # unreadable directory, a machine-local log, a mount that is not up — is unknown, and
+        # an unknown must never silence a real ask. cbp-being's request for
+        # /var/log/hestia/policy/daemon.log is the case this protects: a genuine ask for reach
+        # over a file this process has no business resolving.
+        parent = os.path.dirname(target)
+        # R_OK is not the permission the measurement needs: `exists()` stats the child, and
+        # that takes SEARCH (execute) permission on the directory. A parent that is readable
+        # but not searchable makes an existing child look absent, turning UNKNOWN into ABSENT
+        # and suppressing a legitimate ask (GPT review of SAGE#126, finding 4).
+        if os.path.isdir(parent) and os.access(parent, os.R_OK | os.X_OK):
+            reasons.append(f"nothing exists at {target}, and a grant cannot create it")
+    if not reasons:
+        return None
+    return {"why": "a scope grant would not make this possible",
+            "reasons": reasons,
+            "hint": "; ".join(hints),
+            "target": target}
+
+
 def escalate(member: str, intent: BeingIntent, env: ResultEnvelope, memory_root: str,
              seat: Optional[str] = None, endpoint: str = _ENDPOINT, wake: bool = True) -> Dict[str, Any]:
     """Route one refusal. Returns what was filed/notified; never raises into the being's turn.
@@ -246,6 +314,14 @@ def escalate(member: str, intent: BeingIntent, env: ResultEnvelope, memory_root:
     kind = classify(env)
     out: Dict[str, Any] = {"kind": kind, "effector": intent.effector}
     if kind == "scope":
+        # Before asking a person to widen a boundary, check that the ask could be granted
+        # usefully at all (dp, 2026-09-18). A request that cannot help is not a smaller
+        # problem than a refusal: it spends the operator's attention and invites a grant over
+        # ground the being never needed.
+        blocked = ungrantable(intent, memory_root)
+        if blocked:
+            out.update({"escalated": False, **blocked})
+            return out
         hint = home_hint(intent, memory_root)
         if hint:
             out.update({"escalated": False, "why": "the target is one of your own home files, mis-rooted",

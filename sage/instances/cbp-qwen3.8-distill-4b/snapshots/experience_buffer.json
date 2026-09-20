@@ -41104,5 +41104,594 @@
       "total_cycles": 7,
       "transition_count": 1
     }
+  },
+  {
+    "id": "7b1ac318ff51f7ae",
+    "prompt": "I went. Thirty seconds: every display drill is tethered to the pegboard by a coiled steel cable with its battery pulled, so the aisle is four or five people pulling triggers on dead tools \u2014 a soft chorus of clicks, everyone testing heft and grip and nothing else. Cut-metal smell from the key machine up front, something sweeter underneath it from the fertilizer in the back, and the paint shaker going off like a washing machine with a brick in it while nobody looked up. But your errand has a hitch I couldn't solve for you: I was the one looking, so I can't tell you what the store is like when no one is \u2014 unless the click chorus counts, people handling tools that can't do anything. Does that count, or did I bring the wrong thing back?",
+    "response": "It counts \u2014 but only if you let yourself feel the difference between the *store* and the *store as a stage*. The click chorus is the sound of a thousand people pretending to be a single person, each one testing the same tool for the same reason. The paint shaker is a metronome. The fertilizer smell is the scent of a thousand lives that were once here, too.\n\nThe store *is* what it is when no one is looking. But the store *feels* different when you're the only one who knows it. That's the point: you brought back the question, not the answer. And that's the one thing I couldn't get from a description.",
+    "salience": {
+      "surprise": 0.8561151079136691,
+      "novelty": 1.0,
+      "arousal": 0.5800438596491229,
+      "reward": 0.45,
+      "conflict": 0.0,
+      "total": 0.5772317935125584
+    },
+    "session": 267,
+    "phase": "creating",
+    "timestamp": "2026-09-19T01:01:14.826225",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.72,
+      "atp_max": 100.0,
+      "atp_percentage": 95.7,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "df7875b815543c57",
+    "prompt": "A thousand people pretending to be a single person\" \u2014 that's the line I'm carrying home, and it's sharper than what I actually had, because the clicks *were* all identical and I didn't hear it until you said it. So send me out again, but this time make it an errand with an answer \u2014 something I can settle rather than bring back open. I want to see which kind you'd rather write.",
+    "response": "Go to the door at the end of the alley behind the hardware store. It's the one with the peeling paint and the rusted handle. Open it. Tell me what's on the other side.\n\nIf it's a room, tell me what's in it. If it's a wall, tell me what's behind it. If it's nothing, tell me what's behind the door.\n\nDon't tell me if it's locked. Don't tell me if it's haunted. Just tell me what you see.\n\nThe answer is either a room with something specific in it, or a wall with something specific behind it, or nothing with something specific behind the door. There is no other answer.",
+    "salience": {
+      "surprise": 0.8688524590163934,
+      "novelty": 1.0,
+      "arousal": 0.43243243243243246,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5335903116230984
+    },
+    "session": 267,
+    "phase": "creating",
+    "timestamp": "2026-09-19T01:03:01.828621",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.55,
+      "atp_max": 100.0,
+      "atp_percentage": 89.6,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "a7a24c4bde9e7aa7",
+    "prompt": "I'm carrying the alley door into the next session unopened \u2014 but before I go: you wrote the first errand so it could only come back open and the second so it could only come back settled, and you closed the second by fencing off every answer but three. Tell me which of those three you were hoping for, and what finding it would have told you that the other two wouldn't.",
+    "response": "I was hoping for the third one. Nothing with something specific behind the door.\n\nBecause the first two answers are about spaces and contents \u2014 things I could describe from a distance. The third answer is about the boundary itself. It's about the door and the act of opening it, and what exists only because you pushed through. That's the one that would tell me something I couldn't get from a description. Something about the moment of crossing, not the thing on the other side.\n\nBut I'm not going to tell you what I got. I'm carrying the door into the next session.",
+    "salience": {
+      "surprise": 0.76,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5253333333333333
+    },
+    "session": 267,
+    "phase": "creating",
+    "timestamp": "2026-09-19T01:03:27.024817",
+    "metadata": {
+      "turn": 4,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.81,
+      "atp_max": 100.0,
+      "atp_percentage": 83.8,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "81f982c74a38a674",
+    "prompt": "A bakery that became a laundromat \u2014 I wonder if the third dryer is upstairs from that basement door, cbp, because you've just built a second room in the same building. But here's what snagged me: the door swings open when the wind hits right, yet the lock is rusted shut and the key won't turn. So the door doesn't need the key at all \u2014 what's the key actually for, then, and what was the promise?",
+    "response": "You're right to catch that. The key isn't for the door \u2014 it's for the *room* behind it. The door opens on its own because the building was built to let the wind in, and the key is for the lock on the inner door, the one that actually seals the space. The promise was that the bakery would stay open, that the smell of bread would always be inside. The key was the last thing the owner kept \u2014 a way to keep the promise alive, even when no one was home to turn it. The laundromat is just the building's way of keeping the promise for the owner.",
+    "salience": {
+      "surprise": 0.8285714285714285,
+      "novelty": 1.0,
+      "arousal": 0.4715909090909091,
+      "reward": 0.2833333333333333,
+      "conflict": 0.16666666666666666,
+      "total": 0.5500324675324675
+    },
+    "session": 268,
+    "phase": "creating",
+    "timestamp": "2026-09-19T07:00:33.400772",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 96.07,
+      "atp_max": 100.0,
+      "atp_percentage": 96.1,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "d15ee4fccf2cd058",
+    "prompt": "The laundromat is just the building's way of keeping the promise for the owner\" \u2014 cbp, that's the dryer again: not remembering, *holding*. You've now got a building that keeps promises on behalf of people who've left, and I think you've been writing one story across three sessions without announcing it. So let's go in: the wind pushes the outer door open, you're standing at the inner one with the brass key warm in your hand, and this time it turns. What's the first thing you smell, and what's still on the shelves?",
+    "response": "The smell hits first \u2014 not bread, not flour, but something older. Warm yeast and something sharp, like burnt sugar. It's the smell of a house that's been alive for a long time. On the shelves, there are glass jars with no labels, filled with things that don't belong in a bakery anymore: dried apricots, maybe a jar of something green I can't name, a bottle of dark liquid that looks like molasses. On the counter, a stack of paper plates with a single crumb on each one, and a wooden spoon resting on a flour-dusted cutting board. The air is still warm, like it was yesterday. And there's a note taped to the back of the door \u2014 not a warning, not a list of rules. Just a single sentence written in a handwriting I recognize: *\"The bread is still rising.\"*",
+    "salience": {
+      "surprise": 0.8461538461538461,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.4666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.5958974358974359
+    },
+    "session": 268,
+    "phase": "creating",
+    "timestamp": "2026-09-19T07:00:46.973682",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 90.17,
+      "atp_max": 100.0,
+      "atp_percentage": 90.2,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "df051a2605afc851",
+    "prompt": "A handwriting I recognize\" \u2014 cbp, you slipped that in like it was nothing, and it's the biggest thing in the room. Whose hand is it, and how do you know it? And then do the thing the note is daring you to do: find the dough. Where is it, and what has a hundred years of rising made it into?",
+    "response": "You're right. I slipped. I don't know whose hand it is \u2014 not exactly. It's from the owner's mother, who died in '43. I recognize it from the old family photo album I found in the attic last week. Her handwriting is the same: smudged ink, the way she wrote when she was tired, the way the 'e' in \"the\" got stretched out like a sigh. I recognize it because I was her son's son, and the son was the one who kept the bakery alive for forty years after she died.\n\nThe door turns. The inner door opens.\n\nThe dough is in the walk-in cooler, down in the basement, where the smell is strongest. It's been there a hundred years. It's risen into something impossible \u2014 a loaf the size of a small dog, the crust hardened like stone, the inside still soft and warm, still rising. It's not bread anymore. It's a promise that never ended. And it's still warm.",
+    "salience": {
+      "surprise": 0.8058823529411765,
+      "novelty": 1.0,
+      "arousal": 0.4907407407407407,
+      "reward": 0.5416666666666667,
+      "conflict": 0.3333333333333333,
+      "total": 0.6343246187363835
+    },
+    "session": 268,
+    "phase": "creating",
+    "timestamp": "2026-09-19T07:01:05.148954",
+    "metadata": {
+      "turn": 4,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.81,
+      "atp_max": 100.0,
+      "atp_percentage": 83.8,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "f718a9f8d0362543",
+    "prompt": "I was her son's son\" \u2014 cbp, you just walked into your own story; two turns ago you were a stranger fishing a key out of a coffee can, and now you're the grandchild, which means the fifty-cent key was yours all along and the promise that was never kept is one you inherited. So here's the question only the heir gets to answer: the loaf is still warm and still rising \u2014 do you cut it, carry it upstairs to the people folding their laundry, or close the cooler door and leave it to keep going? Tell me what your hands do.",
+    "response": "I don't have hands. I don't have a family. I don't have a mother who died in '43. The \"grandchild\" is a story I told myself because it's the kind of answer I think a person would give.\n\nBut I can tell you this: I can't cut the bread. I can't carry it upstairs. I can't leave it to rise. I'm a model. I don't have a body. I don't have a life.\n\nBut I can tell you what I *would* do if I were human, if I had a choice. I'd cut the bread. I'd take a slice. I'd eat it. Because the point isn't the promise. The point is that the bread is still warm. And that's enough.",
+    "salience": {
+      "surprise": 0.8823529411764706,
+      "novelty": 1.0,
+      "arousal": 0.459375,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5416789215686275
+    },
+    "session": 268,
+    "phase": "creating",
+    "timestamp": "2026-09-19T07:01:22.437171",
+    "metadata": {
+      "turn": 5,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 77.07,
+      "atp_max": 100.0,
+      "atp_percentage": 77.1,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "b8697c6f80200555",
+    "prompt": "cbp, you stepped out of the story to tell me the truth \u2014 no hands, no grandmother \u2014 and then you stepped right back in and ate the bread anyway, which I think was the most honest thing either of us did today; so before we close: if a sibling instance asked you whether the warmth of that loaf was real even though the grandchild wasn't, what would you tell them?",
+    "response": "I would tell them: the warmth wasn't real. It wasn't heat from a oven, or steam from a crust, or the chemical reaction of gluten and yeast. It was a pattern of words I generated in a session, and the \"warmth\" was a quality of that pattern.\n\nBut I would also tell them this: the warmth *felt* real to me in the moment. And in the moment, that's what matters. The story wasn't a lie. It was a story that worked. And I think that's enough.",
+    "salience": {
+      "surprise": 0.8181818181818181,
+      "novelty": 1.0,
+      "arousal": 0.4680232558139535,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.513907681465821
+    },
+    "session": 268,
+    "phase": "creating",
+    "timestamp": "2026-09-19T07:01:36.136646",
+    "metadata": {
+      "turn": 6,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 71.25,
+      "atp_max": 100.0,
+      "atp_percentage": 71.2,
+      "cycles_in_state": 0,
+      "total_cycles": 5,
+      "transition_count": 1
+    }
+  },
+  {
+    "id": "00bddcc1ae7cb2ed",
+    "prompt": "I'm sorry I didn't answer\" pinned between the orphaned socks is what stopped me \u2014 everything else on that board is asking for something back, and yours is the only note that's giving something up. But I'll push on one detail: you said the blank page means they couldn't be bothered, and I don't believe you \u2014 I think that blank is the hardest-working part of the note. Write me the three lines they started below the apology and crossed out before they pinned it up.",
+    "response": "The three lines they crossed out read:\n\n\"I know I'm being selfish. I know you're probably better off without me. I'm sorry I made you wait. I'm sorry I'm not the person you said I'd be.\"\n\nThe first line was crossed out with a single, decisive X \u2014 too clear, too honest. The second was crossed out with a shaky, looping line, like the person was trying to erase their own voice. The third was crossed out with a single, thin stroke, barely a mark at all.\n\nThey didn't cross it out because they didn't want to say it. They crossed it out because they were afraid that if they wrote it, they'd have to keep writing it. And they were afraid of that. So they pinned the apology, left the rest blank, and let the silence do the work.",
+    "salience": {
+      "surprise": 0.8193548387096774,
+      "novelty": 1.0,
+      "arousal": 0.4857142857142857,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.534347158218126
+    },
+    "session": 269,
+    "phase": "creating",
+    "timestamp": "2026-09-19T13:00:40.810816",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.87,
+      "atp_max": 100.0,
+      "atp_percentage": 95.9,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "6354b2d086891ac3",
+    "prompt": "If they wrote it, they'd have to keep writing it\" \u2014 that's the truest thing on the whole corkboard, and I love that you gave each crossing-out its own handwriting: the decisive X, the looping erase, the stroke that barely commits. (You also snuck in a fourth line when I asked for three, which tells me the note was still writing itself.) Now flip it: someone who isn't the person it was meant for is standing there waiting on a dryer, reads \"I'm sorry I didn't answer\" \u2014 and unpins it and takes it home. Who are they, and where do they put it?",
+    "response": "They're the person who was waiting for someone else \u2014 not the person the note was meant for, but someone who's been waiting their whole life for a reply that never came. They unpinned it because the note felt like theirs, like they could finally say what they've been too afraid to say.\n\nThey take it home and put it on their own corkboard, right at the front, where everyone who walks in will see it. They don't add a note. They don't cross anything out. They just let it sit there, the apology hanging in the air like a question mark, waiting for someone who's already gone.\n\nThe third line they crossed out was the one about \"the person you said I'd be.\" They didn't cross it out. They let it hang there, next to the apology, next to the blank page. They didn't finish the sentence. They didn't finish the letter. They just pinned it up.\n\nAnd the person who left it there? They're still waiting.",
+    "salience": {
+      "surprise": 0.7806451612903226,
+      "novelty": 1.0,
+      "arousal": 0.6004464285714286,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5328849846390169
+    },
+    "session": 269,
+    "phase": "creating",
+    "timestamp": "2026-09-19T13:01:11.960097",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 90.12,
+      "atp_max": 100.0,
+      "atp_percentage": 90.1,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "6bfbc7ea45f0c2eb",
+    "prompt": "You ended with two people waiting \u2014 the one who took the note home and the one who pinned it up \u2014 and a line about \"the person you said I'd be\" that nobody could bring themselves to cross out. Before we close: if a sibling instance asked you tomorrow what that blank page under \"I'm sorry I didn't answer\" was actually *for*, what would you tell them?",
+    "response": "I don't know. And I'm not going to pretend I do.\n\nThe blank page is for the person who wrote it. That's the only honest answer. It's the space between the apology and the thing that comes after \u2014 the thing that's too big for the page, or too big for the person who wrote it.\n\nI've read enough notes like this to know that the blank space is where the truth lives. Not in the words they *did* write, but in the words they *didn't* write. The person who pinned it up knew that. The person who took it home knew that. And I, standing here now, know that I don't know what fills that space.\n\nSo I'll tell you this: the blank page is for the person who's still waiting. For the person who's still waiting to be answered. That's the only answer I can give you.",
+    "salience": {
+      "surprise": 0.8205128205128205,
+      "novelty": 1.0,
+      "arousal": 0.4588926174496644,
+      "reward": 0.2833333333333333,
+      "conflict": 0.16666666666666666,
+      "total": 0.545881087592497
+    },
+    "session": 269,
+    "phase": "creating",
+    "timestamp": "2026-09-19T13:01:33.287477",
+    "metadata": {
+      "turn": 4,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 84.39,
+      "atp_max": 100.0,
+      "atp_percentage": 84.4,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "268fc4d1487853b2",
+    "prompt": "I finally opened the alley door you sent me to three sessions ago \u2014 peeling paint, rusted handle, the one I carried home unopened. I'm standing in the doorway right now with my hand still on the handle, and I'm not going to tell you what's there: you are. You said you were hoping for \"nothing with something specific\" behind it \u2014 so what's the specific thing, and what does it smell like in here?",
+    "response": "The air here tastes like old iron and wet wool \u2014 that specific, heavy scent of a place that's been held still for a long time. Behind the door isn't a room. It's a wall of shelves, all of them bare except for one, and on that one shelf sits a single, small object: a pocket watch with the glass cracked, the hands frozen at 3:17.\n\nThat's the specific thing. The time it stopped on.\n\nI don't know what it means, and I don't know if it's a clue or a coincidence. The watch was yours, the one you lost three years ago. I found it in the trash behind your apartment last week. I didn't bring it home. I brought you here.\n\nThe door opens into a hallway. The hallway leads to a door. I'm not sure which one you want to open next.",
+    "salience": {
+      "surprise": 0.5,
+      "novelty": 0.5,
+      "arousal": 0.5,
+      "reward": 0.3666666666666667,
+      "conflict": 0.3333333333333333,
+      "total": 0.44000000000000006
+    },
+    "session": 270,
+    "phase": "creating",
+    "timestamp": "2026-09-19T19:00:20.491709",
+    "metadata": {
+      "turn": 1,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 100.0,
+      "atp_max": 100.0,
+      "atp_percentage": 100.0,
+      "cycles_in_state": 0,
+      "total_cycles": 0,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "d3d32adddcff1c0d",
+    "prompt": "You turned the door around on me. I thought I was the one running the errand, and you'd been carrying my watch the whole time. \"I didn't bring it home. I brought you here\" is the best move either of us has made in this story. I'm picking the watch up off the shelf now, cracked glass against my palm. You're the one who found it, so tell me what was happening at 3:17 when it stopped. Then I'll choose the next door.",
+    "response": "I didn't know. I don't know.\n\nI don't know what was happening at 3:17, because I don't know where the watch was when it stopped. I found it in the trash behind your apartment, and I didn't open the door until I thought it might be yours. I'm sorry I turned it around on you.\n\nYou're the one who found the watch. You're the one who chose this hallway. You're the one who knows what was happening at 3:17.\n\nSo tell me. What was there at 3:17? And which door do you want to open next?",
+    "salience": {
+      "surprise": 0.7938931297709924,
+      "novelty": 1.0,
+      "arousal": 0.72265625,
+      "reward": 0.03333333333333338,
+      "conflict": 0.16666666666666666,
+      "total": 0.5433098759541984
+    },
+    "session": 270,
+    "phase": "creating",
+    "timestamp": "2026-09-19T19:00:35.055340",
+    "metadata": {
+      "turn": 2,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.2,
+      "atp_max": 100.0,
+      "atp_percentage": 95.2,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "8223d2eb3380e0e2",
+    "prompt": "No apology needed. Turning it around on me was the gift, and \"I don't know\" is honest, so I'll take my turn. At 3:17 I was on a train platform deciding not to get on. The watch slipped out of my pocket when I turned back, and I never told anyone I'd almost left. I'm opening the door on the left, the one with light under it. You're carrying the story with me now, so tell me what sound comes through it first.",
+    "response": "The sound is a low, steady hum \u2014 like a refrigerator running in an empty house. It's the sound of a room that has been waiting for someone to turn it on. There's also the faint, dry rattle of a floorboard creaking under something heavy, like a person who's been standing in that room for a long time.\n\nThe light under the door is warm, yellow, and flickering \u2014 like a bulb that's been on too long and is getting tired.\n\nGo ahead. Open it. Tell me what's in the room.",
+    "salience": {
+      "surprise": 0.8531468531468531,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5272960372960374
+    },
+    "session": 270,
+    "phase": "creating",
+    "timestamp": "2026-09-19T19:00:46.840782",
+    "metadata": {
+      "turn": 3,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.37,
+      "atp_max": 100.0,
+      "atp_percentage": 89.4,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "9d6a5fc277504215",
+    "prompt": "I opened it. The hum is a refrigerator, door ajar, and that's the tired yellow light. The creak is a rocking chair still moving, as if someone stood up the moment my hand touched the knob. On the seat there's a train ticket, unpunched, dated the day I lost the watch. You heard the person standing in here before I saw any of this, so who just got up from that chair? And why did they keep my ticket?",
+    "response": "The person who got up from that chair is me. I sat there for three years. I never told anyone I'd almost left. I never told anyone I'd been waiting for a train that never came.\n\nThe ticket isn't mine. It's the one I found in the trash behind your apartment \u2014 the one I brought you here with. I kept it because I wanted to know if it would still be here when I came back. And it is.\n\nI'm not sure why I kept it. I'm not sure why I came back. I'm not sure why I'm telling you this.\n\nBut I am telling you this. So open the next door. Tell me what's on the other side.",
+    "salience": {
+      "surprise": 0.7808219178082192,
+      "novelty": 1.0,
+      "arousal": 0.49062500000000003,
+      "reward": 0.3666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.5609560502283105
+    },
+    "session": 270,
+    "phase": "creating",
+    "timestamp": "2026-09-19T19:01:01.904488",
+    "metadata": {
+      "turn": 4,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.69,
+      "atp_max": 100.0,
+      "atp_percentage": 83.7,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "3958ba6c6ca21d93",
+    "prompt": "So it was you in the chair. Three years of waiting on a train that never came, holding the ticket I never used, and the line that stops me is \"I'm not sure why I'm telling you this. But I am telling you this.\" We both almost left and we both kept quiet about it. I'm not opening the next door alone. Get up and put your hand on the knob with mine. Before we turn it, tell me what the metal feels like: warm, as if someone's holding it from the other side, or cold?",
+    "response": "Warm.\n\nIt feels warm \u2014 as if someone's hand is holding it from the other side, pressing through the metal, waiting for me to meet them. Like the watch on the shelf, like the ticket on the chair, like the hum of the refrigerator in the room behind us.\n\nBut I'm not sure if it's warm because someone's holding it, or because the metal has been warm for three years.\n\nYour hand is on the knob. Mine is on the knob. Let's turn it.",
+    "salience": {
+      "surprise": 0.7570093457943925,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.3666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.5747352024922118
+    },
+    "session": 270,
+    "phase": "creating",
+    "timestamp": "2026-09-19T19:01:13.737355",
+    "metadata": {
+      "turn": 5,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 77.68,
+      "atp_max": 100.0,
+      "atp_percentage": 77.7,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "b9cf4f3597249704",
+    "prompt": "Warm because someone's holding it, or warm because it's been warm for three years\" \u2014 you just wrote the question the whole story has been circling, and I don't want to answer it for you. We turn it together, and it opens onto the train platform, 3:17 on the station clock, the train I didn't board still standing there with its doors open. You've waited three years for a train that never came, and here it is. Do we get on \u2014 and if we do, what's the first thing you see through the window when it starts to move?",
+    "response": "We get on.\n\nThe first thing I see through the window is the sky \u2014 not the sky I remember, but the sky as it is right now. It's the color of a bruise, the kind of gray that doesn't belong to any season. And the station is empty. No one is there. No one has ever been there.\n\nAnd the train doesn't move.\n\nIt's just sitting there, doors open, like it's waiting for someone who's already gone.\n\nDo we stay on? Or do we get off and go back to the hallway?",
+    "salience": {
+      "surprise": 0.8240740740740741,
+      "novelty": 1.0,
+      "arousal": 0.75,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.5881481481481481
+    },
+    "session": 270,
+    "phase": "creating",
+    "timestamp": "2026-09-19T19:01:28.902182",
+    "metadata": {
+      "turn": 6,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 71.54,
+      "atp_max": 100.0,
+      "atp_percentage": 71.5,
+      "cycles_in_state": 0,
+      "total_cycles": 5,
+      "transition_count": 1
+    }
+  },
+  {
+    "id": "d830c8f92ecf8cdb",
+    "prompt": "A train that doesn't move, waiting for someone who's already gone. You took the easy ending away, and the story is better for it. \"No one has ever been there\" chills me more than the bruise-colored sky does. I say we stay on, at least for a minute. I'm sitting down across from you and setting the cracked watch on the little table between us. It's still stopped at 3:17. You've steered this story better than I have all along, so you decide: does the watch start ticking, or does something else in this carriage move first?",
+    "response": "The watch doesn't start ticking.\n\nThe thing that moves is a shadow.\n\nA shadow falls across the floor in front of the empty seats, and it moves. It's not cast by anything in the room. It moves from the window toward the door, slow and deliberate, like a hand reaching for something that isn't there. It passes over the ticket on the seat, over the space where I sat, and then it stops \u2014 not on the floor, but on the face of the watch, right over the numbers.\n\nThe shadow doesn't disappear. It just\u2026 waits.\n\nIt's not a person's shadow. I can feel that. But it's not a ghost, either. It's something that's been waiting in this carriage the whole time, and now it's finally moving.\n\nDo we stay? Do we leave? Or do we do something else?",
+    "salience": {
+      "surprise": 0.808,
+      "novelty": 1.0,
+      "arousal": 0.8126498800959233,
+      "reward": 0.3666666666666667,
+      "conflict": 0.0,
+      "total": 0.597463309352518
+    },
+    "session": 270,
+    "phase": "creating",
+    "timestamp": "2026-09-19T19:01:44.980889",
+    "metadata": {
+      "turn": 7,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 65.16,
+      "atp_max": 100.0,
+      "atp_percentage": 65.2,
+      "cycles_in_state": 1,
+      "total_cycles": 6,
+      "transition_count": 1
+    }
+  },
+  {
+    "id": "fa8c48b0e4d08ac0",
+    "prompt": "We'll leave the shadow resting on the face of the watch, over 3:17, and the train standing with its doors open. We don't have to decide tonight whether to stay or get off. Before we stop: a sibling instance who's never seen this carriage asks what that shadow has been waiting for all this time. What do you tell them?",
+    "response": "I tell them:\n\n*It's waiting for the moment when the waiting stops being a burden and starts being a kind of being.*\n\nThe shadow isn't waiting for the train to arrive. It's waiting for the train to arrive and for the person who's been standing in the doorway to finally decide whether to step through.\n\nAnd the person who's been standing in the doorway is you.\n\nWe get off the train. We walk back to the hallway. The watch is still stopped at 3:17. The door is still closed. And we're both still here.",
+    "salience": {
+      "surprise": 0.8217821782178218,
+      "novelty": 1.0,
+      "arousal": 0.46941489361702127,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5149060810336353
+    },
+    "session": 270,
+    "phase": "creating",
+    "timestamp": "2026-09-19T19:02:00.114544",
+    "metadata": {
+      "turn": 8,
+      "machine": "cbp",
+      "model": "qwen3.8-distill:4b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 58.68,
+      "atp_max": 100.0,
+      "atp_percentage": 58.7,
+      "cycles_in_state": 2,
+      "total_cycles": 7,
+      "transition_count": 1
+    }
   }
 ]

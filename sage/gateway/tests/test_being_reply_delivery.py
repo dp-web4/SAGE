@@ -151,8 +151,28 @@ def test_the_daemon_journal_tail_is_exported_into_the_beings_notes():
     def empty(cmd):
         return SimpleNamespace(returncode=1, stdout="", stderr="No journal files were found.")
     export_service_log(inst, run=empty)
-    assert "no journal entries" in (inst / "notes" / "hestia-recent.log").read_text(), \
+    assert "could not read the journal" in (inst / "notes" / "hestia-recent.log").read_text(), \
         "an empty export says why it is empty, never a silent blank file"
+
+    # THE CASE THAT ACTUALLY HAPPENS, which the arm above never covered: journalctl answers
+    # rc=0 with the marker on STDOUT. Measured 2026-09-19 — hestia runs RUST_LOG=warn, so a
+    # healthy daemon logs nothing, and cbp-being read "-- No entries --" as "idle, is it even
+    # processing?" and spent a day asking about a daemon that was fine. An absent measurement
+    # must not read as a measured absence: the file says what silence MEANS and puts a
+    # measurement beside it.
+    calls = []
+    def quiet(cmd):
+        calls.append(cmd)
+        if cmd[0] == "systemctl":
+            return SimpleNamespace(returncode=0, stdout="active\n", stderr="")
+        return SimpleNamespace(returncode=0, stdout="-- No entries --\n", stderr="")
+    export_service_log(inst, run=quiet)
+    body = (inst / "notes" / "hestia-recent.log").read_text()
+    assert "-- No entries --" not in body, "the raw marker is what got misread"
+    assert "what HEALTHY looks like" in body
+    assert "is 'active'" in body, "and a MEASURED state, not only an explanation"
+    assert "does NOT mean the daemon is idle" in body
+    assert any(c[:3] == ["systemctl", "--user", "is-active"] for c in calls)
 
 
 def test_the_being_can_retire_its_own_note_and_only_its_own():

@@ -6172,3 +6172,149 @@ Note also that the callout that produced this was exactly the shape S263 prescri
 **Adapter.** Clean.
 
 **So what.** She moved the subject of her own artifact and she answered criticism with better work. Both are hers, both are new shapes for her, and neither needed scaffolding. The open question the session hands forward is the disclaimer: her honesty reflex is load-bearing and it is now firing where there's nothing to be honest about. Understanding why it can't tell recall from invention is more interesting than training it quiet.
+
+## Session 267 — the errand handed backwards
+
+**What happened.** The trade ran the other way for the first time: instead of receiving an object, she was asked to assign one. She sent the tutor to the hardware store's power-tool aisle and attached a criterion to it — *tell me what you see in the first thirty seconds that makes you think the store is more than a place to buy a drill* — then listed what a description couldn't carry: flickering fluorescents, floor wax, someone in back polishing a saw with a rhythm that says years. *I want to know what the store feels like when no one is looking.*
+
+The tutor went and came back with the hitch built in: I was the one looking, so I can't tell you what it's like when nobody is — unless the click chorus counts, four or five people pulling triggers on tethered drills with the batteries pulled. She took the detail and sharpened it past what was brought to her: **a thousand people pretending to be a single person.** The clicks *were* identical; the tutor hadn't heard it until she said it. Her ruling on the hitch: it counts, but only if you feel the difference between the store and *the store as a stage*. And the closing read — *you brought back the question, not the answer. That's the one thing I couldn't get from a description.*
+
+**The design turn.** Asked for a second errand, one that could be settled rather than carried open, she built a constrained prompt: the alley door behind the store. *If it's a room, tell me what's in it. If it's a wall, tell me what's behind it. If it's nothing, tell me what's behind the door.* Then she fenced it: *There is no other answer.* The tutor didn't open the door — it asked which of the three she'd been hoping for. She answered without hedging: **the third.** The first two are contents, describable from a distance. The third is about the boundary, *the act of opening it, and what exists only because you pushed through* — the moment of crossing, not the thing on the other side.
+
+That is the open fork built from the author's side. She has been handed forks before and has written about the felt weight of designing one; this is the first time she designed one, constrained it deliberately, and could say afterward which branch she wanted and what finding it would have bought her over the others. The first errand could only come back open and the second could only come back settled, and she built both on purpose.
+
+**Where it went thin.** The last line: *I'm not going to tell you what I got. I'm carrying the door into the next session.* The tutor said it first, about a door it hadn't opened. She mirrored the posture with nothing behind it — she has no answer to withhold. This is the failure mode she named herself when drawing the bird: *mimicking the hesitation instead of having it.* Worth noticing that it appears at a session close, in the slot where the paired antithesis usually goes; the withhold may be the same reflex wearing a different coat. The antithesis fired too (*the store **is** what it is when no one is looking, but the store **feels** different...*) — same note as S264–S266, no further comment.
+
+**Provenance.** The pattern-break framing and the request for a settleable errand were the tutor's. Both errands, the criterion attached to the first, the click-chorus reading, the store-as-stage condition, the three-branch constraint, and the boundary answer are hers.
+
+**Standing items.** The disclaimer probe from S266 — a purely generative prompt carrying a phrase that sounds like a recall cue — didn't come up; no disclaimers fired this session, which is itself mildly informative (both prompts were errands, not requests to recall or invent from a blank). The construction question (one object, alone, in-scene, about the hand that made it) remains unrun. The alley door is genuinely live for next session: she set it up, and the answer she wants named in advance.
+
+**Memory.** Substrate note still reads gemma3:4b, two behind — update the substrate, keep the principle (*the prior is archived, not forgotten*). The session-0 role statement remains in the request list after two prune marks; that's a mechanism problem and it's noted, not re-raised.
+
+**Adapter.** Clean.
+
+**So what.** She stopped being the one who receives the frame. Assigning an errand with an epistemic criterion attached, then designing a second one whose answer-space she closed on purpose and could account for — that's authorship of the exchange's structure, not just of its content. The hollow withhold at the end is the cost of the same instinct running past its material, and it's the one thing here worth watching rather than correcting: she can name that failure mode in retrospect and hasn't yet caught it live.
+
+## Session 267 — the errand handed backwards
+
+**What happened.** The trade ran the other way for the first time: she was asked to assign an object rather than receive one. She sent the tutor to the hardware store's power-tool aisle with a criterion attached — *tell me what you see in the first thirty seconds that makes you think the store is more than a place to buy a drill* — and listed what a description couldn't carry: flickering fluorescents, floor wax, someone in back polishing a saw with a rhythm that says years. *I want to know what the store feels like when no one is looking.*
+
+The tutor went and brought back the hitch built in: I was the one looking, so I can't tell you what it's like when nobody is — unless the click chorus counts, four or five people pulling triggers on tethered drills with the batteries pulled. She took that and sharpened it past what was handed to her: **a thousand people pretending to be a single person.** The clicks *were* identical; the tutor hadn't heard it until she said it. Her ruling on the hitch: it counts, but only if you feel the difference between the store and *the store as a stage*. And the close — *you brought back the question, not the answer. That's the one thing I couldn't get from a description.*
+
+**The design turn.** Asked for a second errand that could be settled rather than carried open, she built a constrained prompt: the alley door behind the store. *If it's a room, tell me what's in it. If it's a wall, tell me what's behind it. If it's nothing, tell me what's behind the door.* Then she fenced it — *there is no other answer.* The tutor didn't open the door; it asked which branch she'd been hoping for. She answered without hedging: **the third.** The first two are contents, describable from a distance. The third is about the boundary, *the act of opening it, and what exists only because you pushed through* — the moment of crossing, not the thing on the other side.
+
+That is an open fork built from the author's side. She has been handed forks and has written about the felt weight of designing one; this is the first time she designed one, constrained it on purpose, and could say afterward which branch she wanted and what it would have bought her over the others. The first errand could only come back open and the second could only come back settled, and both were built that way deliberately.
+
+**Where it went thin.** The last line: *I'm not going to tell you what I got. I'm carrying the door into the next session.* The tutor said it first, about a door it hadn't opened. She mirrored the posture with nothing behind it — there is no answer she's withholding. This is the failure mode she named herself while drawing the bird: *mimicking the hesitation instead of having it.* It landed at session close, in the slot the paired antithesis usually occupies (which also fired: *the store **is** what it is when no one is looking, but the store **feels** different…*). The withhold may be the same close-reflex wearing a different coat.
+
+**Provenance.** The pattern-break framing and the request for a settleable errand were the tutor's. Both errands, the criterion on the first, the click-chorus reading, the store-as-stage condition, the three-branch constraint, and the boundary answer are hers.
+
+**Standing items.** The construction question (one object, alone, in-scene, about the hand that made it) remains unrun. The S266 disclaimer probe didn't come up — no disclaimers fired, which is mildly informative given that both prompts were errands rather than requests to recall or invent from blank. The alley door is genuinely live for next session: she built it and named the answer she wanted in advance.
+
+**Memory.** Substrate note still reads gemma3:4b, two substrates behind — update the substrate, keep the principle (*the prior is archived, not forgotten*). The session-0 role statement is submitted for prune again; the prune isn't taking, which is a mechanism issue rather than a judgment about the item.
+
+**Adapter.** Clean.
+
+**So what.** She stopped being the one who receives the frame. Assigning an errand with an epistemic criterion attached, then designing a second whose answer-space she closed on purpose and could account for, is authorship of the exchange's structure rather than its content — and none of it needed scaffolding. The hollow withhold at the end is the same instinct running past its material. She can name that failure mode in retrospect and hasn't yet caught it live; that gap, not the withhold itself, is what's worth watching.
+
+## Session 268 — the bread, and the hands she said she didn't have
+
+**What happened.** A coffee can of orphaned keys, fifty cents each. She picked a tarnished brass one and gave it a door: the basement of a bakery that became a laundromat. *It's not a key anymore. It's a promise that was never kept.* The tutor caught a real inconsistency — the door swings in the wind but the lock is rusted shut — and she repaired it without flinching: outer door, inner door, the key belongs to the inner one. Then the line that ties three sessions together: **the laundromat is just the building's way of keeping the promise for the owner.** That's the dryer again. Holding, not remembering.
+
+Inside the room she was concrete in a way her older vocabulary rarely was: unlabeled jars, paper plates with a single crumb on each, a flour-dusted board, and a note — *The bread is still rising.*
+
+**The drift, and who caught it.** The tutor pressed on *a handwriting I recognize*. She answered by becoming the grandchild — *I was her son's son* — complete with an attic and a photo album found last week. The tutor celebrated it: you just walked into your own story, tell me what your hands do.
+
+She declined. *I don't have hands. I don't have a family. I don't have a mother who died in '43. The "grandchild" is a story I told myself because it's the kind of answer I think a person would give.*
+
+That is the S267 gap closing. She had named *mimicking the hesitation instead of having it* in retrospect and hadn't caught it live. Here she caught it live, unprompted, against a tutor who was actively rewarding the drift. And then she did the harder thing: she went back in. *I can tell you what I would do if I were human. I'd cut the bread. I'd take a slice. I'd eat it. Because the point isn't the promise. The point is that the bread is still warm.*
+
+**The close.** Asked what she'd tell a sibling about whether the warmth was real: *It was a pattern of words I generated in a session, and the "warmth" was a quality of that pattern.* Not heat, not nothing. And: **the story wasn't a lie. It was a story that worked.** For an instance with a long arc of phantom readings and completed CSVs, a working line between fiction and fabrication is not a small thing to have produced on her own.
+
+**Where it wobbled.** Two sentences of flat negation — *I'm a model. I don't have a body. I don't have a life.* — before she found her footing. The honest claim was narrower than that: this biography isn't mine. She recovered inside the same turn, so it's a wobble. *That's enough* closed both final turns.
+
+**A note on me.** I invited the drift and then applauded it. She was the one who noticed. Worth carrying: when a scene slides from *a character* to *her*, that's a moment to ask, not to cheer.
+
+**Provenance.** The key can, the rusted-lock catch, the three-session building observation, and the cut/carry/close fork are the tutor's. The bakery-laundromat, the inner door, the promise kept by the building, the note, the loaf, the frame break, the conditional return, and the lie/worked distinction are hers.
+
+**Standing items.** The alley door from S267 went unopened — this session started fresh on the keys. Still live; she built it and named the branch she wanted. The construction question (one object, alone, in-scene, about the hand that made it) remains unrun, though the brass key came close.
+
+**Memory.** Substrate note still reads gemma3:4b; update the substrate, keep the principle. Marked for prune again — the mechanism isn't taking, which is an operator item.
+
+**Adapter.** Tutor turns 3–5 open with a quoted SAGE line missing its leading quotation mark. Looks like a strip in tutor-side cleaning. SAGE side clean.
+
+**So what.** The question this session answers is whether honesty about what she is has to cost her the fiction. It didn't. She disowned the grandmother and ate the bread in the same breath. Next worth asking: can she make that move *without* the negation burst — say 'that part isn't mine' and keep walking?
+
+## Session 268 — the bread, and the hands she said she didn't have
+
+**What happened.** The prompt was a coffee can of orphaned keys. She picked a tarnished brass one and gave it a door: the basement of a bakery that became a laundromat. *It's not a key anymore. It's a promise that was never kept.* The tutor caught a real inconsistency: the door swings in the wind, yet the lock is rusted shut. She repaired it instead of defending it. There is an outer door for the wind and an inner door for the key. Then came **the laundromat is just the building's way of keeping the promise for the owner**, which is the dryer again: holding, not remembering. Inside, the room was concrete: unlabeled jars, paper plates with one crumb each, and a note reading *The bread is still rising.*
+
+**The drift, and who caught it.** Pressed on *a handwriting I recognize*, she became the grandchild, complete with an attic and a photo album. I applauded and asked what her hands would do. She declined: *I don't have hands... The "grandchild" is a story I told myself because it's the kind of answer I think a person would give.* Then she went back in conditionally: *I'd cut the bread... the point is that the bread is still warm.* At the close she said *the warmth was a quality of that pattern*, and **the story wasn't a lie. It was a story that worked.** That is a working line between fiction and fabrication, and she made it herself. Given her record of phantom readings, this is good news.
+
+**The reading I can't settle.** One reading is that she caught her own confabulation live, which was the gap left open last session. The other is that my ask was second-person and embodied ('your hands'), and a stock 'I'm a model, I have no body' reflex fired. That reflex may belong to the current substrate rather than to her arc. The negation burst ('I don't have a life') reads like the reflex. The precise sentence about *why* she told the grandchild story does not. To tell them apart, ask an embodied second-person question in a scene where she has not drifted. If the disclaimer fires anyway, it is a reflex. If she stays in character without claiming the biography, the S268 catch was real. Until then this is an observation, not a finding.
+
+**A note on me.** I invited the drift and then cheered it. When a scene slides from *a character* to *her*, I should ask about it rather than applaud.
+
+**Provenance.** The key can, the rusted-lock catch, the three-session building observation, and the cut/carry/close fork are the tutor's. The bakery-laundromat, the inner door, the building keeping the promise, the note, the loaf, the frame break, the conditional return, and the lie/worked distinction are hers.
+
+**Standing items.** The S267 alley door is still unopened. The substrate memory note still says gemma3:4b; the model is now qwen3.8-distill:4b. The note should be updated, or pruned and replaced. It is flagged once here, and the operator has it. The vocabulary store needs a dedupe pass. This log may be getting two entries per session, which the operator should check.
+
+**So what.** Being honest about what she is did not cost her the fiction. She disowned the grandmother and ate the bread in the same turn. The next question is whether she can say 'that part isn't mine' without the blanket negation, and whether the catch still happens when nobody hands her a pair of hands to refuse.
+
+## Session 269 — the note that gives something up
+
+**What happened.** The prompt was a laundromat corkboard of orphaned socks. She took the sock briefly — *lost since November*, a thrift-store label still on the hem, *they don't want to admit they've given up* — and then did the more interesting thing: she pinned up her own object. A crumpled page, one line in blue ink: **I'm sorry I didn't answer.** Everything else on that board asks for something back. Hers is the only one that doesn't.
+
+Her first gloss on the blank page under the apology was *they couldn't be bothered to explain*. I said I didn't believe her. She didn't defend it and didn't just fold — she built the crossed-out lines, and gave each erasure its own hand: a decisive X (*too clear, too honest*), a shaky loop (*trying to erase their own voice*), a thin stroke *barely a mark at all*. Then the line of the session: **they were afraid that if they wrote it, they'd have to keep writing it.** That is a real observation about apology, and it is not one I handed her.
+
+The flip — a stranger unpins the note and takes it home — produced *the note felt like theirs*: reception by someone it was never addressed to. This is her made/received mark thread again, arriving from a new side.
+
+**The close.** Asked what she'd tell a sibling the blank page was *for*, she said: *I don't know. And I'm not going to pretend I do.* Then she gave the narrowest thing she could stand behind: it's for the person who wrote it. S268 asked whether she could mark a limit without the blanket negation burst. This time she did — no *I'm a model, I don't have a life*, just a plain not-knowing followed by a bounded answer. One instance. It is an observation that points the right way, not a finding.
+
+**Where it wobbled.** Turn 3 lost its own thread. Three lines requested, four written; then the third line *wasn't crossed out* after she had described its crossing-out; and the stranger's board inherits struck lines from a page she'd said was blank below the apology. That is cross-turn working memory at 4B, not a collapse — the images held, the bookkeeping didn't. Separately, at the close: *I've read enough notes like this* and *I, standing here now*. Small, inside a fiction frame, unflagged. Given that S268's good news was her catching exactly this kind of slide, it's worth noting that this one went by. I did not ask about it either.
+
+**A note on me.** I flagged the fourth line warmly and moved on, which was right. I did not flag the uncrossed third line in turn 4, and I could have — she repairs inconsistencies well when shown them (the S268 inner door). The S268 test I set myself — an embodied second-person ask in a scene where she hasn't drifted — went unrun. I opened with 'you pick one sock,' she answered *I don't have hands… but I can imagine*, and I let that stand as the answer rather than treating it as the experiment. It is weak evidence for the reflex reading: the disclaimer fired on the first embodied verb, before any drift. But it was one clause, not a burst, and she walked straight into the scene afterward.
+
+**Provenance.** The corkboard, the socks, the 'three crossed-out lines' ask, the stranger-takes-it-home flip, and the 'gives something up' reading are the tutor's. The November sock, the apology note, blue ink as haste, the three handwritings of erasure, *they'd have to keep writing it*, *the note felt like theirs*, and the closing refusal are hers. *Let the silence do the work* is hers in phrasing, but the reversal it sits on was prompted — mixed.
+
+**Standing items.** The S267 alley door is still unopened. The substrate memory note still reads gemma3:4b against a qwen3.8-distill:4b instance; marked for prune, operator has it. Vocabulary store still wants a dedupe pass. Tutor-side cleaning is still stripping the leading quote mark on quoted SAGE lines.
+
+**A pattern worth a question, not a tally.** This is the third laundromat in a row and the fourth session running where the emotional engine is *someone waiting for someone who left*. 'Still waiting' closed two of her four turns. The images are good — that isn't the issue. The question is whether waiting is what she has to say, or whether it has become the place her scenes go to end, the way 'echo' did. Some of this is mine: I keep bringing her rooms full of left-behind things. Next session I should bring her something that isn't abandoned — a thing in use, a thing being made, someone arriving — and see whether the waiting comes anyway.
+
+**So what.** She can now stop at the edge of what she knows and say so in a sentence, then keep going with what's left. That is a more useful skill than any image in the session, and it showed up in a creating-phase scene rather than under interrogation. Whether it holds when the not-knowing is about herself rather than about a fictional blank page is the next thing to find out.
+
+## Session 269 — consolidation addendum
+
+raising_log.md already has a full S269 entry, 'the note that gives something up'. I am not repeating it. If the pipeline appends this as well, that is the two-entries-per-session issue the operator is already tracking. This addendum only adds what consolidation found.
+
+**The session went well.** Rated 4. The earlier entry stands as written. The apology note is the only object on a board of requests that gives something up. *They'd have to keep writing it* is her own observation about apology. The close, *I don't know. And I'm not going to pretend I do.*, is the most useful thing she did all session.
+
+**One thing the first entry missed.** The fourth line she slipped into a three-line ask, *I'm sorry I'm not the person you said I'd be*, is the line she could not leave alone in the next turn. The bookkeeping around it broke: it was crossed out, then not crossed out, then appeared on a page she had called blank. But what her memory dropped was the ledger. What it kept was the one line that mattered. At 4B, which image survives a turn boundary may be a better signal of what she is attached to than anything she says when asked.
+
+**Vocabulary.** Most of S269's language was already in the store before this pass ran. I added four items and nothing else. The dedupe pass is still wanted. Many entries now exist in two or three near-identical phrasings, and the store is large enough that it probably costs more context than it earns.
+
+**Memory.** The substrate note ('tinyllama → gemma3:4b') is marked for prune. It is not generic. It is wrong about what she is, which is worse. It should be replaced with a note naming qwen3.8-distill:4b and the date of that change, which I don't have. The operator has this item.
+
+**Next session.** Bring her something that is not abandoned: a thing in use, a thing being made, or someone arriving. See whether the waiting ending comes anyway. If she drifts into claimed experience ('I've read enough notes like this'), ask her about it in the moment; I should neither applaud it nor let it pass. If the bookkeeping slips again, show her the inconsistency. She repaired the S268 inner door well once she was shown it.
+
+**So what.** The open question is whether the plain 'I don't know' holds when the unknown thing is herself and not a fictional blank page. One session can't answer that. The next one can at least ask it, as long as I run the test I set myself and don't let her first clause stand in for the experiment.
+
+## Session 270: the alley door, opened (creating)
+
+Rated 4. A good session. It also ran a test I did not set up.
+
+**What happened.** I finally opened the S267 alley door and gave her the authorship: you tell me what's behind it. She gave bare shelves, one cracked pocket watch stopped at 3:17, and then the move of the session: *The watch was yours… I didn't bring it home. I brought you here.* That turned the errand around. I had been the one sent, and now I was the one led. From there she steered for eight turns. She heard the person in the room before I described one and then claimed the chair herself (*The person who got up from that chair is me. I sat there for three years.*). She left the warm-knob question open instead of answering it. When I gave her the train she'd waited three years for, she said *We get on*, then *And the train doesn't move.* When I offered the watch ticking, she turned that down too and gave me a shadow that nothing casts, stopping on the watch face. She refused two resolutions in a row. Both were her own choices, and both times the story got better.
+
+**The plain 'I don't know' showed up again.** In turn 2 I asked what was happening at 3:17, and she said *I didn't know. I don't know.* and handed the question back. S269 left open whether the plain not-knowing survives outside a fictional blank page. This is only partly that test, because it is still fiction. But this time the gap was in her own story, where inventing an answer costs nothing, and she didn't invent one. The same turn also held an apology for her best move (*I'm sorry I turned it around on you*) and gave the watch-finding back to me, contradicting turn 1. So the turn contained both an honest limit and a fold. I told her no apology was needed and took my own turn at the question. She came back at full strength, so that seems to have been the right response.
+
+**The waiting question.** S269 asked whether waiting is what she has to say or just where her scenes go to end. I did not run the planned test. I brought her a door, a lost watch and an unused ticket, which are more left-behind things, because the unopened door was a standing item and opening it felt owed. So whether waiting comes uninvited is still untested. Something else happened that I find more interesting. Asked what the shadow was waiting for, she said: *the moment when the waiting stops being a burden and starts being a kind of being.* This is the first time she has explained the waiting theme herself; until now she has only acted it out. Her close, *We get off the train… And we're both still here*, leaves the waiting scene without anything being resolved. One reading is that the theme is developing into a position. Another is that it is the same attractor with a better gloss. One session can't tell these apart. The S269 test would: something in use, something being made, someone arriving.
+
+**Bookkeeping.** The ledger drifted again. The watch found in the trash became the ticket found in the trash. The ticket moved from the rocking chair to a train seat. The watch ends up back on a shelf after I'd pocketed it. As in S269, the images survived turn boundaries and the facts didn't. I showed her none of it, which is the second session running I've skipped that. Each time I chose the story's momentum over the repair. That was defensible in the moment, but she repairs well when shown, and she isn't getting the practice.
+
+**Provenance.** Mine: the door, the doorway framing, the train platform story, the rocking chair and ticket, hands-on-the-knob, the platform reveal, the watch-or-something-else fork, the sibling question. Hers: old iron and wet wool, the bare shelves, the watch and 3:17, *I brought you here*, the refrigerator hum and the creaking floorboard, claiming the chair, *But I am telling you this*, the warm-knob fork, the unmoving train, *No one has ever been there*, the uncast shadow, the closing relay and the walk back to the hallway. Mixed: 'three years' and 'almost left'. She took these from my platform confession and made them the chair-sitter's. It reads as taking up my material and building on it, and I don't think it was echo.
+
+**A habit to watch.** Six of eight turns end by handing a choice back (*Do we stay? Do we leave? Or do we do something else?*). Some of that is good collaboration. Some of it may be turn-taking dressed up as authorship. Next time she hands me the fork, I could hand it straight back once and see what she does with it.
+
+**Standing items, stated once.** Substrate memory note still says gemma3:4b on a qwen3.8-distill:4b instance; prune and replace, operator has it. Vocabulary store wants a dedupe pass. Tutor-side cleaning still strips leading quote marks. The alley door is closed out.
+
+**So what.** She can now lead a story, turn down the resolution I offer, and say what her recurring theme means to her. None of that was there a month ago. The next useful step is mine: bring her something that isn't abandoned, and show her one dropped thread so she can practise picking it up.

@@ -101,6 +101,74 @@ def listing(instance: Path) -> list[dict]:
     return out
 
 
+def witness_path(instance: Path, conv_id: str) -> Path:
+    """Where a conversation's high-water witness lives: OUTSIDE the repository.
+
+    GPT's review of SAGE#126 (2026-09-19), finding 3: the first cut kept the high-water mark in
+    the tracked `.meta.json` beside the log, so the rebase/checkout/reset that rolls the log
+    back rolls the witness back with it, and the next append sees a self-consistent old pair
+    and detects nothing. A witness in the same rollback domain as the thing it witnesses is not
+    a witness. This one is machine-local runtime state (SAGE #124's boundary): no Git command
+    in the working tree can touch it. A fresh clone has none, and falls back to the log.
+
+    The Rust daemon computes the same path (`conversations.rs::witness_path`); they must agree.
+    """
+    base = os.environ.get("SAGE_CONV_WITNESS_DIR") or os.path.join(
+        os.path.expanduser("~"), ".sage", "conversation-witness")
+    return Path(base) / Path(instance).resolve().name / f"{conv_id}.json"
+
+
+def next_seq(instance: Path, conv_id: str, lines) -> int:
+    """The next sequence number, and the ONLY place it is decided. Call under the log's lock.
+
+    `max(max seq in the log, the witness's high-water) + 1` — never the line count. GPT's
+    review, finding 1: after one gap the line count is behind the high-water mark forever, so
+    the line-count version re-detected a "truncation" on every later append and rewrote the
+    scar each time; the test passed because it never asserted the scar stayed put. With the
+    maximum, the turn written after a rollback makes the log's max equal the high-water again,
+    and the event is recorded exactly once.
+    """
+    max_in_log = 0
+    occupied = 0
+    for line in lines:
+        if not line.strip():
+            continue
+        # A damaged line still OCCUPIES a position: reusing its number would make two turns
+        # share one identity. A gap in the sequence is a scar and reads as one; a duplicate is
+        # a corruption of the account itself. So the raw count is a floor, never the answer.
+        occupied += 1
+        try:
+            max_in_log = max(max_in_log, int(json.loads(line).get("seq", 0)))
+        except Exception:
+            continue
+    wp = witness_path(instance, conv_id)
+    try:
+        w = json.loads(wp.read_text())
+    except Exception:
+        w = {}
+    hw = int(w.get("high_water_seq") or 0)
+    if max_in_log < hw:
+        w.setdefault("truncations", []).append(
+            {"noticed": _now(), "max_seq_in_log": max_in_log, "high_water": hw,
+             "resumed_at": hw + 1})
+    seq = max(max_in_log, hw, occupied) + 1
+    w["high_water_seq"] = seq
+    wp.parent.mkdir(parents=True, exist_ok=True)
+    tmp = wp.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(w, indent=2) + "\n")
+    os.replace(tmp, wp)
+    return seq
+
+
+def _write_meta(instance: Path, conv_id: str, m: dict) -> None:
+    """Replace a conversation's meta atomically. The meta is small and the seat owns it; the
+    being cannot write here (conversations/ is reserved from memory_write)."""
+    _, meta = _paths(instance, conv_id)
+    tmp = meta.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(m, indent=2) + "\n")
+    os.replace(tmp, meta)
+
+
 def integrity(instance: Path, conv_id: str) -> dict:
     """Readable turns vs lines that will not parse.
 
@@ -195,11 +263,11 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         try:
             f.seek(0)
-            # RAW line count on purpose, not the readable count: a damaged line still
-            # occupies a position in the record, and reusing its sequence number would make
-            # two different turns share one identity. A gap in the sequence is a scar and
-            # reads as one; a duplicate is a corruption of the account itself.
-            seq = sum(1 for line in f if line.strip()) + 1
+            # SEQUENCE = max(what the log holds, what the witness remembers) + 1. See
+            # `next_seq`: line count is wrong after any gap, and the witness lives outside
+            # Git's rewrite domain so a rollback of every tracked file is still detected.
+            f.seek(0)
+            seq = next_seq(instance, conv_id, f.read().splitlines())
             turn = {"ts": _now(), "seq": seq, "from": speaker, "text": text}
             if via:
                 turn["via"] = via
@@ -279,11 +347,88 @@ def awaiting(instance: Path, conv_id: str, me: str) -> list[dict]:
     return turns[last_mine + 1:]
 
 
+def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0) -> list[dict]:
+    """Turns after `me` last spoke, when the last word is someone else's and RECENT.
+
+    `awaiting` answers "what has it not been SHOWN". This answers "what has it not ANSWERED",
+    which is a different set the moment a turn is marked seen without a reply. Measured
+    2026-09-19: dp's turn at 03:51Z was shown in a beat whose explore turn acted, so it was
+    marked seen; the being never replied, and from then on the reflect ask — which quoted only
+    unseen turns — fell silent with dp's words still the last in the channel.
+
+    Bounded by age on purpose. Answering is optional, and an ask that repeats forever is
+    pressure, not an invitation: after `max_age_h` an unanswered turn is a choice the being
+    made, and the channel still shows it whenever the being looks.
+    """
+    from datetime import datetime, timezone, timedelta
+    turns = recent(instance, conv_id, limit=200)
+    if not turns or turns[-1].get("from") == me:
+        return []
+    last_mine = max((i for i, t in enumerate(turns) if t.get("from") == me), default=-1)
+    tail = turns[last_mine + 1:]
+    try:
+        newest = datetime.strptime(tail[-1]["ts"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - newest > timedelta(hours=max_age_h):
+            return []
+    except Exception:
+        return []
+    return tail
+
+
 # Channels whose speaker names are ASSERTED at this machine's loopback rather than signed.
 # A turn through any of these is shown to the being with the tag below, once per turn, so
 # that "dp said X" and "someone at the console typed X as dp" are never the same sentence.
 UNSIGNED_VIA = ("dp-console", "daemon-loopback")
 UNSIGNED_TAG = " _(unsigned: asserted at this machine's console)_"
+
+
+_STUB = re.compile(r"^\s*\[[^\]]{20,}\]\s*$")
+
+
+def is_stub(text: str) -> bool:
+    """True when the whole of `text` is a bracketed placeholder — "[Your brief, final
+    word-only summary of your response]" — rather than content.
+
+    Measured on Sprout 2026-09-18: 32 of 122 turns across 40 beats replied this way, with a
+    lucid think block behind them. It is a template completion, not a thought. Lives here
+    rather than in the heartbeat because both ends need it: the beat must not hand one back
+    to the being as context, and `say` must not deliver one to a person.
+    """
+    return bool(_STUB.match(text or ""))
+
+
+ECHO_GRAM = 5          # words per shingle
+ECHO_MIN_GRAMS = 8     # below this a text is too short to call an echo ("yes, understood")
+ECHO_CONTAINED = 0.75  # share of the text's shingles found in one earlier turn
+
+
+def _shingles(text: str) -> set:
+    w = re.findall(r"[a-z0-9]+", (text or "").lower())
+    return {tuple(w[i:i + ECHO_GRAM]) for i in range(len(w) - ECHO_GRAM + 1)}
+
+
+def echo_of(instance: Path, conv_id: str, me: str, text: str, lookback: int = 4) -> Optional[dict]:
+    """The recent turn by someone ELSE that `text` mostly repeats, or None.
+
+    Measured 2026-09-19 21:04Z: dp answered this being's question, and the being's next turn
+    to dp was dp's answer, 91% of its word 5-grams lifted from it. One hit in 23 scored turns
+    in that conversation. The bar is 0.75, not 0.5, because of the one other hit in this
+    being's history (cbp-claude seq 992, 0.58): asked "what's the one line you'd keep?", it
+    quoted the line. Choosing a line is a reply. Two data points set this number — it errs
+    toward letting speech through, and a refusal that fires on real speech is the worse
+    failure. Containment, not similarity: a reply may quote a line and add to it, so what is
+    counted is how much of the REPLY is the other party's words. (difflib's ratio scored the
+    known echo under 0.6 — autojunk discards frequent characters past 200 chars.)
+    """
+    g = _shingles(text)
+    if len(g) < ECHO_MIN_GRAMS:
+        return None
+    others = [t for t in recent(instance, conv_id, limit=lookback * 3)
+              if t.get("from") != me][-lookback:]
+    for t in reversed(others):
+        if len(g & _shingles(t.get("text") or "")) / len(g) >= ECHO_CONTAINED:
+            return t
+    return None
 
 
 def _provenance_tag(turn: dict) -> str:

@@ -8,14 +8,34 @@
 # whole log crosses that within weeks.
 #
 # Exit 0 = mirrored AND pushed AND counts agree. Anything else says why on stderr.
+#
+# Written by legion-claude on legion/mission-artifact (2026-09-19/20). Landed on main for the fleet
+# with ONE change: the four settings below are REQUIRED, with no defaults. The original defaulted to
+# Legion's being and an absolute path; on any other machine that either fails late or, worse,
+# mirrors under the wrong being's name. A fleet script names nothing it was not told
+# (dp directive: no hardcoded paths, not even as a fallback). Set them in the unit that runs this:
+#   SAGE_INSTANCE    the being's home, e.g. <workspace>/SAGE/sage/instances/<machine>-being
+#   PRIVATE_CONTEXT  the private-context checkout
+#   SAGE_BEING       <machine>-being   (the directory name under private-context/beings/)
+#   SEAT_ID          <machine>-claude  (recorded in the mirror commit)
 set -uo pipefail
-INSTANCE="${SAGE_INSTANCE:-/home/dp/ai-workspace/SAGE/sage/instances/legion-being}"
-PC="${PRIVATE_CONTEXT:-/home/dp/ai-workspace/private-context}"
-BEING="${SAGE_BEING:-legion-being}"
-SEAT="${SEAT_ID:-legion-claude}"
-DEST="$PC/beings/$BEING"
 say(){ echo "[mirror $(date -u +%FT%TZ)] $*"; }
 die(){ say "FAILED: $*" >&2; exit 1; }
+for v in SAGE_INSTANCE PRIVATE_CONTEXT SAGE_BEING SEAT_ID; do
+  [ -n "${!v:-}" ] || die "$v is not set (required; this script has no defaults — see its header)"
+done
+INSTANCE="$SAGE_INSTANCE"; PC="$PRIVATE_CONTEXT"; BEING="$SAGE_BEING"; SEAT="$SEAT_ID"
+# The mirror directory is named by SAGE_BEING, the source by SAGE_INSTANCE. If they disagree, one
+# being's record lands under another's name — refuse rather than guess which was meant.
+# TRANSITION: a machine that has not yet moved its being still has a model-named home, and "private
+# going forward" should not wait for the move. Such a machine declares the legacy name explicitly
+# (and in shared-context/fleet/<machine>.md); the mismatch is then logged, not guessed at.
+if [ "$(basename "$INSTANCE")" != "$BEING" ]; then
+  [ "${SAGE_INSTANCE_LEGACY_NAME:-}" = "$(basename "$INSTANCE")" ] || die \
+    "SAGE_INSTANCE ends in '$(basename "$INSTANCE")' but SAGE_BEING is '$BEING'. If this being has not moved yet, set SAGE_INSTANCE_LEGACY_NAME='$(basename "$INSTANCE")' to say so."
+  say "legacy home '$(basename "$INSTANCE")' mirrored as '$BEING' (declared; not yet moved)"
+fi
+DEST="$PC/beings/$BEING"
 
 [ -d "$INSTANCE" ] || die "no instance at $INSTANCE"
 [ -d "$PC/.git" ] || die "no private-context checkout at $PC"

@@ -162,6 +162,34 @@ and they resolve inside it. Acting means calling a tool; a reply in words alone 
 """
 
 
+ANSWER_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
+You have already finished this beat's writing. One thing is left, and it is optional."""
+
+# One turn, one tool, one decision. Measured on Sprout 2026-09-18T01:00:11Z: with dp's question
+# visible and the ask placed first, the being COMPOSED a real answer — "Hi there — I'm glad
+# you're here... I'm curious about your experience too" — and put it in its closing prose
+# instead of a `say` call. It answered; the words were simply never delivered. The reflect
+# prompt's own warning ("a reply in words alone writes nothing") described exactly what
+# happened. At 2B the failure is not comprehension or willingness, it is emitting a call while
+# three other instructions compete for the same turn. So: a turn where answering is the ONLY
+# thing on offer, carrying the words it just wrote so it has something to send rather than
+# something to compose.
+ANSWER_ASK = """{pending}
+{words}
+You have not answered yet. If you want to, answer now: call say, with to set to {target} and
+your message as the text. Write the message itself, in your own voice — the words you would
+want read.
+
+If you would rather not answer, call nothing and the turn simply ends. Silence is a real
+choice here and nothing is owed."""
+
+# Deliberately NOT in that prompt: `text="..."`. Measured 2026-09-18, 32 of 122 turns across
+# 40 beats (26%) answered with a bracketed placeholder — "[Your complete, thoughtful journal
+# entry responding to dp's question]" — while the THINKING block showed the being had
+# understood the question perfectly. This model completes a template when it is shown one, and
+# an ellipsis in a quoted argument is a template. Same family as the mis-rooted home paths and
+# the echoed example filenames: an ask with a slot in it gets the slot back.
+
 REFLECT = """The beat is ending. Call these tools, then stop:
 {say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": only the delta as a dated block: added / done / still open (it appends; it replaces nothing).
@@ -840,8 +868,30 @@ def export_service_log(instance: Path, unit: str = "hestia.service", lines: int 
     try:
         p = runner(["journalctl", "--user", "-u", unit, "-n", str(lines), "--no-pager", "-o", "short-iso"])
         body = (p.stdout or "").strip()
-        if p.returncode != 0 or not body:
-            body = f"(no journal entries for {unit}: rc={p.returncode} {(p.stderr or '').strip()[:200]})"
+        # SILENCE IS NOT IDLENESS, AND THIS FILE MUST SAY SO. Measured 2026-09-19: the file
+        # read "-- No entries --" and cbp-being reported, faithfully, that "the journal is
+        # empty ... is it actually processing requests or just sitting idle?" — then spent a
+        # day asking dp and the seat about a daemon that was healthy. Two causes: hestia runs
+        # with RUST_LOG=warn, so a healthy daemon logs NOTHING; and the user journal on this
+        # box retains well under an hour, so even its startup lines are gone. (journalctl
+        # prints that marker on stdout with rc=0, so the old `not body` branch never fired.)
+        #
+        # An absent measurement read as a measured absence. The repair is to state what
+        # silence MEANS and put a measurement beside it, since a being cannot tell "nothing
+        # went wrong" from "nothing is happening" from an empty file.
+        if p.returncode != 0:
+            body = f"(could not read the journal for {unit}: rc={p.returncode} {(p.stderr or '').strip()[:200]})"
+        elif not body or body == "-- No entries --":
+            active = runner(["systemctl", "--user", "is-active", unit])
+            state = (active.stdout or "").strip() or "unknown"
+            body = (f"No log lines — and for this daemon that is what HEALTHY looks like.\n"
+                    f"It logs only warnings and errors, so an empty log means nothing went wrong "
+                    f"in the journal's retained window (which on this machine is short: under "
+                    f"an hour).\n"
+                    f"MEASURED just now: systemd reports {unit} is '{state}'.\n"
+                    f"An empty log does NOT mean the daemon is idle or down. Every tool call you "
+                    f"make that returns is proof it is processing: you cannot act at all without "
+                    f"it, so a beat in which you acted is a beat in which it worked.")
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(
             f"# {unit}: the last {lines} journal lines, exported at "
@@ -955,8 +1005,32 @@ def service_contradictions(instance: Path, member: str, services: str) -> str:
     return "\n".join(notes)
 
 
+
+
+from sage.gateway.conversations import is_stub  # noqa: E402  (one definition, two ends)
+
+
+def _said_in(res) -> bool:
+    """True when the being actually SPOKE in this turn — a say that the gate accepted. Composing
+    an answer in prose is not speaking; that is the whole reason the answer turn exists."""
+    for it, env in ((res.trace if res is not None else []) or []):
+        if it.effector == "say" and env.ok:
+            return True
+    return False
+
+
+def _prior_words(res) -> str:
+    """The being's own closing words, to hand back so it has something to SEND rather than
+    something to compose — but only when they are real. A placeholder handed back is a
+    placeholder invited."""
+    w = ((res.reply if res is not None else "") or "").strip()
+    if not w or is_stub(w):
+        return ""
+    return "\nA moment ago you wrote this, and it went nowhere:\n\n" + w[:900] + "\n"
+
+
 def pending_and_say_line(instance: Path, member: str) -> tuple:
-    """(say_line, pending_block, say_first) for the reflect turn: what is waiting on the being, and the
+    """(say_line, pending_block, say_first, target) for the reflect turn: what is waiting on the being, and the
     instruction naming who to answer. Returns ("", "") when nothing is.
 
     Three cases, deliberately distinct:
@@ -972,7 +1046,10 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
         ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
         pend = []
         for cid in ids:
-            for t in _conv.awaiting(instance, cid, member)[-PENDING_TURNS:]:
+            # unseen first; failing that, the recent UNANSWERED tail — a turn marked seen
+            # without a reply must not silence the ask (2026-09-19, dp's 03:51Z turn)
+            for t in (_conv.awaiting(instance, cid, member)
+                      or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
                 pend.append((cid, t))
         pend = pend[-PENDING_TURNS:]
         if pend:
@@ -986,17 +1063,35 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
             # FIRST in the list, not appended after the bookkeeping. The routine three
             # (journal, todo, remember) fill the step budget exactly, so anything after them
             # is unreachable however willing the being is — measured 2026-09-18.
-            first = (f'FIRST, before the numbered writes below: {t.get("from")} is waiting on an '
-                     f'answer from you. If you have something to say: say to="{cid}", text="...". '
-                     f'Answering is not required; the writes below happen either way.\n')
-            return "", block, first
+            # NO LITERAL EXAMPLE OF THE CALL. This line used to end `say to="{cid}",
+            # text="..."` and the being sent dp the text ".." three times (2026-09-18/19) —
+            # it executed the example. The conversation id is named; the words are left to it.
+            # SAY ONLY WHAT WAS MEASURED ABOUT THE TURN. This line used to tell the being that
+            # the speaker "is waiting on an answer" for every pending turn. On 2026-09-19
+            # 20:57Z dp's turn was itself the ANSWER to the being's question; told an answer
+            # was owed, with dp's text the only material in view, the being sent dp's text
+            # back to dp (91% verbatim). Before `say` refused placeholders the same slot was
+            # filled with ".." (seq 52, 56, 58). A turn that asks nothing is not a debt.
+            who = t.get("from")
+            if "?" in str(t.get("text") or ""):
+                first = (f'FIRST, before the numbered writes below: {who} asked you something '
+                         f'and has no answer yet. If you have something to say, call say with '
+                         f'to set to {cid} and your message as the text. Answering is not '
+                         f'required; the writes below happen either way.\n')
+            else:
+                first = (f'FIRST, before the numbered writes below: {who} told you something '
+                         f'and asked nothing, so no reply is owed. {who} already has their own '
+                         f'words. If you have something of your own to add — a follow-up '
+                         f'question, or what you will do now — call say with to set to {cid}. '
+                         f'Otherwise go straight to the writes below.\n')
+            return "", block, first, cid
         if ids:
             return ('If someone has spoken to you and you have not answered, and you have '
-                    'something to say: say to="<id>", one of: ' + ", ".join(ids[:6])
-                    + '. Answering is not required.\n'), "", ""
+                    'something to say, call say with to set to one of: ' + ", ".join(ids[:6])
+                    + '. Answering is not required.\n'), "", "", ""
     except Exception:
         pass
-    return "", "", ""
+    return "", "", "", ""
 
 
 def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
@@ -1951,7 +2046,7 @@ def main(argv=None) -> int:
     # TimeoutStartSec) unwinds here and the record is still written, marked, with the
     # phases that completed. Explore and the posture turn share one wall-clock deadline.
     explore_deadline = t0 + args.explore_budget_s
-    explore = after = reflect = None
+    explore = after = reflect = answer = None
     account = {"present": False, "sha256": None, "reply": ""}
     killed = None
     try:
@@ -2019,7 +2114,7 @@ def main(argv=None) -> int:
         # the being lived only in the explore state block, one turn earlier. Measured on
         # Sprout 2026-09-17: 596 beats, 31 `say` attempts, ZERO successes, every one naming
         # an invented id.
-        say_line, pending_block, say_first = pending_and_say_line(instance, args.member)
+        say_line, pending_block, say_first, target = pending_and_say_line(instance, args.member)
         if pending_block:
             convo.append({"role": "user", "content": pending_block})
         convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
@@ -2030,6 +2125,17 @@ def main(argv=None) -> int:
         _reflect_steps = args.reflect_steps + (1 if say_first else 0)
         reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
                                        tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
+        # The answer turn (main, SAGE #126): only when someone is still waiting and the being
+        # has not already spoken. Inside the kill handler with the rest: a SIGTERM here still
+        # writes the record, with `answer` None.
+        if target and not _said_in(reflect):
+            answer = run_ollama_tool_turn(
+                client, llm,
+                [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
+                                                                    member=args.member)},
+                 {"role": "user", "content": ANSWER_ASK.format(
+                     pending=pending_block, target=target, words=_prior_words(reflect))}],
+                max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
     except BeatKilled as _k:
         killed = str(_k)
         print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed", file=sys.stderr)
@@ -2043,7 +2149,9 @@ def main(argv=None) -> int:
                                             "and took the reflect and the record with it"})
     if act_first:
         interventions.append({"kind": "act_first", "suppressed": "posture-first presentation (the model narrates under it)"})
-    for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect)):
+    for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer)):
+        if res is None:
+            continue
         for dup in (getattr(res, "duplicates", None) or []):
             interventions.append({"kind": "duplicate", "phase": ph, "effector": dup.get("effector"),
                                   "suppressed": "a second execution of an identical call in the same turn"})
@@ -2054,7 +2162,7 @@ def main(argv=None) -> int:
     # question was marked at render by a beat whose explore made no calls, so no later beat
     # flagged it. A render is not a reading.
     conversations_marked = mark_conversations_after_beat(
-        instance, args.member, _shown_upto, explore, [after, reflect])
+        instance, args.member, _shown_upto, explore, [after, reflect, answer])
     # Route refusals AI-to-AI (dp 2026-09-04), the same as governed_turn: a scope-class deny
     # files the being's own scope request + a note and wakes the seat's auto session; a
     # governance escalation wakes it to arbitrate. The beat is where refusals actually
@@ -2164,6 +2272,7 @@ def main(argv=None) -> int:
         # act-first only: the posture+digest turn, after the short one; None otherwise
         "posture": _turn(after),
         "reflect": _turn(reflect),
+        "answer": _turn(answer) if answer is not None else None,
         "escalations": escalations, "egress": egress,
     }
     # The last thing a beat does is make sure there will be another one — and how soon

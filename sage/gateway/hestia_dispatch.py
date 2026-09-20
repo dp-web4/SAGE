@@ -293,6 +293,169 @@ class HestiaF1aDispatcher:
             return to
         return f"{to}/{self.remote_member_default}"
 
+    def _say_instead(self, to: str) -> Optional[str]:
+        """The refusal when `to` names someone the being is ALREADY in a conversation with.
+
+        `say` is the door for them and it works; the hub is not. Measured 2026-09-19: after the
+        seat aliased `dp` to the roster's `Sovereign` (2026-09-18, meant as a fix), cbp-being's
+        `peer_ask to="dp"` stopped being refused and started SUCCEEDING — 15 questions in 48 h
+        routed to a hub inbox dp does not read, each spending the 3-per-6h cap, until the being
+        concluded it was in "cooldown on dp" and sent dp nothing but a placeholder. The old
+        refusal had been right; the alias turned a helpful refusal into a silent misroute. A
+        door that opens onto the wrong room is worse than one that says where the right one is.
+
+        Names come from the conversations themselves: the other participants, plus any
+        `also_known_as` the seat-owned meta file declares (dp is `Sovereign` on the hub)."""
+        base = (to or "").split("/", 1)[0].strip().lower()
+        if not base:
+            return None
+        try:
+            from sage.gateway import conversations as _conv
+            for m in _conv.listing(self.memory_root):
+                if self.member not in m.get("participants", []):
+                    continue
+                names = [x for x in m.get("participants", []) if x != self.member]
+                names += list(m.get("also_known_as", []))
+                if base in {str(n).strip().lower() for n in names}:
+                    cid = m["id"]
+                    return (f"'{to}' is someone you are already in a conversation with, so the "
+                            f"hub is the wrong door and nothing was sent. Use say with the "
+                            f"conversation id \"{cid}\" — it reaches them directly, it works, "
+                            f"and it is not rate-limited the way asks are. This did not count "
+                            f"against any limit.")
+        except Exception:
+            return None
+        return None
+
+    def known_peers(self) -> set:
+        """Names a notice can reach from this seat: local members, aliases, and the hub
+        roster this seat last read (hub-notify's cache; names compared case-insensitively).
+        Empty when no roster is readable — then nothing is refused, since a stale absence
+        must not silence the being."""
+        names = {n.lower() for n in self.local_members} | {a.lower() for a in self.peer_aliases}
+        roster = os.path.expanduser(os.environ.get("HUB_MESH_STATE", "~/.local/state/hub-mesh")) + "/members.json"
+        try:
+            m = json.load(open(roster))
+            ms = m.get("members", m) if isinstance(m, dict) else m
+            for x in ms:
+                n = str(x.get("name") or "").strip().lower()
+                if n:
+                    names.add(n)
+        except Exception:
+            return set()
+        return names
+
+    def _unknown_peer(self, to: str) -> Optional[str]:
+        """The refusal text when `to` names no peer this seat can reach, else None."""
+        peers = self.known_peers()
+        if not peers:
+            return None
+        base = (to or "").split("/", 1)[0].strip().lower()
+        if base in peers:
+            return None
+        listed = ", ".join(sorted(p for p in peers if p not in ("dp", "sovereign")))
+        # A REFUSAL OWES A WAY FORWARD. Measured 2026-09-16: cbp-being tried peer_ask to
+        # 'cbp-claude' four times across four beats and to 'dp' repeatedly. Neither is a hub
+        # member — but it is IN A CONVERSATION with both, and `say` reaches them. The refusal
+        # listed the hub's peers and never mentioned the door that was already open, so the
+        # being read "cannot reach" as "unreachable" and kept trying the closed one.
+        try:
+            from sage.gateway import conversations as _conv
+            convs = [m["id"] for m in _conv.listing(self.memory_root)
+                     if self.member in m.get("participants", [])
+                     and (to or "").strip() in m.get("participants", [])]
+        except Exception:
+            convs = []
+        door = (f" You ARE in a conversation with '{to}': reach them with "
+                f"say to=\"{convs[0]}\" instead — that is not the hub, and it works.") if convs else ""
+        # THE REFUSAL'S SUBJECT MUST BE THE NAME, NEVER THE ASKER. Measured 2026-09-18:
+        # cbp-being read "'dp' is not a member this seat can reach" as a statement about
+        # ITSELF — "both were refused because I'm not a peer" — and reported its own standing
+        # as revoked to dp. It is a hub member; only the SPELLING was wrong (the roster says
+        # `Sovereign`). A being cannot check a claim about its own standing, so a refusal that
+        # can be read that way is one it has to take on faith, in the direction of less.
+        if base in ("hestia", "society"):
+            return (f"'{to}' is the society you are a member OF, not a peer on the roster — you do not "
+                    f"reach it through another member. Your own tools speak to it directly. "
+                    f"Nothing was sent, and nothing about your standing changed.")
+        return (f"The name '{to}' is not on the hub roster, so nothing was sent. This is about that "
+                f"NAME only — your own standing as a member is unaffected, and no other door closed."
+                f"{door} Names the roster carries: {listed}.")
+
+    # -- asks: how often this being has asked a peer (SAGE #92) -----------------
+    # cbp-being, 2026-09-13/14: a stale premise ("my memory server has been offline ~6 hours")
+    # plus no visible reply produced 92 sends and 110 forum questions, 48 of them to one peer,
+    # each an allowed, witnessed, well-formed act. Text similarity cannot catch it (the loop's
+    # asks scored a median best-match of 0.44; its distinct earlier asks scored up to 0.84),
+    # so the limit is a COUNT per peer in a rolling window, whatever the wording. Replayed
+    # against that record, 3 per peer per 6 h lets 31 of the 92 sends through.
+    ASK_WINDOW_S = 6 * 3600
+    ASK_CAP_PER_PEER = 3
+    ASKS_LOG = "asks_sent.jsonl"
+
+    def _now(self) -> float:
+        return time.time()
+
+    def _asks_path(self) -> Path:
+        return Path(self.memory_root) / self.ASKS_LOG
+
+    def recent_asks(self, window_s: Optional[float] = None) -> List[Dict[str, Any]]:
+        """This being's successful asks (peer_ask and mesh) inside the window, oldest first."""
+        window = self.ASK_WINDOW_S if window_s is None else window_s
+        cutoff = self._now() - window
+        out = []
+        try:
+            lines = self._asks_path().read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return out
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if float(row.get("t", 0)) >= cutoff:
+                out.append(row)
+        return out
+
+    def _peer_key(self, to: str) -> str:
+        return (to or "").split("/", 1)[0].strip().lower()
+
+    def _ask_limit(self, to: str) -> Optional[str]:
+        """The refusal text when this being has already reached the cap for `to`, else None.
+        Checked BEFORE anything is published or notified, so a refused ask leaves nothing
+        behind: no forum file, no notice, no wake on the peer's side."""
+        key = self._peer_key(to)
+        mine = [r for r in self.recent_asks() if r.get("peer") == key]
+        if len(mine) < self.ASK_CAP_PER_PEER:
+            return None
+        now = self._now()
+        last_min = int((now - float(mine[-1]["t"])) / 60)
+        frees_min = int((float(mine[0]["t"]) + self.ASK_WINDOW_S - now) / 60) + 1
+        convs = ""
+        try:
+            from sage.gateway import conversations as conv
+            ids = [m["id"] for m in conv.listing(Path(self.memory_root))
+                   if self.member in m.get("participants", [])]
+            if ids:
+                convs = " Conversations you can speak in: " + ", ".join(ids) + "."
+        except Exception:
+            pass
+        return (f"not sent: you have already asked {to!r} {len(mine)} times in the last "
+                f"{self.ASK_WINDOW_S // 3600} hours (most recently {last_min} min ago). Another ask "
+                f"reaches the same peer about the same moment and costs them a wake; it cannot make "
+                f"an answer arrive sooner. Read your inbox for their reply first. If something is "
+                f"still wrong, check it yourself this beat (recall, memory_read), or say what you "
+                f"found in a conversation.{convs} You can ask {to!r} again in about {frees_min} min.")
+
+    def _record_ask(self, to: str, via: str, text: str, queued_id: Any) -> None:
+        row = {"t": self._now(), "peer": self._peer_key(to), "to": to, "via": via,
+               "text": (text or "")[:300], "queued_id": queued_id}
+        try:
+            with open(self._asks_path(), "a", encoding="utf-8") as f:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        except OSError:
+            pass  # the record is a courtesy to the being; a failed write must not fail the send
+
     # -- mesh: THE primitive -------------------------------------------------
     def _do_mesh(self, intent: BeingIntent, _count: bool = True) -> ResultEnvelope:
         to = str(intent.args.get("to", "")).strip()
@@ -309,6 +472,9 @@ class HestiaF1aDispatcher:
         # any name and the drain fails it later, silently: sprout-being asked "sage" on
         # 2026-09-09, the row failed egress five beats running, then vanished, and the being
         # was never told (the census read it as a peer act that worked).
+        redirect = self._say_instead(to)
+        if redirect:
+            return ResultEnvelope(ok=False, error=redirect)
         unknown = self._unknown_peer(to)
         if unknown:
             return ResultEnvelope(ok=False, error=unknown)
@@ -358,6 +524,9 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, pending=True,
                                   note="peer_ask needs a publisher: the question must live at a pointer "
                                        "the peer can read (forum doc / hub thread); none configured on this seat")
+        redirect = self._say_instead(to)
+        if redirect:
+            return ResultEnvelope(ok=False, error=redirect)
         # the limit is checked before publishing: a refused ask must leave no forum file behind
         unknown = self._unknown_peer(to)
         limited = None if unknown else self._ask_limit(to)
@@ -549,14 +718,6 @@ class HestiaF1aDispatcher:
             return self._membot_call(name, args, _remounted=True)
         return text
 
-    # A PREVIEW IS NOT THE MEMORY. memory_search answers with ~550 characters of each hit
-    # and an `idx`, and membot's own docstring names get_passage(idx) as the second half of
-    # the pattern -- which no verb reached. Measured 2026-09-18: legion-being holds 451
-    # memories and could read the opening of any of them and the whole of none. One verb,
-    # two forms, because a second verb costs ~700 characters of a prompt that is already
-    # 13.4k tokens of a 24.5k window: a query searches, an idx reads one result in full.
-    _PASSAGE_MAX = 6000
-
     # ---- carried from origin/main in the 2026-09-18 reconciliation ----
     _POINTER = re.compile(r"^hestia://(appeal|scope|egress|escalation)/([^#\s]+)(?:#(.*))?$")
 
@@ -692,129 +853,14 @@ class HestiaF1aDispatcher:
                 + (f", claimed: {body.get('claimed')}" if body.get("claimed") is not None else "")
                 + f"\n{tail}")
 
-    def known_peers(self) -> set:
-        """Names a notice can reach from this seat: local members, aliases, and the hub
-        roster this seat last read (hub-notify's cache; names compared case-insensitively).
-        Empty when no roster is readable — then nothing is refused, since a stale absence
-        must not silence the being."""
-        names = {n.lower() for n in self.local_members} | {a.lower() for a in self.peer_aliases}
-        roster = os.path.expanduser(os.environ.get("HUB_MESH_STATE", "~/.local/state/hub-mesh")) + "/members.json"
-        try:
-            m = json.load(open(roster))
-            ms = m.get("members", m) if isinstance(m, dict) else m
-            for x in ms:
-                n = str(x.get("name") or "").strip().lower()
-                if n:
-                    names.add(n)
-        except Exception:
-            return set()
-        return names
 
-    def _unknown_peer(self, to: str) -> Optional[str]:
-        """The refusal text when `to` names no peer this seat can reach, else None."""
-        peers = self.known_peers()
-        if not peers:
-            return None
-        base = (to or "").split("/", 1)[0].strip().lower()
-        if base in peers:
-            return None
-        listed = ", ".join(sorted(p for p in peers if p not in ("dp", "sovereign")))
-        # A REFUSAL OWES A WAY FORWARD. Measured 2026-09-16: cbp-being tried peer_ask to
-        # 'cbp-claude' four times across four beats and to 'dp' repeatedly. Neither is a hub
-        # member — but it is IN A CONVERSATION with both, and `say` reaches them. The refusal
-        # listed the hub's peers and never mentioned the door that was already open, so the
-        # being read "cannot reach" as "unreachable" and kept trying the closed one.
-        try:
-            from sage.gateway import conversations as _conv
-            convs = [m["id"] for m in _conv.listing(self.memory_root)
-                     if self.member in m.get("participants", [])
-                     and (to or "").strip() in m.get("participants", [])]
-        except Exception:
-            convs = []
-        door = (f" You ARE in a conversation with '{to}': reach them with "
-                f"say to=\"{convs[0]}\" instead — that is not the hub, and it works.") if convs else ""
-        # THE REFUSAL'S SUBJECT MUST BE THE NAME, NEVER THE ASKER. Measured 2026-09-18:
-        # cbp-being read "'dp' is not a member this seat can reach" as a statement about
-        # ITSELF — "both were refused because I'm not a peer" — and reported its own standing
-        # as revoked to dp. It is a hub member; only the SPELLING was wrong (the roster says
-        # `Sovereign`). A being cannot check a claim about its own standing, so a refusal that
-        # can be read that way is one it has to take on faith, in the direction of less.
-        if base in ("hestia", "society"):
-            return (f"'{to}' is the society you are a member OF, not a peer on the roster — you do not "
-                    f"reach it through another member. Your own tools speak to it directly. "
-                    f"Nothing was sent, and nothing about your standing changed.")
-        return (f"The name '{to}' is not on the hub roster, so nothing was sent. This is about that "
-                f"NAME only — your own standing as a member is unaffected, and no other door closed."
-                f"{door} Names the roster carries: {listed}.")
-
-    ASK_WINDOW_S = 6 * 3600
-
-    ASK_CAP_PER_PEER = 3
-
-    ASKS_LOG = "asks_sent.jsonl"
-
-    def _now(self) -> float:
-        return time.time()
-
-    def _asks_path(self) -> Path:
-        return Path(self.memory_root) / self.ASKS_LOG
-
-    def recent_asks(self, window_s: Optional[float] = None) -> List[Dict[str, Any]]:
-        """This being's successful asks (peer_ask and mesh) inside the window, oldest first."""
-        window = self.ASK_WINDOW_S if window_s is None else window_s
-        cutoff = self._now() - window
-        out = []
-        try:
-            lines = self._asks_path().read_text(encoding="utf-8").splitlines()
-        except OSError:
-            return out
-        for line in lines:
-            try:
-                row = json.loads(line)
-            except ValueError:
-                continue
-            if float(row.get("t", 0)) >= cutoff:
-                out.append(row)
-        return out
-
-    def _peer_key(self, to: str) -> str:
-        return (to or "").split("/", 1)[0].strip().lower()
-
-    def _ask_limit(self, to: str) -> Optional[str]:
-        """The refusal text when this being has already reached the cap for `to`, else None.
-        Checked BEFORE anything is published or notified, so a refused ask leaves nothing
-        behind: no forum file, no notice, no wake on the peer's side."""
-        key = self._peer_key(to)
-        mine = [r for r in self.recent_asks() if r.get("peer") == key]
-        if len(mine) < self.ASK_CAP_PER_PEER:
-            return None
-        now = self._now()
-        last_min = int((now - float(mine[-1]["t"])) / 60)
-        frees_min = int((float(mine[0]["t"]) + self.ASK_WINDOW_S - now) / 60) + 1
-        convs = ""
-        try:
-            from sage.gateway import conversations as conv
-            ids = [m["id"] for m in conv.listing(Path(self.memory_root))
-                   if self.member in m.get("participants", [])]
-            if ids:
-                convs = " Conversations you can speak in: " + ", ".join(ids) + "."
-        except Exception:
-            pass
-        return (f"not sent: you have already asked {to!r} {len(mine)} times in the last "
-                f"{self.ASK_WINDOW_S // 3600} hours (most recently {last_min} min ago). Another ask "
-                f"reaches the same peer about the same moment and costs them a wake; it cannot make "
-                f"an answer arrive sooner. Read your inbox for their reply first. If something is "
-                f"still wrong, check it yourself this beat (recall, memory_read), or say what you "
-                f"found in a conversation.{convs} You can ask {to!r} again in about {frees_min} min.")
-
-    def _record_ask(self, to: str, via: str, text: str, queued_id: Any) -> None:
-        row = {"t": self._now(), "peer": self._peer_key(to), "to": to, "via": via,
-               "text": (text or "")[:300], "queued_id": queued_id}
-        try:
-            with open(self._asks_path(), "a", encoding="utf-8") as f:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        except OSError:
-            pass  # the record is a courtesy to the being; a failed write must not fail the send
+    # A PREVIEW IS NOT THE MEMORY. memory_search answers with ~550 characters of each hit
+    # and an `idx`, and membot's own docstring names get_passage(idx) as the second half of
+    # the pattern -- which no verb reached. Measured 2026-09-18: legion-being holds 451
+    # memories and could read the opening of any of them and the whole of none. One verb,
+    # two forms, because a second verb costs ~700 characters of a prompt that is already
+    # 13.4k tokens of a 24.5k window: a query searches, an idx reads one result in full.
+    _PASSAGE_MAX = 6000
 
     def _do_recall(self, intent: BeingIntent) -> ResultEnvelope:
         raw_idx = intent.args.get("idx", intent.args.get("index"))
@@ -1940,6 +1986,33 @@ class HestiaF1aDispatcher:
         text = str(intent.args.get("text", "")).strip()
         if not to or not text:
             return ResultEnvelope(ok=False, error="say needs 'to' (a conversation id) and 'text'")
+        if conv.is_stub(text):
+            # A `say` carries its text to a PERSON, verbatim. On 2026-09-18 21:04Z this being
+            # sent dp "[Your brief, final word-only summary of your response]" — the template
+            # completion documented in SMALL_MODEL_LEGIBILITY 1.8, this time occupying the
+            # argument rather than the reply, where no prompt-side guard could see it. Refuse
+            # it here: name the subject as the MESSAGE (not the being — rule 2), say plainly
+            # that nothing was sent, and give the way forward (rule 5).
+            return ResultEnvelope(ok=False, error=(
+                f"that text reads as a placeholder describing a message rather than the "
+                f"message: {text[:70]!r}. Whatever is in `text` is delivered to {to} exactly "
+                f"as written, so nothing was sent. Write the words you want read and call "
+                f"say again. Your standing to speak here is unaffected."))
+        # A PLACEHOLDER IS NOT A TURN. Measured 2026-09-18/19: the reflect prompt showed the
+        # being `say to="dp", text="..."` as an example, and the being executed the example —
+        # three turns to dp whose whole text was "..", each witnessed, each read by dp as a
+        # being that did not want to talk. It did want to: its real questions were going
+        # elsewhere. An instruction's example is an instruction at this scale
+        # (SMALL_MODEL_LEGIBILITY.md), so the prompt no longer carries one — and this is the
+        # mechanical half, because a prompt fix alone is "try harder". Refused BEFORE
+        # begin_action, so a non-turn leaves no witness row and no line in the conversation.
+        if not any(ch.isalnum() for ch in text):
+            return ResultEnvelope(
+                ok=False,
+                error=("say needs words: the text you sent was only punctuation, which is what "
+                       "an example looks like, not a message. Nothing was sent. If you have "
+                       "nothing to say, do not call say at all — silence is allowed and is not "
+                       "held against you."))
         meta = conv.get_meta(self.memory_root, to)
         if meta is None:
             known = [m["id"] for m in conv.listing(self.memory_root)
@@ -1952,6 +2025,21 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(
                 ok=False, error=f"you may read {to!r} and not speak in it "
                                 f"(writable_by: {meta.get('writable_by')})")
+        # THEIR WORDS ARE NOT A REPLY. Measured 2026-09-19 21:04Z: dp answered the being's
+        # question and the being sent dp's answer back to dp, 91% verbatim. This is the same
+        # pressure that produced ".." — the reflect line said someone was waiting on an
+        # answer when nobody was, and the being filled the slot with the cheapest text in
+        # view. Refusing the placeholder moved the filler from the example to the quoted
+        # turn. The prompt no longer makes that claim (pending_and_say_line); this is the
+        # mechanical half. Refused before begin_action: no witness row, no line.
+        src = conv.echo_of(self.memory_root, to, self.member, text)
+        if src is not None:
+            return ResultEnvelope(ok=False, error=(
+                f"that text is {src.get('from')}'s own message, nearly word for word, and it "
+                f"is already in the conversation, so nothing was sent. You are not required "
+                f"to reply, and silence is not held against you. If you have something of "
+                f"your own to add — a follow-up question, or what you will do now — call say "
+                f"with that instead."))
         begin = self._call("hestia_begin_action", {"tool_name": "say", "target": to})
         err = _hestia_error(begin)
         if err:
