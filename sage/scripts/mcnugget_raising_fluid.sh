@@ -117,58 +117,26 @@ echo "[McNugget-Raising] Dream consolidation..."
     echo "[McNugget-Raising] Dream consolidation skipped"
 }
 
-# Commit if changed
-CHANGED=0
-if [ -d "$INSTANCE_DIR" ]; then
-    if ! git diff --quiet "$INSTANCE_DIR/" 2>/dev/null; then
-        CHANGED=1
-    fi
-    if [ -n "$(git ls-files --others --exclude-standard "$INSTANCE_DIR/" 2>/dev/null)" ]; then
-        CHANGED=1
-    fi
-fi
-
-if [ "$CHANGED" -eq 0 ]; then
-    echo "[McNugget-Raising] No new data to commit."
-    exit 0
-fi
-
-git add "$INSTANCE_DIR/" 2>/dev/null || true
-
-git commit -m "[McNugget-Raising] Session $SESSION_NUM ($PHASE) — $(date -u +'%Y-%m-%d %H:%M UTC')
-
-Fluid raising session via $DAEMON_MODEL
-Machine: McNugget (Mac Mini M4)
-Model: $DAEMON_MODEL
-Phase: $PHASE
-Runner: sage.session --raising --fluid (auto-detected instance: $INSTANCE_SLUG)
-AI-Instance: OllamaIRP (automated)
-Human-Supervised: no"
-
-# THE PUSH THAT LOST TEN SESSIONS. The opening pull above stashes first; this one
-# did not, and by now the daemon has dirtied identity.attest.json, so `pull --rebase`
-# refused ("You have unstaged changes"), `2>/dev/null || true` swallowed it, and the
-# push was rejected because origin moved during the session. The commit sat
-# stranded until the supervisor's `git reset --hard origin/main` (every 4h)
-# destroyed it -- file gone, counter already advanced, gap. Measured 2026-09-14:
-# sessions 455, 469, 470, 473 all followed exactly this path (recovered from their
-# dangling commits); 2 and 272-276 were the same and are gone for good. Every loss
-# was an overnight slot, when other seats push most and origin moves most.
+# Mirror the being's record PRIVATELY. Nothing is published.
+# Until 2026-09-20 this step ran `git add "$INSTANCE_DIR/"`, committed, and pushed to PUBLIC SAGE
+# every 6 h (sessions, raising_log, identity snapshots, peer trust). dp, 2026-09-19/20: existing
+# public records are retained; being records are private going forward
+# (shared-context/FLEET_BROADCAST_being_records_private.md). So this step no longer stages the
+# instance dir at all, and the record goes to private-context instead. Same shape as
+# cbp_raising.sh step 7.
 #
-# --autostash does what the opening pull does by hand. Nothing here is silenced:
-# a push that fails is the single most consequential line in this script, and it
-# was the one line allowed to fail quietly.
-git pull --rebase --autostash origin main 2>&1 | sed 's/^/[McNugget-Raising] pull: /'
-if ! git push origin main 2>&1 | sed 's/^/[McNugget-Raising] push: /'; then
-    echo "[McNugget-Raising] push rejected; refetching and retrying once"
-    git pull --rebase --autostash origin main 2>&1 | sed 's/^/[McNugget-Raising] pull: /'
-    git push origin main 2>&1 | sed 's/^/[McNugget-Raising] push: /'
-fi
-if [ "$(git log origin/main..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')" != "0" ]; then
-    # Still stranded. Pin it so no reset can destroy it, and say so where a human looks.
-    BK="refs/backup/raising-$(date -u +%Y%m%dT%H%M%SZ)-session-$SESSION_NUM"
-    git update-ref "$BK" HEAD
-    echo "[McNugget-Raising] *** Session $SESSION_NUM is committed but NOT on origin. Pinned at $BK. ***" >&2
+# KNOWN RESIDUE until the being moves to sage/instances/mcnugget-being/ (ignored; waits on #127):
+# the already-tracked files under $INSTANCE_DIR show as modified in `git status`, permanently.
+# Do not `git add -A` in this tree -- mcnugget_supervisor.sh step 4 did, and now excludes
+# sage/instances/ for that reason.
+PRIVATE_CONTEXT_DIR="$(cd "$SAGE_DIR/.." && pwd)/private-context"
+if SAGE_INSTANCE="$SAGE_DIR/$INSTANCE_DIR" PRIVATE_CONTEXT="$PRIVATE_CONTEXT_DIR" \
+   SAGE_BEING="mcnugget-being" SEAT_ID="mcnugget-claude" \
+   SAGE_INSTANCE_LEGACY_NAME="$(basename "$INSTANCE_DIR")" \
+   "$SAGE_DIR/scripts/mirror_being_private.sh"; then
+    echo "[McNugget-Raising] Session $SESSION_NUM ($PHASE) mirrored privately."
 else
-    echo "[McNugget-Raising] Session $SESSION_NUM committed and pushed."
+    # Loud, and non-fatal: a failed mirror must not look like a finished session, and must not
+    # tempt anyone back to the public push as a fallback.
+    echo "[McNugget-Raising] ERROR: private mirror FAILED -- the record exists only on this machine until it succeeds." >&2
 fi
