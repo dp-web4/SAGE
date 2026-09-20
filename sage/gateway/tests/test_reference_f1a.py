@@ -3,6 +3,7 @@ memory root; no gate/model needed. Runnable under pytest or directly."""
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict  # noqa: E402
@@ -51,7 +52,42 @@ def test_memory_read_says_missing_empty_or_directory_never_a_silent_zero():
 def test_path_escape_is_error():
     disp, _ = _disp()
     env = disp(BeingIntent("memory_write", {"path": "/etc/cron.d/x", "content": "x"}), _ALLOW)
-    assert not env.ok and "escapes" in (env.error or "")
+    assert not env.ok and "outside your reach" in (env.error or "")
+    assert "memory_write creates a file inside your home" in env.error, "a way forward, not just a wall"
+
+
+def test_an_out_of_reach_path_that_does_not_exist_says_so_rather_than_implying_a_boundary():
+    """cbp-being read `/home/dp/ai-workspace/SAGE/126-being.md` — outside its root AND absent —
+    and was told only that the path "escapes the being's memory root and its grants". It spent
+    two days asking dp what the boundary was protecting (conversation `dp`, seq 68-70). Nothing
+    was: the file had never existed. dp, 2026-09-20: "the refusal was because what you were
+    trying to reach wasn't there. the system needs to do a better job of explaining this." """
+    disp, _ = _disp()
+    env = disp(BeingIntent("memory_read", {"path": "/home/dp/ai-workspace/SAGE/126-being.md"}), _ALLOW)
+    assert not env.ok
+    assert "THERE IS NOTHING AT THAT PATH" in env.error, "absence is the useful fact here"
+    assert "not a boundary" in env.error
+    assert "Do not ask for a grant on it" in env.error, "a grant cannot conjure a file (legibility 1.11)"
+
+
+def test_an_out_of_reach_path_that_DOES_exist_is_still_named_a_real_boundary():
+    """CONTROL. Without this the fix could be 'call every refusal an absence', which would teach
+    the being to discount real boundaries."""
+    disp, _ = _disp()
+    env = disp(BeingIntent("memory_read", {"path": "/etc/hostname"}), _ALLOW)
+    assert not env.ok
+    assert "does exist, so this one is a real boundary" in env.error
+    assert "request_scope" in env.error, "the way forward for a boundary is to ask"
+    assert "NOTHING AT THAT PATH" not in env.error
+
+
+def test_absence_is_never_claimed_where_it_could_not_be_established():
+    """A PermissionError must read as UNKNOWN. `Path.exists()` answers False when it may not
+    look, which would print a confident false absence — the failure this guard exists to stop."""
+    disp, _ = _disp()
+    assert ReferenceF1aDispatcher._existence(Path("/proc/1/root/nonexistent-xyz")) in ("unknown", "absent")
+    assert ReferenceF1aDispatcher._existence(Path("/etc/hostname")) == "present"
+    assert ReferenceF1aDispatcher._existence(Path("/definitely-not-here-9f3a")) == "absent"
 
 
 def test_network_act_deferred_to_f1a():
@@ -93,7 +129,7 @@ def test_relative_memory_path_roots_at_memory_root_not_cwd():
         assert r.ok and "rooted" in r.result
         # a relative path cannot climb out of the root either
         e = disp(BeingIntent("memory_write", {"path": "../../escape.md", "content": "x"}), _ALLOW)
-        assert not e.ok and "escapes" in (e.error or "")
+        assert not e.ok and "outside your reach" in (e.error or "")
     finally:
         os.chdir(cwd)
 
@@ -108,11 +144,11 @@ def test_confinement_follows_the_verdicts_granted_roots():
     r = disp(BeingIntent("memory_read", {"path": target}), GatewayVerdict("allow", granted=(other,)))
     assert r.ok and "a note from a peer" in r.result
     r = disp(BeingIntent("memory_read", {"path": target}), _ALLOW)
-    assert not r.ok and "escapes" in (r.error or "")
+    assert not r.ok and "outside your reach" in (r.error or "")
     # a granted root never widens to its parent or a sibling
     r = disp(BeingIntent("memory_read", {"path": os.path.join(os.path.dirname(other), "x.md")}),
              GatewayVerdict("allow", granted=(other,)))
-    assert not r.ok and "escapes" in (r.error or "")
+    assert not r.ok and "outside your reach" in (r.error or "")
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
@@ -109,8 +110,67 @@ class ReferenceF1aDispatcher:
                     "appeal, all of which are read")
         roots = (self.memory_root,) + tuple(getattr(self, "_extra_roots", ()) or ())
         if not any(p == r or r in p.parents for r in roots):
-            raise ValueError(f"path escapes the being's memory root and its grants: {p}")
+            raise ValueError(self._out_of_reach(p, roots, writing))
         return p
+
+    @staticmethod
+    def _existence(p: Path) -> str:
+        """'absent' | 'present' | 'unknown'. Never guesses.
+
+        `Path.exists()` is not usable here: it swallows a PermissionError and answers False, so
+        "I may not look" would be reported as "there is nothing there" — the exact false absence
+        this method exists to prevent. An unknown must never be dressed as a fact
+        (SMALL_MODEL_LEGIBILITY 1.11).
+        """
+        try:
+            os.stat(p)
+            return "present"
+        except FileNotFoundError:
+            try:
+                os.stat(p.parent)          # could we even traverse to where it would be?
+                return "absent"
+            except FileNotFoundError:
+                return "absent"            # the parent is missing too: still nothing there
+            except OSError:
+                return "unknown"           # cannot traverse; absence is not established
+        except OSError:
+            return "unknown"
+
+    def _out_of_reach(self, p: Path, roots, writing: bool) -> str:
+        """Why a path outside the being's roots was refused — and WHICH of three facts it is.
+
+        dp, 2026-09-20, after cbp-being asked what a refusal protects: "the past refusals were
+        capability - you were trying to access nonexistent paths and files, so the refusal was
+        because what you were trying to reach wasn't there. the system needs to do a better job
+        of explaining this."
+
+        The being had tried to read an absolute path that does not exist. The old text —
+        "path escapes the being's memory root and its grants" — describes a BOUNDARY, so the
+        being reasoned for two days about what the boundary was protecting (conversation `dp`,
+        seq 68-70). Nothing: the file was never there. `memory_read` has told missing from empty
+        from directory since 2026-09-15; this path refused before that check could run, so the
+        one case where absence matters most was the one case that never said it.
+
+        Absence is asserted only where it was established. A grant cannot conjure a file, so a
+        refusal that hides absence sends the being to ask an operator for reach that would
+        change nothing (legibility 1.11).
+        """
+        reach = ", ".join(str(r) for r in roots)
+        head = f"'{p}' is outside your reach. You can read and write under: {reach}."
+        if writing:
+            return head + (" memory_write creates a file inside your home; name a path there "
+                           "instead, or request_scope and say what you would write.")
+        where = self._existence(p)
+        if where == "absent":
+            return head + (" Separately, and more usefully: THERE IS NOTHING AT THAT PATH. It "
+                           "does not exist, so this is an absence, not a boundary — nothing is "
+                           "being kept from you, and reach over it would give you nothing to "
+                           "read. Do not ask for a grant on it; check the name.")
+        if where == "present":
+            return head + (" That path does exist, so this one is a real boundary. If you need "
+                           "it, request_scope and say what you would do with it.")
+        return head + (" Whether anything exists there cannot be determined from here, so treat "
+                       "it as unknown rather than as evidence either way.")
 
     # -- effectors -----------------------------------------------------------
     def _do_witness(self, intent: BeingIntent) -> ResultEnvelope:
