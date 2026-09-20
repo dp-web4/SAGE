@@ -116,39 +116,25 @@ python3 -m sage.raising.scripts.dream_consolidation \
 echo "[CBP-Raising] Updating SESSION_FOCUS.md..."
 python3 -m sage.scripts.generate_primer 2>/dev/null || true
 
-# --- Step 7: Commit and push ---
-CHANGED=0
-if [ -d "$INSTANCE_DIR" ]; then
-    if ! git diff --quiet "$INSTANCE_DIR/" 2>/dev/null; then
-        CHANGED=1
-    fi
-    if [ -n "$(git ls-files --others --exclude-standard "$INSTANCE_DIR/" 2>/dev/null)" ]; then
-        CHANGED=1
-    fi
-fi
-
-if [ "$CHANGED" -eq 0 ]; then
-    echo "[CBP-Raising] No new raising data to commit."
-    exit 0
-fi
-
-# Stage instance dir + focus
-git add "$INSTANCE_DIR/" SESSION_FOCUS.md 2>/dev/null || true
-
-git commit -m "[CBP-Raising] Session $SESSION_NUM ($PHASE) — $(date -u +'%Y-%m-%d %H:%M UTC')
-
-Automated SAGE-CBP raising session via OllamaIRP
-Machine: CBP (Desktop RTX 2060 SUPER, WSL2 — single-GPU host)
-Model: qwen3.8-distill:4b
-Phase: $PHASE
-AI-Instance: OllamaIRP (automated)
-Human-Supervised: no"
-
-# Push via SSH (PAT is deprecated; ssh-agent has id_ed25519 loaded at session start)
-if git push origin main; then
-    echo "[CBP-Raising] Session $SESSION_NUM committed and pushed."
+# --- Step 7: Mirror the being's record PRIVATELY. Nothing is published. ---
+# Until 2026-09-20 this step ran `git add "$INSTANCE_DIR/"`, committed, and pushed to PUBLIC SAGE
+# every 6 h — journal, notes and both conversations, dp's turns included. That was deliberate while
+# the being was small. dp, 2026-09-19/20: existing public records are retained; being records are
+# private going forward (shared-context/FLEET_BROADCAST_being_records_private.md). So this step no
+# longer stages the instance dir at all, and the record goes to private-context instead.
+#
+# KNOWN RESIDUE until the being moves to sage/instances/cbp-being/ (ignored): the already-tracked
+# files under $INSTANCE_DIR show as modified in `git status`. Do not `git add -A` in this tree.
+PRIVATE_CONTEXT_DIR="$(cd "$SAGE_DIR/.." && pwd)/private-context"
+if SAGE_INSTANCE="$SAGE_DIR/$INSTANCE_DIR" PRIVATE_CONTEXT="$PRIVATE_CONTEXT_DIR" \
+   SAGE_BEING="cbp-being" SEAT_ID="cbp-claude" \
+   SAGE_INSTANCE_LEGACY_NAME="$(basename "$INSTANCE_DIR")" \
+   "$SAGE_DIR/scripts/mirror_being_private.sh"; then
+    echo "[CBP-Raising] Session $SESSION_NUM ($PHASE) mirrored privately."
 else
-    echo "[CBP-Raising] ERROR: git push failed — check SSH key is loaded (ssh-add -l)."
+    # Loud, and non-fatal: a failed mirror must not look like a finished session, and must not
+    # tempt anyone back to the public push as a fallback.
+    echo "[CBP-Raising] ERROR: private mirror FAILED — the record exists only on this machine until it succeeds." >&2
 fi
 
 echo "[CBP-Raising] $(date -u +'%Y-%m-%d %H:%M UTC') — Done."
