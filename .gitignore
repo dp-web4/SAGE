@@ -318,3 +318,5 @@ sage/instances/legion-gemma3-12b/backups/
 sage/instances/legion-gemma3-12b/m.md
 sage/instances/legion-gemma3-12b/review_queue.jsonl
 sage/instances/legion-gemma3-12b/long_term_memory_recovered.jsonl
+# dp 2026-09-20: conversations do not reach main. History on the branches keeps them; the tree does not.
+sage/instances/legion-gemma3-12b/conversations/
