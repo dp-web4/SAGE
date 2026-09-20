@@ -20,6 +20,7 @@ import os
 import time
 import hashlib
 import secrets
+import stat
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Optional, Dict, Any
@@ -418,12 +419,35 @@ class IdentityProvider:
         try:
             keep = self.sealed_path.with_name('identity.sealed.v1')
             live = self.sealed_path.read_bytes()
-            if not keep.exists():
-                import shutil
-                shutil.copy2(self.sealed_path, keep)
-            if not keep.is_file() or keep.is_symlink() or keep.read_bytes() != live:
+
+            # Never follow a pre-existing final-component symlink while creating the backup.
+            # Path.exists() follows symlinks, so a dangling link looks absent; opening with
+            # mode 'xb' gives us O_CREAT|O_EXCL semantics instead. If another filesystem
+            # object appears between lstat and create, exclusive creation fails rather than
+            # following/reusing it.
+            try:
+                keep.lstat()
+            except FileNotFoundError:
+                try:
+                    with open(keep, 'xb') as out:
+                        out.write(live)
+                        out.flush()
+                        os.fsync(out.fileno())
+                except FileExistsError:
+                    pass
+
+            try:
+                keep_stat = keep.lstat()
+            except FileNotFoundError:
+                keep_stat = None
+            preserved = (
+                keep_stat is not None
+                and stat.S_ISREG(keep_stat.st_mode)
+                and keep.read_bytes() == live
+            )
+            if not preserved:
                 print(f"[Identity] v1 seal verified with '{label}' but NOT migrated: "
-                      f"{keep.name} exists and is not a byte-identical copy of the live v1 file. "
+                      f"{keep.name} is not a byte-identical regular-file copy of the live v1 file. "
                       f"The v1 file is left in place. Move {keep.name} aside to allow migration.")
                 return
             self._seal_secret(secret, anchor_type)
