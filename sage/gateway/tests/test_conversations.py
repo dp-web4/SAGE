@@ -240,8 +240,10 @@ def test_turn_provenance_is_recorded_and_shown(tmp_path):
     assert out.count(C.UNSIGNED_TAG) == 1                                # the console turn only
     assert "provenance unrecorded" in out                                # the legacy one, named
     assert "purported until the seat confirms" in out
-    line_b = [l for l in out.splitlines() if l.startswith("- **b**")][0]
+    line_b = [l for l in out.splitlines() if l.startswith("- **b (you)**")][0]
     assert "unsigned" not in line_b and "unrecorded" not in line_b       # say is the gated path
+    # the being's own turns are marked as its own IN THE LABEL, not left to inference
+    assert "- **dp (you)**" not in out, "only the reader's own turns carry (you)"
 
 
 
@@ -277,7 +279,15 @@ def test_seen_is_not_answered(tmp_path):
     assert "The last word here is dp's (seq 1" in again and "still yours to answer" in again
     C.append(tmp_path, "dp", speaker="b", text="I will.", via="say")
     after = C.render_for_being(tmp_path, "b")
-    assert "last word here" not in after and "since you last spoke" not in after
+    assert "since you last spoke" not in after, "nothing of theirs is unanswered"
+    # ...but the being is now the one WAITING, and that is a state it must be able to see.
+    # Until 2026-09-20 this said nothing, and cbp-being answered its own turn in the other
+    # party's voice (conversation `dp`, seq 66->67 in one beat) and re-asked the same question
+    # on three consecutive beats (seq 63, 65, 66).
+    assert "The last word here is YOURS" in after
+    assert "You are waiting on dp; they are not waiting on you" in after
+    assert "would put words in dp's mouth" in after
+    assert "asking again does not make it arrive sooner" in after
 
 
 

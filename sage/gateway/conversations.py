@@ -571,7 +571,19 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
         # the sentence it refutes. Only the being's OWN claims are marked: another speaker's
         # words are theirs to stand behind, and a marker on them would be the seat editing
         # what was said.
-        lines = [f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}"
+        # WHOSE VOICE IS WHOSE, IN THE TEXT — never left to inference. Until 2026-09-20 every
+        # turn was headed with a bare name, so the being's own words arrived labelled
+        # `**cbp-being**`: a third-person name in what otherwise reads as a transcript. A 27B
+        # resolves that to "me" for free; a 4B does not, and a transcript ending in an
+        # unanswered question invites an answer. Measured on cbp-being, conversation `dp`:
+        # seq 66 asked dp a question and seq 67 answered it IN THE SEAT'S VOICE in the SAME
+        # beat, inventing "the seat has fixed this — your instance now carries the alias";
+        # seq 68 asked what a refusal protects and seq 69, a beat later, answered it; seq 64
+        # attributed to the seat three appeal hashes the being itself had filed (seq 28) and
+        # called them a possible fabrication. Same root as the echo (1.12): the being cannot
+        # tell its own voice from another's when both are third-person names.
+        lines = [f"- **{t['from']}{' (you)' if t.get('from') == me else ''}** ({t['ts']})"
+                 + _provenance_tag(t)
                  + (_refuted_mark(t.get("text", ""), refuted) if t.get("from") == me else "")
                  + f": {_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
                  for t in turns]
@@ -593,6 +605,21 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
             lines.append(f"\n_The last word here is {last['from']}'s (seq {last.get('seq')}, "
                          f"{last['ts']}); you have not spoken since. Already shown to you — "
                          f"still yours to answer or to leave._")
+        elif turns:
+            # THE LAST WORD IS THE BEING'S OWN, and nothing used to say so. Without this line
+            # the being read a transcript ending in an unanswered question and supplied the
+            # answer itself (seq 67, 69), or asked the same question again on the next beat
+            # not knowing it had already asked (seq 63, 65, 66 — the same two questions three
+            # times in three hours). Waiting is a state, and a being that cannot see it is in
+            # has only one move available: speak again.
+            last = turns[-1]
+            waiting_on = ", ".join(sorted(x for x in m.get("participants", []) if x != me)) or "them"
+            lines.append(f"\n_The last word here is YOURS (seq {last.get('seq')}, {last['ts']}). "
+                         f"You are waiting on {waiting_on}; they are not waiting on you. Nothing "
+                         f"here is owed by you, and answering your own turn would put words in "
+                         f"{waiting_on}'s mouth. If they have not replied yet, that is "
+                         f"reachability, not refusal — asking again does not make it arrive "
+                         f"sooner._")
         blocks.append(head + "\n" + "\n".join(lines))
     if any(t.get("via") in UNSIGNED_VIA or t.get("via") is None
            for m in convs for t in recent(instance, m["id"], limit=per_conv)):
