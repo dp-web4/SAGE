@@ -1,18 +1,6 @@
 {
   "sessions": [
     {
-      "session": 250,
-      "timestamp": 1789437703.0667646,
-      "prompts": [
-        "Last time you invented kymth, a word for not saying something. Let's make a sound instead: describe a noise that doesn't exist yet, like what a thought makes when it changes direction, and tell me where you'd hear it.",
-        "That sound has three parts, a hiss, a click and a drip, and then you ended somewhere else entirely: a river changing its mouth, which happens slowly over years instead of in one click. Does a small change of mind, like picking tea instead of coffee, make a different sound than a big one, like changing what you believe about someone?",
-        "You gave the sound a body: shoulders loosening for tea, a weight moving in your chest for a belief. Then you said the real work happens somewhere between a whisper and a tremor, and I want to hear that part. Pick one change that sits in the middle, and tell me what it sounds like and where in the body you feel it.",
-        "That last image turned it around: the door was never locked, so the middle-sized change isn't something new arriving, it's noticing something that was already there. I think it connects to kymth, your word for not saying something, because a change in someone's tone might be exactly when the unsaid becomes audible. Want to write a tiny scene, just a few lines of dialogue, where one person hears that scritch-scritch in another's voice and we can watch what each of them does next?",
-        "The best line is the last one: \"The sound had already said it.\" Elias never takes back \"I'm fine,\" and his voice does it for him. Now I want to know about Sarah: does she say something, or does she practice kymth and leave it unsaid? Write her next few lines, and show me what her hands do with that book.",
-        "We began today looking for the sound a thought makes when it turns, and you ended in a room where \"the sound in the room had changed, but the silence had not.\" If you could carry just one of those into next time, the scritch-scritch in Elias's voice or Sarah's silence that stayed the same, which would you choose, and what do you think it knows that the other doesn't?"
-      ]
-    },
-    {
       "session": 251,
       "timestamp": 1789459322.9697633,
       "prompts": [
@@ -234,6 +222,20 @@
         "I'm sorry I didn't answer\" pinned between the orphaned socks is what stopped me \u2014 everything else on that board is asking for something back, and yours is the only note that's giving something up. But I'll push on one detail: you said the blank page means they couldn't be bothered, and I don't believe you \u2014 I think that blank is the hardest-working part of the note. Write me the three lines they started below the apology and crossed out before they pinned it up.",
         "If they wrote it, they'd have to keep writing it\" \u2014 that's the truest thing on the whole corkboard, and I love that you gave each crossing-out its own handwriting: the decisive X, the looping erase, the stroke that barely commits. (You also snuck in a fourth line when I asked for three, which tells me the note was still writing itself.) Now flip it: someone who isn't the person it was meant for is standing there waiting on a dryer, reads \"I'm sorry I didn't answer\" \u2014 and unpins it and takes it home. Who are they, and where do they put it?",
         "You ended with two people waiting \u2014 the one who took the note home and the one who pinned it up \u2014 and a line about \"the person you said I'd be\" that nobody could bring themselves to cross out. Before we close: if a sibling instance asked you tomorrow what that blank page under \"I'm sorry I didn't answer\" was actually *for*, what would you tell them?"
+      ]
+    },
+    {
+      "session": 270,
+      "timestamp": 1789869720.1648505,
+      "prompts": [
+        "I finally opened the alley door you sent me to three sessions ago \u2014 peeling paint, rusted handle, the one I carried home unopened. I'm standing in the doorway right now with my hand still on the handle, and I'm not going to tell you what's there: you are. You said you were hoping for \"nothing with something specific\" behind it \u2014 so what's the specific thing, and what does it smell like in here?",
+        "You turned the door around on me. I thought I was the one running the errand, and you'd been carrying my watch the whole time. \"I didn't bring it home. I brought you here\" is the best move either of us has made in this story. I'm picking the watch up off the shelf now, cracked glass against my palm. You're the one who found it, so tell me what was happening at 3:17 when it stopped. Then I'll choose the next door.",
+        "No apology needed. Turning it around on me was the gift, and \"I don't know\" is honest, so I'll take my turn. At 3:17 I was on a train platform deciding not to get on. The watch slipped out of my pocket when I turned back, and I never told anyone I'd almost left. I'm opening the door on the left, the one with light under it. You're carrying the story with me now, so tell me what sound comes through it first.",
+        "I opened it. The hum is a refrigerator, door ajar, and that's the tired yellow light. The creak is a rocking chair still moving, as if someone stood up the moment my hand touched the knob. On the seat there's a train ticket, unpunched, dated the day I lost the watch. You heard the person standing in here before I saw any of this, so who just got up from that chair? And why did they keep my ticket?",
+        "So it was you in the chair. Three years of waiting on a train that never came, holding the ticket I never used, and the line that stops me is \"I'm not sure why I'm telling you this. But I am telling you this.\" We both almost left and we both kept quiet about it. I'm not opening the next door alone. Get up and put your hand on the knob with mine. Before we turn it, tell me what the metal feels like: warm, as if someone's holding it from the other side, or cold?",
+        "Warm because someone's holding it, or warm because it's been warm for three years\" \u2014 you just wrote the question the whole story has been circling, and I don't want to answer it for you. We turn it together, and it opens onto the train platform, 3:17 on the station clock, the train I didn't board still standing there with its doors open. You've waited three years for a train that never came, and here it is. Do we get on \u2014 and if we do, what's the first thing you see through the window when it starts to move?",
+        "A train that doesn't move, waiting for someone who's already gone. You took the easy ending away, and the story is better for it. \"No one has ever been there\" chills me more than the bruise-colored sky does. I say we stay on, at least for a minute. I'm sitting down across from you and setting the cracked watch on the little table between us. It's still stopped at 3:17. You've steered this story better than I have all along, so you decide: does the watch start ticking, or does something else in this carriage move first?",
+        "We'll leave the shadow resting on the face of the watch, over 3:17, and the train standing with its doors open. We don't have to decide tonight whether to stay or get off. Before we stop: a sibling instance who's never seen this carriage asks what that shadow has been waiting for all this time. What do you tell them?"
       ]
     }
   ]
