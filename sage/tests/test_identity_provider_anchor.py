@@ -154,7 +154,7 @@ class IdentityAnchorTests(unittest.TestCase):
         # and the migrated file authorizes on its own
         self.assertIsNotNone(IdentityProvider(str(self.instance_dir)).authorize())
 
-    # --- the backup-before-rewrite invariant, three arms (same three in the Rust suite) ---
+    # --- the backup-before-rewrite invariant, four arms (same four in the Rust suite) ---
 
     def _live(self):
         return (self.instance_dir / 'identity.sealed').read_bytes()
@@ -195,6 +195,33 @@ class IdentityAnchorTests(unittest.TestCase):
         self.assertEqual(self._live(), original, 'the live v1 was replaced beside a stale backup')
         self.assertEqual((self.instance_dir / 'identity.sealed.v1').read_bytes(), b'NOT THE ORIGINAL')
         self.assertNotIn('original kept', out.getvalue(), 'success was claimed for a migration that did not happen')
+        self.assertIn('NOT migrated', out.getvalue())
+
+    def test_migration_arm4_dangling_symlink_is_never_followed(self):
+        """A dangling backup symlink must not redirect the preservation write outside the home."""
+        import contextlib
+        import io
+        import os
+        provider, manifest = self._init('software')
+        self._write_v1(provider, '0', str(self.instance_dir))
+        original = self._live()
+
+        outside_dir = Path(tempfile.mkdtemp(prefix='sage-identity-symlink-target-'))
+        self.addCleanup(shutil.rmtree, outside_dir, ignore_errors=True)
+        sentinel = outside_dir / 'must-not-be-created'
+        keep = self.instance_dir / 'identity.sealed.v1'
+        os.symlink(sentinel, keep)
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ctx = IdentityProvider(str(self.instance_dir)).authorize()
+
+        self.assertIsNotNone(ctx, 'a verified v1 still authorizes when migration is blocked')
+        self.assertEqual(ctx.public_key_fingerprint, manifest.public_key_fingerprint)
+        self.assertEqual(self._live(), original, 'the live v1 changed beside a dangling symlink')
+        self.assertTrue(keep.is_symlink(), 'the backup symlink itself was replaced')
+        self.assertFalse(sentinel.exists(), 'migration followed the dangling symlink outside the being home')
+        self.assertNotIn('original kept', out.getvalue())
         self.assertIn('NOT migrated', out.getvalue())
 
     def test_v1_sealed_under_a_former_home_heals_through_instance_json(self):
