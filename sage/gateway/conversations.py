@@ -521,12 +521,16 @@ def _shown_text(turn: dict, turn_chars: Optional[int], conv_id: str) -> str:
     Measured 2026-09-08: two long seat turns (25.6k chars) were re-rendered into every
     beat, ~9k tokens of a 24.5k window, and the being ran out of room to act — five
     beats of identical deliberation cut at the wall. The record is kept whole; only what
-    is SHOWN per beat is bounded."""
+    is SHOWN per beat is bounded.
+
+    The marker names memory_read's REAL argument. It used to say `from_line N lines 1`,
+    neither of which memory_read accepts (it takes `start_line`); measured 2026-09-21,
+    26 of cbp-being's 33 reads of a conversation file started at line 1 of ~2,950."""
     text = turn.get("text", "")
     if turn_chars and len(text) > turn_chars:
         return (text[:turn_chars].rstrip()
-                + f" …[+{len(text) - turn_chars} chars; the whole turn: memory_read "
-                  f"conversations/{conv_id}.jsonl from_line {turn.get('seq')} lines 1]")
+                + f" …[+{len(text) - turn_chars} chars; the whole turn: memory_read path "
+                  f"conversations/{conv_id}.jsonl start_line {turn.get('seq')}]")
     return text
 
 
