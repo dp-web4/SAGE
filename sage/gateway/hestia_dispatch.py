@@ -1848,7 +1848,8 @@ class HestiaF1aDispatcher:
             except Exception:
                 continue           # a wake is best-effort; the turn already landed
         if woke:
-            conv.record_wake(self.memory_root, to, self.member, run_start)
+            conv.record_wake(self.memory_root, to, self.member, run_start,
+                             covered_through=int(turn.get("seq") or run_start))
             return ", ".join(woke)
         return None
 
