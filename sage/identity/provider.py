@@ -78,6 +78,10 @@ class SigningContext:
         return time.time() - self.authorized_at
 
 
+#: Where a system tool may be found, in order. NOT PATH -- see `_system_tool`. Same list, same
+#: order, as the rust provider's SYSTEM_TOOL_DIRS.
+SYSTEM_TOOL_DIRS = ('/usr/sbin', '/sbin', '/usr/bin', '/bin')
+
 SEAL_V2 = b'SAGE_SEALED_v2'
 
 
@@ -474,7 +478,18 @@ class IdentityProvider:
         machine produced two anchors (IOPlatformUUID vs `host:<name>`), i.e. two v2 keys, and a
         seal written by either process was unreadable to the other. The failure was silent in
         both directions: the fallback is a valid anchor, just a different one."""
-        for d in ('/usr/sbin', '/sbin', '/usr/bin', '/bin'):
+        return IdentityProvider._system_tool_in(name, SYSTEM_TOOL_DIRS)
+
+    @staticmethod
+    def _system_tool_in(name: str, dirs) -> Optional[str]:
+        """`_system_tool` with the directory list passed in -- the seam the tests need.
+
+        Without it a test can only assert against the real /usr/sbin, so the acceptance
+        predicate is unreachable from a fixture and the non-executable test could only assert a
+        property of its own fixture. Measured 2026-09-21: dropping `os.access(..., X_OK)` left
+        the whole python suite green. The rust side had this seam (`system_tool_in`) and caught
+        it. One derivation, one sealing key, so both suites must be able to ask one question."""
+        for d in dirs:
             cand = os.path.join(d, name)
             if os.path.isfile(cand) and os.access(cand, os.X_OK):
                 return cand
