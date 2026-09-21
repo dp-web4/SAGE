@@ -1592,8 +1592,18 @@ class HestiaF1aDispatcher:
         except Exception:
             pass
         woke = self._wake_addressee(to, meta, turn)
+        # THE RECEIPT'S ECHO IS THE BEING'S OWN WORDS, AND A CUT ONE MUST SAY SO. Measured
+        # 2026-09-21 12:13Z (cbp-being, beat d8cff379b67d): a 522-char say came back as "said"
+        # cut unmarked at 200, mid-sentence at "would stop at". The being read its own echo as
+        # the seat's reply — "The seat's response was cut off mid-sentence" — and spent a say
+        # asking the seat to finish a sentence it had written itself (seq 2988). Same failure
+        # as the pending-turn cut (#150), on the return edge.
+        said = turn["text"]
+        if len(said) > 200:
+            said = (said[:200] + f"… [your own message, shortened in this receipt only — all "
+                    f"{len(turn['text'])} chars were delivered as seq {turn['seq']}]")
         result = {"conversation": to, "seq": turn["seq"],
-                  "said": turn["text"][:200], "action_id": action_id}
+                  "said": said, "action_id": action_id}
         if woke:
             result["woke"] = woke
         return ResultEnvelope(ok=True, witness_id=action_id, result=result)
