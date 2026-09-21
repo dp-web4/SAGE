@@ -1616,6 +1616,43 @@ def test_a_say_that_asks_for_a_run_is_routed_as_request_run():
     assert r.ok and "routed" not in r.result and "requested" not in r.result
 
 
+def test_a_missing_argument_is_never_worded_as_a_seat_decision():
+    """Measured 2026-09-21 05:34Z: five request_run calls with 'path' and no 'why', all
+    failing a LOCAL check before any seat saw them. The old text said "the seat decides ...
+    what it decides on", so the being told dp "The seat refused ... What did it decide on?"
+    It then re-tried the PATH (relative, absolute, relative) and never added 'why', because
+    the error did not say which argument was missing.
+
+    Now 'why' is optional, so those exact five calls succeed and reach the seat; and a
+    genuinely missing argument names ITSELF and says nothing was decided."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print(1)\n")
+
+    # THE EXACT CALL THAT FAILED FIVE TIMES: path, no why.
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("request_run", {"path": "notes/train.py"}), _ALLOW)
+    assert r.ok, f"a request without 'why' must still reach the seat: {r.error}"
+    assert r.result["ran"] is False
+    turn = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert "why: (none given" in turn, "the seat is told plainly that no reason was given"
+    assert [a for n, a in FakeMcp.calls if n == "hestia_member_notify"], "the seat was woken"
+
+    # a genuinely missing argument names itself and does not sound like a verdict
+    r = d(BeingIntent("request_run", {"why": "see if it runs"}), _ALLOW)
+    assert not r.ok
+    assert "missing 'path'" in r.error, r.error
+    assert "nothing has been decided" in r.error, r.error
+    assert "the seat decides" not in r.error, "a validation error must not read as a seat's decision"
+
+
 def test_request_run_reports_an_absent_file_as_an_absence_not_a_refusal():
     """A typo must come back in this beat, which is the half a sleeping person cannot give.
     And absence is absence, never a boundary (legibility 1.11)."""
@@ -1640,8 +1677,6 @@ def test_request_run_reports_an_absent_file_as_an_absence_not_a_refusal():
     r = d(BeingIntent("request_run", {"path": "/etc/hostname", "why": "x"}), _ALLOW)
     assert not r.ok and "outside your reach" in r.error, r.error
 
-    r = d(BeingIntent("request_run", {"path": "notes/a.md"}), _ALLOW)
-    assert not r.ok and "'why'" in r.error, r.error
 
 
 def test_a_watcher_is_woken_by_an_ask_it_could_satisfy_and_still_cannot_speak_there():
