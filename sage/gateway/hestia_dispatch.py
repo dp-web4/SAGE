@@ -1560,6 +1560,81 @@ class HestiaF1aDispatcher:
             result["woke"] = woke
         return ResultEnvelope(ok=True, witness_id=action_id, result=result)
 
+    def _do_request_run(self, intent: BeingIntent) -> ResultEnvelope:
+        """Ask the seat to run one of the being's own files. RUNS NOTHING.
+
+        dp, 2026-09-21: "ship a request-run instead, where it passes the request to the seat
+        for evaluation, and it's up to the seat whether to run it, and provide feedback/diags."
+
+        WHY A DOOR AND NOT A CAPABILITY. The being writes code it cannot execute, so it cannot
+        tell "I described a fix" from "the fix works". Measured 2026-09-20/21: six prose
+        requests to dp in two hours for one file, and a note headed "Fix" with a
+        "Verification" section asserting an outcome that was never observed. The obvious
+        remedy — a `run` effector — is unconfined by construction: a file the being wrote,
+        executed as the operator's user, can reach anything the operator can, and the gate
+        could only govern STARTING it. Checking which path is run is cosmetic when the
+        contents are arbitrary. So the seat stays in the loop as the thing that decides.
+
+        What the being gets IMMEDIATELY is the half a person could never give quickly: the
+        file is resolved inside its own home and checked for existence and shape now, so a
+        typo or a missing file comes back in this beat instead of after hours of asking. An
+        absence is reported as an absence, never as a boundary (legibility 1.11).
+
+        What it gets LATER is the seat's answer, in the seat's own channel. This returns a
+        receipt, not a result, and says so — a being told "requested" must not read that as
+        "ran" (legibility 1.7: no promise it cannot retire).
+        """
+        from sage.gateway import conversations as conv
+        raw = str(intent.args.get("path", "")).strip()
+        why = str(intent.args.get("why", "")).strip()
+        if not raw or not why:
+            return ResultEnvelope(ok=False, error=(
+                "request_run needs 'path' (a file in your own home) and 'why' (what you "
+                "expect to learn). The seat decides whether to run it, and 'why' is what it "
+                "decides on."))
+        try:
+            p = self._local._safe_path(raw)
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        if not p.exists():
+            return ResultEnvelope(ok=False, error=(
+                f"nothing to run: '{raw}' does not exist, so there is no file to hand the "
+                f"seat. This is an absence, not a refusal. Check the name — memory_read on "
+                f"the directory will list what is actually there."))
+        if p.is_dir():
+            return ResultEnvelope(ok=False, error=f"'{raw}' is a directory, not a file to run.")
+        if p.suffix not in (".py", ".sh"):
+            return ResultEnvelope(ok=False, error=(
+                f"the seat runs .py and .sh files; '{raw}' is {p.suffix or 'extensionless'}. "
+                f"If this is a script, give it the matching extension and ask again."))
+
+        # The request goes where the seat already reads and can already answer: its own
+        # conversation. No second queue to build, and dp can read it there too.
+        seat_conv = None
+        for m in conv.listing(self.memory_root):
+            parts = m.get("participants") or []
+            if self.member in parts and (m.get("notify") or {}):
+                seat_conv = m["id"]
+                break
+        if not seat_conv:
+            return ResultEnvelope(ok=False, pending=True, note=(
+                "no seat conversation is configured on this instance, so there is nobody to "
+                "hand this to. Your file is untouched."))
+        lines = [f"[request_run] {p.relative_to(self.memory_root)}",
+                 f"why: {why}",
+                 f"({p.stat().st_size} bytes; the seat decides whether to run it and answers here)"]
+        said = self._do_say(BeingIntent("say", {"to": seat_conv, "text": "\n".join(lines)}))
+        if not said.ok:
+            return ResultEnvelope(ok=False, error=f"could not hand the request to the seat: {said.error}")
+        return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
+            "requested": str(p.relative_to(self.memory_root)),
+            "asked": seat_conv,
+            "ran": False,
+            "note": ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
+                     "a result. The seat may run it or decline, and either way it answers in "
+                     f"'{seat_conv}'. Nothing is owed by you in the meantime."),
+        })
+
     def _wake_addressee(self, to: str, meta: dict, turn: dict) -> Optional[str]:
         """A turn wakes whoever it is addressed to — the mirror of the seat's own door.
 

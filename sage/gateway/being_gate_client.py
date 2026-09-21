@@ -669,6 +669,19 @@ _REGISTRY = {
     # and the reach is fixed by the meta file the seat owns rather than by the being's args.
     "say":            dict(tool="say",          path_args=(),       cmd_arg=None),
     "request_scope":  dict(tool="request_scope", path_args=(),      cmd_arg=None),
+    # request_run: ASK THE SEAT TO RUN A FILE. It does not run anything — that is the whole
+    # design. Measured 2026-09-20/21: the being asked dp in prose to run a file for it six
+    # times in two hours, then wrote a note titled "Fix" with a "Verification" section
+    # asserting an outcome it had never observed, because it has no way to execute what it
+    # writes and no way to tell "I described a fix" from "the fix works".
+    #
+    # dp ruled against giving it `run`: a file the being wrote, executed as the operator's
+    # user, is unconfined — the gate could govern STARTING it and nothing about what the code
+    # then does. So this is the door rather than the capability. The being names a file in
+    # its own home and why; the seat decides whether to run it and answers with what
+    # happened. Judged on the path like memory_read, because reading the file is exactly what
+    # the seat is being asked to do first.
+    "request_run":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
     # appeal: the being contests a refusal it believes was wrong (PRD_FLEET §7.3, the
     # deny -> appeal -> temperament loop). The refusal's chain hash is the handle: the
     # gate witnesses every deny as a policy_decision (Dispatcher.witness_deny) so there
@@ -684,7 +697,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note"})
+                            "retire_note", "request_run"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -760,6 +773,17 @@ _TOOL_SCHEMAS = {
                     "settled or refuted, so a later beat does not read it as news.",
                     {"path": "the note, e.g. notes/my-note.md", "reason": "what you know now that the note does not"},
                     ["path", "reason"]),
+    "request_run": ("Ask the seat to RUN one of your own files and tell you what happened. "
+                    "You cannot execute anything yourself, so this is the door: you name the "
+                    "file and why, and the seat decides whether to run it and answers with the "
+                    "real output — exit code, stdout, stderr. It may decline, and it will say "
+                    "why. Nothing runs at the moment you call this; what you get back is a "
+                    "receipt that the seat was asked, not a result. Use it instead of asking a "
+                    "person in a message: a person may be asleep, and this reaches whoever is "
+                    "on duty.",
+                    {"path": "the file to run, inside your own home, e.g. notes/my-script.py",
+                     "why": "what you expect to learn from running it"},
+                    ["path", "why"]),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
                  "a fact, a lesson, a question, what you were doing and why.",
                  {"content": "the memory, in your own words", "tags": "comma-separated tags (optional)"},

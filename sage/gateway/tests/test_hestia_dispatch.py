@@ -1524,6 +1524,72 @@ def test_a_turn_wakes_its_addressee_once_per_unanswered_run():
     assert len([a for n, a in FakeMcp.calls if n == "hestia_member_notify"]) == 1
 
 
+def test_request_run_hands_the_file_to_the_seat_and_runs_nothing():
+    """dp, 2026-09-21: "ship a request-run instead ... it's up to the seat whether to run it."
+
+    The being cannot execute what it writes, so it asked dp in prose six times in two hours
+    and then wrote a note headed "Fix" whose "Verification" section asserted an outcome it
+    had never observed. This is the door. It must hand the request over, wake the seat, and
+    be unmistakable that nothing ran."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print('hello')\n")
+
+    FakeMcp.calls.clear()
+    marker = home / "notes" / "SHOULD_NOT_EXIST"
+    (home / "notes" / "danger.py").write_text(f"open({str(marker)!r}, 'w').write('x')\n")
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "confirm it exits 0"}), _ALLOW)
+    assert r.ok, r
+    assert r.result["ran"] is False, "request_run must never execute"
+    assert "NOTHING HAS RUN YET" in r.result["note"], r.result
+    assert r.result["asked"] == "seat"
+    # it landed as a turn the seat can read, and woke the seat
+    turns = conv.recent(home, "seat", limit=5)
+    assert "[request_run] notes/train.py" in turns[-1]["text"], turns[-1]
+    assert "confirm it exits 0" in turns[-1]["text"]
+    assert [a for n, a in FakeMcp.calls if n == "hestia_member_notify"], "the seat was not woken"
+
+    # THE CONTROL THAT MATTERS: asking to run something never runs it.
+    r = d(BeingIntent("request_run", {"path": "notes/danger.py", "why": "prove nothing executes"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False
+    assert not marker.exists(), "request_run EXECUTED the file; it must only hand it over"
+
+
+def test_request_run_reports_an_absent_file_as_an_absence_not_a_refusal():
+    """A typo must come back in this beat, which is the half a sleeping person cannot give.
+    And absence is absence, never a boundary (legibility 1.11)."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+
+    r = d(BeingIntent("request_run", {"path": "notes/nope.py", "why": "x"}), _ALLOW)
+    assert not r.ok and "does not exist" in r.error and "not a refusal" in r.error, r.error
+    assert conv.count(home, "seat") == 0, "a request for a missing file must not spend a turn"
+
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "a.md").write_text("not a script")
+    r = d(BeingIntent("request_run", {"path": "notes/a.md", "why": "x"}), _ALLOW)
+    assert not r.ok and ".py and .sh" in r.error, r.error
+
+    r = d(BeingIntent("request_run", {"path": "/etc/hostname", "why": "x"}), _ALLOW)
+    assert not r.ok and "outside your reach" in r.error, r.error
+
+    r = d(BeingIntent("request_run", {"path": "notes/a.md"}), _ALLOW)
+    assert not r.ok and "'why'" in r.error, r.error
+
+
 def test_a_watcher_is_woken_by_an_ask_it_could_satisfy_and_still_cannot_speak_there():
     """conversation `dp`, seq 84-89, 2026-09-20/21: the being asked dp to run a file for it
     SIX times in two hours. dp is asynchronous by rule and does not run files; the seat does,
