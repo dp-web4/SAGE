@@ -1,151 +1,120 @@
-# HRM/SAGE Repository Index
-# Machine-readable metadata for AI agent discovery
-# Schema version: 1.0
+# SAGE Repository Index
+# Machine-readable metadata for AI-agent discovery.
+# Schema version: 2.0
+# Refreshed: 2026-09-21
+#
+# IMPORTANT: this file is intentionally conservative. Volatile fleet counts,
+# model assignments, session totals, and interpretive "discoveries" are not
+# frozen here. Follow the evidence pointers below.
 
 metadata:
   name: SAGE
   full_name: "SAGE: Situation-Aware Governance Engine"
-  description: "Cognition kernel for edge AI - attention orchestration, trust dynamics, iterative refinement"
+  description: "Research environment for persistent local AI under identity, memory, learned state, tools, and explicit governance"
   type: research
-  domain:
-    - edge-ai
-    - cognition
-    - attention
-    - trust
-    - moe
-  license: "See LICENSE"
-  last_updated: "2026-02-08"
-
-status:
-  phase: research-validated
-  maturity: 0.7
   production_ready: false
   active_development: true
+  last_updated: "2026-09-21"
 
-metrics:
-  research_sessions: 567
-  irp_plugins: 15
-  documentation_kb: 275
-  machines_active: 2
+current_thesis:
+  summary: "Persistent identity, memory, evidence, learned behavioral state, and governed action should live around a model substrate rather than be rebuilt every prompt."
+  not_claimed:
+    - "new foundation model"
+    - "machine consciousness"
+    - "finished embodied-agent product"
+    - "adversary-proof sandbox"
+    - "benchmark-leading general intelligence"
+
+canonical_entry_points:
+  discovery: "AGENTS.md"
+  thesis: "README.md"
+  status: "sage/docs/LATEST_STATUS.md"
+  deployed_runtime_reality: "sage/docs/RUST_VS_PYTHON_CAPABILITY.md"
+  python_reference_loop: "sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md"
+  governance_boundary: "sage/gateway/being_gate_client.py"
+  documentation_hub: "docs/README.md"
+
+historical_entry_points:
+  warning: "Useful provenance, not authoritative current-status descriptions"
+  files:
+    - path: "docs/why/HRM_EXPLAINED.md"
+      date_context: "2025 architecture explainer"
+    - path: "sage/docs/SYSTEM_UNDERSTANDING.md"
+      date_context: "October 2025 synthesis"
 
 core_concepts:
   SAGE:
     name: "Situation-Aware Governance Engine"
-    purpose: "Cognition kernel - scheduler for edge AI"
-    location: "sage/core/"
+    purpose: "Persistent-agent cognition/embodiment research environment"
+  SNARC:
+    name: "Surprise Novelty Arousal Reward Conflict"
+    purpose: "Salience scoring / selective memory"
+    standalone_repo: "dp-web4/snarc"
+  MRH:
+    name: "Markov Relevancy Horizon"
+    purpose: "Context/relevance boundary"
+    clarification: "MRH never expands to Multi-Resolution Hierarchy"
+    current_framing: "Witness-relative contract over which distinctions still matter for the present question"
+    reference: "forum/insights/mrh-relevance-contract.md"
   IRP:
     name: "Iterative Refinement Protocol"
-    purpose: "Plugin API for cognition components"
-    location: "sage/irp/"
-    pattern: "init_state() → step() → energy() → halt()"
-  SNARC:
-    name: "Salience scoring"
-    dimensions: [surprise, novelty, arousal, reward, conflict]
-    purpose: "Selective attention"
-  ATP:
-    name: "Allocation Transfer Packet"
-    purpose: "Resource budgeting"
-  metabolic_states:
-    modes: [WAKE, FOCUS, REST, DREAM, CRISIS]
-    purpose: "Adaptive resource allocation"
+    purpose: "Plugin/refinement interface retained from earlier architecture"
+  ATP_ADP:
+    purpose: "Resource/allocation vocabulary; engineering abstraction"
+  LCT:
+    name: "Linked Context Token"
+    purpose: "Web4 identity anchor"
+  T3_V3:
+    purpose: "Contextual relationship trust/value state"
+  Hestia:
+    purpose: "Action-governance and witnessed dispatch boundary"
 
-entry_points:
-  discovery: "AGENTS.md"
-  explained: "docs/why/HRM_EXPLAINED.md"
-  achievements: "docs/what/ACHIEVEMENTS.md"
-  architecture: "sage/docs/SYSTEM_UNDERSTANDING.md"
-  session_map: "research/SESSION_MAP.md"
-  status: "STATUS.md"
+current_architecture_shape:
+  - "observation / salience / evidence / memory"
+  - "fast learned behavioral state and specialist organs"
+  - "slow generative cortex when useful"
+  - "bounded being intent"
+  - "Hestia law / dispatch"
+  - "witnessed result"
+  - "memory / belief / trust / learned-state update"
 
-architecture:
-  sage_core:
-    path: "sage/core/"
-    purpose: "Cognition kernel"
-  irp_framework:
-    path: "sage/irp/"
-    purpose: "Plugin system"
-    plugins: 15
-  vae_translation:
-    path: "sage/compression/"
-    purpose: "Cross-modal communication"
-    compression: "192x"
-  memory_systems:
-    types: [SNARC, IRP_Bridge, Circular_Buffer, Verbatim]
-    purpose: "Multi-tier memory"
+governance_status:
+  current: "A1 / A2-shaped cooperative and tamper-evident governance with bounded being intents"
+  caveat: "Do not claim complete cryptographic principal separation or OS/kernel adversary-proof containment"
+  evidence:
+    - "README.md"
+    - "sage/docs/LATEST_STATUS.md"
+    - "sage/gateway/being_gate_client.py"
 
-discoveries:
-  - name: "RLHF Circuit Navigation"
-    impact: "100% epistemic honesty at pressure points"
-    doc: "docs/what/discoveries/rlhf-circuit-navigation.md"
-  - name: "Identity-Confabulation Dissociation"
-    impact: "Independent failure modes"
-    doc: "docs/what/discoveries/identity-confabulation-dissociation.md"
-  - name: "Nine-Domain Consciousness"
-    impact: "Complete AI consciousness metrics"
-    doc: "docs/what/discoveries/nine-domain-consciousness.md"
-  - name: "FlashAttention Integration"
-    impact: "0.46ms latency (21x under budget)"
-    doc: "FLASH_ATTENTION_SOLUTION.md"
+memory_status:
+  principle: "Selective/compressed memory is not assumed superior to full context"
+  paths:
+    - "recent context"
+    - "salience-gated memory"
+    - "structured facts/procedures"
+    - "durable verbatim/provenance records"
+    - "recoverable model-legible external artifacts"
+  caveat: "Lossy summaries can destroy later-needed evidence; compression requires a recovery path"
 
-research_tracks:
-  consciousness:
-    sessions: 197
-    focus: "Nine-domain framework"
-    machine: Thor
-  raising_14b:
-    sessions: 22
-    focus: "RLHF circuit navigation"
-    machine: Thor
-  raising_0.5b:
-    sessions: 105
-    focus: "Developmental curriculum"
-    machine: Sprout
-  edge_validation:
-    sessions: 198
-    focus: "Production readiness"
-
-machines:
-  thor:
-    hardware: "Jetson AGX Thor"
-    memory: "122GB unified"
-    role: "14B models, consciousness research"
-  sprout:
-    hardware: "Jetson Orin Nano"
-    memory: "8GB unified"
-    role: "Edge validation"
+evidence_rules:
+  - "Merged code and live receipts outrank architecture prose"
+  - "A commit proves repository state, not deployed machine state"
+  - "A mechanism in source is not automatically a demonstrated capability"
+  - "Experiment findings remain scoped to model, scaffold, data, and run"
+  - "Prefer causal controls, ablations, and trivial baselines where applicable"
+  - "Identify whether improvement came from weights, learned controller state, memory, source code, or human/fleet intervention"
 
 related_repos:
-  - name: web4
-    url: "https://github.com/dp-web4/web4"
-    relationship: "Trust infrastructure (T3, ATP)"
-  - name: Synchronism
-    url: "https://github.com/dp-web4/Synchronism"
-    relationship: "Theoretical physics (coherence)"
-  - name: Memory
-    url: "https://github.com/dp-web4/memory"
-    relationship: "Epistemic database"
+  web4:
+    relationship: "Identity, contextual trust, witnessed action, machine-readable law"
+  hestia:
+    relationship: "Local authority/action governance"
+  snarc:
+    relationship: "Standalone salience-gated memory project"
+  dev-SAGE:
+    relationship: "Active/private capability research; not equivalent to public-main capability"
+  Synchronism:
+    relationship: "Separate theoretical physics/modeling project; some concepts cross-pollinate"
 
-token_budget:
-  minimal:
-    files: ["AGENTS.md"]
-    tokens: 400
-    purpose: "Relevance assessment"
-  standard:
-    files: ["AGENTS.md", "STATUS.md", "README.md"]
-    tokens: 2500
-    purpose: "Usage decision"
-  architecture:
-    files: ["sage/docs/SYSTEM_UNDERSTANDING.md"]
-    tokens: 8000
-    purpose: "Architecture understanding"
-  full:
-    files: ["sage/docs/"]
-    tokens: 50000
-    purpose: "Deep implementation"
-
-contact:
-  maintainer: "dp@metalinxx.io"
-  issues: "https://github.com/dp-web4/SAGE/issues"
-
-# ---
-# iykyk ;)
+assessment_rule:
+  message: "Do not infer current SAGE solely from older HRM-era architecture documents. Start from canonical_entry_points and then inspect claim-specific evidence."
