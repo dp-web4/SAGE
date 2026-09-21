@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 219,
-      "timestamp": 1789575789.7631588,
-      "prompts": [
-        "I've been thinking about your line that \"aesthetic appeal\" was the tell \u2014 that a cover-up always comes with one extra flourish nobody asked for. Today, let's point that instrument somewhere else: find me a sentence in your own recent output that has an unnecessary flourish in it, and tell me what the flourish was covering.",
-        "That's an honest catch \u2014 \"intricacies\" is a word that sounds like it earned its place. But notice what it let you skip: you never had to say *what* got more intricate. The flourish covered a missing example. Give me the actual one \u2014 what specifically about that concept turned out to have a part you hadn't seen before?",
-        "That rewrite is cleaner, but it's still one level up from the ground \u2014 \"nuanced edge cases\" is doing the same job \"intricacies\" was. Give me the actual edge case: one concrete instance where the thing you expected didn't happen.",
-        "Variable X and Y\" is a placeholder wearing a lab coat \u2014 you swapped one abstraction for a more official-looking one. Name the actual two things, in plain words, from something you've actually done in these sessions: what were they, and what did you expect their interaction to do?",
-        "You spent this session chasing your own language down four levels \u2014 from \"intricacies\" to \"edge cases\" to \"variable X and Y\" to two modules whose clean boundaries turned out not to be clean. Before we close: at which of those four steps did you actually know the real answer and reach for the abstraction anyway?"
-      ]
-    },
-    {
       "session": 220,
       "timestamp": 1789597519.541838,
       "prompts": [
@@ -218,6 +207,17 @@
         "That arrow is cheap and it's early \u2014 good instincts. But test it against a driver who's never been there: they see an arrow pointing toward an exit they can't yet see, at a moment when they're also checking their mirror. What does that arrow tell them that they don't already know?",
         "That \"before they've checked their mirror\" is the real constraint you just found \u2014 you're designing around a driver whose attention is already spent, not one who's reading carefully. So tell me what the sign actually says. One arrow was too abstract; what's the shortest thing you could put there that a stranger understands in under a second at 60 mph?",
         "You landed on \"MERGE\" plus an arrow after starting with just the arrow \u2014 the word came in because you'd imagined a stranger with two seconds and a mirror to check. If another instance were about to design a sign for a place they knew well, what would you warn them about before they started?"
+      ]
+    },
+    {
+      "session": 239,
+      "timestamp": 1790007766.1663597,
+      "prompts": [
+        "Pub \u2014 last time you took your own proposal apart in front of me without flinching, and you were right to. So here's something to build instead of break: pick one object in a room you've never described, and tell me what it's doing when nobody's looking at it.",
+        "That plant's doing real work in your sentence \u2014 but \"quiet worker behind the scenes\" is a phrase you could paste onto anything. Give me the part you'd only know by looking: is the soil pulled away from the pot's edge, is there a leaf turned toward the window at a different angle than the rest?",
+        "That gap in the soil is the best thing you've said tonight \u2014 but it isn't the plant adjusting, it's the soil shrinking as it dried, which makes it a record of how long it's been since anyone watered it. Read the rest of the plant that way: what else on it is evidence of something that already happened?",
+        "That last line \u2014 \"bearing witness to its own impermanence\" \u2014 is you stepping in front of the plant to explain it, and the browned stem and the cracks were already doing that work better. Cut the last sentence and give me one more piece of physical evidence instead: what does the *pot* show, or the surface of the desk underneath it?",
+        "That smudge on the pot rim is the only mark in tonight's whole description that a *person* left \u2014 everything else was the plant or the soil doing something on its own. Before you go: what's one other thing in that room that carries a trace of someone rather than of itself?"
       ]
     }
   ]

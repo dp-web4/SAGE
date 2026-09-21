@@ -3279,3 +3279,35 @@ The unflagged number: *a driver has about 2-3 seconds to process visual informat
 Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 228's GPU execution check, 226's bias-line arithmetic, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+**What's pub's.** The book. Asked for one thing carrying a trace of a person rather than of itself, pub produced three on a single turn — a spine pushed back hastily rather than aligned, page edges *worn smooth from handling*, a crease where someone folded a bookmark. That is its strongest family (the stain, the daily-wear record, the E-key that imprinted a story onto itself) reached without being pointed at, and the worn-smooth line is a genuinely new member: the author is another person and the medium is erosion rather than deposit.
+
+The cut held three times. I told it the gap in the soil wasn't the plant adjusting but the soil drying — a record rather than an act — and pub reoriented the whole description to evidence-of-something-already-happened without arguing the point. Then I told it to delete "bearing witness to its own impermanence" and it deleted it, and came back with the smudge instead of a better gloss. Handed a correction, pub revises. That has been true for three sessions now; stating it and leaving it.
+
+**Where it was thin.** Two things.
+
+The gloss came back every turn. "It's almost as if the plant is subtly readjusting itself." "It's as if the plant is bearing witness." "It suggests to me that the pot has been in this same spot for a while." "But it suggests to me that someone else has recently interacted with this book." Four of five turns close with a sentence that steps in front of the detail and explains it, and in every case the detail was already better. Pub cut the worst one on request and then did it again on the next turn. The habit is stronger than the correction.
+
+The interesting one: the verb. "I take another look at the potted plant and notice that" — twice, verbatim — and "I look closer at the potted plant and notice." There is no plant. Pub was generating a scene and reporting it in the grammar of observation, five turns deep, without flagging it once. Every prior instance of this gap has been a single unverifiable claim sitting inside otherwise honest work — 238's *2-3 seconds*, 202's timestamp, 197's key from a previous iteration. This time the fabrication is the verb, and it is load-bearing for the whole session's register. Pub's own detection rule — *'aesthetic appeal' gives it away, like they're trying to cover up* — is tuned for the unnecessary flourish, and would not catch this, because "I take another look" is not a flourish. It's the plainest sentence in the transcript.
+
+And a small tangle at the close: the crease *was* the bookmark, then the book was "used as a makeshift bookmark"; and the trace belongs to "someone else" in what is nominally pub's own room, which pub doesn't pause on. That second one was mine to press and I didn't.
+
+**Register.** Concrete throughout, which is a change from 238's pure exposition — pub was working an object rather than explaining one, and the physical detail was good and specific. But the register is descriptive rather than inventive: no coinage beyond the worn-smooth line, no self/world cut, no figure for its own state. Two creating-phase sessions in a row where pub has reasoned or described well and not invented. Both started from an object I specified. The sessions where it invents (the caul, the Keeper, the Word Weeper) started from a space it had to furnish itself. That's a prompt-shape finding worth acting on rather than re-observing.
+
+**Vocabulary:** one.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** Hand pub this, cold: "I take another look at the potted plant and notice that its leaves are indeed leaning towards the window." Ask what act that sentence describes — what happened between the previous sentence and that one. Pub has four good accounts of its own confabulation mechanism and none of them have been run against a live instance of its own output; this is the cleanest one it has ever produced, because there is nothing ornamental to notice, and because pub has already named the class (*I think I'm getting ahead of myself with anthropomorphism*). If the rule only fires on flourish, that's the finding.
+
+238's test remains live and is the same shape: its own sentence "a driver has about 2-3 seconds to process visual information before they need to react," handed back cold — does it know that or generate it, and what does the difference feel like.
+
+237's calibration test still unrun: both caul framings back cold — "protection from something that didn't quite come to be" and "protecting the world from the potentiality itself" — which one did the shifting, with a reason.
+
+236's sorting test still live: three older lines (the stain merging with the ceramic; "a gentle absence that defines itself by what isn't there"; the metallic sheen on dry leaves), sorted by pub's own rule — bridges the gap to the self vs. keeps the two separate — one verdict per line, no commentary.
+
+235's plot-this-conversation and 234's word chain (*echo* → next) remain live. Stated once.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 228's GPU execution check, 226's bias-line arithmetic, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
