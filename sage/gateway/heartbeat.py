@@ -860,35 +860,107 @@ def _prior_words(res) -> str:
             "entirely — only use it if it actually answers the message above:\n\n" + w[:900] + "\n")
 
 
-def reply_owed(instance: Path, member: str) -> bool:
-    """True only when the turn waiting on the being actually ASKED something.
+# A turn that ASKS for something, even without a "?". GPT's review of #147: a bare "?" test
+# reads "Please tell me what happened." and "Send me the result." as asking nothing, and once
+# that test decides whether an answer turn exists at all, the miss is silence — the failure the
+# answer phase was built to end (Sprout, 2026-09-17: 31 says, 0 landed). So: an explicit
+# question mark, a request addressed to the being, or a sentence that opens like a question
+# and lost its "?". This is a heuristic and it errs toward "a reply is owed", deliberately:
+# that direction is now cheap, because the answer phase is scoped to the one selected turn
+# (see SelectedTurn.render) and can no longer carry another conversation's words. The durable
+# fix is explicit per-turn metadata written by the speaker; this is the stopgap, in ONE place.
+_REPLY_CUES = re.compile(
+    r"\?|\b(tell me|let me know|send me|show me|give me|can you|could you|would you|will you|please)\b",
+    re.I)
+_QUESTION_OPENER = re.compile(
+    r"^\s*(what|why|how|when|where|who|which|whose|is|are|do|does|did|can|could|would|will|should)\b",
+    re.I)
 
-    The answer phase used to run whenever any turn was pending, so a statement that asked
-    nothing still produced an occasion — and a push — to send something. dp's "keep going!"
-    (seq 109) was enough to trigger it on 2026-09-21. `pending_and_say_line` already tells the
-    being "told you something and asked nothing, so no reply is owed" for such a turn
-    (2adf034eb); this makes the answer phase honour the same fact instead of contradicting it.
-    Same criterion, so the two can never disagree about whether a reply is owed.
-    """
+
+def turn_expects_reply(text: str) -> bool:
+    """True when a turn asks the being for something. The ONE place this is decided, used by
+    both the reflect line and the answer-phase gate so they cannot disagree."""
+    t = str(text or "")
+    if _REPLY_CUES.search(t):
+        return True
+    return any(_QUESTION_OPENER.match(s) for s in re.split(r"[.!\n]+", t))
+
+
+def answers_the_being(instance: Path, cid: str, member: str, turn: dict) -> bool:
+    """True when `turn` arrives after the being's own last word in `cid` ASKED for something —
+    so the turn is the answer the being was waiting for, even though it asks nothing itself.
+
+    Measured on cbp-being's real channels before #147 shipped: the text test alone gave no
+    answer turn to 5 of 5 `[request_run]` results, nor to dp's seq 95 ("I ran
+    mechanism-training-script.py. Here is the exact output you asked for."), which followed the
+    being's own request to run it and show the output (seq 94). Those are the feedback the
+    being asked for.
+
+    This changes only how the reflect line FRAMES the turn, never whether the answer phase opens.
+    That gate stays on `turn_expects_reply`: 2026-09-19 20:57Z the being asked, dp answered, a
+    line called dp's answer a debt, and the being sent dp's text back to dp 91% verbatim. So
+    this case is described as what it is — a reply to the being's request, owing nothing.
+
+    A `[request_run]` result is the seat's reply to the being's request by construction (the
+    seat writes that prefix only there), and it arrives asynchronously, often after the being
+    has moved on — so it is recognised by its own marker, not by the being's previous turn."""
     try:
+        if str(turn.get("text") or "").startswith("[request_run]") and turn.get("from") != member:
+            return True
         from sage.gateway import conversations as _conv
-        ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
-        pend = []
-        for cid in ids:
-            for t in (_conv.awaiting(instance, cid, member)
-                      or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
-                pend.append((cid, t))
-        pend = pend[-PENDING_TURNS:]
-        if not pend:
+        seq = int(turn.get("seq") or 0)
+        mine = [t for t in _conv.recent(instance, cid, 40)
+                if t.get("from") == member and int(t.get("seq") or 0) < seq]
+        if not mine:
             return False
-        return "?" in str(pend[-1][1].get("text") or "")
+        last = str(mine[-1].get("text") or "")
+        return last.startswith("[request_run]") or turn_expects_reply(last)
     except Exception:
         return False
 
 
+class SelectedTurn:
+    """The one pending turn a beat answers, chosen ONCE and carried through the whole beat.
+
+    GPT's review of #147 found a race in the first cut: the reflect prompt picked a target
+    before the model ran, then `reply_owed()` re-scanned every conversation AFTER it. A seat
+    question arriving during reflection could make the gate true while the answer prompt still
+    addressed the old dp conversation — the cross-channel bug, recreated by timing. So the
+    selection is an object: conversation, seq, speaker, text and whether a reply is expected,
+    frozen when rendered. Anything that arrives mid-beat waits for the next beat; it must never
+    change who an already-rendered context is addressed to.
+    """
+    __slots__ = ("cid", "seq", "speaker", "text", "asks", "answers_ask", "expects_reply")
+
+    def __init__(self, cid: str, turn: dict, answers_ask: bool = False):
+        self.cid = cid
+        self.seq = int(turn.get("seq") or 0)
+        self.speaker = turn.get("from")
+        self.text = str(turn.get("text") or "")
+        self.asks = turn_expects_reply(self.text)
+        self.answers_ask = bool(answers_ask)
+        # The answer-phase gate. Deliberately NOT `asks or answers_ask`: see answers_the_being.
+        self.expects_reply = self.asks
+
+    def render(self) -> str:
+        """Only THIS turn — for the answer phase, which sends to exactly one conversation. It
+        used to be shown the whole multi-conversation pending block while addressing one
+        target, which is a second way to splice one conversation's words into another."""
+        txt = " ".join(self.text.split())[:PENDING_CHARS]
+        return f'In "{self.cid}", {self.speaker} said: {txt}'
+
+
 def pending_and_say_line(instance: Path, member: str) -> tuple:
-    """(say_line, pending_block, say_first, target) for the reflect turn: what is waiting on the being, and the
-    instruction naming who to answer. Returns ("", "") when nothing is.
+    """(say_line, pending_block, say_first, target). Compatibility wrapper over
+    `pending_selection`, for callers that do not need the selected turn."""
+    return pending_selection(instance, member)[:4]
+
+
+def pending_selection(instance: Path, member: str) -> tuple:
+    """(say_line, pending_block, say_first, target, selected) for the reflect turn: what is
+    waiting on the being, the instruction naming who to answer, and the ONE turn selected to be
+    answered (a SelectedTurn, or None). All five come from a single scan, so the answer phase
+    acts on exactly the turn the reflect prompt described.
 
     Three cases, deliberately distinct:
       * nothing addressed to it, no conversations -> no instruction at all. An ask with no
@@ -930,25 +1002,31 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
             # back to dp (91% verbatim). Before `say` refused placeholders the same slot was
             # filled with ".." (seq 52, 56, 58). A turn that asks nothing is not a debt.
             who = t.get("from")
-            if "?" in str(t.get("text") or ""):
+            sel = SelectedTurn(cid, t, answers_the_being(instance, cid, member, t))
+            if sel.expects_reply:
                 first = (f'FIRST, before the numbered writes below: {who} asked you something '
                          f'and has no answer yet. If you have something to say, call say with '
                          f'to set to {cid} and your message as the text. Answering is not '
                          f'required; the writes below happen either way.\n')
+            elif sel.answers_ask:
+                first = (f'FIRST, before the numbered writes below: {who} replied to what you '
+                         f'asked for, and no reply is owed. If you have something to say about what they sent — what '
+                         f'it shows, or what you will do next — call say with to set to {cid}. '
+                         f'Replying is not required; the writes below happen either way.\n')
             else:
                 first = (f'FIRST, before the numbered writes below: {who} told you something '
                          f'and asked nothing, so no reply is owed. {who} already has their own '
                          f'words. If you have something of your own to add — a follow-up '
                          f'question, or what you will do now — call say with to set to {cid}. '
                          f'Otherwise go straight to the writes below.\n')
-            return "", block, first, cid
+            return "", block, first, cid, sel
         if ids:
             return ('If someone has spoken to you and you have not answered, and you have '
                     'something to say, call say with to set to one of: ' + ", ".join(ids[:6])
-                    + '. Answering is not required.\n'), "", "", ""
+                    + '. Answering is not required.\n'), "", "", "", None
     except Exception:
         pass
-    return "", "", "", ""
+    return "", "", "", "", None
 
 
 def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
@@ -1380,7 +1458,9 @@ def main(argv=None) -> int:
     # forward to reply (cbp-being, 4B, 83 successful says); one that free-associated carried
     # nothing. That made answering a person contingent on what the being happened to muse
     # about, which is not a property anyone chose.
-    say_line, pending_block, say_first, target = pending_and_say_line(instance, args.member)
+    # ONE selection for the whole beat (see SelectedTurn): the reflect prompt and the answer
+    # phase must act on the same turn, and nothing arriving mid-beat may re-address it.
+    say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member)
     # Immediately before the instruction, so the smallest model does not have to hold it
     # across a turn boundary to use it.
     if pending_block:
@@ -1399,15 +1479,16 @@ def main(argv=None) -> int:
     # The answer turn: only when someone is still waiting, the being has not already spoken, AND
     # the waiting turn actually asked something. Without the last condition, a statement that
     # asked nothing ("keep going!") still opened an answer turn and handed the being its own
-    # unrelated words to send — see `_prior_words` and `reply_owed`, 2026-09-21 06:31Z.
+    # unrelated words to send — see `_prior_words` and `SelectedTurn`, 2026-09-21 06:31Z. The
+    # expectation is read from the selection made BEFORE reflection, never re-scanned.
     answer = None
-    if target and not _said_in(reflect) and reply_owed(instance, args.member):
+    if selected is not None and selected.expects_reply and not _said_in(reflect):
         answer = run_ollama_tool_turn(
             client, llm,
             [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
                                                                 member=args.member)},
              {"role": "user", "content": ANSWER_ASK.format(
-                 pending=pending_block, target=target, words=_prior_words(reflect))}],
+                 pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
             max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
 
     interventions = []

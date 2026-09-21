@@ -191,22 +191,98 @@ if __name__ == "__main__":
 def test_a_statement_that_asks_nothing_opens_no_answer_turn():
     """2026-09-21 06:31Z, cbp-being beat 17e89c29. dp's last turn was "keep going!" (seq 109),
     which asks nothing. The answer phase ran anyway, handed the being its own closing words
-    about a SEAT message, and it sent the seat's point to dp — thanking dp for catching
-    something dp never raised (seq 110). A turn that asks nothing is not an occasion to send."""
-    from sage.gateway.heartbeat import reply_owed
+    about a SEAT message, and it sent the seat's point to dp (seq 110)."""
+    from sage.gateway.heartbeat import pending_selection
     inst = _inst(); _channel(inst)
     conv.append(inst, "dp", speaker=ME, text="Got it, thanks for clarifying.")
     conv.append(inst, "dp", speaker="dp", text="i continue to be impressed by your progress. keep going!")
-    assert reply_owed(inst, ME) is False, "a statement that asked nothing owes no reply"
+    *_, sel = pending_selection(inst, ME)
+    assert sel is not None and sel.expects_reply is False, "a statement that asked nothing owes no reply"
 
 
 def test_a_question_still_opens_the_answer_turn():
-    """CONTROL: without this the fix could be 'never answer anyone', which would re-create the
-    week-long silence the answer phase was built to end (Sprout, 2026-09-17: 31 says, 0 landed)."""
-    from sage.gateway.heartbeat import reply_owed
+    """CONTROL: without this the fix could be 'never answer anyone', re-creating the silence the
+    answer phase was built to end (Sprout, 2026-09-17: 31 says, 0 landed)."""
+    from sage.gateway.heartbeat import pending_selection
     inst = _inst(); _channel(inst)
     conv.append(inst, "dp", speaker="dp", text="what are you curious about?")
-    assert reply_owed(inst, ME) is True
+    *_, sel = pending_selection(inst, ME)
+    assert sel is not None and sel.expects_reply is True
+
+
+def test_a_request_without_a_question_mark_still_expects_a_reply():
+    """GPT on #147: a bare "?" test reads requests as asking nothing, and once that test decides
+    whether an answer turn exists, the miss is silence."""
+    from sage.gateway.heartbeat import turn_expects_reply
+    for asks in ("Please tell me what happened.", "Send me the result.", "what is the status",
+                 "Can you run it again", "Let me know when it finishes."):
+        assert turn_expects_reply(asks), asks
+    for says in ("keep going!", "i continue to be impressed by your progress. keep going!",
+                 "thanks, good work", "empty journal simply means there were no anomalies."):
+        assert not turn_expects_reply(says), says
+
+
+def test_the_answer_to_the_beings_own_request_is_framed_as_a_reply_not_a_debt():
+    """Replayed on cbp-being's real channels before #147 shipped: the text test alone opened no
+    answer turn for dp's seq 95 ("Here is the exact output you asked for."), which followed the
+    being's own request to run the script and show the output (seq 94), nor for any of 5
+    `[request_run]` results. It is named as a reply to the being's request — but the answer PHASE
+    stays closed: the 20:57Z echo (test above) is this exact shape, handled as a debt."""
+    from sage.gateway.heartbeat import pending_selection
+    inst = _inst(); _channel(inst)
+    conv.append(inst, "dp", speaker=ME, text="Please run the script and show me the output.")
+    conv.append(inst, "dp", speaker="dp", text="I ran mechanism-training-script.py. Here is the exact output you asked for.")
+    *_, first, _t, sel = pending_selection(inst, ME)
+    assert sel.asks is False and sel.answers_ask is True
+    assert sel.expects_reply is False, "the answer phase must not open on an answer to the being"
+    assert "replied to what you asked for" in first and "no reply is owed" in first
+
+
+def test_a_run_result_is_recognised_by_its_marker_not_by_the_beings_last_turn():
+    """Real order, cbp-claude seq 2916-2918: the being's last word before the result was a
+    statement, not its request. Results are asynchronous."""
+    from sage.gateway.heartbeat import pending_selection
+    inst = _inst(); _channel(inst, cid="seat", other="seat")
+    conv.append(inst, "seat", speaker=ME, text="[request_run] notes/mechanism-training-script.py")
+    conv.append(inst, "seat", speaker=ME, text="Noted. I will look at the output when it comes.")
+    conv.append(inst, "seat", speaker="seat", text="[request_run] I ran notes/mechanism-training-script.py. exit code 1.")
+    *_, first, _t, sel = pending_selection(inst, ME)
+    assert sel.answers_ask is True and "replied to what you asked for" in first
+
+
+def test_a_turn_arriving_mid_beat_cannot_re_address_the_selected_one():
+    """GPT on #147 — the TOCTOU race. The first cut chose a target before reflection, then
+    re-scanned every conversation after it. A seat QUESTION arriving mid-beat made the gate true
+    while the answer still addressed dp. The selection is now frozen: what arrives after it
+    waits for the next beat."""
+    from sage.gateway.heartbeat import pending_selection
+    inst = _inst(); _channel(inst); _channel(inst, cid="seat", other="seat")
+    conv.append(inst, "dp", speaker="dp", text="keep going!")
+    *_, target, sel = pending_selection(inst, ME)
+    assert target == "dp" and sel.expects_reply is False
+    frozen = (sel.cid, sel.seq, sel.speaker, sel.expects_reply)
+    # the race: a seat question lands while the being is still reflecting
+    conv.append(inst, "seat", speaker="seat", text="can you run the script and tell me what happened?")
+    assert (sel.cid, sel.seq, sel.speaker, sel.expects_reply) == frozen, \
+        "a turn that arrived mid-beat changed who the already-rendered answer is addressed to"
+
+
+def test_the_answer_phase_sees_only_the_turn_it_answers():
+    """The answer phase sends to ONE conversation, so it is shown ONE turn — never the whole
+    multi-conversation pending block, which is a second way to splice one conversation's words
+    into a reply addressed to another."""
+    from sage.gateway.heartbeat import pending_selection
+    inst = _inst(); _channel(inst); _channel(inst, cid="seat", other="seat")
+    conv.append(inst, "seat", speaker="seat", text="memory_write appends; your fix landed below.")
+    conv.append(inst, "dp", speaker="dp", text="what are you working on?")
+    _l, block, _f, target, sel = pending_selection(inst, ME)
+    rendered = sel.render()
+    assert target == sel.cid
+    mine, other = (("what are you working on", "memory_write appends") if sel.cid == "dp"
+                   else ("memory_write appends", "what are you working on"))
+    assert mine in rendered
+    assert other not in rendered, "another conversation's words reached the answer turn"
+    assert other in block, "the reflect survey may still see everything that is waiting"
 
 
 def test_prior_words_are_offered_as_material_not_as_an_undelivered_message():
