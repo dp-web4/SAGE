@@ -1754,3 +1754,18 @@ def test_an_ask_aimed_at_a_conversation_partner_is_pointed_at_say_and_costs_noth
     # CONTROL: a real peer that is NOT a conversation partner still goes through.
     r = d(BeingIntent("mesh", {"to": "legion", "kind": "coordination", "pointer": "x"}), _ALLOW)
     assert r.ok, r
+
+
+def test_say_instead_also_names_request_run():
+    """The peer_ask refusal is read AT the step, the tool list only at the top of the turn.
+    On 2026-09-21 it named `say` as the door that works, and cbp-being turned a refused
+    `peer_ask "please run ..."` into the same request by `say` (cbp-claude seq 2898), one
+    beat after being told a say is not a run request. The refusal names request_run too."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    conv.create(Path(root), "sprout-claude", title="seat", participants=["sprout-claude", "sprout-being"],
+                writable_by=["sprout-claude", "sprout-being"])
+    msg = d._say_instead("sprout-claude")
+    assert msg and 'say with the conversation id "sprout-claude"' in msg, msg
+    assert "request_run" in msg, msg

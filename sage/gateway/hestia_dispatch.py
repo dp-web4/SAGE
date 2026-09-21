@@ -375,7 +375,14 @@ class HestiaF1aDispatcher:
         door that opens onto the wrong room is worse than one that says where the right one is.
 
         Names come from the conversations themselves: the other participants, plus any
-        `also_known_as` the seat-owned meta file declares (dp is `Sovereign` on the hub)."""
+        `also_known_as` the seat-owned meta file declares (dp is `Sovereign` on the hub).
+
+        It also names `request_run` (660cf57f1). Until 2026-09-21 this text was the only
+        advice the being received AT THE MOMENT it acted, and it named `say` as the door that
+        "works": cbp-being's heartbeat-b7b02effd778 tried `peer_ask "please run ..."`, was
+        handed `say`, and sent the identical run request as cbp-claude seq 2898, one beat after
+        the seat's seq 2897 told it a say is not a run request. The tool description is read
+        once at the top of a turn; the refusal is read at the step."""
         base = (to or "").split("/", 1)[0].strip().lower()
         if not base:
             return None
@@ -392,7 +399,9 @@ class HestiaF1aDispatcher:
                             f"hub is the wrong door and nothing was sent. Use say with the "
                             f"conversation id \"{cid}\" — it reaches them directly, it works, "
                             f"and it is not rate-limited the way asks are. This did not count "
-                            f"against any limit.")
+                            f"against any limit. If what you want is for one of your files to "
+                            f"be RUN, neither door is right: call request_run with the path — "
+                            f"a message asking for a run is not a run request.")
         except Exception:
             return None
         return None
