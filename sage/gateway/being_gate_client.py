@@ -802,7 +802,8 @@ _TOOL_SCHEMAS = {
                     "person in a message: a person may be asleep, and this reaches whoever is "
                     "on duty.",
                     {"path": "the file to run, inside your own home, e.g. notes/my-script.py",
-                     "why": "optional: what you expect to learn. Saying it helps the seat decide"},
+                     "why": "optional: what you expect to learn. Saying it helps the seat decide",
+                     "rerun": "optional: true to ask again for a file the seat already answered and you have not changed since"},
                     ["path"]),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
                  "a fact, a lesson, a question, what you were doing and why.",
