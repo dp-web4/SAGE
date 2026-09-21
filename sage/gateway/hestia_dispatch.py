@@ -1462,7 +1462,7 @@ class HestiaF1aDispatcher:
             r = _os.path.realpath(str(r))
             if rp == r or (recursive and rp.startswith(r + "/")):
                 return ResultEnvelope(ok=True, result={"status": "already_granted", "path": path, "within": r,
-                                                       "next": "you already hold reach here; read or write it directly"})
+                                                       "next": "you already hold reach here; read or write it directly. Reach is read and write, not run: to run a file, call request_run with its path"})
             if rp.startswith(r + "/") and (exact_above is None or len(r) > len(exact_above)):
                 exact_above = r
         # Beneath a grant that is EXACT (hestia #1002: a bare grant reaches its path and nothing

@@ -35,6 +35,7 @@ is safe to import on a host without hestia — instantiation fails closed instea
 from __future__ import annotations
 
 import os
+import re
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
@@ -600,6 +601,20 @@ def check_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
 # Where the profile is absent, SANDBOX_REQUIRED decides whether to refuse or degrade.
 
 
+def _unbounded_reason(effector: str) -> str:
+    """The registry refusal, plus the door when the name is a FILE.
+
+    2026-09-21 14:06Z: cbp-being called a tool named `mechanism-training-script-clean.py`
+    with {"epochs": "10"}, twice, then appealed the refusal as an overreach. It wanted to
+    run its own file; the verb for that is request_run, and the refusal never said so.
+    A refusal owes a way forward (hestia operating law, point 1)."""
+    reason = f"'{effector}' is not a gateway-member effector"
+    if "/" in effector or re.search(r"\.[A-Za-z0-9]{1,5}$", effector or ""):
+        reason += (f". That is a file name, and a file is not a tool. To run one of your own "
+                   f"files, call request_run with path='{effector}'; the seat runs it and answers")
+    return reason
+
+
 _REGISTRY = {
     "peer_ask":       dict(tool="peer_ask",     path_args=(),       cmd_arg=None),
     "witness":        dict(tool="witness",      path_args=(),       cmd_arg=None),
@@ -1112,7 +1127,7 @@ class BeingGateClient:
         # Stage 0: bounded registry. Unknown effector never reaches the law.
         if intent.effector not in _REGISTRY:
             return GatewayVerdict("deny", "registry.unbounded", stage="registry",
-                                  reason=f"'{intent.effector}' is not a gateway-member effector")
+                                  reason=_unbounded_reason(intent.effector))
         # --- Single gate (#934): the shim contract. The registry stage above is harness
         # syntax (which verbs exist); everything law-bearing happens in decide(). ---
         sg = getattr(self, "_single_gate", None)
