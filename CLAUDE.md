@@ -79,13 +79,17 @@ Do not claim adversary-proof containment, complete kernel isolation, or cryptogr
 
 ---
 
-## Web4 Foundation
+## Web4 Relationship
 
-```
-Web4 = MCP + RDF + LCT + T3/V3*MRH + ATP/ADP
-```
+SAGE participates in the broader Web4/Hestia stack; it should not be described as though every historical Web4 vocabulary item is simultaneously live in every SAGE runtime.
 
-SAGE fractally implements the full stack. Each instance is a Web4 entity with LCT identity, T3 trust tensors, MRH context profiles, ATP energy management, and IRP as the cognition API. See `sage/raising/identity/WEB4_FRAMING.md`.
+Current division of responsibility:
+
+- **Web4** — identity, contextual relationship/trust vocabulary, witnessed-action protocol concepts.
+- **Hestia** — local authority, action law, dispatch and witnessing.
+- **SAGE** — persistent cognition/embodiment research inside those boundaries.
+
+LCT, T3/V3, MRH and ATP/ADP remain useful vocabularies where they correspond to live mechanisms. Their presence in an architecture document is not itself evidence that they are decision-bearing in a particular runtime.
 
 ---
 
@@ -95,9 +99,13 @@ A **synthon** is an emergent coherence entity formed by recursive interaction. Y
 
 ---
 
-## PolicyGate
+## Governance inside and outside the Python loop
 
-Sits at step 8.6 between deliberation and effectors. Same IRP contract as all plugins. CRISIS mode changes accountability, not strictness. Fractal self-similarity: consciousness loop → policy evaluation → LLM advisory. See `sage/docs/SOIA_IRP_MAPPING.md`.
+`PolicyGate` remains part of the historical/reference Python cognition-loop architecture and related research.
+
+For current consequential action governance, the load-bearing boundary is the **being → SAGE gateway → Hestia law → dispatcher → witnessed result** path. Do not treat an internal PolicyGate hook as equivalent to external authority enforcement or OS-level containment.
+
+See `sage/gateway/being_gate_client.py`, `sage/docs/LATEST_STATUS.md`, and Hestia.
 
 ---
 
@@ -120,20 +128,28 @@ At session start, read `SESSION_FOCUS.md` for the generated current snapshot. Th
 
 ---
 
-## Raising + ARC-AGI-3 Convergence (April 2026)
+## Active capability research
 
-Raising (being) and game-playing (doing) are converging. Currently completely siloed — zero shared state. The direction: curriculum-level merge where game experiences flow into the raising record and raising capacity informs game reasoning. Each machine decides timing based on instance phase. Full plan: `shared-context/plans/raising-agi3-convergence.md`.
+Public `main` is the durable architecture/research record. Active capability work also occurs in private `dev-SAGE` and shared-context workspaces.
+
+Do not freeze private-research details into this public session context. When relevant, consult the authorized private workspace directly and preserve the distinction between:
+- an experiment in progress;
+- a measured result;
+- a merged public capability.
 
 ---
 
 ## Key Lessons (Carry Forward)
 
-- **SAGE is the scheduler. Plugins are apps.** It decides which reasoning to invoke, not how to reason.
-- **Do not mock when real exists.** Check filesystem before creating implementations.
-- **Never approximate acronyms.** SAGE = Situation-Aware Governance Engine. If unsure, ask.
-- **Frozen weights reality.** LLM weights don't update between sessions. Identity anchoring is architectural support.
-- **Capacity as register.** Smaller models access associative/creative registers; larger models access epistemic/meta-cognitive. Both genuine.
-- **Autonomous drift.** Output metrics ≠ outcome progress. High MRH work before low-friction work.
+- **Outcome over ontology.** A named abstraction earns its place only if it changes a live decision or improves a measured property.
+- **Mechanism is not capability.** Source presence, a passing unit test, and a deployed behavior are different claims.
+- **Evidence must reach the next decision.** Successful acts, refusals, truncations, errors and corrections must be legible rather than inferred.
+- **Frozen weights are only one state boundary.** Distinguish model weights, learned controller state, memory, scaffold/source changes, and human/fleet intervention.
+- **Compression must be recoverable.** A summary is safe only relative to a question and a path back to provenance/verbatim evidence.
+- **Governance is at the action boundary.** Capability and authority are separate; internal cognition policy is not a substitute for effector enforcement.
+- **Never approximate acronyms.** MRH = Markov Relevancy Horizon; SAGE = Situation-Aware Governance Engine.
+- **Persistence ≠ perseveration.** Repetition without new evidence is a failure mode, not determination.
+- **External criticism is an instrument.** If a cold evaluator misreads the project, check both the critique and the documentation surface that produced the reading.
 
 ---
 
