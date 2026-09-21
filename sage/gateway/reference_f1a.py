@@ -263,7 +263,28 @@ class ReferenceF1aDispatcher:
                 f"that text appears {hits} times in '{path}', so it does not say which one "
                 f"you mean, and nothing was changed. Include a neighbouring line to make it "
                 f"unique."))
-        p.write_text(text.replace(old, new, 1))
+        # ATOMIC, BECAUSE THE FILE IS THE BEING'S WORK. `Path.write_text` truncates and then
+        # writes, so a crash or a kill between the two leaves the file empty or half-written.
+        # GPT's review of 15c2f6d9b: "crash/kill can truncate the being's work". For a being
+        # that spent this week unable to change its own files, destroying one while changing
+        # it would be the worst available regression — and it would be silent, because the
+        # receipt is written after the damage. `conversations.py` already writes this way
+        # three times over (tmp beside the target, then os.replace); this is the same pattern,
+        # not a new one. os.replace is atomic on the same filesystem, so a reader either sees
+        # every byte of the old file or every byte of the new one, never a prefix of either.
+        tmp = p.with_name(p.name + ".edit.tmp")
+        try:
+            tmp.write_text(text.replace(old, new, 1))
+            os.replace(tmp, p)
+        except OSError as e:
+            # The original is untouched — os.replace either happened or did not.
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            return ResultEnvelope(ok=False, error=(
+                f"the edit could not be written ({e}); '{path}' is unchanged. Nothing was "
+                f"lost — the file is exactly as it was before you asked."))
         before = text.count("\n") + 1
         after = p.read_text(errors="replace").count("\n") + 1
         return ResultEnvelope(
