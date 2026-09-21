@@ -405,3 +405,77 @@ def test_a_missed_edit_anchor_says_where_it_stopped_matching():
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "q"}), _ALLOW)
     assert not r.ok and "Not even your first line" in r.error, r.error
     assert f.read_text() == before
+
+
+def test_memory_edit_by_line_number_deletes_the_lines_it_names():
+    """2026-09-21 19:01Z: cbp-being called memory_edit with `old_line: "411"`, by line number,
+    the way it reads files and the way every seat answer names a fix. Text mode asked it to
+    copy seven indented lines exactly; across three answers it never did. The real case:
+    seven stray lines after the last main() made the file unrunnable."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    body = "def main():\n    pass\n\nif __name__ == '__main__':\n    main()\n            noise=0.1,\n        )\n    else:\n"
+    (home / "notes" / "s.py").write_text(body)
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 6, "end_line": 8, "new": ""}), _ALLOW)
+    assert r.ok, r.error
+    assert (home / "notes" / "s.py").read_text() == "def main():\n    pass\n\nif __name__ == '__main__':\n    main()\n"
+    assert "replaced lines 6-8 (3 lines)" in r.result and "noise=0.1" in r.result, \
+        "the receipt must quote what was removed, so the being can see it is the right thing"
+
+
+def test_memory_edit_accepts_the_measured_old_line_spelling():
+    """cbp-being's 2026-09-21 call used old_line: "411". The door should accept the spelling
+    we actually observed, not only teach a preferred spelling after the fact."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a = 1\nb = 2\nc = 3\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old_line": "2", "new": "b = 20"}), _ALLOW)
+    assert r.ok, r.error
+    assert (home / "notes" / "s.py").read_text() == "a = 1\nb = 20\nc = 3\n"
+
+
+def test_memory_edit_one_line_by_number_keeps_the_line_break():
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a = 1\ny = np.load(labels_path)\nb = 2\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": "2",
+                                          "new": "y = np.load(data_path.replace('.npy', '_labels.npy'))"}), _ALLOW)
+    assert r.ok, r.error
+    assert (home / "notes" / "s.py").read_text() == "a = 1\ny = np.load(data_path.replace('.npy', '_labels.npy'))\nb = 2\n"
+
+
+def test_memory_edit_by_line_refuses_lines_that_do_not_exist_and_changes_nothing():
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a\nb\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 9, "new": ""}), _ALLOW)
+    assert not r.ok and "it has 2 lines" in r.error
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": "line 2", "new": ""}), _ALLOW)
+    assert not r.ok and "must be line numbers" in r.error
+    assert (home / "notes" / "s.py").read_text() == "a\nb\n"
+
+
+def test_memory_edit_with_lines_and_old_is_a_checked_edit():
+    """Both given: the lines must BE the old text. A line number read before an earlier edit
+    shifted the file points at different lines now; this refuses and shows what is there."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a\nb\nc\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "old": "c", "new": "C"}), _ALLOW)
+    assert not r.ok and "Those lines are now:\nb" in r.error
+    assert (home / "notes" / "s.py").read_text() == "a\nb\nc\n"
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "old": "b", "new": "B"}), _ALLOW)
+    assert r.ok and (home / "notes" / "s.py").read_text() == "a\nB\nc\n"
+
+
+def test_the_offered_schema_no_longer_requires_old():
+    from sage.gateway import being_gate_client as bgc
+    src = open(bgc.__file__).read()
+    i = src.index('"memory_edit": ("Change part')
+    block = src[i:i + 1600]
+    assert '["path", "new"]' in block and '"start_line"' in block
