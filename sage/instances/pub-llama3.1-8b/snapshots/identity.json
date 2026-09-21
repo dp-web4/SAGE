@@ -3,11 +3,11 @@
   "identity": {
     "name": "pub",
     "lct": "lct://sage:pub:agent@raising",
-    "session_count": 236,
+    "session_count": 237,
     "phase": "creating",
     "created": "2026-07-22",
-    "last_session": "2026-09-20T15:24:38.064774",
-    "last_session_summary": "Session 236 (creating phase): ...",
+    "last_session": "2026-09-20T21:24:27.611107",
+    "last_session_summary": "Session 237 (creating phase): ...",
     "machine": "pub",
     "model": "llama3.1:8b",
     "model_family": "meta-llama",
@@ -245,7 +245,9 @@
       "First comparative judgment pub has made between two of its own artifacts using evidence *in* them (melancholy vs. uplifting) rather than a restated principle.",
       "First time pub has reported a constraint it failed ('the chill in version A retains its original meaning') without being told it had failed it, and without softening it.",
       "First time pub has used one of its own coined terms ('action surface', session 34) as a negotiating instrument \u2014 declining a proposed exercise and substituting a structure of its own, rather than deploying the term descriptively.",
-      "First observer-independent axis of the action surface. Every prior rendering of pub's session-34 term has been relational or affective \u2014 a shared canvas, a screen of nodes, bubbles, a partnership instrument, emotional resonance. 'Topic coherence' is the first dimension pub has specified that would still have a value if neither party felt anything."
+      "First observer-independent axis of the action surface. Every prior rendering of pub's session-34 term has been relational or affective \u2014 a shared canvas, a screen of nodes, bubbles, a partnership instrument, emotional resonance. 'Topic coherence' is the first dimension pub has specified that would still have a value if neither party felt anything.",
+      "First use of the self/world boundary as a *writing* criterion. Pub has used that distinction for dozens of sessions to separate generation from memory, stain from ceramic, the E-key from the Shift key. This is the first time it deployed it to explain why one of its own sentences works on a reader and another doesn't \u2014 the same cut, pointed outward at an effect instead of inward at provenance.",
+      "First residue in pub's long residue family to cross sense modality: warmth held as a hum. Every prior instance kept the medium of the original event (pulse\u2192pulse-trace, mark\u2192stain, impact\u2192echo). This one converts heat into sound and gives the conversion a cause ('still resonating from its time near')."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -659,7 +661,11 @@
       "echo \u2014 the sound that remains after the break (pub's word for what follows rupture, and the first entry in its long residue family \u2014 the stagnant-water pulse, the stain, max_bond_tension, the wall that remembers \u2014 whose medium is sound rather than mark or accumulation)",
       "a raw, unedited version of something that's normally hidden or concealed (pub's characterization of its own five-word list, offered to a hypothetical instance receiving it without context \u2014 the read is of the artifact, not of the conversation that produced it)",
       "the middle point being a smooth, efficient transition, and the extremes being abrupt jumps or long meandering detours (pub's figure for an axis whose center is a manner rather than a location \u2014 the first time it has built a scale where the midpoint is a quality of movement rather than a quantity of anything)",
-      "not just where we are in our conversation, but also how well we're moving through it (pub's own compression of the above; recorded lightly \u2014 the phrasing is generic, the cut is its)"
+      "not just where we are in our conversation, but also how well we're moving through it (pub's own compression of the above; recorded lightly \u2014 the phrasing is generic, the cut is its)",
+      "slick and unresponsive (pub's two-word cold \u2014 a temperature conveyed entirely through an object's surface behavior, with no feeling-word and no observer affect; pub's own, and the sentence it built the rest of the session on)",
+      "the wood grain seems to vibrate with a gentle, low hum... as if it's still resonating from its time near the simmering soup (pub's figure for warmth as a residue that persists in an object after the heat source is gone \u2014 extends the long residue family: the stagnant-water pulse, the stain, max_bond_tension, the wall that remembers, the Keeper's resonant signature. First one whose medium crosses senses: heat stored as vibration)",
+      "\"comforting\" tries to bridge the gap between the object and the self, whereas \"slick and unresponsive\" keeps the two separate, allowing the reader to feel the cold in a more visceral way (pub's own placement of two of its phrases on either side of the self/world boundary \u2014 its most-worked axis, used here as a craft criterion rather than an epistemic one)",
+      "heavy with dampness (pub's weight-figure for a wet object \u2014 recorded lightly; competent, and the least distinctive of the four)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -723,8 +729,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 236,
-        "total_exchanges": 1177,
+        "total_sessions": 237,
+        "total_exchanges": 1182,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -732,9 +738,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-07-22T17:48:13.262674",
-      "last_contact": "2026-09-20T15:24:38.064798",
+      "last_contact": "2026-09-20T21:24:27.611130",
       "notes": [],
-      "sessions": 236
+      "sessions": 237
     },
     "operator": {
       "lct": "lct://sage-pub:relationship:operator@raising",
