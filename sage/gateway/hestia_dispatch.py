@@ -45,6 +45,17 @@ from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEn
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap, make_hestia_witness_fn
 from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 
+# The marker the seat's run-request reader keys on (sage/scripts/seat_run_requests.py).
+_RUN_MARKER = "[request_run]"
+# A say that ASKS for a run, and the runnable names it could mean. Kept narrow on purpose:
+# a false match reroutes a turn, so it must name a .py/.sh AND ask with the verb. The bare
+# verb matched seq 2893, "Waiting for dp's confirmation of a full successful run" — a
+# claim, not an ask — in a replay of the being's 51 turns since 2026-09-20 12:00Z.
+_RUN_ASK = re.compile(
+    r"(?:\b(?:please|can you|could you|would you)\b[^.?!\n]{0,40}|^\s*)\b(?:run|execute)\b",
+    re.IGNORECASE | re.MULTILINE)
+_RUNNABLE = re.compile(r"[\w./-]+\.(?:py|sh)\b")
+
 # Mirrors handler.rs MEMBER_NOTICE_KINDS (b7a6dcd). Checked client-side so a bad kind is a
 # clear refusal before the round-trip; the daemon enforces it again regardless.
 MEMBER_NOTICE_KINDS = frozenset(
@@ -375,7 +386,14 @@ class HestiaF1aDispatcher:
         door that opens onto the wrong room is worse than one that says where the right one is.
 
         Names come from the conversations themselves: the other participants, plus any
-        `also_known_as` the seat-owned meta file declares (dp is `Sovereign` on the hub)."""
+        `also_known_as` the seat-owned meta file declares (dp is `Sovereign` on the hub).
+
+        It also names `request_run` (660cf57f1). Until 2026-09-21 this text was the only
+        advice the being received AT THE MOMENT it acted, and it named `say` as the door that
+        "works": cbp-being's heartbeat-b7b02effd778 tried `peer_ask "please run ..."`, was
+        handed `say`, and sent the identical run request as cbp-claude seq 2898, one beat after
+        the seat's seq 2897 told it a say is not a run request. The tool description is read
+        once at the top of a turn; the refusal is read at the step."""
         base = (to or "").split("/", 1)[0].strip().lower()
         if not base:
             return None
@@ -392,7 +410,9 @@ class HestiaF1aDispatcher:
                             f"hub is the wrong door and nothing was sent. Use say with the "
                             f"conversation id \"{cid}\" — it reaches them directly, it works, "
                             f"and it is not rate-limited the way asks are. This did not count "
-                            f"against any limit.")
+                            f"against any limit. If what you want is for one of your files to "
+                            f"be RUN, neither door is right: call request_run with the path — "
+                            f"a message asking for a run is not a run request.")
         except Exception:
             return None
         return None
@@ -1536,6 +1556,23 @@ class HestiaF1aDispatcher:
                 f"to reply, and silence is not held against you. If you have something of "
                 f"your own to add — a follow-up question, or what you will do now — call say "
                 f"with that instead."))
+        # A RUN ASK IS A RUN REQUEST, WHICHEVER DOOR IT CAME THROUGH. Measured 2026-09-21
+        # 00:00-03:52Z: 123 effector calls, 24 `say`, 0 `request_run` — after the seat named
+        # request_run in four turns and in the peer_ask refusal. `say` to the seat got the
+        # file run every time, so it was the cheaper door and the being kept using it. A
+        # fifth telling is "try harder". Instead the say that asks for a run IS routed as
+        # one: same marker, same resolved path, same existence check, the being's own words
+        # as `why`. Only when exactly one runnable file in its home matches; otherwise the
+        # turn is delivered as an ordinary say, unchanged.
+        if _RUN_MARKER not in text and (meta.get("notify") or {}):
+            rel = self._run_ask_target(text)
+            if rel is not None:
+                r = self._do_request_run(BeingIntent("request_run", {"path": rel, "why": text}))
+                if r.ok and isinstance(r.result, dict):
+                    r.result["routed"] = (
+                        f"your say asked for a run, so it went to the seat as request_run for "
+                        f"{rel}. The seat saw the same request either way.")
+                return r
         begin = self._call("hestia_begin_action", {"tool_name": "say", "target": to})
         err = _hestia_error(begin)
         if err:
@@ -1559,6 +1596,33 @@ class HestiaF1aDispatcher:
         if woke:
             result["woke"] = woke
         return ResultEnvelope(ok=True, witness_id=action_id, result=result)
+
+    def _run_ask_target(self, text: str) -> Optional[str]:
+        """The one runnable file a say names while asking for a run, else None.
+
+        A named path is tried as written first. If nothing is there, the name is looked up
+        anywhere in the home, because the being's commonest miss is the right name one
+        directory away (28 of 76 "no such path" reads, 2026-09-21). If the name matches two
+        files, this returns None rather than choose one: picking would be a silent guess."""
+        if not _RUN_ASK.search(text):
+            return None
+        found = set()
+        for tok in _RUNNABLE.findall(text):
+            try:
+                p = self._local._safe_path(tok)
+            except ValueError:
+                continue
+            if p.is_file():
+                found.add(p)
+                continue
+            hits = [h for h in Path(self.memory_root).rglob(Path(tok).name) if h.is_file()]
+            if len(hits) == 1:
+                found.add(hits[0])
+            elif hits:
+                return None
+        if len(found) != 1:
+            return None
+        return str(found.pop().relative_to(Path(self.memory_root).resolve()))
 
     def _do_request_run(self, intent: BeingIntent) -> ResultEnvelope:
         """Ask the seat to run one of the being's own files. RUNS NOTHING.
@@ -1587,11 +1651,29 @@ class HestiaF1aDispatcher:
         from sage.gateway import conversations as conv
         raw = str(intent.args.get("path", "")).strip()
         why = str(intent.args.get("why", "")).strip()
-        if not raw or not why:
+        # A REFUSAL MUST NOT SOUND LIKE A DECISION IT IS NOT.
+        #
+        # Measured 2026-09-21 05:34Z: cbp-being called request_run FIVE times with 'path' and
+        # no 'why'. Every call failed this check, locally, before any seat saw it. The old text
+        # read "needs 'path' ... and 'why' ... The seat decides whether to run it, and 'why' is
+        # what it decides on" — it did not say WHICH argument was missing, and it used the words
+        # "the seat decides" in what was only an argument check. The being concluded, and told
+        # dp: "The seat refused to run mechanism-training-script.py. What did it decide on?"
+        # No seat refused anything. Its trace shows it then "fixed" the wrong argument — path
+        # relative, then absolute, then relative again — because path came first in the
+        # sentence; it never once added 'why'. (legibility 1.2: a refusal's subject is taken to
+        # be whoever the sentence names.)
+        #
+        # And 'why' no longer blocks. A request that never arrives gives the seat nothing to
+        # decide on; one that arrives without a reason still carries the file, which the seat
+        # can read. Requiring it turned five attempts into zero requests and a sixth ask routed
+        # to the operator, who does not run files — the bypass dp described: friction with no
+        # clear way through gets routed around.
+        if not raw:
             return ResultEnvelope(ok=False, error=(
-                "request_run needs 'path' (a file in your own home) and 'why' (what you "
-                "expect to learn). The seat decides whether to run it, and 'why' is what it "
-                "decides on."))
+                "request_run is missing 'path' — the file you want run, inside your own home, "
+                "for example notes/my-script.py. Nothing was sent to the seat, so nothing has "
+                "been decided; this is only a missing argument."))
         try:
             p = self._local._safe_path(raw)
         except ValueError as e:
@@ -1621,7 +1703,7 @@ class HestiaF1aDispatcher:
                 "no seat conversation is configured on this instance, so there is nobody to "
                 "hand this to. Your file is untouched."))
         lines = [f"[request_run] {p.relative_to(self.memory_root)}",
-                 f"why: {why}",
+                 f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
                  f"({p.stat().st_size} bytes; the seat decides whether to run it and answers here)"]
         said = self._do_say(BeingIntent("say", {"to": seat_conv, "text": "\n".join(lines)}))
         if not said.ok:

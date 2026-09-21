@@ -37,6 +37,23 @@ reader. The meta's optional `notify` map — `{"<participant>": "<mesh plugin id
 by the seat, which the being cannot edit — says who to wake and under which mesh id, since a
 conversation id ("cbp-claude") and a mesh member id ("claude-code") are not the same name.
 No map means no wake, which is right for a conversation whose other party is a person.
+
+WATCHERS, AND THE RULE THEY RUN UNDER (dp, 2026-09-21; wording proposed by GPT's review of
+`9c132c32d` and ratified by dp: "if notify does not create an obligation, an fyi is harmless
+and potentially helpful"). `notify_watchers` is an explicit OBSERVER DELEGATION recorded in
+the conversation's seat-owned meta:
+
+  * a watcher MAY be notified, and receives the pointer — the conversation id and seq range,
+    never the text of a turn;
+  * a watcher gains NO write authority. `writable_by` remains the only thing that decides
+    who may speak, so dp's two-party ruling is untouched;
+  * the being CANNOT add or remove watchers: meta is the seat's file and `conversations/` is
+    reserved from `memory_write`;
+  * the notice CREATES NO OBLIGATION, which is the condition dp attached. Verified, not
+    assumed: the daemon counts only `review_request` and `reply` as awaiting a response
+    (`MEMBER_KINDS_AWAIT_RESPONSE`, handler.rs), and a watcher wake rides `coordination`, so
+    it never accrues to anyone's unanswered queue. If that constant ever grows to include
+    `coordination`, this stops being an FYI and the rule above is what it has broken.
 """
 from __future__ import annotations
 

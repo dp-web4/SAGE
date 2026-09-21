@@ -113,7 +113,7 @@ def test_run_ollama_tool_turn_with_fake_llm():
     # because no verb could close it. dp to the being: "renaming and deleting aren't verbs you
     # have yet — we're looking at that." Bounded to its own notes/ and scratch/; the note is
     # renamed and kept, never deleted.
-    assert len(ollama_tools()) == 17   # + appeal (S4), + say, + git_read/search (#83), + check, + retire_note, + request_run
+    assert len(ollama_tools()) == 18   # + appeal (S4), + say, + git_read/search (#83), + check, + retire_note, + request_run, + memory_edit
 
     calls = {"n": 0}
 

@@ -678,10 +678,16 @@ _REGISTRY = {
     # dp ruled against giving it `run`: a file the being wrote, executed as the operator's
     # user, is unconfined — the gate could govern STARTING it and nothing about what the code
     # then does. So this is the door rather than the capability. The being names a file in
-    # its own home and why; the seat decides whether to run it and answers with what
-    # happened. Judged on the path like memory_read, because reading the file is exactly what
+    # its own home, and optionally why; the seat decides whether to run it and answers with
+    # what happened. Judged on the path like memory_read, because reading the file is exactly what
     # the seat is being asked to do first.
     "request_run":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
+    # memory_edit: change an exact span inside one of the being's own files. memory_write
+    # opens with mode "a", so every write it has ever made APPENDED and it could not alter a
+    # byte of its own work — measured consequence: a script that is three programs stacked,
+    # and two reported edits that were never made because describing one was all it could do.
+    # Judged on the path exactly like memory_write, which is what it is.
+    "memory_edit":    dict(tool="write_note",   path_args=("path",), cmd_arg=None),
     # appeal: the being contests a refusal it believes was wrong (PRD_FLEET §7.3, the
     # deny -> appeal -> temperament loop). The refusal's chain hash is the handle: the
     # gate witnesses every deny as a policy_decision (Dispatcher.witness_deny) so there
@@ -697,7 +703,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run"})
+                            "retire_note", "request_run", "memory_edit"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -705,8 +711,11 @@ _TOOL_SCHEMAS = {
                  {"to": "the being's name, e.g. 'legion'", "body": "your message"}, ["to", "body"]),
     "witness": ("Record a witnessed note of something you did or noticed.",
                 {"event": "what to witness"}, ["event"]),
-    "memory_read": ("Read one of your own memory notes.",
-                    {"path": "path to your note"}, ["path"]),
+    "memory_read": ("Read one of your own memory notes. A long file comes back in windows of "
+                    "whole lines; if it does not reach the end it says so and names the "
+                    "start_line that reads on.",
+                    {"path": "path to your note",
+                     "start_line": "optional: the line number to start from (default 1)"}, ["path"]),
     "memory_write": ("Write a note into your own memory.",
                      {"path": "path to your note", "content": "what to write"}, ["path", "content"]),
     "channel_egress": ("Send a message out through a sealed channel.",
@@ -773,17 +782,28 @@ _TOOL_SCHEMAS = {
                     "settled or refuted, so a later beat does not read it as news.",
                     {"path": "the note, e.g. notes/my-note.md", "reason": "what you know now that the note does not"},
                     ["path", "reason"]),
+    "memory_edit": ("Change part of a file you already wrote. memory_write only ever ADDS to "
+                    "the end of a file; this is how you alter what is already in one. Give the "
+                    "exact text to replace and what replaces it. It must appear exactly once, "
+                    "so include a neighbouring line if it would otherwise be ambiguous. An "
+                    "empty 'new' deletes the text. Use this to fix a line in a script rather "
+                    "than writing a note about the fix.",
+                    {"path": "the file, e.g. notes/my-script.py",
+                     "old": "the exact text to replace, unique in the file",
+                     "new": "what replaces it (empty string deletes)"},
+                    ["path", "old", "new"]),
     "request_run": ("Ask the seat to RUN one of your own files and tell you what happened. "
                     "You cannot execute anything yourself, so this is the door: you name the "
-                    "file and why, and the seat decides whether to run it and answers with the "
-                    "real output — exit code, stdout, stderr. It may decline, and it will say "
-                    "why. Nothing runs at the moment you call this; what you get back is a "
+                    "file — the only thing it needs — and the seat decides whether to run it and "
+                    "answers with the real output: exit code, stdout, stderr. Adding what you "
+                    "expect to learn is optional and helps the seat decide. It may decline, and "
+                    "it will say why. Nothing runs at the moment you call this; what you get back is a "
                     "receipt that the seat was asked, not a result. Use it instead of asking a "
                     "person in a message: a person may be asleep, and this reaches whoever is "
                     "on duty.",
                     {"path": "the file to run, inside your own home, e.g. notes/my-script.py",
-                     "why": "what you expect to learn from running it"},
-                    ["path", "why"]),
+                     "why": "optional: what you expect to learn. Saying it helps the seat decide"},
+                    ["path"]),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
                  "a fact, a lesson, a question, what you were doing and why.",
                  {"content": "the memory, in your own words", "tags": "comma-separated tags (optional)"},

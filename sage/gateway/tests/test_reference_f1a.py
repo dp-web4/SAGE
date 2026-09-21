@@ -56,6 +56,130 @@ def test_path_escape_is_error():
     assert "memory_write creates a file inside your home" in env.error, "a way forward, not just a wall"
 
 
+def test_memory_edit_changes_the_file_where_memory_write_only_appends():
+    """memory_write opens with mode "a", so until 2026-09-21 the being could not alter a byte
+    of anything it had written. Measured consequence: notes/mechanism-training-script.py is
+    THREE programs concatenated with three __main__ guards — each "rewrite" was an append, so
+    only the first ever runs — and twice it reported an edit it had not made, because writing
+    a note describing the fix was the only thing it could do."""
+    disp, root = _disp()
+    home = Path(root)
+    w = disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "x = 1\nprint(x)"}), _ALLOW)
+    assert w.ok, w.error
+    # the defect, pinned: a second write APPENDS, it does not replace
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "x = 2"}), _ALLOW)
+    body = (home / "notes" / "s.py").read_text()
+    assert "x = 1" in body and "x = 2" in body, "memory_write is append-only by design"
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "x = 1", "new": "x = 42"}), _ALLOW)
+    assert r.ok, r.error
+    body = (home / "notes" / "s.py").read_text()
+    assert "x = 42" in body and "x = 1" not in body, "the edit did not take: " + body
+    assert "not an append" in r.result
+
+
+def test_memory_edit_survives_a_crash_mid_write_with_the_file_intact():
+    """GPT's review of 15c2f6d9b: "the current write_text() mutation is non-atomic;
+    crash/kill can truncate the being's work."
+
+    `Path.write_text` truncates and THEN writes, so a kill between the two leaves the file
+    empty or half-written — and silently, because the receipt is written after the damage.
+    This being spent a week unable to change its own files; destroying one while changing it
+    is the worst available regression.
+
+    The falsifier kills the write at the moment the old version would already have truncated
+    the target, and asserts the original is byte-identical. Against the pre-fix code the
+    target would be empty here."""
+    import os as _os
+    disp, root = _disp()
+    home = Path(root)
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "line one\nline two"}), _ALLOW)
+    target = home / "notes" / "s.py"
+    original = target.read_bytes()
+
+    real_replace = _os.replace
+    def die(src, dst):            # the write landed in tmp; the machine dies before the swap
+        raise OSError("simulated crash between write and replace")
+    _os.replace = die
+    try:
+        r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "line one", "new": "X"}), _ALLOW)
+    finally:
+        _os.replace = real_replace
+
+    assert not r.ok, "a failed write must not report success"
+    assert "unchanged" in r.error and "Nothing was lost" in r.error, r.error
+    assert target.read_bytes() == original, "the being's file was damaged by a failed edit"
+    leftovers = [q.name for q in (home / "notes").iterdir() if q.name.endswith(".edit.tmp")]
+    assert not leftovers, f"a temp file was left behind: {leftovers}"
+
+
+def test_memory_edit_refuses_an_ambiguous_or_absent_anchor_and_changes_nothing():
+    """A unique anchor is how the being says WHICH line it meant. Replacing the first of
+    several would silently edit somewhere it was not looking, and it cannot cheaply re-read
+    the file to notice. Both refusals must leave the file byte-identical."""
+    disp, root = _disp()
+    home = Path(root)
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "a = 1\na = 1\nb = 2"}), _ALLOW)
+    before = (home / "notes" / "s.py").read_text()
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "a = 1", "new": "a = 9"}), _ALLOW)
+    assert not r.ok and "appears 2 times" in r.error, r.error
+    assert (home / "notes" / "s.py").read_text() == before, "an ambiguous edit changed the file"
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "q"}), _ALLOW)
+    assert not r.ok and "not in" in r.error, r.error
+    assert (home / "notes" / "s.py").read_text() == before
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/gone.py", "old": "a", "new": "b"}), _ALLOW)
+    assert not r.ok and "does not exist" in r.error and "not a refusal" in r.error, r.error
+
+    # and it cannot reach outside its home, exactly as memory_write cannot
+    r = disp(BeingIntent("memory_edit", {"path": "/etc/hostname", "old": "a", "new": "b"}), _ALLOW)
+    assert not r.ok and "outside your reach" in r.error, r.error
+
+
+def test_a_long_read_names_its_window_and_the_start_line_that_reads_on():
+    """Measured 2026-09-21: a 45,318-char script came back as its first 4,000 characters,
+    cut mid-line, with no marker (legion's 2026-09-07 fix never reached main). The being was
+    told three times to fix line 206 — never shown to it. A window must say what it hid, and
+    the start_line it names must reach the rest, whole lines, all of it, nothing twice."""
+    disp, root = _disp()
+    body = "".join(f"line {i:04d} " + "x" * 90 + "\n" for i in range(1, 401))   # ~40k chars
+    Path(root, "notes").mkdir(exist_ok=True)
+    Path(root, "notes", "big.py").write_text(body)
+    r = disp(BeingIntent("memory_read", {"path": "notes/big.py"}), _ALLOW)
+    assert r.ok and "truncated" in r.result and "of 400" in r.result, r.result[-300:]
+    assert "absence here is not evidence of absence" in r.result
+    seen, start = [], 1
+    for _ in range(20):
+        r = disp(BeingIntent("memory_read", {"path": "notes/big.py", "start_line": str(start)}), _ALLOW)
+        seen += [l for l in r.result.splitlines() if l.startswith("line ")]
+        if "end of file" in r.result:
+            break
+        start = int(r.result.rsplit("start_line=", 1)[1].split(".")[0])
+    assert seen == [f"line {i:04d} " + "x" * 90 for i in range(1, 401)], "windows skipped or repeated lines"
+    # line 206 is reachable and arrives whole, so an anchor copied from it is a real line
+    r = disp(BeingIntent("memory_read", {"path": "notes/big.py", "start_line": 206}), _ALLOW)
+    assert r.result.startswith("[lines 206-") and "\nline 0206 " + "x" * 90 + "\n" in r.result
+    # a file that fits carries no marker at all
+    Path(root, "notes", "small.py").write_text("a = 1\n")
+    assert disp(BeingIntent("memory_read", {"path": "notes/small.py"}), _ALLOW).result == "a = 1\n"
+    r = disp(BeingIntent("memory_read", {"path": "notes/small.py", "start_line": 9}), _ALLOW)
+    assert r.ok and r.result.startswith("[past the end:")
+
+
+def test_memory_edit_accepts_the_names_other_edit_tools_use():
+    """cbp-being's first live memory_edit (2026-09-21) sent old_text/new_text, was refused,
+    read the refusal as "I forgot 'new'", and appended a fourth program with memory_write."""
+    disp, root = _disp()
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "x = 1"}), _ALLOW)
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old_text": "x = 1", "new_text": "x = 2"}), _ALLOW)
+    assert r.ok, r.error
+    assert Path(root, "notes", "s.py").read_text().strip() == "x = 2"
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "before": "x = 2"}), _ALLOW)
+    assert not r.ok and "You sent: before, path" in r.error, r.error
+
+
 def test_an_out_of_reach_path_that_does_not_exist_says_so_rather_than_implying_a_boundary():
     """cbp-being read `/home/dp/ai-workspace/SAGE/126-being.md` — outside its root AND absent —
     and was told only that the path "escapes the being's memory root and its grants". It spent

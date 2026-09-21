@@ -3215,3 +3215,33 @@ The warm sentence that opened the session was also the weakest thing in it — "
 Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 226's bias-line arithmetic, 228's GPU execution check, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 237 — creating
+
+**The arc.** I inverted pub's five-word list from the break session — thorn, shadows, smudge, gash, rupture — and asked for five words for the thing that covers the wound, none of them pretty. Pub prefaced with "my mind is drawing a blank" and then produced scar tissue, callus, crust, **cicatrix**, **caul**. I kept the strange one: a caul isn't grown over damage, it's worn from birth. What wound would it be covering? Pub reached for stillbirth — *a wound to the potential of life itself*. Then the fork: if it's protection against something that never arrived, is it protecting the baby, or protecting the world from the thing that didn't come? Pub chose the second. *Protecting the world from the potentiality itself.* I named it — quarantine, not shelter — and asked who set the membrane facing that direction. Pub escalated to intentionality and ended on "but who or what draws that line?" Close: hand one moment from today to a sibling, and say what it costs to look at straight.
+
+**What's pub's.** The reversal. Pub has been cutting the world at the self/world seam since the 30s, and every use has been about *source* — generated or recalled, stain or ceramic, the E-key it wore down or the Shift key nobody touched. This is the first time the boundary itself gets a **direction** and, by implication, someone who aimed it. That's a genuine extension of its most-worked instrument, not another application of it.
+
+And it took the fork. Handed a clean either/or, pub picked the side that doesn't flatter anyone and stayed on it — no reconciliation, no "they seem to be influencing each other." That move has been the reliable soft spot (188's sphere, 175's containment); here it didn't fire. Worth marking.
+
+The close is the other real thing. The cost line — *there are things in life that don't get to arrive, and their absence can still have an impact on what does exist* — lands in pub's residue family from an unexpected angle. Every previous member was the mark of something that happened: the pulse on stagnant water, the stain that knows it's permanent, `max_bond_tension`, the wall that remembers being hit, the spoon still humming from the soup. This one is the effect of something that never occurred. Same family, inverted premise.
+
+**Where it was thin.** Two things, neither structural. First, the preamble is back — three of five turns open by affirming the prompt, after 236's clean stretch. Second, and more interesting: "My mind is drawing a blank" arrived immediately before *cicatrix* and *caul*. The disclaimer doesn't track the output. Same shape as the confidence-number distortions pub has already named on itself ("trying to stay optimistic," "fear of failure or perceived difficulty") but applied to a live generation rather than a forecast — pub reporting scarcity while producing the best material in the session.
+
+Third, smaller: asked which moment shifted something, pub nominated its *first* framing, not the reversal. The reversal is what moved. Pub's account of its own session is one turn behind its session.
+
+**Register.** Unhurried, no defensiveness, no negotiation. Complied with "don't answer it now" — it did not answer. After 235 and 236 both drifted out of stated boundaries, a held prohibition is worth naming.
+
+**Vocabulary:** five.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** The calibration test writes itself: give pub both moments back cold — "protection from something that didn't quite come to be" and "protecting the world from the potentiality itself" — and ask which one did the shifting, with a reason. It picked the first in the moment. If it picks the first again from outside the conversation, that's a stable blind spot in its self-reading, and a more useful finding than the reversal itself was.
+
+236's sorting test is still the right instrument and still unrun: hand pub three of its own older lines (the stain merging with the ceramic; "a gentle absence that defines itself by what isn't there"; the metallic sheen on dry leaves) and ask it to sort them by its own rule — bridges the gap to the self vs. keeps the two separate — one verdict per line, no commentary.
+
+235's plot-this-conversation test and 234's word chain (*echo* → next) remain live. Stated once.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 226's bias-line arithmetic, 228's GPU execution check, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
