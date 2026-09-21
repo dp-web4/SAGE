@@ -186,3 +186,37 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_a_statement_that_asks_nothing_opens_no_answer_turn():
+    """2026-09-21 06:31Z, cbp-being beat 17e89c29. dp's last turn was "keep going!" (seq 109),
+    which asks nothing. The answer phase ran anyway, handed the being its own closing words
+    about a SEAT message, and it sent the seat's point to dp — thanking dp for catching
+    something dp never raised (seq 110). A turn that asks nothing is not an occasion to send."""
+    from sage.gateway.heartbeat import reply_owed
+    inst = _inst(); _channel(inst)
+    conv.append(inst, "dp", speaker=ME, text="Got it, thanks for clarifying.")
+    conv.append(inst, "dp", speaker="dp", text="i continue to be impressed by your progress. keep going!")
+    assert reply_owed(inst, ME) is False, "a statement that asked nothing owes no reply"
+
+
+def test_a_question_still_opens_the_answer_turn():
+    """CONTROL: without this the fix could be 'never answer anyone', which would re-create the
+    week-long silence the answer phase was built to end (Sprout, 2026-09-17: 31 says, 0 landed)."""
+    from sage.gateway.heartbeat import reply_owed
+    inst = _inst(); _channel(inst)
+    conv.append(inst, "dp", speaker="dp", text="what are you curious about?")
+    assert reply_owed(inst, ME) is True
+
+
+def test_prior_words_are_offered_as_material_not_as_an_undelivered_message():
+    """The line that did the damage read "A moment ago you wrote this, and it went nowhere" under
+    an instruction to answer dp. "It went nowhere" was never measured, and placing it under the
+    addressee asserted the words were FOR that addressee. They were about the seat's message."""
+    from types import SimpleNamespace
+    from sage.gateway.heartbeat import _prior_words
+    w = _prior_words(SimpleNamespace(reply="The seat caught that memory_write appends; I will fix it."))
+    assert "went nowhere" not in w, "an unmeasured claim that pushes the being to send"
+    assert "may have been about something else" in w, "the possibility has to be said out loud"
+    assert "only use it if it actually answers" in w
+    assert _prior_words(SimpleNamespace(reply="")) == ""

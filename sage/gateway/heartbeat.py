@@ -835,13 +835,55 @@ def _said_in(res) -> bool:
 
 
 def _prior_words(res) -> str:
-    """The being's own closing words, to hand back so it has something to SEND rather than
-    something to compose — but only when they are real. A placeholder handed back is a
-    placeholder invited."""
+    """The being's own closing words from earlier in the beat — offered as material, never
+    presented as a message that was meant for whoever is waiting.
+
+    Measured 2026-09-21 06:31Z (cbp-being, beat 17e89c29). The seat had told the being, in the
+    SEAT's channel, that its memory_write had appended instead of editing. The being's reflect
+    phase closed on that. The answer phase was then told to answer dp — whose last turn was only
+    "keep going!" — and was handed the reflect text under the line "A moment ago you wrote this,
+    and it went nowhere." Its own thinking: "The user is asking me to answer dp's message.
+    They've explained that memory_write appends…" It sent the seat's point to dp, thanking dp
+    for catching something dp never raised (dp seq 110).
+
+    Two things in that line did the damage. "It went nowhere" is a claim nobody measured — the
+    reflect text was not an undelivered message, it was the end of a different line of thought.
+    And placing it under "answer <target>" asserts it was FOR that target. Content from one
+    conversation got attached to the addressee of another (SMALL_MODEL_LEGIBILITY 1.9, 1.13).
+    The words are still offered, since they are often the answer it meant, but labelled as what
+    they are, with the possibility they are about something else said out loud.
+    """
     w = ((res.reply if res is not None else "") or "").strip()
     if not w or is_stub(w):
         return ""
-    return "\nA moment ago you wrote this, and it went nowhere:\n\n" + w[:900] + "\n"
+    return ("\nEarlier this beat you wrote the following. It may have been about something else "
+            "entirely — only use it if it actually answers the message above:\n\n" + w[:900] + "\n")
+
+
+def reply_owed(instance: Path, member: str) -> bool:
+    """True only when the turn waiting on the being actually ASKED something.
+
+    The answer phase used to run whenever any turn was pending, so a statement that asked
+    nothing still produced an occasion — and a push — to send something. dp's "keep going!"
+    (seq 109) was enough to trigger it on 2026-09-21. `pending_and_say_line` already tells the
+    being "told you something and asked nothing, so no reply is owed" for such a turn
+    (2adf034eb); this makes the answer phase honour the same fact instead of contradicting it.
+    Same criterion, so the two can never disagree about whether a reply is owed.
+    """
+    try:
+        from sage.gateway import conversations as _conv
+        ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
+        pend = []
+        for cid in ids:
+            for t in (_conv.awaiting(instance, cid, member)
+                      or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
+                pend.append((cid, t))
+        pend = pend[-PENDING_TURNS:]
+        if not pend:
+            return False
+        return "?" in str(pend[-1][1].get("text") or "")
+    except Exception:
+        return False
 
 
 def pending_and_say_line(instance: Path, member: str) -> tuple:
@@ -1354,9 +1396,12 @@ def main(argv=None) -> int:
     reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
                                    tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
 
-    # The answer turn: only when someone is still waiting and the being has not already spoken.
+    # The answer turn: only when someone is still waiting, the being has not already spoken, AND
+    # the waiting turn actually asked something. Without the last condition, a statement that
+    # asked nothing ("keep going!") still opened an answer turn and handed the being its own
+    # unrelated words to send — see `_prior_words` and `reply_owed`, 2026-09-21 06:31Z.
     answer = None
-    if target and not _said_in(reflect):
+    if target and not _said_in(reflect) and reply_owed(instance, args.member):
         answer = run_ollama_tool_turn(
             client, llm,
             [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
