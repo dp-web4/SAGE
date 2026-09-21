@@ -440,3 +440,18 @@ def test_a_missed_first_line_that_is_invented_gets_no_direction():
     assert "none is close to it" in msg and "line 1" not in msg
     msg = _where_it_diverged(text, "        noise=0.1,")
     assert "different indentation, at line 2" in msg
+
+
+def test_memory_edit_names_the_harness_elision_note_when_it_is_copied_as_file_text():
+    """2026-09-21 20:04Z: the being's old held the tool loop's elision note, copied from a
+    shortened read result, and was told only "first line not in file"."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text('"""Doc"""\nx = 1\n')
+    old = ('"""Doc\n[… 143 characters elided from the middle of your NEWEST result to leave room. '
+           'The whole result is saved at scratch/elided/20260921-200407-012-000.txt …]\nx = 1')
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": old, "new": ""}), _ALLOW)
+    assert not r.ok and "harness's note" in r.error
+    assert "scratch/elided/20260921-200407-012-000.txt" in r.error
+    assert (home / "notes" / "s.py").read_text() == '"""Doc"""\nx = 1\n'

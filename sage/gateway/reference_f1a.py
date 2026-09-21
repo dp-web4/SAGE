@@ -386,6 +386,21 @@ class ReferenceF1aDispatcher:
         if p.is_dir():
             return ResultEnvelope(ok=False, error=f"'{path}' is a directory.")
         text = p.read_text(errors="replace")
+        # THE HARNESS'S OWN NOTE, COPIED AS FILE TEXT. Measured 2026-09-21 20:04Z: cbp-being's
+        # old contained "[… 143 characters elided from the middle of your NEWEST result …]",
+        # copied out of a read result the tool loop had shortened to fit its window. It was
+        # refused as "first line not in file", which told it nothing about why. The note is
+        # never file text, so say that, and where the whole result was saved.
+        if "characters elided from the middle" in old:
+            import re as _re
+            spill = _re.search(r"scratch/elided/[\w.\-]+", old)
+            where = (f" The whole result was saved at {spill.group(0)}; memory_read it there."
+                     if spill else "")
+            return ResultEnvelope(ok=False, error=(
+                f"your old contains the harness's note '[… characters elided from the middle "
+                f"…]'. That note is not in '{path}': the harness put it in your view to save "
+                f"room. Nothing was changed. Read a few lines at a time, so nothing is elided, "
+                f"and copy from that result.{where}"))
         hits = text.count(old)
         if hits == 0:
             return ResultEnvelope(ok=False, error=(
