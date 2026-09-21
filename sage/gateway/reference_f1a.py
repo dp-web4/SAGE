@@ -260,7 +260,22 @@ class ReferenceF1aDispatcher:
         p = self._safe_path(intent.args["path"], writing=True)
         content = str(intent.args.get("content", ""))
         p.parent.mkdir(parents=True, exist_ok=True)
+        # SAY APPENDED WHEN IT APPENDED. Measured 2026-09-21: the being rewrote
+        # notes/mechanism-training-script.py whole three times (00:45, 01:14, 01:43Z), read
+        # "wrote N chars" each time as "replaced", and the file became three programs with
+        # three __main__ guards, of which only the first ever runs. Then dp said "you fix it",
+        # and it could not: nothing here edits in place. The receipt is the only place it
+        # learns that, so it names the lines already above and the one way to start fresh.
+        before = sum(1 for _ in open(p, errors="replace")) if p.exists() else 0
         with open(p, "a") as f:
             f.write(content + ("\n" if not content.endswith("\n") else ""))
-        return ResultEnvelope(ok=True, result=f"wrote {len(content)} chars to {p.name}",
+        if not before:
+            result = f"created {p.name} with {len(content)} chars"
+        else:
+            result = (f"appended {len(content)} chars to the END of {p.name}, below the {before} "
+                      f"lines already there. memory_write only adds; it never replaces or edits a line.")
+            if p.parent.name in ("notes", "scratch") and p.parent.parent == self.memory_root:
+                result += (f" To start {p.name} fresh, retire_note it first, then memory_write "
+                           f"the whole new version.")
+        return ResultEnvelope(ok=True, result=result,
                               witness_id=self._witness(f"memory_write {p.name}"))
