@@ -299,8 +299,45 @@ class SystemToolLookupTests(unittest.TestCase):
         if sys.platform == 'darwin':
             self.assertEqual(IdentityProvider._system_tool('ioreg'), '/usr/sbin/ioreg')
             self.assertEqual(IdentityProvider._system_tool('ifconfig'), '/sbin/ifconfig')
-        self.assertEqual(IdentityProvider._system_tool('no-such-tool-xyz'), 'no-such-tool-xyz',
-                         "not found: the bare name, as before")
+        self.assertIsNone(IdentityProvider._system_tool('no-such-tool-xyz'),
+                          "not found must be None: returning the bare name hands the next "
+                          "subprocess.run straight back to PATH, which is the defect")
+
+    def test_a_tool_reachable_ONLY_through_PATH_is_neither_found_nor_run(self):
+        """The negative control (GPT seat, SAGE #130). The first cut returned the bare name on a
+        miss, so the next `subprocess.run([name])` reopened PATH and two processes on one
+        machine could still derive different anchors. A tool that exists only on PATH must be
+        invisible to this lookup, and must not reach the anchor."""
+        import os
+        import shutil as _shutil
+        import tempfile as _tempfile
+        d = Path(_tempfile.mkdtemp(prefix='sage-fake-tool-'))
+        self.addCleanup(_shutil.rmtree, d, ignore_errors=True)
+        fake = d / 'ioreg'
+        fake.write_text('#!/bin/sh\necho \'    "IOPlatformUUID" = "00000000-DEAD-BEEF-0000-000000000000"\'\n')
+        fake.chmod(0o755)
+        with self._with_path(f"{d}{os.pathsep}{os.environ.get('PATH', '')}"):
+            self.assertIsNone(
+                IdentityProvider._system_tool('sage-no-such-system-tool'),
+                "a name absent from the fixed directories is not found, however rich PATH is")
+            anchor = IdentityProvider._machine_anchor()
+        self.assertNotIn('DEAD-BEEF', anchor,
+                         "a tool planted on PATH reached the machine anchor, and so the sealing key")
+
+    def test_a_file_that_is_not_executable_is_not_the_tool(self):
+        """Parity with the rust side, which now applies the same predicate. The two providers
+        derive ONE sealing key, so a machine where they disagree about what counts as a tool is
+        a machine with two keys."""
+        import os
+        import shutil as _shutil
+        import tempfile as _tempfile
+        d = Path(_tempfile.mkdtemp(prefix='sage-noexec-'))
+        self.addCleanup(_shutil.rmtree, d, ignore_errors=True)
+        plain = d / 'ioreg'
+        plain.write_text('not executable')
+        plain.chmod(0o644)
+        self.assertFalse(os.access(plain, os.X_OK),
+                         "fixture: the acceptance predicate both providers apply")
 
     def test_the_anchor_does_not_depend_on_path(self):
         """The property itself, end to end, on whatever platform this runs on."""

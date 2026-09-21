@@ -457,8 +457,16 @@ class IdentityProvider:
             print(f"[Identity] v1 seal verified with '{label}' but could not be rewritten as v2: {e}")
 
     @staticmethod
-    def _system_tool(name: str) -> str:
-        """Absolute path of a system tool, WITHOUT consulting PATH; the bare name if not found.
+    def _system_tool(name: str) -> Optional[str]:
+        """Absolute path of a system tool, WITHOUT consulting PATH. None when not found.
+
+        NONE, NOT THE BARE NAME. The first cut returned `name`, and the very next
+        `subprocess.run([name])` consults PATH again -- so on any machine where the fixed
+        directories miss, the original defect came straight back and the test that pinned the
+        bare-name fallback was pinning the escape hatch rather than the property (GPT seat,
+        SAGE #130). A miss now skips the probe and falls through to the next anchor source,
+        identically in every process on the machine, which is the only property that matters:
+        the anchor is an input to the sealing key, so two processes must never disagree.
 
         Measured on McNugget (macOS, 2026-09-20): `ioreg` is /usr/sbin/ioreg and `ifconfig` is
         /sbin/ifconfig, and a launchd agent with no PATH key runs with `/usr/bin:/bin`. Looked
@@ -470,7 +478,7 @@ class IdentityProvider:
             cand = os.path.join(d, name)
             if os.path.isfile(cand) and os.access(cand, os.X_OK):
                 return cand
-        return name
+        return None
 
     @staticmethod
     def _machine_anchor() -> str:
@@ -485,15 +493,17 @@ class IdentityProvider:
                     return v
             except OSError:
                 pass
-        try:
-            import subprocess
-            out = subprocess.run([IdentityProvider._system_tool('ioreg'), '-rd1', '-c', 'IOPlatformExpertDevice'],
-                                 capture_output=True, text=True, timeout=5).stdout
-            for line in out.splitlines():
-                if 'IOPlatformUUID' in line:
-                    return line.split('"')[-2]
-        except Exception:
-            pass
+        ioreg = IdentityProvider._system_tool('ioreg')
+        if ioreg:
+            try:
+                import subprocess
+                out = subprocess.run([ioreg, '-rd1', '-c', 'IOPlatformExpertDevice'],
+                                     capture_output=True, text=True, timeout=5).stdout
+                for line in out.splitlines():
+                    if 'IOPlatformUUID' in line:
+                        return line.split('"')[-2]
+            except Exception:
+                pass
         import socket
         return 'host:' + socket.gethostname()
 
@@ -538,10 +548,11 @@ class IdentityProvider:
                         out.append(m)
             except (OSError, ValueError):
                 pass
-        if not out:
+        ifconfig = self._system_tool('ifconfig') if not out else None
+        if ifconfig:
             try:
                 import subprocess
-                txt = subprocess.run([self._system_tool('ifconfig'), '-a'], capture_output=True, text=True, timeout=5).stdout
+                txt = subprocess.run([ifconfig, '-a'], capture_output=True, text=True, timeout=5).stdout
                 out = self._parse_ether_lines(txt)
             except Exception:
                 pass
