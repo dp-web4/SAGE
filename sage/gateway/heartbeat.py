@@ -992,9 +992,27 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     return [{"role": "system", "content": system}, {"role": "user", "content": user}], second
 
 
+# An `ok` ACT CARRIES ITS RESULT. Measured 2026-09-21 on cbp-being, beat heartbeat-85303f70bf67:
+# explore's memory_edit returned "replaced 1 occurrence; the file went from 656 to 657 lines",
+# but the reflect turn saw only "-> ok", and just below it the seat's seq 2959 — written BEFORE
+# the edit — saying at length that line 634 was unchanged. Reflect believed the long, specific
+# text over the bare "ok": journal, todo.md and memory #363 all record the edit as refused.
+# An act the being did is the one thing the record is sure of; let it say what happened.
+RECORD_RESULT_CHARS = 240
+
+
 def _record_line(i, e) -> str:
-    return (f"- {i.effector} {json.dumps(i.args, default=str)[:200]} -> "
-            f"{'ok' if e.ok else ('REFUSED ' + str(e.error))[:200] if e.refused else ('error ' + str(e.error))[:200]}")
+    if e.ok:
+        res = getattr(e, "result", None)
+        res = res if isinstance(res, str) else (json.dumps(res, default=str) if res is not None else "")
+        res = " ".join(res.split())
+        verdict = "ok" + (f": {res[:RECORD_RESULT_CHARS]}" + ("…" if len(res) > RECORD_RESULT_CHARS else "")
+                          if res else "")
+    elif e.refused:
+        verdict = ("REFUSED " + str(e.error))[:200]
+    else:
+        verdict = ("error " + str(e.error))[:200]
+    return f"- {i.effector} {json.dumps(i.args, default=str)[:200]} -> {verdict}"
 
 
 REFLECT_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
