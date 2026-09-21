@@ -616,3 +616,38 @@ def test_the_beat_record_names_what_was_attached():
             if hasattr(c, "co_consts"): walk(c)
     walk(H.main.__code__)
     assert "images_attached" in consts, "main() must record images_attached from the seed"
+
+
+def test_known_fixture_marker_survives_the_producer(tmp_path):
+    """A deterministic marker image survives the producer intact (ft09 fixture, ported).
+
+    A 64x64 frame: a magenta 16x16 block at x=24..39, y=0..15 on a gray field.
+    It pins what the being will see next beat to exactly what was captured — no
+    resize (a frame this small never crosses FRAME_MAX_EDGE), and marker pixels
+    that no other image could produce. If the producer ever alters frames, this
+    fails on the magenta pixel."""
+    import io
+    from PIL import Image
+
+    def _marker_jpeg():
+        im = Image.new("RGB", (64, 64), (128, 128, 128))
+        for x in range(24, 40):
+            for y in range(16):
+                im.putpixel((x, y), (255, 0, 255))
+        buf = io.BytesIO()
+        im.save(buf, "JPEG", quality=95)
+        return buf.getvalue()
+
+    inst, fp = _inst(tmp_path)
+    fp.write_bytes(_marker_jpeg())
+    b64, meta = fresh_frame(inst, None, time.time() - 100)
+    assert meta["carried"] is True and meta["path"].endswith(".jpg")
+    sent = Image.open(io.BytesIO(base64.b64decode(b64)))
+    # not resized: a 64px frame never crosses the shrink threshold, so what the
+    # being sees next beat has exactly the captured dimensions
+    assert sent.size == (64, 64)
+    r, g, b = sent.getpixel((32, 8))[:3]          # inside the magenta block
+    assert r > 240 and g < 16 and b > 240, f"marker pixel drifted: {(r, g, b)}"
+    r2, g2, b2 = sent.getpixel((32, 40))[:3]      # below the block: gray field
+    assert abs(r2 - 128) < 16 and abs(g2 - 128) < 16 and abs(b2 - 128) < 16, \
+        f"field pixel drifted: {(r2, g2, b2)}"
