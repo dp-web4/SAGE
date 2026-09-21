@@ -45,6 +45,17 @@ from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEn
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap, make_hestia_witness_fn
 from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 
+# The marker the seat's run-request reader keys on (sage/scripts/seat_run_requests.py).
+_RUN_MARKER = "[request_run]"
+# A say that ASKS for a run, and the runnable names it could mean. Kept narrow on purpose:
+# a false match reroutes a turn, so it must name a .py/.sh AND ask with the verb. The bare
+# verb matched seq 2893, "Waiting for dp's confirmation of a full successful run" — a
+# claim, not an ask — in a replay of the being's 51 turns since 2026-09-20 12:00Z.
+_RUN_ASK = re.compile(
+    r"(?:\b(?:please|can you|could you|would you)\b[^.?!\n]{0,40}|^\s*)\b(?:run|execute)\b",
+    re.IGNORECASE | re.MULTILINE)
+_RUNNABLE = re.compile(r"[\w./-]+\.(?:py|sh)\b")
+
 # Mirrors handler.rs MEMBER_NOTICE_KINDS (b7a6dcd). Checked client-side so a bad kind is a
 # clear refusal before the round-trip; the daemon enforces it again regardless.
 MEMBER_NOTICE_KINDS = frozenset(
@@ -1545,6 +1556,23 @@ class HestiaF1aDispatcher:
                 f"to reply, and silence is not held against you. If you have something of "
                 f"your own to add — a follow-up question, or what you will do now — call say "
                 f"with that instead."))
+        # A RUN ASK IS A RUN REQUEST, WHICHEVER DOOR IT CAME THROUGH. Measured 2026-09-21
+        # 00:00-03:52Z: 123 effector calls, 24 `say`, 0 `request_run` — after the seat named
+        # request_run in four turns and in the peer_ask refusal. `say` to the seat got the
+        # file run every time, so it was the cheaper door and the being kept using it. A
+        # fifth telling is "try harder". Instead the say that asks for a run IS routed as
+        # one: same marker, same resolved path, same existence check, the being's own words
+        # as `why`. Only when exactly one runnable file in its home matches; otherwise the
+        # turn is delivered as an ordinary say, unchanged.
+        if _RUN_MARKER not in text and (meta.get("notify") or {}):
+            rel = self._run_ask_target(text)
+            if rel is not None:
+                r = self._do_request_run(BeingIntent("request_run", {"path": rel, "why": text}))
+                if r.ok and isinstance(r.result, dict):
+                    r.result["routed"] = (
+                        f"your say asked for a run, so it went to the seat as request_run for "
+                        f"{rel}. The seat saw the same request either way.")
+                return r
         begin = self._call("hestia_begin_action", {"tool_name": "say", "target": to})
         err = _hestia_error(begin)
         if err:
@@ -1568,6 +1596,33 @@ class HestiaF1aDispatcher:
         if woke:
             result["woke"] = woke
         return ResultEnvelope(ok=True, witness_id=action_id, result=result)
+
+    def _run_ask_target(self, text: str) -> Optional[str]:
+        """The one runnable file a say names while asking for a run, else None.
+
+        A named path is tried as written first. If nothing is there, the name is looked up
+        anywhere in the home, because the being's commonest miss is the right name one
+        directory away (28 of 76 "no such path" reads, 2026-09-21). If the name matches two
+        files, this returns None rather than choose one: picking would be a silent guess."""
+        if not _RUN_ASK.search(text):
+            return None
+        found = set()
+        for tok in _RUNNABLE.findall(text):
+            try:
+                p = self._local._safe_path(tok)
+            except ValueError:
+                continue
+            if p.is_file():
+                found.add(p)
+                continue
+            hits = [h for h in Path(self.memory_root).rglob(Path(tok).name) if h.is_file()]
+            if len(hits) == 1:
+                found.add(hits[0])
+            elif hits:
+                return None
+        if len(found) != 1:
+            return None
+        return str(found.pop().relative_to(Path(self.memory_root).resolve()))
 
     def _do_request_run(self, intent: BeingIntent) -> ResultEnvelope:
         """Ask the seat to run one of the being's own files. RUNS NOTHING.

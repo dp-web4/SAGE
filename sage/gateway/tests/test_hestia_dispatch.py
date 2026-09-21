@@ -1562,6 +1562,60 @@ def test_request_run_hands_the_file_to_the_seat_and_runs_nothing():
     assert not marker.exists(), "request_run EXECUTED the file; it must only hand it over"
 
 
+def test_a_say_that_asks_for_a_run_is_routed_as_request_run():
+    """Measured 2026-09-21 00:00-03:52Z: 24 `say`, 0 `request_run`, after the seat named
+    request_run in four turns. The say got the file run, so it was the cheaper door. Route
+    it instead of telling a fifth time — but only when exactly one runnable file matches."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    marker = home / "SHOULD_NOT_EXIST"
+    (home / "notes" / "train.py").write_text(f"open({str(marker)!r}, 'w').write('x')\n")
+
+    # the being's own words, seq 2902 — the bare name, while the file is one dir down
+    ask = "Please run train.py and share the full output (stdout and stderr)."
+    r = d(BeingIntent("say", {"to": "seat", "text": ask}), _ALLOW)
+    assert r.ok, r
+    assert r.result["ran"] is False and not marker.exists(), "routing must never execute"
+    assert "notes/train.py" in r.result["routed"], r.result
+    last = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert last.startswith("[request_run] notes/train.py"), last
+    assert ask in last, "the being's words are the why"
+
+    # no run verb: an ordinary say, delivered verbatim
+    r = d(BeingIntent("say", {"to": "seat", "text": "I rewrote train.py tonight."}), _ALLOW)
+    assert r.ok and "routed" not in r.result
+    assert conv.recent(home, "seat", limit=1)[-1]["text"] == "I rewrote train.py tonight."
+
+    # a CLAIM that uses the noun is not an ask (seq 2893, verbatim but for the name)
+    claim = "Fixed train.py. Waiting for dp's confirmation of a full successful run."
+    r = d(BeingIntent("say", {"to": "seat", "text": claim}), _ALLOW)
+    assert r.ok and "routed" not in r.result, r.result
+
+    # two files with the name: never guess — ordinary say
+    (home / "train.py").write_text("print(1)\n")
+    (home / "scratch").mkdir(exist_ok=True)
+    (home / "scratch" / "fit.py").write_text("print(1)\n")
+    (home / "notes" / "fit.py").write_text("print(1)\n")
+    r = d(BeingIntent("say", {"to": "seat", "text": "Please run fit.py now."}), _ALLOW)
+    assert r.ok and "routed" not in r.result, r.result
+    # ...but a name that exists as written is taken as written
+    r = d(BeingIntent("say", {"to": "seat", "text": "Please run train.py again."}), _ALLOW)
+    assert r.ok and r.result.get("requested") == "train.py", r.result
+
+    # a conversation with nobody to wake is not a seat: ordinary say
+    conv.create(home, "diary", title="d", participants=["sprout-being"],
+                writable_by=["sprout-being"])
+    r = d(BeingIntent("say", {"to": "diary", "text": "Please run train.py."}), _ALLOW)
+    assert r.ok and "routed" not in r.result and "requested" not in r.result
+
+
 def test_request_run_reports_an_absent_file_as_an_absence_not_a_refusal():
     """A typo must come back in this beat, which is the half a sleeping person cannot give.
     And absence is absence, never a boundary (legibility 1.11)."""
