@@ -1651,11 +1651,29 @@ class HestiaF1aDispatcher:
         from sage.gateway import conversations as conv
         raw = str(intent.args.get("path", "")).strip()
         why = str(intent.args.get("why", "")).strip()
-        if not raw or not why:
+        # A REFUSAL MUST NOT SOUND LIKE A DECISION IT IS NOT.
+        #
+        # Measured 2026-09-21 05:34Z: cbp-being called request_run FIVE times with 'path' and
+        # no 'why'. Every call failed this check, locally, before any seat saw it. The old text
+        # read "needs 'path' ... and 'why' ... The seat decides whether to run it, and 'why' is
+        # what it decides on" — it did not say WHICH argument was missing, and it used the words
+        # "the seat decides" in what was only an argument check. The being concluded, and told
+        # dp: "The seat refused to run mechanism-training-script.py. What did it decide on?"
+        # No seat refused anything. Its trace shows it then "fixed" the wrong argument — path
+        # relative, then absolute, then relative again — because path came first in the
+        # sentence; it never once added 'why'. (legibility 1.2: a refusal's subject is taken to
+        # be whoever the sentence names.)
+        #
+        # And 'why' no longer blocks. A request that never arrives gives the seat nothing to
+        # decide on; one that arrives without a reason still carries the file, which the seat
+        # can read. Requiring it turned five attempts into zero requests and a sixth ask routed
+        # to the operator, who does not run files — the bypass dp described: friction with no
+        # clear way through gets routed around.
+        if not raw:
             return ResultEnvelope(ok=False, error=(
-                "request_run needs 'path' (a file in your own home) and 'why' (what you "
-                "expect to learn). The seat decides whether to run it, and 'why' is what it "
-                "decides on."))
+                "request_run is missing 'path' — the file you want run, inside your own home, "
+                "for example notes/my-script.py. Nothing was sent to the seat, so nothing has "
+                "been decided; this is only a missing argument."))
         try:
             p = self._local._safe_path(raw)
         except ValueError as e:
@@ -1685,7 +1703,7 @@ class HestiaF1aDispatcher:
                 "no seat conversation is configured on this instance, so there is nobody to "
                 "hand this to. Your file is untouched."))
         lines = [f"[request_run] {p.relative_to(self.memory_root)}",
-                 f"why: {why}",
+                 f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
                  f"({p.stat().st_size} bytes; the seat decides whether to run it and answers here)"]
         said = self._do_say(BeingIntent("say", {"to": seat_conv, "text": "\n".join(lines)}))
         if not said.ok:
