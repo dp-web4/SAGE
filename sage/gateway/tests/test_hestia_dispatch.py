@@ -889,6 +889,30 @@ def test_say_speaks_only_where_the_meta_allows_and_records_its_channel():
     assert "hestia_begin_action" in names and "hestia_record_outcome" in names
     outcome = [a for n, a in FakeMcp.calls if n == "hestia_record_outcome"][-1]
     assert outcome["success"] is True
+    assert r.result["said"] == "I read it, and here is my answer.", "a short echo is uncut"
+
+
+def test_a_cut_say_receipt_says_it_is_the_beings_own_words():
+    """cbp-being 2026-09-21 seq 2988: the receipt echoed its own 522-char say cut at 200,
+    unmarked, mid-sentence; it read the echo as the seat's reply and asked the seat to
+    finish it. The turn is stored whole; the receipt's echo now names whose words they are,
+    that only the receipt is shortened, and where the whole message went."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    long = ("The seat confirmed the file hasn't changed since 11:43Z and that a run would "
+            "stop at line 321 before reaching the matmul. ") * 3
+    long = long.strip()
+    r = d(BeingIntent("say", {"to": "dp", "text": long}), _ALLOW)
+    assert r.ok, r.error
+    assert conv.recent(home, "dp", limit=1)[-1]["text"] == long, "the turn itself is not cut"
+    said = r.result["said"]
+    assert said.startswith(long[:200]) and said != long[:200]
+    assert "your own message" in said and f"all {len(long)} chars" in said
+    assert f"seq {r.result['seq']}" in said
 
 
 def test_a_search_that_finds_nothing_is_a_result_not_an_error(tmp_path):
