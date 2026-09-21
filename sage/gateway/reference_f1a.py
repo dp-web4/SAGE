@@ -75,15 +75,30 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     best_i = ties[0] if ties else -1
     cut = lambda s: s if len(s) <= width else s[:width] + "…"  # noqa: E731
     if best_k == 0:
-        # No line matches exactly. Name the nearest one, so indentation or one changed word
-        # is visible rather than guessed at.
+        # No line matches exactly. Name a nearby line ONLY when the difference is specific:
+        # the same text with different indentation, or one small change once whitespace is
+        # ignored. Measured 2026-09-21 19:53Z: cbp-being's old began with a line it invented,
+        # "# Generate synthetic data with known mechanism"; a 0.6-similarity "closest line"
+        # (0.72, line 1012, a docstring) sent it to read lines 1000-1226, the wrong region.
+        # An indentation-only miss scores 0.90. A hint for a line the file never had is a
+        # direction, and a wrong direction costs a beat.
         import difflib
-        near = difflib.get_close_matches(want[0], have, n=1, cutoff=0.6)
-        if not near:
-            return f" Not even your first line ({cut(want[0])!r}) is in the file."
-        n = have.index(near[0]) + 1
-        return (f" Your first line is not in the file. The closest line is line {n}: "
-                f"{cut(near[0])!r}; you sent {cut(want[0])!r}.")
+        mine = want[0].strip()
+        same_text = [i for i, l in enumerate(have) if mine and l.strip() == mine]
+        if same_text:
+            where = ", ".join(str(i + 1) for i in same_text[:4]) + (", ..." if len(same_text) > 4 else "")
+            return (f" Your first line is in the file with different indentation, at line"
+                    f"{'s' if len(same_text) > 1 else ''} {where}: the file has "
+                    f"{cut(have[same_text[0]])!r}; you sent {cut(want[0])!r}.")
+        stripped = [l.strip() for l in have]
+        near = difflib.get_close_matches(mine, stripped, n=1, cutoff=0.9) if mine else []
+        if near:
+            n = stripped.index(near[0]) + 1
+            return (f" Your first line is not in the file. Line {n} is almost the same: "
+                    f"{cut(have[n - 1])!r}; you sent {cut(want[0])!r}.")
+        return (f" None of the file's lines is your first line ({cut(want[0])!r}), and none "
+                f"is close to it. Read the lines you mean with memory_read, and copy them "
+                f"from that result.")
     # MORE THAN ONE PLACE. Measured 2026-09-21: cbp-being's refused `old` began with 3 lines
     # of a stray block at 1610-1612 that ALSO occur at 330-332, the working data-loading
     # branch. Naming only the first match told it "your lines are at 330", and a 4B acting on

@@ -400,10 +400,10 @@ def test_a_missed_edit_anchor_says_where_it_stopped_matching():
 
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": '    p.add_argument("--lr ")',
                                          "new": ""}), _ALLOW)
-    assert not r.ok and "closest line is line 1" in r.error, r.error
+    assert not r.ok and "Line 1 is almost the same" in r.error, r.error
 
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "q"}), _ALLOW)
-    assert not r.ok and "Not even your first line" in r.error, r.error
+    assert not r.ok and "none is close to it" in r.error, r.error
     assert f.read_text() == before
 
 
@@ -428,3 +428,15 @@ def test_a_missed_anchor_with_one_match_reads_as_before():
     text = "a\nb\nc\nd"
     msg = _where_it_diverged(text, "b\nc\nX")
     assert "match lines 2-3 of the file exactly" in msg and "places" not in msg
+
+
+def test_a_missed_first_line_that_is_invented_gets_no_direction():
+    """2026-09-21 19:53Z: the being's old began with a line it invented. A 0.6-similarity
+    "closest line" (0.72, a docstring at 1012) sent it to read the wrong region. A hint is
+    now given only for a specific difference: indentation, or near-identical text."""
+    from sage.gateway.reference_f1a import _where_it_diverged
+    text = '    """Generate synthetic data with a linear mechanism and noise."""\n            noise=0.1,\n'
+    msg = _where_it_diverged(text, "# Generate synthetic data with known mechanism\nnp.random.seed(42)")
+    assert "none is close to it" in msg and "line 1" not in msg
+    msg = _where_it_diverged(text, "        noise=0.1,")
+    assert "different indentation, at line 2" in msg
