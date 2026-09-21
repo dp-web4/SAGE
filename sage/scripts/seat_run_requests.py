@@ -16,8 +16,11 @@ auto-runner would be the unconfined capability dp ruled against, with extra step
 
 Usage:
     seat_run_requests.py list
-    seat_run_requests.py run     <path-in-being-home> [--timeout 120]
-    seat_run_requests.py decline <path-in-being-home> --reason "..."
+    seat_run_requests.py run     <path-in-being-home> [--timeout 120] [--seq N ...]
+    seat_run_requests.py decline <path-in-being-home> --reason "..." [--seq N ...]
+
+An answer names the requests it answers ("Answers your request seq N."), and only a named
+answer — or a run/decline result for the same file — closes a request.
 
 Env: SAGE_INSTANCE (the being's home), SAGE_SEAT_CONV (default cbp-claude),
      SAGE_DAEMON (default http://127.0.0.1:8760), SEAT_ID (default cbp-claude).
@@ -27,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -57,19 +61,92 @@ def _conv_id() -> str:
     return os.environ.get("SAGE_SEAT_CONV", "cbp-claude")
 
 
+def request_path(turn: dict) -> str:
+    """The path a request names: the first line after the marker (`[request_run] <path>`)."""
+    first = (turn.get("text") or "").splitlines()[0] if turn.get("text") else ""
+    return first.replace(MARKER, "", 1).strip()
+
+
+def _same_file(inst: Path, a: str, b: str) -> bool:
+    """Two spellings of one file in the being's home ("x.py" and "notes/../x.py")."""
+    if not a or not b:
+        return False
+    try:
+        return (inst / a).resolve() == (inst / b).resolve()
+    except OSError:
+        return a == b
+
+
+# How an answer names the requests it answers. Written by `answers_line` below; the prose
+# form is how seat answers were written by hand before this existed ("answering your seq
+# 2912"), and it stays recognised so the history does not re-open.
+_NAMES = re.compile(r"\b(?:request seq|answering your seq|about seq|on your seq)\s+"
+                    r"(\d+(?:\s*(?:,|and)\s*(?:seq\s+)?\d+)*)", re.I)
+
+
+def _named_seqs(text: str) -> set[int]:
+    out: set[int] = set()
+    for m in _NAMES.finditer(text or ""):
+        out.update(int(n) for n in re.findall(r"\d+", m.group(1)))
+    return out
+
+
+def answers_line(seqs: list[int]) -> str:
+    return "Answers your request seq " + ", ".join(str(s) for s in sorted(seqs)) + "."
+
+
 def pending(inst: Path, cid: str) -> list[dict]:
-    """Requests with no seat turn after them. Seq-keyed, not time-keyed: a request answered
-    once stays answered, and one the seat has not reached stays visible however old."""
+    """Requests no seat turn has ANSWERED. Seq-keyed, not time-keyed.
+
+    GPT's review of the request_run tools: the first version closed every earlier request
+    as soon as ANY seat turn followed it, so an unrelated seat message silently retired a
+    request nobody had looked at. Replayed on cbp-being's channel (10 requests, 2026-09-21)
+    that had not happened yet — every first seat turn after a request was its answer — which
+    makes it untested, not safe: it held only because the seat answered promptly.
+
+    A request is closed by a later seat turn that NAMES it (`Answers your request seq N`, or
+    the hand-written "answering your seq N" form), or by a later run/decline result for the
+    same file — a result about a file answers every request for that file made before it.
+    Nothing else closes one."""
     turns = conv.recent(inst, cid, limit=400)
     seat = os.environ.get("SEAT_ID", "cbp-claude")
     out = []
     for i, t in enumerate(turns):
         if t.get("from") == seat or MARKER not in (t.get("text") or ""):
             continue
-        if any(x.get("from") == seat for x in turns[i + 1:]):
-            continue
-        out.append(t)
+        seq, path = int(t.get("seq") or 0), request_path(t)
+        closed = False
+        for x in turns[i + 1:]:
+            if x.get("from") != seat:
+                continue
+            text = x.get("text") or ""
+            if seq in _named_seqs(text):
+                closed = True
+                break
+            if text.startswith(MARKER):
+                first = text.splitlines()[0]
+                m = re.match(re.escape(MARKER) + r" I (?:ran|did not run) (\S+)", first)
+                # "I did not run x.py. <reason>": the sentence's period is not the path's.
+                if m and _same_file(inst, m.group(1).rstrip(".,;:"), path):
+                    closed = True
+                    break
+        if not closed:
+            out.append(t)
     return out
+
+
+def bind(inst: Path, cid: str, rel: str, seqs: list[int] | None) -> list[int]:
+    """Which requests this run/decline answers. Explicit `--seq` wins and must name pending
+    requests; otherwise every pending request for this file. An answer that names nothing is
+    allowed — the seat may run a file unasked — but it then closes nothing, and says so."""
+    open_reqs = pending(inst, cid)
+    if seqs:
+        known = {int(t["seq"]) for t in open_reqs}
+        stray = [s for s in seqs if s not in known]
+        if stray:
+            sys.exit(f"refusing: seq {stray} is not a pending request (pending: {sorted(known)})")
+        return sorted(seqs)
+    return sorted(int(t["seq"]) for t in open_reqs if _same_file(inst, request_path(t), rel))
 
 
 def _target(inst: Path, raw: str) -> Path:
@@ -130,6 +207,9 @@ def cmd_run(args) -> None:
     inst = _instance()
     p = _target(inst, args.path)
     rel = p.relative_to(inst.resolve())
+    # Bound BEFORE running, so the answer names the requests that existed when the seat chose
+    # to act — not whatever arrived while the script ran.
+    seqs = bind(inst, _conv_id(), str(rel), args.seq)
     interp = [sys.executable] if p.suffix == ".py" else ["bash"]
     # GPU HIDDEN, BY DEFAULT. The being shares this GPU with its own model. Measured on CBP
     # 2026-09-21: a beat holds the card at ~88-90% of 8 GB, and a model left resident after a
@@ -166,14 +246,21 @@ def cmd_run(args) -> None:
         "",
         block("stderr", err),
         "",
+        _answers(seqs),
         "That is the whole output, unedited. Nothing is owed by you on this.",
     ]))
+
+
+def _answers(seqs: list[int]) -> str:
+    return (answers_line(seqs) if seqs
+            else "No pending request named this file, so this answers none of your requests.")
 
 
 def cmd_decline(args) -> None:
     inst = _instance()
     rel = _target(inst, args.path).relative_to(inst.resolve())
-    _say(f"[request_run] I did not run {rel}. {args.reason}\n\n"
+    seqs = bind(inst, _conv_id(), str(rel), args.seq)
+    _say(f"[request_run] I did not run {rel}. {args.reason}\n\n{_answers(seqs)}\n"
          f"This is a decision, not a failure, and it is not about your standing. If you want "
          f"it run under different conditions, say which and ask again.")
 
@@ -185,8 +272,11 @@ def main() -> int:
     r = sub.add_parser("run"); r.add_argument("path"); r.add_argument("--timeout", type=int, default=120)
     r.add_argument("--gpu", action="store_true",
                    help="let the script see the GPU (default: CUDA devices hidden — the being's model needs the card)")
+    r.add_argument("--seq", type=int, action="append",
+                   help="the request seq this answers (repeatable; default: every pending request for the file)")
     r.set_defaults(fn=cmd_run)
     d = sub.add_parser("decline"); d.add_argument("path"); d.add_argument("--reason", required=True)
+    d.add_argument("--seq", type=int, action="append", help="as for run")
     d.set_defaults(fn=cmd_decline)
     args = ap.parse_args()
     args.fn(args)
