@@ -501,3 +501,16 @@ def test_a_non_python_receipt_says_nothing_about_parsing():
     disp, root = _disp()
     r = disp(BeingIntent("memory_write", {"path": "journal.md", "content": "a note"}), _ALLOW)
     assert r.ok and "parse" not in r.result
+
+
+def test_the_edit_receipt_counts_lines_the_way_memory_read_does():
+    """2026-09-21: the receipt said 1637 lines while memory_read said 1636 (count+1 vs
+    splitlines, for a file ending in a newline). The being edits by line number now."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a = 1\nb = 2\nc = 3\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3, "end_line": 3, "new": ""}), _ALLOW)
+    assert r.ok and "went from 3 to 2 lines" in r.result, r.result
+    rd = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
+    assert rd.ok and (home / "notes" / "s.py").read_text().count("\n") == 2

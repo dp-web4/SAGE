@@ -450,8 +450,12 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(ok=False, error=(
                 f"the edit could not be written ({e}); '{path}' is unchanged. Nothing was "
                 f"lost — the file is exactly as it was before you asked."))
-        before = text.count("\n") + 1
-        after = p.read_text(errors="replace").count("\n") + 1
+        # COUNTED THE WAY memory_read COUNTS (splitlines). This was count("\n") + 1, one
+        # higher than memory_read for any file ending in a newline: 2026-09-21 the receipt said
+        # 1637 lines while memory_read said 1636, and line numbers are now what the being edits
+        # by (#160) -- an end_line taken from the receipt is refused as past the end.
+        before = len(text.splitlines())
+        after = len(p.read_text(errors="replace").splitlines())
         return ResultEnvelope(
             ok=True,
             result=(f"edited {p.name}: {what}; the file went from {before} to "
