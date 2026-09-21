@@ -123,7 +123,16 @@ ASK_ACT_FIRST = "This time is yours. Do one thing now and leave a trace of it.\n
 # the compact reflect context whose whole reason for existing is that carrying the beat
 # forward overflowed the window (8171 of 8192 tokens, 5 `length` stops in 54 beats).
 PENDING_TURNS = 2
-PENDING_CHARS = 700
+# NEVER A SILENT CUT, AND WIDE ENOUGH TO HOLD THE ANSWER. Measured 2026-09-21 on cbp-being:
+# the seat's seq 2950 was cut at "...--data-path data/train.npy` fail" and its correction 2951
+# at "It fails only at t" — both mid-word, both exactly where the answer began, with nothing
+# saying a cut happened. The answer turn asked "fails at t... what exactly does it fail on?"
+# (seq 2952), which is the right question about what it was shown. In ~15 other beats the
+# thinking said "the message was cut off" and several set out to "complete the response
+# with the rest": a silent cut invites the being to write the missing half itself. The
+# 700 dates from an 8,192-token window; CBP runs 16,384 and this answer turn's prompt was 946
+# tokens. So the cap is wider and a cut, when one happens, says so and says where the rest is.
+PENDING_CHARS = 2000
 
 ANSWER_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
 You have already finished this beat's writing. One thing is left, and it is optional."""
@@ -870,7 +879,12 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
         if pend:
             lines = []
             for cid, t in pend:
-                txt = " ".join(str(t.get("text") or "").split())[:PENDING_CHARS]
+                txt = " ".join(str(t.get("text") or "").split())
+                if len(txt) > PENDING_CHARS:
+                    txt = (txt[:PENDING_CHARS].rstrip()
+                           + f" …[the beat cut this turn here; {len(txt) - PENDING_CHARS} more "
+                             f"chars were not shown. It is seq {t.get('seq')}: memory_read path "
+                             f"conversations/{cid}.jsonl start_line {t.get('seq')}]")
                 lines.append(f'- in "{cid}", {t.get("from")} said: {txt}')
             block = ("Addressed to you and not yet answered:\n" + "\n".join(lines)
                      + "\nYou may answer with say, or leave it. Both are allowed.")
