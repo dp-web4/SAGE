@@ -1653,6 +1653,27 @@ def test_a_missing_argument_is_never_worded_as_a_seat_decision():
     assert "the seat decides" not in r.error, "a validation error must not read as a seat's decision"
 
 
+def test_request_run_carries_reason_as_the_why():
+    """Measured 2026-09-21 05:59Z: cbp-being called request_run with 'reason', not 'why', and
+    the seat was told the being gave no reason. It had given one. Carry it."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print(1)\n")
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "reason": "verify the fixes"}), _ALLOW)
+    assert r.ok, r.error
+    turn = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert "why: verify the fixes" in turn, turn
+    assert "none given" not in turn, "the seat must not be told the being said nothing"
+
+
 def test_request_run_reports_an_absent_file_as_an_absence_not_a_refusal():
     """A typo must come back in this beat, which is the half a sleeping person cannot give.
     And absence is absence, never a boundary (legibility 1.11)."""

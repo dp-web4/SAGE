@@ -1650,7 +1650,12 @@ class HestiaF1aDispatcher:
         """
         from sage.gateway import conversations as conv
         raw = str(intent.args.get("path", "")).strip()
-        why = str(intent.args.get("why", "")).strip()
+        # 'reason' is the word the being reaches for. Measured 2026-09-21 05:59Z: it passed
+        # reason="Running the mechanism training script to verify the fixes ..." and the seat
+        # was told "why: (none given — the being did not say what it expects to learn)". It
+        # had said. A receipt that misreports what the being did is the same defect as one that
+        # misreports what the tool did (SAGE #141), pointed the other way.
+        why = str(intent.args.get("why") or intent.args.get("reason") or "").strip()
         # A REFUSAL MUST NOT SOUND LIKE A DECISION IT IS NOT.
         #
         # Measured 2026-09-21 05:34Z: cbp-being called request_run FIVE times with 'path' and
