@@ -49,6 +49,24 @@ def test_memory_read_says_missing_empty_or_directory_never_a_silent_zero():
     assert r.ok and r.result.startswith("[directory:") and "- a.md" in r.result
 
 
+
+def test_a_miss_one_directory_away_names_where_the_file_is():
+    """cbp-being, 2026-09-21: read `mechanism-training-script.py` from its root, was told it
+    did not exist while it sat in notes/, and wrote a "verified" note about it. 28 of 76 of
+    its misses were this shape. The answer must point at the file, and a true absence must
+    still read as one."""
+    disp, root = _disp()
+    os.makedirs(os.path.join(root, "notes"), exist_ok=True)
+    open(os.path.join(root, "notes", "script.py"), "w").write("print(1)")
+    r = disp(BeingIntent("memory_read", {"path": "script.py"}), _ALLOW)
+    assert r.ok and r.result.startswith("[no such path:")
+    assert "'notes/script.py'" in r.result and "Nothing was read" in r.result
+    open(os.path.join(root, "top.md"), "w").write("x")
+    r = disp(BeingIntent("memory_read", {"path": "notes/top.md"}), _ALLOW)
+    assert "'top.md'" in r.result, "the reverse direction: notes/ asked, root holds it"
+    r = disp(BeingIntent("memory_read", {"path": "never.md"}), _ALLOW)
+    assert "not an empty file" in r.result and "DOES exist" not in r.result
+
 def test_path_escape_is_error():
     disp, _ = _disp()
     env = disp(BeingIntent("memory_write", {"path": "/etc/cron.d/x", "content": "x"}), _ALLOW)
