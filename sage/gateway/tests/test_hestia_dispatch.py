@@ -1562,6 +1562,43 @@ def test_request_run_hands_the_file_to_the_seat_and_runs_nothing():
     assert not marker.exists(), "request_run EXECUTED the file; it must only hand it over"
 
 
+def test_request_run_says_when_the_file_is_unchanged_since_the_seat_answered():
+    """Measured 2026-09-21 06:31Z: the being restated the seat's diagnosis in its journal,
+    then asked for a run of the byte-identical file the seat had answered 28 min earlier.
+    The receipt must say so in-beat, without refusing."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "train.py"
+    f.write_text("print('a')\n")
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "first"}), _ALLOW)
+    assert r.ok and "unchanged" not in r.result
+    # asking again before the seat answers is not flagged: nobody has answered yet
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
+    assert r.ok and "unchanged" not in r.result
+    conv.append(home, "seat", speaker="seat", text="Ran it: prints a.", via="seat")
+    asked = [t["seq"] for t in conv.recent(home, "seat", limit=10)]
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "verify my fix"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False, "flagged, never refused"
+    assert "memory_edit" in r.result["unchanged"], r.result
+    assert f"seq {asked[-1]}" in r.result["unchanged"], (asked, r.result)
+    assert "UNCHANGED since" in conv.recent(home, "seat", limit=1)[-1]["text"]
+
+    # an edit clears it
+    conv.append(home, "seat", speaker="seat", text="Same again.", via="seat")
+    f.write_text("print('b')\n")
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "after edit"}), _ALLOW)
+    assert r.ok and "unchanged" not in r.result, r.result
+
+
 def test_a_say_that_asks_for_a_run_is_routed_as_request_run():
     """Measured 2026-09-21 00:00-03:52Z: 24 `say`, 0 `request_run`, after the seat named
     request_run in four turns. The say got the file run, so it was the cheaper door. Route
