@@ -1393,7 +1393,11 @@ def main(argv=None) -> int:
             client, llm,
             [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
                                                                 member=args.member)},
-             {"role": "user", "content": ANSWER_ASK.format(
+             # The acts go FIRST, ahead of what it is answering. Measured 2026-09-21, beat
+             # heartbeat-85303f70bf67: this turn saw only the seat's pre-edit "nothing was
+             # applied" and the reflect words that echoed it, and told the seat "the edit never
+             # actually happened" (seq 2961) about an edit that had succeeded 50 s earlier.
+             {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
                  pending=pending_block, target=target, words=_prior_words(reflect))}],
             max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
 
