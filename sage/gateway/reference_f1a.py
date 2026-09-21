@@ -61,7 +61,7 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     matched, and deleting through it would have broken the next argument)."""
     have = text.split("\n")
     want = old.split("\n")
-    best_k, best_i = 0, -1
+    best_k, ties = 0, []
     for i, line in enumerate(have):
         if line != want[0]:
             continue
@@ -69,7 +69,10 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
         while k < len(want) and i + k < len(have) and have[i + k] == want[k]:
             k += 1
         if k > best_k:
-            best_k, best_i = k, i
+            best_k, ties = k, [i]
+        elif k == best_k and k > 0:
+            ties.append(i)
+    best_i = ties[0] if ties else -1
     cut = lambda s: s if len(s) <= width else s[:width] + "…"  # noqa: E731
     if best_k == 0:
         # No line matches exactly. Name the nearest one, so indentation or one changed word
@@ -81,6 +84,29 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
         n = have.index(near[0]) + 1
         return (f" Your first line is not in the file. The closest line is line {n}: "
                 f"{cut(near[0])!r}; you sent {cut(want[0])!r}.")
+    # MORE THAN ONE PLACE. Measured 2026-09-21: cbp-being's refused `old` began with 3 lines
+    # of a stray block at 1610-1612 that ALSO occur at 330-332, the working data-loading
+    # branch. Naming only the first match told it "your lines are at 330", and a 4B acting on
+    # that deletes the code that works. When the matched prefix repeats, say every place, and
+    # what the file has after each, so the being can tell which one it meant.
+    if len(ties) > 1:
+        # Show each place at the first line where the places DIFFER from each other: the
+        # line right after the prefix is often shared too (2026-09-21: `else:` in both).
+        d = best_k
+        while d < best_k + 20 and all(i + d < len(have) for i in ties) and \
+                len({have[i + d] for i in ties}) == 1:
+            d += 1
+
+        def at(i):
+            s0, e0 = i + 1, i + best_k
+            where = f"line {s0}" if best_k == 1 else f"lines {s0}-{e0}"
+            after = (f"and its line {i + d + 1} is {cut(have[i + d])!r}" if i + d < len(have)
+                     else "then the file ends")
+            return f"{where} ({after})"
+        places = "; ".join(at(i) for i in ties[:4]) + ("; ..." if len(ties) > 4 else "")
+        return (f" Your first {best_k} line{'s' if best_k > 1 else ''} of {len(want)} match "
+                f"the file exactly in {len(ties)} places: {places}. Your line {best_k + 1} is "
+                f"{cut(want[best_k]) if best_k < len(want) else '(none)'!r}.")
     start, end = best_i + 1, best_i + best_k
     span = f"line {start}" if best_k == 1 else f"lines {start}-{end}"
     head = (f" Your first {best_k} line{'s' if best_k > 1 else ''} of {len(want)} match "

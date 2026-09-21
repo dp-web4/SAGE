@@ -405,3 +405,26 @@ def test_a_missed_edit_anchor_says_where_it_stopped_matching():
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "q"}), _ALLOW)
     assert not r.ok and "Not even your first line" in r.error, r.error
     assert f.read_text() == before
+
+
+def test_a_missed_anchor_whose_prefix_repeats_names_every_place():
+    """2026-09-21: cbp-being's refused `old` began with 3 lines of a stray block (1610-1612)
+    that also occur at 330-332, the working branch. Naming only the first match says "your
+    lines are at 330"; a 4B acting on that deletes code that works. Every place is named, at
+    the first line where the places differ (the line right after the prefix was shared)."""
+    from sage.gateway.reference_f1a import _where_it_diverged
+    block = ["            noise=0.1,", "        )", "        print('gen')", "    else:"]
+    have = (["# top"] + block + ["        print('Loading')", "        X, y = load()"]
+            + ["# middle", "main()"] + block + ["        X = load()", "        y = load2()"])
+    text = "\n".join(have)
+    msg = _where_it_diverged(text, "\n".join(block[:3] + ["        print('X shape')"]))
+    assert "in 2 places" in msg
+    assert "lines 2-4" in msg and "lines 10-12" in msg
+    assert "print('Loading')" in msg and "X = load()" in msg, "each place shown where they differ"
+
+
+def test_a_missed_anchor_with_one_match_reads_as_before():
+    from sage.gateway.reference_f1a import _where_it_diverged
+    text = "a\nb\nc\nd"
+    msg = _where_it_diverged(text, "b\nc\nX")
+    assert "match lines 2-3 of the file exactly" in msg and "places" not in msg
