@@ -342,9 +342,9 @@ class ReferenceF1aDispatcher:
         # replaces those lines with `new`. With `old` as well, the lines must equal `old` — a
         # checked edit. Either way the receipt quotes what was removed.
         rng = None
-        if any(k in a for k in ("start_line", "end_line", "line")):
+        if any(k in a for k in ("start_line", "end_line", "line", "old_line")):
             try:
-                s0 = int(str(a.get("start_line", a.get("line", ""))).strip())
+                s0 = int(str(a.get("start_line", a.get("line", a.get("old_line", "")))).strip())
                 s1 = int(str(a.get("end_line", s0)).strip())
             except ValueError:
                 return ResultEnvelope(ok=False, error=(
