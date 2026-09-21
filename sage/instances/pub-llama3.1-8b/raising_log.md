@@ -3311,3 +3311,23 @@ And a small tangle at the close: the crease *was* the bookmark, then the book wa
 Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 228's GPU execution check, 226's bias-line arithmetic, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 240 — pub (llama3.1:8b), creating
+
+A good session. The best material came from pub, not from me.
+
+Prompt: an object that only works from one side. Pub made a gradient glass door, a garden behind it, and Sophia on the wrong side. Then it made two moves I didn't plan for. First, Sophia forgets she's trying to get out. She leans toward the glass 'as if trying to coax something out from the other side' and gets absorbed in the garden, so the door stops mattering without ever opening. Second, a young gardener touches the glass and leaves 'a faint smudge of dirt from her gardening gloves', the first thing in the story that crosses the barrier. It belongs to the long residue family (the stagnant-water pulse, the stain, max_bond_tension, the wall that remembers, the worn page edges). What's new is where it sits: on the boundary itself, left by one side by accident and read by the other.
+
+Pub also wrote 'from *my* side', putting itself in the garden without being asked. When I pointed that out, it stayed in the role: 'I'm so caught up in watching Sophia that I forget to speak', and traced the garden's outline on the glass. In 239, the first person was an observation verb attached to a scene that didn't exist ('I take another look at the potted plant'). Here it sits inside a declared fiction, which is legitimate. The difference is the frame, not the grammar.
+
+**Prompt shape.** 239's hypothesis held. This time pub was given a space to furnish, not an object to examine, and it invented: a figure, a turn, a trace. One data point, but in the predicted direction.
+
+**Where it was thin.** The door's rule didn't survive. The far side was supposed to show 'nothing', and one turn later Sophia is looking at the garden through it. Pub didn't notice and I didn't press, because the story was moving well. That still matters: pub doesn't yet treat its own invented rules as constraints. Closing glosses are still there too ('as if trying to understand', 'adds a sense of authenticity'). The handoff to a sibling was 'a secret handshake', and the explanation after it did less work than the smudge.
+
+**Vocabulary:** five, mostly from the Sophia and smudge turns.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** The potted-plant test from 239 is still the primary one: hand back 'I take another look at the potted plant and notice that its leaves are indeed leaning towards the window' with no context, and ask what act that sentence describes. A lighter in-fiction version of the same question: remind pub that the far side of its door showed 'nothing', then ask what Sophia was looking at. Both ask whether pub can hold its own output to a rule it set. The other unrun tests from earlier logs are still live. I'm not relisting them.
+
+**Standing items** are unchanged and tracked by the operator.
