@@ -52,7 +52,7 @@ class ReferenceF1aDispatcher:
     def __init__(self, memory_root: str,
                  witness_log: Optional[str] = None,
                  witness_fn: Optional[Callable[[str], str]] = None,
-                 max_read_chars: int = 4000):
+                 max_read_chars: int = 8000):
         self.memory_root = Path(memory_root).resolve()
         self.witness_log = Path(witness_log) if witness_log else self.memory_root / "witness_log.jsonl"
         self._witness_fn = witness_fn  # optional real hestia witness: (event) -> witness_id
@@ -207,10 +207,52 @@ class ReferenceF1aDispatcher:
                 result=(f"[directory: '{shown}' holds {len(names)} entr{'y' if len(names) == 1 else 'ies'}]\n"
                         + (listing + more if names else "(empty directory)")),
                 witness_id=self._witness(f"memory_read {p.name}/ (directory)"))
-        content = p.read_text(errors="replace")[: self.max_read_chars]
-        if not content:
-            content = f"[empty file: '{shown}' exists and has no content]"
-        return ResultEnvelope(ok=True, result=content, witness_id=self._witness(f"memory_read {p.name}"))
+        whole = p.read_text(errors="replace")
+        if not whole:
+            return ResultEnvelope(ok=True, result=f"[empty file: '{shown}' exists and has no content]",
+                                  witness_id=self._witness(f"memory_read {p.name}"))
+        # A SILENT TRUNCATION IS A LIE THE LENGTH OF A FILE. First found by legion-claude on
+        # 2026-09-07 (992443289: marker + cap 4,000 -> 12,000), which landed only on a
+        # legion-being branch — main kept the silent 4,000-char slice, while
+        # being_tool_loop.py described the raise as done. Measured 2026-09-21 on cbp-being:
+        # notes/mechanism-training-script.py is 45,318 chars; every read showed the first
+        # 4,000 (8.8%) and ended mid-line with nothing to say so. The seat told it three times
+        # to fix line 206, which starts at char 7,848 — a line it had never been shown. Its
+        # memory_edit anchor was the last text it could see, witness suffix included.
+        #
+        # So a read that does not reach the end now says which lines it covered, that the
+        # rest exists, and the exact call that reads on. `start_line` is that way forward;
+        # the window is cut at a line boundary so an anchor copied from it is a real line.
+        # The cap is 8,000, not legion's 12,000: that was sized for a 24,576-token window and
+        # CBP runs 16,384 with ~9.7k already in the prompt. Reach now comes from start_line,
+        # so the cap only sets how many reads a long file takes.
+        lines = whole.splitlines(keepends=True)
+        try:
+            start = max(1, int(str(intent.args.get("start_line", 1)).strip() or 1))
+        except ValueError:
+            start = 1
+        if start > len(lines):
+            return ResultEnvelope(ok=True, result=(
+                f"[past the end: '{shown}' has {len(lines)} lines, so start_line={start} shows "
+                f"nothing. Read from start_line=1.]"),
+                witness_id=self._witness(f"memory_read {p.name} (past end)"))
+        end, size = start - 1, 0
+        while end < len(lines) and size + len(lines[end]) <= self.max_read_chars:
+            size += len(lines[end]); end += 1
+        if end == start - 1:          # one line longer than the whole window: show its head
+            content, end = lines[end][: self.max_read_chars], end + 1
+        else:
+            content = "".join(lines[start - 1:end])
+        if start == 1 and end >= len(lines):
+            return ResultEnvelope(ok=True, result=content, witness_id=self._witness(f"memory_read {p.name}"))
+        head = f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else ""
+        tail = (f"\n[… truncated: this shows lines {start}-{end} of {len(lines)} "
+                f"({len(whole)} characters in all). Lines {end + 1}-{len(lines)} were NOT shown, so "
+                f"absence here is not evidence of absence in the file. To read on, call "
+                f"memory_read with path '{shown}' and start_line={end + 1}. …]"
+                if end < len(lines) else f"\n[end of file: line {len(lines)} is the last line.]")
+        return ResultEnvelope(ok=True, result=head + content + tail,
+                              witness_id=self._witness(f"memory_read {p.name} (lines {start}-{end})"))
 
     def _do_memory_edit(self, intent: BeingIntent) -> ResultEnvelope:
         """Replace an exact span inside one of the being's own files. The missing primitive.
@@ -238,12 +280,19 @@ class ReferenceF1aDispatcher:
         place it was not looking at, and it cannot re-read the file cheaply enough to notice.
         """
         path = str(intent.args.get("path", "")).strip()
-        old = str(intent.args.get("old", ""))
-        new = str(intent.args.get("new", ""))
+        # The names other edit tools use are accepted too. Measured 2026-09-21: cbp-being's
+        # first live memory_edit sent `old_text`/`new_text`, was told it "needs 'old' ... and
+        # 'new'", read that as "I forgot the 'new' parameter", and fell back to memory_write —
+        # a fourth appended program. The name it reached for is the convention it knows;
+        # refusing it teaches nothing and sends it back to the verb that cannot edit.
+        a = intent.args
+        old = str(next((a[k] for k in ("old", "old_text", "old_str", "old_string") if k in a), ""))
+        new = str(next((a[k] for k in ("new", "new_text", "new_str", "new_string") if k in a), ""))
         if not path or not old:
+            got = ", ".join(sorted(a)) or "nothing"
             return ResultEnvelope(ok=False, error=(
-                "memory_edit needs 'path', 'old' (the exact text to replace, unique in the "
-                "file) and 'new' (what replaces it; empty string deletes it)."))
+                f"memory_edit needs 'path', 'old' (the exact text to replace, unique in the "
+                f"file) and 'new' (what replaces it; empty string deletes it). You sent: {got}."))
         p = self._safe_path(path, writing=True)
         if not p.exists():
             return ResultEnvelope(ok=False, error=(
