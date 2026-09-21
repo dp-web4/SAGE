@@ -326,3 +326,54 @@ def test_the_ask_record_is_reserved_so_a_being_cannot_reset_its_own_limit():
     assert not w.ok and "reserved" in (w.error or ""), w.error
     r = disp(BeingIntent("memory_read", {"path": "asks_sent.jsonl"}), _ALLOW)
     assert r.ok and "hub" in r.result
+
+
+def test_a_second_write_says_it_appended_and_the_way_to_start_fresh_works():
+    """Measured 2026-09-21: cbp-being rewrote notes/mechanism-training-script.py whole three
+    times, read "wrote N chars" as "replaced", and the file became three programs with three
+    __main__ guards — only the first ever runs. A receipt must say APPENDED when it appended,
+    and the remedy it names (retire_note, then write) must actually yield one clean file."""
+    disp, root = _disp()
+    path = "notes/script.py"
+    first = disp(BeingIntent("memory_write", {"path": path, "content": "print('v1')"}), _ALLOW)
+    assert first.ok and first.result.startswith("created script.py"), first.result
+    second = disp(BeingIntent("memory_write", {"path": path, "content": "print('v2')"}), _ALLOW)
+    assert second.ok and "appended" in second.result and "below the 1 lines" in second.result
+    assert "never replaces" in second.result and "retire_note" in second.result
+    assert open(os.path.join(root, path)).read() == "print('v1')\nprint('v2')\n", "still appends"
+    # the named remedy, run literally
+    ret = disp(BeingIntent("retire_note", {"path": path, "reason": "superseded by v3"}), _ALLOW)
+    assert ret.ok, ret.error
+    third = disp(BeingIntent("memory_write", {"path": path, "content": "print('v3')"}), _ALLOW)
+    assert third.ok and third.result.startswith("created script.py"), third.result
+    assert open(os.path.join(root, path)).read() == "print('v3')\n"
+
+
+def test_appending_to_the_journal_does_not_offer_retire_note():
+    """The journal and todo are meant to grow; retire_note refuses them, so suggesting it
+    there would hand the being a door that is shut."""
+    disp, _ = _disp()
+    disp(BeingIntent("memory_write", {"path": "journal.md", "content": "one"}), _ALLOW)
+    env = disp(BeingIntent("memory_write", {"path": "journal.md", "content": "two"}), _ALLOW)
+    assert env.ok and "appended" in env.result and "retire_note" not in env.result
+
+
+def test_appending_to_an_existing_empty_file_does_not_say_created():
+    """An existing empty file has 0 lines but this write did not create it (GPT review, #141)."""
+    disp, root = _disp()
+    os.makedirs(os.path.join(root, "notes"), exist_ok=True)
+    open(os.path.join(root, "notes", "empty.py"), "w").close()
+    env = disp(BeingIntent("memory_write", {"path": "notes/empty.py", "content": "x = 1"}), _ALLOW)
+    assert env.ok and env.result.startswith("appended") and "below the 0 lines" in env.result, env.result
+
+
+def test_the_append_receipt_names_memory_edit_for_a_one_line_change():
+    """2026-09-21 05:47Z: a memory_write "fix" of one method landed below line 1206. The
+    receipt must name the verb that changes text in place, with the argument names it takes."""
+    disp, _ = _disp()
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "a = 1"}), _ALLOW)
+    env = disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "a = 2"}), _ALLOW)
+    assert "memory_edit" in env.result and "old_text" in env.result and "new_text" in env.result
+    # and the named door works with exactly those names
+    ed = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old_text": "a = 1", "new_text": "a = 3"}), _ALLOW)
+    assert ed.ok, ed.error

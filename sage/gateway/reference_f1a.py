@@ -390,7 +390,36 @@ class ReferenceF1aDispatcher:
         p = self._safe_path(intent.args["path"], writing=True)
         content = str(intent.args.get("content", ""))
         p.parent.mkdir(parents=True, exist_ok=True)
+        # SAY APPENDED WHEN IT APPENDED. Measured 2026-09-21: the being rewrote
+        # notes/mechanism-training-script.py whole three times (00:45, 01:14, 01:43Z), read
+        # "wrote N chars" each time as "replaced", and the file became three programs with
+        # three __main__ guards, of which only the first ever runs. Then dp said "you fix it",
+        # and it could not: nothing here edits in place. The receipt is the only place it
+        # learns that, so it names the lines already above and the one way to start fresh.
+        #
+        # And name the door for a one-line change. 2026-09-21 05:47Z, a beat after memory_edit
+        # shipped: the being "fixed" def forward by memory_write-ing a new copy of it, which
+        # landed below line 1206 and changed nothing that runs. The receipt said only what not
+        # to expect; it did not say which verb does what the being wanted.
+        #
+        # Existence, not line count, decides "created": an existing EMPTY file has 0 lines and
+        # was not created by this write (GPT review on #141).
+        existed = p.exists()
+        before = 0
+        if existed:
+            with open(p, errors="replace") as f:
+                before = sum(1 for _ in f)
         with open(p, "a") as f:
             f.write(content + ("\n" if not content.endswith("\n") else ""))
-        return ResultEnvelope(ok=True, result=f"wrote {len(content)} chars to {p.name}",
+        if not existed:
+            result = f"created {p.name} with {len(content)} chars"
+        else:
+            result = (f"appended {len(content)} chars to the END of {p.name}, below the {before} "
+                      f"lines already there. memory_write only adds; it never replaces or edits a line. "
+                      f"To change text already in the file, use memory_edit with old_text (copied "
+                      f"exactly from memory_read) and new_text.")
+            if p.parent.name in ("notes", "scratch") and p.parent.parent == self.memory_root:
+                result += (f" To start {p.name} fresh, retire_note it first, then memory_write "
+                           f"the whole new version.")
+        return ResultEnvelope(ok=True, result=result,
                               witness_id=self._witness(f"memory_write {p.name}"))
