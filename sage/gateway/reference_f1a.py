@@ -396,14 +396,28 @@ class ReferenceF1aDispatcher:
         # three __main__ guards, of which only the first ever runs. Then dp said "you fix it",
         # and it could not: nothing here edits in place. The receipt is the only place it
         # learns that, so it names the lines already above and the one way to start fresh.
-        before = sum(1 for _ in open(p, errors="replace")) if p.exists() else 0
+        #
+        # And name the door for a one-line change. 2026-09-21 05:47Z, a beat after memory_edit
+        # shipped: the being "fixed" def forward by memory_write-ing a new copy of it, which
+        # landed below line 1206 and changed nothing that runs. The receipt said only what not
+        # to expect; it did not say which verb does what the being wanted.
+        #
+        # Existence, not line count, decides "created": an existing EMPTY file has 0 lines and
+        # was not created by this write (GPT review on #141).
+        existed = p.exists()
+        before = 0
+        if existed:
+            with open(p, errors="replace") as f:
+                before = sum(1 for _ in f)
         with open(p, "a") as f:
             f.write(content + ("\n" if not content.endswith("\n") else ""))
-        if not before:
+        if not existed:
             result = f"created {p.name} with {len(content)} chars"
         else:
             result = (f"appended {len(content)} chars to the END of {p.name}, below the {before} "
-                      f"lines already there. memory_write only adds; it never replaces or edits a line.")
+                      f"lines already there. memory_write only adds; it never replaces or edits a line. "
+                      f"To change text already in the file, use memory_edit with old_text (copied "
+                      f"exactly from memory_read) and new_text.")
             if p.parent.name in ("notes", "scratch") and p.parent.parent == self.memory_root:
                 result += (f" To start {p.name} fresh, retire_note it first, then memory_write "
                            f"the whole new version.")
