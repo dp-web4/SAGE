@@ -678,8 +678,8 @@ _REGISTRY = {
     # dp ruled against giving it `run`: a file the being wrote, executed as the operator's
     # user, is unconfined — the gate could govern STARTING it and nothing about what the code
     # then does. So this is the door rather than the capability. The being names a file in
-    # its own home and why; the seat decides whether to run it and answers with what
-    # happened. Judged on the path like memory_read, because reading the file is exactly what
+    # its own home, and optionally why; the seat decides whether to run it and answers with
+    # what happened. Judged on the path like memory_read, because reading the file is exactly what
     # the seat is being asked to do first.
     "request_run":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
     # memory_edit: change an exact span inside one of the being's own files. memory_write
@@ -794,9 +794,10 @@ _TOOL_SCHEMAS = {
                     ["path", "old", "new"]),
     "request_run": ("Ask the seat to RUN one of your own files and tell you what happened. "
                     "You cannot execute anything yourself, so this is the door: you name the "
-                    "file and why, and the seat decides whether to run it and answers with the "
-                    "real output — exit code, stdout, stderr. It may decline, and it will say "
-                    "why. Nothing runs at the moment you call this; what you get back is a "
+                    "file — the only thing it needs — and the seat decides whether to run it and "
+                    "answers with the real output: exit code, stdout, stderr. Adding what you "
+                    "expect to learn is optional and helps the seat decide. It may decline, and "
+                    "it will say why. Nothing runs at the moment you call this; what you get back is a "
                     "receipt that the seat was asked, not a result. Use it instead of asking a "
                     "person in a message: a person may be asleep, and this reaches whoever is "
                     "on duty.",
