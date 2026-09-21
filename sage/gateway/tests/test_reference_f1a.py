@@ -377,3 +377,31 @@ def test_the_append_receipt_names_memory_edit_for_a_one_line_change():
     # and the named door works with exactly those names
     ed = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old_text": "a = 1", "new_text": "a = 3"}), _ALLOW)
     assert ed.ok, ed.error
+
+
+def test_a_missed_edit_anchor_says_where_it_stopped_matching():
+    """cbp-being 2026-09-21: three refused edits in one beat, all told only "not in the file".
+    One matched 8 of its 49 lines; two were the real block written twice. The refusal
+    now names the matching span and the first differing line, and still changes nothing."""
+    disp, root = _disp()
+    f = Path(root) / "notes" / "s.py"
+    body = ('    p.add_argument("--lr")\n    p.add_argument(\n        "--epochs", type=int\n'
+            '    )\n    p.add_argument(\n        "--synthetic",\n    )')
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": body}), _ALLOW)
+    before = f.read_text()
+
+    doubled = '    p.add_argument(\n        "--epochs", type=int\n    )\n' * 2
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old_text": doubled.rstrip("\n"),
+                                         "new_text": ""}), _ALLOW)
+    assert not r.ok and "not in" in r.error, r.error
+    assert "first 4 lines of 6 match lines 2-5" in r.error, r.error
+    assert "'        \"--synthetic\",'" in r.error, r.error
+    assert f.read_text() == before
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": '    p.add_argument("--lr ")',
+                                         "new": ""}), _ALLOW)
+    assert not r.ok and "closest line is line 1" in r.error, r.error
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "q"}), _ALLOW)
+    assert not r.ok and "Not even your first line" in r.error, r.error
+    assert f.read_text() == before
