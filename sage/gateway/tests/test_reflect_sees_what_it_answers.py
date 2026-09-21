@@ -16,6 +16,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
@@ -277,12 +278,36 @@ def test_the_answer_phase_sees_only_the_turn_it_answers():
     conv.append(inst, "dp", speaker="dp", text="what are you working on?")
     _l, block, _f, target, sel = pending_selection(inst, ME)
     rendered = sel.render()
-    assert target == sel.cid
-    mine, other = (("what are you working on", "memory_write appends") if sel.cid == "dp"
-                   else ("memory_write appends", "what are you working on"))
-    assert mine in rendered
-    assert other not in rendered, "another conversation's words reached the answer turn"
-    assert other in block, "the reflect survey may still see everything that is waiting"
+    assert target == sel.cid == "dp", "dp's is the newer turn, and the only one that asks"
+    assert "what are you working on" in rendered
+    assert "memory_write appends" not in rendered, "another conversation's words reached the answer turn"
+    assert "memory_write appends" in block, "the reflect survey may still see everything that is waiting"
+
+
+def test_a_newer_question_in_another_channel_is_selected_over_an_older_statement():
+    """GPT on #147. `listing()` returns the newest conversation FIRST and the collector took
+    `pend[-1]`, so the selection was the least recent conversation: an old dp statement was
+    frozen as the turn to answer while a newer seat question got no answer phase. (My own
+    isolation test above hit this and I made it order-agnostic instead of reading it.)"""
+    from sage.gateway.heartbeat import pending_selection
+    inst = _inst(); _channel(inst); _channel(inst, cid="seat", other="seat")
+    conv.append(inst, "dp", speaker="dp", text="keep going!")
+    time.sleep(1.1)  # ts has one-second resolution
+    conv.append(inst, "seat", speaker="seat", text="Can you show me the result?")
+    *_, target, sel = pending_selection(inst, ME)
+    assert target == sel.cid == "seat" and sel.expects_reply is True
+
+
+def test_an_older_question_outranks_a_newer_statement():
+    """The other half of the policy: only an ask opens the answer phase, so a run result
+    landing after dp's question must not pass the question over for a beat."""
+    from sage.gateway.heartbeat import pending_selection
+    inst = _inst(); _channel(inst); _channel(inst, cid="seat", other="seat")
+    conv.append(inst, "dp", speaker="dp", text="what are you working on?")
+    time.sleep(1.1)
+    conv.append(inst, "seat", speaker="seat", text="[request_run] I ran notes/x.py. exit code 0.")
+    *_, target, sel = pending_selection(inst, ME)
+    assert target == "dp" and sel.expects_reply is True
 
 
 def test_prior_words_are_offered_as_material_not_as_an_undelivered_message():

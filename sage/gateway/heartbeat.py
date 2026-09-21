@@ -980,6 +980,12 @@ def pending_selection(instance: Path, member: str) -> tuple:
             for t in (_conv.awaiting(instance, cid, member)
                       or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
                 pend.append((cid, t))
+        # ORDER BY WHEN IT WAS SAID, not by list construction. `listing()` is newest-
+        # conversation FIRST, so `pend[-1]` used to pick the LEAST recent conversation and the
+        # truncation below kept the oldest turns (GPT on #147: an old dp "keep going!" was
+        # frozen as the selection while a newer seat question waited). ts is ISO-8601 Z,
+        # so it sorts as text; seq breaks ties within one conversation.
+        pend.sort(key=lambda ct: (str(ct[1].get("ts") or ""), int(ct[1].get("seq") or 0)))
         pend = pend[-PENDING_TURNS:]
         if pend:
             lines = []
@@ -988,7 +994,13 @@ def pending_selection(instance: Path, member: str) -> tuple:
                 lines.append(f'- in "{cid}", {t.get("from")} said: {txt}')
             block = ("Addressed to you and not yet answered:\n" + "\n".join(lines)
                      + "\nYou may answer with say, or leave it. Both are allowed.")
-            cid, t = pend[-1]
+            # THE SELECTION POLICY: the newest turn that asks something; failing that, the newest
+            # turn. Asks first because only an ask opens the answer phase — picking a newer
+            # statement (a run result, say) over an older question would pass the question over
+            # for a whole beat. Newest, not oldest-waiting, because an answered conversation
+            # leaves `pend`, so the next beat reaches the older one; nothing is starved.
+            asking = [ct for ct in pend if turn_expects_reply(ct[1].get("text"))]
+            cid, t = (asking or pend)[-1]
             # FIRST in the list, not appended after the bookkeeping. The routine three
             # (journal, todo, remember) fill the step budget exactly, so anything after them
             # is unreachable however willing the being is — measured 2026-09-18.
