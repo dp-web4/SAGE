@@ -799,14 +799,17 @@ _TOOL_SCHEMAS = {
                     ["path", "reason"]),
     "memory_edit": ("Change part of a file you already wrote. memory_write only ever ADDS to "
                     "the end of a file; this is how you alter what is already in one. Give the "
-                    "exact text to replace and what replaces it. It must appear exactly once, "
-                    "so include a neighbouring line if it would otherwise be ambiguous. An "
-                    "empty 'new' deletes the text. Use this to fix a line in a script rather "
-                    "than writing a note about the fix.",
+                    "exact text to replace, OR the line numbers to replace, and what replaces "
+                    "it. Text must appear exactly once, so include a neighbouring line if it "
+                    "would otherwise be ambiguous. Line numbers are the ones memory_read shows. "
+                    "An empty 'new' deletes. Use this to fix a line in a script rather than "
+                    "writing a note about the fix.",
                     {"path": "the file, e.g. notes/my-script.py",
-                     "old": "the exact text to replace, unique in the file",
+                     "old": "the exact text to replace, unique in the file (or use start_line)",
+                     "start_line": "the first line to replace, as memory_read numbers it",
+                     "end_line": "the last line to replace (same as start_line for one line)",
                      "new": "what replaces it (empty string deletes)"},
-                    ["path", "old", "new"]),
+                    ["path", "new"]),
     "request_run": ("Ask the seat to RUN one of your own files and tell you what happened. "
                     "You cannot execute anything yourself, so this is the door: you name the "
                     "file — the only thing it needs — and the seat decides whether to run it and "
