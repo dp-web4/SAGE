@@ -212,6 +212,66 @@ class ReferenceF1aDispatcher:
             content = f"[empty file: '{shown}' exists and has no content]"
         return ResultEnvelope(ok=True, result=content, witness_id=self._witness(f"memory_read {p.name}"))
 
+    def _do_memory_edit(self, intent: BeingIntent) -> ResultEnvelope:
+        """Replace an exact span inside one of the being's own files. The missing primitive.
+
+        `memory_write` opens with mode "a". Every write this being has ever made APPENDS, so
+        until now it could not change one byte of anything it had written — its only
+        mutations were append and rename (`retire_note`). It was repeatedly asked to fix code
+        and was structurally unable to, and what it did instead is the whole shape of
+        2026-09-20/21:
+
+          * `notes/mechanism-training-script.py` is THREE programs concatenated, with three
+            `if __name__ == "__main__":` guards. Each "rewrite" was an append, so the first
+            program is the only one that ever runs and the two later attempts are unreachable.
+          * Twice it reported an edit it had not made — `set -e` added to a Python file, then
+            `w = self.weights[...]` added at line 213 — because writing a note describing the
+            fix was the only thing it could actually do. The second was lifted from the seat's
+            own defect report, a hypothetical turned into a claimed edit.
+
+        Appending is right for a journal and wrong for a program, and the being had only the
+        one verb for both. This is not new reach: the file is already its own and already
+        writable. It is the same reach, finally usable.
+
+        Exactly one occurrence, or nothing happens. A unique anchor is the being's way of
+        saying WHICH line it meant; "replace the first of several" would silently edit a
+        place it was not looking at, and it cannot re-read the file cheaply enough to notice.
+        """
+        path = str(intent.args.get("path", "")).strip()
+        old = str(intent.args.get("old", ""))
+        new = str(intent.args.get("new", ""))
+        if not path or not old:
+            return ResultEnvelope(ok=False, error=(
+                "memory_edit needs 'path', 'old' (the exact text to replace, unique in the "
+                "file) and 'new' (what replaces it; empty string deletes it)."))
+        p = self._safe_path(path, writing=True)
+        if not p.exists():
+            return ResultEnvelope(ok=False, error=(
+                f"nothing to edit: '{path}' does not exist. This is an absence, not a "
+                f"refusal. memory_write creates a file; memory_edit changes one that is there."))
+        if p.is_dir():
+            return ResultEnvelope(ok=False, error=f"'{path}' is a directory.")
+        text = p.read_text(errors="replace")
+        hits = text.count(old)
+        if hits == 0:
+            return ResultEnvelope(ok=False, error=(
+                f"that text is not in '{path}', so nothing was changed. The file is as it "
+                f"was. Read it first and copy the line exactly, including its indentation — "
+                f"what you remember writing and what is on disk can differ."))
+        if hits > 1:
+            return ResultEnvelope(ok=False, error=(
+                f"that text appears {hits} times in '{path}', so it does not say which one "
+                f"you mean, and nothing was changed. Include a neighbouring line to make it "
+                f"unique."))
+        p.write_text(text.replace(old, new, 1))
+        before = text.count("\n") + 1
+        after = p.read_text(errors="replace").count("\n") + 1
+        return ResultEnvelope(
+            ok=True,
+            result=(f"edited {p.name}: replaced 1 occurrence; the file went from {before} to "
+                    f"{after} lines. This changed the file on disk — it is not an append."),
+            witness_id=self._witness(f"memory_edit {p.name} ({before}->{after} lines)"))
+
     def _do_retire_note(self, intent: BeingIntent) -> ResultEnvelope:
         """Mark one of the being's OWN notes as no longer current, by renaming it and writing
         a dated header. Nothing is destroyed.

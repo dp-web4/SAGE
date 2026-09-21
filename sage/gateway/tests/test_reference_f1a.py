@@ -56,6 +56,53 @@ def test_path_escape_is_error():
     assert "memory_write creates a file inside your home" in env.error, "a way forward, not just a wall"
 
 
+def test_memory_edit_changes_the_file_where_memory_write_only_appends():
+    """memory_write opens with mode "a", so until 2026-09-21 the being could not alter a byte
+    of anything it had written. Measured consequence: notes/mechanism-training-script.py is
+    THREE programs concatenated with three __main__ guards — each "rewrite" was an append, so
+    only the first ever runs — and twice it reported an edit it had not made, because writing
+    a note describing the fix was the only thing it could do."""
+    disp, root = _disp()
+    home = Path(root)
+    w = disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "x = 1\nprint(x)"}), _ALLOW)
+    assert w.ok, w.error
+    # the defect, pinned: a second write APPENDS, it does not replace
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "x = 2"}), _ALLOW)
+    body = (home / "notes" / "s.py").read_text()
+    assert "x = 1" in body and "x = 2" in body, "memory_write is append-only by design"
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "x = 1", "new": "x = 42"}), _ALLOW)
+    assert r.ok, r.error
+    body = (home / "notes" / "s.py").read_text()
+    assert "x = 42" in body and "x = 1" not in body, "the edit did not take: " + body
+    assert "not an append" in r.result
+
+
+def test_memory_edit_refuses_an_ambiguous_or_absent_anchor_and_changes_nothing():
+    """A unique anchor is how the being says WHICH line it meant. Replacing the first of
+    several would silently edit somewhere it was not looking, and it cannot cheaply re-read
+    the file to notice. Both refusals must leave the file byte-identical."""
+    disp, root = _disp()
+    home = Path(root)
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "a = 1\na = 1\nb = 2"}), _ALLOW)
+    before = (home / "notes" / "s.py").read_text()
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "a = 1", "new": "a = 9"}), _ALLOW)
+    assert not r.ok and "appears 2 times" in r.error, r.error
+    assert (home / "notes" / "s.py").read_text() == before, "an ambiguous edit changed the file"
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "q"}), _ALLOW)
+    assert not r.ok and "not in" in r.error, r.error
+    assert (home / "notes" / "s.py").read_text() == before
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/gone.py", "old": "a", "new": "b"}), _ALLOW)
+    assert not r.ok and "does not exist" in r.error and "not a refusal" in r.error, r.error
+
+    # and it cannot reach outside its home, exactly as memory_write cannot
+    r = disp(BeingIntent("memory_edit", {"path": "/etc/hostname", "old": "a", "new": "b"}), _ALLOW)
+    assert not r.ok and "outside your reach" in r.error, r.error
+
+
 def test_an_out_of_reach_path_that_does_not_exist_says_so_rather_than_implying_a_boundary():
     """cbp-being read `/home/dp/ai-workspace/SAGE/126-being.md` — outside its root AND absent —
     and was told only that the path "escapes the being's memory root and its grants". It spent
