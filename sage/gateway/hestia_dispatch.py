@@ -34,6 +34,7 @@ Invariants (same as the reference this wraps):
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -1707,14 +1708,42 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, pending=True, note=(
                 "no seat conversation is configured on this instance, so there is nobody to "
                 "hand this to. Your file is untouched."))
-        lines = [f"[request_run] {p.relative_to(self.memory_root)}",
+        # AN UNCHANGED FILE GIVES THE SAME ANSWER. Measured 2026-09-21 06:31Z: cbp-being's
+        # journal restated the seat's diagnosis correctly ("the fix requires replacing the
+        # file, not appending to it"), and in the same beat called request_run on the file,
+        # byte-identical to the one the seat had run and answered 28 minutes earlier. Its
+        # why claimed "the fixes". The seat's reply could only be the same traceback, a
+        # whole wake later. The digest makes the no-op visible NOW, in this beat, where the
+        # being can still act on it. It does not block: a being may want a rerun.
+        rel = str(p.relative_to(self.memory_root))
+        digest = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
+        unchanged = None  # (seq it asked at, seq the seat answered at)
+        asked_at = None
+        for t in conv.recent(self.memory_root, seat_conv, limit=80):
+            text = str(t.get("text", ""))
+            if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
+                asked_at = t.get("seq") if f"sha256:{digest}" in text else None
+            elif asked_at is not None and t.get("from") != self.member:
+                unchanged = (asked_at, t.get("seq"))
+        lines = [f"[request_run] {rel}",
                  f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
-                 f"({p.stat().st_size} bytes; the seat decides whether to run it and answers here)"]
+                 f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it and answers here)"]
+        if unchanged:
+            lines.append(f"UNCHANGED since the request at seq {unchanged[0]}; the seat answered "
+                         f"at seq {unchanged[1]}.")
         said = self._do_say(BeingIntent("say", {"to": seat_conv, "text": "\n".join(lines)}))
         if not said.ok:
             return ResultEnvelope(ok=False, error=f"could not hand the request to the seat: {said.error}")
+        result = {}
+        if unchanged:
+            result["unchanged"] = (
+                f"This file is byte-for-byte the one you asked about at seq {unchanged[0]}, and "
+                f"the seat answered that at seq {unchanged[1]}. Nothing in it has changed since, "
+                f"so running it again will give the same result. To change what runs: "
+                f"memory_edit the lines, or retire_note the file and then memory_write it anew.")
         return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
-            "requested": str(p.relative_to(self.memory_root)),
+            **result,
+            "requested": rel,
             "asked": seat_conv,
             "ran": False,
             "note": ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
