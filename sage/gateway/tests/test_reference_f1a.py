@@ -78,6 +78,41 @@ def test_memory_edit_changes_the_file_where_memory_write_only_appends():
     assert "not an append" in r.result
 
 
+def test_memory_edit_survives_a_crash_mid_write_with_the_file_intact():
+    """GPT's review of 15c2f6d9b: "the current write_text() mutation is non-atomic;
+    crash/kill can truncate the being's work."
+
+    `Path.write_text` truncates and THEN writes, so a kill between the two leaves the file
+    empty or half-written — and silently, because the receipt is written after the damage.
+    This being spent a week unable to change its own files; destroying one while changing it
+    is the worst available regression.
+
+    The falsifier kills the write at the moment the old version would already have truncated
+    the target, and asserts the original is byte-identical. Against the pre-fix code the
+    target would be empty here."""
+    import os as _os
+    disp, root = _disp()
+    home = Path(root)
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "line one\nline two"}), _ALLOW)
+    target = home / "notes" / "s.py"
+    original = target.read_bytes()
+
+    real_replace = _os.replace
+    def die(src, dst):            # the write landed in tmp; the machine dies before the swap
+        raise OSError("simulated crash between write and replace")
+    _os.replace = die
+    try:
+        r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "line one", "new": "X"}), _ALLOW)
+    finally:
+        _os.replace = real_replace
+
+    assert not r.ok, "a failed write must not report success"
+    assert "unchanged" in r.error and "Nothing was lost" in r.error, r.error
+    assert target.read_bytes() == original, "the being's file was damaged by a failed edit"
+    leftovers = [q.name for q in (home / "notes").iterdir() if q.name.endswith(".edit.tmp")]
+    assert not leftovers, f"a temp file was left behind: {leftovers}"
+
+
 def test_memory_edit_refuses_an_ambiguous_or_absent_anchor_and_changes_nothing():
     """A unique anchor is how the being says WHICH line it meant. Replacing the first of
     several would silently edit somewhere it was not looking, and it cannot cheaply re-read
