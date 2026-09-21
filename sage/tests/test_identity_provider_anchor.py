@@ -29,7 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from sage.identity.provider import IdentityProvider
+from sage.identity.provider import IdentityProvider, SYSTEM_TOOL_DIRS
 
 
 class IdentityAnchorTests(unittest.TestCase):
@@ -325,9 +325,15 @@ class SystemToolLookupTests(unittest.TestCase):
                          "a tool planted on PATH reached the machine anchor, and so the sealing key")
 
     def test_a_file_that_is_not_executable_is_not_the_tool(self):
-        """Parity with the rust side, which now applies the same predicate. The two providers
-        derive ONE sealing key, so a machine where they disagree about what counts as a tool is
-        a machine with two keys."""
+        """Parity with the rust side, which applies the same predicate. The two providers
+        derive ONE sealing key, so a machine where they disagree about what counts as a tool
+        is a machine with two keys.
+
+        2026-09-21: this test used to build the fixture and then assert only that
+        `os.access(plain, X_OK)` is False -- a property of the FIXTURE. It never reached
+        `_system_tool`, which does not look in a temp directory anyway. Removing
+        `os.access(cand, os.X_OK)` from the lookup left the whole suite green. It asks the
+        code now, through the same `dirs` seam the rust side has."""
         import os
         import shutil as _shutil
         import tempfile as _tempfile
@@ -336,8 +342,43 @@ class SystemToolLookupTests(unittest.TestCase):
         plain = d / 'ioreg'
         plain.write_text('not executable')
         plain.chmod(0o644)
-        self.assertFalse(os.access(plain, os.X_OK),
-                         "fixture: the acceptance predicate both providers apply")
+        self.assertFalse(os.access(plain, os.X_OK), "fixture")
+        self.assertIsNone(IdentityProvider._system_tool_in('ioreg', [str(d)]),
+                          "a non-executable regular file is not the tool")
+        plain.chmod(0o755)
+        self.assertEqual(IdentityProvider._system_tool_in('ioreg', [str(d)]), str(plain),
+                         "the control: the SAME file, executable, IS the tool")
+        (d / 'sub').mkdir()
+        (d / 'sub' / 'ifconfig').mkdir()
+        self.assertIsNone(IdentityProvider._system_tool_in('ifconfig', [str(d / 'sub')]),
+                          "a DIRECTORY named like the tool is not the tool")
+        self.assertIsNone(IdentityProvider._system_tool_in('ioreg', ['/nonexistent-dir']))
+        self.assertEqual(IdentityProvider._system_tool_in('ioreg', ['/nonexistent-dir', str(d)]),
+                         str(plain), "the first directory that HAS it wins")
+
+    def test_the_fixed_directories_are_the_only_ones_searched(self):
+        """The invariant #130 exists for, asked where a Linux CI can answer it.
+
+        The PATH-planting test above plants `ioreg` but asserts on a DIFFERENT name, and its
+        anchor assertion passes trivially on Linux because `_machine_anchor` returns
+        /etc/machine-id before `ioreg` is ever reached. Measured 2026-09-21: prepending the
+        PATH directories to the search list left the whole suite green on Linux -- the exact
+        defect this PR fixes, re-introduced, invisible on the platform most of the fleet runs.
+        This one asks the lookup itself, and holds on every platform."""
+        import os
+        import shutil as _shutil
+        import tempfile as _tempfile
+        d = Path(_tempfile.mkdtemp(prefix='sage-path-only-'))
+        self.addCleanup(_shutil.rmtree, d, ignore_errors=True)
+        fake = d / 'ioreg'
+        fake.write_text('#!/bin/sh\necho x\n')
+        fake.chmod(0o755)
+        with self._with_path(str(d) + os.pathsep + os.environ.get('PATH', '')):
+            got = IdentityProvider._system_tool('ioreg')
+        self.assertNotEqual(got, str(fake),
+                            "a tool planted on PATH was returned by the lookup")
+        self.assertIn(got, [None] + [os.path.join(x, 'ioreg') for x in SYSTEM_TOOL_DIRS],
+                      "the lookup returned something outside the fixed directories")
 
     def test_the_anchor_does_not_depend_on_path(self):
         """The property itself, end to end, on whatever platform this runs on."""
