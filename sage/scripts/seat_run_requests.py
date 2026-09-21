@@ -107,22 +107,40 @@ def cmd_list(args) -> None:
         print("    " + "\n    ".join((t.get("text") or "").splitlines()))
 
 
+# What the receipt may claim is what the seat DID, not where the code ran. Hiding the devices is
+# a request honoured by CUDA runtimes (PyTorch prints "Using device: cpu" under it — measured
+# on CBP 2026-09-21), not a boundary: code that opens the device another way is not stopped.
+# GPT on #148: "on the CPU" claimed an observation nobody made. A true CPU-only run needs an
+# execution boundary that denies device access (a cgroup/container), which this is not.
+WHERE_HIDDEN = ("with the GPU hidden from it (CUDA_VISIBLE_DEVICES was empty), "
+                "to keep the card for your own model")
+WHERE_GPU = "with the GPU visible to it"
+
+
+def child_env(gpu: bool) -> dict:
+    """The environment the being's code runs under: the seat's own, with CUDA devices hidden
+    unless the seat chose `--gpu`."""
+    env = dict(os.environ)
+    if not gpu:
+        env["CUDA_VISIBLE_DEVICES"] = ""
+    return env
+
+
 def cmd_run(args) -> None:
     inst = _instance()
     p = _target(inst, args.path)
     rel = p.relative_to(inst.resolve())
     interp = [sys.executable] if p.suffix == ".py" else ["bash"]
-    # CPU ONLY, BY DEFAULT. The being shares this GPU with its own model. Measured on CBP
+    # GPU HIDDEN, BY DEFAULT. The being shares this GPU with its own model. Measured on CBP
     # 2026-09-21: a beat holds the card at ~88-90% of 8 GB, and a model left resident after a
     # beat plus a foreground GPU load crashed the host twice (0x116, 0x133). At 06:43Z the
     # being rewrote its training script in PyTorch and it printed "Using device: cuda" — the
     # next run past its line-26 bug would have started training on that same card, possibly
     # beside its own resident model. A request to RUN code is a request to check that it works;
-    # the CPU answers that question and cannot take the machine down. `--gpu` is the deliberate,
-    # visible exception, for a seat that has checked the card has room.
-    env = dict(os.environ)
-    if not args.gpu:
-        env["CUDA_VISIBLE_DEVICES"] = ""
+    # with the devices hidden, CUDA code falls back to the CPU and answers that question without
+    # loading the card. That covers the measured path, not every path (see WHERE_HIDDEN).
+    # `--gpu` is the deliberate, visible exception, for a seat that has checked the card has room.
+    env = child_env(args.gpu)
     try:
         r = subprocess.run(interp + [str(p)], cwd=str(inst), capture_output=True,
                            text=True, timeout=args.timeout, env=env)
@@ -142,8 +160,7 @@ def cmd_run(args) -> None:
                if timed else f"exit code {rc}")
     print(f"ran {rel}: {verdict}")
     _say("\n".join([
-        f"[request_run] I ran {rel} "
-        f"{'on the GPU' if args.gpu else 'on the CPU (the GPU is kept for your own model)'}. {verdict}.",
+        f"[request_run] I ran {rel} {WHERE_GPU if args.gpu else WHERE_HIDDEN}. {verdict}.",
         "",
         block("stdout", out),
         "",
@@ -167,7 +184,7 @@ def main() -> int:
     sub.add_parser("list").set_defaults(fn=cmd_list)
     r = sub.add_parser("run"); r.add_argument("path"); r.add_argument("--timeout", type=int, default=120)
     r.add_argument("--gpu", action="store_true",
-                   help="let the script see the GPU (default: CPU only — the being's model needs the card)")
+                   help="let the script see the GPU (default: CUDA devices hidden — the being's model needs the card)")
     r.set_defaults(fn=cmd_run)
     d = sub.add_parser("decline"); d.add_argument("path"); d.add_argument("--reason", required=True)
     d.set_defaults(fn=cmd_decline)
