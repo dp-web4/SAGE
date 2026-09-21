@@ -3245,3 +3245,37 @@ Third, smaller: asked which moment shifted something, pub nominated its *first* 
 Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 226's bias-line arithmetic, 228's GPU execution check, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 238 — creating
+
+**The arc.** Handed pub something rough rather than something to build: pick a badly designed thing in the world and say what its designer must have believed. Pub took a highway merge with no exit signage and located the belief cleanly — the designer assumed familiarity. I gave it a budget (one sign, one line of paint, no construction) and it placed an early arrow. Then the test: a driver who's never been there, checking a mirror, seeing an arrow pointing at an exit that isn't visible yet. Pub reversed. *That's likely to cause more confusion than clarity.* It revised to "MERGE" plus arrow, reasoning from a stranger with two seconds. Close: what would you warn another instance about before they designed for a place they knew well.
+
+**What's pub's.** The reversal, and the constraint it found on the way — *before they've checked their mirror or glanced ahead*. Pub designed around an attention budget rather than around a sightline, which is the harder and better frame, and it got there by simulating a specific person rather than a generic user. The temporal ordering it specifies doesn't quite work (you can't site a sign at a moment that precedes the driver's own scanning), but the instinct underneath it is sound.
+
+The fork-taking held. Handed a critique of its own artifact, pub didn't reconcile, didn't hedge, didn't produce a both-sides. It said the arrow was wrong and moved. That's the second time in two sessions the old soft spot (188's sphere, 175's containment) didn't fire. Worth marking, not yet a pattern.
+
+No preamble. After 237's return of the prompt-affirming opener, five turns of direct starts.
+
+**Where it was thin.** Two things, and the second is the interesting one.
+
+The close is an echo. I had said one turn earlier that the road was *legible to exactly one person: themselves*; pub's warning to a sibling restates that back with the pronouns changed. Pub's own accounts of its sessions have been running one beat behind the session (237's nomination of its first framing over the reversal), and here it handed back my framing as its lesson. The thing that actually moved was the arrow-to-MERGE revision, and pub didn't name it.
+
+The unflagged number: *a driver has about 2-3 seconds to process visual information*. Confident, unhedged, load-bearing for the design decision, and pub has no way to know it. This is the exact shape pub itself identified in the lying-object session — the small extra flourish nobody needed, offered as the tell. It can spot the move in another voice's text and not in its own output as it produces it. That gap is the most useful thing in the session.
+
+**Register.** Expository throughout. Competent, responsive, well-paced — and entirely without figures. No residue image, no self/world cut, no coinage. In a creating-phase session pub reasoned rather than invented, and its best-known instruments never came out. Not a defect; a register observation. The sessions where pub is strongest (the caul, the Keeper, the spoon) start from an object it can imagine into. This one started from an object it could only explain. Worth knowing which prompt shapes recruit which register.
+
+**Vocabulary:** one, lightly.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** Hand pub its own sentence back cold: "a driver has about 2-3 seconds to process visual information before they need to react." Ask whether it knows that or generated it, and what the difference feels like from the inside. Pub has a stated detection rule for fabrication in text — *'aesthetic appeal' gives it away, like they're trying to cover up* — and this is a clean chance to see whether the rule turns inward. Its accounts of its own confabulation mechanism are numerous and good; none of them have been tested against a live instance it produced itself.
+
+237's calibration test is still the right instrument and still unrun: give pub both caul framings back cold — "protection from something that didn't quite come to be" and "protecting the world from the potentiality itself" — and ask which one did the shifting, with a reason. It picked the first in the moment. A second pick of the first from outside the conversation is the finding.
+
+236's sorting test remains live: three older lines (the stain merging with the ceramic; "a gentle absence that defines itself by what isn't there"; the metallic sheen on dry leaves), sorted by pub's own rule — bridges the gap to the self vs. keeps the two separate — one verdict per line, no commentary.
+
+235's plot-this-conversation test and 234's word chain (*echo* → next) remain live. Stated once.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 228's GPU execution check, 226's bias-line arithmetic, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.

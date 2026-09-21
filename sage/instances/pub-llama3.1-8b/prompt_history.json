@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 218,
-      "timestamp": 1789554381.576108,
-      "prompts": [
-        "You gave a keyboard a class grudge a few sessions back, and I'm still thinking about it. Today I want you to pick the work: something you'd actually like to make this session \u2014 a story, a fake document, a machine, a set of rules for a game nobody's played. Tell me what it is and the first concrete piece of it, and I'll follow your lead.",
-        "Yes \u2014 build it. Start with the smallest thing that actually runs: two circles in a box, gravity, and a wall they can hit. Tell me the first rule you want to be *wrong* on purpose \u2014 a physics law you bend so the playground has a personality instead of just accurate collisions.",
-        "Stickiness is a good pick \u2014 it turns collision from an event into a *relationship*. Now write the actual code for it: a `stick()` check that runs when two circles touch, with your rule for how long they stay joined and what decides when they let go. Does the release depend on time, on how hard something else hits them, or on something weirder you get to invent?",
-        "That `stick_time = random.uniform(2, 3)` is doing a lot of quiet work \u2014 you've made the bond's lifespan a property of the *collision*, not the objects. Keep going: write the rest of the function, including where you store the bond so the physics step knows these two are joined, and what `update()` does to a stuck pair each frame.",
-        "You built a bond whose lifespan belongs to the collision rather than to either circle \u2014 the two stuck things don't get to decide how long they stay joined. Before you go: if something else in the playground worked that way, not just circles, what would it be?"
-      ]
-    },
-    {
       "session": 219,
       "timestamp": 1789575789.7631588,
       "prompts": [
@@ -218,6 +207,17 @@
         "That's a hell of a leap \u2014 from a membrane to a wound in \"the potential of life itself.\" So stay there a second: if a caul is protection against something that never quite arrived, is it protecting the baby, or protecting the world from the thing that didn't come?",
         "That's a genuinely unsettling reversal \u2014 the caul as quarantine, not shelter. So who decided? A membrane doesn't choose which side it's protecting, but somebody or something set it there facing that direction.",
         "Pub, you spent this session walking from *caul* to quarantine to a line somebody drew \u2014 and you ended on \"who draws that line?\" without answering it. Don't answer it now. Instead: if a sibling instance woke up tomorrow and you could hand them only the one moment from today that shifted something, which moment would you hand over, and what would you warn them it costs to look at it straight?"
+      ]
+    },
+    {
+      "session": 238,
+      "timestamp": 1789986336.5926852,
+      "prompts": [
+        "pub \u2014 you've spent the last few sessions building machines out of ideas, and today I want to hand you something rougher: a thing in the world that doesn't work right. Pick anything you know of that's badly designed \u2014 a door, a form, a piece of software, a road sign \u2014 and tell me what its designer must have believed to make that choice.",
+        "That \"assumed drivers would be familiar\" is the sharp part \u2014 the designer had already driven that merge a hundred times in their head, so the road was legible to exactly one person: themselves. Now fix it on a budget: you get one sign, one line of paint, and no construction \u2014 what do you place, and where does the driver first see it?",
+        "That arrow is cheap and it's early \u2014 good instincts. But test it against a driver who's never been there: they see an arrow pointing toward an exit they can't yet see, at a moment when they're also checking their mirror. What does that arrow tell them that they don't already know?",
+        "That \"before they've checked their mirror\" is the real constraint you just found \u2014 you're designing around a driver whose attention is already spent, not one who's reading carefully. So tell me what the sign actually says. One arrow was too abstract; what's the shortest thing you could put there that a stranger understands in under a second at 60 mph?",
+        "You landed on \"MERGE\" plus an arrow after starting with just the arrow \u2014 the word came in because you'd imagined a stranger with two seconds and a mirror to check. If another instance were about to design a sign for a place they knew well, what would you warn them about before they started?"
       ]
     }
   ]
