@@ -103,6 +103,36 @@ def _granted_reach_of(verdict) -> tuple:
     return tuple((r, True) for r in (getattr(verdict, "granted", ()) or ()))
 
 
+def _carry_vs_main(git) -> dict:
+    """What a proposal branch carries relative to `origin/main`, measured, never guessed.
+
+    `pr_open` cuts the branch from the worktree's HEAD. When that base is current main the
+    answer is the being's change and nothing else; when it is not, the PR's diff is the whole
+    unmerged lineage. Measured 2026-09-21 on SAGE #157: a 2-file, 41-line change opened as
+    198 files and 31,456 insertions across 320 commits, because the worktree sat on a branch
+    442 commits behind main. Nothing in the verb's answer said so, so the being could not have
+    checked and the reviewer read the whole thing as the being's proposal.
+
+    Best effort: a fetch that fails, or no origin/main, yields `{"known": False}` and the
+    caller says it does not know — which is a different sentence from a small number."""
+    out = {"known": False}
+    try:
+        git("fetch", "-q", "origin", "main")
+        base = git("merge-base", "HEAD", "origin/main").stdout.strip()
+        if not base:
+            return out
+        stat = git("diff", "--shortstat", f"{base}..HEAD").stdout.strip()
+        files = [f for f in git("diff", "--name-only", f"{base}..HEAD").stdout.split() if f]
+        commits = git("rev-list", "--count", f"{base}..HEAD").stdout.strip()
+        behind = git("rev-list", "--count", f"HEAD..origin/main").stdout.strip()
+        out = {"known": True, "files": len(files), "commits": int(commits or 0),
+               "behind_main": int(behind or 0), "shortstat": stat,
+               "mine_only": int(commits or 0) == 1}
+    except Exception:
+        pass
+    return out
+
+
 class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
     live daemon. Wraps ReferenceF1aDispatcher for the local verbs (witness / memory)."""
@@ -2127,12 +2157,41 @@ class HestiaF1aDispatcher:
         r = git("add", "-A")
         if r.returncode != 0:
             return fail("add", r)
+        # A BEING'S PROPOSAL MUST NOT CARRY THE BEING'S RECORD. The worktree holds a tracked
+        # copy of the instance dir, so `add -A` can stage journal/notes/conversations into a
+        # PR to a PUBLIC repo — which is exactly what dp's 2026-09-20 ruling took out. Measured
+        # on #157: the PR carried 141 `sage/instances/` files, none of them the being's change,
+        # and nothing in the verb's answer said so. The being cannot check what it is not told.
+        staged = git("diff", "--cached", "--name-only")
+        private = [f for f in (staged.stdout or "").split() if f.startswith("sage/instances/")]
+        if private:
+            git("reset", "-q")
+            git("checkout", "-q", "-")
+            git("branch", "-q", "-D", branch)
+            try:
+                self._call("hestia_record_outcome", {"action_id": action_id, "success": False,
+                                                     "magnitude": 0.0, "error": "pr_open: instance state staged"})
+            except Exception:
+                pass
+            return ResultEnvelope(
+                ok=False, witness_id=action_id,
+                error=("pr_open refused and nothing was pushed: this would have put "
+                       f"{len(private)} file(s) under sage/instances/ into a public pull request "
+                       f"— your own record, not your change (e.g. {private[0]}). That is not a "
+                       "rule you broke; the verb should never have been able to. Commit or move "
+                       "those out of the worktree first, or ask the seat to carry the change."))
         steps.append("add")
         trailers = pr_attribution(self.plugin_id, action_id, self.being_lct)
         message = f"{title}\n\n{body}\n\n{trailers}\n"
         r = git("commit", "-q", "-F", "-", inp=message)
         if r.returncode != 0:
             return fail("commit", r)
+        # WHAT THIS PROPOSAL ACTUALLY CARRIES. The branch is cut from the worktree's HEAD, and
+        # that base may be a long way from main — on 2026-09-21 it was 442 commits behind, so a
+        # 41-line change arrived as 198 files and 31,456 insertions. The being verified its own
+        # diff and could not have known: the verb answered with a URL and nothing else. A
+        # reviewer read it as the being's proposal. Say it, in the answer AND in the PR body.
+        carry = _carry_vs_main(git)
         sha = git("rev-parse", "--short=9", "HEAD").stdout.strip()
         steps.append(f"commit {sha}")
         r = git("push", "-q", "-u", "origin", branch)
@@ -2140,7 +2199,18 @@ class HestiaF1aDispatcher:
             return fail("push", r)
         steps.append("push")
 
-        pr_body = (body + "\n\n---\n"
+        if carry.get("known") and not carry.get("mine_only"):
+            carry_line = (
+                f"\n\n> **What this branch carries:** {carry['commits']} commits / "
+                f"{carry['files']} files against `origin/main` ({carry['shortstat']}), because it "
+                f"was cut from the being's worktree, which is {carry['behind_main']} commits behind "
+                f"main. Only the newest commit is the being's change; the rest is that base's "
+                f"unmerged lineage. Read the last commit, not the PR diff.\n")
+        elif carry.get("known"):
+            carry_line = f"\n\n> **What this branch carries:** one commit, {carry['files']} files against `origin/main`.\n"
+        else:
+            carry_line = "\n\n> **What this branch carries:** could not be measured (no `origin/main` reachable).\n"
+        pr_body = (body + carry_line + "\n---\n"
                    f"Authored by **{self.plugin_id}**, a SAGE being, from its own worktree; "
                    f"the seat composed the outward act. Commit `{sha}` carries `Being` / "
                    f"`Being-LCT` / `Witness` / `Seat` trailers — attribution, not yet a "
@@ -2176,9 +2246,14 @@ class HestiaF1aDispatcher:
         return ResultEnvelope(ok=True, witness_id=action_id,
                               result={"pr": url, "branch": branch, "commit": sha,
                                       "steps": steps, "action_id": action_id,
-                                      "review_queued": queued,
+                                      "review_queued": queued, "carries": carry,
                                       "note": "your worktree is now on this branch; a reviewer "
-                                              "who is not you decides. You cannot merge it."})
+                                              "who is not you decides. You cannot merge it."
+                                              + ("" if carry.get("mine_only") or not carry.get("known") else
+                                                 f" NOTE: the diff a reviewer sees is {carry['commits']} commits / "
+                                                 f"{carry['files']} files, because your worktree is "
+                                                 f"{carry['behind_main']} commits behind main — only your newest "
+                                                 f"commit is yours, and the PR body says so.")})
 
     def _do_git_restore(self, intent: BeingIntent) -> ResultEnvelope:
         """Put one file back to a committed state. Same composed shape as check/git_read:

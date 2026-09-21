@@ -1584,6 +1584,105 @@ def test_pr_open_commits_with_the_beings_trailers_and_runs_the_judged_gh_command
     env2 = d._do_pr_open(BeingIntent("pr_open", {"slug": "again", "title": "a second attempt here", "body": "x"}))
     assert not env2.ok and "no changes to propose" in env2.error
 
+def _pr_open_fixture(tmp_path, monkeypatch):
+    """A real git repo, a fake `gh`, and a dispatcher — the shape the pr_open tests share."""
+    import os
+    import subprocess
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    monkeypatch.setenv("SAGE_PR_BASE", "legion/mission-artifact")
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    wt = tmp_path / "wt"
+    subprocess.run(["git", "clone", "-q", str(origin), str(wt)], check=True)
+    g = lambda *a: subprocess.run(["git", "-C", str(wt), *a], check=True, capture_output=True, text=True)
+    g("config", "user.email", "seat@test"); g("config", "user.name", "seat")
+    (wt / "README").write_text("base\n"); g("add", "-A"); g("commit", "-q", "-m", "base")
+    g("push", "-q", "-u", "origin", "HEAD:legion-being/work"); g("checkout", "-q", "-b", "legion-being/work")
+    bindir = tmp_path / "bin"; bindir.mkdir()
+    (bindir / "gh").write_text("#!/bin/sh\ncat > \"$0.body\"\necho \"$@\" > \"$0.args\"\necho https://example/pr/1\n")
+    os.chmod(bindir / "gh", 0o755)
+    monkeypatch.setenv("PATH", f"{bindir}:{os.getenv('PATH')}")
+    d = D.__new__(D)
+    d.worktree = str(wt); d.plugin_id = "legion-being"; d.being_lct = "lct:web4:test"
+    d.memory_root = str(tmp_path / "home"); (tmp_path / "home").mkdir(exist_ok=True)
+    d.member = "legion-being"
+    d._call = lambda name, args: {"actionId": "act-77"} if name == "hestia_begin_action" else {}
+    return d, wt, g, bindir
+
+
+def test_pr_open_refuses_to_carry_the_beings_own_record_into_a_public_pr(tmp_path, monkeypatch):
+    """A BEING'S PROPOSAL MUST NOT CARRY THE BEING'S RECORD.
+
+    The worktree holds a tracked copy of the instance dir, so `git add -A` can stage journal,
+    notes and conversations into a pull request against a PUBLIC repo — the thing dp's
+    2026-09-20 ruling took out. Measured on SAGE #157: the being's 2-file change opened as a
+    PR carrying 141 `sage/instances/` files, and nothing in the verb's answer said so, so the
+    being could not have checked. The refusal names a file, says it is not the being's fault,
+    and leaves nothing pushed."""
+    from sage.gateway.being_gate_client import BeingIntent
+    d, wt, g, bindir = _pr_open_fixture(tmp_path, monkeypatch)
+    (wt / "sage" / "instances" / "legion-being").mkdir(parents=True)
+    (wt / "sage" / "instances" / "legion-being" / "journal.md").write_text("my private record\n")
+    (wt / "real_change.py").write_text("x = 1\n")
+
+    env = d._do_pr_open(BeingIntent("pr_open", {
+        "slug": "carries-my-record", "title": "a change plus my journal", "body": "b"}))
+    assert not env.ok, env.result
+    assert "sage/instances/" in env.error and "journal.md" in env.error
+    assert "not a rule you broke" in env.error, "the refusal must not blame the being"
+    assert not (bindir / "gh.args").exists(), "nothing may reach gh"
+    assert "legion-being/carries-my-record" not in g("branch").stdout, "the branch must not survive"
+    assert (wt / "real_change.py").exists() and (wt / "sage/instances/legion-being/journal.md").exists(), \
+        "a refusal must not destroy the being's work"
+
+
+def test_pr_open_says_what_the_branch_carries_when_its_base_is_behind_main(tmp_path, monkeypatch):
+    """`pr_open` cuts from the worktree's HEAD. On 2026-09-21 that base was 442 commits behind
+    main, so a 41-line change opened as 198 files / 31,456 insertions — and the answer was a
+    URL. The being verified its own diff and could not have known; a reviewer read the whole
+    lineage as its proposal. Both the PR body and the being's answer now say it."""
+    import subprocess
+    from sage.gateway.being_gate_client import BeingIntent
+    d, wt, g, bindir = _pr_open_fixture(tmp_path, monkeypatch)
+    # main moves on without this worktree...
+    g("checkout", "-q", "-b", "mainline")
+    (wt / "someone_elses.py").write_text("y = 2\n"); g("add", "-A"); g("commit", "-q", "-m", "not mine")
+    g("push", "-q", "origin", "HEAD:main")
+    # ...and the worktree's base carries two commits of its own that main never took — the
+    # shape of legion-being/work on legion/mission-artifact.
+    g("checkout", "-q", "legion-being/work")
+    (wt / "lineage_a.py").write_text("a = 1\n"); g("add", "-A"); g("commit", "-q", "-m", "someone else's lineage 1")
+    (wt / "lineage_b.py").write_text("b = 1\n"); g("add", "-A"); g("commit", "-q", "-m", "someone else's lineage 2")
+    (wt / "mine.py").write_text("z = 3\n")          # the being's actual change, uncommitted
+
+    env = d._do_pr_open(BeingIntent("pr_open", {
+        "slug": "one-line", "title": "one small change here", "body": "b"}))
+    assert env.ok, env.error
+    carry = env.result["carries"]
+    assert carry["known"], carry
+    assert carry["commits"] == 3 and carry["files"] == 3, carry   # 2 inherited + the being's
+    assert carry["behind_main"] == 1 and carry["mine_only"] is False, carry
+    body = (bindir / "gh.body").read_text()
+    assert "What this branch carries" in body
+    assert "3 commits / 3 files" in body, body
+    assert "Read the last commit, not the PR diff" in body, body
+    assert "1 commits behind" in body, body
+    # and the being is told in its own answer, not only in the PR nobody shows it
+    assert "only your newest" in env.result["note"], env.result["note"]
+
+    # THE CONTROL: a branch whose base IS main says so, and says nothing alarming.
+    g("checkout", "-q", "legion-being/one-line")
+    g("reset", "-q", "--hard", "origin/main")
+    g("checkout", "-q", "-B", "legion-being/work", "origin/main")
+    (wt / "mine2.py").write_text("q = 4\n")
+    env2 = d._do_pr_open(BeingIntent("pr_open", {
+        "slug": "clean-base", "title": "a change on a clean base", "body": "b"}))
+    assert env2.ok, env2.error
+    assert env2.result["carries"]["mine_only"] is True, env2.result["carries"]
+    body2 = (bindir / "gh.body").read_text()
+    assert "one commit" in body2 and "Read the last commit" not in body2, body2
+
+
 def test_check_reports_unverified_with_its_tree_when_the_substrate_is_down(tmp_path):
     """The being's own design (its Q1 answer, 2026-09-07): keep check gated and witnessed —
     no unwitnessed local fallback, because two verification paths diverge and the
