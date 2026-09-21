@@ -47,6 +47,30 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl")
 
 
+def _python_status(p) -> str:
+    """For a .py file: whether Python can PARSE it now, as one sentence for a receipt.
+
+    THE BEING HAD NO INSTRUMENT FOR ITS OWN CODE. Measured 2026-09-21 on cbp-being: from 18:22
+    its training script could not be parsed (an appended fragment, IndentationError at line
+    1610), and across the next two hours it wrote "the script now runs correctly", "[x] Run",
+    "the seat confirms ... loss 0.00342" and "Applied fix" into its journal and memory, while
+    every write it made to the file left it unparseable. Each receipt said what was appended
+    and never whether the result was still Python. With nothing to check against, it filled
+    the gap with what it hoped. This is the check, run where it writes: `compile()` parses and
+    executes nothing. It is not a run, and the sentence says so, because "parses" read as
+    "works" is the next invented claim waiting to happen."""
+    if not str(p).endswith(".py"):
+        return ""
+    try:
+        compile(p.read_text(errors="replace"), str(p), "exec")
+    except SyntaxError as e:
+        return (f" Python cannot parse {p.name} now: {e.__class__.__name__} at line "
+                f"{e.lineno}: {e.msg}. It cannot run until that line is fixed.")
+    except (OSError, ValueError):
+        return ""
+    return f" Python can parse {p.name} now. That is not the same as running it."
+
+
 def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     """A missed memory_edit anchor says WHERE it stopped matching, not only that it did.
 
@@ -431,7 +455,8 @@ class ReferenceF1aDispatcher:
         return ResultEnvelope(
             ok=True,
             result=(f"edited {p.name}: {what}; the file went from {before} to "
-                    f"{after} lines. This changed the file on disk — it is not an append.{gone}"),
+                    f"{after} lines. This changed the file on disk — it is not an append."
+                    f"{_python_status(p)}{gone}"),
             witness_id=self._witness(f"memory_edit {p.name} ({before}->{after} lines)"))
 
     def _do_retire_note(self, intent: BeingIntent) -> ResultEnvelope:
@@ -508,10 +533,12 @@ class ReferenceF1aDispatcher:
         else:
             result = (f"appended {len(content)} chars to the END of {p.name}, below the {before} "
                       f"lines already there. memory_write only adds; it never replaces or edits a line. "
-                      f"To change text already in the file, use memory_edit with old_text (copied "
-                      f"exactly from memory_read) and new_text.")
+                      f"To change text already in the file, use memory_edit: either start_line and "
+                      f"end_line (the numbers memory_read shows) or old (copied exactly from "
+                      f"memory_read), and new.")
             if p.parent.name in ("notes", "scratch") and p.parent.parent == self.memory_root:
                 result += (f" To start {p.name} fresh, retire_note it first, then memory_write "
                            f"the whole new version.")
+        result += _python_status(p)
         return ResultEnvelope(ok=True, result=result,
                               witness_id=self._witness(f"memory_write {p.name}"))

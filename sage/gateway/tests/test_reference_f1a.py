@@ -373,7 +373,7 @@ def test_the_append_receipt_names_memory_edit_for_a_one_line_change():
     disp, _ = _disp()
     disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "a = 1"}), _ALLOW)
     env = disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "a = 2"}), _ALLOW)
-    assert "memory_edit" in env.result and "old_text" in env.result and "new_text" in env.result
+    assert "memory_edit" in env.result and "start_line and end_line" in env.result and "old (copied" in env.result
     # and the named door works with exactly those names
     ed = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old_text": "a = 1", "new_text": "a = 3"}), _ALLOW)
     assert ed.ok, ed.error
@@ -479,3 +479,25 @@ def test_the_offered_schema_no_longer_requires_old():
     i = src.index('"memory_edit": ("Change part')
     block = src[i:i + 1600]
     assert '["path", "new"]' in block and '"start_line"' in block
+
+
+def test_a_py_receipt_says_whether_python_can_parse_the_file_now():
+    """2026-09-21: from 18:22 the being's script could not be parsed, and for two hours it
+    recorded "runs correctly" and "Applied fix" while every write left it unparseable. The
+    receipts never said. Parsing executes nothing; the sentence says it is not a run."""
+    disp, root = _disp()
+    home = Path(root)
+    r = disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "def main():\n    pass\n"}), _ALLOW)
+    assert r.ok and "Python can parse s.py now. That is not the same as running it." in r.result
+    # the being's real 20:18 write: a bracketed description appended where an edit was meant
+    r = disp(BeingIntent("memory_write", {"path": "notes/s.py",
+                                          "content": "            noise=0.1,\n        )"}), _ALLOW)
+    assert r.ok and "Python cannot parse s.py now: IndentationError at line 3" in r.result, r.result
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3, "end_line": 4, "new": ""}), _ALLOW)
+    assert r.ok and "Python can parse s.py now" in r.result, r.result
+
+
+def test_a_non_python_receipt_says_nothing_about_parsing():
+    disp, root = _disp()
+    r = disp(BeingIntent("memory_write", {"path": "journal.md", "content": "a note"}), _ALLOW)
+    assert r.ok and "parse" not in r.result
