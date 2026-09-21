@@ -711,8 +711,11 @@ _TOOL_SCHEMAS = {
                  {"to": "the being's name, e.g. 'legion'", "body": "your message"}, ["to", "body"]),
     "witness": ("Record a witnessed note of something you did or noticed.",
                 {"event": "what to witness"}, ["event"]),
-    "memory_read": ("Read one of your own memory notes.",
-                    {"path": "path to your note"}, ["path"]),
+    "memory_read": ("Read one of your own memory notes. A long file comes back in windows of "
+                    "whole lines; if it does not reach the end it says so and names the "
+                    "start_line that reads on.",
+                    {"path": "path to your note",
+                     "start_line": "optional: the line number to start from (default 1)"}, ["path"]),
     "memory_write": ("Write a note into your own memory.",
                      {"path": "path to your note", "content": "what to write"}, ["path", "content"]),
     "channel_egress": ("Send a message out through a sealed channel.",

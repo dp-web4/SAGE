@@ -138,6 +138,48 @@ def test_memory_edit_refuses_an_ambiguous_or_absent_anchor_and_changes_nothing()
     assert not r.ok and "outside your reach" in r.error, r.error
 
 
+def test_a_long_read_names_its_window_and_the_start_line_that_reads_on():
+    """Measured 2026-09-21: a 45,318-char script came back as its first 4,000 characters,
+    cut mid-line, with no marker (legion's 2026-09-07 fix never reached main). The being was
+    told three times to fix line 206 — never shown to it. A window must say what it hid, and
+    the start_line it names must reach the rest, whole lines, all of it, nothing twice."""
+    disp, root = _disp()
+    body = "".join(f"line {i:04d} " + "x" * 90 + "\n" for i in range(1, 401))   # ~40k chars
+    Path(root, "notes").mkdir(exist_ok=True)
+    Path(root, "notes", "big.py").write_text(body)
+    r = disp(BeingIntent("memory_read", {"path": "notes/big.py"}), _ALLOW)
+    assert r.ok and "truncated" in r.result and "of 400" in r.result, r.result[-300:]
+    assert "absence here is not evidence of absence" in r.result
+    seen, start = [], 1
+    for _ in range(20):
+        r = disp(BeingIntent("memory_read", {"path": "notes/big.py", "start_line": str(start)}), _ALLOW)
+        seen += [l for l in r.result.splitlines() if l.startswith("line ")]
+        if "end of file" in r.result:
+            break
+        start = int(r.result.rsplit("start_line=", 1)[1].split(".")[0])
+    assert seen == [f"line {i:04d} " + "x" * 90 for i in range(1, 401)], "windows skipped or repeated lines"
+    # line 206 is reachable and arrives whole, so an anchor copied from it is a real line
+    r = disp(BeingIntent("memory_read", {"path": "notes/big.py", "start_line": 206}), _ALLOW)
+    assert r.result.startswith("[lines 206-") and "\nline 0206 " + "x" * 90 + "\n" in r.result
+    # a file that fits carries no marker at all
+    Path(root, "notes", "small.py").write_text("a = 1\n")
+    assert disp(BeingIntent("memory_read", {"path": "notes/small.py"}), _ALLOW).result == "a = 1\n"
+    r = disp(BeingIntent("memory_read", {"path": "notes/small.py", "start_line": 9}), _ALLOW)
+    assert r.ok and r.result.startswith("[past the end:")
+
+
+def test_memory_edit_accepts_the_names_other_edit_tools_use():
+    """cbp-being's first live memory_edit (2026-09-21) sent old_text/new_text, was refused,
+    read the refusal as "I forgot 'new'", and appended a fourth program with memory_write."""
+    disp, root = _disp()
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "x = 1"}), _ALLOW)
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old_text": "x = 1", "new_text": "x = 2"}), _ALLOW)
+    assert r.ok, r.error
+    assert Path(root, "notes", "s.py").read_text().strip() == "x = 2"
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "before": "x = 2"}), _ALLOW)
+    assert not r.ok and "You sent: before, path" in r.error, r.error
+
+
 def test_an_out_of_reach_path_that_does_not_exist_says_so_rather_than_implying_a_boundary():
     """cbp-being read `/home/dp/ai-workspace/SAGE/126-being.md` — outside its root AND absent —
     and was told only that the path "escapes the being's memory root and its grants". It spent
