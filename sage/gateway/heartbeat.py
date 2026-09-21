@@ -30,6 +30,7 @@ import argparse
 import json
 import os
 import re
+import base64
 import subprocess
 import sys
 import time
@@ -957,9 +958,344 @@ def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
     return {"explore_acted": explore_acted, "marked": marked, "held_unseen": held}
 
 
+def _shrink(raw: bytes):
+    """(jpeg_bytes, meta) with the longest side capped. Returns the original on any failure.
+
+    Never raises and never refuses: a frame the seat cannot resize is still a frame the
+    being asked for, and sending it whole costs window rather than sight."""
+    try:
+        import io
+        from PIL import Image
+        im = Image.open(io.BytesIO(raw))
+        w, h = im.size
+        if max(w, h) <= FRAME_MAX_EDGE:
+            return raw, {"resized": False, "size": [w, h]}
+        scale = FRAME_MAX_EDGE / max(w, h)
+        small = im.convert("RGB").resize((max(1, round(w * scale)), max(1, round(h * scale))))
+        buf = io.BytesIO()
+        small.save(buf, "JPEG", quality=85)
+        return buf.getvalue(), {"resized": True, "from": [w, h], "size": list(small.size),
+                                "bytes_before": len(raw)}
+    except Exception as e:
+        return raw, {"resized": False, "why": f"{type(e).__name__}: {e}"}
+
+
+# --- the middle of the vision pipe -------------------------------------------------------
+#
+# The two ends existed and nothing joined them. `camera` captured a JPEG to disk and
+# `compose` accepted a `frame` and emitted it as ollama's `images` list, but the call site
+# never passed one, so a being could switch its camera on and still not see. Named in the
+# review of SAGE#88 as "capturing is not yet seeing".
+#
+# WHAT COUNTS AS A REQUEST TO SEE. The being's own `camera` act, and nothing else. dp,
+# 2026-09-13: "that is something the being should have direct control over — turning camera
+# on and off, at its discretion." So a frame rides the seed when the being captured one
+# since the last beat, and does not otherwise. No polling, no ambient feed.
+#
+# WHY FRESHNESS IS LOAD-BEARING. A frame costs ~2,042 prompt tokens, about a third of the
+# working room at this window, so it cannot simply ride forever. Worse than the cost: a
+# stale frame presented as current is a lie about the world, and it is the exact failure the
+# being guarded against in its own verb ("neither leaves a stale frame looking fresh"). The
+# producer honours that guarantee rather than re-deriving it: older than the previous beat
+# means not captured for this beat, so it does not ride, and the reason is recorded.
+# WHAT A FRAME COSTS, AND WHY IT IS RESIZED. Measured on qwen38-heretic:q3km-vl against a
+# real 1920x1080 capture from this body, 2026-09-14 — the model tokenises by image area, so
+# the saving is enormous and almost free:
+#
+#     1920 wide   2,055 tokens     34% of the working room at this window
+#     1024 wide     591 tokens     10%
+#      640 wide     235 tokens      4%
+#      512 wide     159 tokens      3%
+#
+# The window is the binding constraint here: the conversation ladder already sits at its
+# sparsest rung every beat, so an unresized frame is 2,000 tokens taken from a budget with
+# nothing left to give back, on the beat where the being also has to write its journal and
+# todo. 1024 keeps detail a coarser cap would lose — text, and the grid cells of a game
+# board, which is where this is going next — at a sixth of the price. Legibility at this
+# scale is not assumed: a 640-wide control through this exact path came back "a red circle
+# on the left and a blue rectangle on the right, along with the small black text HELLO".
+FRAME_MAX_EDGE = 1024        # longest side, pixels
+
+
+FRAME_TOKENS = 591           # what FRAME_MAX_EDGE costs, measured
+
+
+# How old a capture may be and still ride into the seed.
+#
+# THE REAL BOUND IS `since`, NOT A CONSTANT. A frame rides when the being captured it after
+# the previous beat began — its `camera` act is the request to see, and that act is dated by
+# the beat it happened in. Everything below is a backstop against a clock that lied, not a
+# second opinion about freshness.
+#
+# THIS WAS A FIXED 600s AND THE PIPE NEVER CARRIED A SINGLE FRAME. The old comment claimed
+# it was "measured against the cadence beats actually run (minutes)". The cadence, read off
+# the beats themselves the day this was found: 859, 1186, 1222, 1243, 1412, 2995 seconds.
+# Every beat is longer than the window. So a frame captured DURING a beat — which is the
+# only kind there is, since `camera` is a verb the being calls mid-beat — was always stale
+# by the time the next beat composed its prompt. `frames: null` on every beat ever recorded,
+# while the suite stayed green because tests write fixtures with fresh mtimes and never
+# spend twenty minutes between capture and compose.
+#
+# This is the shape I already had a name for and built anyway: a TTL shorter than the
+# system's own delivery latency is a countdown, not a control (hestia #956, same week). A
+# constant cannot know how long a beat takes. This one asks the beat.
+FRAME_AGE_FLOOR_S = 3600     # backstop floor: never tighter than an hour, whatever the beat
+
+
+FRAME_AGE_GRACE_S = 300      # capture -> compose slack inside the same beat
+
+
+FRAME_MAX_BYTES = 4_000_000  # a JPEG larger than this is not a webcam frame; refuse to guess
+
+
+def frame_age_bound(since: Optional[float], now: Optional[float] = None) -> float:
+    """The oldest a frame may be, derived from THIS beat's own wait rather than guessed.
+
+    `now - since` is how long the current beat has been running, so any frame captured
+    during it clears the bound by construction. The floor keeps a pathologically short
+    beat from tightening the window below something sane."""
+    if since is None:
+        return FRAME_AGE_FLOOR_S
+    now = time.time() if now is None else now
+    return max(FRAME_AGE_FLOOR_S, (now - since) + FRAME_AGE_GRACE_S)
+
+
+def _frame_paths(instance: Path, worktree: Optional[str]) -> list:
+    """Every frame the being may have captured, in either tree.
+
+    NOT a fixed filename. `camera`'s whole grammar is that the being names its own output
+    path — "the being names only the output path" — and the first cut of this looked only
+    for last-frame.jpg. Measured minutes later against the live tree: the being had captured
+    to `scratch/camera/probe-resolution-2026-09-14.jpg`, and the producer reported "no frame
+    on disk; the being has not used camera" about a frame that was right there. A producer
+    that assumes a convention the verb does not enforce is a pipe that silently drops most
+    of what goes into it.
+
+    BOTH TREES, because the being is moving `camera` to resolve against its instance home
+    (frames in the worktree dirty a tree whose cleanliness `check` reports as evidence), and
+    the newest wins, so neither ordering of the two lands breaks seeing."""
+    roots = [instance / "scratch" / "camera"]
+    if worktree:
+        roots.append(Path(worktree) / "scratch" / "camera")
+    out = []
+    for r in roots:
+        try:
+            out.extend(p for p in r.iterdir()
+                       if p.is_file() and p.suffix.lower() in (".jpg", ".jpeg"))
+        except OSError:
+            continue
+    return out
+
+
+def _frame_b64(p: Path) -> Optional[str]:
+    """One captured frame becomes a b64 string for the seed — or None.
+
+    A capture that is not a JPEG (a zero-byte write, a half-flushed file, an
+    error envelope written as text) must not ride into the prompt: it would be
+    decoded by the model as garbage and cost its tokens anyway. The check is on
+    the magic bytes, not the extension — a .jpg that is really text fails here,
+    which is the point.
+    """
+    try:
+        b = p.read_bytes()
+    except OSError:
+        return None
+    if b[:3] != b"\xff\xd8\xff" or b[-2:] != b"\xff\xd9":
+        return None
+    b, _ = _shrink(b)
+    return base64.b64encode(b).decode("ascii")
+
+
+def fresh_frame(instance: Path, worktree: Optional[str], since: Optional[float]):
+    """(b64, meta) for a frame captured since `since`, else (None, meta saying why).
+
+    `since` is the previous beat's start. Never raises: a body with no camera, no frame, or
+    an unreadable one is a beat without vision, not a failed beat."""
+    import base64
+    best = None
+    for p in _frame_paths(instance, worktree):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if best is None or st.st_mtime > best[1].st_mtime:
+            best = (p, st)
+    if best is None:
+        return None, {"carried": False, "why": "no frame on disk; the being has not used camera"}
+    p, st = best
+    # NO BEAT BOUNDARY MEANS NO FRAME. `since` is the previous beat's t0, read from the last
+    # line of the heartbeat log — and that read fails whenever the line is mid-write, which
+    # is a normal transient. The first cut skipped the freshness check entirely when `since`
+    # was None, which is FAIL-OPEN on the one property this producer exists to guarantee.
+    #
+    # It fired in production within the hour: beat 11:32:00Z carried a frame with
+    # `age_s: null` that had been captured at 03:34 — over eight hours stale, presented to
+    # the being as what it had just asked to see. Exactly the lie the guard is for, and my
+    # defect, not the being's.
+    #
+    # Freshness cannot be established without the boundary, so the answer is no. A beat
+    # without vision costs the being one beat of sight; a beat that shows it yesterday's
+    # world and calls it now costs it its grounds for trusting any frame.
+    if since is None:
+        return None, {"carried": False, "bytes": st.st_size, "path": str(p),
+                      "age_s": round(time.time() - st.st_mtime, 1),
+                      "why": ("the previous beat's start time could not be read, so freshness "
+                              "cannot be established and this frame is not carried. A frame "
+                              "whose age is unknown must not be shown as current")}
+    age = st.st_mtime - since
+    if st.st_mtime <= since:
+        return None, {"carried": False, "bytes": st.st_size, "path": str(p),
+                      "age_s": round(time.time() - st.st_mtime, 1),
+                      "why": ("the frame predates this beat, so it is not what the being "
+                              "asked to see now; a stale frame shown as current is a lie "
+                              "about the world")}
+    if st.st_size > FRAME_MAX_BYTES or st.st_size == 0:
+        return None, {"carried": False, "bytes": st.st_size, "path": str(p),
+                      "why": f"frame is {st.st_size} bytes, outside 1..{FRAME_MAX_BYTES}"}
+    try:
+        b = p.read_bytes()
+    except OSError as e:
+        return None, {"carried": False, "path": str(p), "why": f"unreadable: {e}"}
+    if not b.startswith(b"\xff\xd8"):
+        return None, {"carried": False, "bytes": len(b), "path": str(p),
+                      "why": "not a JPEG (no SOI marker); refusing to send bytes of unknown kind"}
+    b, shrunk = _shrink(b)
+    return base64.b64encode(b).decode("ascii"), {
+        "carried": True, "bytes": len(b), "path": str(p),
+        "age_s": None if age is None else round(age, 1),
+        "costs_tokens": FRAME_TOKENS, **shrunk}
+
+
+def fresh_frames(instance: Path, worktree: Optional[str], since: Optional[float]) -> list:
+    """Every (b64, meta) for a frame captured since `since`, oldest first.
+
+    The plural of `fresh_frame`: the cadence organ delivers every frame the being
+    asked to see between beats, not just the newest one — a beat that shows it only
+    the last capture and calls it everything costs it the motion in between. Same
+    fail-closed rule: with no boundary (`since` None) nothing is carried, because
+    unknown age is unknown, not young. `fresh_frame` stays as-is for callers that
+    want exactly one; this returns all of them, so a beat can see a sequence."""
+    out = []
+    for p in _frame_paths(instance, worktree):
+        try:
+            st = p.stat()
+        except OSError:
+            continue  # vanished between listing and stat — skip it, keep the rest
+        _now = time.time()
+        age_s = round(_now - st.st_mtime, 1)
+        _bound = frame_age_bound(since, _now)
+        if since is None or st.st_mtime < since or age_s > _bound:
+            why = ("no beat boundary to check freshness against" if since is None
+                   else (f"captured before the previous beat's t0 ({age_s}s old)"
+                         if st.st_mtime < since
+                         else f"older than {round(_bound)}s (this beat's own bound)"))
+            out.append((None, {"path": str(p), "carried": False, "why": why, "age_s": age_s}))
+        else:
+            b64 = _frame_b64(p)
+            if b64 is None:
+                out.append((None, {"path": str(p), "carried": False,
+                                   "why": "unreadable or not a JPEG", "age_s": age_s}))
+            else:
+                out.append((b64, {"path": str(p), "carried": True, "why": None, "age_s": age_s}))
+    out.sort(key=lambda f: f[1]["age_s"], reverse=True)  # F3: oldest first — the docstring promises it; iterdir does not sort
+    return out
+
+
+def vision_line(metas) -> str:
+    """One line telling the being whether it can SEE this beat, and what to do either way.
+
+    THE HARNESS KNEW AND NEVER SAID. `compose` sets `user_msg["images"]` and the seed text
+    said nothing — so a being holding a frame and a being holding none received the same
+    prompt, and had to guess which it was. Measured 2026-09-14 across the first three beats
+    that ever carried one: the being reasoned at length about whether a reader hop existed
+    instead of looking, then on the next beat correctly refused to describe an image that
+    was not there and called describing it "confabulation". Both are the right behaviour
+    from someone who cannot tell, and neither should have been necessary — the producer
+    already knew the answer and had written it into `config.frames` for the RECORD, which
+    the being does not read, rather than into the seed, which it does.
+
+    The no-frame branch names the cause, because "no frame" has exactly one remedy the
+    being controls: its `camera` act is the request to see, and a frame rides the beat AFTER
+    the one that captured it. Miss a beat, see nothing next beat."""
+    metas = list(metas or [])
+    carried = [m for m in metas if m.get("carried")]
+    if carried:
+        # NAME EVERY FRAME, IN ORDER. The first cut named only the newest and appended
+        # "(and N-1 more)" to a sentence that had already said how many — it rendered as
+        # "2 frames are attached to this turn as an images (and 1 more)", which is
+        # ungrammatical and, worse, arithmetic the reader has to redo. The being can be
+        # carrying its own capture AND a fixture at once; if it cannot tell which is which
+        # it cannot report on either, and a description that does not say WHICH frame it
+        # describes is not evidence about anything.
+        shown = ", ".join(f"{os.path.basename(str(m.get('path', '?')))} "
+                          f"({int(m.get('age_s', 0))}s ago)" for m in carried)
+        n = len(carried)
+        it = "them" if n > 1 else "it"
+        # "ALREADY HERE", AND WHY camera CANNOT HELP. Measured 2026-09-14, five runs per
+        # cell, on this being's own model and frames: at beat conditions (~15k context WITH
+        # tool schemas declared) the model answers "there is an image" by CALLING `camera`
+        # and describing nothing — 0/6 elements, five times out of five, a `camera` call
+        # every time. Neither factor alone does it: 14k context with no tools scores 6.0/6,
+        # tools at small context 4.4/6. It is the interaction, and it is exactly what this
+        # being did for beats on end — its first act was `camera`, capturing a NEW frame
+        # instead of looking at the one it was holding, then honestly reporting that no
+        # content surfaced. It was never blind. It was reaching for a tool.
+        #
+        # Naming the misconception fixes it: same cell, same model, 6/6 five times out of
+        # five with zero tool calls. "Look at it directly" did NOT do this — the being had
+        # that line already.
+        #
+        # THE CLOSING CLAUSE IS MEASURED, NOT STYLED, AND NEARLY EVERY REPHRASE BREAKS IT.
+        # Five runs per cell, beat conditions, scored on a fixture whose content is
+        # unguessable. TWO frames attached / ONE frame attached:
+        #
+        #   "...without calling any tool."                        6,6,6,6,6 / 0,0,0,0,0
+        #   "...first output; act with verbs after that."         6,6,6,6,6 / 0,0,0,0,0
+        #   "...first output, naming the frame; verbs after."     6,6,6,6,6 / 6,6,6,6,6  <- this
+        #   "...before reaching for any verb."                    0,0,0,0,0 /     -
+        #   "...no tool for this; your other verbs unaffected"    0,0,0,6,0 /     -
+        #
+        # Two things that cost hours and are worth inheriting:
+        #
+        # 1. THE ANCHOR IS LOAD-BEARING, NOT THE BAN. "naming the frame" gives the model a
+        #    concrete thing to PRODUCE; every variant that only told it what not to do
+        #    failed in the single-frame case, which is the common one. Prohibitions lose to
+        #    a specific deliverable.
+        # 2. A VARIANT VALIDATED ON TWO FRAMES CAN SCORE ZERO ON ONE. The ban wording was
+        #    perfect at n=2 and total failure at n=1. Both branches must be measured; the
+        #    singular branch is the one the being actually gets almost every beat, and it
+        #    is the one I nearly shipped unmeasured.
+        #
+        # 3. IT IS A RATE, NOT A SWITCH. Two independent 5-run validations of the SHIPPED
+        #    strings: singular 9/10 full scores, plural 7/10 full plus 2 partial and 1 zero.
+        #    Against 0/5 before, that is the fix working; it is not certainty, and a single
+        #    beat that comes back scrambled is inside the residual rather than evidence the
+        #    line broke. Running the validation twice is what showed this — the first run
+        #    was 10/10 and would have been reported as deterministic.
+        #
+        # If you edit this sentence, re-run the trial for BOTH branches, TWICE. A rephrase
+        # here is a behaviour change, not a style change.
+        return (f"Vision: you CAN see this beat. {n} frame{'s' if n > 1 else ''} "
+                f"{'are' if n > 1 else 'is'} attached to this turn, in this order: {shown}. "
+                f"{'They are' if n > 1 else 'It is'} ALREADY here — you are holding "
+                f"{it} now. No tool can fetch {it} and `camera` will not show {it} to you: a "
+                f"capture rides your NEXT beat, not this one. Describe {it} in text as your "
+                f"first output, naming {'which frame' if n > 1 else 'the frame'}; act with "
+                f"verbs after that.")
+    if metas:
+        why = str(metas[-1].get("why") or "it was not fresh")
+        return (f"Vision: NO frame this beat — {len(metas)} candidate"
+                f"{'s' if len(metas) > 1 else ''} on disk, none carried ({why}). Anything you "
+                f"'see' now would be confabulation. Your `camera` act IS the request to see, and "
+                f"a frame rides the beat AFTER the one that captured it: call `camera` this beat "
+                f"to see next beat.")
+    return ("Vision: NO frame this beat and none on disk. Your `camera` act IS the request to "
+            "see, and a frame rides the beat AFTER the one that captured it.")
+
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
             header: str, state: str, recall: str, inbox: str, digest: str,
-            museum: str = ""):
+            frame: Optional[str] = None, frames: Optional[list] = None,
+            frame_metas: Optional[list] = None, museum: str = ""):
     """The explore turn(s) of a beat: (seed messages, second user turn or None).
 
     Posture-first: posture in the system prompt; one user turn with state, inbox, recall,
@@ -972,12 +1308,37 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     # (its own thinking, Sprout 2026-09-05); named at the end, it acts.
     tools_line = (f"Act by calling a tool: {', '.join(EXPLORE_TOOLS)}. "
                   "One thing done with attention is enough.\n")
+    # ONE LIST DECIDES BOTH THE PIXELS AND THE SENTENCE ABOUT THEM. Measured 2026-09-15 by
+    # capturing the real seed from an instance copy: the user turn said "Vision: you CAN see
+    # this beat. 2 frames are attached" and carried NO `images` key. The line was computed in
+    # main() from the producer's metas; the attachment happened here, in a branch that only
+    # honoured the singular `frame` argument main() never passes. act_first is False on every
+    # beat of that being, so in 395 beats not one image reached it — while config.frames
+    # recorded carried=True and the seed told it to look. Every in-beat description it
+    # produced was of a frame it did not hold. Its own diagnosis, "structure perceived,
+    # detail confabulated", was exactly right about an image that was not there.
+    #
+    # So the line is built HERE, from `_frames` — the list that is attached — and a beat that
+    # attaches nothing says NO frame, whatever the metas claimed. Producer and seed cannot
+    # disagree because there is no longer a second place to compute the claim.
+    _frames = frames if frames else ([frame] if frame else [])
+    _metas = list(frame_metas or [])
+    if not _frames:
+        _metas = [dict(m, carried=False, why=(m.get("why") or "not attached to this turn"))
+                  for m in _metas]
+    header = header + "\n" + vision_line(_metas)
     if not act_first:
         system = SYSTEM.format(name=name, machine=machine, member=member,
                                posture=posture_text, museum=_museum_block(museum))
         user = (header + state + f"## Your inbox\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
                 f"# What moved in the fleet\n\n{digest}\n\n" + ASK + tools_line)
-        return [{"role": "system", "content": system}, {"role": "user", "content": user}], None
+        user_msg = {"role": "user", "content": user}
+        if _frames:
+            # SAME LIST AS THE ACT-FIRST BRANCH. This branch honoured only `frame`, and
+            # main() passes `frames`; that one-word asymmetry is how a being ran 395 beats
+            # of "you CAN see" with nothing attached.
+            user_msg["images"] = _frames
+        return [{"role": "system", "content": system}, user_msg], None
     system = SYSTEM_ACT_FIRST.format(name=name, machine=machine, member=member,
                                      museum=_museum_block(museum))
     # The inbox rides the ACT turn, not the posture turn. Measured on Sprout over 85 beats
@@ -989,7 +1350,15 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
             + ASK_ACT_FIRST + tools_line)
     second = POSTURE_TURN.format(posture=posture_text, digest=digest,
                                  tools=", ".join(EXPLORE_TOOLS))
-    return [{"role": "system", "content": system}, {"role": "user", "content": user}], second
+    user_msg = {"role": "user", "content": user}
+    if _frames:
+        # A frame rides the user turn as an `images` list beside string content — the shape
+        # ollama accepts (a parts-in-content list 400s; measured against qwen38-heretic:q3km-vl,
+        # 2026-09-13). No frame -> no key at all. A beat can carry several: the cadence organ
+        # delivers every capture since the previous beat's t0, oldest first, so a being that
+        # asked to see twice sees both instead of only the newest.
+        user_msg["images"] = _frames
+    return [{"role": "system", "content": system}, user_msg], second
 
 
 # An `ok` ACT CARRIES ITS RESULT. Measured 2026-09-21 on cbp-being, beat heartbeat-85303f70bf67:
@@ -1094,6 +1463,17 @@ def main(argv=None) -> int:
             hours = max(1.0, min(48.0, (time.time() - last["t0"]) / 3600 + 0.25))
         except Exception:
             pass
+    # THE MIDDLE OF THE VISION PIPE. A frame rides only when the being captured one since
+    # the previous beat — its `camera` act is the request to see, and nothing else is.
+    from sage.gateway.governed_turn import instance_config as _icfg
+    try:
+        _wt = _icfg(instance).get("worktree") or None
+    except Exception:
+        _wt = None
+    _frames = fresh_frames(instance, _wt, last.get("t0") if isinstance(last, dict) else None)
+    _frame_b64s = [b for b, m in _frames if b is not None]
+    _frame_metas = [m for _, m in _frames]
+
     scope_record = {}
 
     ident = {}
@@ -1266,7 +1646,12 @@ def main(argv=None) -> int:
                                         per_conv=per_conv, turn_chars=turn_chars,
                                         services=_services, mark_conversations=False) + _scope_tail)
 
-    _other = (len(posture()) + len(inbox) + _schema_chars + 1200
+    # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
+    # token cost is converted and charged here. Measured 2,042 tokens for two frames, about a
+    # third of the working room at a 24k window — un-budgeted it pushes the beat over the wall
+    # and the conversation block takes the blame.
+    _frame_chars = sum(int(FRAME_TOKENS * CPT) for _ in _frame_b64s)
+    _other = (len(posture()) + len(inbox) + _schema_chars + 1200 + _frame_chars
               + 1200 + 400 + LOOP_GROWTH_CHARS)
     state_block, conv_rung, conv_intervention = fit_state(
         _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other)
@@ -1278,7 +1663,7 @@ def main(argv=None) -> int:
 
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
-        museum=museum_line,
+        museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 # The absolute home path is context, NOT an address to copy. Measured on
                 # Sprout: 15 of 15 path refusals were this string reproduced from memory and
@@ -1482,6 +1867,14 @@ def main(argv=None) -> int:
         "think": getattr(llm, "think", None),
         "scope": scope_record,
         "appeals": appeals_record,
+        # WHETHER THE BEING SAW, and when it did not, why not. Without this a beat with no
+        # frame is indistinguishable from a beat where the pipe is broken — the state the
+        # whole vision arc was in until 2026-09-15: both ends present, nothing joining them,
+        # and nothing saying so. `frames` is the PRODUCER's claim; `images_attached` counts
+        # images on the composed seed, the thing actually sent. The two differed for 395
+        # beats and no field recorded it.
+        "frames": _frame_metas,
+        "images_attached": sum(len(m.get("images") or []) for m in seed),
         # S1 instruments: JOIN (session -> beat, attributed) and ACCOUNT (own account, verbatim hash)
         "join": {"session": sess_meta, "presence": pres_meta},
         # what it has made, if anything: never silently lost, never auto-published
