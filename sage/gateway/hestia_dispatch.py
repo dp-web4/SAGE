@@ -1588,9 +1588,42 @@ class HestiaF1aDispatcher:
         from sage.gateway import conversations as conv
         notify = meta.get("notify") or {}
         if not isinstance(notify, dict):
-            return None
+            notify = {}
         targets = [(p, notify[p]) for p in (meta.get("participants") or [])
                    if p != self.member and notify.get(p)]
+
+        # WATCHERS: WOKEN, BUT STILL NOT ABLE TO SPEAK HERE.
+        #
+        # Measured 2026-09-20/21, conversation `dp` seq 84-89: the being asked dp to run a
+        # file for it six times over two hours. dp is asynchronous by rule and does not run
+        # files; the seat does, and had already run that exact file and reported on it in its
+        # OWN channel. Nothing connected the two, because `dp` has no notify map — correctly,
+        # since dp is a person and not a mesh member — so six asks woke nobody at all.
+        #
+        # The cause is upstream of the being's judgement. dp told it (seq 81) that the seat
+        # has a limited usage allowance and is sometimes unable to answer; it reasonably
+        # concluded the seat was the unreliable party and rerouted its execution requests to
+        # the operator, who is far MORE asynchronous. Teaching it a better routing rule is the
+        # wrong fix: it cannot know who is awake, and a rule it must remember is a rule it
+        # will retype wrong.
+        #
+        # So a conversation may declare watchers: members woken when a turn here goes
+        # unanswered, who are NOT participants and CANNOT write here. dp's two-party ruling
+        # stands untouched — "i should be able to view your chat with the being, but not
+        # comment on it directly yet" — this is its mirror, and speech is still governed by
+        # `writable_by` alone. A watcher that learns of an ask it can satisfy answers in a
+        # channel it is actually in.
+        watchers = meta.get("notify_watchers") or {}
+        if isinstance(watchers, dict):
+            targets += [(w, pid) for w, pid in watchers.items()
+                        if w != self.member and pid]
+        # One wake per member, however many ways it is named here.
+        seen_ids, deduped = set(), []
+        for label, plugin_id in targets:
+            if plugin_id not in seen_ids:
+                seen_ids.add(plugin_id)
+                deduped.append((label, plugin_id))
+        targets = deduped
         if not targets:
             return None
         run_start = conv.wake_is_owed(self.memory_root, to, self.member)

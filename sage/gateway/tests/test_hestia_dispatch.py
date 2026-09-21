@@ -1524,6 +1524,61 @@ def test_a_turn_wakes_its_addressee_once_per_unanswered_run():
     assert len([a for n, a in FakeMcp.calls if n == "hestia_member_notify"]) == 1
 
 
+def test_a_watcher_is_woken_by_an_ask_it_could_satisfy_and_still_cannot_speak_there():
+    """conversation `dp`, seq 84-89, 2026-09-20/21: the being asked dp to run a file for it
+    SIX times in two hours. dp is asynchronous by rule and does not run files; the seat does,
+    and had already run that exact file and reported on it in its own channel. `dp` has no
+    notify map — right, dp is a person, not a mesh member — so six asks woke nobody.
+
+    A watcher is woken and still may not write here: dp's two-party ruling is untouched."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    meta = conv.get_meta(home, "dp")
+    meta["notify_watchers"] = {"seat": "claude-code"}     # not a participant
+    conv._write_meta(home, "dp", meta)
+
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "dp", "text": "Can you run the training script for me?"}), _ALLOW)
+    assert r.ok, r
+    notifies = [a for n, a in FakeMcp.calls if n == "hestia_member_notify"]
+    assert len(notifies) == 1 and notifies[0]["to_plugin_id"] == "claude-code", notifies
+    assert r.result.get("woke") == "seat"
+
+    # five more asks, nobody having answered: still one wake, not six
+    for i in range(5):
+        FakeMcp.calls.clear()
+        r = d(BeingIntent("say", {"to": "dp", "text": f"Please run it and show stderr, {i}."}), _ALLOW)
+        assert r.ok and not [a for n, a in FakeMcp.calls if n == "hestia_member_notify"], i
+
+    # the watcher is woken, and is STILL not a speaker here — dp's two-party ruling holds
+    assert "seat" not in (conv.get_meta(home, "dp").get("writable_by") or [])
+    env = d(BeingIntent("say", {"to": "dp", "text": "x"}), _ALLOW)   # the being may still speak
+    assert env.ok
+
+
+def test_a_watcher_that_is_also_a_participant_is_woken_once():
+    """CONTROL. The seat's own channel names it both ways once a watcher map exists; two
+    wakes for one turn would double the cost of every seat-directed ask."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat")
+    meta["notify"] = {"seat": "claude-code"}
+    meta["notify_watchers"] = {"seat-watcher": "claude-code"}   # same member, other name
+    conv._write_meta(home, "seat", meta)
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "seat", "text": "one ask"}), _ALLOW)
+    assert r.ok
+    assert len([a for n, a in FakeMcp.calls if n == "hestia_member_notify"]) == 1, "one member, one wake"
+
+
 def test_a_conversation_with_no_notify_mapping_wakes_nobody_and_still_lands():
     """dp is a person, not a mesh member: the `dp` conversation has no notify map and must
     not try to wake anyone. CONTROL that the wake is opt-in per conversation and that its
