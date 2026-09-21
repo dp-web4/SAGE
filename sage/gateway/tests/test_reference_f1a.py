@@ -424,6 +424,18 @@ def test_memory_edit_by_line_number_deletes_the_lines_it_names():
         "the receipt must quote what was removed, so the being can see it is the right thing"
 
 
+def test_memory_edit_accepts_the_measured_old_line_spelling():
+    """cbp-being's 2026-09-21 call used old_line: "411". The door should accept the spelling
+    we actually observed, not only teach a preferred spelling after the fact."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a = 1\nb = 2\nc = 3\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old_line": "2", "new": "b = 20"}), _ALLOW)
+    assert r.ok, r.error
+    assert (home / "notes" / "s.py").read_text() == "a = 1\nb = 20\nc = 3\n"
+
+
 def test_memory_edit_one_line_by_number_keeps_the_line_break():
     disp, root = _disp()
     home = Path(root)
