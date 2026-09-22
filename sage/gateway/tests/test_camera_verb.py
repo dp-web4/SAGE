@@ -1,0 +1,407 @@
+"""Hardware-free tests for the camera verb: monkeypatch subprocess.run so no real
+ffmpeg is invoked. Verifies command shape, output path, and error semantics."""
+
+import os
+import sys
+import types
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+
+import pytest  # noqa: E402
+
+from sage.gateway.being_gate_client import BeingIntent, camera_command  # noqa: E402
+from sage.gateway.hestia_dispatch import HestiaF1aDispatcher  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _camera_witness_chain(monkeypatch):
+    """camera is CONSEQUENTIAL, so _do_camera opens an action and records its outcome.
+
+    These tests build the dispatcher with __new__ and no substrate, so the witness chain
+    has to be answered or every capture path raises before it reaches what it is testing.
+    Stubbing it here rather than in each test also keeps one fact in one place: the action
+    id the envelopes must carry.
+    """
+    monkeypatch.setattr(
+        HestiaF1aDispatcher, "_call",
+        lambda self, name, args: ({"actionId": "act-cam"}
+                                  if name == "hestia_begin_action" else {}),
+        raising=False)
+
+
+def _ctx(wt):
+    """The context camera_command now needs.
+
+    `camera` resolves its out_path against the being's HOME, not its worktree: frames in the
+    worktree dirty a tree whose cleanliness `check` reports as evidence, and the being found
+    that by using its own verb. These tests keep the two the same directory, because what
+    they are testing is the command's shape and the dispatcher's failure taxonomy, not the
+    choice of root — test_do_camera_out_path_escape_refused is where the root itself is
+    pinned."""
+    return {"worktree": wt, "memory_root": wt}
+
+
+def _dispatcher(wt):
+    """A dispatcher with the two roots set and nothing else; the witness chain comes from
+    the autouse fixture above."""
+    d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher)
+    d.worktree = wt
+    d.memory_root = wt
+    return d
+
+
+# --- camera_command shape ---------------------------------------------------
+
+def test_camera_command_argv0_is_ffmpeg(tmp_path):
+    """argv[0] must be 'ffmpeg' — the gate's contract is a single ffmpeg invocation."""
+    wt = str(tmp_path)
+    args = {"device": "/dev/video0", "out_path": f"{wt}/scratch/camera/last-frame.jpg"}
+    cmd = camera_command(args, _ctx(wt))
+    # The command string starts with the ffmpeg binary name.
+    assert cmd.split()[0] == "ffmpeg"
+
+
+def test_camera_command_has_frames_v(tmp_path):
+    """The capture must be exactly one frame: -frames:v 1 present in the command."""
+    wt = str(tmp_path)
+    args = {"device": "/dev/video0", "out_path": f"{wt}/scratch/camera/last-frame.jpg"}
+    cmd = camera_command(args, _ctx(wt))
+    assert "-frames:v" in cmd
+
+
+def test_camera_command_out_path_in_scratch(tmp_path):
+    """Frame lands in scratch/ as one file; no cross-beat state."""
+    wt = str(tmp_path)
+    out = f"{wt}/scratch/camera/last-frame.jpg"
+    args = {"device": "/dev/video0", "out_path": out}
+    cmd = camera_command(args, _ctx(wt))
+    assert out in cmd
+
+
+def test_camera_command_requests_image2_atomic_writing(tmp_path):
+    """The old frame is protected by the exact command Hestia judges, not a hidden rename."""
+    wt = str(tmp_path)
+    cmd = camera_command({"out_path": "scratch/camera/last-frame.jpg"}, _ctx(wt))
+    assert "-f image2" in cmd
+    assert "-atomic_writing 1" in cmd
+    assert cmd.rstrip().endswith("scratch/camera/last-frame.jpg")
+
+
+# --- _do_camera with monkeypatched subprocess.run ----------------------------
+
+def test_do_camera_success(tmp_path):
+    """Monkeypatch subprocess.run: ffmpeg 'succeeds' (returncode 0), frame file
+    appears at the expected path, and the ResultEnvelope mirrors search's shape."""
+    wt = str(tmp_path)
+    out_dir = wt + "/scratch/camera"
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = f"{out_dir}/last-frame.jpg"
+
+    old = b"\\xff\\xd8\\xffOLD\\xff\\xd9"
+    Path(out_path).write_bytes(old)
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        Path(cmd[-1]).write_bytes(b"\\xff\\xd8\\xffNEW\\xff\\xd9")
+        return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    d = _dispatcher(wt)
+
+    # Monkeypatch subprocess.run inside the dispatch module's namespace.
+    import sage.gateway.hestia_dispatch as hd
+    orig_run = hd.subprocess.run
+    hd.subprocess.run = fake_run
+    try:
+        intent = BeingIntent("camera", {"device": "/dev/video0", "out_path": out_path})
+        env = d._do_camera(intent)
+    finally:
+        hd.subprocess.run = orig_run
+
+    assert env.ok, f"expected ok=True, got {env.result}"
+    assert "device" in env.result
+    # Verify the command that was 'executed' had ffmpeg as argv[0].
+    cmd_str = captured["cmd"] if isinstance(captured["cmd"], str) else " ".join(captured["cmd"])
+    assert cmd_str.split()[0] == "ffmpeg"
+    assert "-frames:v" in cmd_str
+    assert "-atomic_writing 1" in cmd_str
+    assert cmd_str.endswith("last-frame.jpg")
+    assert Path(out_path).read_bytes() == b"\\xff\\xd8\\xffNEW\\xff\\xd9"
+
+
+def test_do_camera_device_busy(tmp_path):
+    """Device busy: ffmpeg exits non-zero with a recognizable stderr. The envelope
+    must be ok=False and the result must carry a checkable meaning (not just an error)."""
+    wt = str(tmp_path)
+    os.makedirs(wt + "/scratch/camera", exist_ok=True)
+
+    def fake_run(cmd, **kwargs):
+        return types.SimpleNamespace(
+            returncode=1,
+            stdout=b"",
+            stderr=b"Device or resource busy: /dev/video0",
+        )
+
+    d = _dispatcher(wt)
+
+    import sage.gateway.hestia_dispatch as hd
+    orig_run = hd.subprocess.run
+    hd.subprocess.run = fake_run
+    try:
+        intent = BeingIntent("camera", {"device": "/dev/video0", "out_path": f"{wt}/scratch/camera/last-frame.jpg"})
+        env = d._do_camera(intent)
+    finally:
+        hd.subprocess.run = orig_run
+
+    assert not env.ok, "device-busy must be ok=False"
+    # The result must carry a checkable meaning.
+    res_str = str(env.result).lower()
+    assert "busy" in res_str or "error" in res_str
+
+
+def test_do_camera_device_absent(tmp_path):
+    """Device absent: ffmpeg exits non-zero (no such device). ok=False with a
+    checkable message distinguishing 'absent' from 'busy'."""
+    wt = str(tmp_path)
+    os.makedirs(wt + "/scratch/camera", exist_ok=True)
+
+    def fake_run(cmd, **kwargs):
+        return types.SimpleNamespace(
+            returncode=1,
+            stdout=b"",
+            stderr=b"No such file or directory: /dev/video99",
+        )
+
+    d = _dispatcher(wt)
+
+    import sage.gateway.hestia_dispatch as hd
+    orig_run = hd.subprocess.run
+    hd.subprocess.run = fake_run
+    try:
+        intent = BeingIntent("camera", {"device": "/dev/video99", "out_path": f"{wt}/scratch/camera/last-frame.jpg"})
+        env = d._do_camera(intent)
+    finally:
+        hd.subprocess.run = orig_run
+
+    assert not env.ok, "absent device must be ok=False"
+
+
+def test_do_camera_device_off(tmp_path):
+    """Device 'off' (powered down / unregistered): ffmpeg cannot open it.
+    ok=False with a meaning distinct from busy and absent."""
+    wt = str(tmp_path)
+    os.makedirs(wt + "/scratch/camera", exist_ok=True)
+
+    def fake_run(cmd, **kwargs):
+        return types.SimpleNamespace(
+            returncode=1,
+            stdout=b"",
+            stderr=b"Cannot open: Device not configured",
+        )
+
+    d = _dispatcher(wt)
+
+    import sage.gateway.hestia_dispatch as hd
+    orig_run = hd.subprocess.run
+    hd.subprocess.run = fake_run
+    try:
+        intent = BeingIntent("camera", {"device": "/dev/video0", "out_path": f"{wt}/scratch/camera/last-frame.jpg"})
+        env = d._do_camera(intent)
+    finally:
+        hd.subprocess.run = orig_run
+
+    assert not env.ok, "device-off must be ok=False"
+
+
+# --- out_path escape / whitespace guard --------------------------------------
+
+def test_do_camera_out_path_escape_refused(tmp_path):
+    """An out_path that escapes the worktree (../) must be refused with a
+    checkable meaning — mirroring search's path-escape refusal."""
+    wt = str(tmp_path)
+    os.makedirs(wt + "/scratch/camera", exist_ok=True)
+
+    d = _dispatcher(wt)
+
+    import sage.gateway.hestia_dispatch as hd
+    orig_run = hd.subprocess.run
+
+    def fake_run(cmd, **kwargs):
+        raise AssertionError("subprocess.run must not be called for an escaping path")
+
+    hd.subprocess.run = fake_run
+    try:
+        intent = BeingIntent("camera", {"device": "/dev/video0", "out_path": f"{wt}/../escape.jpg"})
+        env = d._do_camera(intent)
+    finally:
+        hd.subprocess.run = orig_run
+
+    assert not env.ok, "escaping out_path must be ok=False"
+
+
+def test_do_camera_out_path_whitespace_refused(tmp_path):
+    """A path with a space is judged/executed drift (GPT review of #56, #6).
+    Must be refused with a checkable meaning."""
+    wt = str(tmp_path)
+    os.makedirs(wt + "/scratch/camera", exist_ok=True)
+
+    d = _dispatcher(wt)
+
+    import sage.gateway.hestia_dispatch as hd
+    orig_run = hd.subprocess.run
+
+    def fake_run(cmd, **kwargs):
+        raise AssertionError("subprocess.run must not be called for a whitespace path")
+
+    hd.subprocess.run = fake_run
+    try:
+        intent = BeingIntent("camera", {"device": "/dev/video0", "out_path": f"{wt}/scratch/camera/has space.jpg"})
+        env = d._do_camera(intent)
+    finally:
+        hd.subprocess.run = orig_run
+
+    assert not env.ok, "whitespace out_path must be ok=False"
+
+
+# --- standalone runner (mirrors test_being_gate_client.py convention) --------
+
+if __name__ == "__main__":
+    import pytest
+    sys.exit(pytest.main([__file__, "-v"]))
+
+
+def test_the_frame_resolves_against_HOME_not_the_worktree(tmp_path):
+    """The whole point of the change, and the only test that can see it.
+
+    Every other test in this file sets home and worktree to the SAME directory, because what
+    they pin is command shape and failure taxonomy. That makes the two roots indistinguish-
+    able, so reverting the resolution to the worktree leaves them all green — measured.
+    A discriminator that is true by construction is a constant, not a test.
+
+    Why home: legion-being found by using its own verb that frames land in its worktree and
+    flip that tree's `dirty` flag, and `check` reports dirty as part of the evidence a
+    verdict rests on. Using the camera quietly degraded its own ability to make verified
+    claims about its code.
+    """
+    home = tmp_path / "home"
+    wt = tmp_path / "worktree"
+    for d in (home, wt):
+        (d / "scratch" / "camera").mkdir(parents=True)
+
+    cmd = camera_command({}, {"worktree": str(wt), "memory_root": str(home)})
+
+    assert str(home) in cmd, f"the frame does not land under the being's home: {cmd}"
+    assert str(wt) not in cmd, (
+        f"the frame still lands in the worktree, whose cleanliness is evidence: {cmd}")
+    assert "-atomic_writing 1" in cmd
+    assert cmd.rstrip().endswith("scratch/camera/last-frame.jpg")
+
+
+def test_out_path_escaping_HOME_is_refused(tmp_path):
+    """Containment moved with the root: the boundary is the home now, and the refusal says
+    so rather than naming a tree the path no longer resolves against."""
+    home = tmp_path / "home"
+    wt = tmp_path / "worktree"
+    for d in (home, wt):
+        (d / "scratch" / "camera").mkdir(parents=True)
+    ctx = {"worktree": str(wt), "memory_root": str(home)}
+
+    try:
+        camera_command({"out_path": "../../escape.jpg"}, ctx)
+    except ValueError as e:
+        assert "home" in str(e).lower() or "worktree" in str(e).lower(), str(e)
+    else:
+        raise AssertionError("a path escaping the home was accepted")
+
+    # And a path INSIDE the worktree but outside the home is now an escape, which is the
+    # behavioural difference the two roots create.
+    try:
+        camera_command({"out_path": str(wt / "scratch" / "camera" / "x.jpg")}, ctx)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(
+            "a worktree path was accepted as a frame destination; the roots are not separate")
+def test_camera_creates_its_output_directory_and_names_a_write_failure(tmp_path):
+    """The default out_path pointed somewhere that did not exist in the tree it writes to.
+
+    `scratch/camera/` lives under the being's HOME; camera writes into its WORKTREE, which
+    had no scratch/ at all. legion-being's first real capture failed with ffmpeg exit 251,
+    and the taxonomy called it "device busy or unopenable" because the device node existed.
+    The camera was fine. There was nowhere to put the frame.
+    """
+    import subprocess as _sp
+    import types
+    import sage.gateway.hestia_dispatch as hd
+
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    assert not (wt / "scratch").exists(), "precondition: the worktree has no scratch/"
+
+    d = _dispatcher(str(wt))
+
+    wrote = {}
+
+    def fake_run(cmd, **kw):
+        out = cmd[-1]
+        # ffmpeg can only succeed if the directory is already there
+        if not os.path.isdir(os.path.dirname(out)):
+            return types.SimpleNamespace(returncode=251, stdout=b"",
+                                         stderr=b"Unable to open: No such file or directory")
+        open(out, "wb").write(b"\xff\xd8frame")
+        wrote["path"] = out
+        return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    orig = hd.subprocess.run
+    hd.subprocess.run = fake_run
+    try:
+        env = d._do_camera(BeingIntent("camera", {}))
+    finally:
+        hd.subprocess.run = orig
+
+    assert env.ok, f"camera must create its own output directory; got {env.result or env.error}"
+    assert (wt / "scratch" / "camera").is_dir(), "the directory was not created"
+    assert wrote.get("path", "").endswith("last-frame.jpg")
+
+
+def test_a_write_failure_is_not_reported_as_a_busy_device(tmp_path):
+    """Three causes, not two. "the node exists, therefore the device is busy" also fires
+    when the device is fine and the OUTPUT is the problem, which is the case that actually
+    happened. ffmpeg says which on stderr, so the envelope reads it rather than inferring,
+    and carries ffmpeg's own words beside the reading."""
+    import types
+    import sage.gateway.hestia_dispatch as hd
+
+    wt = tmp_path / "wt"; (wt / "scratch" / "camera").mkdir(parents=True)
+    d = _dispatcher(str(wt))
+
+    # A DEVICE THIS TEST OWNS, not the host's. The classifier's first branch is
+    # os.path.exists(device), so with the default /dev/video0 this test asks a question
+    # about the machine it runs on: it passed on the host, where the node exists, and failed
+    # inside the being's sandbox, where `--dev /dev` is minimal and there is no video node —
+    # so it short-circuited to "device absent" and never reached the stderr branch this test
+    # exists to pin. Found by legion-being running `check` after I reported the same head
+    # green from the host. A test whose verdict depends on where it ran is not a test of the
+    # code (same defect as the mesh roster, fixed in SAGE#86 hours earlier).
+    dev = tmp_path / "fake-video0"
+    dev.write_bytes(b"")
+
+    orig = hd.subprocess.run
+    hd.subprocess.run = lambda cmd, **kw: types.SimpleNamespace(
+        returncode=251, stdout=b"", stderr=b"Unable to open output file: Permission denied")
+    try:
+        env = d._do_camera(BeingIntent("camera", {"device": str(dev)}))
+    finally:
+        hd.subprocess.run = orig
+
+    assert not env.ok
+    note = env.result["note"]
+    assert "WRITTEN" in note or "written to" in note, \
+        f"a write failure must not be reported as a busy device: {note!r}"
+    assert "busy" not in note, f"still blaming the device: {note!r}"
+    assert "Permission denied" in env.result["stderr"], \
+        "ffmpeg's own account must ride along, not only my reading of it"
+    # And the being can actually see all of that.
+    assert "Permission denied" in env.to_tool_message()

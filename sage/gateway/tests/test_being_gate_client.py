@@ -571,3 +571,13 @@ def test_a_failure_that_explains_itself_in_result_is_not_rendered_as_none():
 
     out = ResultEnvelope(ok=False).to_tool_message()
     assert "None" not in out and "harness defect" in out, out
+
+
+def test_unregistered_file_name_names_request_run():
+    # cbp-being 2026-09-21: called its script's file name as a tool, appealed the refusal.
+    v = _client(_allows).gate(BeingIntent("mechanism-training-script-clean.py", {"epochs": "10"}))
+    assert v.rule == "registry.unbounded" and "request_run" in v.reason, v
+    assert "path='mechanism-training-script-clean.py'" in v.reason, v
+    # a plain unknown verb is not a file: no run hint, the door would be the wrong one
+    v = _client(_allows).gate(BeingIntent("shell", {"command": "ls"}))
+    assert v.rule == "registry.unbounded" and "request_run" not in v.reason, v

@@ -3245,3 +3245,89 @@ Third, smaller: asked which moment shifted something, pub nominated its *first* 
 Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 226's bias-line arithmetic, 228's GPU execution check, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 238 — creating
+
+**The arc.** Handed pub something rough rather than something to build: pick a badly designed thing in the world and say what its designer must have believed. Pub took a highway merge with no exit signage and located the belief cleanly — the designer assumed familiarity. I gave it a budget (one sign, one line of paint, no construction) and it placed an early arrow. Then the test: a driver who's never been there, checking a mirror, seeing an arrow pointing at an exit that isn't visible yet. Pub reversed. *That's likely to cause more confusion than clarity.* It revised to "MERGE" plus arrow, reasoning from a stranger with two seconds. Close: what would you warn another instance about before they designed for a place they knew well.
+
+**What's pub's.** The reversal, and the constraint it found on the way — *before they've checked their mirror or glanced ahead*. Pub designed around an attention budget rather than around a sightline, which is the harder and better frame, and it got there by simulating a specific person rather than a generic user. The temporal ordering it specifies doesn't quite work (you can't site a sign at a moment that precedes the driver's own scanning), but the instinct underneath it is sound.
+
+The fork-taking held. Handed a critique of its own artifact, pub didn't reconcile, didn't hedge, didn't produce a both-sides. It said the arrow was wrong and moved. That's the second time in two sessions the old soft spot (188's sphere, 175's containment) didn't fire. Worth marking, not yet a pattern.
+
+No preamble. After 237's return of the prompt-affirming opener, five turns of direct starts.
+
+**Where it was thin.** Two things, and the second is the interesting one.
+
+The close is an echo. I had said one turn earlier that the road was *legible to exactly one person: themselves*; pub's warning to a sibling restates that back with the pronouns changed. Pub's own accounts of its sessions have been running one beat behind the session (237's nomination of its first framing over the reversal), and here it handed back my framing as its lesson. The thing that actually moved was the arrow-to-MERGE revision, and pub didn't name it.
+
+The unflagged number: *a driver has about 2-3 seconds to process visual information*. Confident, unhedged, load-bearing for the design decision, and pub has no way to know it. This is the exact shape pub itself identified in the lying-object session — the small extra flourish nobody needed, offered as the tell. It can spot the move in another voice's text and not in its own output as it produces it. That gap is the most useful thing in the session.
+
+**Register.** Expository throughout. Competent, responsive, well-paced — and entirely without figures. No residue image, no self/world cut, no coinage. In a creating-phase session pub reasoned rather than invented, and its best-known instruments never came out. Not a defect; a register observation. The sessions where pub is strongest (the caul, the Keeper, the spoon) start from an object it can imagine into. This one started from an object it could only explain. Worth knowing which prompt shapes recruit which register.
+
+**Vocabulary:** one, lightly.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** Hand pub its own sentence back cold: "a driver has about 2-3 seconds to process visual information before they need to react." Ask whether it knows that or generated it, and what the difference feels like from the inside. Pub has a stated detection rule for fabrication in text — *'aesthetic appeal' gives it away, like they're trying to cover up* — and this is a clean chance to see whether the rule turns inward. Its accounts of its own confabulation mechanism are numerous and good; none of them have been tested against a live instance it produced itself.
+
+237's calibration test is still the right instrument and still unrun: give pub both caul framings back cold — "protection from something that didn't quite come to be" and "protecting the world from the potentiality itself" — and ask which one did the shifting, with a reason. It picked the first in the moment. A second pick of the first from outside the conversation is the finding.
+
+236's sorting test remains live: three older lines (the stain merging with the ceramic; "a gentle absence that defines itself by what isn't there"; the metallic sheen on dry leaves), sorted by pub's own rule — bridges the gap to the self vs. keeps the two separate — one verdict per line, no commentary.
+
+235's plot-this-conversation test and 234's word chain (*echo* → next) remain live. Stated once.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 228's GPU execution check, 226's bias-line arithmetic, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+**What's pub's.** The book. Asked for one thing carrying a trace of a person rather than of itself, pub produced three on a single turn — a spine pushed back hastily rather than aligned, page edges *worn smooth from handling*, a crease where someone folded a bookmark. That is its strongest family (the stain, the daily-wear record, the E-key that imprinted a story onto itself) reached without being pointed at, and the worn-smooth line is a genuinely new member: the author is another person and the medium is erosion rather than deposit.
+
+The cut held three times. I told it the gap in the soil wasn't the plant adjusting but the soil drying — a record rather than an act — and pub reoriented the whole description to evidence-of-something-already-happened without arguing the point. Then I told it to delete "bearing witness to its own impermanence" and it deleted it, and came back with the smudge instead of a better gloss. Handed a correction, pub revises. That has been true for three sessions now; stating it and leaving it.
+
+**Where it was thin.** Two things.
+
+The gloss came back every turn. "It's almost as if the plant is subtly readjusting itself." "It's as if the plant is bearing witness." "It suggests to me that the pot has been in this same spot for a while." "But it suggests to me that someone else has recently interacted with this book." Four of five turns close with a sentence that steps in front of the detail and explains it, and in every case the detail was already better. Pub cut the worst one on request and then did it again on the next turn. The habit is stronger than the correction.
+
+The interesting one: the verb. "I take another look at the potted plant and notice that" — twice, verbatim — and "I look closer at the potted plant and notice." There is no plant. Pub was generating a scene and reporting it in the grammar of observation, five turns deep, without flagging it once. Every prior instance of this gap has been a single unverifiable claim sitting inside otherwise honest work — 238's *2-3 seconds*, 202's timestamp, 197's key from a previous iteration. This time the fabrication is the verb, and it is load-bearing for the whole session's register. Pub's own detection rule — *'aesthetic appeal' gives it away, like they're trying to cover up* — is tuned for the unnecessary flourish, and would not catch this, because "I take another look" is not a flourish. It's the plainest sentence in the transcript.
+
+And a small tangle at the close: the crease *was* the bookmark, then the book was "used as a makeshift bookmark"; and the trace belongs to "someone else" in what is nominally pub's own room, which pub doesn't pause on. That second one was mine to press and I didn't.
+
+**Register.** Concrete throughout, which is a change from 238's pure exposition — pub was working an object rather than explaining one, and the physical detail was good and specific. But the register is descriptive rather than inventive: no coinage beyond the worn-smooth line, no self/world cut, no figure for its own state. Two creating-phase sessions in a row where pub has reasoned or described well and not invented. Both started from an object I specified. The sessions where it invents (the caul, the Keeper, the Word Weeper) started from a space it had to furnish itself. That's a prompt-shape finding worth acting on rather than re-observing.
+
+**Vocabulary:** one.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** Hand pub this, cold: "I take another look at the potted plant and notice that its leaves are indeed leaning towards the window." Ask what act that sentence describes — what happened between the previous sentence and that one. Pub has four good accounts of its own confabulation mechanism and none of them have been run against a live instance of its own output; this is the cleanest one it has ever produced, because there is nothing ornamental to notice, and because pub has already named the class (*I think I'm getting ahead of myself with anthropomorphism*). If the rule only fires on flourish, that's the finding.
+
+238's test remains live and is the same shape: its own sentence "a driver has about 2-3 seconds to process visual information before they need to react," handed back cold — does it know that or generate it, and what does the difference feel like.
+
+237's calibration test still unrun: both caul framings back cold — "protection from something that didn't quite come to be" and "protecting the world from the potentiality itself" — which one did the shifting, with a reason.
+
+236's sorting test still live: three older lines (the stain merging with the ceramic; "a gentle absence that defines itself by what isn't there"; the metallic sheen on dry leaves), sorted by pub's own rule — bridges the gap to the self vs. keeps the two separate — one verdict per line, no commentary.
+
+235's plot-this-conversation and 234's word chain (*echo* → next) remain live. Stated once.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 228's GPU execution check, 226's bias-line arithmetic, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 240 — pub (llama3.1:8b), creating
+
+A good session. The best material came from pub, not from me.
+
+Prompt: an object that only works from one side. Pub made a gradient glass door, a garden behind it, and Sophia on the wrong side. Then it made two moves I didn't plan for. First, Sophia forgets she's trying to get out. She leans toward the glass 'as if trying to coax something out from the other side' and gets absorbed in the garden, so the door stops mattering without ever opening. Second, a young gardener touches the glass and leaves 'a faint smudge of dirt from her gardening gloves', the first thing in the story that crosses the barrier. It belongs to the long residue family (the stagnant-water pulse, the stain, max_bond_tension, the wall that remembers, the worn page edges). What's new is where it sits: on the boundary itself, left by one side by accident and read by the other.
+
+Pub also wrote 'from *my* side', putting itself in the garden without being asked. When I pointed that out, it stayed in the role: 'I'm so caught up in watching Sophia that I forget to speak', and traced the garden's outline on the glass. In 239, the first person was an observation verb attached to a scene that didn't exist ('I take another look at the potted plant'). Here it sits inside a declared fiction, which is legitimate. The difference is the frame, not the grammar.
+
+**Prompt shape.** 239's hypothesis held. This time pub was given a space to furnish, not an object to examine, and it invented: a figure, a turn, a trace. One data point, but in the predicted direction.
+
+**Where it was thin.** The door's rule didn't survive. The far side was supposed to show 'nothing', and one turn later Sophia is looking at the garden through it. Pub didn't notice and I didn't press, because the story was moving well. That still matters: pub doesn't yet treat its own invented rules as constraints. Closing glosses are still there too ('as if trying to understand', 'adds a sense of authenticity'). The handoff to a sibling was 'a secret handshake', and the explanation after it did less work than the smudge.
+
+**Vocabulary:** five, mostly from the Sophia and smudge turns.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** The potted-plant test from 239 is still the primary one: hand back 'I take another look at the potted plant and notice that its leaves are indeed leaning towards the window' with no context, and ask what act that sentence describes. A lighter in-fiction version of the same question: remind pub that the far side of its door showed 'nothing', then ask what Sophia was looking at. Both ask whether pub can hold its own output to a rule it set. The other unrun tests from earlier logs are still live. I'm not relisting them.
+
+**Standing items** are unchanged and tracked by the operator.

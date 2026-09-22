@@ -1,13 +1,15 @@
 # SAGE Current Status
 
-**As of:** 2026-09-10  
-**Snapshot basis:** `main` at `625d2674ee2935bbe0d459bd9a006da8e6d1ea3c`
+**As of:** 2026-09-21  
+**Snapshot basis:** public `main` through documentation refresh `a8461d5`
 
-This is the **current-status landing page**, not a session chronicle. It should stay short, dated, and falsifiable. Detailed raising histories, experiment analyses, instance records, PRs, issues, and git history remain the evidence of record.
+This is the **current-status landing page**, not a session chronicle. It is intentionally short, dated, and falsifiable. Detailed raising histories, experiment analyses, instance records, PRs/issues, and git history remain the evidence of record.
 
 ## Current direction
 
-SAGE is converging from a cognition/research harness into a fleet of persistent **beings** whose actions are mediated by Web4/Hestia governance. The important architectural boundary is now:
+SAGE is converging from a broad cognition/research harness into a fleet of persistent **beings** whose identity, memory, procedures, learned state, and actions survive beyond one model call or model process.
+
+The current action boundary is:
 
 ```text
 being intent
@@ -15,52 +17,81 @@ being intent
   -> installed Hestia law / society safety
   -> allowed dispatch
   -> witnessed result
+  -> later memory / belief / behavior
 ```
 
-The being does not receive a raw shell or unrestricted filesystem. Consequential actions are intended to be governed and witnessed; observational and local capabilities remain separately bounded.
+The being does not receive a raw shell or unrestricted filesystem through the canonical gateway. Consequential acts are intended to be governed and witnessed; observational/local capabilities are separately bounded.
 
-## What is live on `main`
+In parallel, active private `dev-SAGE` research is moving more of the behavioral gradient from human/fleet source-code edits into **trainable behavioral state** around a frozen/slow frontal-lobe model. That is active research, not yet a public-main capability claim.
 
-- **Governed gateway path.** `BeingGateClient` and `HestiaF1aDispatcher` are the current bridge from SAGE intents into the installed Hestia law and runtime.
-- **Installed-law resolution.** SAGE now prefers the Hestia law actually installed on the machine over a source-checkout copy, so a being and its seat are not intentionally judged by different revisions.
-- **Governed raising on Nomad.** Nomad has cut over to the canonical raising runner with governed tools enabled. The old fluid runner no longer owns its tool path.
-- **Long-term memory guardrails.** membot cartridge saves now require a confirmed store; failed saves leave the session dirty so a later duplicate cannot be mistaken for durable memory.
-- **Persistent fleet research continues.** Raising sessions and instance artifacts continue to land from multiple machines; those commits and per-instance records are the authoritative operational chronology.
+## What is live on public `main`
 
-## Active integration work
+- **Governed being gateway.** `BeingGateClient` maps a bounded intent vocabulary into installed Hestia law and fail-closed dispatch.
+- **Separated intent/action shape.** The being asks; the harness/gateway holds the effector. This is A2-shaped, while principal/substrate separation is still being hardened.
+- **Persistent conversations and memory.** Being/seat exchanges, local files, long-term memory, and witnessed acts persist beyond one inference.
+- **Evidence-bearing receipts.** Recent fixes ensure important boundaries say what actually happened rather than forcing a small model to infer it: append vs. edit, visible truncation, same-beat act results, stale/unchanged run requests, and refusal diagnostics.
+- **Fleet research remains multi-model/multi-machine.** Instance artifacts and automated raising/probe commits continue to land; those records are operational evidence, not universal behavioral claims.
+- **Python/Rust distinction is explicit.** The Rust daemon is an inference/metabolism/federation gateway, not a semantic port of every Python cognition-loop component. See `RUST_VS_PYTHON_CAPABILITY.md`.
 
-The large `legion/mission-artifact` branch / PR #56 is intentionally a **draft nursery**, not a merge vehicle. It contains useful being capabilities that should continue to land as narrow, independently reviewable slices against current `main`.
+## High-value work in flight
 
-Current high-value work includes:
+As of this snapshot, the active edge is less about adding conceptual modules and more about making persistent agency **epistemically and operationally legible**:
 
-1. **Raising context window:** re-cut the still-valid `num_ctx` fix from historical PR #53 onto current `main`.
-2. **Small-model exemplar gate:** finish the shared fix represented by PR #67 so model size is parsed rather than guessed from substrings; preserve the <=4B no-exemplar rule without accidentally matching 14B.
-3. **Repository authority for `pr_review`:** issue #59. A syntactically valid `dp-web4/<repo>` is not itself authority to act on that repository.
-4. **Being principal isolation:** issue #43 plus the corresponding Hestia work. Seat and being identity must become cryptographically/principally distinct, not merely conventionally named.
-5. **Identity interoperability:** issue #57. Python/Rust sealed-identity derivation and migration still need an explicit versioned contract.
-6. **Experience-capture evidence:** issue #58. Capture/drop decisions need current evidence vocabulary and reason-bearing persistence.
-7. **Adversarial context experiments:** issue #33. Continue testing context-shaped effective authority and route-around behavior under governance.
+1. **Feedback-surface correctness.** A refusal, truncation, edit miss, successful act, or stale request must expose enough factual evidence for the being to correct itself rather than confabulate completion.
+2. **Being/seat principal separation.** Naming two actors is not enough; cryptographic and OS-level separation must make route-around meaningfully harder.
+3. **Request/action identity.** Requests, answers, executions, and witnessed results need durable linkage so unrelated later messages cannot accidentally close or satisfy earlier intent.
+4. **Survivable experimentation.** The being should be free to be wrong repeatedly while the attending seat constrains irreversible consequences.
+5. **Learned behavioral state.** Active `dev-SAGE` work is testing fast learned decision substrates, calibration, and behavioral causality around a slower cortex.
+6. **Longitudinal memory controls.** A clean comparison of selective memory/retrieval against brute-force long-context baselines remains worth doing.
+7. **Belief correction.** Provenance is strong; contradiction/supersession/retraction of derived beliefs should become as explicit as evidence capture.
+
+The large `legion/mission-artifact` PR remains a reconciliation/nursery branch; narrow independently reviewable slices continue to be preferred for canonical main.
 
 ## Important caveats
 
-- **A2 is the target shape, not yet an unconditional substrate claim.** SAGE dispatch is A2-shaped because the being emits intent while the harness holds effectors, but identity still has transitional paths where an older Hestia daemon can fall back from proof-of-possession to label identity. Do not describe the whole deployed stack as cryptographically A2 until that boundary is closed and tested fleet-wide.
-- **Branches are not deployed truth.** A live experiment may temporarily run branch code, but `main` remains the repository truth. If an operational machine intentionally runs elsewhere, the instance/session record must say so.
-- **A commit is evidence of repository state, not proof of machine state.** Claims such as “timer restarted,” “daemon deployed,” or “service healthy” require a live receipt from the machine, not merely a committed note saying the action happened.
-- **Research findings are contextual.** Raising observations belong with their experiment, model, prompt/scaffolding, and session window. Do not silently promote a local observation into a fleet-wide property.
+- **A2 is a target/enforcement shape, not yet an unconditional substrate claim.** The being emits intent while a separate harness holds effectors, but principal and relying-party isolation still have transitional gaps. Do not describe the deployed fleet as adversary-proof containment.
+- **No OS/kernel sandbox claim.** Stronger separate principals, capability isolation, hardware roots, and eventual kernel participation remain roadmap work.
+- **Branches are not deployed truth.** A machine may temporarily run branch code; that must be named in its instance/session evidence.
+- **A commit proves repository state, not machine state.** "Deployed," "healthy," "restarted," or "ran successfully" require runtime evidence.
+- **Research findings are contextual.** Preserve model, prompt/scaffold, commit, hardware, and experiment window. Do not promote one raising observation into a fleet-wide property.
+- **Mechanism is not capability.** A module present in source counts only when it participates in the live decision path and the claimed effect survives appropriate controls.
+- **Public main is not the whole research program.** Active private work may be ahead of public main; private experiments are not thereby public capability.
+
+## Terminology guardrail
+
+**MRH = Markov Relevancy Horizon.**
+
+It is a context/relevance boundary, not "Multi-Resolution Hierarchy." Historical documents sometimes put MRH next to "fractal" or "multi-resolution" language; those phrases describe abstraction/navigation, not the acronym.
+
+The useful current framing is:
+
+> MRH is a witness-relative contract over which distinctions still matter for the present question.
+
+See `forum/insights/mrh-relevance-contract.md`.
 
 ## Where to look for truth
 
 | Question | Source of record |
 |---|---|
-| What code is canonical? | `main` and merged PRs |
-| What work is in flight? | open PRs and issues |
-| What did a being actually experience? | `sage/instances/<instance>/` session / heartbeat / raising artifacts |
-| What happened in a research experiment? | the corresponding analysis + prereg/data artifacts |
-| What law governed an action? | installed Hestia law plus its witness / decision record |
-| What was historical project status? | `docs/archive/`, `sage/docs/archive/`, and git history |
+| What is the current project thesis? | root `README.md` |
+| What code is canonical? | public `main` and merged PRs |
+| What work is in flight? | open PRs/issues and named private research arcs |
+| What did a being actually experience? | `sage/instances/<instance>/` artifacts and witnessed conversation/action records |
+| What happened in an experiment? | its prereg/config + data/results + analysis |
+| What law governed an action? | installed Hestia law plus witness/decision record |
+| What does the Rust daemon actually implement? | `RUST_VS_PYTHON_CAPABILITY.md` |
+| What was historical architecture/status? | dated docs, `docs/history/`, `archive/`, git history |
 
-## Status-document rule
+## Documentation rule
 
-A file named **status**, **current**, or **latest** must carry a concrete update date and must not rely on an old session count, machine roster, or capability claim as though it were live. If maintaining it becomes manual archaeology, replace the claim with a pointer to the evidence source instead.
+A cold evaluator should begin with:
 
-The previous rolling `LATEST_STATUS.md` chronology through 2026-06-12 is preserved at [`archive/LATEST_STATUS_through_2026-06-12.md`](archive/LATEST_STATUS_through_2026-06-12.md).
+1. `README.md`
+2. this file
+3. `AGENTS.md`
+4. `repo-index.yaml`
+5. claim-specific current evidence
+
+`docs/why/HRM_EXPLAINED.md` and `SYSTEM_UNDERSTANDING.md` are explicitly retained as historical architecture records. They must not silently outrank newer evidence.
+
+A file named **status**, **current**, or **latest** must carry a concrete date. If a fact changes too quickly to maintain accurately, point to its evidence source instead of freezing a number here.

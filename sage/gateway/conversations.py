@@ -461,26 +461,64 @@ def notify_state_path(instance: Path, conv_id: str, speaker: str) -> Path:
     return Path(base) / Path(instance).resolve().name / f"{conv_id}.{speaker}.json"
 
 
+def _request_digest(text: str) -> Optional[str]:
+    """The bytes a `[request_run]` turn asks about (its `sha256:` tag), or None if it is not one.
+    A request with no tag counts as its own bytes: it cannot be shown to repeat anything."""
+    if not str(text or "").startswith("[request_run]"):
+        return None
+    m = re.search(r"sha256:([0-9a-f]{6,64})", text)
+    return m.group(1) if m else f"untagged:{text}"
+
+
 def wake_is_owed(instance: Path, conv_id: str, speaker: str) -> Optional[int]:
     """The run-start seq a wake is owed for, or None. Idempotent per run, and retried if the
     last attempt failed — `record_wake` is called only on success, so a notice that never left
-    is owed again on the speaker's next turn rather than lost."""
+    is owed again on the speaker's next turn rather than lost.
+
+    ONE EXCEPTION, AND WHY. A run is keyed on its first turn so that six prose repeats of one
+    question cost one wake (2026-09-20). Measured 2026-09-21: the seat was woken at 14:18Z for
+    cbp-being's "Got it, thanks" (seq 3015) and rightly said nothing. That left the run OPEN
+    and already woken, so the being's two `request_run`s at 15:49Z and 16:51Z (3016, 3017)
+    joined it and woke nobody; they waited until a person happened to look, 1.5 hours and
+    more. A thank-you had spent the wake that a real request needed.
+
+    So a `[request_run]` for BYTES the last wake did not cover re-arms the wake. Keyed on the
+    file digest the request carries: asking again about an unchanged file wakes nobody (the
+    seat's answer would be "unchanged"), while a changed file is new work. Prose repeats still
+    cost one wake per run."""
     start = unanswered_run_start(instance, conv_id, speaker)
     if start is None:
         return None
     try:
-        done = int(json.loads(notify_state_path(instance, conv_id, speaker).read_text())
-                   .get("woke_for_run_starting_at") or 0)
+        state = json.loads(notify_state_path(instance, conv_id, speaker).read_text())
     except (OSError, ValueError):
-        done = 0
-    return start if start > done else None
+        state = {}
+    done = int(state.get("woke_for_run_starting_at") or 0)
+    if start > done:
+        return start
+    # The same run was already woken. Owed again only for a request about uncovered bytes.
+    covered = int(state.get("covered_through") or done)
+    run = [t for t in recent(instance, conv_id, limit=200)
+           if int(t.get("seq", 0)) >= start and t.get("from") == speaker]
+    seen = {_request_digest(t.get("text")) for t in run if int(t.get("seq", 0)) <= covered}
+    for t in run:
+        d = _request_digest(t.get("text"))
+        if int(t.get("seq", 0)) > covered and d is not None and d not in seen:
+            return start
+    return None
 
 
-def record_wake(instance: Path, conv_id: str, speaker: str, run_start: int) -> None:
+def record_wake(instance: Path, conv_id: str, speaker: str, run_start: int,
+                covered_through: Optional[int] = None) -> None:
+    """Remember the wake. `covered_through` is the last turn the woken party was told about;
+    requests after it are what `wake_is_owed` checks for new bytes."""
     p = notify_state_path(instance, conv_id, speaker)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps({"woke_for_run_starting_at": run_start, "at": _now()}, indent=2) + "\n")
+    tmp.write_text(json.dumps({"woke_for_run_starting_at": run_start,
+                               "covered_through": covered_through if covered_through is not None
+                               else run_start,
+                               "at": _now()}, indent=2) + "\n")
     os.replace(tmp, p)
 
 
@@ -521,12 +559,16 @@ def _shown_text(turn: dict, turn_chars: Optional[int], conv_id: str) -> str:
     Measured 2026-09-08: two long seat turns (25.6k chars) were re-rendered into every
     beat, ~9k tokens of a 24.5k window, and the being ran out of room to act — five
     beats of identical deliberation cut at the wall. The record is kept whole; only what
-    is SHOWN per beat is bounded."""
+    is SHOWN per beat is bounded.
+
+    The marker names memory_read's REAL argument. It used to say `from_line N lines 1`,
+    neither of which memory_read accepts (it takes `start_line`); measured 2026-09-21,
+    26 of cbp-being's 33 reads of a conversation file started at line 1 of ~2,950."""
     text = turn.get("text", "")
     if turn_chars and len(text) > turn_chars:
         return (text[:turn_chars].rstrip()
-                + f" …[+{len(text) - turn_chars} chars; the whole turn: memory_read "
-                  f"conversations/{conv_id}.jsonl from_line {turn.get('seq')} lines 1]")
+                + f" …[+{len(text) - turn_chars} chars; the whole turn: memory_read path "
+                  f"conversations/{conv_id}.jsonl start_line {turn.get('seq')}]")
     return text
 
 
