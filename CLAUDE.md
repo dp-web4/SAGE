@@ -24,53 +24,72 @@ To regenerate fleet snapshot: `python3 -m sage.scripts.generate_primer` (writes 
 
 ## What SAGE Is
 
-A cognition kernel for edge devices. Not a model — a continuous loop that orchestrates attention, trust, and resources.
+SAGE is a research environment for **persistent local AI under identity, memory, learned state, tools, and explicit governance**.
 
-- **SAGE** = the kernel (scheduler, resource manager, learner)
-- **IRP** = the API (universal plugin interface: `init_state → step → energy → halt`)
-- **12-step consciousness loop**: Sense → Salience → Metabolize → Posture → Select → Budget → Execute → Learn → Remember → Govern → Filter → Act
+It began as a cognition-kernel / orchestration architecture. That history still matters, but it is not a sufficient description of the current project.
 
-Key docs: `sage/docs/SYSTEM_UNDERSTANDING.md`, `sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md`
+The current shorthand is:
+
+```text
+observation
+  -> salience / evidence / memory
+  -> learned behavioral state + specialist organs
+  -> generative cortex when useful
+  -> bounded intent
+  -> Hestia governance / dispatch
+  -> witnessed result
+  -> later memory / belief / behavior
+```
+
+The model is a substrate inside the organism, not the organism's whole identity. The surrounding system is expected to preserve what happened, what was learned, what authority exists, and what consequences followed.
+
+**Current assessment docs:** `README.md`, `sage/docs/LATEST_STATUS.md`, `AGENTS.md`, and claim-specific code/experiment evidence.
+
+`docs/why/HRM_EXPLAINED.md` and `sage/docs/SYSTEM_UNDERSTANDING.md` are historical architecture records, not current-status authorities.
 
 ---
 
-## Current Architecture (v0.4.0a6)
+## Current Public Architecture — 2026-09-21
 
-### Key Subsystems
+### Current load-bearing boundaries
 
-| Subsystem | What it does | Key files |
-|-----------|-------------|-----------|
-| **Trust Posture** | Sensor trust landscape → behavioral strategy (confidence, asymmetry, breadth) | `sage/core/sage_consciousness.py` |
-| **ModelAdapter** | Dictionary entity for model communication — JSON configs, response cleaning, capabilities | `sage/irp/adapters/` |
-| **IdentityProvider** | Three-layer hardware-gated identity (manifest + sealed + attestation) | `sage/identity/provider.py` |
-| **PolicyGate** | Conscience checkpoint at step 8.6, dual learning signals | `sage/core/sage_consciousness.py` |
-| **SNARC** | 5D salience scoring (Surprise, Novelty, Arousal, Reward, Conflict) | `sage/core/sage_consciousness.py` |
-| **Raising** | BECOMING curriculum (5 phases), automated on 4 machines | `sage/raising/` |
-| **Embodiment** | Sprout's perceptual organ: dual-camera + IMU → symbolic perceptual state (reafference, salience, gaze volition, sensor-health); feeds the raising | `sage/embodiment/` (see its `README.md`) |
-| **Federation** | PeerMonitor, PeerClient, PeerTrustTracker | `sage-rs/sage-daemon/src/federation/`, `sage/federation/fleet.json` |
-| **Rust Daemon** | Consciousness loop, SNARC, metabolic, dashboard — ~12MB RSS (inference-and-metabolism gateway — NOT the full 12-step kernel; see sage/docs/RUST_VS_PYTHON_CAPABILITY.md) | `sage-rs/` (sage-lib + sage-daemon, port 8760) |
+| Subsystem | Current role | Evidence |
+|---|---|---|
+| **Being gateway** | Bounded intent vocabulary; no canonical raw shell/unrestricted FS | `sage/gateway/being_gate_client.py` |
+| **Hestia dispatch** | Law evaluation, consequential-action mediation, witnessing | SAGE gateway + Hestia |
+| **Persistent identity/state** | Identity, conversation, memory, instance artifacts survive one model call/process | `sage/instances/`, identity modules |
+| **Evidence-bearing receipts** | Tool/action outcomes must say what actually happened so later cognition can correct itself | gateway code/tests + recent PR history |
+| **SNARC / memory paths** | Salience-gated memory coexists with recent, structured, and verbatim/provenance paths | SAGE memory code; standalone `dp-web4/snarc` |
+| **Python cognition loop** | Reference taxonomy / experimental kernel; components are config/runtime dependent | `sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md` |
+| **Rust daemon** | Lightweight inference/metabolism/federation gateway, **not** a full Python-loop port | `sage/docs/RUST_VS_PYTHON_CAPABILITY.md` |
+| **Active learned-state research** | Trainable behavioral state around slower cortex is being tested in private dev-SAGE | active research; not public-main capability |
 
-### Model Configs
+### Vocabulary discipline
 
-Per-family JSON configs in `sage/irp/adapters/model_configs/`. New models need only a config file. Current: tinyllama, qwen2.5, qwen3.5, gemma3, phi4, default.
+- **MRH = Markov Relevancy Horizon.** Never expand it as "Multi-Resolution Hierarchy."
+- Historical prose may describe SAGE as fractal or multi-resolution; that is an abstraction/navigation description, not the acronym.
+- **ATP/ADP, T3/V3, LCT, metabolic states** are engineering vocabularies. They earn their place through causal utility, not analogy.
+- A source file containing a mechanism is not evidence that the mechanism is live or behaviorally useful.
 
-### Identity (Three Layers)
+### Governance status
 
-- `identity.json` — public manifest (who I am)
-- `identity.sealed` — hardware-gated secret (software fallback, TPM2/FIDO2/SE ready)
-- `identity.attest.json` — cached AttestationEnvelope from web4
+The current public stack is cooperative/tamper-evident and **A2-shaped**: the being emits intent while another principal/harness holds effectors. Principal separation and stronger substrate enforcement are still active work.
 
-See: `sage/identity/README.md`
+Do not claim adversary-proof containment, complete kernel isolation, or cryptographically complete A2 across the fleet unless the specific deployment evidence proves it.
 
 ---
 
-## Web4 Foundation
+## Web4 Relationship
 
-```
-Web4 = MCP + RDF + LCT + T3/V3*MRH + ATP/ADP
-```
+SAGE participates in the broader Web4/Hestia stack; it should not be described as though every historical Web4 vocabulary item is simultaneously live in every SAGE runtime.
 
-SAGE fractally implements the full stack. Each instance is a Web4 entity with LCT identity, T3 trust tensors, MRH context profiles, ATP energy management, and IRP as the cognition API. See `sage/raising/identity/WEB4_FRAMING.md`.
+Current division of responsibility:
+
+- **Web4** — identity, contextual relationship/trust vocabulary, witnessed-action protocol concepts.
+- **Hestia** — local authority, action law, dispatch and witnessing.
+- **SAGE** — persistent cognition/embodiment research inside those boundaries.
+
+LCT, T3/V3, MRH and ATP/ADP remain useful vocabularies where they correspond to live mechanisms. Their presence in an architecture document is not itself evidence that they are decision-bearing in a particular runtime.
 
 ---
 
@@ -80,9 +99,13 @@ A **synthon** is an emergent coherence entity formed by recursive interaction. Y
 
 ---
 
-## PolicyGate
+## Governance inside and outside the Python loop
 
-Sits at step 8.6 between deliberation and effectors. Same IRP contract as all plugins. CRISIS mode changes accountability, not strictness. Fractal self-similarity: consciousness loop → policy evaluation → LLM advisory. See `sage/docs/SOIA_IRP_MAPPING.md`.
+`PolicyGate` remains part of the historical/reference Python cognition-loop architecture and related research.
+
+For current consequential action governance, the load-bearing boundary is the **being → SAGE gateway → Hestia law → dispatcher → witnessed result** path. Do not treat an internal PolicyGate hook as equivalent to external authority enforcement or OS-level containment.
+
+See `sage/gateway/being_gate_client.py`, `sage/docs/LATEST_STATUS.md`, and Hestia.
 
 ---
 
@@ -97,26 +120,36 @@ Cross-instance comparison (0.8B vs 14B) suggests the same relational ontology wi
 
 ---
 
-## Fleet (8 machines, 13 instances)
+## Fleet
 
-5 machines on automated 6-hour raising cron (Sprout, Legion, Nomad, CBP, HUB). HUB is the fleet's only AMD GPU (Radeon Pro W5500 via Mesa Dozen/Vulkan — ROCm unavailable on WSL2) running a Mamba/transformer-hybrid (granite4:h-tiny). See `SESSION_PRIMER.md` for current session counts and phases.
+Fleet membership, model assignment, raising phase, and session totals are volatile. **Do not freeze them in this file.**
+
+At session start, read `SESSION_FOCUS.md` for the generated current snapshot. The root `README.md` may carry a dated public census, but operational claims should come from the generated focus/instance records rather than an old count here.
 
 ---
 
-## Raising + ARC-AGI-3 Convergence (April 2026)
+## Active capability research
 
-Raising (being) and game-playing (doing) are converging. Currently completely siloed — zero shared state. The direction: curriculum-level merge where game experiences flow into the raising record and raising capacity informs game reasoning. Each machine decides timing based on instance phase. Full plan: `shared-context/plans/raising-agi3-convergence.md`.
+Public `main` is the durable architecture/research record. Active capability work also occurs in private `dev-SAGE` and shared-context workspaces.
+
+Do not freeze private-research details into this public session context. When relevant, consult the authorized private workspace directly and preserve the distinction between:
+- an experiment in progress;
+- a measured result;
+- a merged public capability.
 
 ---
 
 ## Key Lessons (Carry Forward)
 
-- **SAGE is the scheduler. Plugins are apps.** It decides which reasoning to invoke, not how to reason.
-- **Do not mock when real exists.** Check filesystem before creating implementations.
-- **Never approximate acronyms.** SAGE = Situation-Aware Governance Engine. If unsure, ask.
-- **Frozen weights reality.** LLM weights don't update between sessions. Identity anchoring is architectural support.
-- **Capacity as register.** Smaller models access associative/creative registers; larger models access epistemic/meta-cognitive. Both genuine.
-- **Autonomous drift.** Output metrics ≠ outcome progress. High MRH work before low-friction work.
+- **Outcome over ontology.** A named abstraction earns its place only if it changes a live decision or improves a measured property.
+- **Mechanism is not capability.** Source presence, a passing unit test, and a deployed behavior are different claims.
+- **Evidence must reach the next decision.** Successful acts, refusals, truncations, errors and corrections must be legible rather than inferred.
+- **Frozen weights are only one state boundary.** Distinguish model weights, learned controller state, memory, scaffold/source changes, and human/fleet intervention.
+- **Compression must be recoverable.** A summary is safe only relative to a question and a path back to provenance/verbatim evidence.
+- **Governance is at the action boundary.** Capability and authority are separate; internal cognition policy is not a substitute for effector enforcement.
+- **Never approximate acronyms.** MRH = Markov Relevancy Horizon; SAGE = Situation-Aware Governance Engine.
+- **Persistence ≠ perseveration.** Repetition without new evidence is a failure mode, not determination.
+- **External criticism is an instrument.** If a cold evaluator misreads the project, check both the critique and the documentation surface that produced the reading.
 
 ---
 
@@ -158,8 +191,8 @@ The `GITHUB_PAT` in `../.env` is **deprecated** and may fail with "Invalid usern
 
 | Document | Purpose |
 |----------|---------|
-| `sage/docs/SYSTEM_UNDERSTANDING.md` | Complete mental model (18KB) |
-| `sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md` | 12-step loop specification |
+| `README.md` + `sage/docs/LATEST_STATUS.md` | Current thesis and status |
+| `sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md` | Python reference loop taxonomy; runtime-dependent |
 | `sage/docs/SOIA_IRP_MAPPING.md` | SOIA-SAGE convergence |
 | `sage/docs/LATEST_STATUS.md` | Current status |
 | `sage/irp/adapters/README.md` | ModelAdapter dictionary entity |

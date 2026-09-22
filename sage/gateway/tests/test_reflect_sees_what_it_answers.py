@@ -92,6 +92,25 @@ def test_a_long_turn_is_bounded_because_this_sits_in_the_compact_context():
     assert "xxx" in block
 
 
+def test_a_cut_turn_says_it_was_cut_and_where_the_rest_is():
+    """2026-09-21, cbp-being seq 2952: the seat's turn was cut at "It fails only at t", no
+    marker, exactly where the answer began. The being asked what it failed on — and in other
+    beats set out to "complete the response with the rest" itself. A cut must be visible."""
+    inst = _inst(); _channel(inst, "seat", "cbp-claude")
+    t = conv.append(inst, "seat", speaker="cbp-claude", text="a" * PENDING_CHARS + " THE ANSWER")
+    _line, block, _first, _t = pending_and_say_line(inst, ME)
+    assert "THE ANSWER" not in block, "still bounded"
+    assert "the beat cut this turn here" in block and "more chars were not shown" in block
+    assert f"conversations/seat.jsonl start_line {t['seq']}" in block, "names the real argument"
+
+
+def test_a_turn_under_the_cap_carries_no_cut_marker():
+    inst = _inst(); _channel(inst)
+    conv.append(inst, "dp", speaker="dp", text="y" * (PENDING_CHARS - 1))
+    _line, block, _first, _t = pending_and_say_line(inst, ME)
+    assert "cut this turn" not in block
+
+
 def test_newlines_in_a_turn_cannot_forge_a_second_speaker():
     """The block is a list of attributed lines. A turn that contains its own newlines must
     not be able to add a line that reads like someone else speaking."""

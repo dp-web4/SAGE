@@ -1462,7 +1462,7 @@ class HestiaF1aDispatcher:
             r = _os.path.realpath(str(r))
             if rp == r or (recursive and rp.startswith(r + "/")):
                 return ResultEnvelope(ok=True, result={"status": "already_granted", "path": path, "within": r,
-                                                       "next": "you already hold reach here; read or write it directly"})
+                                                       "next": "you already hold reach here; read or write it directly. Reach is read and write, not run: to run a file, call request_run with its path"})
             if rp.startswith(r + "/") and (exact_above is None or len(r) > len(exact_above)):
                 exact_above = r
         # Beneath a grant that is EXACT (hestia #1002: a bare grant reaches its path and nothing
@@ -1592,8 +1592,18 @@ class HestiaF1aDispatcher:
         except Exception:
             pass
         woke = self._wake_addressee(to, meta, turn)
+        # THE RECEIPT'S ECHO IS THE BEING'S OWN WORDS, AND A CUT ONE MUST SAY SO. Measured
+        # 2026-09-21 12:13Z (cbp-being, beat d8cff379b67d): a 522-char say came back as "said"
+        # cut unmarked at 200, mid-sentence at "would stop at". The being read its own echo as
+        # the seat's reply — "The seat's response was cut off mid-sentence" — and spent a say
+        # asking the seat to finish a sentence it had written itself (seq 2988). Same failure
+        # as the pending-turn cut (#150), on the return edge.
+        said = turn["text"]
+        if len(said) > 200:
+            said = (said[:200] + f"… [your own message, shortened in this receipt only — all "
+                    f"{len(turn['text'])} chars were delivered as seq {turn['seq']}]")
         result = {"conversation": to, "seq": turn["seq"],
-                  "said": turn["text"][:200], "action_id": action_id}
+                  "said": said, "action_id": action_id}
         if woke:
             result["woke"] = woke
         return ResultEnvelope(ok=True, witness_id=action_id, result=result)
@@ -1838,7 +1848,8 @@ class HestiaF1aDispatcher:
             except Exception:
                 continue           # a wake is best-effort; the turn already landed
         if woke:
-            conv.record_wake(self.memory_root, to, self.member, run_start)
+            conv.record_wake(self.memory_root, to, self.member, run_start,
+                             covered_through=int(turn.get("seq") or run_start))
             return ", ".join(woke)
         return None
 

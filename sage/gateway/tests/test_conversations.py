@@ -260,7 +260,7 @@ def test_a_long_turn_is_shown_capped_and_points_at_its_whole(tmp_path):
     assert long in full                                                  # uncapped by default
     capped = C.render_for_being(tmp_path, "b", turn_chars=1000)
     assert long not in capped and "x" * 1000 in capped and "x" * 1001 not in capped
-    assert f"+4000 chars; the whole turn: memory_read conversations/s.jsonl from_line {t['seq']} lines 1" in capped
+    assert f"+4000 chars; the whole turn: memory_read path conversations/s.jsonl start_line {t['seq']}" in capped
     assert "short" in capped                                             # a short turn is untouched
     assert C.recent(tmp_path, "s")[-1]["text"] == long                   # the record is whole
 
@@ -341,7 +341,7 @@ def test_an_answered_turn_is_shown_briefly_and_a_live_one_in_full():
     # the closed exchange: shortened, and the marker says where the rest is
     assert ("S" * ANSWERED_TURN_CHARS) in out
     assert ("S" * (ANSWERED_TURN_CHARS + 1)) not in out
-    assert "memory_read conversations/seat.jsonl" in out
+    assert "memory_read path conversations/seat.jsonl start_line" in out
     # the being's OWN answered turn is history too
     assert ("B" * (ANSWERED_TURN_CHARS + 1)) not in out
     # what arrived after it last spoke is live and uncut at this rung

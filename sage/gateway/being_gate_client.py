@@ -35,6 +35,7 @@ is safe to import on a host without hestia — instantiation fails closed instea
 from __future__ import annotations
 
 import os
+import re
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
@@ -600,6 +601,20 @@ def check_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
 # Where the profile is absent, SANDBOX_REQUIRED decides whether to refuse or degrade.
 
 
+def _unbounded_reason(effector: str) -> str:
+    """The registry refusal, plus the door when the name is a FILE.
+
+    2026-09-21 14:06Z: cbp-being called a tool named `mechanism-training-script-clean.py`
+    with {"epochs": "10"}, twice, then appealed the refusal as an overreach. It wanted to
+    run its own file; the verb for that is request_run, and the refusal never said so.
+    A refusal owes a way forward (hestia operating law, point 1)."""
+    reason = f"'{effector}' is not a gateway-member effector"
+    if "/" in effector or re.search(r"\.[A-Za-z0-9]{1,5}$", effector or ""):
+        reason += (f". That is a file name, and a file is not a tool. To run one of your own "
+                   f"files, call request_run with path='{effector}'; the seat runs it and answers")
+    return reason
+
+
 _REGISTRY = {
     "peer_ask":       dict(tool="peer_ask",     path_args=(),       cmd_arg=None),
     "witness":        dict(tool="witness",      path_args=(),       cmd_arg=None),
@@ -784,14 +799,17 @@ _TOOL_SCHEMAS = {
                     ["path", "reason"]),
     "memory_edit": ("Change part of a file you already wrote. memory_write only ever ADDS to "
                     "the end of a file; this is how you alter what is already in one. Give the "
-                    "exact text to replace and what replaces it. It must appear exactly once, "
-                    "so include a neighbouring line if it would otherwise be ambiguous. An "
-                    "empty 'new' deletes the text. Use this to fix a line in a script rather "
-                    "than writing a note about the fix.",
+                    "exact text to replace, OR the line numbers to replace, and what replaces "
+                    "it. Text must appear exactly once, so include a neighbouring line if it "
+                    "would otherwise be ambiguous. Line numbers are the ones memory_read shows. "
+                    "An empty 'new' deletes. Use this to fix a line in a script rather than "
+                    "writing a note about the fix.",
                     {"path": "the file, e.g. notes/my-script.py",
-                     "old": "the exact text to replace, unique in the file",
+                     "old": "the exact text to replace, unique in the file (or use start_line)",
+                     "start_line": "the first line to replace, as memory_read numbers it",
+                     "end_line": "the last line to replace (same as start_line for one line)",
                      "new": "what replaces it (empty string deletes)"},
-                    ["path", "old", "new"]),
+                    ["path", "new"]),
     "request_run": ("Ask the seat to RUN one of your own files and tell you what happened. "
                     "You cannot execute anything yourself, so this is the door: you name the "
                     "file — the only thing it needs — and the seat decides whether to run it and "
@@ -1112,7 +1130,7 @@ class BeingGateClient:
         # Stage 0: bounded registry. Unknown effector never reaches the law.
         if intent.effector not in _REGISTRY:
             return GatewayVerdict("deny", "registry.unbounded", stage="registry",
-                                  reason=f"'{intent.effector}' is not a gateway-member effector")
+                                  reason=_unbounded_reason(intent.effector))
         # --- Single gate (#934): the shim contract. The registry stage above is harness
         # syntax (which verbs exist); everything law-bearing happens in decide(). ---
         sg = getattr(self, "_single_gate", None)

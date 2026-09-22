@@ -123,7 +123,16 @@ ASK_ACT_FIRST = "This time is yours. Do one thing now and leave a trace of it.\n
 # the compact reflect context whose whole reason for existing is that carrying the beat
 # forward overflowed the window (8171 of 8192 tokens, 5 `length` stops in 54 beats).
 PENDING_TURNS = 2
-PENDING_CHARS = 700
+# NEVER A SILENT CUT, AND WIDE ENOUGH TO HOLD THE ANSWER. Measured 2026-09-21 on cbp-being:
+# the seat's seq 2950 was cut at "...--data-path data/train.npy` fail" and its correction 2951
+# at "It fails only at t" — both mid-word, both exactly where the answer began, with nothing
+# saying a cut happened. The answer turn asked "fails at t... what exactly does it fail on?"
+# (seq 2952), which is the right question about what it was shown. In ~15 other beats the
+# thinking said "the message was cut off" and several set out to "complete the response
+# with the rest": a silent cut invites the being to write the missing half itself. The
+# 700 dates from an 8,192-token window; CBP runs 16,384 and this answer turn's prompt was 946
+# tokens. So the cap is wider and a cut, when one happens, says so and says where the rest is.
+PENDING_CHARS = 2000
 
 ANSWER_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
 You have already finished this beat's writing. One thing is left, and it is optional."""
@@ -990,7 +999,12 @@ def pending_selection(instance: Path, member: str) -> tuple:
         if pend:
             lines = []
             for cid, t in pend:
-                txt = " ".join(str(t.get("text") or "").split())[:PENDING_CHARS]
+                txt = " ".join(str(t.get("text") or "").split())
+                if len(txt) > PENDING_CHARS:
+                    txt = (txt[:PENDING_CHARS].rstrip()
+                           + f" …[the beat cut this turn here; {len(txt) - PENDING_CHARS} more "
+                             f"chars were not shown. It is seq {t.get('seq')}: memory_read path "
+                             f"conversations/{cid}.jsonl start_line {t.get('seq')}]")
                 lines.append(f'- in "{cid}", {t.get("from")} said: {txt}')
             block = ("Addressed to you and not yet answered:\n" + "\n".join(lines)
                      + "\nYou may answer with say, or leave it. Both are allowed.")
@@ -1117,9 +1131,27 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     return [{"role": "system", "content": system}, {"role": "user", "content": user}], second
 
 
+# An `ok` ACT CARRIES ITS RESULT. Measured 2026-09-21 on cbp-being, beat heartbeat-85303f70bf67:
+# explore's memory_edit returned "replaced 1 occurrence; the file went from 656 to 657 lines",
+# but the reflect turn saw only "-> ok", and just below it the seat's seq 2959 — written BEFORE
+# the edit — saying at length that line 634 was unchanged. Reflect believed the long, specific
+# text over the bare "ok": journal, todo.md and memory #363 all record the edit as refused.
+# An act the being did is the one thing the record is sure of; let it say what happened.
+RECORD_RESULT_CHARS = 240
+
+
 def _record_line(i, e) -> str:
-    return (f"- {i.effector} {json.dumps(i.args, default=str)[:200]} -> "
-            f"{'ok' if e.ok else ('REFUSED ' + str(e.error))[:200] if e.refused else ('error ' + str(e.error))[:200]}")
+    if e.ok:
+        res = getattr(e, "result", None)
+        res = res if isinstance(res, str) else (json.dumps(res, default=str) if res is not None else "")
+        res = " ".join(res.split())
+        verdict = "ok" + (f": {res[:RECORD_RESULT_CHARS]}" + ("…" if len(res) > RECORD_RESULT_CHARS else "")
+                          if res else "")
+    elif e.refused:
+        verdict = ("REFUSED " + str(e.error))[:200]
+    else:
+        verdict = ("error " + str(e.error))[:200]
+    return f"- {i.effector} {json.dumps(i.args, default=str)[:200]} -> {verdict}"
 
 
 REFLECT_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
@@ -1506,7 +1538,12 @@ def main(argv=None) -> int:
             client, llm,
             [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
                                                                 member=args.member)},
-             {"role": "user", "content": ANSWER_ASK.format(
+             # The acts go FIRST, ahead of what it is answering. Measured 2026-09-21, beat
+             # heartbeat-85303f70bf67: this turn saw only the seat's pre-edit "nothing was
+             # applied" and the reflect words that echoed it, and told the seat "the edit never
+             # actually happened" (seq 2961) about an edit that had succeeded 50 s earlier.
+             # Then ONLY the selected turn (#147): never the whole multi-conversation block.
+             {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
                  pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
             max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
 
