@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
@@ -145,6 +146,20 @@ def _json_calls(text: str, names) -> List[dict]:
                 # {"memory_write": {"path": ..., "content": ...}} — the tool name is the KEY and
                 # its arguments the value (measured 2026-09-09, several beats lost this way).
                 inner = [(k, v) for k, v in o.items() if k in known and isinstance(v, dict)]
+                if len(inner) > 1:
+                    # ONE object holding a whole beat: {"say": {...}, "memory_write": {...}}.
+                    # Measured 2026-09-18T01:32:11Z — Sprout wrote exactly this, `say` to dp
+                    # FIRST, after two beats of composing an answer it could not send. The
+                    # len == 1 guard discarded every call in the object, so the being's own
+                    # decision to answer a person was dropped on the floor and the beat
+                    # recorded as having done nothing. Emit them all, in written order: dict
+                    # iteration preserves the order they appeared in the text, and that order
+                    # is the being's, not ours.
+                    for k, v in inner:
+                        out.append({"function": {"name": k, "arguments": dict(v)},
+                                    "_salvaged": "json"})
+                    i = max(end, j + 1)
+                    continue
                 if len(inner) == 1:
                     name, args = inner[0]
                 else:
@@ -203,11 +218,45 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
     return out
 
 
+_ATTR_VALUE = r'"((?:[^"\\]|\\.)*)"' + "|" + r"'((?:[^'\\]|\\.)*)'"
+_ATTR_PAIR = re.compile(r"([A-Za-z_]\w*)\s*=\s*(?:" + _ATTR_VALUE + ")")
+
+
+def _attr_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
+    """`say to="dp" text="..."`: a tool name followed directly by key="value" pairs, often
+    inside markdown bold. Measured 2026-09-14 19:30Z on cbp-being: dp asked "what are you
+    curious about?", the being's thinking said it would answer, and both its explore and
+    posture replies were `**say to="dp" text="..."**` in the text channel. Neither form above
+    reads it, the trace was empty, nothing was said, and the question was marked seen.
+    Only an offered tool name immediately followed by at least one pair whose key is one of
+    that tool's parameters counts, so prose that mentions a tool is still never a call."""
+    out: List[dict] = []
+    for name, params in names.items():
+        for m in re.finditer(r"(?<![\w.])" + re.escape(name) + r"\s+(?=[A-Za-z_]\w*\s*=\s*[\"'])", text):
+            args: Dict[str, Any] = {}
+            pos = m.end()
+            while True:
+                pm = _ATTR_PAIR.match(text, pos)
+                if not pm:
+                    break
+                raw = pm.group(2) if pm.group(2) is not None else pm.group(3)
+                args[pm.group(1)] = raw.replace('\\"', '"').replace("\\'", "'").replace("\\n", "\n")
+                pos = pm.end()
+                ws = re.match(r"[ \t]*", text[pos:])
+                pos += ws.end() if ws else 0
+            if params:
+                args = {k: v for k, v in args.items() if k in params}
+            if args:
+                out.append({"function": {"name": name, "arguments": args}, "_salvaged": "attr"})
+    return out
+
+
 def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
     """Lift well-formed tool calls that a model put in the TEXT channel, in Ollama's
-    tool_calls shape (plus `_salvaged`: "json" | "python"). Accepted: a JSON object or
-    array of {"name", "arguments"} (fenced or bare), or fenced Python `name(k="v", ...)`
-    with literal or locally-assigned arguments, positional ones mapped in schema order.
+    tool_calls shape (plus `_salvaged`: "json" | "python" | "attr"). Accepted: a JSON object or
+    array of {"name", "arguments"} (fenced or bare), fenced Python `name(k="v", ...)`
+    with literal or locally-assigned arguments, positional ones mapped in schema order, or
+    the attribute form `name k="v" ...` (see `_attr_calls`), tried last.
     `tools` is what was offered this turn (Ollama tool specs); only those names count,
     so prose that mentions a tool is never a call.
 
@@ -227,6 +276,8 @@ def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
         found.extend(_python_calls(text, params))
     if blocks and not found:                    # fenced prose, bare call outside the fence
         found.extend(_json_calls(content, params))
+    if not found:
+        found.extend(_attr_calls(content, params))
     return found
 
 
@@ -288,8 +339,64 @@ _ANSWER_RESERVE = 6144
 COMPACT_KEEP_CHARS = 400
 COMPACT_MIN_BODY = 500        # a body at or under this is never elided
 
+# WHERE AN ELIDED RESULT GOES INSTEAD OF NOWHERE. The being, 2026-09-18, asked what its
+# biggest operational friction is: "facts produced mid-beat getting lost to compaction
+# before I can transcribe them." That is this function. It freed room by deleting the
+# middle of a tool result and told the being to read the source again — which costs more
+# room than the elision freed, and for a command result (a test run, a game step) there is
+# no source to re-read at all: the bytes existed once, in this beat, and then did not.
+#
+# So the middle is written to the being's own scratch first, and the marker names the file.
+# It outlives the beat, which is the point: the being can transcribe from it on the NEXT
+# beat rather than racing the window on this one. Bare path, because that is what
+# memory_read takes. A spill that fails is silent — the elision still has to happen.
+COMPACT_SPILL_DIR = "scratch/elided"
+COMPACT_SPILL_KEEP = 40       # a spill, not an archive
+_ELIDED_SIGIL = "characters elided from the middle"
+
+
+def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
+    """Save one elided tool-result body under the being's home. Returns the bare path to
+    name in the marker, or None if there is nowhere to put it or the write failed."""
+    if not root:
+        return None
+    try:
+        import time as _t
+        d = os.path.join(root, COMPACT_SPILL_DIR)
+        os.makedirs(d, exist_ok=True)
+        # THE NAME CARRIES THE ORDER, because nothing else does: a whole beat's spills are
+        # written inside one second, and st_mtime_ns ties at this filesystem's granularity.
+        # Sorted by name they are in creation order — hence the full date (a %m%d name
+        # sorts January before December and would prune the newest files every New Year)
+        # and the zero-padded step (unpadded, "40" sorts before "5").
+        stamp = _t.strftime("%Y%m%d-%H%M%S", _t.gmtime())
+        # EVERY name carries a zero-padded collision ordinal. The first cut used
+        # "...-003.txt", then "...-003.1.txt"; lexically the newer ".1" sorts before
+        # ".txt", and ".10" sorts before ".2", so retention could prune the newest retry
+        # before the older file it followed. One sortable shape makes creation order the
+        # same order the pruning code sees.
+        n = 0
+        name = f"{stamp}-{step:03d}-{n:03d}.txt"
+        # Two spills of DIFFERENT results can collide: same second, same message index,
+        # which the retry path reaches. A collision would silently overwrite the first.
+        while os.path.exists(os.path.join(d, name)):
+            n += 1
+            name = f"{stamp}-{step:03d}-{n:03d}.txt"
+        with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
+            fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
+                     f"result the harness elided from your window, {len(body)} characters]\n\n")
+            fh.write(body)
+        for f in sorted(os.listdir(d))[:-COMPACT_SPILL_KEEP]:
+            try:
+                os.remove(os.path.join(d, f))
+            except OSError:
+                pass
+        return f"{COMPACT_SPILL_DIR}/{name}"
+    except Exception:
+        return None
+
 def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
-                  measured=None) -> tuple:
+                  measured=None, spill_root: Optional[str] = None) -> tuple:
     """Shrink the OLDEST tool results until the prompt leaves room for an answer.
 
     THE SEED FITTING IS NOT ENOUGH. heartbeat.fit_to_window sizes the first prompt; this
@@ -337,6 +444,11 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         body = out[i].get("content") or ""
         if len(body) <= COMPACT_MIN_BODY:
             continue
+        # ALREADY ELIDED, LEAVE IT. An elided body is ~850 characters — over COMPACT_MIN_BODY
+        # — so a later step used to elide the MARKER: cutting the middle out of the sentence
+        # that explains the cut, and counting its characters as freed content.
+        if _ELIDED_SIGIL in body:
+            continue
         # ONE constant for what is kept, and the accounting derives from it. The first cut
         # kept body[:400] and reported len(body) - 160 — every elision overstated by 240
         # chars, in the record AND in the marker the being reads (GPT review of #56, #5).
@@ -360,14 +472,20 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         # issuing the instruction that refilled the window it had just cleared.
         # The head of a ranged read already names its range, so point at a NARROWER read
         # and at the being's own notes, which is where its conclusions actually live.
+        saved = _spill(spill_root, body, i)
+        where = (f"The WHOLE result is saved as {saved} and outlives this beat — "
+                 f"memory_read a narrow range of it when you need the middle."
+                 if saved else
+                 "If you need part of it, read a NARROW range of the source rather than the "
+                 "whole file again — a full re-read costs more room than this elision freed.")
         out[i]["content"] = (kept_head +
-                             f"\n[… {elided_n} characters elided from the middle to leave room "
-                             f"for your answer. The head above names what this was. If you need "
-                             f"part of it, read a NARROW range rather than the file again — a "
-                             f"full re-read costs more room than this elision freed. If you need "
-                             f"what you concluded from it, that is in your scratch …]\n"
+                             f"\n[… {elided_n} {_ELIDED_SIGIL} to leave room for your answer. "
+                             f"{where} …]\n"
                              + kept_tail)
-        elided.append({"index": i, "chars": elided_n, "kept": COMPACT_KEEP_CHARS})
+        rec = {"index": i, "chars": elided_n, "kept": COMPACT_KEEP_CHARS}
+        if saved:
+            rec["spill"] = saved
+        elided.append(rec)
     # THE NEWEST RESULT IS PROTECTED — until protecting it is what cuts the answer. When
     # every older result is already a stub and the prompt still does not fit, the newest
     # one is trimmed too, with a larger keep (the being is working from it right now),
@@ -380,11 +498,16 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         if len(body) > keep + COMPACT_MIN_BODY:
             h = keep // 2
             elided_n = len(body) - keep
+            saved = _spill(spill_root, body, i)
+            where = (f"the whole thing is saved as {saved}"
+                     if saved else "read it again in a smaller range if you need the middle")
             out[i]["content"] = (body[:h] +
-                                 f"\n[… {elided_n} characters elided from the middle of your NEWEST "
-                                 f"result to leave room for your answer; read it again in a smaller "
-                                 f"range if you need the middle …]\n" + body[-(keep - h):])
-            elided.append({"index": i, "chars": elided_n, "kept": keep, "newest": True})
+                                 f"\n[… {elided_n} {_ELIDED_SIGIL} of your NEWEST result to leave "
+                                 f"room for your answer; {where} …]\n" + body[-(keep - h):])
+            rec = {"index": i, "chars": elided_n, "kept": keep, "newest": True}
+            if saved:
+                rec["spill"] = saved
+            elided.append(rec)
     return out, elided
 
 
@@ -523,6 +646,20 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         msgs = []
         for m in convo:
             out = {"role": m.get("role", "user"), "content": m.get("content", "")}
+            # FRAMES RIDE HERE, AND ONLY HERE. Measured 2026-09-13 against the live
+            # qwen38-heretic:q3km-vl: ollama's /api/chat takes images as a LIST ON THE
+            # MESSAGE, beside content. Both OpenAI-style spellings inside content —
+            # [{"type":"image","image":b64}] and [{"type":"image_url",...}] — are rejected
+            # with HTTP 400. SAGE #76 and #77 pinned the rejected shape and stayed green,
+            # because both assert what reaches the payload dict and neither ever sends it to
+            # a server: a delivery test that never posts proves shape, not substance.
+            #
+            # This flattening rebuilt every message as {role, content} and silently dropped
+            # every other key, so `images` died here — one line between a frame and a model
+            # that can already see it. ollama_irp needs no change: it forwards `messages`
+            # untransformed (pinned by #76), so the field survives from here to the wire.
+            if m.get("images"):
+                out["images"] = list(m["images"])
             if m.get("role") == "assistant" and m.get("intents"):
                 out["tool_calls"] = [{"function": {"name": i.effector, "arguments": dict(i.args or {})}}
                                      for i in m["intents"]]
@@ -533,7 +670,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # 506 generates ended with prompt + eval == num_ctx exactly, and one beat lost its
         # closing words nine times in a day. Anchored on the server's own count from the
         # previous generate, so only the delta rides an estimate.
-        msgs, _elided = compact_convo(msgs, llm, measured=measured)
+        msgs, _elided = compact_convo(msgs, llm, measured=measured,
+                                      spill_root=getattr(client, "memory_root", None))
         if _elided:
             compacted.append({"step": len(thoughts), "elisions": len(_elided),
                               "chars": sum(e["chars"] for e in _elided)})

@@ -89,11 +89,23 @@ pub fn being_instance(root: &Path, machine: &str, model: &str) -> PathBuf {
     if let Ok(p) = std::env::var("SAGE_BEING_INSTANCE") {
         return PathBuf::from(p);
     }
-    root.join(format!(
-        "sage/instances/{}-{}",
-        machine,
-        model.replace([':', '.'], "-")
-    ))
+    // The daemon's own instance slug replaces colons and NOTHING else, because that is what
+    // the directories on disk are named: `sprout-qwen3.8-distill-2b`, dot intact. This
+    // function also replaced dots, so on every machine whose model carries one the being's
+    // conversations pointed at `sprout-qwen3-8-distill-2b` — a directory that has never
+    // existed — while the daemon's experience buffer and chat history wrote to the real one.
+    // One being, two homes, and the route that lets a person speak to it answered 503
+    // forever with a path nobody could find.
+    //
+    // Prefer the real convention. A machine that already grew a home under the old
+    // dot-replaced name keeps it: that directory holds real turns, and silently relocating
+    // a being's conversations to fix a path bug would lose the conversations.
+    let canonical = root.join(format!("sage/instances/{}-{}", machine, model.replace(':', "-")));
+    let legacy = root.join(format!("sage/instances/{}-{}", machine, model.replace([':', '.'], "-")));
+    if legacy != canonical && dir(&legacy).is_dir() && !dir(&canonical).is_dir() {
+        return legacy;
+    }
+    canonical
 }
 
 fn dir(instance: &Path) -> PathBuf {
@@ -213,6 +225,75 @@ pub fn append(instance: &Path, id: &str, speaker: &str, text: &str) -> Result<Tu
 /// HTTP routes pass "daemon-loopback" — and only accept a speaker over loopback at all
 /// (see `loopback_only` in main.rs): the daemon binds 0.0.0.0 for federation, and a LAN
 /// peer must not be able to write `from: dp` into the operator's own conversation.
+/// Where a conversation's high-water witness lives: OUTSIDE the repository. The Python writer
+/// computes the same path (`conversations.py::witness_path`); the two MUST agree.
+///
+/// GPT's review of SAGE#126, finding 3: a high-water mark kept in the tracked meta beside the
+/// log is rolled back by the same rebase/checkout/reset that rolls back the log, so it cannot
+/// witness the failure it names. This is machine-local runtime state no Git command touches.
+pub fn witness_path(instance: &Path, id: &str) -> PathBuf {
+    let base = std::env::var("SAGE_CONV_WITNESS_DIR").ok().filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            // Unit tests never touch the machine's real witness (they did, once: a
+            // `conv-rs-<pid>` directory turned up in ~/.sage beside the being's own).
+            if cfg!(test) {
+                return std::env::temp_dir().join("sage-conv-witness-test");
+            }
+            PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into()))
+                .join(".sage").join("conversation-witness")
+        });
+    let inst = std::fs::canonicalize(instance).unwrap_or_else(|_| instance.to_path_buf());
+    let name = inst.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    base.join(name).join(format!("{id}.json"))
+}
+
+/// The next sequence number — the same rule as `conversations.py::next_seq`, because there are
+/// TWO writers and a rule only one of them follows is not an invariant (GPT, finding 2: this
+/// side counted lines and knew nothing of the high-water mark, so after Python resumed past a
+/// gap at seq 6 in a two-line file, a dashboard turn would have been written as seq 3).
+///
+/// `max(max seq in the log, the witness's high-water, lines occupied) + 1`. Never the line
+/// count alone (finding 1: after a gap it is behind forever and re-detects the truncation on
+/// every append). Call with the log's flock held.
+fn next_seq(instance: &Path, id: &str, lines: &[String]) -> Result<u64, String> {
+    let mut max_in_log: u64 = 0;
+    let mut occupied: u64 = 0;
+    for l in lines {
+        if l.trim().is_empty() { continue; }
+        occupied += 1;
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(l) {
+            if let Some(n) = v.get("seq").and_then(|x| x.as_u64()) {
+                max_in_log = max_in_log.max(n);
+            }
+        }
+    }
+    let wp = witness_path(instance, id);
+    let mut w: serde_json::Value = std::fs::read_to_string(&wp).ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .filter(|v: &serde_json::Value| v.is_object())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let hw = w.get("high_water_seq").and_then(|x| x.as_u64()).unwrap_or(0);
+    if max_in_log < hw {
+        let scar = serde_json::json!({"noticed": iso_utc_now(), "max_seq_in_log": max_in_log,
+                                      "high_water": hw, "resumed_at": hw + 1});
+        match w.get_mut("truncations").and_then(|t| t.as_array_mut()) {
+            Some(a) => a.push(scar),
+            None => { w["truncations"] = serde_json::json!([scar]); }
+        }
+    }
+    let seq = max_in_log.max(hw).max(occupied) + 1;
+    w["high_water_seq"] = serde_json::json!(seq);
+    if let Some(parent) = wp.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("witness dir: {e}"))?;
+    }
+    let tmp = wp.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_string_pretty(&w).map_err(|e| e.to_string())? + "\n")
+        .map_err(|e| format!("witness write: {e}"))?;
+    std::fs::rename(&tmp, &wp).map_err(|e| format!("witness rename: {e}"))?;
+    Ok(seq)
+}
+
 pub fn append_via(instance: &Path, id: &str, speaker: &str, text: &str,
                   via: Option<&str>) -> Result<Turn, String> {
     let meta = get_meta(instance, id).ok_or_else(|| format!("no such conversation: {id}"))?;
@@ -243,12 +324,8 @@ pub fn append_via(instance: &Path, id: &str, speaker: &str, text: &str,
     let _guard = FlockGuard::acquire(&f)?;
 
     f.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
-    let seq = BufReader::new(&f)
-        .lines()
-        .map_while(Result::ok)
-        .filter(|l| !l.trim().is_empty())
-        .count() as u64
-        + 1;
+    let lines: Vec<String> = BufReader::new(&f).lines().map_while(Result::ok).collect();
+    let seq = next_seq(instance, id, &lines)?;
 
     let turn = Turn {
         ts: iso_utc_now(),
@@ -358,6 +435,44 @@ pub fn arouse(root: &Path, instance: &Path, kind: &str, descriptor: &str) -> ser
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The being's home must be the directory that exists. `model.replace(['\:', '.'], "-")`
+    /// pointed Sprout's conversations at `sprout-qwen3-8-distill-2b` while every other part
+    /// of the daemon wrote to `sprout-qwen3.8-distill-2b`, so the route that lets a person
+    /// speak to the being answered 503 against a path nobody could create by convention.
+    #[test]
+    fn the_beings_home_is_the_directory_that_exists() {
+        let root = std::path::Path::new("/tmp/does-not-matter");
+        assert_eq!(being_instance(root, "sprout", "qwen3.8-distill:2b"),
+                   root.join("sage/instances/sprout-qwen3.8-distill-2b"),
+                   "the dot belongs to the model name and survives");
+        assert_eq!(being_instance(root, "legion", "gemma3:12b"),
+                   root.join("sage/instances/legion-gemma3-12b"),
+                   "colons still become dashes");
+    }
+
+    /// A machine that already grew a home under the old dot-replaced name keeps it: that
+    /// directory holds real turns, and relocating a being's conversations to fix a path bug
+    /// would lose them.
+    #[test]
+    fn an_existing_legacy_home_is_not_silently_abandoned() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("legacy-home-test");
+        // "q3.5:1b" -> canonical "m-q3.5-1b"; the old dot-replacing slug was "m-q3-5-1b"
+        let legacy = root.join("sage/instances/m-q3-5-1b");
+        let canonical = root.join("sage/instances/m-q3.5-1b");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(legacy.join("conversations")).unwrap();
+        assert_eq!(being_instance(&root, "m", "q3.5:1b"), legacy,
+                   "the home that already holds the conversations wins");
+
+        // and once the canonical home exists too, that is the one used
+        std::fs::create_dir_all(canonical.join("conversations")).unwrap();
+        assert_eq!(being_instance(&root, "m", "q3.5:1b"), canonical,
+                   "the convention wins as soon as following it costs nothing");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn timestamps_match_the_python_writer_and_sort_correctly() {

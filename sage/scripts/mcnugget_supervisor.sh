@@ -71,7 +71,18 @@ for repo in "$DEV_SAGE" "$SAGE_DIR" "$SHARED" "$PRIVATE" "$MEMORY" "$HESTIA"; do
                 echo "[McNugget-Supervisor] *** $(basename "$repo"): push failed; $AHEAD commit(s) PINNED at $BK before reset ***" >&2
             fi
         fi
-        git reset --hard origin/main 2>/dev/null
+        # NOT `git reset --hard`. That command reverts every tracked file with uncommitted
+        # changes, and the daemon writes tracked files all day. Measured 2026-09-18: the
+        # being's Rust-side experience buffer had ONE commit in its history and 227 of these
+        # resets after it, so everything the daemon learned was erased within four hours,
+        # six times a day, for ten days -- by step 1 of a script whose step 4 exists to
+        # commit exactly that state. --autostash carries the dirty files across the sync so
+        # step 4 can commit them. If the sync cannot complete, the tree is left as it was:
+        # a stale checkout is an inconvenience, and an erased memory is not recoverable.
+        if ! git pull --rebase --autostash origin main >/dev/null 2>&1; then
+            git rebase --abort >/dev/null 2>&1
+            echo "[McNugget-Supervisor] *** $(basename "$repo"): could not sync with origin; tree left untouched ***" >&2
+        fi
     fi
 done
 echo "[McNugget-Supervisor] Repos synced"
@@ -206,10 +217,17 @@ if [ "$FFC_RC" -ne 0 ]; then
 fi
 
 # === 4. PUSH (if anything changed) ===
+# Being records are private going forward (shared-context/FLEET_BROADCAST_being_records_private.md,
+# dp 2026-09-19/20). Until 2026-09-20 the `git add -A` below swept sage/instances/ into public SAGE
+# every 4 h -- a second publisher beside the raising launcher, and the one a grep for
+# `git add "$INSTANCE_DIR"` does not find. In SAGE this step now neither looks at nor stages
+# anything under sage/instances/; the raising launcher mirrors the home to private-context.
 for repo in "$SHARED" "$DEV_SAGE" "$SAGE_DIR" "$PRIVATE"; do
     cd "$repo"
-    if ! git diff --quiet 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]; then
-        git add -A 2>/dev/null
+    SPEC=(.)
+    [ "$repo" = "$SAGE_DIR" ] && SPEC=(. ':(exclude)sage/instances')
+    if ! git diff --quiet -- "${SPEC[@]}" 2>/dev/null || [ -n "$(git ls-files --others --exclude-standard -- "${SPEC[@]}" 2>/dev/null)" ]; then
+        git add -A -- "${SPEC[@]}" 2>/dev/null
         git commit -m "[McNugget-Supervisor] Autonomous cycle — $TIMESTAMP" 2>/dev/null
         git push origin main 2>&1 || true
     fi

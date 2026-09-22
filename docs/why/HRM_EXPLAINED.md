@@ -1,4 +1,10 @@
 # SAGE: Situation-Aware Governance Engine
+
+> **CURRENT-STATUS WARNING — historical architecture record.**  
+> This explainer preserves the project's 2025 HRM/SAGE design framing. It is useful for provenance, but it is **not** the authoritative description of SAGE as of September 2026. For current assessment, start with [README.md](../../README.md), [SAGE Current Status](../../sage/docs/LATEST_STATUS.md), and claim-specific merged code / experiment evidence.
+>
+> **MRH terminology:** MRH means **Markov Relevancy Horizon**. The section below titled "Dynamic MRH Navigation" describes a *fractal, multi-resolution approach* to moving between levels of abstraction; "multi-resolution" is not an expansion of the MRH acronym. Current operational framing: [MRH as a Relevance Contract](../../forum/insights/mrh-relevance-contract.md).
+
 ## An Exploratory Architecture for Living Intelligence
 
 *Note: This is a living document for an exploratory system. Specific metrics (parameter counts, memory sizes, layer counts) are implementation snapshots that will evolve as we discover what works. The principles and architecture patterns are what matter.*

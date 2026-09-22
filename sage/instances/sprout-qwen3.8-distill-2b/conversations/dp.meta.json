@@ -1,0 +1,14 @@
+{
+  "id": "dp",
+  "title": "dp and sprout-being",
+  "participants": [
+    "dp",
+    "sprout-being"
+  ],
+  "writable_by": [
+    "dp",
+    "sprout-being"
+  ],
+  "summary": "The operator's own channel. dp is asynchronous by rule; a gap here is reachability, not judgement.",
+  "created": "2026-09-17T22:09:07Z"
+}

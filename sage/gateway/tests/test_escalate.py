@@ -48,6 +48,20 @@ def test_no_wake_files_the_request_but_writes_no_note():
     assert r["escalated"] is True and r["scope_request"]["request_id"] == "scope-x" and filed
     assert "note" not in r and "wake" not in r and os.listdir(d) == []
 
+def test_reask_on_an_already_pending_request_writes_no_note_and_wakes_no_one():
+    # the being re-asking the same path beat after beat must not fire a seat session per beat
+    d = tempfile.mkdtemp(); e.NOTE_DIR = d
+    woke = []
+    orig_f, orig_w = e._file_scope_request, e.wake_seat
+    e._file_scope_request = lambda *a: {"request_id": "scope-x", "status": "already_pending"}
+    e.wake_seat = lambda *a, **k: woke.append(a) or {"sent": True}
+    try:
+        r = e.escalate("b", BeingIntent("memory_read", {"path": "/var/log/x/daemon.log"}), _ref("mrh.path", "outside"), "/x/instances/b")
+    finally:
+        e._file_scope_request, e.wake_seat = orig_f, orig_w
+    assert r["escalated"] is True and r["scope_request"]["status"] == "already_pending"
+    assert woke == [] and "note" not in r and "skipped" in r["wake"] and os.listdir(d) == []
+
 def test_two_notes_in_one_second_get_distinct_files():
     d = tempfile.mkdtemp(); e.NOTE_DIR = d
     orig = e.time.strftime
@@ -125,6 +139,106 @@ def test_bare_home_filename_is_the_home_file_and_a_real_ask(monkeypatch=None):
         esc._file_scope_request = orig
     assert filed.get("path") == os.path.abspath(root), (filed, r)
     assert r.get("escalated") is not False or "hint" not in r, r
+
+
+
+def test_an_ask_a_grant_could_not_help_is_flagged_not_filed():
+    """dp, 2026-09-18, reading the console: "it shows mrh, a non-existent directory/file
+    should be flagged as such, not mrh scope."
+
+    Specimen scope-017afe902e2c (sprout-being, 10:52:06Z): retire_note on
+    <repo>/sage/journal-2026-09-18.md. The gate said mrh.path, so a request went to dp asking
+    for reach over the shared SAGE package root — for a file that does not exist, through a
+    verb bounded to the being's own notes/ and scratch/ whatever is granted."""
+    import os, tempfile
+    from sage.gateway.escalate import escalate, ungrantable
+    from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope
+    root = tempfile.mkdtemp(prefix="ungrantable-")
+    # a real, readable directory standing in for the shared repo root, so absence is
+    # observable the way it was on the live request
+    repo = tempfile.mkdtemp(prefix="repo-")
+    deny = ResultEnvelope(ok=False, refused=True, verdict=GatewayVerdict("deny", "mrh.path", "outside"),
+                          error="mrh.path: outside your granted scope")
+    i = BeingIntent("retire_note", {"path": os.path.join(repo, "journal-2026-09-18.md"), "reason": "r"})
+    why = ungrantable(i, root)
+    assert why and len(why["reasons"]) == 2, "both blocks are named, not just the first"
+    assert any("does not exist" in r or "nothing exists" in r for r in why["reasons"])
+    assert any("notes/" in r and "whatever scope is granted" in r for r in why["reasons"])
+    r = escalate("sprout-being", i, deny, root, wake=False)
+    assert r["escalated"] is False and "scope_request" not in r, "nothing reaches the operator"
+    assert "memory_write is the verb" in r["hint"], "and the being is told the way forward"
+
+
+def test_a_real_ask_still_reaches_the_operator():
+    """The check must not swallow a genuine request for reach. A write to a path the being
+    does not hold is exactly what the scope queue is for."""
+    import os, tempfile
+    from sage.gateway.escalate import ungrantable
+    from sage.gateway.being_gate_client import BeingIntent
+    root = tempfile.mkdtemp(prefix="realask-")
+    # memory_write CREATES; a target that is not there yet is normal, never a reason to refuse
+    assert ungrantable(BeingIntent("memory_write", {"path": "/shared/plan.md", "content": "x"}), root) is None
+    # a peer's real file the being cannot reach
+    peer = tempfile.mkdtemp(prefix="peer-")
+    open(os.path.join(peer, "notes.md"), "w").write("x")
+    assert ungrantable(BeingIntent("memory_read", {"path": os.path.join(peer, "notes.md")}), root) is None
+    # no path at all: not this check's business
+    assert ungrantable(BeingIntent("peer_ask", {"to": "legion"}), root) is None
+
+
+def test_retire_note_on_a_real_note_in_its_own_home_is_grantable():
+    import os, tempfile
+    from sage.gateway.escalate import ungrantable
+    from sage.gateway.being_gate_client import BeingIntent
+    root = tempfile.mkdtemp(prefix="ownhome-")
+    os.makedirs(os.path.join(root, "notes"))
+    open(os.path.join(root, "notes", "a.md"), "w").write("x")
+    assert ungrantable(BeingIntent("retire_note", {"path": "notes/a.md", "reason": "r"}), root) is None
+    # the same name one level deeper is outside the verb's bound, whatever scope says
+    os.makedirs(os.path.join(root, "notes", "sub"))
+    open(os.path.join(root, "notes", "sub", "a.md"), "w").write("x")
+    assert ungrantable(BeingIntent("retire_note", {"path": "notes/sub/a.md", "reason": "r"}), root)
+
+
+
+def test_a_path_the_seat_cannot_see_is_unknown_not_absent():
+    """An unreadable or missing parent means we cannot tell, and an unknown must not silence a
+    real ask. cbp-being asking for /var/log/hestia/policy/daemon.log is the case this
+    protects — a genuine request for reach over a file this process has no business
+    resolving."""
+    import tempfile
+    from sage.gateway.escalate import ungrantable
+    from sage.gateway.being_gate_client import BeingIntent
+    root = tempfile.mkdtemp(prefix="unknown-")
+    assert ungrantable(BeingIntent("memory_read", {"path": "/var/log/nowhere/daemon.log"}), root) is None
+    # but a missing file in a directory we CAN read is genuinely absent
+    import os
+    seen = tempfile.mkdtemp(prefix="visible-")
+    why = ungrantable(BeingIntent("memory_read", {"path": os.path.join(seen, "gone.md")}), root)
+    assert why and "nothing exists at" in why["reasons"][0]
+
+
+
+def test_a_readable_but_unsearchable_parent_is_unknown_not_absent():
+    """GPT review of SAGE#126, finding 4. `exists()` needs search (x) permission on the parent;
+    with r-- only, an EXISTING child stats as absent. That must not suppress the ask."""
+    import os, stat, tempfile
+    import pytest
+    from sage.gateway.escalate import ungrantable
+    from sage.gateway.being_gate_client import BeingIntent
+    if os.geteuid() == 0:
+        pytest.skip("root bypasses directory permissions")
+    root = tempfile.mkdtemp(prefix="perm-home-")
+    parent = tempfile.mkdtemp(prefix="perm-parent-")
+    child = os.path.join(parent, "real.md")
+    open(child, "w").write("it exists")
+    os.chmod(parent, stat.S_IRUSR)                      # r-- : listable, not traversable
+    try:
+        assert not os.path.exists(child), "precondition: the existing child looks absent"
+        assert ungrantable(BeingIntent("memory_read", {"path": child}), root) is None, \
+            "unknown must not be reported as absent"
+    finally:
+        os.chmod(parent, stat.S_IRWXU)
 
 
 if __name__ == "__main__":

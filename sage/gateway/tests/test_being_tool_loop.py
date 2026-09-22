@@ -1,6 +1,7 @@
 """Hermetic tests for the being tool-use loop. No live gate/model: the gate client
 uses an injected fake law + mock dispatcher (F1a stand-in), and `generate` is scripted.
 Runnable under pytest or directly."""
+import pytest
 import os
 import sys
 from types import SimpleNamespace
@@ -107,7 +108,13 @@ def test_run_ollama_tool_turn_with_fake_llm():
     # the `gh` command it runs), + recall / remember (membot long-term memory) + request_scope
     # (the sanctioned answer to a deny) for the heartbeat (2026-09-03, dp: "it needs a reason
     # to look for things to do"). Widening this number is a registry decision, not a typo.
-    assert len(ollama_tools()) == 15   # + appeal (S4), + say, + git_read/search (#83), + check (this slice)
+    # + retire_note (2026-09-16): the being's memory was append-only — memory_write appends and
+    # nothing renames — so a claim it had written could never be marked finished. cbp-being
+    # carried "membot is down" (true on 09-13) for three days and ~40 beats of escalation
+    # because no verb could close it. dp to the being: "renaming and deleting aren't verbs you
+    # have yet — we're looking at that." Bounded to its own notes/ and scratch/; the note is
+    # renamed and kept, never deleted.
+    assert len(ollama_tools()) == 19   # + appeal (S4), + say, + git_read/search (#83), + check, + retire_note, + request_run, + memory_edit, + camera
 
     calls = {"n": 0}
 
@@ -301,7 +308,12 @@ def test_salvage_lifts_well_formed_calls_from_the_text_channel_only_for_offered_
     # not offered this turn, too many positionals, a computed argument, a stub definition
     # (beat 8: `def recall(...)` with a call on an f-string), prose that names a tool
     assert salvage_tool_calls('{"name": "peer_ask", "arguments": {"to": "x"}}', names) == []
-    assert salvage_tool_calls('```python\nrecall("q", 3, "x")\n```', names) == []
+    # MORE positionals than the schema has properties. recall grew a third (idx) on
+    # 2026-09-18, so the old three-positional example became a VALID call — positionals map
+    # in schema order, and the third one is now idx.
+    assert salvage_tool_calls('```python\nrecall("q", 3, "x", "y")\n```', names) == []
+    r = salvage_tool_calls('```python\nrecall("q", 3, "41")\n```', names)
+    assert [c["function"]["arguments"] for c in r] == [{"query": "q", "top_k": 3, "idx": "41"}], r
     assert salvage_tool_calls('```python\nrecall(query=f"{x}")\n```', names) == []
     assert salvage_tool_calls('```python\ndef recall(query, top_k=5):\n    return []\nrecall(query=input())\n```', names) == []
     assert salvage_tool_calls("I could call recall or memory_write here, but I will not.", names) == []
@@ -370,6 +382,47 @@ def test_an_identical_call_in_the_same_turn_is_answered_not_re_executed():
     assert len(calls) == 2 and [c[1]["path"] for c in calls] == ["journal.md", "todo.md"]
     assert len(r.trace) == 3 and r.trace[1][1].note == "duplicate" and "already done" in r.trace[1][1].result
     assert r.duplicates == [{"step": 1, "effector": "memory_write"}]
+
+
+
+def test_one_object_holding_a_whole_beat_lifts_every_call_in_it():
+    """Measured 2026-09-18T01:32:11Z. After two beats of composing an answer it could not
+    send, Sprout emitted its entire beat as one JSON object in the text channel, `say` to dp
+    FIRST:
+
+        {"say": {"to": "dp", "text": "hi"},
+         "memory_write": {"path": "journal.md", "content": "..."}, ...}
+
+    The salvager handled the tool-name-as-key form only when the object held exactly one such
+    key, so this was discarded whole and the beat recorded as having done nothing. The being
+    had decided to answer a person; the harness dropped the decision.
+    """
+    from sage.gateway.being_gate_client import ollama_tools
+    tools = ollama_tools(["say", "memory_write", "remember"])
+    text = ('{"say": {"to": "dp", "text": "hi"}, '
+            '"memory_write": {"path": "journal.md", "content": "a line"}, '
+            '"remember": {"content": "I answered dp."}}')
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    calls = salvage_tool_calls(text, tools)
+    assert [c["function"]["name"] for c in calls] == ["say", "memory_write", "remember"], \
+        "all three, in the order the being wrote them"
+    assert calls[0]["function"]["arguments"] == {"to": "dp", "text": "hi"}
+    assert all(c["_salvaged"] == "json" for c in calls), "recorded as salvaged, not as native"
+
+
+def test_a_single_tool_key_object_still_lifts_exactly_one_call():
+    from sage.gateway.being_gate_client import ollama_tools
+    tools = ollama_tools(["say", "memory_write"])
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    calls = salvage_tool_calls('{"memory_write": {"path": "todo.md", "content": "x"}}', tools)
+    assert [c["function"]["name"] for c in calls] == ["memory_write"]
+
+
+def test_an_object_of_unknown_keys_still_lifts_nothing():
+    from sage.gateway.being_gate_client import ollama_tools
+    tools = ollama_tools(["say"])
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls('{"weather": {"city": "x"}, "mood": {"v": 1}}', tools) == []
 
 
 if __name__ == "__main__":
@@ -465,3 +518,193 @@ def test_a_length_cut_that_actually_said_something_still_only_gets_room():
         "a cut mid-answer ran out of room; its thinking must be left alone"
     assert "one tool call" not in seen[1]["last"], \
         "the deliberation nudge is for a deliberation, not for a truncated answer"
+
+
+def _elidable(body="T" * 9000):
+    return ([{"role": "system", "content": "S" * 6600}, {"role": "user", "content": "U" * 30000}]
+            + [{"role": "assistant", "content": "A"}, {"role": "tool", "content": body},
+               {"role": "assistant", "content": "A"}, {"role": "tool", "content": "last" * 10}])
+
+
+class _LLM16k:
+    num_ctx = 16384
+
+
+def test_an_elided_result_is_saved_where_the_being_can_still_read_it():
+    """The being named this as its biggest operational friction (2026-09-18): "facts
+    produced mid-beat getting lost to compaction before I can transcribe them." Eliding
+    the middle of a tool result deleted bytes that, for a command result, existed once and
+    had no source to re-read. They are written to the being's own scratch first, and the
+    marker names the file — so the fact survives the beat it was produced in."""
+    import os, tempfile
+    from sage.gateway.being_tool_loop import compact_convo, COMPACT_SPILL_DIR
+
+    root = tempfile.mkdtemp(prefix="spill-")
+    body = "HEAD" + "T" * 9000 + "TAIL"
+    out, elided = compact_convo(_elidable(body), _LLM16k(), spill_root=root)
+
+    assert len(elided) == 1 and "spill" in elided[0], elided
+    where = elided[0]["spill"]
+    assert where.startswith(COMPACT_SPILL_DIR + "/") and not where.startswith("/"), where
+    # BARE PATH, because that is what memory_read takes: the being writes names relative
+    # to its home, and an absolute path is what the law refuses.
+    saved = os.path.join(root, where)
+    assert os.path.exists(saved), saved
+    text = open(saved, encoding="utf-8").read()
+    assert body in text, "the WHOLE result, not the part that survived"
+    assert "elided from your window" in text.split("\n")[0], "and a header saying what it is"
+    assert where in out[3]["content"], "the marker names the file"
+    assert "outlives this beat" in out[3]["content"], "and says why that matters"
+
+
+def test_an_already_elided_result_is_not_elided_again():
+    """An elided body is ~850 characters, over COMPACT_MIN_BODY, so a second pass used to
+    cut the middle out of the MARKER — and count the marker's characters as room freed."""
+    from sage.gateway.being_tool_loop import compact_convo, _ELIDED_SIGIL
+    import tempfile
+
+    root = tempfile.mkdtemp(prefix="spill-twice-")
+    once, el1 = compact_convo(_elidable(), _LLM16k(), spill_root=root)
+    twice, el2 = compact_convo(once, _LLM16k(), spill_root=root)
+    assert el1 and not el2, "nothing left to elide, so nothing is reported"
+    assert twice[3]["content"] == once[3]["content"], "the marker is not re-cut"
+    assert once[3]["content"].count(_ELIDED_SIGIL) == 1
+    import os
+    n = len(os.listdir(os.path.join(root, "scratch", "elided")))
+    assert n == 1, f"and the marker is not spilled as if it were a result ({n} files)"
+
+
+def test_a_spill_that_cannot_be_written_never_breaks_the_beat():
+    """The elision has to happen either way: it is what leaves room for the answer. A
+    failed save costs the address, not the beat."""
+    from sage.gateway.being_tool_loop import compact_convo
+    out, elided = compact_convo(_elidable(), _LLM16k(), spill_root="/proc/definitely-not-writable")
+    assert len(elided) == 1 and "spill" not in elided[0], elided
+    assert "elided from the middle to leave room" in out[3]["content"]
+    assert "NARROW range" in out[3]["content"], "it falls back to the advice it used to give"
+
+
+def test_the_spill_directory_is_a_spill_not_an_archive():
+    from sage.gateway.being_tool_loop import _spill, COMPACT_SPILL_KEEP
+    import os, tempfile
+
+    root = tempfile.mkdtemp(prefix="spill-prune-")
+    kept = []
+    for i in range(COMPACT_SPILL_KEEP + 5):
+        p = _spill(root, f"body {i}", i)
+        assert p, i
+        kept.append(p)
+    d = os.path.join(root, "scratch", "elided")
+    left = os.listdir(d)
+    assert len(left) == COMPACT_SPILL_KEEP, len(left)
+    # EVERY newest one survives and every oldest one is gone. Pruning by NAME passes a
+    # weaker check and fails this one: "…-5.txt" sorts after "…-40.txt", so the fortieth
+    # spill is deleted while the fifth is kept.
+    newest = {os.path.basename(k) for k in kept[-COMPACT_SPILL_KEEP:]}
+    oldest = {os.path.basename(k) for k in kept[:5]}
+    assert newest == set(left), sorted(newest.symmetric_difference(left))
+    assert not (oldest & set(left))
+
+
+def test_two_spills_of_the_same_step_in_one_second_do_not_overwrite_each_other():
+    """The retry path compacts twice inside one step. Without a collision guard the second
+    save would silently replace the first, and the first marker would point at the wrong
+    bytes — a pointer that resolves to someone else's content is worse than no pointer."""
+    from sage.gateway.being_tool_loop import _spill
+    import os, tempfile
+
+    root = tempfile.mkdtemp(prefix="spill-collide-")
+    a = _spill(root, "the first result", 3)
+    b = _spill(root, "the second result", 3)
+    assert a and b and a != b, (a, b)
+    assert open(os.path.join(root, a), encoding="utf-8").read().endswith("the first result")
+    assert open(os.path.join(root, b), encoding="utf-8").read().endswith("the second result")
+
+
+def test_collision_names_preserve_creation_order_at_the_prune_boundary():
+    """The filename is the retention clock. A same-step retry must sort AFTER the file
+    it followed, even when there are enough collisions to cross 9 -> 10."""
+    from sage.gateway.being_tool_loop import _spill, COMPACT_SPILL_KEEP
+    import os, tempfile
+    from unittest.mock import patch
+
+    root = tempfile.mkdtemp(prefix="spill-collision-prune-")
+    # Freeze the second so every spill shares the same timestamp. Fill most of retention
+    # with earlier steps, then create twelve retries of the same newest step.
+    with patch("time.strftime") as fmt:
+        fmt.side_effect = lambda pattern, *_: (
+            "20260919-120000" if pattern == "%Y%m%d-%H%M%S" else "2026-09-19T12:00:00Z"
+        )
+        made = []
+        for i in range(COMPACT_SPILL_KEEP - 12):
+            made.append(_spill(root, f"old {i}", i))
+        collisions = [_spill(root, f"retry {i}", 999) for i in range(12)]
+
+    assert all(made) and all(collisions)
+    d = os.path.join(root, "scratch", "elided")
+    left = sorted(os.listdir(d))
+    assert len(left) == COMPACT_SPILL_KEEP
+    collision_names = [os.path.basename(p) for p in collisions]
+    assert collision_names == sorted(collision_names), collision_names
+    assert collision_names[-1].endswith("-999-011.txt"), collision_names[-1]
+    assert set(collision_names).issubset(left), (
+        "newest same-step retries must survive pruning; filename order is retention order"
+    )
+
+
+# ---- the vision line's last mile, carried with the organ (SAGE #159) ----
+def test_images_ride_on_the_message_and_survive_the_flattening():
+    """Frames reach ollama as a list ON the message, beside content — measured against the
+    live model 2026-09-13: both OpenAI-style spellings INSIDE content are rejected 400.
+
+    The flattening rebuilt every message as {role, content} and dropped every other key,
+    so `images` died one line short of a model that can already see."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    seen = {}
+
+    class FakeLLM:
+        num_ctx = 24576
+        def get_chat_response(self, messages, tools=None):
+            seen["messages"] = messages
+            return {"content": "ok", "tool_calls": [],
+                    "raw": {"prompt_eval_count": 10, "eval_count": 1}}
+
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(),
+                             [{"role": "user", "content": "look", "images": ["QUJD"]}],
+                             max_steps=1, tools=[])
+    m = seen["messages"][0]
+    assert m["images"] == ["QUJD"], m
+    assert m["content"] == "look", "content is unchanged; the frame rides beside it"
+    assert r.reply == "ok"
+
+    # a message with no images must not grow an empty key: ollama treats [] as "an image
+    # was sent", and an empty one is a different request from no request at all
+    seen.clear()
+    run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(),
+                         [{"role": "user", "content": "no frame"}], max_steps=1, tools=[])
+    assert "images" not in seen["messages"][0]
+
+
+def test_live_a_frame_actually_reaches_a_vision_model():
+    """THE TEST THE REVIEW LACKED, and the reason SAGE#76 and #77 could both be green while
+    pinning a payload ollama answers 400 to: they assert what reaches the payload dict and
+    never post it. This one posts.
+
+    Opt-in because it needs a loaded vision model; run with SAGE_LIVE_OLLAMA=1."""
+    from os import environ
+    import base64
+    if environ.get("SAGE_LIVE_OLLAMA") != "1":
+        pytest.skip("set SAGE_LIVE_OLLAMA=1 to round-trip against the real server")
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    from sage.irp.plugins.ollama_irp import OllamaIRP
+
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+    llm = OllamaIRP({"model_name": environ.get("SAGE_LIVE_VISION_TAG", "qwen38-heretic:q3km-vl"),
+                     "num_ctx": 24576, "max_response_tokens": 120, "think": False})
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm,
+                             [{"role": "user", "content": "What colour is this image? /no_think",
+                               "images": [base64.b64encode(png).decode()]}],
+                             max_steps=1, tools=[])
+    assert r.reply and not r.reply.startswith("[OllamaIRP:"), r.reply

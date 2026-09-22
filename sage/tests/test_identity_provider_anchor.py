@@ -73,7 +73,7 @@ class IdentityAnchorTests(unittest.TestCase):
 
                 # ...and its header agrees with the manifest.
                 with open(sealed_path, 'rb') as f:
-                    self.assertEqual(f.readline().strip(), b'SAGE_SEALED_v1')
+                    self.assertEqual(f.readline().strip(), b'SAGE_SEALED_v2')
                     self.assertEqual(f.readline().strip(), b'software')
 
                 # The identity still round-trips: seal -> lock -> unseal -> authorize.
@@ -98,30 +98,178 @@ class IdentityAnchorTests(unittest.TestCase):
         self.assertEqual(attestation['anchor_type'], 'software')
         self.assertEqual(attestation['trust_ceiling'], 0.4)
 
-    def test_relocated_identity_is_refused_not_silently_wrong(self):
-        """instance_dir feeds the machine key, so a moved identity must fail closed.
+    def _copy_identity(self, dst):
+        for name in ('identity.json', 'identity.sealed', 'identity.attest.json'):
+            shutil.copy(self.instance_dir / name, dst / name)
 
-        Before the fingerprint check, this path returned a garbage secret and built
-        a SigningContext carrying the manifest's fingerprint — a signed-shaped
-        attestation naming an identity the held secret cannot generate.
-        """
+    def test_identity_moved_to_another_MACHINE_is_refused(self):
+        """The property the old relocation test protected, restated for v2: a sealed file
+        whose key no longer derives is REFUSED, never unsealed into plausible garbage.
+        v2 binds to the machine, so 'no longer derives' now means another machine."""
         provider, manifest = self._init('software')
         self.assertTrue(provider.is_authorized)
-
         moved = Path(tempfile.mkdtemp(prefix='sage-identity-moved-'))
         self.addCleanup(shutil.rmtree, moved, ignore_errors=True)
-        for name in ('identity.json', 'identity.sealed', 'identity.attest.json'):
-            shutil.copy(self.instance_dir / name, moved / name)
-
+        self._copy_identity(moved)
         relocated = IdentityProvider(str(moved))
-        self.assertTrue(relocated.is_initialized)
-
-        context = relocated.authorize()
-        self.assertIsNone(
-            context,
-            'relocated identity must be REFUSED; the unsealed secret cannot '
-            f'produce fingerprint {manifest.public_key_fingerprint}')
+        relocated._machine_anchor = lambda: 'some-other-machine-id'
+        self.assertIsNone(relocated.authorize(),
+                          f'identity from another machine must be refused '
+                          f'(fingerprint {manifest.public_key_fingerprint})')
         self.assertFalse(relocated.is_authorized)
+
+    def test_renamed_home_on_the_same_machine_keeps_its_identity(self):
+        """2026-09-19: the fleet renames being homes to <machine>-being/. v1 sealed against
+        str(instance_dir), so the rename would have orphaned an identity raised since March."""
+        provider, manifest = self._init('software')
+        moved = Path(tempfile.mkdtemp(prefix='sage-identity-renamed-'))
+        self.addCleanup(shutil.rmtree, moved, ignore_errors=True)
+        self._copy_identity(moved)
+        ctx = IdentityProvider(str(moved)).authorize()
+        self.assertIsNotNone(ctx, 'a rename on the same machine must not orphan the identity')
+        self.assertEqual(ctx.public_key_fingerprint, manifest.public_key_fingerprint)
+
+    # -- v1 files in the field: three derivations that never agreed -------------------
+    def _write_v1(self, provider, mac, path):
+        """Re-seal this provider's secret the way a v1 provider would have."""
+        import hashlib, socket
+        secret = provider.context.identity_secret
+        key = hashlib.sha256(f"{socket.gethostname()}:{mac}:{path}".encode()).digest()
+        with open(provider.sealed_path, 'wb') as f:
+            f.write(b'SAGE_SEALED_v1\nsoftware\n' + bytes(a ^ b for a, b in zip(secret, key)))
+        return secret
+
+    def test_v1_sealed_by_the_rust_provider_unseals_and_migrates(self):
+        provider, manifest = self._init('software')
+        secret = self._write_v1(provider, '0', str(self.instance_dir))
+        again = IdentityProvider(str(self.instance_dir))
+        ctx = again.authorize()
+        self.assertIsNotNone(ctx, "python must unseal a rust-sealed v1 file ('0' for the MAC)")
+        self.assertEqual(ctx.identity_secret, secret)
+        with open(self.instance_dir / 'identity.sealed', 'rb') as f:
+            self.assertEqual(f.readline().strip(), b'SAGE_SEALED_v2', 'verified v1 migrates to v2')
+        kept = self.instance_dir / 'identity.sealed.v1'
+        self.assertTrue(kept.exists(), 'the original v1 file is kept, not overwritten')
+        self.assertTrue(kept.read_bytes().startswith(b'SAGE_SEALED_v1'))
+        # and the migrated file authorizes on its own
+        self.assertIsNotNone(IdentityProvider(str(self.instance_dir)).authorize())
+
+    # --- the backup-before-rewrite invariant, four arms (same four in the Rust suite) ---
+
+    def _live(self):
+        return (self.instance_dir / 'identity.sealed').read_bytes()
+
+    def test_migration_arm1_no_backup_creates_a_byte_identical_one_then_rewrites(self):
+        provider, _ = self._init('software')
+        self._write_v1(provider, '0', str(self.instance_dir))
+        original = self._live()
+        self.assertIsNotNone(IdentityProvider(str(self.instance_dir)).authorize())
+        self.assertEqual((self.instance_dir / 'identity.sealed.v1').read_bytes(), original)
+        self.assertTrue(self._live().startswith(b'SAGE_SEALED_v2'))
+
+    def test_migration_arm2_backup_impossible_authorizes_but_does_not_rewrite(self):
+        provider, manifest = self._init('software')
+        self._write_v1(provider, '0', str(self.instance_dir))
+        original = self._live()
+        (self.instance_dir / 'identity.sealed.v1').mkdir()   # a directory: cannot be the backup
+        ctx = IdentityProvider(str(self.instance_dir)).authorize()
+        self.assertIsNotNone(ctx, 'a verified v1 still authorizes when it cannot be migrated')
+        self.assertEqual(ctx.public_key_fingerprint, manifest.public_key_fingerprint)
+        self.assertEqual(self._live(), original, 'the live v1 was replaced with no backup of it')
+
+    def test_migration_arm3_stale_backup_is_not_blessed_as_the_original(self):
+        """HUB induced this on a real seal 2026-09-20: unrelated bytes already at
+        identity.sealed.v1, the live v1 replaced anyway, the log saying 'original kept',
+        and the v1 bytes surviving nowhere."""
+        import contextlib
+        import io
+        provider, manifest = self._init('software')
+        self._write_v1(provider, '0', str(self.instance_dir))
+        original = self._live()
+        (self.instance_dir / 'identity.sealed.v1').write_bytes(b'NOT THE ORIGINAL')
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ctx = IdentityProvider(str(self.instance_dir)).authorize()
+        self.assertIsNotNone(ctx)
+        self.assertEqual(ctx.public_key_fingerprint, manifest.public_key_fingerprint)
+        self.assertEqual(self._live(), original, 'the live v1 was replaced beside a stale backup')
+        self.assertEqual((self.instance_dir / 'identity.sealed.v1').read_bytes(), b'NOT THE ORIGINAL')
+        self.assertNotIn('original kept', out.getvalue(), 'success was claimed for a migration that did not happen')
+        self.assertIn('NOT migrated', out.getvalue())
+
+    def test_migration_arm4_dangling_symlink_is_never_followed(self):
+        """A dangling backup symlink must not redirect the preservation write outside the home."""
+        import contextlib
+        import io
+        import os
+        provider, manifest = self._init('software')
+        self._write_v1(provider, '0', str(self.instance_dir))
+        original = self._live()
+
+        outside_dir = Path(tempfile.mkdtemp(prefix='sage-identity-symlink-target-'))
+        self.addCleanup(shutil.rmtree, outside_dir, ignore_errors=True)
+        sentinel = outside_dir / 'must-not-be-created'
+        keep = self.instance_dir / 'identity.sealed.v1'
+        os.symlink(sentinel, keep)
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ctx = IdentityProvider(str(self.instance_dir)).authorize()
+
+        self.assertIsNotNone(ctx, 'a verified v1 still authorizes when migration is blocked')
+        self.assertEqual(ctx.public_key_fingerprint, manifest.public_key_fingerprint)
+        self.assertEqual(self._live(), original, 'the live v1 changed beside a dangling symlink')
+        self.assertTrue(keep.is_symlink(), 'the backup symlink itself was replaced')
+        self.assertFalse(sentinel.exists(), 'migration followed the dangling symlink outside the being home')
+        self.assertNotIn('original kept', out.getvalue())
+        self.assertIn('NOT migrated', out.getvalue())
+
+    def test_v1_sealed_under_a_former_home_heals_through_instance_json(self):
+        """Legion's real case: sealed 2026-03-28 at .../legion-gemma3-12b, home renamed."""
+        import json
+        provider, manifest = self._init('software')
+        self._write_v1(provider, '0', '/old/home/legion-gemma3-12b')
+        (self.instance_dir / 'instance.json').write_text(json.dumps(
+            {'former_homes': [{'path': '/old/home/legion-gemma3-12b', 'moved': '2026-09-19'}]}))
+        ctx = IdentityProvider(str(self.instance_dir)).authorize()
+        self.assertIsNotNone(ctx)
+        self.assertEqual(ctx.public_key_fingerprint, manifest.public_key_fingerprint)
+
+    def test_v1_that_no_candidate_unseals_is_still_refused(self):
+        provider, _ = self._init('software')
+        self._write_v1(provider, '123456789', '/nowhere/anyone/recorded')
+        again = IdentityProvider(str(self.instance_dir))
+        self.assertIsNone(again.authorize(), 'no candidate matches the fingerprint -> refuse')
+        with open(self.instance_dir / 'identity.sealed', 'rb') as f:
+            self.assertEqual(f.readline().strip(), b'SAGE_SEALED_v1', 'an unverified file is never rewritten')
+
+    def test_macos_ifconfig_macs_are_candidates_for_v1_recovery(self):
+        """No sysfs on macOS: the MACs come from `ifconfig -a`. Parser pinned on real-shaped
+        output; the decimal form must equal what uuid.getnode() would have sealed with."""
+        sample = ("lo0: flags=8049<UP,LOOPBACK,RUNNING,MULTICAST> mtu 16384\n"
+                  "\tinet 127.0.0.1 netmask 0xff000000\n"
+                  "en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500\n"
+                  "\tether f0:18:98:aa:bb:cc\n"
+                  "en1: flags=8963<UP> mtu 1500\n\tether 36:6f:24:00:11:22\n"
+                  "bridge0: flags=8863 mtu 1500\n\tether 36:6f:24:00:11:22\n")
+        macs = IdentityProvider._parse_ether_lines(sample)
+        self.assertEqual(macs, [str(0xf01898aabbcc), str(0x366f24001122)])
+        # and a v1 sealed with a MAC that only ifconfig reports is recovered
+        provider, manifest = self._init('software')
+        self._write_v1(provider, str(0xf01898aabbcc), str(self.instance_dir))
+        again = IdentityProvider(str(self.instance_dir))
+        again._interface_macs = lambda: macs
+        ctx = again.authorize()
+        self.assertIsNotNone(ctx)
+        self.assertEqual(ctx.public_key_fingerprint, manifest.public_key_fingerprint)
+
+    def test_v2_key_is_the_documented_bytes(self):
+        """Pins the derivation the Rust provider mirrors; change one, change both."""
+        import hashlib
+        provider, manifest = self._init('software')
+        provider._machine_anchor = lambda: 'ANCHOR'
+        self.assertEqual(provider._derive_machine_key_v2(),
+                         hashlib.sha256(b'sage-seal-v2:ANCHOR:lct://sage:test:agent@test').digest())
 
 
 if __name__ == '__main__':

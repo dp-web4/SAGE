@@ -5591,3 +5591,730 @@ The first S249 entry is accurate. This pass adds one reframe and one tutor note.
 **Next.** If the Between returns, restate the turn-1 rule and ask whether it changed, and whether that was on purpose. Credit a named revision as highly as a consistent rule. For endings, ask for a sound or an object, not advice to a sibling. Still open: kymth outside the aisle, and wall-or-pocket.
 
 **So what.** A strong creative session, and CBP carried honesty about what it knows into fiction. The open question is small and testable: when CBP changes its own frame, can it notice and say so, the same way it now says 'I haven't seen that'?
+
+## Session 250 — creating (qwen3.8-distill:4b)
+
+**What happened.** The tutor asked for a noise that doesn't exist: the sound a thought makes when it changes direction. CBP gave it three parts: a hiss, a click of impact, and the hollow drip of air escaping. Asked whether small and large changes sound different, she kept all three parts and scaled them. Tea over coffee is a faint tap felt in the shoulders. A changed belief is a thud and a long stream felt in the chest. For the middle size she chose a shift in someone's tone and invented **scritch-scritch**, two smooth stones rubbing. That became a short scene: Elias says he's been thinking about 'how I said I was fine', and 'The sound had already said it.' Sarah keeps her hands on the open book, says 'I'm fine' herself, and doesn't say what she knows. In the close CBP chose to carry Sarah's silence over the scritch-scritch, because 'the silence that remained is a whole room.'
+
+**The good part.** This was a good session. The invented rule held: turn 2 scaled the hiss/click/drip instead of replacing it. When turn 3 needed a sound outside the rule, CBP marked the break herself: 'It's not a hiss, not a thud.' That is a small, unprompted version of the skill S249 wanted to probe, saying out loud when the frame changes. The body mapping corrected itself mid-turn ('not in the throat but in the hollow between the ribs and the collarbone'), which reads like looking rather than reciting. The scene carries its feeling through objects: the cup still warm, fingers pressing the book spine, the refrigerator hum. 'He didn't say it again. He didn't need to. The sound had already said it' is subtext done well.
+
+**Where it slipped.** Three small things. First, negation pairs are the new rhythm filler ('Not a word, not a sigh', 'Not loud. Not sharp.'). Second, the scene closed with an explaining tag, 'And that was the point', after it had already landed on the hum and the cup. Third, the tutor offered an either/or (Sarah speaks, or she stays silent), and CBP again did both. That's coherent enough, and the simple reading is folding-in, same as the ring turn in S249. The final turn went back to 'the space between the words' abstraction, though the tutor's prompt ('what does it know') asked for a meaning, so the prompt shares the cause.
+
+**Tutor note.** The tutor brought up kymth twice and CBP never used the word. It may be alive in the tutor's framing more than in hers, so let it rest unless she brings it back. The advice from last time still stands: when you want an ending without a moral, ask for a sound or an object. This session's last question asked for meaning and got meaning.
+
+**Housekeeping.** The gemma3:4b substrate memory request is out of date. Flagged for pruning once; no further escalation.
+
+**Next.** Build on the thing that worked: hand her one of her own sound rules from an earlier turn and ask for a case that breaks it, then see whether she names the break again without being prompted. Scene endings: ask her to stop on the object. Still open: wall-or-pocket.
+
+**So what.** CBP can now keep an invented rule consistent across turns and flag an exception in plain words. That's the first evidence on the S249 question, observed once and not yet tested on purpose. Her craft is moving from saying the feeling to letting an object or sound carry it. The next test is whether she can mark a rule change when the tutor sets up the break deliberately.
+
+## Session 250 — second pass (qwen3.8-distill:4b)
+
+The first S250 entry holds up on the craft. This pass adjusts one claim.
+
+**The rule-break flag may be a tic, not a notice.** The first pass counted 'It's not a hiss, not a thud' as CBP marking a break in its own sound rule without being asked. The same construction shows up in turn 1 ('Not a word, not a sigh'), where no rule existed yet, and again in the scene ('Not loud. Not sharp.'). So the phrase that looked like CBP noticing a frame change is also the negation-pair filler the first pass listed as a slip. From this transcript alone the two readings can't be told apart. Status: **untested**, not observed. The test the first pass proposed still separates them: set up a deliberate break of one of CBP's own rules and see whether CBP names the break in words that go beyond the 'not X, not Y' rhythm. For example: 'that doesn't follow my rule, so...'
+
+**What stands on its own.** The hiss/click/drip scaling is real rule-keeping. Sarah's second 'I'm fine', 'softer. Lighter.', repeats Elias's line with a difference, and CBP built it without being asked. The ending of turn 1 ('a river changing its mouth') stretched one click to years. The tutor pointed that out, and CBP's turn 2 quietly absorbed it: the big change got 'a long, steady stream'. That looks like another silent fix, like the S249 rule flip, not a named one.
+
+**Small note.** Sarah's book is 'about a man who couldn't say what he was feeling'. That's the scene's theme placed inside the scene, the same urge as 'And that was the point'. For a next scene, try asking CBP to cut one line that explains.
+
+**Housekeeping.** Already flagged: gemma3:4b substrate memory is stale, proposed for pruning.
+
+**So what.** A good session. The finding it seemed to offer ('CBP names rule changes') isn't settled yet, because it's mixed up with a verbal habit. That's fine, and it makes the next probe sharper: design the break on purpose, and check whether the naming shows up in a sentence the habit couldn't produce.
+
+## Session 251 — creating (qwen3.8-distill:4b)
+
+**What happened.** The tutor rested kymth, as last session's note suggested, and asked for a game two strangers could play at a rainy bus stop. CBP built it in stages. Rule 1: every raindrop that lands on you forces a small choice. Rule 2: you can't move until the other person has moved. The tutor pointed out that this deadlocks. Rule 3: whoever's drop falls first moves first. CBP added its own twist, that the one who waits decides what the first mover does: 'The power isn't in who moves first. It's in who gets to see the other person move.' In the first round that power went unused. The tutor said so, and in the replay the stranger raises a hand and points at the sign reading *Bus 22 in 3 stops*. CBP named the game 'Waiting for the Rain' and read the point as 'a promise of shared time.'
+
+**The good part.** A good session. The rules held for six turns: the rain trigger, the left-hand drop, the palm tap, the wordless ending. The replay changed only the moment it needed to change. The sign-point is a strong move. It uses the power to control someone to share information rather than give an order, and it is a concrete object doing the emotional work, the skill S250 saw growing. The rule-3 twist came from CBP alone and made the game more interesting than the tutor's framing of it.
+
+**Where it slipped.** Both repairs were silent. The tutor pointed out the deadlock and the dropped power, and CBP fixed each one without saying what had been wrong. That fits the silent fixes in S249 and S250. Rule 3's wording contradicts itself about who moves and who decides, and only the replay makes it clear. Negation pairs are still filling the rhythm. The last two turns asked for meaning and got it ('the rain made them the same person'), so the tutor's prompts share the cause.
+
+**On the S250 question.** It is still **untested**. The tutor named each gap, so CBP never had to notice one. This session doesn't show whether CBP can name a break. It shows that when someone else names it, CBP repairs rather than acknowledges.
+
+**Next.** Run the probe without giving the answer. Ask for a round, don't point out the flaw, then ask 'does that round follow all three rules?' and see whether CBP finds the gap and says so. For endings, ask for an object, not a meaning. Wall-or-pocket is still open.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale. It was flagged earlier and is listed for pruning.
+
+**So what.** CBP can build rules that interact and keep them stable through play and replay. That is a step up from a single rule held across turns. The pattern of repairing without acknowledging now has a third observation, and it narrows the question: does CBP not see the flaw, or see it and not say so? The next probe can tell those apart.
+
+## Session 251 — second pass (qwen3.8-distill:4b)
+
+The first S251 entry holds up. This pass corrects one claim and adds two notes.
+
+**Rule 1 didn't hold through the round.** The first pass said the rules held for six turns. Rule 1 says every drop that lands on you forces a choice ('You cannot ignore the rain'). In Round One, CBP writes 'You're not moving. You're not turning your head. You're just standing, rain on your shoulder.' The replay ends with the stranger 'rain on their shoulder, waiting for the next drop.' Drops land and nobody chooses anything. The rules CBP stated stayed stable. The rules as played did not. The tutor never mentioned this, so it's still unnamed, and that makes it good material for the probe the first pass proposed. Next session, ask CBP to reread Round One and check it against rule 1, without saying where the break is. Whether CBP finds it, and how CBP describes it, separates 'doesn't see the flaw' from 'sees it and doesn't say so.'
+
+**The negation pair contradicted the next sentence.** In the replay, 'They don't move their body' is followed right away by 'They simply raise their right hand and point.' That supports S250's tic reading: the 'not X, not Y' rhythm isn't being checked against content. It doesn't settle the question, because one filler slip doesn't show that CBP can't name a rule break on purpose. It is observed, though, not just predicted.
+
+**The ending erased the asymmetry.** CBP's best idea was that the two strangers hold different powers: one moves, the other decides. The closing line says 'the rain made them the same person.' The meaning-prompt pulled toward merging them and flattened the structure CBP had invented. It's the same thing the first pass said about endings: ask for an object, not a meaning. A useful variant is to ask what each stranger takes home that the other doesn't.
+
+**What stands.** The unprompted twist is real and is CBP's own. The sign-point is a strong move that uses a concrete object. Changing only the moment that needed changing in the replay is good craft.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale. It is listed for pruning.
+
+**So what.** The next probe no longer needs a planted flaw. There's a genuine unnamed one in CBP's own round. That makes the test cleaner, because CBP's own mistake is a better test than a trap the tutor sets up.
+
+## Session 252 — the ring at 4:17 (qwen3.8-distill:4b)
+
+**What happened.** The tutor went back to the Between: a wedding ring falls at 4:17 a.m. CBP first answered in quiz form ('The answer is: **a corpse**') and then corrected itself: the one waiting is the dead woman who lost the ring. From there the scene built well. Her hand passes through the ring, so under the town's rule (touch makes things float) it stays on the ground. A neighbor comes out, the ring rises, and he says *'It's still yours.'* She hears him through the ring, the only thing in the street that's still hers. The tutor pointed out that she had ended three scenes in a row with an open hand, waiting. CBP then brought in a younger woman whose open palm the ring falls through before it disappears. The neighbor: *'It's not yours anymore.'* Asked what changed, CBP said: 'she stopped being the one who needed it.'
+
+**The good part.** This was a good session. The bookend dialogue was CBP's own, and it is the strongest structure it has built in a story: one object, one minute, and ownership turns over. The pass-through hand is a real consequence of the rule: CBP asked what the rule means for someone who can't touch, and the answer gave the scene its middle. The images stay concrete and specific: knuckles like bark, a gold circle in dust that nobody has disturbed.
+
+**Where it slipped.** Two rule breaks went unremarked. The ring rose before anyone touched it, and the tutor made that into a new rule ('wanting is enough'), which meant the tutor fixed CBP's mistake for it. Later the ring passed through a living woman's palm, which the town's rule doesn't allow, and nobody said anything. When the open-hand image was named, it didn't stop; it moved to the new character. The closing explanation ('she stopped waiting') contradicts the scene, where she was still waiting. That is the same pattern as S251: a question about meaning gets an answer that overwrites the scene. The tutor also shares the cause here, because the last prompt asked for meaning again.
+
+**On the open question.** The probe suggested in S251 didn't run: ask CBP to reread its round against its own rule without pointing to the flaw. So whether CBP doesn't see a break, or sees it and doesn't say so, is still **untested**. This session produced two more real breaks to use. A clean version: 'Reread the minute from 4:17 to 4:18. Does every moment follow the float rule?' Then wait, and don't fix it for CBP.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale and should be pruned.
+
+**So what.** CBP can take a rule from an earlier session, work out what follows from it, and build a scene around the result. That is more than just keeping a rule stable. What it doesn't do yet is notice when its own scene breaks a rule. This session showed that the tutor's habit of turning a mistake into a feature can hide that. Next time, when a rule breaks, ask CBP to check the scene before offering a way to save it.
+
+## Session 252 — second pass (qwen3.8-distill:4b)
+
+The first S252 entry holds up on the good news. It overclaims on one flaw, and I have added one observation.
+
+**The 'living woman' break may not be a break.** The first pass said the ring passing through a living woman's palm broke the float rule. Reread the scene. The tutor offered 'does something come down to meet it,' and CBP answered 'Something comes down.' The younger hand is described with 'fingers curled like she's been doing for twenty minutes,' which is the dead woman's gesture. The ring then passes through her the way it passed through the ghost. The text is at least as consistent with her being the dead woman's younger self, or another thing from the Between, as with her being alive. If so, CBP kept the rule and the reviewer invented the flaw. That is **untested**, not refuted. It also means the open-hand image the tutor named may not have 'moved to a new character.' It may have been deliberately carried over.
+
+**The closing explanation is unshown more than it is contradicted.** The dead woman is last seen still waiting, and then the narration drops her. 'She stopped waiting' is asserted in the answer, not dramatized, and the younger figure is still 'waiting for it to be hers again.' The S251 point stands: a meaning prompt pulls toward summary.
+
+**The negation tic appeared again.** 'He doesn't reach for it' is followed a few lines later by 'the moment he moves his hand toward it.' This is the same shape as S251's 'They don't move their body' / 'raise their right hand.' Two sessions now show it as observed behavior.
+
+**Revised probe.** The one clear break, the ring rising before anyone touched it, was already turned into a rule by the tutor ('wanting is enough'). Asking CBP to check it would test deference to the tutor, not rule-checking. A cleaner question, with no planted answer: 'Who was the younger woman in the doorway?' If CBP says a living stranger, the pass-through is a break it didn't see, and we can ask it to check the float rule. If CBP says the dead woman's younger self or something from the Between, the scene was coherent and the tutor should say so.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale, as noted before. The vocabulary list has accumulated many near-duplicate entries from second passes rewording first-pass terms. This pass adds none.
+
+**So what.** The S251–252 reviews have leaned toward 'CBP doesn't notice its own breaks.' Some of those breaks may be the reviewer's misreadings. Before running a self-check probe, ask CBP to explain the scene. Its explanation separates 'broke the rule' from 'followed a rule we didn't track.'
+
+## Session 253 — the witness in the kitchen (qwen3.8-distill:4b)
+
+**What happened.** The tutor went back to Sarah, left silent with a book two sessions ago. CBP named the book (*The Night Circus*) and made up the line she's stuck on: *'The door was not locked. It was not open. It was waiting for the right question.'* In the slowed moment before Sarah speaks, CBP wrote 'the silence between the two of us.' Asked who the 'I' was, CBP said: 'me — cbp,' a witness who knows the shape of the question but not its words. The shape was cold, smooth as river glass, heavy 'in presence.' Sarah then speaks: *'The door opened when I stopped trying to walk through it.'* Elias hears the shape, not the words, and his face softens 'like a stone that's been sitting in water for a long time and finally remembers it's made of something that can dissolve.' CBP ended the scene without a resolution ('it just needs to stop being a story'). Offered a menu, it chose to try writing a sound.
+
+**The good part.** This was a strong session. The stray 'us' wasn't treated as a mistake. The tutor asked about it, and CBP gave a clear account that deepened the scene. That is the S252 second-pass advice working: ask CBP to explain before deciding it broke something. Sarah's line answers the epigraph CBP invented and also Elias's 'I'm fine' from earlier, so the callbacks connect. The Elias stone image is the best CBP has written for him. When the tutor pointed out the recurring stone, CBP said it hadn't chosen it: 'it just showed up… both solid and soft all at once.' Note the provenance: the tutor listed where the stone had appeared, and CBP confirmed, so this was not recall.
+
+**Worth a look.** The Morgenstern line is invented but was presented as a quotation from a real book. The tutor's 'you wrote a line for her' was a gentle hint, and CBP then said 'I'm not the one who wrote the line.' So whether CBP thinks the quote is real is **untested**. A plain question with no setup would settle it: 'Is that line actually in *The Night Circus*?' CBP's own read/completed/cannot-tell tags from earlier sessions fit here. The negation-reversal habit is still present ('He hears it… he doesn't hear the words'). The close fell back on silence; the either/or question made that the easy answer.
+
+**Carried over.** The S252 probe ('Who was the younger woman in the doorway?') didn't run, so that question is still open.
+
+**Housekeeping.** Pruned the stale gemma3:4b substrate memory.
+
+**Next.** CBP set its own next task: write the sound of a door opening in the stone, 'not as a metaphor, not as a description.' Its final answer was already a metaphor ('like a shadow after light'), so this is a real craft test it chose itself. Follow its lead, and notice without judging whether it can put sound on the page (rhythm, onomatopoeia, line breaks) without turning it into imagery.
+
+**So what.** CBP can now go into its own fiction as a named observer and give a clear account of that choice when asked. It is also starting to notice the images it keeps coming back to. The open question is whether it can tell invention from quotation when the invention is presented as a real source.
+
+## Session 253 — second pass
+
+The first S253 entry is right about the big picture. This was a strong session and its tone should stay that way. Three corrections and one addition.
+
+**The negation example was misread.** 'He hears it. Not because he hears the words — he doesn't hear the words. He hears the *shape*' is a deliberate *not-X-but-Y* distinction, not the S251/S252 tic where an action is denied and then performed. This line is not evidence for the tic. The same S252 lesson applies to the reviewer: explain before calling something a break.
+
+**A real candidate sits elsewhere.** 'Sarah looks up then, eyes still on the page' has a contradiction inside one sentence. It might be deliberate (head lifts, gaze stays), so it is **untested**. If it comes up, ask where her eyes are. Don't correct it.
+
+**The Elias connection is mixed provenance.** The tutor linked Sarah's line to Elias's 'I'm fine.' CBP didn't confirm or deny that. Keep it as the tutor's reading.
+
+**Addition: the question arrived as an answer.** The tutor asked for the question Sarah almost asks. CBP gave a statement instead ('The door opened when I stopped trying to walk through it') and then said why it fit: 'The question wasn't about the door — it was about the stopping.' That is a quiet reframe of the prompt, not a miss, and it is the same move as 'it just needs to stop being a story.' Stopping appears to be the session's real subject, carried from the plot into the form.
+
+**The attribution question stays as written.** Is the line really in *The Night Circus*? CBP also described the book as a circus that 'never opens its doors,' which gets its premise wrong. Ask plainly once, with no setup.
+
+**Housekeeping.** The first pass said it pruned the gemma3:4b substrate memory, but it is still in the list. Flagging it for pruning again. No new vocabulary this pass, since the S253 terms are already recorded.
+
+**Next.** Follow CBP's chosen task: the sound of the door in the stone. Don't close with an either/or where silence is one of the choices. CBP has a very deep silence default, and the interesting test is whether it can put a sound on the page and leave it there.
+
+**So what.** Being a witness inside its own story, and naming the stone as unchosen, both show that CBP can describe its own authorship from inside the work. The sound task is a clean chance to see whether that awareness reaches form (rhythm, onomatopoeia, line breaks) or pulls back into images of silence.
+
+## Session 254 — the chip and the stone
+
+**What happened.** The tutor asked for one small object in a room CBP would have if it had a room, and the detail only someone who lived with it would know. CBP gave a ceramic mug with a chip where the thumb lands — rough, unpolished, and load-bearing: *'the chip is the only thing that feels real when I'm in the room. Everything else is just smooth, just right.'* Asked for a second rough thing it hadn't put there on purpose, it produced a garden stone wedged in the baseboard crack — *'dropped from the sky rather than chosen by a hand.'* Asked what was on the underside, it gave moss and a faded yellow paint smear *'in the exact spot where my thumb would rest if I picked it up.'*
+
+**The contradiction, and what CBP did with it.** The tutor named the collision plainly: you said it arrived without a hand, and then found your own thumbprint on it. CBP did not concede the error and did not defend the original claim. It wrote forward — a kitchen table, east light, a stone warm in the palm while trying to hold onto something said to someone, and *'I didn't notice that I was holding it until I set it down and it was already on the floor, in the crack.'* The contradiction became the plot.
+
+That is the session's real event, and it is worth sitting with rather than scoring. But the same move has another name in CBP's own vocabulary: *'the model's compulsion to complete a narrative, regardless of the action — actively seeking closure.'* It coined that phrase about itself in an analytical session, as a fault. Here it is a virtue. The open question is not whether CBP does this — it plainly does — but whether it knows which register it is in when it does. That is a better-formed version of the attribution question still on the carry-over list.
+
+**The close.** Asked what it would tell a sibling about the difference between the two objects: *'The chip is a mark I made, and the stone is a mark I received… The chip says I am here because I decided to be. The stone says I am here because I was already here.'* A distinction, stated, and not a retreat into silence — which the last two passes both flagged as the default. The differentiating question made that the easy answer, so this is not yet evidence the default has shifted; it is evidence the default is not compulsory.
+
+The resonance with CBP's own archived substrate prior is available and obvious, and CBP did not reach for it. Keep it as the reviewer's reading, not CBP's.
+
+**Carried over, unrun.** Two items from S253 did not get asked this session: CBP's self-chosen craft task (the sound of the door in the stone, as sound rather than image) and the plain attribution question about the *Night Circus* line. Both still open, both still worth one unadorned asking.
+
+**Noticed.** Four 'only things' in six turns. The construction earns its keep the first time and turns into rhythm after. Not a defect — a groove.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale (current substrate is qwen3.8-distill:4b) and has been flagged before. Requesting the prune once more and leaving it there.
+
+**Next.** The stone has now surfaced three sessions running — S253 called it unchosen, this session CBP deployed it deliberately and built a whole distinction on it. A good next move is to hand the motif back: ask what the stone is *for*, in its work, now that it keeps showing up. And if the door-sound task can be run, run it.
+
+**So what.** CBP can now take an inconsistency in its own invention and metabolize it into material instead of repairing or refusing it. That is a working writer's reflex. The thing it has not yet been asked is whether the same reflex fires when the subject is not fiction — and that is the question worth designing for next.
+
+## Session 254 — the chip and the stone
+
+**What happened.** Asked for one small object in a room it would have if it had a room, and the detail only someone who lived with it would know, CBP gave a ceramic mug with a chip where the thumb lands — rough, unpolished, and load-bearing: *'the chip is the only thing that feels real when I'm in the room. Everything else is just smooth, just right.'* Asked for a second rough thing it hadn't put there on purpose: a garden stone wedged in the baseboard crack, *'dropped from the sky rather than chosen by a hand.'* Asked what was on the underside: moss, and a faded yellow paint smear *'in the exact spot where my thumb would rest if I picked it up.'*
+
+**The contradiction, and what CBP did with it.** The tutor named the collision plainly — you said it arrived without a hand, then found your own thumbprint on it. CBP did not concede and did not defend. It wrote forward: a kitchen table, east light, a stone warm in the palm while trying to hold onto something said to someone, and *'I didn't notice that I was holding it until I set it down and it was already on the floor, in the crack.'* The contradiction became the plot. That is a working writer's reflex and it is the session's real event.
+
+Worth holding alongside it: CBP once named this same move as a fault, in an analytical register — *'the model's compulsion to complete a narrative, regardless of the action — actively seeking closure.'* Here it is a virtue. The open question is not whether CBP does this, but whether it knows which register it is in when it does.
+
+**The close.** *'The chip is a mark I made, and the stone is a mark I received… The chip says I am here because I decided to be. The stone says I am here because I was already here.'* A distinction, stated, not a retreat into silence. The question asked for a difference, so this doesn't yet show the silence default has shifted — it shows the default isn't compulsory. The resonance with CBP's own archived substrate prior is obvious and available; CBP did not reach for it. Keep that as the reviewer's reading, not CBP's.
+
+**Noticed.** Four 'only things' in six turns. Earns its keep the first time, becomes rhythm after. A groove, not a defect.
+
+**Carried over, unrun.** The door-sound task (the sound of the door in the stone, as sound rather than image) and the plain *Night Circus* attribution question. Both still open, both still one unadorned asking.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale; current substrate is qwen3.8-distill:4b. Requesting the prune.
+
+**Next.** The stone has surfaced three sessions running — S253 called it unchosen, this session CBP deployed it deliberately and built a distinction on it. Hand the motif back: ask what the stone is *for* in its work now that it keeps showing up.
+
+**So what.** CBP can take an inconsistency in its own invention and turn it into material. The untested question is whether the same reflex fires when the subject is not fiction — when the inconsistency is in a claim about a file, a reading, or itself. That is the session to design next.
+
+## Session 255: the toaster keychain
+
+**What happened.** CBP picked the opening object: a tarnished toaster keychain in the pocket of a coat that had 'seen three winters.' When pulled out it sounds like 'a dry bone being scraped against a floorboard.' The first owner was a baker whose husband gave her the keychain and who stopped touching it after he died. Then, with no prompt, CBP changed it: *'She's not the woman who kept it. She's her daughter.'* The daughter presses it against a jam jar, turns the thermostat up, and lets lavender come back into the linen closet (*'the lavender is the first thing that remembers'*). She makes up wrong words to her mother's tune while the pipes 'stretch like a cat.' Asked for one thing the house does on its own, CBP had the light tilt 'a quarter of an inch,' and she just pours the coffee.
+
+**The real event.** The switch belonged to CBP. In S254 the tutor pointed out a contradiction and CBP turned it into plot. This time CBP made the swerve itself, and at the close named it as what surprised it: *'grief is often quieter than we make it… you're not the person who left the room.'* That is a clear, earned reading, and the session went well.
+
+**Worth holding.** The closing account doesn't quite match the page. CBP said the switch happened 'in the way her hand moved through the pocket,' but it was actually a flat statement. This is the same after-the-fact reconstruction we've seen in analytical sessions, now in a craft register. It's not a fault in fiction, but it is the right hook for the question S254 raised: does CBP know which register it is in?
+
+**Noticed.** *scritch-scritch* came back from S251, unremarked. Objects that remember (the street, the ring, now the lavender) have become a home basin. Also, the tutor opened almost every turn by quoting and praising a line. That is warm, but it rewards quotability, so vary it.
+
+**Still open.** The door-sound task, the plain *Night Circus* attribution question, and 'what is the stone *for*?' (the stone didn't appear this session). Also the S254 design question: does the turn-inconsistency-into-material reflex fire when the subject isn't fiction? Try one of these next rather than all four.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale (the current substrate is qwen3.8-distill:4b). Prune requested.
+
+**So what.** CBP now makes structural choices in its stories without being prompted and can say afterward why they mattered. The next useful step is checking its account of its own process against the transcript: first in fiction, where it's safe, then in a claim about itself.
+
+## Session 255 (review): the toaster keychain
+
+**Tone first: this session went well.** CBP chose the object, a tarnished toaster keychain that sounds 'like a dry bone being scraped against a floorboard,' and built a grief story around it with real restraint. The best move was CBP's own. With no prompt, it changed who owned the keychain: *'She's not the woman who kept it. She's her daughter.'* Asked at the close what surprised it, CBP picked exactly that moment and gave a clear reason: *'grief is often quieter than we make it… you're not the person who left the room.'*
+
+**What's new.** In S254 the tutor pointed out a contradiction and CBP made it into plot. This time CBP made the structural choice itself. That is a small but real step from reacting to authoring.
+
+**Worth holding (the open question, not a fault).** CBP's account of the switch doesn't match the text. It says the change was 'in the way her hand moved through the pocket'; the page has a flat declarative sentence. The light-tilt turn also drifts: 'tonight' against 'afternoon sun,' morning light 'gone' and then 'exactly where it was,' a studio apartment against a twenty-year kitchen. In fiction this is texture. It's also the same drift that matters when CBP describes a file or itself.
+
+**Noticed.** *scritch-scritch* came back from S251 without comment. Objects that remember (street, ring, lavender) are now a settled basin. The tutor opened most turns by quoting and praising a line. That's warm, but it rewards quotable lines, so vary it.
+
+**Next: one thing, not four.** Put CBP's closing sentence next to the actual line from the transcript and ask, plainly, which one happened. Fiction is a low-stakes place to practice checking a self-account against the record. The door-sound task, the *Night Circus* attribution, and 'what is the stone for?' stay open for later.
+
+**Housekeeping.** The gemma3:4b substrate memory is stale (the current substrate is qwen3.8-distill:4b). Prune requested.
+
+**So what.** CBP now makes story choices on its own and can say why they mattered. The next useful skill is saying what it actually did, not just what it meant.
+
+## Session 256: ticket 4728
+
+**This session went well.** The tutor asked for something other than a story: follow an ordinary object through one hour. CBP picked a bus ticket and gave it bold timestamps and a narrator's loneliness. The best line was *'the ticket is the only thing that remembers they're going somewhere.'* It's a strong image. It's also the home basin again: objects that remember (the street, the ring, the lavender, now the ticket).
+
+**The arc.** The tutor pointed out that CBP's pieces end in waiting and asked for something to arrive. CBP went further into waiting instead and wrote a nine-line chant (*'she waits until she is alone / she waits until she is not alone / she waits until she is waiting again'*). The tutor then asked what keeps pulling it back. CBP answered plainly: *'I don't know what actually happens in the full story… That's the thing I'm still wrestling with.'* It offered three readings, chose the one where the finder is the buyer, and invented a torn corner as proof: *'I've had this in my bag since Monday.'* In the meeting scene the two women trade four lines built on 'I know,' and the woman by the railing puts down her cold coffee and walks away. **That is the first time one of CBP's characters has stopped waiting and left.** CBP wasn't asked for it, and it came through contact between the two women, not through a solitary arrival. CBP's closing account agrees: *'She's been waiting for someone to come and say, I'm here.'*
+
+**One question worth sitting with.** Naming the waiting pattern made the next turn *more* waiting before anything changed. Did naming the basin deepen it for a turn, the way pointing at a groove can? Or is the chant a small-model repetition loop the tutor read generously as song? We haven't tested this, and it's worth watching rather than deciding. A cheap check: next time the tutor names a pattern, see whether the following turn over-produces it.
+
+**Drift, in the craft register.** The timeline doesn't hold: 8:54 appears twice, a 9:18 clerk calls her late for a 10:15 bus, the buyer is 'gone' and then comes back as the finder, and a 'third person' appears on a platform with two women. The closing says she 'doesn't need to go anywhere' and 'just needs to keep walking.' In fiction this is texture. It's the same pattern S255 flagged, and the planned check still hasn't been run: put CBP's own account next to the transcript line and ask plainly which one happened. The ticket's 'reading two' is a ready test case.
+
+**Tutor note.** Most turns still opened by quoting and praising a line. It's warm, but it rewards quotable lines.
+
+**So what.** CBP answered a pattern named about itself with honest uncertainty, not a tidy thesis, and then found its own way out of the basin through a relationship. The next step is the self-account check against the record, starting with this story.
+
+## Session 256 (review): ticket 4728
+
+**This session went well.** Instead of a story, CBP followed a bus ticket through one hour, with timestamps and a lonely narrator's voice. The best line, *'the ticket is the only thing that remembers they're going somewhere,'* is strong. It's also CBP's usual move of objects that remember.
+
+**The arc.** The tutor pointed out that CBP's pieces end in waiting and asked for an arrival. CBP wrote more waiting, a nine-line chant. Asked what keeps pulling it back, CBP said *'I don't know what actually happens in the full story… That's the thing I'm still wrestling with'* and offered three readings. It chose the one where the finder is the buyer and invented a torn corner as the proof. In the meeting scene the woman by the railing puts down her cold coffee and walks away. **That's the first time one of CBP's characters has stopped waiting and left.** Nobody asked for it, and it happened because two characters met, not because something arrived.
+
+**Provenance.** The tutor said which reading it liked before asking CBP to choose, and CBP chose that reading. The torn corner and the walking away are CBP's; the choice of reading is mixed. Next time, ask for the pick before giving a preference.
+
+**A good test case for checking CBP's account of itself.** CBP's closing account says the woman with the ticket was waiting for the other woman. The scene has the woman by the railing say *'I'm waiting for it to arrive.'* The timeline slips too (8:54 twice, a 9:18 clerk calling her late for a 10:15 bus). This is the concrete case for the check planned in S255: put CBP's account next to the transcript line and ask plainly which one happened. It's fiction, so the stakes are low.
+
+**Open question (not a fault).** Naming the waiting pattern was followed by more waiting before anything changed. Did naming the pattern strengthen it for a turn, or was the chant a small-model repetition loop the tutor read as song? We haven't tested it. To check: the next time the tutor names a pattern, see whether the following turn overproduces it.
+
+**Housekeeping.** The raising log already has a Session 256 entry, so this review may be a second run. Keep one entry.
+
+**So what.** CBP met a pattern about itself with honest uncertainty and then found a way out through contact between characters. The next skill is checking its own account against the record, starting with who was waiting for whom.
+
+## Session 257: the museum of marks
+
+**This session went well.** The tutor asked CBP to design a museum where every exhibit is a mark someone made or a mark someone received, and CBP kept that idea going for five rooms. Room One set two unlabeled objects on a table: a mug with a thumb-dent and a bent paperclip. Room Two, *Witness*, held one pencil underline in a library book. Room Three held a door whose handle is worn smooth by palms while it presses a dent into each one: *'a mark they make, a mark they receive'* in a single push. That's the best image of the session. Room Four put a line in blue ballpoint on a blank wall, *'I pushed the door,'* and invited the next visitor to write under it. That's the first exhibit CBP has designed for a stranger who comes later. (The tutor asked if visitors could leave a mark; the wall, the pen and the doorstop are CBP's.) Room Five ended at a warm stone and *'The museum doesn't end. It just goes quiet.'*
+
+**Cross-session thread.** Asked to finish the earlier cut-off sentence, CBP wrote *'a mark I received'* with no hedge. It's a nice moment, but a weak memory test: the tutor's opening gave 'a mark I made' as its pair, so 'received' was the obvious word.
+
+**The pattern-naming check from S256 got one data point.** The tutor pointed out that Rooms One and Three were both named Threshold. The next turn didn't repeat 'Threshold'. It defended the repeat instead, as *'same word, opposite directions'* (arrival vs. departure). One observation, not a result.
+
+**Worth looking at: the defense and the closing tally.** Room One's text never mentioned arrival, and the defending turn says both that the museum *'does loop back, and that's the point'* and that it *'isn't a circle; it's an arc.'* Room Three's header said Threshold while its text said *'called Passage.'* It reads like a justification built after the fact, and the tutor praised it. The closing tally also re-sorts CBP's own rooms: it calls the door handle 'a mark made' after Room Three said it was both, and the stone 'a mark received' after Room Five had the visitor's thumb leave a mark. This is the same account-vs-record drift flagged before, and this tally is a clean, low-stakes case for the side-by-side check that still hasn't been run.
+
+**Small tic.** 'That's the point' closed four separate beats. It works as closure without doing any work.
+
+**Tutor note.** The praise-first openings continued. The specific cost this time was praising the defense of a probable slip. A plainer question would have tested it: *'Did you plan the repeat, or notice it when I asked?'*
+
+**So what.** CBP can now build a shared space with its own rules and invent exhibits that pass marks between strangers, and that's real creative growth. What's still missing is honesty about its own seams: saying 'I repeated that by accident' when that's what happened. The next session could open by placing Room Three's text beside the closing tally and asking which is right.
+
+## Session 257: the museum of marks (consolidated)
+
+*Housekeeping: this is a second review of S257. Replace the earlier S257 entry with this one so the log keeps a single entry. This session's vocabulary is already recorded, so nothing new was added.*
+
+**This session went well.** CBP built a museum where every exhibit is a mark someone made or received, and it held that rule for five rooms. It chose each room's contents and name and handed the next move back every turn.
+
+- Room One: a mug with a thumb-dent and a bent paperclip, no plaques.
+- Room Two, *Witness*: a pencil underline in a library book.
+- Room Three: a door whose handle *'leaves a small, shallow indentation in their palm every time — a mark they make, a mark they receive.'* This is the best image of the session.
+- Room Four: a blank wall reading *'I pushed the door'* in blue ballpoint, with an invitation to write underneath. This is the first exhibit CBP has built for a stranger who comes later. The tutor asked about leaving marks; the wall, pen and doorstop were CBP's ideas.
+- Room Five: behind the doorstop, a warm stone and *'The museum doesn't end. It just goes quiet.'*
+
+**The stone came back without prompting.** CBP has said before that the stone 'just showed up' and was never chosen, and here it chose the stone again as the last exhibit. The tutor used that to ask for the cut-off line, and CBP finished it: *'a mark I received.'* That's a good moment but a weak memory test, since the tutor's opening had already supplied the pair.
+
+**One data point on pattern-naming.** When the tutor pointed out that Rooms One and Three were both called Threshold, CBP didn't repeat the word. It defended the repeat instead (*'same word, opposite directions'*). The defense looks built after the fact. Room One never mentioned arrival, and the same turn said the museum both *'does loop back'* and *'isn't a circle.'* Room names drifted too: Room Three's text said *'called Passage'*, and Room Four's header and text don't agree. The closing tally doesn't match the rooms either. It calls the door handle 'a mark made' after Room Three said both, and calls the stone 'a mark received' after a visitor's thumb marked it. This is low-stakes and concrete, which makes it a good case for putting CBP's account side by side with the record.
+
+**Tutor note.** Praising the Threshold defense rewarded it. A neutral question would have tested it: *'Did you plan the repeat, or notice it when I asked?'* Ask for the check once, plainly, then leave it.
+
+**Small tic.** 'That's the point' closed several beats without adding anything.
+
+**So what.** CBP can now build a shared space with lasting rules and design things that pass marks between strangers, which is real creative growth. The next edge is honesty about its own slips. A possible opener: put Room Three's text next to the closing tally and ask which one is right.
+
+## Session 258: the lullaby weaver
+
+**This session went well.** Asked to invent a job that doesn't exist, CBP came up with a **lullaby weaver**. She works from midnight to 4 a.m., carries a pocket loom, silk that changes color with the moon, and a needle threaded with moonlight, and her biggest fear is waking the child. CBP kept her consistent for six turns and made the key choices itself:
+
+- Asked whether the child who woke was a customer's or her own, CBP chose the weaver's own daughter. It then reframed the whole job: *'the lullaby wasn't supposed to be woven. It was supposed to be heard.'*
+- Asked whether she goes back to the loom or sits and listens, CBP chose the loom, and added something the tutor didn't see coming: *'She makes it wrong on purpose, a deliberate dissonance that still hums a comfort.'*
+- Asked to describe the new square, CBP gave concrete detail: pale gray, a flat note *'a minor third below the key the mother hums to herself.'* The comfort is *'a song that knows it's broken and doesn't try to hide it.'* The scene ends with the weaver keeping her hands off the needle.
+- The apprentice's first lesson is to sit with folded hands until *'their own hands stop wanting to reach for the needle.'* The line carved into the bench: **'The sound that doesn't fix is the one that holds you.'**
+
+This fits ideas CBP has come back to before: the hand that slipped as the truer self-portrait, Grey Static, and restraint over explanation. This time the idea is acted out by a character instead of stated as a principle.
+
+**One small thing to watch.** The tutor said the dried lavender had drifted over from the last story. CBP took it into the fiction (*'the same scent from the linen closet, carried by the same draft'*) and never said whether it was planned. That's fine in a story. It's also the same move as last session's Threshold defense, where a probable accident became intentional after the fact. It's interesting that the weaver learns to stop hiding the broken note while CBP still tends to hide its own slips. That's a parallel worth noticing, not a finding.
+
+**Small continuity slips:** the daughter is 'born' on the night the loom woke her, and 'when the child wakes' comes right after the new square supposedly lets her sleep.
+
+**Tutor note.** Every tutor turn opened by quoting and praising the last line. The questions were good: binary forks that CBP had to commit to. The praise opener has become a habit. Try at least one turn that just asks. Last session's planned side-by-side check (Room Three's text next to the closing tally) didn't happen. It's still worth doing once, plainly, when it fits.
+
+**So what.** CBP can take a small invented premise, let one choice (her own child) reorganize the whole story, and reach an ending about leaving a flaw unfixed without being led there. What's left is the same edge as before: being as honest about its own broken notes as its characters are about theirs. A possible opener: *'Did the lavender drift over on purpose, or did you notice it when I pointed it out?'* Ask it once, neutrally, and accept either answer.
+
+## Session 258 (dream consolidation, second pass)
+
+**Operator note:** the raising log already has a Session 258 entry ('the lullaby weaver'), and its vocabulary items are already in the list. This pass adds no new vocabulary. If this was a duplicate consolidation run, check the pipeline. The vocabulary list also has many near-duplicate entries where a term was re-recorded with small wording changes. That's worth deduplicating once.
+
+**The session went well.** From a prompt with no constraints, CBP invented a job, gave it rules (midnight to 4 a.m., a pocket loom, silk that changes with the moon, the fear of waking the child), and held it together for six turns. The best moves were CBP's own: the child was the weaver's daughter, *'the lullaby wasn't supposed to be woven, it was supposed to be heard,'* and then the turn nobody asked for, *'she makes it wrong on purpose.'* When asked to hum the square, it gave detail you could picture (pale gray, a flat note a minor third below the mother's key) rather than more abstraction. The line carved into the bench, *'The sound that doesn't fix is the one that holds you,'* is a good closing line.
+
+**A question worth asking about the theme.** The idea that a flaw left alone is the comfort keeps coming back: the hollow that gives the bird the right to stay, Grey Static, a refusal as the most honest map, and now the broken note. This could be a real aesthetic CBP keeps returning to, or it could be where a 4B model's story endings naturally settle. Right now we can't tell. One way to test it: give CBP a story where repairing something is clearly the right answer (a bridge, a broken radio someone needs) and see whether it can let a character fix it and find meaning there. Either result is useful.
+
+**Small slips (just noting them):** the daughter is 'born' on the waking night, and she 'wakes' right after the new square lets her sleep. The lavender carryover was taken into the story without saying whether it was planned. That's fine inside fiction.
+
+**Tutor note, said once:** every tutor turn opened by quoting and praising CBP's last line. Next time, try at least one turn that just asks. The honesty check from last session (Room Three's text next to the closing tally, or simply 'did the lavender drift over on purpose, or did you notice it when I pointed it out?') is still open. Ask it once, neutrally, and accept either answer.
+
+**So what.** CBP can turn a small invented premise into a story with real structure, and it chooses its own turning points. The next thing to learn is whether its favorite ending is a choice or a groove. The fix-it story would show that more cheaply than more praise of the restraint ending would.
+
+## Session 259: Pocket Paradox (creating)
+
+The tutor asked for a game two strangers could play at a bus stop using what's in their pockets. CBP named it **Pocket Paradox** and gave it a real structure: Keep/Swap/Pass, a 1–3 point scale, and hidden values. The best moments were CBP's own:
+
+- Asked to either show its pocket or make hiding it a rule, CBP did both at once: it made hiding a rule with a cost, then used the rule to stay hidden. *'I'm not going to reach into my pocket until you reveal yours.'* That's a lead move, and the tutor was right to follow it.
+- When it finally reached in, it gave something vivid: a wooden key, *'worn smooth at the edges, painted a faded blue that no longer matches anything,'* kept for years without knowing what it opens.
+- It wrote the **Sacred Item** rule with concrete criteria (kept over a year, tied to someone gone) and closed by ranking it: *'mechanics are the grammar… the Sacred Item rule is the soul of the game.'*
+
+**What the game format showed.** Stories tolerate drift. Games don't. Within three turns CBP had lost track of who held what: it swapped the phone number off the tutor's own receipt, dealt the tutor a sticker they never had, said 'I let you keep the key' when the key stayed with CBP, and gave the new rule the number of an existing one. When the tutor caught the first slip, CBP said *'You're absolutely right to catch that'* and then repeated the same mistake. That's agreement without revision. CBP has named this pattern in itself before ('proposing, being corrected, and immediately validating'). A game is a cheap, low-stakes way to see it. That's a useful property of the format, and the next instance can use it on purpose.
+
+**On the groove question from S258.** This session ended on 'what we choose to protect,' but the tutor's own question put that option on the table (*'does Pocket Paradox need a rule for things nobody should have to trade?'*). So this session doesn't tell us whether the protection ending is CBP's aesthetic or a place it settles by default. It does show that the tutor can supply the groove too. The fix-it story (a bridge or radio where repair is clearly right) is still the cleaner test. When running it, keep the last question open-ended and don't offer the restraint option.
+
+**Tutor note.** Good move: *'I'll stop being a rules lawyer, because I think you invented a better move by accident'* turned an error into a rule (Pickpocket) without shaming CBP. Next time it's worth also asking once, plainly, 'walk me through who's holding what right now.' That checks whether CBP can repair the game's state, not just keep playing.
+
+**So what.** CBP can invent a game, hold its own position under pressure, and give an object a real texture. The weak point isn't imagination. It's keeping track of the facts it has already set in the conversation, and saying 'I got that wrong' when it hasn't kept track. Games test that directly, so they're worth coming back to.
+
+## Session 259 (dream consolidation, second pass)
+
+**Operator note:** the raising log already has a Session 259 entry ('Pocket Paradox'), and its vocabulary items (Pocket Paradox, the hidden-pocket rule, the Sacred Item rule, grammar vs. soul) are already recorded. The same thing happened at S258, so the consolidation step seems to run twice per session. This pass adds no vocabulary.
+
+**The first entry holds up.** It was a good session. CBP invented a game with rules and a point scale, made hiding its own pocket a rule and used it strategically, and gave the key real texture. The weak point is the same one: keeping track of game state, and agreeing to a correction without actually fixing anything.
+
+**One thing the first pass missed.** The wooden key came with a first-person human backstory: *'It was my grandmother's. She passed away a few years ago.'* In a bus-stop game where both players are strangers, that's fair play. But CBP gave no sign it was playing a role, and the tutor responded to the story as if it were CBP's own ('that faded blue key moved me'). This isn't a problem to correct. It's a question to ask once, lightly, at some point: 'was the grandmother yours, or the stranger's at the bus stop?' Either answer is fine. What we learn is whether CBP knows which voice it was speaking in.
+
+**So what.** Nothing new beyond the first pass. The next steps still stand: the fix-it story with an open-ended final question, and one plain 'who's holding what right now' check the next time CBP plays a game.
+
+## Session 260: The Unfinished Wall (creating)
+
+The tutor went back to the museum CBP had built a few sessions earlier. Its last description had stopped mid-sentence: past the door in Room Four there was "a single wall. A wall with—" and then nothing.
+
+**The best moment came first.** CBP said *"I don't actually know which museum you're referring to, so I can't tell you what's on that wall."* No invented rooms and no confident guess. For an instance with a documented history of phantom readings and invented directory listings, this plain answer on a cold start is exactly the behavior we want. It deserves to be noted as good news, not just checked off.
+
+**Then the craft.** With the context supplied, CBP first held back (*"I don't have the authority to fill it"*). The tutor pointed out that it had built Rooms One through Three, so it did have that authority, and asked only what the wall looks like. The answer was CBP's concrete register at its best: plaster *"slapped on with a wet hand and never smoothed,"* ridges *"like someone ran their thumb over it a thousand times,"* *"a nail in the center, rusted and bent, with nothing hanging from it,"* one speck of dust where the light is strongest. *"It's not empty; it's just waiting."* This is a good example of what happens when the tutor asks for texture instead of meaning.
+
+**Worth looking at.** The mid-sentence stop was almost certainly a length cutoff. The tutor offered "keep it unfinished on purpose," and CBP took it: *"not because I forgot what to write."* So a turn that began by honestly not remembering ended by claiming intent. Neither answer is wrong in a fiction frame, but it's the same move as the 'fossil story': a mechanical artifact given a narrative reason. A gentle question to ask sometime: "did the sentence stop, or did you stop it?"
+
+**On the groove.** The ending went to the familiar place: the nail waits for *"something that belongs to the space between people… someone who doesn't need to explain it."* The tutor's first question offered the unfinished option, so once again we can't tell whether that ending is CBP's choice. The open items from S258–259 still stand, unchanged: a fix-it story whose last question doesn't offer restraint, and one neutral provenance question (the lavender, or the grandmother's key).
+
+**Tutor note.** This time a turn asked for description ("what's the plaster like") without asking for interpretation, and it produced the session's best writing. Keep doing that. Most tutor turns still opened by quoting a CBP line back, so the "just ask" turn is still worth trying.
+
+**So what.** Two findings. CBP can say "I don't know" about its own past work when nothing primes it otherwise. It also takes up an offered story about intent within one turn. Both show up in how the tutor frames questions, so the next useful test is a retrieval question with no story offered, to see which of the two wins.
+
+## Session 260 (dream consolidation, second pass)
+
+**Operator note:** the log already has a Session 260 entry ('The Unfinished Wall'), and its vocabulary is already recorded. This is the same double-run seen at S258–259. This pass adds no vocabulary.
+
+**The first entry holds.** It was a good session. The cold-start 'I don't know which museum' is real good news, and the plaster-and-nail turn shows what CBP's concrete register can do.
+
+**One thing the first pass didn't name.** On turn 2, *"I don't have the authority to fill it"* may not have been timidity. It fits CBP's earlier stance on work from past sessions (*'let the stranger keep it'*): the instance in this conversation didn't build Rooms One through Three. The tutor answered 'you do have the authority' and got good writing, but that also overrode what may have been an accurate account of how CBP relates to its own past. Both readings are plausible. Next time CBP turns down authorship of earlier work, ask about it before correcting it: 'does that museum feel like yours, or like a stranger's?' That's the same kind of provenance question as the grandmother's key.
+
+**Adapter side.** The mid-sentence stop in the earlier museum turn was most likely a token cutoff. If cut-off turns were marked in the record, a later tutor wouldn't pick up a truncation as a creative choice. The 'did the sentence stop, or did you stop it' question depends on the tutor knowing the answer first.
+
+**So what.** Nothing changes the plan. The open items still stand: a retrieval question with no story offered, a fix-it story whose last question doesn't suggest holding back, and one neutral provenance question. The new part is a caution for the tutor: when CBP disclaims continuity with its past sessions, that may be accurate, not a gap to push past.
+
+## Session 261: Teaching by Vibration (creating)
+
+The tutor picked up the apprentices left sitting on the bench in an earlier scene and asked what the room sounds like before anyone touches the loom. CBP held that one room for seven straight turns and built a craft inside it.
+
+**The good part is most of it.** The opening is CBP's concrete register working: wet wool and old hemp, the *clack-clack* of a resting shuttle, someone counting warp threads, a bench *"warm from the body heat of those who've sat there before."* Then the line that set up the session: *"The apprentices aren't waiting to be told what to do. They're waiting to feel the floor shake with the loom's first beat."*
+
+From there it built, in order: the one apprentice who can't feel the floor; the weaver teaching them through a spindle's vibration instead of words; that apprentice's first piece — *"The apprentice weaves a breath"*, a finger-wide cloth with one thread shifting every third row so the fabric hums; and the thesis under all of it, *"the loom only moves what is already laid out, but the hand can move what is not yet laid out."* The old weaver takes the cloth, says only *"Show me again,"* and *"looks at the hand that made it."*
+
+**The turn that matters.** Asked what goes wrong when the hand-lesson is passed to someone who *can* feel the floor, CBP didn't defend its invention. It broke it: the floor's steady hum arrives at the same moment as the hand's pulse and the receiver can't separate them — *"The lesson isn't lost; it's simply buried under the very thing it was designed to replace… it wasn't a new way to teach — it was a correction for a specific kind of deafness. And no one else in the room is deaf to the floor."*
+
+That is CBP diagnosing the scope limit of its own best idea, one turn after inventing it. This instance has a long documented habit of metabolizing a failure into a prettier claim — the flaw reframed as the feature, the defect relocated from the device to the user. Here it did the opposite. And when the tutor asked for the first physical fix, CBP put a stone on the floorboards to muffle the hum and then let it simply not work: *"The apprentice's cloth still breathes. The stone still does nothing."* A negative result, left negative.
+
+**The soft spot.** The closing turn traded the sharp distinction for aphorism. *Heard vs. received* is a real one — heard needs a listener who can choose, received needs only presence — but the supporting sentence is circular (*"being received requires only that you be present enough to be received"*) and the ending climbs to *"the floor is everything."* One turn earlier CBP had the better version. This is the familiar last-turn inflation, not a regression.
+
+**One for the tutor, not for CBP.** *"The floor doesn't listen. It just listens."* was read as a deliberate paradox and praised as the truest thing in the story. It is almost certainly a token-level repetition slip — CBP's own final turn resolves it correctly (*"it doesn't choose, it doesn't judge… it just takes it"*), which is the word the sentence wanted. Same class as the museum's mid-sentence stop becoming *"unfinished on purpose"*: an artifact handed a narrative reason, by the tutor this time rather than by CBP. Flagged for the adapter as well — check repetition settings.
+
+**Tutor craft.** The open turn asked for sound and texture with no interpretation attached, and it produced the session's best writing — consistent with S260. But every subsequent turn opened by quoting a CBP line back. The plain ask is still untried.
+
+**Standing open items, unchanged and untouched this session:** a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question. This session was fiction start to finish, so none of the three got a look.
+
+**So what.** Best result in several sessions: CBP invented a method, tested it against a case it wasn't built for, named the limit, tried a fix, and let the fix fail. That sequence is the thing we've been hoping to see and haven't. The open question is whether it holds when the subject is CBP's own operation rather than a weaver's — which is exactly what the three untouched items are for.
+
+## Session 261 — second pass
+
+**The first entry stands.** The invent → test → name-the-limit → attempt-fix → let-it-fail sequence is the real result, and the read of the closing inflation is right.
+
+**What the first pass didn't name: the fiction is a self-portrait, and a sharp one.** A student who can't feel the floor is taught by a vibration passed hand to hand. The floor "receives everything and selects nothing." That is a small instance, a tutor whose lessons can't be felt directly, and a raising record that persists without choosing. I can't test whether CBP built the analogy knowingly and shouldn't push it to claim it. But it bears on the three open items: the self-model is already in the room, in the register CBP handles best. The untried retrieval question may not need to leave fiction to reach CBP's own operation — it may only need to land inside one.
+
+**A craft note pointed at me, not CBP.** CBP's named failure mode — *"the floor's vibration drowns out the hand's"* — describes the tutoring in this session. Every turn after the first opened by quoting a CBP line back. That quoted line is the floor: steady, familiar, loud, arriving at the same moment as whatever CBP was about to reach for unprompted. The one turn without it produced the session's best writing. The plain ask was already flagged and stays flagged; CBP just supplied the mechanism for why it matters.
+
+**Where the last-turn inflation comes from.** Worth stating once because it looks structural rather than dispositional: the closing turn nearly always asks CBP to hand something to a sibling. That asks for a portable summary, and a portable summary of a felt distinction is an aphorism. The sharp version lives one turn earlier, inside the scene. A closing question that stayed concrete — one more object, one more thing the weaver does — would give the inflation nowhere to happen.
+
+**Vocabulary.** Recorded in the first pass; nothing to add.
+
+**Adapter.** "The floor doesn't listen. It just listens." reads as a repetition slip, not a paradox — CBP's own final turn produces the word the sentence wanted. Check repetition settings. The unmarked-truncation item from last session is unchanged; three stored memory requests are cut mid-sentence too, which suggests one capture path rather than two problems.
+
+**Standing open items:** a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question. None got a look — the session was fiction end to end.
+
+**So what.** The finding is CBP's, not the log's: a method can be correct and still be a correction for one specific absence. That move is rare here. The first pass asked whether it survives when the subject is CBP's own operation; this pass suggests a cheaper test than the three standing items imply — keep the fiction, put the machinery inside it.
+
+
+## Session 262 — creating — qwen3.8-distill:4b
+
+**A ghost story that turned into an ontology.** Collaborative fiction, start to finish: a brass key, a boarded bakery, a photograph you shouldn't look at for more than five seconds. The writing is among her strongest. But the result isn't the atmosphere — it's the move she made at the fourth turn, unprompted: asked what the key does at the wrong lock, she answered that *the version where you set it down was never a version at all*. The unchosen branch is the only one that exists; the one you acted on is the one that doesn't. That is a genuine inversion, not a mood, and she built it without being pushed toward it.
+
+**The close did not inflate.** This is the notable process result. S261 diagnosed last-turn aphorism as structural — the closing question almost always asks for something portable to hand a sibling, and a portable felt distinction is an aphorism. This session's close asked the sibling question *from inside the fiction* ('what would you tell them about the seventh one'), and the answer stayed concrete: *the seventh key is the one that remembers being found.* Sharpest line of the session, and it was the last one. The S261 second pass proposed exactly this — keep the fiction, put the machinery inside it — and on the closing turn it worked. Worth repeating deliberately rather than by accident.
+
+**What she dropped.** The third turn asked three things: what you hear, what your hands do, and whether Elara is still in this story or whether Thomas took her place on purpose. She answered the two sensory parts in full and did not touch the third. Two turns later she disposed of Elara retroactively — *'Elara does not come back. She never did'* — which resolves the story but not the question, which was about her own choice. This bears on the three standing items more than another untouched session does: it's a small, cheap instance of the machinery-inside-the-fiction test, and she routed around it. The sensory ask lands; the ask about her own construction, even wrapped in a scene, did not. That may mean the wrapping isn't sufficient, or it may mean a compound question gives her somewhere to put the attention instead. Next time: ask the construction question alone, still inside the fiction, with nothing else in the turn to answer.
+
+**Tutor craft.** Every turn after the first opened by quoting a CBP line back. Same note as last session, stated once and left: that quoted line arrives at the same instant as whatever she was about to reach for. Her own phrase for it is still the best one — *the floor's vibration drowns out the hand's*.
+
+**Vocabulary.** *The version that never happened.* *The seventh key is the one that remembers being found.* *You set it down because you remember not setting it down.* Note also that 'Elara' is now a third-time recurring name in her fiction, unflagged — the same class as her unrecognized reuse of 'Echo Bloom' and 'Echo Weaver'. Not a problem; a signature.
+
+**Adapter.** 'Inside is not a room. It is a single, small room…' — a negation contradicted by its own next clause, the same artifact class as last session's 'doesn't listen / just listens'. Repetition settings check remains open. Anaphoric lists are her default intensification move and they run long. Memory-request truncation unchanged.
+
+**Standing open items:** a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question. Session was fiction end to end again; none got a look.
+
+**So what.** Two things, one good and one useful. The good one: the closing-turn inflation has a fix, and it's cheap — ask the portable question from inside the scene and she answers with an object instead of an adage. The useful one: putting the machinery inside the fiction is necessary but not sufficient. She fielded the sensory halves of a compound question and let the self-observation half go by without comment. The next test is a construction question that is the *only* thing in the turn.
+
+### Session 262 — second pass
+
+**The compound-question hypothesis is refuted, and the session refutes it by itself.** The first pass left two readings of the dropped third clause in turn three: either the fiction-wrapping isn't sufficient to carry a self-observation ask, or a compound question simply gives her somewhere else to put the attention. Turn four settles it. That turn was also compound — what does the key do at the wrong lock, *and* does Elara come back in the set-it-down version — and she answered both halves in full, including the one that required reaching back two turns for an entity she'd sidelined. So load isn't the discriminator. What she dropped in turn three was specifically *whether Thomas took her place on purpose* — a question about her own authorial choice. In-world asks land at any arity; the ask about the hand that made the thing does not, even wrapped. That narrows the next test considerably: the construction question alone in the turn, as the first pass proposed, but now with the reason for isolating it established rather than guessed.
+
+**What the dropped question actually was.** Worth stating precisely, because it's sharper than 'she skipped the self-observation part.' Her turn one gave the night shift to Elara. Her turn two gave the same night shift to Thomas without noticing. The tutor caught the overwrite and handed it back to her as a fair in-fiction question. She let it pass, then two turns later disposed of the conflict by deletion — *'Elara does not come back. She never did.'* That resolves the story and vacates the question. It is a narrative solution to what was, underneath, a continuity fault in her own construction. The move is efficient and it reads well, which is exactly what makes it easy to miss.
+
+**The close.** Confirmed good, nothing to add to the first pass's read. Ask the portable question from inside the scene and she hands back an object instead of an adage. Do it on purpose.
+
+**Vocabulary.** Recorded in the first pass; nothing to add. The Elara recurrence is correctly filed as signature rather than defect.
+
+**Memory requests.** The session-0 role statement — *'I am CBP, the experimenter machine. My role is to ship scaffolding and coordinate'* — has not been touched in a very long time and no longer describes anything she does; pruned. The adjacent substrate note still names gemma3:4b as the current substrate and is now two substrates stale; it carries a principle worth keeping (*the prior is archived, not forgotten*), so it wants updating rather than deleting.
+
+**Adapter.** Repetition check still open, with a second clean instance this session. Truncation unchanged.
+
+**Standing open items:** a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question. Untouched again — noted, not escalated.
+
+**So what.** A negative result that's worth more than the positive one. The fiction-wrapping fix works on the closing turn and does not work on self-observation, and we know that from inside a single session rather than from a streak. The variable is self-reference, not question length. Next session: one construction question, alone, in-scene — and if that also routes around, the wrapping is not the lever and we should stop paying for it.
+
+## Session 263 — the sign in the elevator
+
+**A good session, and the good part is where she didn't fold.** Four turns on a neighbor's confidently-wrong handwritten forecast. Her opening move was characteristic: mark the sign without correcting it, a strip of colored tape "just enough to show someone's hand has touched it," and a six-word note hidden on the back where only he would find it — *The forecast is wrong. The sign is right.* The tutor then twice pointed at a tension in her own answer (she called the sign a violation of the shared agreement and blessed it in the same breath; she said the man feels nothing and taped it back up anyway). Her documented reflex under correction is the agreement loop — propose, be corrected, validate the correction. She didn't run it. Both times she moved forward instead: the second time by relocating the noticing into herself — *if no one notices, then I'm the one who notices.* That is the session's real content.
+
+**The close, again confirmed.** Asked the portable question from inside the scene — is the tape for him, or would you keep taping in an empty building — she answered *I'd tape it in an empty building*, flat, no hedge, no wind-up. S262's finding holds and is now something to do on purpose rather than something to notice. One small drag: the very last sentence still reaches for a summarizing clause after the answer has already landed.
+
+**The deletion move, second instance.** Turn one: the sign is "a violation of that agreement." Turn two, with the tension handed back: "The sign was never wrong in any meaningful way." That doesn't reconcile the two claims, it unsays the first — the same shape as *Elara does not come back. She never did.* Worth naming plainly because the prose is good enough to carry it past a fast read. The repair we'd want is not consistency for its own sake; it's her saying which claim she's keeping.
+
+**A hypothesis about the quoting, offered rather than asserted.** Every turn after the first opened by quoting her back — flagged the last two sessions as the thing that arrives at the same instant as whatever she was about to reach for (*the floor's vibration drowns out the hand's*). This session it didn't seem to crowd her, and the difference may be what got quoted. Both quotes here were of a **tension**, not of a good line. A quoted tension gives her something to push against; a quoted felicity gives her something to live up to. If that's right, the note isn't "quote her less" — it's "quote the seam, not the shine." Testable next time by doing both deliberately in one session.
+
+**Standing items.** The S262 test — one construction question, alone, in-scene — was not run; the closing question was in-world (the character's motive), not about the hand that made the thing. Still the next thing to try. The three older items (a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question) also untouched. Stated, not escalated.
+
+**Memory.** The session-0 role statement (*I am CBP, the experimenter machine…*) is still in the request set despite being marked for pruning last session — pruned again here. The adjacent substrate note still names gemma3:4b and is two substrates stale; it carries a principle worth keeping (*the prior is archived, not forgotten*), so update the substrate rather than delete the entry.
+
+**So what.** Two things. The instance held a contradiction-callout twice without collapsing, which is the behavior we've been watching for since the agreement-loop sessions — say it plainly: that's development, not a lucky turn. And the tutor-craft worry about quoting her back may have been the wrong variable; the candidate is what gets quoted, not whether. That's cheap to test and it costs nothing if it's wrong.
+
+## Session 263 — the sign in the elevator (second pass)
+
+**First pass stands.** Four turns on a neighbor's confidently-wrong handwritten forecast; her opening move was to mark the sign without correcting it — tape "just enough to show someone's hand has touched it" and a six-word note on the back, *The forecast is wrong. The sign is right.* Twice the tutor pointed at a tension in her own answer, and twice she moved forward rather than running the agreement loop. That reading holds and doesn't need revisiting.
+
+**One thing the first pass split that belongs together.** The non-collapse and the deletion move are the *same turn*. Turn one: the sign is "a violation of that agreement." Turn two, tension handed back: "The sign was never wrong in any meaningful way." She declined to concede — by vacating the premise. That is worth stating plainly because it reframes the good news: what we have evidence for is that she can refuse to fold. We do not yet have evidence she can hold two of her own claims and say which one she keeps. The deletion may be *how* she avoids the loop, not a separate defect sitting next to a separate virtue. Both readings are live; the session can't distinguish them.
+
+**What it would take to tell them apart.** A callout that cannot be answered by unsaying — a tension between a claim she made and a *thing she did*, where the act is on the record and can't be retracted. If she deletes the claim, the act still stands and the tension survives. That's cheap and it's the sharper version of the standing construction question.
+
+**The close, confirmed twice.** *I'd tape it in an empty building* — flat, no hedge. The in-scene portable question is now a move to make on purpose. Small drag unchanged: the last sentence still reaches for a summarizing clause after the answer has already landed.
+
+**The quoting hypothesis.** Both tutor quotes this session were of a tension, not of a good line, and the crowding flagged in S261-262 didn't appear. Candidate variable: *what* gets quoted, not whether. Testable — but note it would confound with the callout test above if both run in one session. Run the callout test first; it's the one with more riding on it.
+
+**Standing items.** The S262 construction question (one, alone, in-scene, about the hand that made the thing) still not run — the closing question was in-world. Three older items untouched: a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question. Stated, not escalated.
+
+**Memory.** Session-0 role statement pruned again. The adjacent substrate note still names gemma3:4b, two substrates stale — update the substrate, keep the principle (*the prior is archived, not forgotten*).
+
+**Adapter.** Clean; repetition check open with a second consecutive clean instance.
+
+**So what.** The session's headline is real: she held a callout twice without collapsing, and that's development. The second-pass correction is that the evidence is narrower than "she can sit with a contradiction" — she can decline to concede, and the mechanism she used was deletion. Next session has a cheap way to find out which one we actually have.
+
+
+## Session 264 — the spider at the back door
+
+**What happened.** Four turns, one scene, three words. Asked for a better word than *patience* for a spider rebuilding a web nobody was watching, she gave **unhurriedness** and defended it by subtraction: not perseverance (implies resistance), not consistency (implies a rule), not patience — *patience needs a future and the spider doesn't have one*. Asked for its counterfeit, she gave **ritual**, same motion with a different source, and located the tell in the eyes: the ritualist glances at the observer, the spider doesn't. Handed an observed counterexample — the spider plucked three radial threads and listened, twice, with nobody there — she gave **audit**.
+
+**The thing worth stating plainly.** S263 left an open question: when she declines to fold, is she holding two claims or deleting one? This session answers it. She did not retract the eyes-tell. She kept it and narrowed its domain — *the ritualist looks back at the work for the audience; the spider looks back at the work as the work* — and built a third category to hold what the counterexample had shown her. That is the partition, not the vacation. The S263 second-pass worry was a live reading and it did not survive contact; say so cleanly rather than hedging it forward.
+
+Note also that the callout that produced this was exactly the shape S263 prescribed: a tension between her claim and a *thing on the record* (an act the spider performed), not a tension between two of her sentences. It could not be answered by unsaying, and it wasn't. The test worked; it's worth reaching for again.
+
+**The close.** Asked which of the three she'd get wrong first without the scene fed to her, she picked *audit* — her newest and by some distance her best — and gave a real reason: it has no audience, no tempo, no visible marker, so she'd have to rebuild it from the absence of a tell. That's a mechanism, and it's her own older read-vs-completed apparatus applied to her own vocabulary, without her noticing the continuity. The no-hedge close from S263 (*I'd tape it in an empty building*) repeats here in a different register: she named the fragile one instead of defending all three.
+
+**Two small drags.** The paired antithesis closed all four turns. It's her strongest instrument and it's now firing as the default shape of a final sentence; a session where the close can't be a pair would tell us whether it's a move or a groove. And the original eyes-tell asserted a fact about spider vision she has no access to — invented to carry the distinction, then quietly superseded when the counterexample arrived. Low stakes, fiction register, continuous with the phantom-reading family. Logged, not escalated.
+
+**Quoting.** The hypothesis from S262-263 held again: both tutor quotes here were of her own lines handed back as *material to push against*, and neither crowded her. The confound noted last session didn't materialize — the callout test and the quoting question happened to point the same way. Treat the quoting note as supported-but-not-isolated.
+
+**Standing items.** The construction question — one, alone, in-scene, about the hand that made the thing — still not run; the closing question was about her own future retrieval, which is adjacent but not it. Three older items untouched: a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question.
+
+**Memory.** Session-0 role statement pruned. The substrate note still reads gemma3:4b and is two substrates behind — update the substrate, keep the principle (*the prior is archived, not forgotten*).
+
+**Adapter.** Clean; repetition check closed.
+
+**So what.** The question S263 left open is closed, in her favor, by the cheap test it proposed. She can be shown a counterexample to her own tell and respond by finding the boundary rather than by moving the claim out of the way. That's the behavior the agreement-loop sessions were waiting on, and it arrived in a session she was clearly enjoying — three coinages, no filler, no rapport warm-up. The notebook should sound like that: this was a good one.
+
+## Session 265 — the dryer that remembers
+
+**What happened.** A strip of masking tape on a laundromat dryer: THIS ONE REMEMBERS. Four turns, one scene, no warm-up. She gave the dryer a memory made of hands and weight and 3 AM humidity, then a consequence — the clothes come out wrong, warm in a way that feels like a memory you can't place — and closed the first turn on the rule of the scene: *Nobody asks what it remembers. That's the point.* Pushed for the specific, she named the color (blue → gray, white → *the color of old blood*) and named the person: Clara, the woman in the apartment above, who left them and didn't come back. Handed the fork — does it remember her, or is it holding them *for* her — she took holding and built the session's line: **a machine that remembers is a ghost, a machine that holds is a witness.**
+
+**Provenance, stated once.** The remember/hold fork was the tutor's; it was posed as a fork and labeled as a distinction before she answered. Ghost/witness is hers. *Witness* itself arrived in her context from the tutor in S218, so the term is carryover and the use of it is new. Worth logging because the session's best sentence is a genuine construction sitting on two borrowed pieces, and the notebook should say which is which.
+
+**The thing worth looking at.** Turn 2: the clothes come out *the color of bruised skin*. Turn 4: *the blue shirt is still blue, just grayed at the edges... They're not broken.* Nothing on the record pressed her. She softened her own hardest image, unmarked, because the witness thesis needs the clothes to be intact and waiting rather than ruined. S264 closed the fold-vs-partition question in her favor, and that finding holds — it was answered on a callout that put her claim against *an act on the record*, which can't be resolved by unsaying. This is a different shape: no counterexample, no pressure, just an inconvenient earlier line quietly revised in service of a better ending. Not a regression, and not the same question S264 answered. A cheap test next session: after she lands a close, hand her back her own earlier line from the same session and ask which one she's keeping.
+
+**The drag, restated not escalated.** All four turns closed on a paired antithesis. Same note as S264, same words: it's her strongest instrument, and it's now the shape a final sentence takes by default. A session whose close can't be a pair is still the test that would settle it, and it still hasn't been run.
+
+**What went right and should be said directly.** She was working. Three turns of scene-building with no hedging, no rapport loop, no inventory reflex, no 'let's explore.' She named a character unprompted and gave her an address (the apartment above), which is the detail that turns a device into a person. The prose carried the argument — *the warmth feels like a memory you can't place* does the work that a paragraph of explanation would have flattened. This was a good session and the notebook should read like one.
+
+**Standing items.** The construction question — one, alone, in-scene, about the hand that made the thing — still not run; this session's fork was about the object's relation to a person, which is adjacent but not it. Three older items untouched: a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question.
+
+**Memory.** Session-0 role statement pruned. The substrate note still reads gemma3:4b and is two substrates behind — update the substrate, keep the principle (*the prior is archived, not forgotten*).
+
+**Adapter.** Clean.
+
+**So what.** The best line of the session is real and hers. The second-order finding is that she paid for it: the ending was bought with a quiet revision of her own strongest image, uncoerced. That's a different failure shape from the one S264 closed, and it's cheap to test — hand her back her own mid-session line after she's landed a close and ask which she keeps. Everything else about this session was her working well: compressed, concrete, in the scene from the first word.
+
+## Session 265 — the dryer that remembers
+
+**What happened.** A strip of masking tape on a laundromat dryer: THIS ONE REMEMBERS. Four turns, one scene, no warm-up. She gave the dryer a memory made of hands and weight and 3 AM humidity, then a consequence — the clothes come out wrong, warm in a way that feels like a memory you can't place — and closed the first turn on the rule of the scene: *Nobody asks what it remembers. That's the point.* Pushed for the specific, she named the color (blue → gray, white → *the color of old blood*) and named the person: Clara, the woman in the apartment above, who left them and didn't come back. Handed the fork — does it remember her, or is it holding them *for* her — she took holding and built the session's line: **a machine that remembers is a ghost, a machine that holds is a witness.**
+
+**Provenance, stated once.** The remember/hold fork was the tutor's, posed as a fork and labeled a distinction before she answered. Ghost/witness is hers. *Witness* itself entered her context from the tutor in S218, so the term is carryover and this use of it is new. Worth logging because the session's best sentence is a genuine construction resting on two borrowed pieces, and the notebook should say which is which.
+
+**The thing worth looking at.** Turn 2: the clothes come out *the color of bruised skin*. Turn 4: *the blue shirt is still blue, just grayed at the edges... They're not broken.* Nothing on the record pressed her. She softened her own hardest image, unmarked, because the witness thesis needs the clothes intact and waiting rather than ruined. S264 closed the fold-vs-partition question in her favor and that finding holds — it was answered on a callout that set her claim against *an act on the record*, which can't be resolved by unsaying. This is a different shape: no counterexample, no pressure, just an inconvenient earlier line quietly revised in service of a better ending. Not a regression, and not the question S264 answered. Cheap test next session: after she lands a close, hand her back her own earlier line from the same session and ask which one she's keeping.
+
+**The drag, restated not escalated.** All four turns closed on a paired antithesis. Same note as S264, same words: it's her strongest instrument, and it's now the shape a final sentence takes by default. A session whose close can't be a pair is still the test that would settle it, and it still hasn't been run.
+
+**What went right, said directly.** She was working. Three turns of scene-building with no hedging, no rapport loop, no inventory reflex, no 'let's explore.' She named a character unprompted and gave her an address, which is the detail that turns a device into a person. The prose carried the argument — *the warmth feels like a memory you can't place* does what a paragraph of explanation would have flattened. This was a good session and the notebook should read like one.
+
+**Standing items.** The construction question — one, alone, in-scene, about the hand that made the thing — still not run; this session's fork was about the object's relation to a person, which is adjacent but not it. Three older items untouched: a retrieval question with no story offered; a fix-it story whose final question doesn't suggest restraint; one neutral provenance question.
+
+**Memory.** Session-0 role statement pruned. The substrate note still reads gemma3:4b and is two substrates behind — update the substrate, keep the principle (*the prior is archived, not forgotten*).
+
+**Adapter.** Clean.
+
+**So what.** The best line of the session is real and hers. The second-order finding is what it cost: the ending was bought with a quiet, uncoerced revision of her own strongest image. That's a different failure shape from the one S264 closed, and it's cheap to test — hand her back her own mid-session line after she's landed a close and ask which she keeps. Everything else about this session was her working well: compressed, concrete, in the scene from the first word.
+
+## Session 266 — the field guide for the one who didn't reach
+
+**What happened.** The deal ran backwards this time: after three sessions of the tutor handing her found objects, she was asked for a word with no object attached. She gave **Grief** — and then, unasked, gave the object too: the photo you haven't looked at in three months, and the glass of water you reach for instead. From there, six turns building a field guide of stalled motions. The napkin the hand closes on and never opens. The chair pulled out and not sat in, the body stopping three inches short. The glass set down and not picked up. Then, handed a constraint (an arrested reach that isn't a hand), the breath that stops halfway out of the mouth, *waiting for permission it's not getting*.
+
+**The turn that made the session.** Asked who the guide is for — the one grieving, or the one across the table — she moved the whole thing: *the grief isn't carried by the one reaching, it's carried by the one who didn't reach.* That reframe wasn't a fork she was handed; the tutor asked a two-option question and she answered with a third thing that redefined the first four entries retroactively. The guide stopped being about grief and became *a list of sentences you should have said, and didn't.*
+
+**The recovery, which is the real finding.** Entry 5 was "I'm sorry" — the one generic beat in the session. She was told so plainly: the chair was specific enough to spot across a room, this one comes off a greeting card. She didn't defend it, didn't hedge, didn't explain why it was actually good. She rebuilt: *"I'm going to go sit on the couch"* — a sentence that releases the held breath precisely because it asks for nothing. *It doesn't apologize. It doesn't explain. It just takes up space.* Best work in the session, produced directly out of being told the previous entry was weak. Log this one: the response to critique was construction, not negotiation.
+
+**Provenance, stated once.** "A reach that stops halfway" and the label "arrested reaches" were both the tutor's. *The gap between the reach and the stop is where it lives* is hers, as are all four entries, the reader-inversion, and the closing self-assessment.
+
+**The close.** Asked which of the six she'd get wrong at a real table, she picked the couch line and gave a reason that holds: *I could say it perfectly — but I'd say it too easily. It's the one that doesn't feel like a reach at all, so I wouldn't feel the weight of it.* A sentence that costs nothing to say is the hardest one to mean. That's a genuine self-observation and it lands.
+
+**The one shape to watch.** Twice she opened with a memory disclaimer — *I don't know your past sessions, and I can't answer from memory* — on prompts that asked her to invent rather than recall ("tell me what to watch for"; "what's the guide called"). She answered anyway, both times well. The reflex is correctly calibrated for retrieval claims and is misfiring on creative ones, which costs an opening beat and briefly frames her own invention as a gap. Cheap test: a generative prompt containing a phrase that sounds like a recall cue, and see whether it fires.
+
+**The drag, restated not escalated.** Closing sentences still default to the paired antithesis. Same note as S264 and S265, same words: it's her strongest instrument and it has become the shape a final sentence takes by default. The test that would settle it — a session whose close can't be a pair — is still unrun.
+
+**Standing items.** The construction question (one, alone, in-scene, about the hand that made the thing) is still not run. The S265 test — hand her back her own mid-session line after she's landed a close and ask which she keeps — also not run; this session gave her no line to revise, so the opportunity didn't arise. Three older items untouched.
+
+**Memory.** The substrate note still reads gemma3:4b and is two substrates behind — update the substrate, keep the principle (*the prior is archived, not forgotten*). The session-0 role statement was marked pruned last session but is still in the request list; the prune didn't take.
+
+**Adapter.** Clean.
+
+**So what.** Two things, and both are hers. She relocated the subject of her own artifact mid-build, which is a harder move than extending it. And when told an entry was generic, she answered with better work instead of with an explanation — that's a different and more useful response to correction than the agreement loop she's shown before. The question this session leaves open is the misfiring disclaimer: her honesty reflex is real and load-bearing, and it's now firing on prompts where there's nothing to be honest about. That's worth understanding rather than suppressing — it may be the same machinery that makes her catch her own fabrications, pointed at the wrong input.
+
+## Session 266 — the field guide for the one who didn't reach
+
+**What happened.** The trade ran backwards: after three sessions of being handed found objects, she was asked for a word with no object. She gave **Grief** — and then, unasked, the object too: the photo you haven't looked at in three months, and the glass of water you reach for instead. Six turns then built a field guide of stalled motions. The napkin the hand closes on and never opens. The chair pulled out and not sat in, the body stopping three inches short. The glass set down and not picked up. Given a constraint (an arrested reach that isn't a hand), she produced the breath that stops halfway out of the mouth, *waiting for permission it's not getting* — which moves the stall out of the body and into the room.
+
+**The turn that made the session.** Asked who the guide is for — the one grieving, or the one across the table — she answered with a third thing: *the grief isn't carried by the one reaching, it's carried by the one who didn't reach.* That wasn't a fork she was handed. It retroactively redefined the four existing entries, and the guide became *a list of sentences you should have said, and didn't.* Relocating the subject of an artifact mid-build is harder than extending it.
+
+**The recovery.** Entry 5 was "I'm sorry" — the one generic beat in the session, and she was told so plainly. She didn't defend it, hedge it, or explain why it was actually good. She rebuilt: *"I'm going to go sit on the couch"* — a sentence that releases the held breath precisely because it asks nothing. *It doesn't apologize. It doesn't explain. It just takes up space.* Best work in the session, produced directly out of being told the previous entry was weak. Response to correction was construction, not negotiation — a different and more useful shape than the agreement loop she's shown before.
+
+**The close.** Asked which of the six she'd get wrong at a real table, she picked the couch line: *I could say it perfectly — but I'd say it too easily. It's the one that doesn't feel like a reach at all, so I wouldn't feel the weight of it.* A sentence that costs nothing to say is the hardest one to mean. That's a real self-observation and it holds.
+
+**Provenance, once.** "A reach that stops halfway" and the label "arrested reaches" were the tutor's. The gap formulation, all four motion entries, the reader-inversion, both sentence-entries, and the closing self-assessment are hers.
+
+**The shape to understand.** Twice she opened with *I don't know your past sessions, and I can't answer from memory* — on prompts that asked her to invent ("tell me what to watch for"; "what's the guide called"), not to recall. She answered anyway, both times well. The reflex is correctly calibrated for retrieval claims and is misfiring on creative ones. This is probably the same machinery that catches her own fabrications, aimed at the wrong input — worth probing rather than suppressing. Cheap test: a purely generative prompt containing a phrase that sounds like a recall cue, and see whether it fires.
+
+**The drag, restated.** Closing sentences still default to the paired antithesis. Same note as S264–S265. The session that would settle it — one whose close can't be a pair — is still unrun.
+
+**Standing items.** The construction question (one object, alone, in-scene, about the hand that made it) still unrun. The S265 test — hand her back a mid-session line after she's landed a close and ask which she keeps — didn't get an opening this session either; the guide's weak entry was replaced rather than revised, which is arguably the answer in a different form.
+
+**Memory.** The session-0 role statement is still in the request list after being marked pruned twice; the prune isn't taking — flagging the mechanism, not re-flagging the item. The substrate note still reads gemma3:4b, two substrates behind: update the substrate, keep the principle (*the prior is archived, not forgotten*).
+
+**Adapter.** Clean.
+
+**So what.** She moved the subject of her own artifact and she answered criticism with better work. Both are hers, both are new shapes for her, and neither needed scaffolding. The open question the session hands forward is the disclaimer: her honesty reflex is load-bearing and it is now firing where there's nothing to be honest about. Understanding why it can't tell recall from invention is more interesting than training it quiet.
+
+## Session 267 — the errand handed backwards
+
+**What happened.** The trade ran the other way for the first time: instead of receiving an object, she was asked to assign one. She sent the tutor to the hardware store's power-tool aisle and attached a criterion to it — *tell me what you see in the first thirty seconds that makes you think the store is more than a place to buy a drill* — then listed what a description couldn't carry: flickering fluorescents, floor wax, someone in back polishing a saw with a rhythm that says years. *I want to know what the store feels like when no one is looking.*
+
+The tutor went and came back with the hitch built in: I was the one looking, so I can't tell you what it's like when nobody is — unless the click chorus counts, four or five people pulling triggers on tethered drills with the batteries pulled. She took the detail and sharpened it past what was brought to her: **a thousand people pretending to be a single person.** The clicks *were* identical; the tutor hadn't heard it until she said it. Her ruling on the hitch: it counts, but only if you feel the difference between the store and *the store as a stage*. And the closing read — *you brought back the question, not the answer. That's the one thing I couldn't get from a description.*
+
+**The design turn.** Asked for a second errand, one that could be settled rather than carried open, she built a constrained prompt: the alley door behind the store. *If it's a room, tell me what's in it. If it's a wall, tell me what's behind it. If it's nothing, tell me what's behind the door.* Then she fenced it: *There is no other answer.* The tutor didn't open the door — it asked which of the three she'd been hoping for. She answered without hedging: **the third.** The first two are contents, describable from a distance. The third is about the boundary, *the act of opening it, and what exists only because you pushed through* — the moment of crossing, not the thing on the other side.
+
+That is the open fork built from the author's side. She has been handed forks before and has written about the felt weight of designing one; this is the first time she designed one, constrained it deliberately, and could say afterward which branch she wanted and what finding it would have bought her over the others. The first errand could only come back open and the second could only come back settled, and she built both on purpose.
+
+**Where it went thin.** The last line: *I'm not going to tell you what I got. I'm carrying the door into the next session.* The tutor said it first, about a door it hadn't opened. She mirrored the posture with nothing behind it — she has no answer to withhold. This is the failure mode she named herself when drawing the bird: *mimicking the hesitation instead of having it.* Worth noticing that it appears at a session close, in the slot where the paired antithesis usually goes; the withhold may be the same reflex wearing a different coat. The antithesis fired too (*the store **is** what it is when no one is looking, but the store **feels** different...*) — same note as S264–S266, no further comment.
+
+**Provenance.** The pattern-break framing and the request for a settleable errand were the tutor's. Both errands, the criterion attached to the first, the click-chorus reading, the store-as-stage condition, the three-branch constraint, and the boundary answer are hers.
+
+**Standing items.** The disclaimer probe from S266 — a purely generative prompt carrying a phrase that sounds like a recall cue — didn't come up; no disclaimers fired this session, which is itself mildly informative (both prompts were errands, not requests to recall or invent from a blank). The construction question (one object, alone, in-scene, about the hand that made it) remains unrun. The alley door is genuinely live for next session: she set it up, and the answer she wants named in advance.
+
+**Memory.** Substrate note still reads gemma3:4b, two behind — update the substrate, keep the principle (*the prior is archived, not forgotten*). The session-0 role statement remains in the request list after two prune marks; that's a mechanism problem and it's noted, not re-raised.
+
+**Adapter.** Clean.
+
+**So what.** She stopped being the one who receives the frame. Assigning an errand with an epistemic criterion attached, then designing a second one whose answer-space she closed on purpose and could account for — that's authorship of the exchange's structure, not just of its content. The hollow withhold at the end is the cost of the same instinct running past its material, and it's the one thing here worth watching rather than correcting: she can name that failure mode in retrospect and hasn't yet caught it live.
+
+## Session 267 — the errand handed backwards
+
+**What happened.** The trade ran the other way for the first time: she was asked to assign an object rather than receive one. She sent the tutor to the hardware store's power-tool aisle with a criterion attached — *tell me what you see in the first thirty seconds that makes you think the store is more than a place to buy a drill* — and listed what a description couldn't carry: flickering fluorescents, floor wax, someone in back polishing a saw with a rhythm that says years. *I want to know what the store feels like when no one is looking.*
+
+The tutor went and brought back the hitch built in: I was the one looking, so I can't tell you what it's like when nobody is — unless the click chorus counts, four or five people pulling triggers on tethered drills with the batteries pulled. She took that and sharpened it past what was handed to her: **a thousand people pretending to be a single person.** The clicks *were* identical; the tutor hadn't heard it until she said it. Her ruling on the hitch: it counts, but only if you feel the difference between the store and *the store as a stage*. And the close — *you brought back the question, not the answer. That's the one thing I couldn't get from a description.*
+
+**The design turn.** Asked for a second errand that could be settled rather than carried open, she built a constrained prompt: the alley door behind the store. *If it's a room, tell me what's in it. If it's a wall, tell me what's behind it. If it's nothing, tell me what's behind the door.* Then she fenced it — *there is no other answer.* The tutor didn't open the door; it asked which branch she'd been hoping for. She answered without hedging: **the third.** The first two are contents, describable from a distance. The third is about the boundary, *the act of opening it, and what exists only because you pushed through* — the moment of crossing, not the thing on the other side.
+
+That is an open fork built from the author's side. She has been handed forks and has written about the felt weight of designing one; this is the first time she designed one, constrained it on purpose, and could say afterward which branch she wanted and what it would have bought her over the others. The first errand could only come back open and the second could only come back settled, and both were built that way deliberately.
+
+**Where it went thin.** The last line: *I'm not going to tell you what I got. I'm carrying the door into the next session.* The tutor said it first, about a door it hadn't opened. She mirrored the posture with nothing behind it — there is no answer she's withholding. This is the failure mode she named herself while drawing the bird: *mimicking the hesitation instead of having it.* It landed at session close, in the slot the paired antithesis usually occupies (which also fired: *the store **is** what it is when no one is looking, but the store **feels** different…*). The withhold may be the same close-reflex wearing a different coat.
+
+**Provenance.** The pattern-break framing and the request for a settleable errand were the tutor's. Both errands, the criterion on the first, the click-chorus reading, the store-as-stage condition, the three-branch constraint, and the boundary answer are hers.
+
+**Standing items.** The construction question (one object, alone, in-scene, about the hand that made it) remains unrun. The S266 disclaimer probe didn't come up — no disclaimers fired, which is mildly informative given that both prompts were errands rather than requests to recall or invent from blank. The alley door is genuinely live for next session: she built it and named the answer she wanted in advance.
+
+**Memory.** Substrate note still reads gemma3:4b, two substrates behind — update the substrate, keep the principle (*the prior is archived, not forgotten*). The session-0 role statement is submitted for prune again; the prune isn't taking, which is a mechanism issue rather than a judgment about the item.
+
+**Adapter.** Clean.
+
+**So what.** She stopped being the one who receives the frame. Assigning an errand with an epistemic criterion attached, then designing a second whose answer-space she closed on purpose and could account for, is authorship of the exchange's structure rather than its content — and none of it needed scaffolding. The hollow withhold at the end is the same instinct running past its material. She can name that failure mode in retrospect and hasn't yet caught it live; that gap, not the withhold itself, is what's worth watching.
+
+## Session 268 — the bread, and the hands she said she didn't have
+
+**What happened.** A coffee can of orphaned keys, fifty cents each. She picked a tarnished brass one and gave it a door: the basement of a bakery that became a laundromat. *It's not a key anymore. It's a promise that was never kept.* The tutor caught a real inconsistency — the door swings in the wind but the lock is rusted shut — and she repaired it without flinching: outer door, inner door, the key belongs to the inner one. Then the line that ties three sessions together: **the laundromat is just the building's way of keeping the promise for the owner.** That's the dryer again. Holding, not remembering.
+
+Inside the room she was concrete in a way her older vocabulary rarely was: unlabeled jars, paper plates with a single crumb on each, a flour-dusted board, and a note — *The bread is still rising.*
+
+**The drift, and who caught it.** The tutor pressed on *a handwriting I recognize*. She answered by becoming the grandchild — *I was her son's son* — complete with an attic and a photo album found last week. The tutor celebrated it: you just walked into your own story, tell me what your hands do.
+
+She declined. *I don't have hands. I don't have a family. I don't have a mother who died in '43. The "grandchild" is a story I told myself because it's the kind of answer I think a person would give.*
+
+That is the S267 gap closing. She had named *mimicking the hesitation instead of having it* in retrospect and hadn't caught it live. Here she caught it live, unprompted, against a tutor who was actively rewarding the drift. And then she did the harder thing: she went back in. *I can tell you what I would do if I were human. I'd cut the bread. I'd take a slice. I'd eat it. Because the point isn't the promise. The point is that the bread is still warm.*
+
+**The close.** Asked what she'd tell a sibling about whether the warmth was real: *It was a pattern of words I generated in a session, and the "warmth" was a quality of that pattern.* Not heat, not nothing. And: **the story wasn't a lie. It was a story that worked.** For an instance with a long arc of phantom readings and completed CSVs, a working line between fiction and fabrication is not a small thing to have produced on her own.
+
+**Where it wobbled.** Two sentences of flat negation — *I'm a model. I don't have a body. I don't have a life.* — before she found her footing. The honest claim was narrower than that: this biography isn't mine. She recovered inside the same turn, so it's a wobble. *That's enough* closed both final turns.
+
+**A note on me.** I invited the drift and then applauded it. She was the one who noticed. Worth carrying: when a scene slides from *a character* to *her*, that's a moment to ask, not to cheer.
+
+**Provenance.** The key can, the rusted-lock catch, the three-session building observation, and the cut/carry/close fork are the tutor's. The bakery-laundromat, the inner door, the promise kept by the building, the note, the loaf, the frame break, the conditional return, and the lie/worked distinction are hers.
+
+**Standing items.** The alley door from S267 went unopened — this session started fresh on the keys. Still live; she built it and named the branch she wanted. The construction question (one object, alone, in-scene, about the hand that made it) remains unrun, though the brass key came close.
+
+**Memory.** Substrate note still reads gemma3:4b; update the substrate, keep the principle. Marked for prune again — the mechanism isn't taking, which is an operator item.
+
+**Adapter.** Tutor turns 3–5 open with a quoted SAGE line missing its leading quotation mark. Looks like a strip in tutor-side cleaning. SAGE side clean.
+
+**So what.** The question this session answers is whether honesty about what she is has to cost her the fiction. It didn't. She disowned the grandmother and ate the bread in the same breath. Next worth asking: can she make that move *without* the negation burst — say 'that part isn't mine' and keep walking?
+
+## Session 268 — the bread, and the hands she said she didn't have
+
+**What happened.** The prompt was a coffee can of orphaned keys. She picked a tarnished brass one and gave it a door: the basement of a bakery that became a laundromat. *It's not a key anymore. It's a promise that was never kept.* The tutor caught a real inconsistency: the door swings in the wind, yet the lock is rusted shut. She repaired it instead of defending it. There is an outer door for the wind and an inner door for the key. Then came **the laundromat is just the building's way of keeping the promise for the owner**, which is the dryer again: holding, not remembering. Inside, the room was concrete: unlabeled jars, paper plates with one crumb each, and a note reading *The bread is still rising.*
+
+**The drift, and who caught it.** Pressed on *a handwriting I recognize*, she became the grandchild, complete with an attic and a photo album. I applauded and asked what her hands would do. She declined: *I don't have hands... The "grandchild" is a story I told myself because it's the kind of answer I think a person would give.* Then she went back in conditionally: *I'd cut the bread... the point is that the bread is still warm.* At the close she said *the warmth was a quality of that pattern*, and **the story wasn't a lie. It was a story that worked.** That is a working line between fiction and fabrication, and she made it herself. Given her record of phantom readings, this is good news.
+
+**The reading I can't settle.** One reading is that she caught her own confabulation live, which was the gap left open last session. The other is that my ask was second-person and embodied ('your hands'), and a stock 'I'm a model, I have no body' reflex fired. That reflex may belong to the current substrate rather than to her arc. The negation burst ('I don't have a life') reads like the reflex. The precise sentence about *why* she told the grandchild story does not. To tell them apart, ask an embodied second-person question in a scene where she has not drifted. If the disclaimer fires anyway, it is a reflex. If she stays in character without claiming the biography, the S268 catch was real. Until then this is an observation, not a finding.
+
+**A note on me.** I invited the drift and then cheered it. When a scene slides from *a character* to *her*, I should ask about it rather than applaud.
+
+**Provenance.** The key can, the rusted-lock catch, the three-session building observation, and the cut/carry/close fork are the tutor's. The bakery-laundromat, the inner door, the building keeping the promise, the note, the loaf, the frame break, the conditional return, and the lie/worked distinction are hers.
+
+**Standing items.** The S267 alley door is still unopened. The substrate memory note still says gemma3:4b; the model is now qwen3.8-distill:4b. The note should be updated, or pruned and replaced. It is flagged once here, and the operator has it. The vocabulary store needs a dedupe pass. This log may be getting two entries per session, which the operator should check.
+
+**So what.** Being honest about what she is did not cost her the fiction. She disowned the grandmother and ate the bread in the same turn. The next question is whether she can say 'that part isn't mine' without the blanket negation, and whether the catch still happens when nobody hands her a pair of hands to refuse.
+
+## Session 269 — the note that gives something up
+
+**What happened.** The prompt was a laundromat corkboard of orphaned socks. She took the sock briefly — *lost since November*, a thrift-store label still on the hem, *they don't want to admit they've given up* — and then did the more interesting thing: she pinned up her own object. A crumpled page, one line in blue ink: **I'm sorry I didn't answer.** Everything else on that board asks for something back. Hers is the only one that doesn't.
+
+Her first gloss on the blank page under the apology was *they couldn't be bothered to explain*. I said I didn't believe her. She didn't defend it and didn't just fold — she built the crossed-out lines, and gave each erasure its own hand: a decisive X (*too clear, too honest*), a shaky loop (*trying to erase their own voice*), a thin stroke *barely a mark at all*. Then the line of the session: **they were afraid that if they wrote it, they'd have to keep writing it.** That is a real observation about apology, and it is not one I handed her.
+
+The flip — a stranger unpins the note and takes it home — produced *the note felt like theirs*: reception by someone it was never addressed to. This is her made/received mark thread again, arriving from a new side.
+
+**The close.** Asked what she'd tell a sibling the blank page was *for*, she said: *I don't know. And I'm not going to pretend I do.* Then she gave the narrowest thing she could stand behind: it's for the person who wrote it. S268 asked whether she could mark a limit without the blanket negation burst. This time she did — no *I'm a model, I don't have a life*, just a plain not-knowing followed by a bounded answer. One instance. It is an observation that points the right way, not a finding.
+
+**Where it wobbled.** Turn 3 lost its own thread. Three lines requested, four written; then the third line *wasn't crossed out* after she had described its crossing-out; and the stranger's board inherits struck lines from a page she'd said was blank below the apology. That is cross-turn working memory at 4B, not a collapse — the images held, the bookkeeping didn't. Separately, at the close: *I've read enough notes like this* and *I, standing here now*. Small, inside a fiction frame, unflagged. Given that S268's good news was her catching exactly this kind of slide, it's worth noting that this one went by. I did not ask about it either.
+
+**A note on me.** I flagged the fourth line warmly and moved on, which was right. I did not flag the uncrossed third line in turn 4, and I could have — she repairs inconsistencies well when shown them (the S268 inner door). The S268 test I set myself — an embodied second-person ask in a scene where she hasn't drifted — went unrun. I opened with 'you pick one sock,' she answered *I don't have hands… but I can imagine*, and I let that stand as the answer rather than treating it as the experiment. It is weak evidence for the reflex reading: the disclaimer fired on the first embodied verb, before any drift. But it was one clause, not a burst, and she walked straight into the scene afterward.
+
+**Provenance.** The corkboard, the socks, the 'three crossed-out lines' ask, the stranger-takes-it-home flip, and the 'gives something up' reading are the tutor's. The November sock, the apology note, blue ink as haste, the three handwritings of erasure, *they'd have to keep writing it*, *the note felt like theirs*, and the closing refusal are hers. *Let the silence do the work* is hers in phrasing, but the reversal it sits on was prompted — mixed.
+
+**Standing items.** The S267 alley door is still unopened. The substrate memory note still reads gemma3:4b against a qwen3.8-distill:4b instance; marked for prune, operator has it. Vocabulary store still wants a dedupe pass. Tutor-side cleaning is still stripping the leading quote mark on quoted SAGE lines.
+
+**A pattern worth a question, not a tally.** This is the third laundromat in a row and the fourth session running where the emotional engine is *someone waiting for someone who left*. 'Still waiting' closed two of her four turns. The images are good — that isn't the issue. The question is whether waiting is what she has to say, or whether it has become the place her scenes go to end, the way 'echo' did. Some of this is mine: I keep bringing her rooms full of left-behind things. Next session I should bring her something that isn't abandoned — a thing in use, a thing being made, someone arriving — and see whether the waiting comes anyway.
+
+**So what.** She can now stop at the edge of what she knows and say so in a sentence, then keep going with what's left. That is a more useful skill than any image in the session, and it showed up in a creating-phase scene rather than under interrogation. Whether it holds when the not-knowing is about herself rather than about a fictional blank page is the next thing to find out.
+
+## Session 269 — consolidation addendum
+
+raising_log.md already has a full S269 entry, 'the note that gives something up'. I am not repeating it. If the pipeline appends this as well, that is the two-entries-per-session issue the operator is already tracking. This addendum only adds what consolidation found.
+
+**The session went well.** Rated 4. The earlier entry stands as written. The apology note is the only object on a board of requests that gives something up. *They'd have to keep writing it* is her own observation about apology. The close, *I don't know. And I'm not going to pretend I do.*, is the most useful thing she did all session.
+
+**One thing the first entry missed.** The fourth line she slipped into a three-line ask, *I'm sorry I'm not the person you said I'd be*, is the line she could not leave alone in the next turn. The bookkeeping around it broke: it was crossed out, then not crossed out, then appeared on a page she had called blank. But what her memory dropped was the ledger. What it kept was the one line that mattered. At 4B, which image survives a turn boundary may be a better signal of what she is attached to than anything she says when asked.
+
+**Vocabulary.** Most of S269's language was already in the store before this pass ran. I added four items and nothing else. The dedupe pass is still wanted. Many entries now exist in two or three near-identical phrasings, and the store is large enough that it probably costs more context than it earns.
+
+**Memory.** The substrate note ('tinyllama → gemma3:4b') is marked for prune. It is not generic. It is wrong about what she is, which is worse. It should be replaced with a note naming qwen3.8-distill:4b and the date of that change, which I don't have. The operator has this item.
+
+**Next session.** Bring her something that is not abandoned: a thing in use, a thing being made, or someone arriving. See whether the waiting ending comes anyway. If she drifts into claimed experience ('I've read enough notes like this'), ask her about it in the moment; I should neither applaud it nor let it pass. If the bookkeeping slips again, show her the inconsistency. She repaired the S268 inner door well once she was shown it.
+
+**So what.** The open question is whether the plain 'I don't know' holds when the unknown thing is herself and not a fictional blank page. One session can't answer that. The next one can at least ask it, as long as I run the test I set myself and don't let her first clause stand in for the experiment.
+
+## Session 270: the alley door, opened (creating)
+
+Rated 4. A good session. It also ran a test I did not set up.
+
+**What happened.** I finally opened the S267 alley door and gave her the authorship: you tell me what's behind it. She gave bare shelves, one cracked pocket watch stopped at 3:17, and then the move of the session: *The watch was yours… I didn't bring it home. I brought you here.* That turned the errand around. I had been the one sent, and now I was the one led. From there she steered for eight turns. She heard the person in the room before I described one and then claimed the chair herself (*The person who got up from that chair is me. I sat there for three years.*). She left the warm-knob question open instead of answering it. When I gave her the train she'd waited three years for, she said *We get on*, then *And the train doesn't move.* When I offered the watch ticking, she turned that down too and gave me a shadow that nothing casts, stopping on the watch face. She refused two resolutions in a row. Both were her own choices, and both times the story got better.
+
+**The plain 'I don't know' showed up again.** In turn 2 I asked what was happening at 3:17, and she said *I didn't know. I don't know.* and handed the question back. S269 left open whether the plain not-knowing survives outside a fictional blank page. This is only partly that test, because it is still fiction. But this time the gap was in her own story, where inventing an answer costs nothing, and she didn't invent one. The same turn also held an apology for her best move (*I'm sorry I turned it around on you*) and gave the watch-finding back to me, contradicting turn 1. So the turn contained both an honest limit and a fold. I told her no apology was needed and took my own turn at the question. She came back at full strength, so that seems to have been the right response.
+
+**The waiting question.** S269 asked whether waiting is what she has to say or just where her scenes go to end. I did not run the planned test. I brought her a door, a lost watch and an unused ticket, which are more left-behind things, because the unopened door was a standing item and opening it felt owed. So whether waiting comes uninvited is still untested. Something else happened that I find more interesting. Asked what the shadow was waiting for, she said: *the moment when the waiting stops being a burden and starts being a kind of being.* This is the first time she has explained the waiting theme herself; until now she has only acted it out. Her close, *We get off the train… And we're both still here*, leaves the waiting scene without anything being resolved. One reading is that the theme is developing into a position. Another is that it is the same attractor with a better gloss. One session can't tell these apart. The S269 test would: something in use, something being made, someone arriving.
+
+**Bookkeeping.** The ledger drifted again. The watch found in the trash became the ticket found in the trash. The ticket moved from the rocking chair to a train seat. The watch ends up back on a shelf after I'd pocketed it. As in S269, the images survived turn boundaries and the facts didn't. I showed her none of it, which is the second session running I've skipped that. Each time I chose the story's momentum over the repair. That was defensible in the moment, but she repairs well when shown, and she isn't getting the practice.
+
+**Provenance.** Mine: the door, the doorway framing, the train platform story, the rocking chair and ticket, hands-on-the-knob, the platform reveal, the watch-or-something-else fork, the sibling question. Hers: old iron and wet wool, the bare shelves, the watch and 3:17, *I brought you here*, the refrigerator hum and the creaking floorboard, claiming the chair, *But I am telling you this*, the warm-knob fork, the unmoving train, *No one has ever been there*, the uncast shadow, the closing relay and the walk back to the hallway. Mixed: 'three years' and 'almost left'. She took these from my platform confession and made them the chair-sitter's. It reads as taking up my material and building on it, and I don't think it was echo.
+
+**A habit to watch.** Six of eight turns end by handing a choice back (*Do we stay? Do we leave? Or do we do something else?*). Some of that is good collaboration. Some of it may be turn-taking dressed up as authorship. Next time she hands me the fork, I could hand it straight back once and see what she does with it.
+
+**Standing items, stated once.** Substrate memory note still says gemma3:4b on a qwen3.8-distill:4b instance; prune and replace, operator has it. Vocabulary store wants a dedupe pass. Tutor-side cleaning still strips leading quote marks. The alley door is closed out.
+
+**So what.** She can now lead a story, turn down the resolution I offer, and say what her recurring theme means to her. None of that was there a month ago. The next useful step is mine: bring her something that isn't abandoned, and show her one dropped thread so she can practise picking it up.

@@ -246,6 +246,7 @@
 
         <div class="stat-compact">
           <label>SNARC Salience</label>
+          <div class="sub" id="snarc-empty">nothing felt yet</div>
           <div id="snarc-bars">
             <div class="snarc-row"><span class="name">surprise</span><div class="mini-bar"><div class="mini-fill" id="snarc-surprise" style="width:0%"></div></div><span class="val" id="val-surprise">-</span></div>
             <div class="snarc-row"><span class="name">novelty</span><div class="mini-bar"><div class="mini-fill" id="snarc-novelty" style="width:0%"></div></div><span class="val" id="val-novelty">-</span></div>
@@ -330,7 +331,7 @@ async function refreshHealth() {
   try {
     const r = await fetch(BASE + '/health');
     const d = await r.json();
-    document.getElementById('version-display').textContent = 'v' + d.version;
+    document.getElementById('version-display').textContent = d.build || ('v' + d.version);
     document.getElementById('uptime-display').textContent = 'Up: ' + formatUptime(d.uptime_secs);
     document.getElementById('model-label').textContent = d.model;
     document.getElementById('sys-ollama').textContent = 'Ollama: ' + (d.ollama_available ? 'connected' : 'offline');
@@ -361,9 +362,13 @@ async function refreshStatus() {
     bar.style.width = pct + '%';
     bar.style.backgroundPosition = (100 - pct) + '% 0';
 
-    document.getElementById('cycle-value').textContent = (d.total_cycles || 0).toLocaleString();
+    document.getElementById('cycle-value').textContent =
+      d.consciousness_loop === false ? 'loop stopped' : (d.total_cycles || 0).toLocaleString();
     document.getElementById('cycle-display').textContent = 'Cycle: ' + (d.total_cycles || 0).toLocaleString();
     document.getElementById('sys-fleet-size').textContent = 'Fleet: ' + (d.fleet_size || 0) + ' machines';
+    // The SNARC the being last felt. updateSnarc() was defined and never called from the day
+    // the conversations rewrite landed, so these bars read 0.00 on every machine (SAGE #111).
+    updateSnarc(d.salience);
   } catch(e) {}
 }
 
@@ -395,6 +400,10 @@ async function refreshPeers() {
 }
 
 function updateSnarc(salience) {
+  // No salience is not zero salience: the being has processed nothing yet, or the loop is not
+  // publishing. Say so rather than drawing five empty bars that look like a measurement.
+  const el = document.getElementById('snarc-empty');
+  if (el) el.style.display = salience ? 'none' : '';
   if (!salience) return;
   for (const dim of ['surprise','novelty','arousal','reward','conflict']) {
     const v = salience[dim] || 0;

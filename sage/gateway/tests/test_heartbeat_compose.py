@@ -31,8 +31,14 @@ def test_act_first_moves_the_posture_verbatim_to_a_second_tool_turn():
     assert POSTURE in second, "the same words, not a summary"
     first = seed[1]["content"]
     assert "STATE" in first and "RECALL" in first and TOOLS in first
-    assert "DIGEST" not in first and "INBOX" not in first, "the world comes with the posture"
-    assert "DIGEST" in second and "INBOX" in second and TOOLS in second, "the posture turn is a tool turn"
+    # The DIGEST comes with the posture; the INBOX does not — mail rides the act turn
+    # (2026-09-17: the posture turn acted in 1 of 85 beats, the act turn in 25).
+    assert "DIGEST" not in first, "the world comes with the posture"
+    assert "INBOX" in first, "mail belongs in the turn that acts"
+    # ...and is NOT in the posture turn: it rides the act turn now, and asserting both was a
+    # leftover from before the move (left red 2026-09-17, caught and fixed the same day).
+    assert "INBOX" not in second, "mail rides the act turn; it is not repeated here"
+    assert "DIGEST" in second and TOOLS in second, "the posture turn is a tool turn"
 
 
 def test_no_turn_carries_a_think_suffix():
@@ -99,6 +105,32 @@ def test_inbox_renders_newest_first_with_replies_ahead_of_stale_dispositions():
     assert lines[1].startswith("- [unreachable]") and "after 5 attempts" in lines[1] and "hestia://egress" not in lines[1]
     assert lines[2] == "- 6 scope decision notice(s), already written into your notes; nothing to do."
     assert len(text) < 600 and render_inbox([]) == "(empty)"
+
+
+def test_the_inbox_rides_the_turn_the_being_acts_in():
+    """Sprout, 85 beats to 2026-09-17: the posture turn acted in 1 of 85, the first turn in 25,
+    and a peer's reply sat unopened in the posture turn the whole time."""
+    seed, second = compose(True, **KW)          # act-first
+    assert "INBOX" in seed[1]["content"], "mail belongs in the turn that acts"
+    assert "INBOX" not in (second or ""), "and not in the posture turn"
+    assert "DIGEST" in (second or "") and "DIGEST" not in seed[1]["content"]
+    seed, second = compose(False, **KW)         # posture-first: one turn, unchanged
+    assert second is None and "INBOX" in seed[1]["content"] and "DIGEST" in seed[1]["content"]
+
+
+def test_the_answer_ask_appears_only_when_there_is_someone_to_answer():
+    """2026-09-17: in no conversation at all, the being filled the id slot three beats running
+    with "speaker", "conversation_id_placeholder" and "1234567890"."""
+    from sage.gateway.heartbeat import REFLECT
+    none = REFLECT.format(date="D", say_line="", say_first="")
+    assert "say to=" not in none and "journal.md" in none and "remember" in none
+    # a channel exists but nobody is waiting: the generic form, after the writes
+    some = REFLECT.format(date="D", say_line='... say to="<id>", one of: c1.\n', say_first="")
+    assert 'say to="<id>", one of: c1' in some
+    # someone IS waiting: the ask comes FIRST, because the routine writes exhaust the step
+    # budget and anything after them is unreachable (2026-09-18).
+    waiting = REFLECT.format(date="D", say_line="", say_first='FIRST ... say to="dp", text="...".\n')
+    assert waiting.index("say to=") < waiting.index("journal.md")
 
 
 if __name__ == "__main__":

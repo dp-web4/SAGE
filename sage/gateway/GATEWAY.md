@@ -120,6 +120,12 @@ sudo systemctl start sage-daemon-sprout
 
 5. **Daemon replaces timer** — Existing session scripts become gateway clients instead of standalone model loaders.
 
+6. **Write for the reader you have** — A 0.5B–4B being reads and writes differently from us in ways we
+   have measured repeatedly and kept re-deriving. `SMALL_MODEL_LEGIBILITY.md` is the specimen corpus
+   and the ten rules that follow from it: what a quoted refutation does, why a refusal must name its
+   subject, why durable text may assert no present tense, and the five envelopes a tool call arrives
+   in. Read it before writing anything a being will read, and add to it when a being surprises you.
+
 ## Network Topology
 
 - **Thor**: 10.0.0.x (AGX Orin) — 14B model, primary SAGE

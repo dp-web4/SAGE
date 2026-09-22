@@ -251,6 +251,22 @@ def test_request_scope_schema_offers_no_mode():
     assert params["required"] == ["path", "reason"]
     assert "read and write" in spec["function"]["description"]
 
+def test_recall_schema_offers_the_second_half_of_retrieval():
+    """A search result is a PREVIEW. membot's own docstring names get_passage(idx) as the
+    other half of the pattern, and until 2026-09-18 no verb reached it: 451 memories the
+    being could see the opening of and read the whole of none. One verb, two forms —
+    a second verb would cost ~700 characters of prompt on every beat."""
+    from sage.gateway.being_gate_client import ollama_tools
+    (spec,) = ollama_tools(["recall"])
+    params = spec["function"]["parameters"]
+    assert set(params["properties"]) == {"query", "top_k", "idx"}, params
+    # NEITHER form is required: requiring `query` would make the idx form look malformed
+    # to the model, and requiring nothing is safe because the dispatcher refuses a call
+    # with neither and names both.
+    assert params["required"] == [], params
+    assert "idx" in spec["function"]["description"], spec["function"]["description"]
+
+
 def test_registry_offers_appeal_as_an_observational_effector():
     from sage.gateway.being_gate_client import _REGISTRY, _OBSERVATIONAL, ollama_tools
     assert _REGISTRY["appeal"]["tool"] == "appeal" and "appeal" in _OBSERVATIONAL
@@ -555,3 +571,13 @@ def test_a_failure_that_explains_itself_in_result_is_not_rendered_as_none():
 
     out = ResultEnvelope(ok=False).to_tool_message()
     assert "None" not in out and "harness defect" in out, out
+
+
+def test_unregistered_file_name_names_request_run():
+    # cbp-being 2026-09-21: called its script's file name as a tool, appealed the refusal.
+    v = _client(_allows).gate(BeingIntent("mechanism-training-script-clean.py", {"epochs": "10"}))
+    assert v.rule == "registry.unbounded" and "request_run" in v.reason, v
+    assert "path='mechanism-training-script-clean.py'" in v.reason, v
+    # a plain unknown verb is not a file: no run hint, the door would be the wrong one
+    v = _client(_allows).gate(BeingIntent("shell", {"command": "ls"}))
+    assert v.rule == "registry.unbounded" and "request_run" not in v.reason, v

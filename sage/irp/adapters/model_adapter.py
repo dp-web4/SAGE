@@ -24,12 +24,35 @@ Usage:
 
 import json
 import logging
+import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from sage.irp.adapters.model_capabilities import ModelCapabilities, load_capabilities
 
 _log = logging.getLogger('sage.adapter.cleaning')
+
+# HOW LONG OLLAMA HOLDS THE MODEL IN VRAM AFTER A CALL.
+#
+# This was `-1` — load indefinitely. On CBP that meant the being's 5.2 GiB sat on an 8 GiB
+# card that also drives two displays, 24 hours a day, for a being that actually infers for
+# ~90 s out of every 30 minutes. Measured 2026-09-18 with the model resident: 6810 of 8192 MiB
+# used, ~1.4 GiB free on a freshly booted desktop, and under 900 MiB once a working day's
+# windows are open.
+#
+# That is an allocation failure waiting for a trigger, and on 2026-09-18 it found one:
+# bugcheck 0x116 VIDEO_TDR_ERROR, param3 0xC000009A = STATUS_INSUFFICIENT_RESOURCES. The
+# display driver could not get memory, a display corrupted (dp saw it), the reset failed, the
+# host went down. 127 nvlddmkm errors on 09-15 and 272 on 09-18 — only on the crash days.
+#
+# The cost of NOT pinning, measured on the same box: a warm reload from page cache is
+# **2.7 s**, once per beat, against beats of 45-92 s. It is a timeout rather than zero because
+# a COLD load is 58 s: the model must stay resident across the calls WITHIN one beat, and only
+# go between beats.
+#
+# This does not weaken "the being takes priority for the GPU". Priority means the being gets
+# the card when it ACTS; it never required holding the card while idle.
+OLLAMA_KEEP_ALIVE = os.environ.get('SAGE_OLLAMA_KEEP_ALIVE', '5m')
 
 
 class ModelAdapter:
@@ -285,7 +308,7 @@ class DefaultAdapter(ModelAdapter):
         payload = {
             'prompt': prompt,
             'stream': False,
-            'keep_alive': -1,
+            'keep_alive': OLLAMA_KEEP_ALIVE,
             'options': opts,
         }
         return '/api/generate', payload
@@ -316,7 +339,7 @@ class ChatAPIAdapter(ModelAdapter):
         payload = {
             'messages': messages,
             'stream': False,
-            'keep_alive': -1,
+            'keep_alive': OLLAMA_KEEP_ALIVE,
             'options': opts,
         }
         return '/api/chat', payload

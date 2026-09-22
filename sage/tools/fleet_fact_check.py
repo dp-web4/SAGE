@@ -350,6 +350,149 @@ def check_local_census(rep: Report, machine: str, rows) -> None:
             f"on disk {on_disk}  |  site {published}{extra}")
 
 
+def daemon_presence(repo: Path = REPO, home: Path | None = None) -> list[str]:
+    """Evidence that this seat is SUPPOSED to run a sage-rs daemon. Empty list = none found.
+
+    Exists because of HUB (2026-09-18): HUB has never had a sage-daemon -- no unit, no
+    binary, nothing on the port -- and the check told it, on every run, forever, that "a
+    down daemon is itself a finding". True line, wrong explanation, unclearable. The port
+    in fleet.json cannot discriminate: all eight rows carry the same template 8760.
+    So presence is established from what is on the box, not from the manifest.
+    """
+    import glob
+    import subprocess
+    home = home or Path.home()
+    ev: list[str] = []
+    for b in (repo / "sage-rs" / "target" / "release" / "sage-daemon",
+              home / ".sage-deploy" / "bin" / "sage-daemon"):
+        if b.is_file():
+            ev.append(f"binary {b}")
+    for pat in (str(home / "Library/LaunchAgents/*sage-daemon*"),
+                str(home / ".config/systemd/user/*sage-daemon*"),
+                "/etc/systemd/system/*sage-daemon*", "/Library/LaunchDaemons/*sage-daemon*"):
+        ev.extend(f"unit {u}" for u in sorted(glob.glob(pat)))
+    try:
+        r = subprocess.run(["pgrep", "-f", "sage-daemon"], capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            ev.append(f"process pid {r.stdout.split()[0]}")
+    except Exception:
+        pass
+    return ev
+
+
+def upstream_newest(git, fetch: bool, max_ref_age_h: float = 24.0) -> tuple[str, str, str]:
+    """(newest sage-rs commit ON THE FLEET'S MAIN, the ref it was read from, caveat).
+
+    Exists because of Sprout (2026-09-18): the first cut read `git log -1 -- sage-rs/`
+    from HEAD of whatever checkout ran it and never fetched, so a seat whose checkout was
+    one sage-rs commit behind was told `ok` about a stale binary -- the check failing OPEN
+    in the one direction it exists to close. A non-empty caveat means "I could not see the
+    fleet's newest from here", and the caller must not turn that into `ok`.
+    """
+    import time
+    # Age of the last fetch, read BEFORE fetching: git rewrites FETCH_HEAD when a fetch
+    # STARTS, so after a failed one its mtime says "just now" about a ref that did not move.
+    # (Found by this function's own test, 2026-09-20: the failed-fetch arm came back clean.)
+    gd = git("rev-parse", "--git-common-dir").stdout.strip()
+    fh = Path(gd if os.path.isabs(gd) else REPO / gd) / "FETCH_HEAD"
+    age_h = (time.time() - fh.stat().st_mtime) / 3600 if fh.exists() else float("inf")
+    failed = ""
+    if fetch:
+        r = git("fetch", "--quiet", "origin", "main", timeout=30)
+        if r.returncode == 0:
+            age_h = 0.0
+        else:
+            failed = "could not fetch origin/main (" + ((r.stderr or "").strip().splitlines() or ["no output"])[-1][:80] + "); "
+    ref = "origin/main"
+    if git("rev-parse", "--verify", "--quiet", ref).returncode != 0:
+        return "", "", "this checkout has no origin/main to compare against"
+    caveat = ""
+    if age_h > max_ref_age_h:   # a recent fetch by anyone is as good as ours; an old one is not
+        age = "has never been fetched" if age_h == float("inf") else f"was last fetched {age_h:.0f}h ago"
+        caveat = failed + f"origin/main {age}" + ("" if fetch else ", and this run did not refresh it")
+    newest = git("log", "-1", "--format=%h", ref, "--", "sage-rs/").stdout.strip()
+    return newest, ref, caveat
+
+
+def daemon_verdict(*, reachable: bool, why_unreachable: str, port: int, presence: list[str],
+                   build: str, newest: str, ref: str, caveat: str,
+                   built_resolvable: bool, is_current: bool, behind: str) -> tuple[str, str]:
+    """PURE: every observation in, (status, detail) out. Tested in test_fleet_fact_check.py.
+
+    Four states, which the first cut collapsed into two:
+      no daemon on this seat   -> ok, and it says what it looked for (HUB)
+      daemon expected, not up  -> DIVERGE: that one a seat can act on
+      up, but I cannot see the fleet's newest sage-rs  -> UNDETERMINED, never ok (Sprout)
+      up and comparable        -> ok / DIVERGE on ancestry, as before
+    """
+    if not reachable:
+        if not presence:
+            return OK, (f"this seat runs no sage-rs daemon: nothing on :{port}, no sage-daemon binary, "
+                        "unit or process found — nothing to be stale (not a skip: absence was looked for)")
+        return DIVERGE, (f"daemon is DOWN: /health unreachable on :{port} ({why_unreachable}), but this seat "
+                         f"has one — {'; '.join(presence[:3])}")
+    m = re.search(r"\+([0-9a-f]{7,40})", build)
+    if not m:
+        return UNDETERMINED, f"/health reports build {build!r}; no commit sha to compare (binary predates build stamping?)"
+    if not newest:
+        return UNDETERMINED, f"running {build}  |  {caveat or 'no sage-rs history on ' + ref}"
+    if not built_resolvable:
+        return UNDETERMINED, f"running {build}  |  that commit is not in this checkout, so ancestry cannot be decided"
+    dirty = "  [built from a DIRTY tree]" if "dirty" in build else ""
+    base = f"running {build}  |  newest sage-rs commit on {ref} is {newest}"
+    if not is_current:
+        # Stale against even a stale ref is still stale: report it, caveat and all.
+        return DIVERGE, base + f" — binary is {behind} sage-rs commit(s) behind" + dirty + (f"  ({caveat})" if caveat else "")
+    if caveat:
+        return UNDETERMINED, base + f" — current against that, BUT {caveat}; cannot say the fleet has nothing newer"
+    return (DIVERGE if dirty else OK), base + dirty
+
+
+def check_daemon_build(rep: Report, machine: str, fleet: dict, fetch: bool = True) -> None:
+    """Is the RUNNING daemon built from the newest sage-rs on the fleet's main?
+
+    Added 2026-09-18, the day McNugget's daemon was found running a binary built
+    2026-06-06 -- fourteen sage-rs commits and three months behind. /health publishes
+    its build as "<ver>+<sha>@<date>"; the binary is current iff the newest commit
+    touching sage-rs/ on origin/main is an ancestor of that sha. A differ: it rebuilds
+    nothing. Reworked 2026-09-20 after HUB's and Sprout's reviews -- see daemon_presence,
+    upstream_newest and daemon_verdict for what each of them found.
+    """
+    import subprocess
+    port = ((fleet.get("machines") or {}).get(machine) or {}).get("gateway_port", 8760)
+    name = f"running daemon vs sage-rs source [{machine}]"
+
+    def git(*a, timeout=20):
+        try:
+            return subprocess.run(["git", "-C", str(REPO), *a], capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return subprocess.CompletedProcess(a, 124, "", "timed out")
+
+    build, why, reachable = "", "", False
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=4) as r:
+            build = str(json.loads(r.read().decode()).get("build", ""))
+        reachable = True
+    except Exception as e:
+        why = type(e).__name__
+    if not reachable:
+        status, detail = daemon_verdict(reachable=False, why_unreachable=why, port=port,
+                                        presence=daemon_presence(), build="", newest="", ref="", caveat="",
+                                        built_resolvable=False, is_current=False, behind="?")
+        rep.add(status, name, detail)
+        return
+    newest, ref, caveat = upstream_newest(git, fetch)
+    m = re.search(r"\+([0-9a-f]{7,40})", build)
+    built = m.group(1) if m else ""
+    resolvable = bool(built) and git("cat-file", "-e", built + "^{commit}").returncode == 0
+    current = bool(newest) and resolvable and git("merge-base", "--is-ancestor", newest, built).returncode == 0
+    behind = (git("rev-list", "--count", f"{built}..{ref}", "--", "sage-rs/").stdout.strip() or "?") if resolvable and ref else "?"
+    status, detail = daemon_verdict(reachable=True, why_unreachable="", port=port, presence=[],
+                                    build=build, newest=newest, ref=ref, caveat=caveat,
+                                    built_resolvable=resolvable, is_current=current, behind=behind)
+    rep.add(status, name, detail)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Compare published fleet facts against their sources.")
     ap.add_argument("--machine", default=os.getenv("SAGE_MACHINE", ""),
@@ -375,6 +518,7 @@ def main() -> int:
 
     if machine:
         check_local_model(rep, machine, fleet)
+        check_daemon_build(rep, machine, fleet, fetch=not args.no_site)
     if "__error__" in legacy:
         rep.add(UNDETERMINED, "fleet.json vs sage-fleet-models.json",
                 f"cannot read the legacy manifest: {legacy['__error__']}")

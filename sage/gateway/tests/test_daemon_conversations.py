@@ -151,3 +151,43 @@ def test_a_non_loopback_peer_can_neither_read_nor_speak(daemon):
     code, body = _req(base + "/chat", {"message": "from the network"})
     assert code == 403, body
     assert all(t["text"] != "from the network" for t in conv.recent(daemon["being"], "dp", limit=50))
+
+
+def test_both_writers_hold_one_sequence_through_a_rollback(daemon):
+    """GPT's exact falsifier from the review of SAGE#126 — run against the REAL Rust writer.
+
+    There are two canonical writers of a conversation log: the Python heartbeat (`say`) and the
+    Rust daemon (a turn typed in the dashboard). The first high-water repair lived only in
+    Python and counted lines, so after Python resumed past a gap at seq 6 in a two-line file,
+    a daemon turn would have been written as seq 3: "numbering never goes backwards" was false
+    on one of the two writers. And its witness sat in the tracked meta, inside the rollback.
+
+      1. turns 1..5 through BOTH paths      4. Rust   -> 7, same scar
+      2. roll the log back to turn 1        5. Python -> 8, same scar
+      3. Python -> 6, one truncation scar   6. roll back EVERY tracked artifact; still detected
+    """
+    being, base = daemon["being"], daemon["base"]
+    conv.create(being, "hw", title="high water", participants=["dp", "e2e-being"],
+                writable_by=["dp", "e2e-being"])
+    say = lambda text: _req(base + "/conversations/hw/say", {"message": text, "from": "dp"})[1]["turn"]["seq"]
+    py = lambda text: conv.append(being, "hw", speaker="e2e-being", text=text)["seq"]
+
+    assert [py("1"), say("2"), py("3"), say("4"), py("5")] == [1, 2, 3, 4, 5]                 # 1
+    log, meta = being / "conversations" / "hw.jsonl", being / "conversations" / "hw.meta.json"
+    snapshot_log, snapshot_meta = log.read_text().splitlines()[0] + "\n", meta.read_text()
+    wp = conv.witness_path(being, "hw")
+    assert json.loads(wp.read_text())["high_water_seq"] == 5, "the Rust turns advanced the witness too"
+
+    log.write_text(snapshot_log)                                                              # 2
+    assert py("after rollback") == 6                                                          # 3
+    scar = json.loads(wp.read_text())["truncations"]      # compared as VALUES: the Rust writer
+    assert len(scar) == 1                                 # re-serialises with sorted keys
+    assert say("rust after the gap") == 7                                                     # 4
+    assert py("python again") == 8                                                            # 5
+    assert json.loads(wp.read_text())["truncations"] == scar, "one event, one scar, both writers"
+
+    log.write_text(snapshot_log); meta.write_text(snapshot_meta)                              # 6
+    assert say("rust, after every tracked file rolled back together") == 9
+    w = json.loads(wp.read_text())
+    assert len(w["truncations"]) == 2 and w["truncations"][1]["high_water"] == 8, \
+        "the witness is outside Git's rewrite domain, so a joint rollback is still seen"

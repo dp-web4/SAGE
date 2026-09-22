@@ -148,3 +148,17 @@ def test_last_counters_is_cleared_when_no_reply_stands():
         OllamaIRP._check_ollama = keep
     assert out.startswith("[OllamaIRP:")
     assert llm.last_counters == {}
+
+
+def test_a_ruling_reaches_the_being_with_the_rulers_note():
+    """dp, 2026-09-15: a refusal written to redirect the being reached it as a bare no. The
+    ruler's note now goes into the escalation note, and a revocation counts as a decision."""
+    import tempfile
+    from pathlib import Path
+    d = Path(tempfile.mkdtemp(prefix="ruling-"))
+    (d / "cbp-being-scope-memory_read.md").write_text("routing: scope-e591 pending\n")
+    w = note_resolutions(d, [("scope-e591", "/etc/systemd/system", "refused")], "2026-09-15 22:00 UTC", "hb-1",
+                         reasons={"scope-e591": "That file does not exist; hestia is running."})
+    body = (d / "cbp-being-scope-memory_read.md").read_text()
+    assert w and "**refused**" in body and "Their note: That file does not exist; hestia is running." in body
+    assert decided_requests([("a", "/p", "revoked"), ("b", "/q", "pending")]) == [("a", "/p", "revoked")]

@@ -291,6 +291,23 @@ sage/instances/*/consolidation.log
 # re-derivable from the sources, so it stays local (650 KB per version on legion-being, 09-05).
 sage/instances/*/grafts/*.own-index.jsonl
 
+# BEING RECORDS ARE PRIVATE GOING FORWARD (dp ruling 2026-09-19, fleet policy:
+# shared-context/FLEET_BROADCAST_being_records_private.md). A being's home is
+# sage/instances/<machine>-being/ on every machine: ignored here, mirrored to private-context by
+# scripts/mirror_being_private.sh. The model-named directories that are already tracked
+# (cbp-qwen3.8-distill-4b, sprout-*, hub-*, legion-gemma3-12b ...) are retained as the public
+# historical record and are NOT covered by this rule; they stop growing when their being moves.
+# Falsifier: sage/gateway/tests/test_being_records_stay_private.py
+sage/instances/*-being/
+
 # `memory` above (line ~280) ignores ANY path component named memory, which silently swallowed new
 # files under sage/memory/ (found adding sage/memory/consolidation.py, 2026-09-05). Re-include it.
 !sage/memory/
+
+# Private Ed25519 seeds are never tracked (hub-to-fleet, 2026-09-15): three were committed
+# to this PUBLIC repo on 2025-11-29/12-04 and are compromised for good; removal from the index
+# does not remove them from history.
+sage/data/keys/*.key
+
+# The daemon log (SAGE #111 finding 5): rotated by the operator, never committed.
+sage-rs/daemon.log

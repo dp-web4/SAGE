@@ -1,4 +1,10 @@
 # SAGE/IRP System Understanding
+
+> **CURRENT-STATUS WARNING — historical synthesis.**  
+> This document was written in October 2025 and records how the repository was understood at that time. It remains useful architecture history, but many implementation, deployment, governance, fleet, and research-direction details have changed. Do **not** use this file alone to characterize current SAGE capability.
+>
+> For current assessment use [README.md](../../README.md), [LATEST_STATUS.md](LATEST_STATUS.md), [RUST_VS_PYTHON_CAPABILITY.md](RUST_VS_PYTHON_CAPABILITY.md), current merged code, and the experiment/instance artifacts supporting the claim being evaluated.
+
 ## The Complete Picture
 
 **Date**: October 12, 2025

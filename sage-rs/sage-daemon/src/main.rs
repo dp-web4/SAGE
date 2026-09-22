@@ -40,7 +40,14 @@ struct AppState {
     arousal: Mutex<ArousalDetector>,
     reward: Mutex<RewardEstimator>,
     conflict: Mutex<ConflictDetector>,
-    metabolic: Mutex<MetabolicController>,
+    /// NOT the being's metabolism. This controller exists only for the `POST /metabolic`
+    /// probe, which lets a caller step a controller by hand. The being's real one lives in
+    /// the consciousness loop and is read through `loop_state` (SAGE #111): until 2026-09-17
+    /// `/status` read THIS one, so it answered `total_cycles: 0, atp 100%` on every machine
+    /// while the loop ran at 1.6M cycles and ATP 36%.
+    probe_metabolic: Mutex<MetabolicController>,
+    /// What the consciousness loop publishes about itself. The loop is the only writer.
+    loop_state: Arc<Mutex<consciousness::LoopSnapshot>>,
     consciousness: ConsciousnessHandle,
     ollama: OllamaClient,
     fleet: Option<FleetRegistry>,
@@ -67,10 +74,19 @@ struct HealthResponse {
     status: &'static str,
     uptime_secs: f64,
     version: &'static str,
+    /// Which build is answering (SAGE #111 finding 6).
+    build: &'static str,
     port: u16,
     model: String,
     ollama_available: bool,
     consciousness_loop: bool,
+    // THE FIELDS A PEER'S MONITOR ALREADY PARSES (SAGE #111 finding 4). `federation::monitor`
+    // reads `metabolic_state`, `atp_level` and `cycle_count` out of this response; none of
+    // them existed, and because every field there is `Option` + serde default the parse
+    // succeeded anyway — so a reachable peer went green carrying nothing at all.
+    metabolic_state: Option<String>,
+    atp_level: Option<f64>,
+    cycle_count: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -79,12 +95,26 @@ struct StatusResponse {
     sprint: &'static str,
     snarc_detectors: Vec<&'static str>,
     half_lives: Vec<(&'static str, f64)>,
-    metabolic_state: &'static str,
+    /// Owned, not `&'static str`: this is the LOOP's state now, read at request time.
+    metabolic_state: String,
     atp_percentage: f64,
     total_cycles: u64,
     model: String,
     fleet_size: usize,
+    /// Derived from the publish age, not asserted (SAGE #111): it was a hard-coded `true`.
     consciousness_loop: bool,
+    messages_processed: u64,
+    experiences_recorded: u64,
+    /// The SNARC of the last input the being FELT; `null` until one arrives.
+    salience: Option<sage_lib::consciousness::observation::SalienceScore>,
+    /// Whose stream that salience belongs to: "dp", the seat, "cortex", a peer.
+    salience_source: Option<String>,
+    /// Inputs felt without being answered here — sensor moments and governed turns.
+    observations_felt: u64,
+    /// Seconds since the loop last published. `null` = it never has.
+    loop_published_age_secs: Option<u64>,
+    /// Which build answered. Was `version: "0.1.0"` and a frozen sprint label.
+    build: &'static str,
 }
 
 #[derive(Deserialize)]
@@ -132,6 +162,12 @@ struct ChatRequest {
     // (valence) axis instead of the word-count proxy — coherence-as-reward (H1).
     #[serde(default)]
     coherence: Option<f64>,
+    // Which stream this arrived on. Each source carries its own SNARC history, so the
+    // cortex's 4 Hz chatter and a person's occasional words habituate on separate curves
+    // instead of one collapsing the other. Defaults to the transport, which is honest about
+    // knowing nothing more.
+    #[serde(default)]
+    source: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -288,30 +324,65 @@ fn chat_history_path(root: &std::path::Path, machine: &str, model: &str) -> std:
 
 async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let available = state.ollama.is_available().await;
+    let snap = state.loop_state.lock().await.clone();
+    let alive = snap.published_at > 0 && now_secs().saturating_sub(snap.published_at) <= LOOP_STALE_SECS;
     Json(HealthResponse {
         status: "ok",
         uptime_secs: state.started.elapsed().as_secs_f64(),
         version: env!("CARGO_PKG_VERSION"),
+        build: build_stamp(),
         port: port(),
         model: state.model.clone(),
         ollama_available: available,
-        consciousness_loop: true,
+        consciousness_loop: alive,
+        // Only when the loop is actually publishing. A stale loop reports None rather than
+        // its last numbers: a peer must be able to tell "quiet" from "stopped".
+        metabolic_state: alive.then(|| snap.metabolic_state.clone()),
+        atp_level: alive.then_some(snap.atp_percentage),
+        cycle_count: alive.then_some(snap.total_cycles),
     })
 }
 
+/// A loop that has not published within this many seconds is not running. It ticks every
+/// 100 ms, so this is 300 missed ticks — long enough that a busy generate never trips it.
+const LOOP_STALE_SECS: u64 = 30;
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Which build this is, stamped at compile time (SAGE #111 finding 6). `version: "0.1.0"` has
+/// not moved since Sprint 1, so a running daemon could not be told from a months-old one.
+fn build_stamp() -> &'static str {
+    option_env!("SAGE_BUILD").unwrap_or(concat!(env!("CARGO_PKG_VERSION"), "+unstamped"))
+}
+
 async fn status(State(state): State<Arc<AppState>>) -> Json<StatusResponse> {
-    let ctrl = state.metabolic.lock().await;
+    let snap = state.loop_state.lock().await.clone();
+    // A loop that stopped leaves its last numbers behind; only the publish age says so.
+    let age = now_secs().saturating_sub(snap.published_at);
+    let alive = snap.published_at > 0 && age <= LOOP_STALE_SECS;
     Json(StatusResponse {
         daemon: "sage-daemon",
         sprint: "6 — dashboard + cutover",
         snarc_detectors: vec!["surprise", "novelty", "arousal", "reward", "conflict"],
         half_lives: temporal::DEFAULT_HALF_LIVES.to_vec(),
-        metabolic_state: ctrl.current_state.as_str(),
-        atp_percentage: ctrl.atp_percentage(),
-        total_cycles: ctrl.total_cycles,
+        metabolic_state: if alive { snap.metabolic_state.clone() } else { "unknown".to_string() },
+        atp_percentage: snap.atp_percentage,
+        total_cycles: snap.total_cycles,
         model: state.model.clone(),
         fleet_size: state.fleet.as_ref().map_or(0, |f| f.fleet_size()),
-        consciousness_loop: true,
+        consciousness_loop: alive,
+        messages_processed: snap.messages_processed,
+        experiences_recorded: snap.experiences_recorded,
+        salience: snap.salience.clone(),
+        salience_source: snap.salience_source.clone(),
+        observations_felt: snap.observations_felt,
+        loop_published_age_secs: if snap.published_at > 0 { Some(age) } else { None },
+        build: build_stamp(),
     })
 }
 
@@ -339,7 +410,7 @@ async fn metabolic_cycle(
         crisis_detected: req.crisis_detected.unwrap_or(false),
         ..Default::default()
     };
-    let mut ctrl = state.metabolic.lock().await;
+    let mut ctrl = state.probe_metabolic.lock().await;
     ctrl.update(&data);
     Json(MetabolicResponse {
         state: ctrl.current_state.as_str(),
@@ -362,12 +433,13 @@ async fn chat(
         });
         match state.ollama.chat(&messages).await {
             Ok(text) => {
-                let ctrl = state.metabolic.lock().await;
+                // The being's real metabolism, not the probe controller (SAGE #111).
+                let snap = state.loop_state.lock().await.clone();
                 (StatusCode::OK, Json(serde_json::json!({
                     "response": text,
                     "model": state.model,
-                    "metabolic_state": ctrl.current_state.as_str(),
-                    "atp_percentage": ctrl.atp_percentage(),
+                    "metabolic_state": snap.metabolic_state,
+                    "atp_percentage": snap.atp_percentage,
                 })))
             }
             Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({
@@ -375,7 +447,9 @@ async fn chat(
             }))),
         }
     } else {
-        match state.consciousness.send_message(req.message, req.system, req.salience, req.coherence, "http").await {
+        let source = req.source.unwrap_or_else(|| "http".to_string());
+        match state.consciousness.send_message(req.message, req.system, req.salience,
+                                               req.coherence, &source).await {
             Ok(resp) => (StatusCode::OK, Json(serde_json::json!({
                 "response": resp.text,
                 "model": state.model,
@@ -499,15 +573,22 @@ async fn chat_being(
             "hint": "create it with sage.gateway.conversations.create, or use /chat/raw to prompt the model directly (that is NOT the being)",
         })));
     }
+    let spoken = req.message.clone();
     match conversations::append_via(&state.being_instance, id, "dp", &req.message,
                                     Some("daemon-loopback")) {
         Ok(turn) => {
+            // dp's words reach the being NOW, not only when it next reads the file. Recording
+            // a turn and rousing a beat told the being it had mail; neither let it be
+            // AFFECTED by what was said. (dp, 2026-09-17: "messages from me and you" should
+            // trigger snarc.)
+            let felt = state.consciousness.observe(spoken, None, None, "dp");
             let woke = conversations::arouse(&state.root, &state.being_instance, "dp_turn",
                                              &format!("dp spoke in conversation '{id}'"));
             (StatusCode::OK, Json(serde_json::json!({
                 "to": state.being,
                 "conversation": id,
                 "turn": turn,
+                "felt": felt,
                 "delivery": delivery_text(&woke),
                 "arousal": woke,
                 "note": "the being answers on its own rhythm; its reply appears in this conversation when it next beats",
@@ -515,6 +596,51 @@ async fn chat_being(
         }
         Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))),
     }
+}
+
+#[derive(Deserialize)]
+struct ObserveRequest {
+    /// What was perceived, in words. For the cortex this is its descriptor sentence.
+    message: String,
+    /// Real perceptual salience [0,1] from the cortex, which has the sensor data this
+    /// daemon does not. When absent the being falls back to the text-shape proxy.
+    #[serde(default)]
+    salience: Option<f64>,
+    /// Cross-modal coherence [0,1] → the reward (valence) axis.
+    #[serde(default)]
+    coherence: Option<f64>,
+    /// Which stream this came from; each carries its own SNARC history. Defaults to the
+    /// body's own senses rather than to a person, because misattributing perception to a
+    /// speaker is worse than leaving it anonymous.
+    #[serde(default)]
+    source: Option<String>,
+}
+
+/// Something the being PERCEIVED, as distinct from something anybody said to it.
+///
+/// The cortex used to post its noticings to `/chat`, which became the governed conversation
+/// route: a perceptual descriptor was filed as a turn spoken by dp, and its salience and
+/// coherence were dropped on the floor. On this machine it had been answering 503 since the
+/// being's conversation directory did not exist, so the loop had felt nothing at all.
+///
+/// Perception is not speech from anyone. It is felt, never recorded as a turn, and never
+/// generates a reply — the being reacts on its own beat.
+async fn observe(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    Json(req): Json<ObserveRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(refused) = loopback_only(peer, "/observe") {
+        return refused;
+    }
+    let source = req.source.unwrap_or_else(|| "cortex".to_string());
+    let felt = state.consciousness.observe(req.message, req.salience, req.coherence, &source);
+    (StatusCode::OK, Json(serde_json::json!({
+        "felt": felt,
+        "source": source,
+        "note": if felt { "felt; the being reacts on its own rhythm and answers to nobody for it" }
+                else { "not felt: the loop's queue is full or the loop is not running" },
+    })))
 }
 
 #[derive(Deserialize)]
@@ -581,9 +707,14 @@ async fn conversation_say(
         return refused;
     }
     let speaker = req.from.unwrap_or_else(|| "dp".to_string());
+    let spoken = req.message.clone();
     match conversations::append_via(&state.being_instance, &id, &speaker, &req.message,
                                     Some("daemon-loopback")) {
         Ok(turn) => {
+            // Felt under the speaker's own name: each source carries its own SNARC history,
+            // so the seat's routine relay and dp's first words in a week are not measured
+            // against one another's rhythm.
+            let felt = state.consciousness.observe(spoken, None, None, &speaker);
             let woke = conversations::arouse(
                 &state.root, &state.being_instance,
                 if speaker == "dp" { "dp_turn" } else { "peer_turn" },
@@ -592,6 +723,7 @@ async fn conversation_say(
             (StatusCode::OK, Json(serde_json::json!({
                 "turn": turn,
                 "conversation": id,
+                "felt": felt,
                 "delivery": delivery_text(&woke),
                 "arousal": woke,
             })))
@@ -822,6 +954,8 @@ async fn main() {
     // Non-forcing shadow-metabolism experiment log (sibling of the experience buffer).
     let shadow_path = exp_path.with_file_name("atp_shadow.jsonl");
     info!("shadow metabolism log: {}", shadow_path.display());
+    // The cell the loop publishes into and the HTTP layer reads (SAGE #111).
+    let loop_state = Arc::new(Mutex::new(consciousness::LoopSnapshot::default()));
     let consciousness_loop = ConsciousnessLoop::new(
         OllamaClient::default_local(&model),
         experience,
@@ -829,7 +963,8 @@ async fn main() {
         &machine,
         &model,
         Some(shadow_path),
-    );
+    )
+    .with_snapshot(loop_state.clone());
 
     let loop_shutdown = shutdown_rx.clone();
     let loop_handle = tokio::spawn(async move {
@@ -863,7 +998,8 @@ async fn main() {
         arousal: Mutex::new(ArousalDetector::with_defaults()),
         reward: Mutex::new(RewardEstimator::with_defaults()),
         conflict: Mutex::new(ConflictDetector::with_defaults()),
-        metabolic: Mutex::new(MetabolicController::with_defaults()),
+        probe_metabolic: Mutex::new(MetabolicController::with_defaults()),
+        loop_state: loop_state.clone(),
         consciousness: consciousness_handle,
         ollama: OllamaClient::default_local(&model),
         fleet,
@@ -889,6 +1025,7 @@ async fn main() {
         // model stays reachable at /chat/raw for probing weights, which is a different
         // and much narrower thing than talking to the entity that lives here.
         .route("/chat", post(chat_being))
+        .route("/observe", post(observe))
         .route("/chat/raw", post(chat))
         .route("/conversations", get(conversations_list))
         .route("/conversations/:id", get(conversation_get))

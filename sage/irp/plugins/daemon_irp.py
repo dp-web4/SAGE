@@ -119,23 +119,49 @@ class DaemonIRP:
         if state.get('system_prompt'):
             payload_dict['system'] = state['system_prompt']
 
-        # POST to daemon /chat
+        # POST to the daemon's SYNCHRONOUS model route.
+        #
+        # That route is `/chat/raw`. It was `/chat` until sage-rs 77bcb395b (2026-09-13), which
+        # gave `/chat` to the operator's conversation WITH the being: it appends the message to
+        # the `dp` conversation AS dp, rouses a beat, and returns a delivery receipt -- no
+        # `response`, because the being answers on its own rhythm. This client kept posting to
+        # `/chat`, and nothing failed loudly:
+        #   * a seat with no `dp` conversation got 503, recorded as SAGE's reply. McNugget,
+        #     sessions 491-496 (2026-09-18 18:50 -> 09-20): six sessions of
+        #     "[Daemon unreachable: HTTP Error 503: Service Unavailable]", twelve turns each,
+        #     committed as raising. It began the day that seat's daemon was brought current.
+        #   * a seat WITH one would have had the tutor's prompts written into dp's conversation
+        #     under dp's name, the being roused by each, and '' recorded as its every reply.
+        # A daemon older than the split has no `/chat/raw`; it answers 404 and its `/chat` is
+        # still the synchronous route, so fall back on exactly that status and no other.
         try:
             payload = json.dumps(payload_dict).encode('utf-8')
 
-            req = urllib.request.Request(
-                f"{self.base_url}/chat",
-                data=payload,
-                headers={'Content-Type': 'application/json'},
-                method='POST',
-            )
+            def _post(route: str) -> Dict[str, Any]:
+                req = urllib.request.Request(
+                    f"{self.base_url}{route}",
+                    data=payload,
+                    headers={'Content-Type': 'application/json'},
+                    method='POST',
+                )
+                with urllib.request.urlopen(req, timeout=self.max_wait + 10) as resp:
+                    return json.loads(resp.read().decode())
 
-            with urllib.request.urlopen(req, timeout=self.max_wait + 10) as resp:
-                result = json.loads(resp.read().decode())
+            try:
+                result = _post('/chat/raw')
+            except urllib.error.HTTPError as e:
+                if e.code != 404:
+                    raise
+                result = _post('/chat')
 
-            response = result.get('response', '')
             if result.get('error'):
                 response = f"[Daemon error: {result['error']}]"
+            elif 'response' not in result:
+                # A 200 with no `response` is a receipt from some OTHER route, not an empty
+                # answer. Recording '' would put a silent being on the record; say what came back.
+                response = f"[Daemon error: no 'response' in reply (keys: {sorted(result)[:6]})]"
+            else:
+                response = result['response']
 
             state['current_response'] = response
             state['energy'] = 0.0  # Converged (daemon handled refinement)

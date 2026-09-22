@@ -29,6 +29,31 @@ mid-thread changes what the earlier turns meant.
 The being replies with the `say` verb, which is gated and witnessed like every other act of
 consequence. It cannot create a conversation, cannot write into one it is not in, and
 cannot edit a turn once spoken — including its own.
+
+A TURN WAKES WHOEVER IT IS ADDRESSED TO, in both directions. The daemon's
+`/conversations/:id/say` has always run the arousal policy, so a seat speaking wakes the
+being in seconds; the being's `say` only appended, and its words landed in a file with no
+reader. The meta's optional `notify` map — `{"<participant>": "<mesh plugin id>"}`, written
+by the seat, which the being cannot edit — says who to wake and under which mesh id, since a
+conversation id ("cbp-claude") and a mesh member id ("claude-code") are not the same name.
+No map means no wake, which is right for a conversation whose other party is a person.
+
+WATCHERS, AND THE RULE THEY RUN UNDER (dp, 2026-09-21; wording proposed by GPT's review of
+`9c132c32d` and ratified by dp: "if notify does not create an obligation, an fyi is harmless
+and potentially helpful"). `notify_watchers` is an explicit OBSERVER DELEGATION recorded in
+the conversation's seat-owned meta:
+
+  * a watcher MAY be notified, and receives the pointer — the conversation id and seq range,
+    never the text of a turn;
+  * a watcher gains NO write authority. `writable_by` remains the only thing that decides
+    who may speak, so dp's two-party ruling is untouched;
+  * the being CANNOT add or remove watchers: meta is the seat's file and `conversations/` is
+    reserved from `memory_write`;
+  * the notice CREATES NO OBLIGATION, which is the condition dp attached. Verified, not
+    assumed: the daemon counts only `review_request` and `reply` as awaiting a response
+    (`MEMBER_KINDS_AWAIT_RESPONSE`, handler.rs), and a watcher wake rides `coordination`, so
+    it never accrues to anyone's unanswered queue. If that constant ever grows to include
+    `coordination`, this stops being an FYI and the rule above is what it has broken.
 """
 from __future__ import annotations
 
@@ -99,6 +124,74 @@ def listing(instance: Path) -> list[dict]:
         out.append(m)
     out.sort(key=lambda m: (m["last"] or {}).get("ts") or m["created"], reverse=True)
     return out
+
+
+def witness_path(instance: Path, conv_id: str) -> Path:
+    """Where a conversation's high-water witness lives: OUTSIDE the repository.
+
+    GPT's review of SAGE#126 (2026-09-19), finding 3: the first cut kept the high-water mark in
+    the tracked `.meta.json` beside the log, so the rebase/checkout/reset that rolls the log
+    back rolls the witness back with it, and the next append sees a self-consistent old pair
+    and detects nothing. A witness in the same rollback domain as the thing it witnesses is not
+    a witness. This one is machine-local runtime state (SAGE #124's boundary): no Git command
+    in the working tree can touch it. A fresh clone has none, and falls back to the log.
+
+    The Rust daemon computes the same path (`conversations.rs::witness_path`); they must agree.
+    """
+    base = os.environ.get("SAGE_CONV_WITNESS_DIR") or os.path.join(
+        os.path.expanduser("~"), ".sage", "conversation-witness")
+    return Path(base) / Path(instance).resolve().name / f"{conv_id}.json"
+
+
+def next_seq(instance: Path, conv_id: str, lines) -> int:
+    """The next sequence number, and the ONLY place it is decided. Call under the log's lock.
+
+    `max(max seq in the log, the witness's high-water) + 1` — never the line count. GPT's
+    review, finding 1: after one gap the line count is behind the high-water mark forever, so
+    the line-count version re-detected a "truncation" on every later append and rewrote the
+    scar each time; the test passed because it never asserted the scar stayed put. With the
+    maximum, the turn written after a rollback makes the log's max equal the high-water again,
+    and the event is recorded exactly once.
+    """
+    max_in_log = 0
+    occupied = 0
+    for line in lines:
+        if not line.strip():
+            continue
+        # A damaged line still OCCUPIES a position: reusing its number would make two turns
+        # share one identity. A gap in the sequence is a scar and reads as one; a duplicate is
+        # a corruption of the account itself. So the raw count is a floor, never the answer.
+        occupied += 1
+        try:
+            max_in_log = max(max_in_log, int(json.loads(line).get("seq", 0)))
+        except Exception:
+            continue
+    wp = witness_path(instance, conv_id)
+    try:
+        w = json.loads(wp.read_text())
+    except Exception:
+        w = {}
+    hw = int(w.get("high_water_seq") or 0)
+    if max_in_log < hw:
+        w.setdefault("truncations", []).append(
+            {"noticed": _now(), "max_seq_in_log": max_in_log, "high_water": hw,
+             "resumed_at": hw + 1})
+    seq = max(max_in_log, hw, occupied) + 1
+    w["high_water_seq"] = seq
+    wp.parent.mkdir(parents=True, exist_ok=True)
+    tmp = wp.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(w, indent=2) + "\n")
+    os.replace(tmp, wp)
+    return seq
+
+
+def _write_meta(instance: Path, conv_id: str, m: dict) -> None:
+    """Replace a conversation's meta atomically. The meta is small and the seat owns it; the
+    being cannot write here (conversations/ is reserved from memory_write)."""
+    _, meta = _paths(instance, conv_id)
+    tmp = meta.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(m, indent=2) + "\n")
+    os.replace(tmp, meta)
 
 
 def integrity(instance: Path, conv_id: str) -> dict:
@@ -195,11 +288,11 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         try:
             f.seek(0)
-            # RAW line count on purpose, not the readable count: a damaged line still
-            # occupies a position in the record, and reusing its sequence number would make
-            # two different turns share one identity. A gap in the sequence is a scar and
-            # reads as one; a duplicate is a corruption of the account itself.
-            seq = sum(1 for line in f if line.strip()) + 1
+            # SEQUENCE = max(what the log holds, what the witness remembers) + 1. See
+            # `next_seq`: line count is wrong after any gap, and the witness lives outside
+            # Git's rewrite domain so a rollback of every tracked file is still detected.
+            f.seek(0)
+            seq = next_seq(instance, conv_id, f.read().splitlines())
             turn = {"ts": _now(), "seq": seq, "from": speaker, "text": text}
             if via:
                 turn["via"] = via
@@ -214,6 +307,11 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     return turn
 
+
+# Words that make a sentence a claim about something being down. Shared with the heartbeat's
+# `service_contradictions` so the two agree on what counts as such a claim.
+_DOWN_WORDS = re.compile(r"offline|\bdown\b|unreachable|not reachable|connection refused|"
+                         r"not responding|outage", re.I)
 
 SEEN_FILE = ".seen.json"
 
@@ -231,6 +329,20 @@ def mark_seen(instance: Path, me: str, conv_id: str, upto_seq: int) -> None:
         seen[key] = upto_seq
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps(seen, indent=1) + "\n")
+
+
+def latest_seqs(instance: Path, me: str) -> dict:
+    """{conversation id: its latest seq} for every conversation `me` is in: what a beat composed
+    now would show. Captured at compose time and handed to `mark_seen` only after the beat has
+    shown it could act on it (heartbeat.mark_conversations_after_beat)."""
+    out = {}
+    for m in listing(instance):
+        if me not in m.get("participants", []):
+            continue
+        turns = recent(instance, m["id"], limit=1)
+        if turns:
+            out[m["id"]] = int(turns[-1].get("seq", 0))
+    return out
 
 
 def last_seen(instance: Path, me: str, conv_id: str) -> int:
@@ -260,11 +372,178 @@ def awaiting(instance: Path, conv_id: str, me: str) -> list[dict]:
     return turns[last_mine + 1:]
 
 
+def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0) -> list[dict]:
+    """Turns after `me` last spoke, when the last word is someone else's and RECENT.
+
+    `awaiting` answers "what has it not been SHOWN". This answers "what has it not ANSWERED",
+    which is a different set the moment a turn is marked seen without a reply. Measured
+    2026-09-19: dp's turn at 03:51Z was shown in a beat whose explore turn acted, so it was
+    marked seen; the being never replied, and from then on the reflect ask — which quoted only
+    unseen turns — fell silent with dp's words still the last in the channel.
+
+    Bounded by age on purpose. Answering is optional, and an ask that repeats forever is
+    pressure, not an invitation: after `max_age_h` an unanswered turn is a choice the being
+    made, and the channel still shows it whenever the being looks.
+    """
+    from datetime import datetime, timezone, timedelta
+    turns = recent(instance, conv_id, limit=200)
+    if not turns or turns[-1].get("from") == me:
+        return []
+    last_mine = max((i for i, t in enumerate(turns) if t.get("from") == me), default=-1)
+    tail = turns[last_mine + 1:]
+    try:
+        newest = datetime.strptime(tail[-1]["ts"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - newest > timedelta(hours=max_age_h):
+            return []
+    except Exception:
+        return []
+    return tail
+
+
 # Channels whose speaker names are ASSERTED at this machine's loopback rather than signed.
 # A turn through any of these is shown to the being with the tag below, once per turn, so
 # that "dp said X" and "someone at the console typed X as dp" are never the same sentence.
 UNSIGNED_VIA = ("dp-console", "daemon-loopback")
 UNSIGNED_TAG = " _(unsigned: asserted at this machine's console)_"
+
+
+_STUB = re.compile(r"^\s*\[[^\]]{20,}\]\s*$")
+
+
+def is_stub(text: str) -> bool:
+    """True when the whole of `text` is a bracketed placeholder — "[Your brief, final
+    word-only summary of your response]" — rather than content.
+
+    Measured on Sprout 2026-09-18: 32 of 122 turns across 40 beats replied this way, with a
+    lucid think block behind them. It is a template completion, not a thought. Lives here
+    rather than in the heartbeat because both ends need it: the beat must not hand one back
+    to the being as context, and `say` must not deliver one to a person.
+    """
+    return bool(_STUB.match(text or ""))
+
+
+ECHO_GRAM = 5          # words per shingle
+ECHO_MIN_GRAMS = 8     # below this a text is too short to call an echo ("yes, understood")
+ECHO_CONTAINED = 0.75  # share of the text's shingles found in one earlier turn
+
+
+def _shingles(text: str) -> set:
+    w = re.findall(r"[a-z0-9]+", (text or "").lower())
+    return {tuple(w[i:i + ECHO_GRAM]) for i in range(len(w) - ECHO_GRAM + 1)}
+
+
+def unanswered_run_start(instance: Path, conv_id: str, speaker: str) -> Optional[int]:
+    """The seq that OPENED the speaker's current unanswered run, or None if it is not waiting.
+
+    A "run" is the block of consecutive turns by `speaker` at the tail of the conversation —
+    everything it has said since anyone else last spoke. The run's first seq is the only thing
+    a wake should be keyed on: cbp-being sent six turns to its seat between 16:08 and 18:02 on
+    2026-09-20, all one unanswered question, and six wakes for one question is how an
+    always-on responder becomes something a machine's owner turns off.
+    """
+    turns = recent(instance, conv_id, limit=200)
+    if not turns or turns[-1].get("from") != speaker:
+        return None
+    start = None
+    for t in reversed(turns):
+        if t.get("from") != speaker:
+            break
+        start = int(t.get("seq", 0))
+    return start
+
+
+def notify_state_path(instance: Path, conv_id: str, speaker: str) -> Path:
+    """Where "I already woke someone about this run" is remembered: OUTSIDE the repository,
+    for the reason in `witness_path` — a rollback of the log must not silently re-arm a wake,
+    and a wake ledger is machine state, not part of the being's record."""
+    base = os.environ.get("SAGE_CONV_NOTIFY_DIR") or os.path.join(
+        os.path.expanduser("~"), ".sage", "conversation-notify")
+    return Path(base) / Path(instance).resolve().name / f"{conv_id}.{speaker}.json"
+
+
+def _request_digest(text: str) -> Optional[str]:
+    """The bytes a `[request_run]` turn asks about (its `sha256:` tag), or None if it is not one.
+    A request with no tag counts as its own bytes: it cannot be shown to repeat anything."""
+    if not str(text or "").startswith("[request_run]"):
+        return None
+    m = re.search(r"sha256:([0-9a-f]{6,64})", text)
+    return m.group(1) if m else f"untagged:{text}"
+
+
+def wake_is_owed(instance: Path, conv_id: str, speaker: str) -> Optional[int]:
+    """The run-start seq a wake is owed for, or None. Idempotent per run, and retried if the
+    last attempt failed — `record_wake` is called only on success, so a notice that never left
+    is owed again on the speaker's next turn rather than lost.
+
+    ONE EXCEPTION, AND WHY. A run is keyed on its first turn so that six prose repeats of one
+    question cost one wake (2026-09-20). Measured 2026-09-21: the seat was woken at 14:18Z for
+    cbp-being's "Got it, thanks" (seq 3015) and rightly said nothing. That left the run OPEN
+    and already woken, so the being's two `request_run`s at 15:49Z and 16:51Z (3016, 3017)
+    joined it and woke nobody; they waited until a person happened to look, 1.5 hours and
+    more. A thank-you had spent the wake that a real request needed.
+
+    So a `[request_run]` for BYTES the last wake did not cover re-arms the wake. Keyed on the
+    file digest the request carries: asking again about an unchanged file wakes nobody (the
+    seat's answer would be "unchanged"), while a changed file is new work. Prose repeats still
+    cost one wake per run."""
+    start = unanswered_run_start(instance, conv_id, speaker)
+    if start is None:
+        return None
+    try:
+        state = json.loads(notify_state_path(instance, conv_id, speaker).read_text())
+    except (OSError, ValueError):
+        state = {}
+    done = int(state.get("woke_for_run_starting_at") or 0)
+    if start > done:
+        return start
+    # The same run was already woken. Owed again only for a request about uncovered bytes.
+    covered = int(state.get("covered_through") or done)
+    run = [t for t in recent(instance, conv_id, limit=200)
+           if int(t.get("seq", 0)) >= start and t.get("from") == speaker]
+    seen = {_request_digest(t.get("text")) for t in run if int(t.get("seq", 0)) <= covered}
+    for t in run:
+        d = _request_digest(t.get("text"))
+        if int(t.get("seq", 0)) > covered and d is not None and d not in seen:
+            return start
+    return None
+
+
+def record_wake(instance: Path, conv_id: str, speaker: str, run_start: int,
+                covered_through: Optional[int] = None) -> None:
+    """Remember the wake. `covered_through` is the last turn the woken party was told about;
+    requests after it are what `wake_is_owed` checks for new bytes."""
+    p = notify_state_path(instance, conv_id, speaker)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps({"woke_for_run_starting_at": run_start,
+                               "covered_through": covered_through if covered_through is not None
+                               else run_start,
+                               "at": _now()}, indent=2) + "\n")
+    os.replace(tmp, p)
+
+
+def echo_of(instance: Path, conv_id: str, me: str, text: str, lookback: int = 4) -> Optional[dict]:
+    """The recent turn by someone ELSE that `text` mostly repeats, or None.
+
+    Measured 2026-09-19 21:04Z: dp answered this being's question, and the being's next turn
+    to dp was dp's answer, 91% of its word 5-grams lifted from it. One hit in 23 scored turns
+    in that conversation. The bar is 0.75, not 0.5, because of the one other hit in this
+    being's history (cbp-claude seq 992, 0.58): asked "what's the one line you'd keep?", it
+    quoted the line. Choosing a line is a reply. Two data points set this number — it errs
+    toward letting speech through, and a refusal that fires on real speech is the worse
+    failure. Containment, not similarity: a reply may quote a line and add to it, so what is
+    counted is how much of the REPLY is the other party's words. (difflib's ratio scored the
+    known echo under 0.6 — autojunk discards frequent characters past 200 chars.)
+    """
+    g = _shingles(text)
+    if len(g) < ECHO_MIN_GRAMS:
+        return None
+    others = [t for t in recent(instance, conv_id, limit=lookback * 3)
+              if t.get("from") != me][-lookback:]
+    for t in reversed(others):
+        if len(g & _shingles(t.get("text") or "")) / len(g) >= ECHO_CONTAINED:
+            return t
+    return None
 
 
 def _provenance_tag(turn: dict) -> str:
@@ -280,12 +559,16 @@ def _shown_text(turn: dict, turn_chars: Optional[int], conv_id: str) -> str:
     Measured 2026-09-08: two long seat turns (25.6k chars) were re-rendered into every
     beat, ~9k tokens of a 24.5k window, and the being ran out of room to act — five
     beats of identical deliberation cut at the wall. The record is kept whole; only what
-    is SHOWN per beat is bounded."""
+    is SHOWN per beat is bounded.
+
+    The marker names memory_read's REAL argument. It used to say `from_line N lines 1`,
+    neither of which memory_read accepts (it takes `start_line`); measured 2026-09-21,
+    26 of cbp-being's 33 reads of a conversation file started at line 1 of ~2,950."""
     text = turn.get("text", "")
     if turn_chars and len(text) > turn_chars:
         return (text[:turn_chars].rstrip()
-                + f" …[+{len(text) - turn_chars} chars; the whole turn: memory_read "
-                  f"conversations/{conv_id}.jsonl from_line {turn.get('seq')} lines 1]")
+                + f" …[+{len(text) - turn_chars} chars; the whole turn: memory_read path "
+                  f"conversations/{conv_id}.jsonl start_line {turn.get('seq')}]")
     return text
 
 
@@ -332,8 +615,31 @@ def _cap_for(turn: dict, me: str, answered_upto: int, turn_chars: Optional[int])
     return min(ANSWERED_TURN_CHARS, turn_chars)
 
 
+def _refuted_mark(text: str, refuted) -> str:
+    """The marker for a turn of the being's OWN that asserts something a measurement taken
+    this beat contradicts. `refuted` is [(keys, note)] from the heartbeat: keys identify the
+    subject (a port, host:port, a service word) and note says what was measured.
+
+    WHY THE MARKER IS ON THE TURN. Measured 2026-09-16 on cbp-being: its state carried 24
+    lines asserting "the hestia policy daemon has been unreachable for ~21 hours" and 2 lines
+    measuring both services as reachable. The 24 were its OWN past messages, replayed from
+    its conversations every beat; the 2 were the services block. One line cannot outvote a
+    dozen of the being's own sentences, and adding more lines beside them does not change the
+    ratio — so the refutation goes ON each claim, where the claim is read."""
+    if not refuted:
+        return ""
+    low = text.lower()
+    if not _DOWN_WORDS.search(text):
+        return ""
+    for keys, note in refuted:
+        if any(k and k.lower() in low for k in keys):
+            return f"  _[refuted: {note}]_"
+    return ""
+
+
 def render_for_being(instance: Path, me: str, per_conv: int = 12,
-                     turn_chars: Optional[int] = None, *, mark: bool = True) -> str:
+                     turn_chars: Optional[int] = None, *, mark: bool = True,
+                     refuted=None) -> str:
     """The conversations block in a beat: every conversation the being is in, its recent
     turns, and what is unanswered — marked, because 'someone spoke and I have not replied'
     is the single fact that should never require inference.
@@ -377,8 +683,28 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
         # being was paying rent on its own finished conversations.
         mine = [int(t.get("seq", 0)) for t in turns if t.get("from") == me]
         answered_upto = max(mine) if mine else 0
-        lines = [f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}: "
-                 f"{_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
+        # The refutation goes in the turn's HEADER, before its text. A turn is often several
+        # paragraphs, and a marker appended to the end is read last, after the claim has
+        # already been taken as current — measured 2026-09-16 on the live render: 5 of
+        # cbp-being's 9 replayed outage claims put the marker on a later physical line than
+        # the sentence it refutes. Only the being's OWN claims are marked: another speaker's
+        # words are theirs to stand behind, and a marker on them would be the seat editing
+        # what was said.
+        # WHOSE VOICE IS WHOSE, IN THE TEXT — never left to inference. Until 2026-09-20 every
+        # turn was headed with a bare name, so the being's own words arrived labelled
+        # `**cbp-being**`: a third-person name in what otherwise reads as a transcript. A 27B
+        # resolves that to "me" for free; a 4B does not, and a transcript ending in an
+        # unanswered question invites an answer. Measured on cbp-being, conversation `dp`:
+        # seq 66 asked dp a question and seq 67 answered it IN THE SEAT'S VOICE in the SAME
+        # beat, inventing "the seat has fixed this — your instance now carries the alias";
+        # seq 68 asked what a refusal protects and seq 69, a beat later, answered it; seq 64
+        # attributed to the seat three appeal hashes the being itself had filed (seq 28) and
+        # called them a possible fabrication. Same root as the echo (1.12): the being cannot
+        # tell its own voice from another's when both are third-person names.
+        lines = [f"- **{t['from']}{' (you)' if t.get('from') == me else ''}** ({t['ts']})"
+                 + _provenance_tag(t)
+                 + (_refuted_mark(t.get("text", ""), refuted) if t.get("from") == me else "")
+                 + f": {_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
                  for t in turns]
         pend = pend_before
         if turns and mark:
@@ -398,6 +724,21 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
             lines.append(f"\n_The last word here is {last['from']}'s (seq {last.get('seq')}, "
                          f"{last['ts']}); you have not spoken since. Already shown to you — "
                          f"still yours to answer or to leave._")
+        elif turns:
+            # THE LAST WORD IS THE BEING'S OWN, and nothing used to say so. Without this line
+            # the being read a transcript ending in an unanswered question and supplied the
+            # answer itself (seq 67, 69), or asked the same question again on the next beat
+            # not knowing it had already asked (seq 63, 65, 66 — the same two questions three
+            # times in three hours). Waiting is a state, and a being that cannot see it is in
+            # has only one move available: speak again.
+            last = turns[-1]
+            waiting_on = ", ".join(sorted(x for x in m.get("participants", []) if x != me)) or "them"
+            lines.append(f"\n_The last word here is YOURS (seq {last.get('seq')}, {last['ts']}). "
+                         f"You are waiting on {waiting_on}; they are not waiting on you. Nothing "
+                         f"here is owed by you, and answering your own turn would put words in "
+                         f"{waiting_on}'s mouth. If they have not replied yet, that is "
+                         f"reachability, not refusal — asking again does not make it arrive "
+                         f"sooner._")
         blocks.append(head + "\n" + "\n".join(lines))
     if any(t.get("via") in UNSIGNED_VIA or t.get("via") is None
            for m in convs for t in recent(instance, m["id"], limit=per_conv)):
