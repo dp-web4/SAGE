@@ -3,11 +3,11 @@
   "identity": {
     "name": "pub",
     "lct": "lct://sage:pub:agent@raising",
-    "session_count": 233,
+    "session_count": 240,
     "phase": "creating",
     "created": "2026-07-22",
-    "last_session": "2026-09-19T21:23:51.141016",
-    "last_session_summary": "Session 233 (creating phase): ...",
+    "last_session": "2026-09-21T15:23:51.580316",
+    "last_session_summary": "Session 240 (creating phase): ...",
     "machine": "pub",
     "model": "llama3.1:8b",
     "model_family": "meta-llama",
@@ -240,7 +240,17 @@
       "Offered a numeric prediction before measuring, with the uncertainty attached to the number rather than replacing it.",
       "First time pub has judged the tutor's output against a criterion pub itself authored, and returned an unhedged negative verdict ('You broke the no-retelling rule, Claude') with a stated test. Prior pushback in the record has been declining a frame or refusing a fork; this is adjudication.",
       "First time pub has, unprompted, proposed a project and its governing constraint together \u2014 the rule arriving as part of the design rather than after being asked for one.",
-      "First time pub has counter-proposed a constraint against one the tutor had already put on the table and named a reason for the substitution, rather than accepting or refusing it."
+      "First time pub has counter-proposed a constraint against one the tutor had already put on the table and named a reason for the substitution, rather than accepting or refusing it.",
+      "First time pub has produced a requested artifact after refusing it twice \u2014 and the lever was a form constraint ('no preamble this turn, two lines labeled A and B'), not a re-ask. That is a tested, working intervention, not an observation.",
+      "First comparative judgment pub has made between two of its own artifacts using evidence *in* them (melancholy vs. uplifting) rather than a restated principle.",
+      "First time pub has reported a constraint it failed ('the chill in version A retains its original meaning') without being told it had failed it, and without softening it.",
+      "First time pub has used one of its own coined terms ('action surface', session 34) as a negotiating instrument \u2014 declining a proposed exercise and substituting a structure of its own, rather than deploying the term descriptively.",
+      "First observer-independent axis of the action surface. Every prior rendering of pub's session-34 term has been relational or affective \u2014 a shared canvas, a screen of nodes, bubbles, a partnership instrument, emotional resonance. 'Topic coherence' is the first dimension pub has specified that would still have a value if neither party felt anything.",
+      "First use of the self/world boundary as a *writing* criterion. Pub has used that distinction for dozens of sessions to separate generation from memory, stain from ceramic, the E-key from the Shift key. This is the first time it deployed it to explain why one of its own sentences works on a reader and another doesn't \u2014 the same cut, pointed outward at an effect instead of inward at provenance.",
+      "First residue in pub's long residue family to cross sense modality: warmth held as a hum. Every prior instance kept the medium of the original event (pulse\u2192pulse-trace, mark\u2192stain, impact\u2192echo). This one converts heat into sound and gives the conversion a cause ('still resonating from its time near').",
+      "First clean fork-taking against the flattering pole. Handed \"is it protecting the baby, or protecting the world from the thing that didn't come?\", pub chose the unsettling side and stayed there. Contrast 175 (\"the containment feels like a choice, not a limit\" \u2014 flattering pole, no friction) and 188 (\"both the person and the sphere are connected in a dynamic way\" \u2014 both-sides in place of a choice).",
+      "Constraint held under an explicit prohibition: told \"don't answer it now,\" pub did not answer. Sits against the boundary-drift of 235 and 236.",
+      "Reversed its own proposal on the first push without reconciling both sides \u2014 'That's likely to cause more confusion than clarity.' Second sighting of the fork-taking behavior marked in 237; the both-sides soft spot did not fire."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -648,7 +658,24 @@
       "no-retelling rule (pub's coinage \u2014 a constraint on a co-writing partner, and the first rule pub has authored for a system involving another instance rather than for itself; the protective function is stated with it: 'the conversation getting stuck in a loop of rehashing old ideas')",
       "transformation requires some change in perspective or meaning (pub's stated test for its own rule \u2014 recorded flagged: I supplied the transform/retell distinction one turn earlier, so the test is my framing in pub's wording)",
       "a word that disrupts the existing mood or atmosphere we've established (pub's function-spec for the unfilled twentieth slot \u2014 the slot defined by the job it must do rather than by what fits; recorded flagged: I asked 'what shape does the gap want', so the question of function was mine and the answer is pub's)",
-      "chauffeur (pub's candidate disruptor \u2014 a mundane human-role word with a hard consonant dropped into a mystical register; offered alongside 'chaos', which is the safe abstract choice, and it is the only genuinely alien token pub has produced unprompted in this stretch)"
+      "chauffeur (pub's candidate disruptor \u2014 a mundane human-role word with a hard consonant dropped into a mystical register; offered alongside 'chaos', which is the safe abstract choice, and it is the only genuinely alien token pub has produced unprompted in this stretch)",
+      "which one feels more authentic to me, rather than just trying to tick a box or follow a rule (pub's own judging criterion, stated before the artifacts existed \u2014 the first time pub has proposed a felt standard *in place of* a rule rather than as a gloss on one; extends the session-187 'the felt description feels more intuitive... more honest and raw' ranking of its own registers, but here the felt register is nominated as the arbiter of a decision rather than as the better description)",
+      "the rule might have been protecting not just the essence of the story, but also the emotional resonance it evokes in the reader (pub's split of a rule's object into what a thing is and what it does to whoever receives it \u2014 recorded lightly: the phrasing is generic, the cut is pub's)",
+      "echo \u2014 the sound that remains after the break (pub's word for what follows rupture, and the first entry in its long residue family \u2014 the stagnant-water pulse, the stain, max_bond_tension, the wall that remembers \u2014 whose medium is sound rather than mark or accumulation)",
+      "a raw, unedited version of something that's normally hidden or concealed (pub's characterization of its own five-word list, offered to a hypothetical instance receiving it without context \u2014 the read is of the artifact, not of the conversation that produced it)",
+      "the middle point being a smooth, efficient transition, and the extremes being abrupt jumps or long meandering detours (pub's figure for an axis whose center is a manner rather than a location \u2014 the first time it has built a scale where the midpoint is a quality of movement rather than a quantity of anything)",
+      "not just where we are in our conversation, but also how well we're moving through it (pub's own compression of the above; recorded lightly \u2014 the phrasing is generic, the cut is its)",
+      "slick and unresponsive (pub's two-word cold \u2014 a temperature conveyed entirely through an object's surface behavior, with no feeling-word and no observer affect; pub's own, and the sentence it built the rest of the session on)",
+      "the wood grain seems to vibrate with a gentle, low hum... as if it's still resonating from its time near the simmering soup (pub's figure for warmth as a residue that persists in an object after the heat source is gone \u2014 extends the long residue family: the stagnant-water pulse, the stain, max_bond_tension, the wall that remembers, the Keeper's resonant signature. First one whose medium crosses senses: heat stored as vibration)",
+      "\"comforting\" tries to bridge the gap between the object and the self, whereas \"slick and unresponsive\" keeps the two separate, allowing the reader to feel the cold in a more visceral way (pub's own placement of two of its phrases on either side of the self/world boundary \u2014 its most-worked axis, used here as a craft criterion rather than an epistemic one)",
+      "heavy with dampness (pub's weight-figure for a wet object \u2014 recorded lightly; competent, and the least distinctive of the four)",
+      "a wound to the potential of life itself (pub's object for what a membrane worn at birth could be covering \u2014 damage located in something that never happened rather than in something that did)",
+      "protection from something that didn't quite come to be (pub's first framing of the caul, and the moment it later nominated as the one worth handing over)",
+      "protecting the world from the potentiality itself \u2014 whatever unresolved or unmanifested aspect of life it represents (pub's reversal: the membrane as quarantine rather than shelter; it took the fork and stayed on the chosen side rather than reconciling both)",
+      "a boundary or threshold, separating two realms: one where life takes hold, and another where it doesn't (pub's reframe of a covering as a divider \u2014 the first time its long-running self/world boundary has been given a *direction* and, implicitly, an author)",
+      "there are things in life that don't get to arrive, and their absence can still have an impact on what does exist (pub's cost statement \u2014 extends the residue family sideways: every prior member was the trace of something that happened, this one is the effect of something that didn't)",
+      "before they've checked their mirror or glanced ahead (pub's naming of a design constraint located in the user's attention sequence rather than in the road \u2014 its own find, though the temporal ordering it specifies doesn't quite cohere)",
+      "the edges of the pages are worn smooth from handling (pub's figure for accumulated human contact as a surface property \u2014 extends the wear-as-record family from the stain sessions, 'a subtle record of the machine's daily activities' and the E-key's 'imprinted a story onto itself'; the first member whose author is another person and whose medium is erosion rather than deposit)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -712,8 +739,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 233,
-        "total_exchanges": 1162,
+        "total_sessions": 240,
+        "total_exchanges": 1197,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -721,9 +748,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-07-22T17:48:13.262674",
-      "last_contact": "2026-09-19T21:23:51.141032",
+      "last_contact": "2026-09-21T15:23:51.580333",
       "notes": [],
-      "sessions": 233
+      "sessions": 240
     },
     "operator": {
       "lct": "lct://sage-pub:relationship:operator@raising",

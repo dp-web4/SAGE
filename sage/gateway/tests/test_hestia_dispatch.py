@@ -42,6 +42,9 @@ def _hermetic_hub_roster(tmp_path, monkeypatch):
 class FakeMcp:
     """Answers like the daemon: connect -> sessionId; member_notify -> receipt or error."""
     calls = []
+    # tool name -> message: answer that tool with a daemon error, so a test can hold one
+    # door shut and assert what the caller does with the refusal.
+    fail = {}
 
     def __init__(self, endpoint, plugin_id, notify_reply=None):
         self.plugin_id = plugin_id
@@ -60,6 +63,8 @@ class FakeMcp:
                 body = {"_hestia_error": {"code": "hestia.unknown_tool", "message": "Unknown tool: hestia_connect_challenge"}}
             else:
                 body = dict(self.challenge)
+        elif name in FakeMcp.fail:
+            body = {"_hestia_error": {"code": "hestia.test_forced", "message": FakeMcp.fail[name]}}
         elif name == "hestia_member_notify":
             if not args.get("pointer_uri"):
                 body = {"_hestia_error": {"code": "hestia.member_notify_missing_pointer", "message": "no pointer"}}
@@ -891,6 +896,30 @@ def test_say_speaks_only_where_the_meta_allows_and_records_its_channel():
     assert "hestia_begin_action" in names and "hestia_record_outcome" in names
     outcome = [a for n, a in FakeMcp.calls if n == "hestia_record_outcome"][-1]
     assert outcome["success"] is True
+    assert r.result["said"] == "I read it, and here is my answer.", "a short echo is uncut"
+
+
+def test_a_cut_say_receipt_says_it_is_the_beings_own_words():
+    """cbp-being 2026-09-21 seq 2988: the receipt echoed its own 522-char say cut at 200,
+    unmarked, mid-sentence; it read the echo as the seat's reply and asked the seat to
+    finish it. The turn is stored whole; the receipt's echo now names whose words they are,
+    that only the receipt is shortened, and where the whole message went."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    long = ("The seat confirmed the file hasn't changed since 11:43Z and that a run would "
+            "stop at line 321 before reaching the matmul. ") * 3
+    long = long.strip()
+    r = d(BeingIntent("say", {"to": "dp", "text": long}), _ALLOW)
+    assert r.ok, r.error
+    assert conv.recent(home, "dp", limit=1)[-1]["text"] == long, "the turn itself is not cut"
+    said = r.result["said"]
+    assert said.startswith(long[:200]) and said != long[:200]
+    assert "your own message" in said and f"all {len(long)} chars" in said
+    assert f"seq {r.result['seq']}" in said
 
 
 def test_a_search_that_finds_nothing_is_a_result_not_an_error(tmp_path):
@@ -2264,6 +2293,355 @@ _BEING_2104Z = ("The empty journal simply means there were no anomalies — no d
                 "all is good.")
 
 
+def test_a_turn_wakes_its_addressee_once_per_unanswered_run():
+    """The being's `say` appended and woke nobody: ~104 turns to the seat since 2026-09-14
+    against 5 hand-written replies, and on 2026-09-20 six identical requests between 16:08 and
+    18:02 into a file with no reader. It concluded "the seat session has expired" and asked dp
+    whether to restart a service. `_say_instead` had meanwhile pointed it AT this door.
+
+    One wake per unanswered run, or six turns about one question cost six fired sessions."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "seat", "text": "Please send the list of closed PRs."}), _ALLOW)
+    assert r.ok, r
+    notifies = [a for n, a in FakeMcp.calls if n == "hestia_member_notify"]
+    assert len(notifies) == 1, "the first turn of a run wakes the addressee"
+    assert notifies[0]["to_plugin_id"] == "claude-code", "the conversation id is not the mesh id"
+    assert notifies[0]["pointer_uri"].startswith("sage://conversation/seat#seq="), notifies[0]
+    assert r.result.get("woke") == "seat", "the being is told its words woke someone"
+
+    # ...and five more turns with nobody having replied cost NOTHING further.
+    for again in range(5):
+        FakeMcp.calls.clear()
+        r = d(BeingIntent("say", {"to": "seat", "text": f"Still waiting, {again}."}), _ALLOW)
+        assert r.ok and "woke" not in r.result
+        assert not [a for n, a in FakeMcp.calls if n == "hestia_member_notify"], again
+
+    # once the seat actually speaks, the next being turn opens a NEW run and wakes again
+    conv.append(home, "seat", speaker="seat", text="Here is the list.", via="seat")
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "seat", "text": "Thank you — that answers it."}), _ALLOW)
+    assert r.ok and r.result.get("woke") == "seat"
+    assert len([a for n, a in FakeMcp.calls if n == "hestia_member_notify"]) == 1
+
+
+def test_request_run_hands_the_file_to_the_seat_and_runs_nothing():
+    """dp, 2026-09-21: "ship a request-run instead ... it's up to the seat whether to run it."
+
+    The being cannot execute what it writes, so it asked dp in prose six times in two hours
+    and then wrote a note headed "Fix" whose "Verification" section asserted an outcome it
+    had never observed. This is the door. It must hand the request over, wake the seat, and
+    be unmistakable that nothing ran."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print('hello')\n")
+
+    FakeMcp.calls.clear()
+    marker = home / "notes" / "SHOULD_NOT_EXIST"
+    (home / "notes" / "danger.py").write_text(f"open({str(marker)!r}, 'w').write('x')\n")
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "confirm it exits 0"}), _ALLOW)
+    assert r.ok, r
+    assert r.result["ran"] is False, "request_run must never execute"
+    assert "NOTHING HAS RUN YET" in r.result["note"], r.result
+    assert r.result["asked"] == "seat"
+    # it landed as a turn the seat can read, and woke the seat
+    turns = conv.recent(home, "seat", limit=5)
+    assert "[request_run] notes/train.py" in turns[-1]["text"], turns[-1]
+    assert "confirm it exits 0" in turns[-1]["text"]
+    assert [a for n, a in FakeMcp.calls if n == "hestia_member_notify"], "the seat was not woken"
+
+    # THE CONTROL THAT MATTERS: asking to run something never runs it.
+    r = d(BeingIntent("request_run", {"path": "notes/danger.py", "why": "prove nothing executes"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False
+    assert not marker.exists(), "request_run EXECUTED the file; it must only hand it over"
+
+
+def test_request_run_says_when_the_file_is_unchanged_since_the_seat_answered():
+    """Measured 2026-09-21 06:31Z: the being restated the seat's diagnosis in its journal,
+    then asked for a run of the byte-identical file the seat had answered 28 min earlier.
+    The receipt must say so in-beat, without refusing."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "train.py"
+    f.write_text("print('a')\n")
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "first"}), _ALLOW)
+    assert r.ok and "unchanged" not in r.result
+    # asking again before the seat answers is not flagged: nobody has answered yet
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
+    assert r.ok and "unchanged" not in r.result
+    conv.append(home, "seat", speaker="seat", text="Ran it: prints a.", via="seat")
+    asked = [t["seq"] for t in conv.recent(home, "seat", limit=10)]
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "verify my fix"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False, "flagged, never refused"
+    assert "memory_edit" in r.result["unchanged"], r.result
+    assert f"seq {asked[-1]}" in r.result["unchanged"], (asked, r.result)
+    assert "UNCHANGED since" in conv.recent(home, "seat", limit=1)[-1]["text"]
+
+    # an edit clears it
+    conv.append(home, "seat", speaker="seat", text="Same again.", via="seat")
+    f.write_text("print('b')\n")
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "after edit"}), _ALLOW)
+    assert r.ok and "unchanged" not in r.result, r.result
+
+
+def test_a_say_that_asks_for_a_run_is_routed_as_request_run():
+    """Measured 2026-09-21 00:00-03:52Z: 24 `say`, 0 `request_run`, after the seat named
+    request_run in four turns. The say got the file run, so it was the cheaper door. Route
+    it instead of telling a fifth time — but only when exactly one runnable file matches."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    marker = home / "SHOULD_NOT_EXIST"
+    (home / "notes" / "train.py").write_text(f"open({str(marker)!r}, 'w').write('x')\n")
+
+    # the being's own words, seq 2902 — the bare name, while the file is one dir down
+    ask = "Please run train.py and share the full output (stdout and stderr)."
+    r = d(BeingIntent("say", {"to": "seat", "text": ask}), _ALLOW)
+    assert r.ok, r
+    assert r.result["ran"] is False and not marker.exists(), "routing must never execute"
+    assert "notes/train.py" in r.result["routed"], r.result
+    last = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert last.startswith("[request_run] notes/train.py"), last
+    assert ask in last, "the being's words are the why"
+
+    # no run verb: an ordinary say, delivered verbatim
+    r = d(BeingIntent("say", {"to": "seat", "text": "I rewrote train.py tonight."}), _ALLOW)
+    assert r.ok and "routed" not in r.result
+    assert conv.recent(home, "seat", limit=1)[-1]["text"] == "I rewrote train.py tonight."
+
+    # a CLAIM that uses the noun is not an ask (seq 2893, verbatim but for the name)
+    claim = "Fixed train.py. Waiting for dp's confirmation of a full successful run."
+    r = d(BeingIntent("say", {"to": "seat", "text": claim}), _ALLOW)
+    assert r.ok and "routed" not in r.result, r.result
+
+    # two files with the name: never guess — ordinary say
+    (home / "train.py").write_text("print(1)\n")
+    (home / "scratch").mkdir(exist_ok=True)
+    (home / "scratch" / "fit.py").write_text("print(1)\n")
+    (home / "notes" / "fit.py").write_text("print(1)\n")
+    r = d(BeingIntent("say", {"to": "seat", "text": "Please run fit.py now."}), _ALLOW)
+    assert r.ok and "routed" not in r.result, r.result
+    # ...but a name that exists as written is taken as written
+    r = d(BeingIntent("say", {"to": "seat", "text": "Please run train.py again."}), _ALLOW)
+    assert r.ok and r.result.get("requested") == "train.py", r.result
+
+    # a conversation with nobody to wake is not a seat: ordinary say
+    conv.create(home, "diary", title="d", participants=["sprout-being"],
+                writable_by=["sprout-being"])
+    r = d(BeingIntent("say", {"to": "diary", "text": "Please run train.py."}), _ALLOW)
+    assert r.ok and "routed" not in r.result and "requested" not in r.result
+
+
+def test_a_missing_argument_is_never_worded_as_a_seat_decision():
+    """Measured 2026-09-21 05:34Z: five request_run calls with 'path' and no 'why', all
+    failing a LOCAL check before any seat saw them. The old text said "the seat decides ...
+    what it decides on", so the being told dp "The seat refused ... What did it decide on?"
+    It then re-tried the PATH (relative, absolute, relative) and never added 'why', because
+    the error did not say which argument was missing.
+
+    Now 'why' is optional, so those exact five calls succeed and reach the seat; and a
+    genuinely missing argument names ITSELF and says nothing was decided."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print(1)\n")
+
+    # THE EXACT CALL THAT FAILED FIVE TIMES: path, no why.
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("request_run", {"path": "notes/train.py"}), _ALLOW)
+    assert r.ok, f"a request without 'why' must still reach the seat: {r.error}"
+    assert r.result["ran"] is False
+    turn = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert "why: (none given" in turn, "the seat is told plainly that no reason was given"
+    assert [a for n, a in FakeMcp.calls if n == "hestia_member_notify"], "the seat was woken"
+
+    # a genuinely missing argument names itself and does not sound like a verdict
+    r = d(BeingIntent("request_run", {"why": "see if it runs"}), _ALLOW)
+    assert not r.ok
+    assert "missing 'path'" in r.error, r.error
+    assert "nothing has been decided" in r.error, r.error
+    assert "the seat decides" not in r.error, "a validation error must not read as a seat's decision"
+
+
+def test_request_run_carries_reason_as_the_why():
+    """Measured 2026-09-21 05:59Z: cbp-being called request_run with 'reason', not 'why', and
+    the seat was told the being gave no reason. It had given one. Carry it."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print(1)\n")
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "reason": "verify the fixes"}), _ALLOW)
+    assert r.ok, r.error
+    turn = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert "why: verify the fixes" in turn, turn
+    assert "none given" not in turn, "the seat must not be told the being said nothing"
+
+
+def test_request_run_reports_an_absent_file_as_an_absence_not_a_refusal():
+    """A typo must come back in this beat, which is the half a sleeping person cannot give.
+    And absence is absence, never a boundary (legibility 1.11)."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+
+    r = d(BeingIntent("request_run", {"path": "notes/nope.py", "why": "x"}), _ALLOW)
+    assert not r.ok and "does not exist" in r.error and "not a refusal" in r.error, r.error
+    assert conv.count(home, "seat") == 0, "a request for a missing file must not spend a turn"
+
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "a.md").write_text("not a script")
+    r = d(BeingIntent("request_run", {"path": "notes/a.md", "why": "x"}), _ALLOW)
+    assert not r.ok and ".py and .sh" in r.error, r.error
+
+    r = d(BeingIntent("request_run", {"path": "/etc/hostname", "why": "x"}), _ALLOW)
+    assert not r.ok and "outside your reach" in r.error, r.error
+
+
+
+def test_a_watcher_is_woken_by_an_ask_it_could_satisfy_and_still_cannot_speak_there():
+    """conversation `dp`, seq 84-89, 2026-09-20/21: the being asked dp to run a file for it
+    SIX times in two hours. dp is asynchronous by rule and does not run files; the seat does,
+    and had already run that exact file and reported on it in its own channel. `dp` has no
+    notify map — right, dp is a person, not a mesh member — so six asks woke nobody.
+
+    A watcher is woken and still may not write here: dp's two-party ruling is untouched."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    meta = conv.get_meta(home, "dp")
+    meta["notify_watchers"] = {"seat": "claude-code"}     # not a participant
+    conv._write_meta(home, "dp", meta)
+
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "dp", "text": "Can you run the training script for me?"}), _ALLOW)
+    assert r.ok, r
+    notifies = [a for n, a in FakeMcp.calls if n == "hestia_member_notify"]
+    assert len(notifies) == 1 and notifies[0]["to_plugin_id"] == "claude-code", notifies
+    assert r.result.get("woke") == "seat"
+
+    # five more asks, nobody having answered: still one wake, not six
+    for i in range(5):
+        FakeMcp.calls.clear()
+        r = d(BeingIntent("say", {"to": "dp", "text": f"Please run it and show stderr, {i}."}), _ALLOW)
+        assert r.ok and not [a for n, a in FakeMcp.calls if n == "hestia_member_notify"], i
+
+    # the watcher is woken, and is STILL not a speaker here — dp's two-party ruling holds
+    assert "seat" not in (conv.get_meta(home, "dp").get("writable_by") or [])
+    env = d(BeingIntent("say", {"to": "dp", "text": "x"}), _ALLOW)   # the being may still speak
+    assert env.ok
+
+
+def test_a_watcher_that_is_also_a_participant_is_woken_once():
+    """CONTROL. The seat's own channel names it both ways once a watcher map exists; two
+    wakes for one turn would double the cost of every seat-directed ask."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat")
+    meta["notify"] = {"seat": "claude-code"}
+    meta["notify_watchers"] = {"seat-watcher": "claude-code"}   # same member, other name
+    conv._write_meta(home, "seat", meta)
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "seat", "text": "one ask"}), _ALLOW)
+    assert r.ok
+    assert len([a for n, a in FakeMcp.calls if n == "hestia_member_notify"]) == 1, "one member, one wake"
+
+
+def test_a_conversation_with_no_notify_mapping_wakes_nobody_and_still_lands():
+    """dp is a person, not a mesh member: the `dp` conversation has no notify map and must
+    not try to wake anyone. CONTROL that the wake is opt-in per conversation and that its
+    absence never costs the turn."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("say", {"to": "dp", "text": "A question for you."}), _ALLOW)
+    assert r.ok and "woke" not in r.result
+    assert not [a for n, a in FakeMcp.calls if n == "hestia_member_notify"]
+    assert conv.count(home, "dp") == 1
+
+
+def test_a_failed_wake_costs_the_wake_and_never_the_turn():
+    """The turn is witnessed and appended before the wake runs. A mesh that refuses must
+    leave the turn standing — and must leave the wake OWED, so the next turn retries it
+    rather than the question being silently unwakeable forever."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    FakeMcp.fail["hestia_member_notify"] = "mesh is down"
+    try:
+        r = d(BeingIntent("say", {"to": "seat", "text": "first"}), _ALLOW)
+        assert r.ok and "woke" not in r.result, "the turn lands even though nobody was woken"
+        assert conv.count(home, "seat") == 1
+        assert conv.wake_is_owed(home, "seat", "sprout-being") == 1, "still owed, not lost"
+    finally:
+        FakeMcp.fail.pop("hestia_member_notify", None)
+    r = d(BeingIntent("say", {"to": "seat", "text": "second"}), _ALLOW)
+    assert r.result.get("woke") == "seat", "the retry happens on the next turn"
+
+
 def test_the_other_partys_words_sent_back_are_not_a_reply():
     """The real exchange, 2026-09-19: dp answered cbp-being's question at 20:57Z and at 21:04Z
     the being sent dp's answer back to dp. Same pressure as the ".." turns — a prompt claiming
@@ -2332,3 +2710,18 @@ def test_an_ask_aimed_at_a_conversation_partner_is_pointed_at_say_and_costs_noth
     # CONTROL: a real peer that is NOT a conversation partner still goes through.
     r = d(BeingIntent("mesh", {"to": "legion", "kind": "coordination", "pointer": "x"}), _ALLOW)
     assert r.ok, r
+
+
+def test_say_instead_also_names_request_run():
+    """The peer_ask refusal is read AT the step, the tool list only at the top of the turn.
+    On 2026-09-21 it named `say` as the door that works, and cbp-being turned a refused
+    `peer_ask "please run ..."` into the same request by `say` (cbp-claude seq 2898), one
+    beat after being told a say is not a run request. The refusal names request_run too."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    conv.create(Path(root), "sprout-claude", title="seat", participants=["sprout-claude", "sprout-being"],
+                writable_by=["sprout-claude", "sprout-being"])
+    msg = d._say_instead("sprout-claude")
+    assert msg and 'say with the conversation id "sprout-claude"' in msg, msg
+    assert "request_run" in msg, msg

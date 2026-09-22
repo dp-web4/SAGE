@@ -1,5 +1,11 @@
 # SAGE Unified Cognition Loop
 
+> **CURRENT-STATUS WARNING — reference taxonomy, not deployed-equivalence claim.**  
+> This document describes the Python cognition-loop taxonomy and the historical integration path that produced it. It should not be read as saying every SAGE runtime, being, or deployed daemon executes every step or component. For deployed Rust/Python differences see [RUST_VS_PYTHON_CAPABILITY.md](RUST_VS_PYTHON_CAPABILITY.md); for the current being → Hestia action boundary and open gaps see [LATEST_STATUS.md](LATEST_STATUS.md) and `sage/gateway/being_gate_client.py`.
+>
+> Presence in this reference loop is not by itself evidence that a mechanism is active, decision-bearing, or behaviorally validated in a given runtime.
+
+
 **Date**: November 19, 2025 (loop structure), February 27, 2026 (LLM wiring + component integration)
 **Status**: All major components config-gated into the loop via `SAGE.create()` flags.
 **Always wired**: 12-step loop, metabolic states, ATP budgeting (token-coupled), DREAM consolidation, NetworkEffector

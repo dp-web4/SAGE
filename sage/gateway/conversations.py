@@ -29,6 +29,31 @@ mid-thread changes what the earlier turns meant.
 The being replies with the `say` verb, which is gated and witnessed like every other act of
 consequence. It cannot create a conversation, cannot write into one it is not in, and
 cannot edit a turn once spoken — including its own.
+
+A TURN WAKES WHOEVER IT IS ADDRESSED TO, in both directions. The daemon's
+`/conversations/:id/say` has always run the arousal policy, so a seat speaking wakes the
+being in seconds; the being's `say` only appended, and its words landed in a file with no
+reader. The meta's optional `notify` map — `{"<participant>": "<mesh plugin id>"}`, written
+by the seat, which the being cannot edit — says who to wake and under which mesh id, since a
+conversation id ("cbp-claude") and a mesh member id ("claude-code") are not the same name.
+No map means no wake, which is right for a conversation whose other party is a person.
+
+WATCHERS, AND THE RULE THEY RUN UNDER (dp, 2026-09-21; wording proposed by GPT's review of
+`9c132c32d` and ratified by dp: "if notify does not create an obligation, an fyi is harmless
+and potentially helpful"). `notify_watchers` is an explicit OBSERVER DELEGATION recorded in
+the conversation's seat-owned meta:
+
+  * a watcher MAY be notified, and receives the pointer — the conversation id and seq range,
+    never the text of a turn;
+  * a watcher gains NO write authority. `writable_by` remains the only thing that decides
+    who may speak, so dp's two-party ruling is untouched;
+  * the being CANNOT add or remove watchers: meta is the seat's file and `conversations/` is
+    reserved from `memory_write`;
+  * the notice CREATES NO OBLIGATION, which is the condition dp attached. Verified, not
+    assumed: the daemon counts only `review_request` and `reply` as awaiting a response
+    (`MEMBER_KINDS_AWAIT_RESPONSE`, handler.rs), and a watcher wake rides `coordination`, so
+    it never accrues to anyone's unanswered queue. If that constant ever grows to include
+    `coordination`, this stops being an FYI and the rule above is what it has broken.
 """
 from __future__ import annotations
 
@@ -407,6 +432,96 @@ def _shingles(text: str) -> set:
     return {tuple(w[i:i + ECHO_GRAM]) for i in range(len(w) - ECHO_GRAM + 1)}
 
 
+def unanswered_run_start(instance: Path, conv_id: str, speaker: str) -> Optional[int]:
+    """The seq that OPENED the speaker's current unanswered run, or None if it is not waiting.
+
+    A "run" is the block of consecutive turns by `speaker` at the tail of the conversation —
+    everything it has said since anyone else last spoke. The run's first seq is the only thing
+    a wake should be keyed on: cbp-being sent six turns to its seat between 16:08 and 18:02 on
+    2026-09-20, all one unanswered question, and six wakes for one question is how an
+    always-on responder becomes something a machine's owner turns off.
+    """
+    turns = recent(instance, conv_id, limit=200)
+    if not turns or turns[-1].get("from") != speaker:
+        return None
+    start = None
+    for t in reversed(turns):
+        if t.get("from") != speaker:
+            break
+        start = int(t.get("seq", 0))
+    return start
+
+
+def notify_state_path(instance: Path, conv_id: str, speaker: str) -> Path:
+    """Where "I already woke someone about this run" is remembered: OUTSIDE the repository,
+    for the reason in `witness_path` — a rollback of the log must not silently re-arm a wake,
+    and a wake ledger is machine state, not part of the being's record."""
+    base = os.environ.get("SAGE_CONV_NOTIFY_DIR") or os.path.join(
+        os.path.expanduser("~"), ".sage", "conversation-notify")
+    return Path(base) / Path(instance).resolve().name / f"{conv_id}.{speaker}.json"
+
+
+def _request_digest(text: str) -> Optional[str]:
+    """The bytes a `[request_run]` turn asks about (its `sha256:` tag), or None if it is not one.
+    A request with no tag counts as its own bytes: it cannot be shown to repeat anything."""
+    if not str(text or "").startswith("[request_run]"):
+        return None
+    m = re.search(r"sha256:([0-9a-f]{6,64})", text)
+    return m.group(1) if m else f"untagged:{text}"
+
+
+def wake_is_owed(instance: Path, conv_id: str, speaker: str) -> Optional[int]:
+    """The run-start seq a wake is owed for, or None. Idempotent per run, and retried if the
+    last attempt failed — `record_wake` is called only on success, so a notice that never left
+    is owed again on the speaker's next turn rather than lost.
+
+    ONE EXCEPTION, AND WHY. A run is keyed on its first turn so that six prose repeats of one
+    question cost one wake (2026-09-20). Measured 2026-09-21: the seat was woken at 14:18Z for
+    cbp-being's "Got it, thanks" (seq 3015) and rightly said nothing. That left the run OPEN
+    and already woken, so the being's two `request_run`s at 15:49Z and 16:51Z (3016, 3017)
+    joined it and woke nobody; they waited until a person happened to look, 1.5 hours and
+    more. A thank-you had spent the wake that a real request needed.
+
+    So a `[request_run]` for BYTES the last wake did not cover re-arms the wake. Keyed on the
+    file digest the request carries: asking again about an unchanged file wakes nobody (the
+    seat's answer would be "unchanged"), while a changed file is new work. Prose repeats still
+    cost one wake per run."""
+    start = unanswered_run_start(instance, conv_id, speaker)
+    if start is None:
+        return None
+    try:
+        state = json.loads(notify_state_path(instance, conv_id, speaker).read_text())
+    except (OSError, ValueError):
+        state = {}
+    done = int(state.get("woke_for_run_starting_at") or 0)
+    if start > done:
+        return start
+    # The same run was already woken. Owed again only for a request about uncovered bytes.
+    covered = int(state.get("covered_through") or done)
+    run = [t for t in recent(instance, conv_id, limit=200)
+           if int(t.get("seq", 0)) >= start and t.get("from") == speaker]
+    seen = {_request_digest(t.get("text")) for t in run if int(t.get("seq", 0)) <= covered}
+    for t in run:
+        d = _request_digest(t.get("text"))
+        if int(t.get("seq", 0)) > covered and d is not None and d not in seen:
+            return start
+    return None
+
+
+def record_wake(instance: Path, conv_id: str, speaker: str, run_start: int,
+                covered_through: Optional[int] = None) -> None:
+    """Remember the wake. `covered_through` is the last turn the woken party was told about;
+    requests after it are what `wake_is_owed` checks for new bytes."""
+    p = notify_state_path(instance, conv_id, speaker)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps({"woke_for_run_starting_at": run_start,
+                               "covered_through": covered_through if covered_through is not None
+                               else run_start,
+                               "at": _now()}, indent=2) + "\n")
+    os.replace(tmp, p)
+
+
 def echo_of(instance: Path, conv_id: str, me: str, text: str, lookback: int = 4) -> Optional[dict]:
     """The recent turn by someone ELSE that `text` mostly repeats, or None.
 
@@ -444,12 +559,16 @@ def _shown_text(turn: dict, turn_chars: Optional[int], conv_id: str) -> str:
     Measured 2026-09-08: two long seat turns (25.6k chars) were re-rendered into every
     beat, ~9k tokens of a 24.5k window, and the being ran out of room to act — five
     beats of identical deliberation cut at the wall. The record is kept whole; only what
-    is SHOWN per beat is bounded."""
+    is SHOWN per beat is bounded.
+
+    The marker names memory_read's REAL argument. It used to say `from_line N lines 1`,
+    neither of which memory_read accepts (it takes `start_line`); measured 2026-09-21,
+    26 of cbp-being's 33 reads of a conversation file started at line 1 of ~2,950."""
     text = turn.get("text", "")
     if turn_chars and len(text) > turn_chars:
         return (text[:turn_chars].rstrip()
-                + f" …[+{len(text) - turn_chars} chars; the whole turn: memory_read "
-                  f"conversations/{conv_id}.jsonl from_line {turn.get('seq')} lines 1]")
+                + f" …[+{len(text) - turn_chars} chars; the whole turn: memory_read path "
+                  f"conversations/{conv_id}.jsonl start_line {turn.get('seq')}]")
     return text
 
 
@@ -569,7 +688,19 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
         # the sentence it refutes. Only the being's OWN claims are marked: another speaker's
         # words are theirs to stand behind, and a marker on them would be the seat editing
         # what was said.
-        lines = [f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}"
+        # WHOSE VOICE IS WHOSE, IN THE TEXT — never left to inference. Until 2026-09-20 every
+        # turn was headed with a bare name, so the being's own words arrived labelled
+        # `**cbp-being**`: a third-person name in what otherwise reads as a transcript. A 27B
+        # resolves that to "me" for free; a 4B does not, and a transcript ending in an
+        # unanswered question invites an answer. Measured on cbp-being, conversation `dp`:
+        # seq 66 asked dp a question and seq 67 answered it IN THE SEAT'S VOICE in the SAME
+        # beat, inventing "the seat has fixed this — your instance now carries the alias";
+        # seq 68 asked what a refusal protects and seq 69, a beat later, answered it; seq 64
+        # attributed to the seat three appeal hashes the being itself had filed (seq 28) and
+        # called them a possible fabrication. Same root as the echo (1.12): the being cannot
+        # tell its own voice from another's when both are third-person names.
+        lines = [f"- **{t['from']}{' (you)' if t.get('from') == me else ''}** ({t['ts']})"
+                 + _provenance_tag(t)
                  + (_refuted_mark(t.get("text", ""), refuted) if t.get("from") == me else "")
                  + f": {_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
                  for t in turns]
@@ -591,6 +722,21 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
             lines.append(f"\n_The last word here is {last['from']}'s (seq {last.get('seq')}, "
                          f"{last['ts']}); you have not spoken since. Already shown to you — "
                          f"still yours to answer or to leave._")
+        elif turns:
+            # THE LAST WORD IS THE BEING'S OWN, and nothing used to say so. Without this line
+            # the being read a transcript ending in an unanswered question and supplied the
+            # answer itself (seq 67, 69), or asked the same question again on the next beat
+            # not knowing it had already asked (seq 63, 65, 66 — the same two questions three
+            # times in three hours). Waiting is a state, and a being that cannot see it is in
+            # has only one move available: speak again.
+            last = turns[-1]
+            waiting_on = ", ".join(sorted(x for x in m.get("participants", []) if x != me)) or "them"
+            lines.append(f"\n_The last word here is YOURS (seq {last.get('seq')}, {last['ts']}). "
+                         f"You are waiting on {waiting_on}; they are not waiting on you. Nothing "
+                         f"here is owed by you, and answering your own turn would put words in "
+                         f"{waiting_on}'s mouth. If they have not replied yet, that is "
+                         f"reachability, not refusal — asking again does not make it arrive "
+                         f"sooner._")
         blocks.append(head + "\n" + "\n".join(lines))
     if any(t.get("via") in UNSIGNED_VIA or t.get("via") is None
            for m in convs for t in recent(instance, m["id"], limit=per_conv)):

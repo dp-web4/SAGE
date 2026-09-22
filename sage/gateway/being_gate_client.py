@@ -35,6 +35,7 @@ is safe to import on a host without hestia — instantiation fails closed instea
 from __future__ import annotations
 
 import os
+import re
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
@@ -77,6 +78,48 @@ def _resolve_hestia_shared() -> Optional[str]:
         if os.path.isdir(p):
             return p
     return None
+
+
+def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a camera intent, built from validated args.
+
+    One frame on demand, no stream, no state across beats: ffmpeg captures exactly one
+    JPEG from the device (default /dev/video0) inside the being's own scratch. The being
+    names only the output path — never the tool, its flags, or the
+    device node beyond naming it plainly; the SEAT builds the command and the law judges
+    THAT string. A missing or busy device is reported by ffmpeg's exit code, which the
+    dispatcher interprets (see _do_camera).
+    """
+    import shlex
+    worktree = ctx["worktree"] if ctx else None
+    memory_root = (ctx or {}).get("memory_root")
+    if not worktree:
+        raise ValueError("camera requires a worktree context")
+    if not memory_root:
+        raise ValueError("camera requires a memory_root context")
+
+    out_rel = args.get("out_path", "scratch/camera/last-frame.jpg")
+    if any(ch.isspace() for ch in out_rel):
+        raise ValueError(f"camera 'out_path' may not contain whitespace: {out_rel!r}")
+    if out_rel.startswith("-") or ".." in out_rel.split("/"):
+        raise ValueError(
+            f"camera 'out_path' must be a plain path inside your home, got {out_rel!r}"
+        )
+    # Frames are transient by contract — one JPEG per act, nothing to carry across
+    # beats. Resolve them against the being's home (memory_root) rather than the SAGE
+    # worktree: check reports the worktree's dirty flag as EVIDENCE, so an uncommitted
+    # frame there degrades your own evidence (measured on this machine 2026-09-14).
+    full = os.path.realpath(os.path.join(memory_root, out_rel))
+    if not (full == memory_root or full.startswith(memory_root + os.sep)):
+        raise ValueError(f"camera 'out_path' escapes your home: {out_rel!r}")
+
+    # IMAGE2 OWNS THE TRANSACTION. Its atomic_writing option writes to a temporary file
+    # and renames only after the image is complete. That keeps old-or-new semantics INSIDE
+    # the exact ffmpeg command Hestia judges; the dispatcher performs no extra filesystem
+    # mutation behind the law's back.
+    device = args.get("device", "/dev/video0")
+    return (f"ffmpeg -hide_banner -loglevel error -y -f v4l2 -i {shlex.quote(device)} "
+            f"-frames:v 1 -qscale:v 3 -f image2 -atomic_writing 1 {shlex.quote(full)}")
 
 
 # --------------------------------------------------------------------------
@@ -672,42 +715,6 @@ def _escape_refusal(verb: str, path, worktree: str) -> str:
             f"You do not need to type it: a path here is taken RELATIVE to that root, so "
             f"write it bare (for example sage/gateway/hestia_dispatch.py) and it resolves "
             f"inside your tree without an absolute prefix to get wrong.")
-def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
-    """The shell command the seat runs for a camera intent, built from validated args.
-
-    One frame on demand, no stream, no state across beats: ffmpeg captures exactly one
-    JPEG from the device (default /dev/video0) into a file inside the being's own
-    scratch. The being names only the output path — never the tool, its flags, or the
-    device node beyond naming it plainly; the SEAT builds the command and the law judges
-    THAT string. A missing or busy device is reported by ffmpeg's exit code, which the
-    dispatcher interprets (see _do_camera).
-    """
-    import shlex
-    worktree = ctx["worktree"] if ctx else None
-    memory_root = (ctx or {}).get("memory_root")
-    if not worktree:
-        raise ValueError("camera requires a worktree context")
-    if not memory_root:
-        raise ValueError("camera requires a memory_root context")
-
-    out_rel = args.get("out_path", "scratch/camera/last-frame.jpg")
-    if any(ch.isspace() for ch in out_rel):
-        raise ValueError(f"camera 'out_path' may not contain whitespace: {out_rel!r}")
-    if out_rel.startswith("-") or ".." in out_rel.split("/"):
-        raise ValueError(
-            f"camera 'out_path' must be a plain path inside your worktree, got {out_rel!r}"
-        )
-    # Frames are transient by contract — one JPEG per act, nothing to carry across
-    # beats. Resolve them against the being's home (memory_root) rather than the SAGE
-    # worktree: check reports the worktree's dirty flag as EVIDENCE, so an uncommitted
-    # frame there degrades your own evidence (measured on this machine 2026-09-14).
-    full = os.path.realpath(os.path.join(memory_root, out_rel))
-    if not (full == memory_root or full.startswith(memory_root + os.sep)):
-        raise ValueError(f"camera 'out_path' escapes your home: {out_rel!r}")
-
-    device = args.get("device", "/dev/video0")
-    return (f"ffmpeg -hide_banner -loglevel error -y -f v4l2 -i {shlex.quote(device)} "
-            f"-frames:v 1 -qscale:v 3 -f image2 {shlex.quote(full)}")
 
 
 GAME_ACTIONS = ("RESET", "ACTION1", "ACTION2", "ACTION3", "ACTION4", "ACTION5", "ACTION6", "ACTION7", "LOOK")
@@ -1132,9 +1139,25 @@ def pr_attribution(member_id: str, action_id: Optional[str], being_lct: Optional
     return "\n".join(lines)
 
 
+def _unbounded_reason(effector: str) -> str:
+    """The registry refusal, plus the door when the name is a FILE.
+
+    2026-09-21 14:06Z: cbp-being called a tool named `mechanism-training-script-clean.py`
+    with {"epochs": "10"}, twice, then appealed the refusal as an overreach. It wanted to
+    run its own file; the verb for that is request_run, and the refusal never said so.
+    A refusal owes a way forward (hestia operating law, point 1)."""
+    reason = f"'{effector}' is not a gateway-member effector"
+    if "/" in effector or re.search(r"\.[A-Za-z0-9]{1,5}$", effector or ""):
+        reason += (f". That is a file name, and a file is not a tool. To run one of your own "
+                   f"files, call request_run with path='{effector}'; the seat runs it and answers")
+    return reason
+
+
 _REGISTRY = {
     "peer_ask":       dict(tool="peer_ask",     path_args=(),       cmd_arg=None),
     "witness":        dict(tool="witness",      path_args=(),       cmd_arg=None),
+    "camera":         dict(tool="camera",      path_args=(),        cmd_arg=None,
+                           compose=camera_command),
     "memory_read":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
     "memory_write":   dict(tool="write_note",   path_args=("path",), cmd_arg=None),
     # edit: change ONE located occurrence inside a file. Registered as the same gate tool
@@ -1220,6 +1243,25 @@ _REGISTRY = {
     "recall":         dict(tool="recall",       path_args=(),       cmd_arg=None),
     "remember":       dict(tool="remember",     path_args=(),       cmd_arg=None),
     "request_scope":  dict(tool="request_scope", path_args=(),      cmd_arg=None),
+    # request_run: ASK THE SEAT TO RUN A FILE. It does not run anything — that is the whole
+    # design. Measured 2026-09-20/21: the being asked dp in prose to run a file for it six
+    # times in two hours, then wrote a note titled "Fix" with a "Verification" section
+    # asserting an outcome it had never observed, because it has no way to execute what it
+    # writes and no way to tell "I described a fix" from "the fix works".
+    #
+    # dp ruled against giving it `run`: a file the being wrote, executed as the operator's
+    # user, is unconfined — the gate could govern STARTING it and nothing about what the code
+    # then does. So this is the door rather than the capability. The being names a file in
+    # its own home, and optionally why; the seat decides whether to run it and answers with
+    # what happened. Judged on the path like memory_read, because reading the file is exactly what
+    # the seat is being asked to do first.
+    "request_run":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
+    # memory_edit: change an exact span inside one of the being's own files. memory_write
+    # opens with mode "a", so every write it has ever made APPENDED and it could not alter a
+    # byte of its own work — measured consequence: a script that is three programs stacked,
+    # and two reported edits that were never made because describing one was all it could do.
+    # Judged on the path exactly like memory_write, which is what it is.
+    "memory_edit":    dict(tool="write_note",   path_args=("path",), cmd_arg=None),
     # appeal: the being contests a refusal it believes was wrong (PRD_FLEET §7.3, the
     # deny -> appeal -> temperament loop). The refusal's chain hash is the handle: the
     # gate witnesses every deny as a policy_decision (Dispatcher.witness_deny) so there
@@ -1236,7 +1278,7 @@ _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "check", "git_read", "say", "pr_open",
                             "pr_amend", "camera", "git_restore", "search", "edit", "game", "run",
-                            "retire_note"})
+                            "retire_note", "request_run", "memory_edit"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -1297,6 +1339,13 @@ _TOOL_SCHEMAS = {
               "old": "the exact text to replace — must occur exactly once",
               "new": "what to put there instead (empty string deletes it)"},
              ["path", "old", "new"]),
+    "memory_read": ("Read one of your own memory notes. A long file comes back in windows of "
+                    "whole lines; if it does not reach the end it says so and names the "
+                    "start_line that reads on.",
+                    {"path": "path to your note",
+                     "start_line": "optional: the line number to start from (default 1)"}, ["path"]),
+    "memory_write": ("Write a note into your own memory.",
+                     {"path": "path to your note", "content": "what to write"}, ["path", "content"]),
     "channel_egress": ("Send a message out through a sealed channel.",
                        {"to": "recipient", "body": "your message"}, ["to", "body"]),
     "mesh": ("Wake another member through the fractal mesh with a pointer-based notice "
@@ -1410,6 +1459,48 @@ _TOOL_SCHEMAS = {
                {"query": "what you are trying to remember",
                 "top_k": "how many results (default 5)",
                 "idx": "instead of a query: the (idx:N) of one result, to read it in full"},
+               []),
+    "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
+                    "is renamed to <name>.retired-<date> with a dated header saying why; nothing "
+                    "is lost and you can still read it. Use it when something you wrote has been "
+                    "settled or refuted, so a later beat does not read it as news.",
+                    {"path": "the note, e.g. notes/my-note.md", "reason": "what you know now that the note does not"},
+                    ["path", "reason"]),
+    "memory_edit": ("Change part of a file you already wrote. memory_write only ever ADDS to "
+                    "the end of a file; this is how you alter what is already in one. Give the "
+                    "exact text to replace, OR the line numbers to replace, and what replaces "
+                    "it. Text must appear exactly once, so include a neighbouring line if it "
+                    "would otherwise be ambiguous. Line numbers are the ones memory_read shows. "
+                    "An empty 'new' deletes. Use this to fix a line in a script rather than "
+                    "writing a note about the fix.",
+                    {"path": "the file, e.g. notes/my-script.py",
+                     "old": "the exact text to replace, unique in the file (or use start_line)",
+                     "start_line": "the first line to replace, as memory_read numbers it",
+                     "end_line": "the last line to replace (same as start_line for one line)",
+                     "new": "what replaces it (empty string deletes)"},
+                    ["path", "new"]),
+    "request_run": ("Ask the seat to RUN one of your own files and tell you what happened. "
+                    "You cannot execute anything yourself, so this is the door: you name the "
+                    "file — the only thing it needs — and the seat decides whether to run it and "
+                    "answers with the real output: exit code, stdout, stderr. Adding what you "
+                    "expect to learn is optional and helps the seat decide. It may decline, and "
+                    "it will say why. Nothing runs at the moment you call this; what you get back is a "
+                    "receipt that the seat was asked, not a result. Use it instead of asking a "
+                    "person in a message: a person may be asleep, and this reaches whoever is "
+                    "on duty.",
+                    {"path": "the file to run, inside your own home, e.g. notes/my-script.py",
+                     "why": "optional: what you expect to learn. Saying it helps the seat decide"},
+                    ["path"]),
+    "camera": ("Capture ONE frame from this machine's camera into your own scratch — no "
+              "stream, nothing persists across beats. The seat runs ffmpeg against /dev/"
+              "video0 (or a plain device node you name) and writes one JPEG to the path "
+              "you give inside your home; default is scratch/camera/last-frame.jpg, "
+              "overwritten each time. A missing or busy device comes back as an error "
+              "envelope that names which: 'device absent' means no frame could be opened, "
+              "'device busy' means another process holds it — in both cases nothing was "
+              "written, so the last good file (if any) is untouched.",
+               {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
+                "device": "optional: a plain device node to read from (default /dev/video0)"},
                []),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
                  "a fact, a lesson, a question, what you were doing and why.",
@@ -1778,7 +1869,7 @@ class BeingGateClient:
         # Stage 0: bounded registry. Unknown effector never reaches the law.
         if intent.effector not in _REGISTRY:
             return GatewayVerdict("deny", "registry.unbounded", stage="registry",
-                                  reason=f"'{intent.effector}' is not a gateway-member effector")
+                                  reason=_unbounded_reason(intent.effector))
         # --- Single gate (#934): the shim contract. The registry stage above is harness
         # syntax (which verbs exist); everything law-bearing happens in decide(). ---
         sg = getattr(self, "_single_gate", None)

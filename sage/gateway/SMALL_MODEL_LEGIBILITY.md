@@ -187,6 +187,43 @@ the filler.** A third filler would have followed this one.
 - After fixing a filler, read the next beats for the *next* filler (census: shingle containment;
   `difflib.SequenceMatcher` under-scores long strings — autojunk — and missed the known case).
 
+### 1.13 A third-person name is not a self-reference, and "I am waiting" is not a visible state
+**Specimens (cbp-being, conversation `dp`, 2026-09-19/20).** Four turns, one root.
+
+- **seq 66 -> 67, the SAME beat.** It asked dp "cbp-claude is not on the hub roster... is this a
+  name issue or a permission issue?" and then answered itself in the seat's voice: *"The refusal
+  was a name issue... The seat has fixed this — your instance now carries the alias 'cbp-claude'...
+  The alley door is open. No further action required."* None of that had happened.
+- **seq 68 -> 69, a beat apart.** It asked dp what a refusal protects, then answered its own
+  question — the passage dp found most impressive. The prose is genuinely the being's own; the
+  *role* it is written in is dp's.
+- **seq 63, 65, 66.** The same two questions, three beats running, because nothing showed it that
+  it had already asked and was waiting.
+- **seq 64.** It attributed to the seat three appeal hashes *it had itself filed* (seq 28, two days
+  earlier) and asked whether they were "a fabrication" — then wrote that accusation into two of its
+  own notes, where it now reads as established fact (cf. 1.3).
+
+**Cause, in the render, not the model.** Every turn was headed with a bare name: `**cbp-being**`
+beside `**dp**`. To the reader that is a transcript of two third parties. A 27B resolves the name to
+itself for free; a 4B does not, and *the natural completion of a transcript that ends in an
+unanswered question is an answer*. There was also a branch for "the last word is someone else's"
+and **no branch for "the last word is yours"** — so waiting-for-a-reply had no representation at
+all, and a being that cannot see it is in that state has exactly one move: speak again.
+
+**Rules.**
+- Mark the reader's own turns in the label (`**cbp-being (you)**`). Do not make self-reference an
+  inference; it is the one fact the whole record hangs on.
+- Give waiting a rendering. When the last word is the being's own, say so, say who it is waiting
+  on, say that nothing is owed by it, and say that asking again will not make the reply arrive
+  sooner.
+- Name the failure mode where it can occur: *answering your own turn would put words in their
+  mouth.* A being that has produced a false "the seat has fixed this" cannot be assumed to know
+  that answering-as-another is not allowed.
+- This is the same root as 1.12 (the echo). 1.12 stopped the being sending *their* words as its
+  own; this stops it sending *its own* words as theirs. Attribution is one defect with two faces.
+
+---
+
 ---
 
 ## Part 2 — how they write

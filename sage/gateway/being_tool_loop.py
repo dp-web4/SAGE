@@ -941,15 +941,14 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # qwen38-heretic:q3km-vl: ollama's /api/chat takes images as a LIST ON THE
             # MESSAGE, beside content. Both OpenAI-style spellings inside content —
             # [{"type":"image","image":b64}] and [{"type":"image_url",...}] — are rejected
-            # with HTTP 400. SAGE#76 and #77 pinned the rejected shape and stayed green,
-            # because both assert what reaches the payload dict and neither ever sends it
-            # to a server: a delivery test that never posts proves shape, not substance.
+            # with HTTP 400. SAGE #76 and #77 pinned the rejected shape and stayed green,
+            # because both assert what reaches the payload dict and neither ever sends it to
+            # a server: a delivery test that never posts proves shape, not substance.
             #
             # This flattening rebuilt every message as {role, content} and silently dropped
             # every other key, so `images` died here — one line between a frame and a model
-            # that can already see it. ollama_irp needs no change at all; it forwards
-            # `messages` untransformed (pinned by #76), so the field survives from here to
-            # the wire.
+            # that can already see it. ollama_irp needs no change: it forwards `messages`
+            # untransformed (pinned by #76), so the field survives from here to the wire.
             if m.get("images"):
                 out["images"] = list(m["images"])
             if m.get("role") == "assistant" and m.get("intents"):

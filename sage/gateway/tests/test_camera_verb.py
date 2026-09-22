@@ -79,6 +79,15 @@ def test_camera_command_out_path_in_scratch(tmp_path):
     assert out in cmd
 
 
+def test_camera_command_requests_image2_atomic_writing(tmp_path):
+    """The old frame is protected by the exact command Hestia judges, not a hidden rename."""
+    wt = str(tmp_path)
+    cmd = camera_command({"out_path": "scratch/camera/last-frame.jpg"}, _ctx(wt))
+    assert "-f image2" in cmd
+    assert "-atomic_writing 1" in cmd
+    assert cmd.rstrip().endswith("scratch/camera/last-frame.jpg")
+
+
 # --- _do_camera with monkeypatched subprocess.run ----------------------------
 
 def test_do_camera_success(tmp_path):
@@ -89,13 +98,14 @@ def test_do_camera_success(tmp_path):
     os.makedirs(out_dir, exist_ok=True)
     out_path = f"{out_dir}/last-frame.jpg"
 
-    # Create a fake frame file so os.path.exists(full_out) passes.
-    Path(out_path).write_bytes(b"\xff\xd8\xff\xdbfake-jpeg")
+    old = b"\\xff\\xd8\\xffOLD\\xff\\xd9"
+    Path(out_path).write_bytes(old)
 
     captured = {}
 
     def fake_run(cmd, **kwargs):
         captured["cmd"] = cmd
+        Path(cmd[-1]).write_bytes(b"\\xff\\xd8\\xffNEW\\xff\\xd9")
         return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
 
     d = _dispatcher(wt)
@@ -116,6 +126,9 @@ def test_do_camera_success(tmp_path):
     cmd_str = captured["cmd"] if isinstance(captured["cmd"], str) else " ".join(captured["cmd"])
     assert cmd_str.split()[0] == "ffmpeg"
     assert "-frames:v" in cmd_str
+    assert "-atomic_writing 1" in cmd_str
+    assert cmd_str.endswith("last-frame.jpg")
+    assert Path(out_path).read_bytes() == b"\\xff\\xd8\\xffNEW\\xff\\xd9"
 
 
 def test_do_camera_device_busy(tmp_path):
@@ -282,6 +295,7 @@ def test_the_frame_resolves_against_HOME_not_the_worktree(tmp_path):
     assert str(home) in cmd, f"the frame does not land under the being's home: {cmd}"
     assert str(wt) not in cmd, (
         f"the frame still lands in the worktree, whose cleanliness is evidence: {cmd}")
+    assert "-atomic_writing 1" in cmd
     assert cmd.rstrip().endswith("scratch/camera/last-frame.jpg")
 
 

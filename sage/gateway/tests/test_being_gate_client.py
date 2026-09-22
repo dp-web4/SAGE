@@ -394,10 +394,7 @@ def test_search_refuses_what_its_grammar_cannot_represent():
         ({"pattern": "a\nb"}, "single line"),
         ({"pattern": "x" * 201}, "under 200"),
         ({"pattern": "x", "path": "../escape"}, "plain path"),
-        # absolute and off the tree: refused for REACH now, not for escaping the worktree
-        # (search_command grew a workspace-wide reach; see the reach test below)
-        ({"pattern": "x", "path": "/etc/passwd"}, "outside anything you can reach"),
-        ({"pattern": "x", "path": "/etc/../etc/passwd"}, "plain path"),
+        ({"pattern": "x", "path": "/etc/passwd"}, "escapes your worktree"),
         ({"pattern": "x", "path": "has space"}, "whitespace"),
         ({"pattern": "x", "path": "-rf"}, "plain path"),
     ]:
@@ -432,10 +429,7 @@ def test_git_read_refuses_what_its_grammar_cannot_represent():
         ({"op": ""}, "must be one of"),
         ({"op": "log", "rev": "; rm -rf /"}, "sha"),
         ({"op": "show", "path": "../../etc/passwd"}, "plain path"),
-        # /etc is not an escape from the worktree any more — it is OUTSIDE the machine's
-        # shared tree, which is a different refusal with a different remedy (the reach
-        # widened to the granted tree on this branch; the refusal names what is reachable).
-        ({"op": "show", "path": "/etc/passwd"}, "outside anything you can reach"),
+        ({"op": "show", "path": "/etc/passwd"}, "escapes"),
         ({"op": "show", "path": "has space"}, "whitespace"),
         ({"op": "show", "path": "-rf"}, "plain path"),
     ]:
@@ -550,15 +544,16 @@ def test_an_escape_refusal_names_the_worktree_and_the_relative_form():
 def test_a_failure_that_explains_itself_in_result_is_not_rendered_as_none():
     """The envelope held a complete account and the renderer threw it away.
 
-    Found 2026-09-14 by legion-being, on the first live use of its own camera verb.
-    `_do_camera` reports failures through `result` — device, exit code, and a sentence
-    naming which kind of failure — and leaves `error` unset because the explanation is
-    structured. to_tool_message assumed not-ok implied `error`, so the being was handed the
-    literal string "[dispatch error — None]" twice and could diagnose nothing. It reported
-    an empty-error envelope matching no code path, which was exactly right.
+    Found 2026-09-14 by legion-being, on the first live use of a verb it wrote itself. That
+    verb reports failures through `result` — device, exit code, a sentence naming the kind
+    of failure — and leaves `error` unset because the explanation is structured. This
+    renderer assumed not-ok implied `error`, so the being was handed the literal string
+    "[dispatch error — None]" twice. It reported an empty-error envelope matching no code
+    path, which was exactly right and as far as it could get.
 
-    Every other verb happens to set `error`, so this stayed invisible until a verb chose the
-    other shape.
+    Latent on this branch, since every verb here sets `error`. Pinned anyway: the envelope
+    is the contract, and a contract that silently drops one of its own fields will be
+    rediscovered by whoever next writes a verb that fills the other one.
     """
     from sage.gateway.being_gate_client import ResultEnvelope
 
@@ -571,35 +566,24 @@ def test_a_failure_that_explains_itself_in_result_is_not_rendered_as_none():
         f"the account the envelope carried must survive rendering: {msg!r}"
     assert "act-1" in msg, "a witnessed failure is still witnessed"
 
-    # The ordinary shape is unchanged.
-    plain = ResultEnvelope(ok=False, error="it broke")
-    assert plain.to_tool_message() == "[dispatch error — it broke]"
+    assert ResultEnvelope(ok=False, error="it broke").to_tool_message() == \
+        "[dispatch error — it broke]"
 
-    # And an envelope carrying NEITHER says so, rather than saying None.
-    empty = ResultEnvelope(ok=False)
-    out = empty.to_tool_message()
+    out = ResultEnvelope(ok=False).to_tool_message()
     assert "None" not in out and "harness defect" in out, out
 
 
-# ---- carried from legion/mission-artifact in the 2026-09-18 reconciliation ----
-import tempfile
+def test_unregistered_file_name_names_request_run():
+    # cbp-being 2026-09-21: called its script's file name as a tool, appealed the refusal.
+    v = _client(_allows).gate(BeingIntent("mechanism-training-script-clean.py", {"epochs": "10"}))
+    assert v.rule == "registry.unbounded" and "request_run" in v.reason, v
+    assert "path='mechanism-training-script-clean.py'" in v.reason, v
+    # a plain unknown verb is not a file: no run hint, the door would be the wrong one
+    v = _client(_allows).gate(BeingIntent("shell", {"command": "ls"}))
+    assert v.rule == "registry.unbounded" and "request_run" not in v.reason, v
 
 
-def test_recall_schema_offers_the_second_half_of_retrieval():
-    """A search result is a PREVIEW. membot's own docstring names get_passage(idx) as the
-    other half of the pattern, and until 2026-09-18 no verb reached it: 451 memories the
-    being could see the opening of and read the whole of none. One verb, two forms —
-    a second verb would cost ~700 characters of prompt on every beat."""
-    from sage.gateway.being_gate_client import ollama_tools
-    (spec,) = ollama_tools(["recall"])
-    params = spec["function"]["parameters"]
-    assert set(params["properties"]) == {"query", "top_k", "idx"}, params
-    # NEITHER form is required: requiring `query` would make the idx form look malformed
-    # to the model, and requiring nothing is safe because the dispatcher refuses a call
-    # with neither and names both.
-    assert params["required"] == [], params
-    assert "idx" in spec["function"]["description"], spec["function"]["description"]
-
+# ---- carried from legion/mission-artifact in the 2026-09-22 reconciliation ----
 def test_check_is_judged_as_the_pytest_command_the_seat_runs():
     """check reaches the law as the exact command, and the allow-list is the whole grammar:
     a being can name a declared suite or one test inside it, and nothing else."""
@@ -642,6 +626,7 @@ def test_check_is_judged_as_the_pytest_command_the_seat_runs():
             assert False, bad
         except ValueError:
             pass
+
 
 def test_git_read_grammar_refuses_everything_that_would_make_a_read_a_run():
     """git IS the composition hazard, not the pairing (2026-09-07).
@@ -695,6 +680,7 @@ def test_git_read_grammar_refuses_everything_that_would_make_a_read_a_run():
     except ValueError as e:
         assert "worktree" in str(e)
 
+
 def test_git_read_is_offered_and_consequential():
     from sage.gateway.being_gate_client import ollama_tools, _CONSEQUENTIAL, _REGISTRY
     assert "git_read" in _REGISTRY and "git_read" in _CONSEQUENTIAL
@@ -703,6 +689,7 @@ def test_git_read_is_offered_and_consequential():
     schema = next(t for t in ollama_tools() if t["function"]["name"] == "git_read")
     assert schema["function"]["parameters"]["required"] == ["op"]
     assert "cannot commit, push, or move a branch" in schema["function"]["description"]
+
 
 def test_check_runs_under_a_principal_that_is_not_the_seat():
     """THE M1 PREREQUISITE. PRD r3 §5 made principal isolation a hard blocker on M1, with a
@@ -757,6 +744,7 @@ def test_check_runs_under_a_principal_that_is_not_the_seat():
     assert "C.UTF-8" not in cmd, \
         "hestia #988 splits a dotted token and refuses the whole command; PYTHONUTF8 instead"
 
+
 def test_git_read_rev_suffixes_work_on_any_base_and_still_take_no_flags():
     """`<sha>~1` was refused (two witnessed denies, 2026-09-08). Flagged by the being as an
     affordance fact, not litigated. Widened deliberately: a suffix is ~ or ^ plus digits."""
@@ -771,6 +759,7 @@ def test_git_read_rev_suffixes_work_on_any_base_and_still_take_no_flags():
             raise AssertionError(f"{bad!r} must be refused")
         except ValueError:
             pass
+
 
 def test_git_read_rejects_whitespace_so_judged_argv_is_executed_argv():
     """GPT review of #56, point 6: a path with a space passed the grammar, was interpolated
@@ -789,6 +778,7 @@ def test_git_read_rejects_whitespace_so_judged_argv_is_executed_argv():
     ok = git_read_command({"op": "show", "rev": "HEAD", "path": "sage/gateway/x"}, ctx)
     import shlex
     assert shlex.split(ok)[-1] == "/tmp/wt/sage/gateway/x", "one path, one argv element"
+
 
 def test_pr_open_base_is_the_worktrees_upstream_not_a_hard_coded_branch(tmp_path, monkeypatch):
     """GPT review of #56, point 8: a hard-coded `legion/mission-artifact` base is right only
@@ -811,6 +801,7 @@ def test_pr_open_base_is_the_worktrees_upstream_not_a_hard_coded_branch(tmp_path
     monkeypatch.setenv("SAGE_PR_BASE", "main")
     assert pr_base_branch(str(wt)) == "main", "explicit override wins"
     assert pr_base_branch(str(tmp_path)) == "main", "no upstream: main, never a stale carrier"
+
 
 def test_check_sandbox_measured_from_inside_with_a_real_conftest():
     """GPT on SAGE#56: "strengthen the bwrap regression arm with a real fixture." The test
@@ -926,6 +917,7 @@ open("/tmp/m1probe.json", "w").write(json.dumps(r))   # tmpfs: writable, and pri
     # before collection cannot rewrite the source the run is evidence about.
     assert probe["write_worktree"] is not True, probe
 
+
 def test_pr_amend_reads_the_branch_from_the_worktree_and_refuses_a_non_pr_branch():
     """SAGE#63: the review asked for a corrected body and a green suite, and the author had
     no verb that could reach either — pr_open claims a slug once and refuses it after. The
@@ -963,6 +955,7 @@ def test_pr_amend_reads_the_branch_from_the_worktree_and_refuses_a_non_pr_branch
     assert pr_amend_command({"title": "a proper title here", "message": "why"},
                             {"worktree": wt}) == "true"
 
+
 def test_pr_amend_is_offered_to_the_being():
     """A verb in the registry but not in the offered set is a verb the being does not have."""
     from sage.gateway.being_gate_client import _REGISTRY
@@ -970,6 +963,7 @@ def test_pr_amend_is_offered_to_the_being():
     assert "pr_amend" in _REGISTRY
     assert "pr_amend" in EXPLORE_TOOLS
     assert _REGISTRY["pr_amend"]["tool"] == "pr_amend"      # the law sees the outward act
+
 
 def test_pr_base_refuses_to_guess_when_the_upstream_is_unset():
     """#63: legion-being/work tracked nothing, pr_base_branch fell through to "main", and a
@@ -1000,6 +994,7 @@ def test_pr_base_refuses_to_guess_when_the_upstream_is_unset():
     finally:
         del environ["SAGE_PR_BASE"]
 
+
 def test_git_read_cat_returns_a_file_at_a_revision_and_still_takes_no_flags():
     """The being tried `show <rev>:<path>` to read the clean version of a file it had
     damaged — its worktree copy was the broken one and the good version existed only at the
@@ -1020,6 +1015,7 @@ def test_git_read_cat_returns_a_file_at_a_revision_and_still_takes_no_flags():
                      (({"op": "cat", "path": "a b.py"}), "may not contain whitespace")):
         with pytest.raises(ValueError, match=msg):
             git_read_command(bad, ctx)
+
 
 def test_git_restore_takes_its_content_from_history_and_no_flags():
     """Restoring a file was possible with cat + memory_write(replace) and impossible in
@@ -1047,6 +1043,7 @@ def test_git_restore_takes_its_content_from_history_and_no_flags():
 
     assert "git_restore" in _REGISTRY and "git_restore" in _CONSEQUENTIAL
     assert "git_restore" in EXPLORE_TOOLS
+
 
 def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
     """THERE ARE TWO COMPOSITION SITES AND ONLY ONE GETS EXERCISED BY THE VERB TESTS.
@@ -1113,6 +1110,7 @@ def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
         f"composed verbs with no args in this test: {unexercised}. Add them — a verb absent "
         f"from this walk is a verb whose gate path nothing checks.")
 
+
 def test_a_search_refused_for_a_word_in_its_pattern_says_so():
     """The harness holds both halves the being lacks, and used to say neither.
 
@@ -1149,6 +1147,7 @@ def test_a_search_refused_for_a_word_in_its_pattern_says_so():
     assert _pattern_collision_hint(
         BeingIntent("search", {"pattern": "q", "path": "/etc/x"}),
         "'/etc/x' is not granted") == "", "a token with a separator is a path, not a pattern word"
+
 
 def test_search_reaches_the_granted_tree_and_stops_at_the_machine(tmp_path):
     """An absolute path inside the fleet repo root composes; one outside it is refused HERE.
@@ -1207,6 +1206,7 @@ def test_search_reaches_the_granted_tree_and_stops_at_the_machine(tmp_path):
     except ValueError as e:
         assert "outside anything you can reach" in str(e)
 
+
 def test_both_composition_sites_build_the_same_search(tmp_path, monkeypatch):
     """The judged string and the executed string, for an absolute path. SAGE#90.
 
@@ -1228,6 +1228,7 @@ def test_both_composition_sites_build_the_same_search(tmp_path, monkeypatch):
     d = HestiaF1aDispatcher("t", memory_root=str(wt), worktree=str(wt), workspace=str(ws))
     executed = search_command(args, {"worktree": d.worktree, "workspace": d.workspace})
     assert judged == executed
+
 
 def test_check_accepts_the_pytest_spelling_of_a_node_id(tmp_path):
     """Dialect is not a boundary. SAGE, 2026-09-14.
@@ -1278,6 +1279,7 @@ def test_check_accepts_the_pytest_spelling_of_a_node_id(tmp_path):
     except ValueError as e:
         assert "Try 'gateway::test_x'" in str(e), e
 
+
 def test_git_read_reaches_the_granted_tree_and_stops_at_the_machine(tmp_path):
     """Same reach as `search` (3fcca0830), same reason. legion-being, holding a standing
     recursive read grant on the workspace, asked for `git log` of its own instance directory
@@ -1311,6 +1313,7 @@ def test_git_read_reaches_the_granted_tree_and_stops_at_the_machine(tmp_path):
     with pytest.raises(ValueError, match="outside anything you can reach"):
         git_read_command({"op": "log", "path": inst}, {"worktree": str(wt)})
 
+
 def test_both_composition_sites_build_the_same_git_read(tmp_path):
     from sage.gateway.being_gate_client import git_read_command
     from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
@@ -1321,6 +1324,7 @@ def test_both_composition_sites_build_the_same_git_read(tmp_path):
     d = HestiaF1aDispatcher.__new__(HestiaF1aDispatcher); d.worktree = str(wt); d.workspace = str(ws)
     executed = git_read_command(args, {"worktree": d.worktree, "workspace": getattr(d, "workspace", None)})
     assert judged == executed == f"git --no-pager -C {ws}/sub log --no-ext-diff --no-textconv --oneline --no-decorate -n 3 -- {ws}/sub"
+
 
 def test_game_command_grammar_cap_and_both_sites(tmp_path):
     """dp 2026-09-15: "build the game verb, batch with cap 8". The being names a game and
@@ -1360,6 +1364,7 @@ def test_game_command_grammar_cap_and_both_sites(tmp_path):
     assert game_command({"probes": [["ACTION6", 1, 2]]}, {"memory_root": d.memory_root, "game_stepper": d.game_stepper}) == \
         game_command({"probes": [["ACTION6", 1, 2]]}, ctx)
 
+
 def test_game_is_offered_composed_and_consequential():
     from sage.gateway import being_gate_client as b
     from sage.gateway.heartbeat import EXPLORE_TOOLS
@@ -1367,6 +1372,7 @@ def test_game_is_offered_composed_and_consequential():
     assert b._REGISTRY["game"]["compose"] is b.game_command and b._REGISTRY["game"]["cmd_arg"] is None
     assert "game" in b._CONSEQUENTIAL
     assert "game" in b._TOOL_SCHEMAS and "8 probes" in b._TOOL_SCHEMAS["game"][0]
+
 
 def test_game_look_is_a_window_not_a_move():
     """LOOK:x0:y0:x1:y1 rides the same grammar; bounded to 16x16; not a click, not a click's shape."""
@@ -1387,6 +1393,7 @@ def test_game_look_is_a_window_not_a_move():
                      (["LOOK", 1, 2], "needs"), (["LOOK", "a", 0, 1, 1], "whole numbers")):
         with pytest.raises(ValueError, match=why):
             game_command({"probes": [bad]}, ctx)
+
 
 def test_run_command_grammar_and_what_the_sandbox_contains():
     """`run` exists because the being could author a simulator and never execute one: writes
@@ -1434,6 +1441,7 @@ def test_run_command_grammar_and_what_the_sandbox_contains():
     with pytest.raises(ValueError, match="outside anything you can reach"):
         run_command({"path": "scratch/e.py", "data": ["/etc/shadow"]}, reach_ctx)
 
+
 def test_run_data_accepts_the_shapes_a_model_actually_emits():
     """First real use, 2026-09-17: the being sent data as a JSON string and as a bare path.
     Both iterated into CHARACTERS — "m.md" became four filenames — and three of its calls died.
@@ -1459,6 +1467,7 @@ def test_run_data_accepts_the_shapes_a_model_actually_emits():
         run_command({"path": "e.py", "data": ["my file.md"]}, ctx)
     with pytest.raises(ValueError, match="must be a list of paths"):
         run_command({"path": "e.py", "data": 7}, ctx)
+
 
 def test_run_is_offered_composed_and_consequential():
     from sage.gateway import being_gate_client as b

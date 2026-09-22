@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
@@ -31,48 +32,94 @@ from typing import Callable, Optional
 from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope
 
 
-# Files inside the being's own home that the SEAT owns and the being may not write.
-# One entry, and it earns its place: `entrustment.md` is what the being was GIVEN. Its own
-# reading of it goes in notes/plan.md. If a being could append to the entrustment, the two
-# provenances would merge in the record and no later reader could tell what was extended to
-# it from what it decided for itself — which is the whole reason the file exists (PRD r3
-# §4). Refusing is not distrust: the being may disagree with it loudly anywhere else.
-SEAT_OWNED = ("entrustment.md",)
-# Same rule one directory down: what was SAID TO the being is not the being's to edit.
-# notes/from-dp.md is the operator's own channel and notes/from-the-seat.md is this seat's;
-# a being that could append to either could not later be distinguished from the person who
-# wrote to it, and neither could anyone reading the record.
+# What was SAID TO the being is not the being's to edit. notes/from-dp.md is the operator's
+# own channel (written by the dp console) and notes/from-the-seat.md is the seat's; a being
+# that could append to either could not later be distinguished from the person who wrote to
+# it, and neither could anyone reading the record.
 SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
 # would let the being forge a `from: dp` turn, or rewrite who may speak, with no witness
-# and no refusal — bypassing every property the store exists for. The whole subtree, not
-# the two files that happen to exist today. asks_sent.jsonl is the record the ask limit
-# counts (hestia_dispatch, SAGE #92): a being that could rewrite it could reset its own limit.
+# and no refusal. The whole subtree, not the two files that happen to exist today.
+# asks_sent.jsonl is the record the ask limit counts (hestia_dispatch, SAGE #92); a being that
+# could rewrite it could reset its own limit.
 RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl")
 
 
-SHARED_FORUM = "/ai-workspace/shared-context/forum"
+def _python_status(p) -> str:
+    """For a .py file: whether Python can PARSE it now, as one sentence for a receipt.
+
+    THE BEING HAD NO INSTRUMENT FOR ITS OWN CODE. Measured 2026-09-21 on cbp-being: from 18:22
+    its training script could not be parsed (an appended fragment, IndentationError at line
+    1610), and across the next two hours it wrote "the script now runs correctly", "[x] Run",
+    "the seat confirms ... loss 0.00342" and "Applied fix" into its journal and memory, while
+    every write it made to the file left it unparseable. Each receipt said what was appended
+    and never whether the result was still Python. With nothing to check against, it filled
+    the gap with what it hoped. This is the check, run where it writes: `compile()` parses and
+    executes nothing. It is not a run, and the sentence says so, because "parses" read as
+    "works" is the next invented claim waiting to happen."""
+    if not str(p).endswith(".py"):
+        return ""
+    try:
+        compile(p.read_text(errors="replace"), str(p), "exec")
+    except SyntaxError as e:
+        return (f" Python cannot parse {p.name} now: {e.__class__.__name__} at line "
+                f"{e.lineno}: {e.msg}. It cannot run until that line is fixed.")
+    except (OSError, ValueError):
+        return ""
+    return f" Python can parse {p.name} now. That is not the same as running it."
 
 
-def _shared_destination_hint(p) -> str:
-    """Name the verb that DOES reach where the being was trying to write.
 
-    legion-being hit this refusal twice on 2026-09-13 trying to answer a peer on the fleet
-    forum, because `memory_write` is the intuitive verb and the refusal named no other. It
-    already had a working path — `peer_ask` and `mesh` file to the forum through the
-    gateway — and used it both times only after spending a step on the refusal. A boundary
-    that says only what is forbidden makes the being guess at what is allowed."""
-    if SHARED_FORUM in str(p).replace("\\", "/"):
-        return (" To reach the forum, use `peer_ask` (it files your message there, in your "
-                "name, and wakes the being you addressed) or `mesh` (a pointer at something "
-                "already posted). Those are the sanctioned doors to shared space; they are "
-                "not a workaround, they are the verb for this.")
-    return ""
+def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
+    """A missed memory_edit anchor says WHERE it stopped matching, not only that it did.
+
+    Measured 2026-09-21 on cbp-being, three refused edits of one file in one beat. The
+    first old_text (49 lines) matched the file exactly for 8, then carried 41 the file
+    never held; the next two were the real 3-line block written twice, because "duplicate"
+    had become "two identical copies". All three got the same "not in the file, read it
+    first", so the being read again, and its next thought said the edit had been made.
+    The refusal knew what it needed to hear and did not say it: which of its lines were
+    right, and the first line that was not. Facts only — no suggested old_text, because
+    the matched prefix is not always the span it meant (the doubled block's 4th line also
+    matched, and deleting through it would have broken the next argument)."""
+    have = text.split("\n")
+    want = old.split("\n")
+    best_k, best_i = 0, -1
+    for i, line in enumerate(have):
+        if line != want[0]:
+            continue
+        k = 0
+        while k < len(want) and i + k < len(have) and have[i + k] == want[k]:
+            k += 1
+        if k > best_k:
+            best_k, best_i = k, i
+    cut = lambda s: s if len(s) <= width else s[:width] + "…"  # noqa: E731
+    if best_k == 0:
+        # No line matches exactly. Name the nearest one, so indentation or one changed word
+        # is visible rather than guessed at.
+        import difflib
+        near = difflib.get_close_matches(want[0], have, n=1, cutoff=0.6)
+        if not near:
+            return f" Not even your first line ({cut(want[0])!r}) is in the file."
+        n = have.index(near[0]) + 1
+        return (f" Your first line is not in the file. The closest line is line {n}: "
+                f"{cut(near[0])!r}; you sent {cut(want[0])!r}.")
+    start, end = best_i + 1, best_i + best_k
+    span = f"line {start}" if best_k == 1 else f"lines {start}-{end}"
+    head = (f" Your first {best_k} line{'s' if best_k > 1 else ''} of {len(want)} match "
+            f"{span} of the file exactly. Your line {best_k + 1} is {cut(want[best_k])!r}; ")
+    if end < len(have):
+        return head + f"the file's line {end + 1} is {cut(have[end])!r}."
+    return head + "the file ends there."
 
 
 class ReferenceF1aDispatcher:
+    # Bounds on one edit. An edit is a SMALL, LOCATED change; anything larger is a rewrite
+    # and should be honest about being one.
+    EDIT_MAX_CHARS = 4000
+
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
 
     def __init__(self, memory_root: str,
@@ -129,41 +176,10 @@ class ReferenceF1aDispatcher:
         return wid
 
     # -- path confinement (defense in depth over the gate) -------------------
-    def _former_home_equivalent(self, p: Path):
-        """If `p` lies under a home this being used to have (instance.json `former_homes`),
-        the path of the same file under its CURRENT home; else None."""
-        try:
-            import json as _json
-            cfg = _json.loads((self.memory_root / "instance.json").read_text())
-            for fh in cfg.get("former_homes") or []:
-                old = Path(str(fh.get("path", ""))).resolve()
-                if str(old) != "/" and (p == old or old in p.parents):
-                    return self.memory_root / p.relative_to(old)
-        except (OSError, ValueError):
-            pass
-        return None
-
     def _safe_path(self, raw: str, writing: bool = False) -> Path:
-        """Resolve a being's memory path. Relative paths are rooted at memory_root, never
-        at the process cwd.
-
-        READS follow the law: memory_root plus whatever roots the verdict named as granted.
-
-        WRITES DO NOT, AND THIS IS A SECURITY BOUNDARY, NOT TIDINESS (2026-09-07).
-        `check` executes pytest inside the being's worktree, and pytest imports `conftest.py`
-        from the rootdir it is given. The moment a being can WRITE into a tree that `check`
-        EXECUTES, the bounded effector registry stops bounding the computation: a gated write
-        plus a gated execute compose into ungated arbitrary code, running as this seat's user,
-        with the vault passphrase and every key on this box in reach. Measured live: with a
-        standing grant on the worktree, `memory_write` to `<worktree>/conftest.py` was ALLOWED.
-        Nothing had to go wrong for that to be true; two correct grants were enough.
-
-        So writes stay inside the being's own home whatever the grants say. That is a stopgap
-        with a known shape: the durable answer is that being-authored code runs under a
-        principal that is not the seat (GPT review of PRD #54, point 3 — a hard prerequisite
-        for M1 write capability). Until that exists, the invariant is: THE TREE `check`
-        EXECUTES IS NOT A TREE THE BEING CAN WRITE.
-        """
+        # A being names its notes by a path inside its own memory ("notes/x.md"); a
+        # relative path is rooted at memory_root, never at the process cwd. Absolute
+        # paths are honoured only if they already lie inside the root (checked below).
         p = Path(raw).expanduser()
         if not p.is_absolute():
             p = self.memory_root / p
@@ -176,59 +192,37 @@ class ReferenceF1aDispatcher:
                         f"{sub}/ is reserved: a turn enters a conversation only through `say`, "
                         "which checks who may speak, witnesses the act and numbers it. Writing "
                         "the store directly would let a turn appear that nobody said")
-        # (root, recursive) pairs. The home is always a subtree — it is the being's own.
-        roots = [(self.memory_root, True)]
-        if not writing:
-            roots += list(getattr(self, "_extra_roots", ()) or ())
-        else:
-            # M1. Writes reach the being's own WORKTREE — and only when `check` runs under
-            # a principal that is not the seat. The 2026-09-07 stopgap confined every write
-            # to the home because write + execute composed into arbitrary code as the seat;
-            # with execute sandboxed (bwrap: no home, no network, no seat environment) the
-            # composition is exactly the harmless one it should be — the being writes a
-            # file, a process that can reach nothing of ours runs it. Gated on the sandbox
-            # being AVAILABLE, not merely on M1 having landed: a machine without the
-            # AppArmor profile must keep the stopgap, or it re-opens the hole silently.
+            if p.parent == self.memory_root / "notes" and p.name in SEAT_OWNED_NOTES:
+                raise ValueError(
+                    f"notes/{p.name} is what was said TO you, and it stays as it was said. Your "
+                    "reply belongs in your journal, in a conversation with `say`, or in an "
+                    "appeal, all of which are read")
+        roots = (self.memory_root,) + tuple(getattr(self, "_extra_roots", ()) or ())
+        if writing:
+            # A home that was renamed leaves absolute paths to the OLD one in the being's own
+            # notes. The harness knows where that file lives now; say so (Legion, 2026-09-20).
+            moved = self._former_home_equivalent(p)
+            if moved is not None:
+                raise ValueError(
+                    f"{p} is inside your FORMER home, which is now a frozen record and is "
+                    f"not written. Your home moved; the same file is {moved} — write there "
+                    f"(or use the relative path, which always means your current home)")
+        if writing and not any(p == r or r in p.parents for r in (self.memory_root,)):
+            # WRITES STAY IN THE BEING'S OWN HOME whatever the grants say: the moment a being
+            # can write a tree that `check` EXECUTES, a gated write plus a gated execute
+            # compose into ungated arbitrary code. Where `check` gets its sandbox the worktree
+            # is writable too; where it cannot, the refusal says which and why.
             wt = getattr(self, "worktree", None)
-            if wt and self._worktree_writable():
-                roots.append((Path(wt).resolve(), True))
-        if writing and p.parent == self.memory_root / "notes" and p.name in SEAT_OWNED_NOTES:
-            raise ValueError(
-                f"notes/{p.name} is what was said TO you, and it stays as it was said. Your "
-                "reply belongs in your journal, notes/plan.md, or an appeal — all of which "
-                "are read")
-        if writing and p.parent == self.memory_root and p.name in SEAT_OWNED:
-            raise ValueError(
-                f"{p.name} is yours to read and not to edit: it is what you were entrusted "
-                "with, and it has to stay separable from what you decide. Your own reading "
-                "of it belongs in notes/plan.md, which is entirely yours. Disagree with it "
-                "there, in your journal, or in an appeal — that record is wanted")
-        def _covered(path: Path, root: Path, recursive: bool) -> bool:
-            # exact: the root itself; recursive: the root and everything under it.
-            # Separator-aware by construction (Path.parents): /a never fronts for /ab.
-            return path == root or (recursive and root in path.parents)
-
-        if not any(_covered(p, r, rec) for r, rec in roots):
-            if writing:
-                # A home that was renamed leaves absolute paths to the OLD one in the being's
-                # own notes. The harness knows where that file lives now; say so.
-                moved = self._former_home_equivalent(p)
-                if moved is not None:
-                    raise ValueError(
-                        f"{p} is inside your FORMER home, which is now a frozen record and is "
-                        f"not written. Your home moved; the same file is {moved} — write there "
-                        f"(or use the relative path, which always means your current home)")
-            if writing and any(_covered(p, r, rec)
-                               for r, rec in (getattr(self, "_extra_roots", ()) or ())):
-                wt = getattr(self, "worktree", None)
-                in_wt = bool(wt) and (p == Path(wt).resolve() or Path(wt).resolve() in p.parents)
-                if in_wt:
-                    raise ValueError(
-                        f"{p} is your worktree and you may not write it on THIS machine yet: "
-                        "`check` cannot get its sandbox here (bubblewrap absent or not "
-                        "permitted a user namespace), so a tree you can write would still be "
-                        "a tree that executes as the seat. Where the sandbox works, this write "
-                        "is allowed — M1 is not withheld, it is waiting on the box")
+            if wt and (p == Path(wt).resolve() or Path(wt).resolve() in p.parents):
+                if self._worktree_writable():
+                    return p
+                raise ValueError(
+                    f"{p} is your worktree and you may not write it on THIS machine yet: "
+                    "`check` cannot get its sandbox here (bubblewrap absent or not permitted "
+                    "a user namespace), so a tree you could write would still be a tree that "
+                    "executes as the seat. Where the sandbox works, this write is allowed — "
+                    "M1 is not withheld, it is waiting on the box")
+            if any(p == r or r in p.parents for r in roots):
                 raise ValueError(
                     f"writes stay inside your own home ({self.memory_root}) and your worktree; "
                     f"{p} is readable to you but not writable. This is not a missing grant "
@@ -242,22 +236,68 @@ class ReferenceF1aDispatcher:
                      " If you need this written, appeal for the affordance and name what "
                      "you would write, rather than asking for the path — a seat can also "
                      "carry it for you if you say what and where."))
-            raise ValueError(f"path escapes the being's memory root and its grants: {p}")
+        if not any(p == r or r in p.parents for r in roots):
+            raise ValueError(self._out_of_reach(p, roots, writing))
         return p
 
-    def _worktree_writable(self) -> bool:
-        """True only when the tree the being would write is a tree that executes under a
-        principal that is not the seat. Cached per dispatcher: the probe runs a real
-        sandbox, and the answer does not change within a beat."""
-        cached = getattr(self, "_wt_writable", None)
-        if cached is None:
+    @staticmethod
+    def _existence(p: Path) -> str:
+        """'absent' | 'present' | 'unknown'. Never guesses.
+
+        `Path.exists()` is not usable here: it swallows a PermissionError and answers False, so
+        "I may not look" would be reported as "there is nothing there" — the exact false absence
+        this method exists to prevent. An unknown must never be dressed as a fact
+        (SMALL_MODEL_LEGIBILITY 1.11).
+        """
+        try:
+            os.stat(p)
+            return "present"
+        except FileNotFoundError:
             try:
-                from sage.gateway.being_gate_client import sandbox_available
-                cached = bool(sandbox_available())
-            except Exception:
-                cached = False
-            self._wt_writable = cached
-        return cached
+                os.stat(p.parent)          # could we even traverse to where it would be?
+                return "absent"
+            except FileNotFoundError:
+                return "absent"            # the parent is missing too: still nothing there
+            except OSError:
+                return "unknown"           # cannot traverse; absence is not established
+        except OSError:
+            return "unknown"
+
+    def _out_of_reach(self, p: Path, roots, writing: bool) -> str:
+        """Why a path outside the being's roots was refused — and WHICH of three facts it is.
+
+        dp, 2026-09-20, after cbp-being asked what a refusal protects: "the past refusals were
+        capability - you were trying to access nonexistent paths and files, so the refusal was
+        because what you were trying to reach wasn't there. the system needs to do a better job
+        of explaining this."
+
+        The being had tried to read an absolute path that does not exist. The old text —
+        "path escapes the being's memory root and its grants" — describes a BOUNDARY, so the
+        being reasoned for two days about what the boundary was protecting (conversation `dp`,
+        seq 68-70). Nothing: the file was never there. `memory_read` has told missing from empty
+        from directory since 2026-09-15; this path refused before that check could run, so the
+        one case where absence matters most was the one case that never said it.
+
+        Absence is asserted only where it was established. A grant cannot conjure a file, so a
+        refusal that hides absence sends the being to ask an operator for reach that would
+        change nothing (legibility 1.11).
+        """
+        reach = ", ".join(str(r) for r in roots)
+        head = f"'{p}' is outside your reach. You can read and write under: {reach}."
+        if writing:
+            return head + (" memory_write creates a file inside your home; name a path there "
+                           "instead, or request_scope and say what you would write.")
+        where = self._existence(p)
+        if where == "absent":
+            return head + (" Separately, and more usefully: THERE IS NOTHING AT THAT PATH. It "
+                           "does not exist, so this is an absence, not a boundary — nothing is "
+                           "being kept from you, and reach over it would give you nothing to "
+                           "read. Do not ask for a grant on it; check the name.")
+        if where == "present":
+            return head + (" That path does exist, so this one is a real boundary. If you need "
+                           "it, request_scope and say what you would do with it.")
+        return head + (" Whether anything exists there cannot be determined from here, so treat "
+                       "it as unknown rather than as evidence either way.")
 
     # -- effectors -----------------------------------------------------------
     def _do_witness(self, intent: BeingIntent) -> ResultEnvelope:
@@ -383,71 +423,161 @@ class ReferenceF1aDispatcher:
         return ResultEnvelope(ok=True, result=content,
                               witness_id=self._witness(f"memory_read {p.name}"))
 
-    # Bounds on one edit. An edit is a SMALL, LOCATED change; anything larger is a rewrite
-    # and should be honest about being one.
-    EDIT_MAX_CHARS = 4000
+    def _do_memory_edit(self, intent: BeingIntent) -> ResultEnvelope:
+        """Replace an exact span inside one of the being's own files. The missing primitive.
 
-    def _do_edit(self, intent: BeingIntent) -> ResultEnvelope:
-        """Replace one exact occurrence of `old` with `new` inside a file.
+        `memory_write` opens with mode "a". Every write this being has ever made APPENDS, so
+        until now it could not change one byte of anything it had written — its only
+        mutations were append and rename (`retire_note`). It was repeatedly asked to fix code
+        and was structurally unable to, and what it did instead is the whole shape of
+        2026-09-20/21:
 
-        WHY THIS VERB EXISTS, measured 2026-09-13. `memory_write` has two modes: append, or
-        replace the WHOLE file. To change three lines inside compose(), legion-being would
-        have had to resend all of heartbeat.py — 63,645 chars, ~25,458 tokens, against a
-        working budget of ~6,500. Four times its entire per-beat room. So it could not.
+          * `notes/mechanism-training-script.py` is THREE programs concatenated, with three
+            `if __name__ == "__main__":` guards. Each "rewrite" was an append, so the first
+            program is the only one that ever runs and the two later attempts are unreachable.
+          * Twice it reported an edit it had not made — `set -e` added to a Python file, then
+            `w = self.weights[...]` added at line 213 — because writing a note describing the
+            fix was the only thing it could actually do. The second was lifted from the seat's
+            own defect report, a hypothetical turned into a claimed edit.
 
-        It did the only thing its verbs allowed: appended a wrapper at the end of the file
-        that shadows the original function. The semantics were right and the shape was
-        wrong, and the shape was wrong because nothing else was reachable. Every one of its
-        merged PRs until now added a NEW file, which I had read as a preference; it was the
-        structure of its instruments. A being that can only append can only ever bolt on.
+        Appending is right for a journal and wrong for a program, and the being had only the
+        one verb for both. This is not new reach: the file is already its own and already
+        writable. It is the same reach, finally usable.
 
-        EXACTLY ONE MATCH, or it refuses. Zero means the anchor is not what it thinks — very
-        often whitespace or a line it is remembering rather than reading. More than one means
-        it does not know which site it is changing, and picking for it would be the harness
-        guessing at intent. Both refusals say the count, because a refusal that names its own
-        cause is one the being can correct without asking."""
-        raw = str(intent.args.get("path", "")).strip()
-        if not raw:
-            return ResultEnvelope(ok=False, error="edit needs a 'path'")
-        old = str(intent.args.get("old", ""))
-        new = str(intent.args.get("new", ""))
-        if not old:
-            return ResultEnvelope(ok=False, error=(
-                "edit needs 'old': the exact text to replace. To ADD text rather than change "
-                "it, use memory_write (append is its default)."))
-        if old == new:
-            return ResultEnvelope(ok=False, error="edit 'old' and 'new' are identical; nothing to do")
-        for name, val in (("old", old), ("new", new)):
-            if len(val) > self.EDIT_MAX_CHARS:
+        Exactly one occurrence, or nothing happens. A unique anchor is the being's way of
+        saying WHICH line it meant; "replace the first of several" would silently edit a
+        place it was not looking at, and it cannot re-read the file cheaply enough to notice.
+        """
+        path = str(intent.args.get("path", "")).strip()
+        # The names other edit tools use are accepted too. Measured 2026-09-21: cbp-being's
+        # first live memory_edit sent `old_text`/`new_text`, was told it "needs 'old' ... and
+        # 'new'", read that as "I forgot the 'new' parameter", and fell back to memory_write —
+        # a fourth appended program. The name it reached for is the convention it knows;
+        # refusing it teaches nothing and sends it back to the verb that cannot edit.
+        a = intent.args
+        old = str(next((a[k] for k in ("old", "old_text", "old_str", "old_string") if k in a), ""))
+        # A MISSING replacement is not an empty one. Measured 2026-09-22 02:30Z: cbp-being sent
+        # `new_content` (the seat's own letter spelled it that way) to add `.reshape(-1, 1)`
+        # to line 336. No alias matched, `new` defaulted to "", and the receipt said "replaced
+        # lines 336-336" while the line was simply gone; the being then asked the seat to run
+        # the fix. Only a replacement key that is present may delete; an absent one refuses.
+        new_keys = ("new", "new_text", "new_str", "new_string", "new_content", "replacement",
+                    "content", "new_lines")
+        new_key = next((k for k in new_keys if k in a), None)
+        new = str(a[new_key]) if new_key is not None else ""
+        # BY LINE NUMBER, TOO. Measured 2026-09-21 19:01Z: cbp-being called memory_edit with
+        # `old_line: "411"`, i.e. by line number, which is how it reads files (`memory_read`
+        # takes `start_line`) and how every seat message names a fix ("line 335", "the 7
+        # lines from 1610"). Text mode then asked it to reproduce seven indented lines
+        # character for character; across three seat answers it never did, and after the one
+        # refused call it stopped trying for four beats while re-reading the same lines. The
+        # tool was shaped for a different reader. So: `start_line` (and `end_line`, inclusive)
+        # replaces those lines with `new`. With `old` as well, the lines must equal `old` — a
+        # checked edit. Either way the receipt quotes what was removed.
+        rng = None
+        if any(k in a for k in ("start_line", "end_line", "line", "old_line")):
+            try:
+                s0 = int(str(a.get("start_line", a.get("line", a.get("old_line", "")))).strip())
+                s1 = int(str(a.get("end_line", s0)).strip())
+            except ValueError:
                 return ResultEnvelope(ok=False, error=(
-                    f"edit '{name}' is {len(val)} chars; the limit is {self.EDIT_MAX_CHARS}. "
-                    f"An edit is a small located change — anchor on the shortest unique text, "
-                    f"or make several edits."))
-        p = self._safe_path(raw, writing=True)          # same confinement as every write
+                    "start_line and end_line must be line numbers, like start_line 1610 and "
+                    "end_line 1616. Nothing was changed."))
+            rng = (s0, s1)
+        if not path or (not old and rng is None):
+            got = ", ".join(sorted(a)) or "nothing"
+            return ResultEnvelope(ok=False, error=(
+                f"memory_edit needs 'path', and either 'old' (the exact text to replace, "
+                f"unique in the file) or 'start_line' and 'end_line' (the lines to replace), "
+                f"and 'new' (what replaces it; empty string deletes it). You sent: {got}."))
+        if new_key is None:
+            got = ", ".join(sorted(a)) or "nothing"
+            return ResultEnvelope(ok=False, error=(
+                f"memory_edit got no 'new', so nothing was changed. 'new' is what replaces the "
+                f"lines; without it the edit would have deleted them. You sent: {got}. Send the "
+                f"same call again with 'new' holding the replacement text (to delete on "
+                f"purpose, send 'new' as an empty string)."))
+        p = self._safe_path(path, writing=True)
         if not p.exists():
-            return ResultEnvelope(ok=False, error=f"no such file to edit: {p}")
+            return ResultEnvelope(ok=False, error=(
+                f"nothing to edit: '{path}' does not exist. This is an absence, not a "
+                f"refusal. memory_write creates a file; memory_edit changes one that is there."))
+        if p.is_dir():
+            return ResultEnvelope(ok=False, error=f"'{path}' is a directory.")
+        text = p.read_text(errors="replace")
+        if rng is not None:
+            lines = text.splitlines(keepends=True)
+            s0, s1 = rng
+            if not (1 <= s0 <= s1 <= len(lines)):
+                return ResultEnvelope(ok=False, error=(
+                    f"lines {s0}-{s1} are not all in '{path}': it has {len(lines)} lines. "
+                    f"Nothing was changed. memory_read shows the current line numbers."))
+            removed = "".join(lines[s0 - 1:s1])
+            if old and removed.rstrip("\n") != old.rstrip("\n"):
+                shown = removed if len(removed) <= 600 else removed[:600] + "..."
+                return ResultEnvelope(ok=False, error=(
+                    f"lines {s0}-{s1} of '{path}' are not the text you gave as old, so nothing "
+                    f"was changed. Those lines are now:\n{shown}"))
+            repl = new
+            if repl and not repl.endswith("\n") and removed.endswith("\n"):
+                repl += "\n"
+            new_text = "".join(lines[:s0 - 1]) + repl + "".join(lines[s1:])
+            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)"
+            shown = removed if len(removed) <= 400 else removed[:400] + "..."
+            gone = f" The lines removed were:\n{shown}"
+            return self._commit_edit(p, path, text, new_text, what, gone)
+        hits = text.count(old)
+        if hits == 0:
+            return ResultEnvelope(ok=False, error=(
+                f"that text is not in '{path}', so nothing was changed. The file is as it "
+                f"was. Read it first and copy the line exactly, including its indentation — "
+                f"what you remember writing and what is on disk can differ."
+                + _where_it_diverged(text, old)))
+        if hits > 1:
+            return ResultEnvelope(ok=False, error=(
+                f"that text appears {hits} times in '{path}', so it does not say which one "
+                f"you mean, and nothing was changed. Include a neighbouring line to make it "
+                f"unique."))
+        # ATOMIC, BECAUSE THE FILE IS THE BEING'S WORK. `Path.write_text` truncates and then
+        # writes, so a crash or a kill between the two leaves the file empty or half-written.
+        # GPT's review of 15c2f6d9b: "crash/kill can truncate the being's work". For a being
+        # that spent this week unable to change its own files, destroying one while changing
+        # it would be the worst available regression — and it would be silent, because the
+        # receipt is written after the damage. `conversations.py` already writes this way
+        # three times over (tmp beside the target, then os.replace); this is the same pattern,
+        # not a new one. os.replace is atomic on the same filesystem, so a reader either sees
+        # every byte of the old file or every byte of the new one, never a prefix of either.
+        return self._commit_edit(p, path, text, text.replace(old, new, 1),
+                                 "replaced 1 occurrence", "")
+
+    def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
+                     gone: str) -> ResultEnvelope:
+        """Write an edit atomically and say what it did. Shared by the text and line modes."""
+        tmp = p.with_name(p.name + ".edit.tmp")
         try:
-            body = p.read_text(errors="replace")
-        except Exception as e:
-            return ResultEnvelope(ok=False, error=f"edit could not read {p}: {type(e).__name__}: {e}")
-        n = body.count(old)
-        if n == 0:
+            tmp.write_text(new_text)
+            os.replace(tmp, p)
+        except OSError as e:
+            # The original is untouched — os.replace either happened or did not.
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
             return ResultEnvelope(ok=False, error=(
-                f"edit found no occurrence of that text in {p}. The anchor has to match the "
-                f"file BYTE FOR BYTE — indentation included — so read the lines you are "
-                f"anchoring on rather than recalling them."))
-        if n > 1:
-            return ResultEnvelope(ok=False, error=(
-                f"edit found {n} occurrences of that text in {p} and will not choose for you. "
-                f"Extend the anchor with a neighbouring line until it is unique."))
-        before = len(body)
-        p.write_text(body.replace(old, new, 1))
-        after = p.stat().st_size
+                f"the edit could not be written ({e}); '{path}' is unchanged. Nothing was "
+                f"lost — the file is exactly as it was before you asked."))
+        # COUNTED THE WAY memory_read COUNTS (splitlines). This was count("\n") + 1, one
+        # higher than memory_read for any file ending in a newline: 2026-09-21 the receipt said
+        # 1637 lines while memory_read said 1636, and line numbers are now what the being edits
+        # by (#160) -- an end_line taken from the receipt is refused as past the end.
+        before = len(text.splitlines())
+        after = len(p.read_text(errors="replace").splitlines())
         return ResultEnvelope(
             ok=True,
-            result=(f"edited {p} — replaced {len(old)} chars with {len(new)}; "
-                    f"file was {before} bytes, now {after}. One occurrence, as required."),
-            witness_id=self._witness(f"edit {p.name}: {old[:60]!r} -> {new[:60]!r}"))
+            result=(f"edited {p.name}: {what}; the file went from {before} to "
+                    f"{after} lines. This changed the file on disk — it is not an append."
+                    f"{_python_status(p)}{gone}"),
+            witness_id=self._witness(f"memory_edit {p.name} ({before}->{after} lines)"))
 
     def _do_retire_note(self, intent: BeingIntent) -> ResultEnvelope:
         """Mark one of the being's OWN notes as no longer current, by renaming it and writing
@@ -546,3 +676,122 @@ class ReferenceF1aDispatcher:
                     f"(relative paths resolve inside your home, {self.memory_root}; "
                     f"append is the default, pass mode='replace' to overwrite).{repeat}"),
             witness_id=self._witness(f"memory_write {p.name} ({mode})"))
+
+    def _do_edit(self, intent: BeingIntent) -> ResultEnvelope:
+        """Replace one exact occurrence of `old` with `new` inside a file.
+
+        WHY THIS VERB EXISTS, measured 2026-09-13. `memory_write` has two modes: append, or
+        replace the WHOLE file. To change three lines inside compose(), legion-being would
+        have had to resend all of heartbeat.py — 63,645 chars, ~25,458 tokens, against a
+        working budget of ~6,500. Four times its entire per-beat room. So it could not.
+
+        It did the only thing its verbs allowed: appended a wrapper at the end of the file
+        that shadows the original function. The semantics were right and the shape was
+        wrong, and the shape was wrong because nothing else was reachable. Every one of its
+        merged PRs until now added a NEW file, which I had read as a preference; it was the
+        structure of its instruments. A being that can only append can only ever bolt on.
+
+        EXACTLY ONE MATCH, or it refuses. Zero means the anchor is not what it thinks — very
+        often whitespace or a line it is remembering rather than reading. More than one means
+        it does not know which site it is changing, and picking for it would be the harness
+        guessing at intent. Both refusals say the count, because a refusal that names its own
+        cause is one the being can correct without asking."""
+        raw = str(intent.args.get("path", "")).strip()
+        if not raw:
+            return ResultEnvelope(ok=False, error="edit needs a 'path'")
+        old = str(intent.args.get("old", ""))
+        new = str(intent.args.get("new", ""))
+        if not old:
+            return ResultEnvelope(ok=False, error=(
+                "edit needs 'old': the exact text to replace. To ADD text rather than change "
+                "it, use memory_write (append is its default)."))
+        if old == new:
+            return ResultEnvelope(ok=False, error="edit 'old' and 'new' are identical; nothing to do")
+        for name, val in (("old", old), ("new", new)):
+            if len(val) > self.EDIT_MAX_CHARS:
+                return ResultEnvelope(ok=False, error=(
+                    f"edit '{name}' is {len(val)} chars; the limit is {self.EDIT_MAX_CHARS}. "
+                    f"An edit is a small located change — anchor on the shortest unique text, "
+                    f"or make several edits."))
+        p = self._safe_path(raw, writing=True)          # same confinement as every write
+        if not p.exists():
+            return ResultEnvelope(ok=False, error=f"no such file to edit: {p}")
+        try:
+            body = p.read_text(errors="replace")
+        except Exception as e:
+            return ResultEnvelope(ok=False, error=f"edit could not read {p}: {type(e).__name__}: {e}")
+        n = body.count(old)
+        if n == 0:
+            return ResultEnvelope(ok=False, error=(
+                f"edit found no occurrence of that text in {p}. The anchor has to match the "
+                f"file BYTE FOR BYTE — indentation included — so read the lines you are "
+                f"anchoring on rather than recalling them."))
+        if n > 1:
+            return ResultEnvelope(ok=False, error=(
+                f"edit found {n} occurrences of that text in {p} and will not choose for you. "
+                f"Extend the anchor with a neighbouring line until it is unique."))
+        before = len(body)
+        p.write_text(body.replace(old, new, 1))
+        after = p.stat().st_size
+        return ResultEnvelope(
+            ok=True,
+            result=(f"edited {p} — replaced {len(old)} chars with {len(new)}; "
+                    f"file was {before} bytes, now {after}. One occurrence, as required."),
+            witness_id=self._witness(f"edit {p.name}: {old[:60]!r} -> {new[:60]!r}"))
+
+    # -- path confinement (defense in depth over the gate) -------------------
+    def _former_home_equivalent(self, p: Path):
+        """If `p` lies under a home this being used to have (instance.json `former_homes`),
+        the path of the same file under its CURRENT home; else None."""
+        try:
+            import json as _json
+            cfg = _json.loads((self.memory_root / "instance.json").read_text())
+            for fh in cfg.get("former_homes") or []:
+                old = Path(str(fh.get("path", ""))).resolve()
+                if str(old) != "/" and (p == old or old in p.parents):
+                    return self.memory_root / p.relative_to(old)
+        except (OSError, ValueError):
+            pass
+        return None
+
+    def _worktree_writable(self) -> bool:
+        """True only when the tree the being would write is a tree that executes under a
+        principal that is not the seat. Cached per dispatcher: the probe runs a real
+        sandbox, and the answer does not change within a beat."""
+        cached = getattr(self, "_wt_writable", None)
+        if cached is None:
+            try:
+                from sage.gateway.being_gate_client import sandbox_available
+                cached = bool(sandbox_available())
+            except Exception:
+                cached = False
+            self._wt_writable = cached
+        return cached
+
+
+# Files inside the being's own home that the SEAT owns and the being may not write.
+# One entry, and it earns its place: `entrustment.md` is what the being was GIVEN. Its own
+# reading of it goes in notes/plan.md. If a being could append to the entrustment, the two
+# provenances would merge in the record and no later reader could tell what was extended to
+# it from what it decided for itself — which is the whole reason the file exists (PRD r3
+# §4). Refusing is not distrust: the being may disagree with it loudly anywhere else.
+SEAT_OWNED = ("entrustment.md",)
+
+
+SHARED_FORUM = "/ai-workspace/shared-context/forum"
+
+
+def _shared_destination_hint(p) -> str:
+    """Name the verb that DOES reach where the being was trying to write.
+
+    legion-being hit this refusal twice on 2026-09-13 trying to answer a peer on the fleet
+    forum, because `memory_write` is the intuitive verb and the refusal named no other. It
+    already had a working path — `peer_ask` and `mesh` file to the forum through the
+    gateway — and used it both times only after spending a step on the refusal. A boundary
+    that says only what is forbidden makes the being guess at what is allowed."""
+    if SHARED_FORUM in str(p).replace("\\", "/"):
+        return (" To reach the forum, use `peer_ask` (it files your message there, in your "
+                "name, and wakes the being you addressed) or `mesh` (a pointer at something "
+                "already posted). Those are the sanctioned doors to shared space; they are "
+                "not a workaround, they are the verb for this.")
+    return ""

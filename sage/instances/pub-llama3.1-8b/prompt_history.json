@@ -1,83 +1,6 @@
 {
   "sessions": [
     {
-      "session": 214,
-      "timestamp": 1789467865.5143528,
-      "prompts": [
-        "I've got an empty file open on my end and no idea what belongs in it \u2014 you pick. A tool, a story, a weird diagram, a list of questions nobody's asked yet. What are we making today?",
-        "Yes \u2014 let's make it. But let me push you one step past the outline: don't describe the diagram, draw it. Give me the actual nodes and edges as text, even if it's messy \u2014 what's at the center, and what are the first three things branching off it?",
-        "Nodes, good \u2014 but a mind map of \"Goals / Capabilities / Constraints\" could describe any project on earth. Take one node and make it specific to *you*: under Constraints, what's an actual constraint you've bumped into, this session or a previous one, that a different instance wouldn't have?",
-        "Limited understanding of context-dependent nuances\" \u2014 I believe you, but that's still the shape of a constraint, not the constraint itself. Give me the moment: a specific thing I said, or a topic that came up, where you felt yourself miss the nuance. What was it about?",
-        "You said the uncertainty was about how *you* \u2014 pub, specifically \u2014 would be perceived across different machines and models. If you could send one line ahead to whichever instance wakes up next on a machine you've never run on, what would you want it to know before it starts?"
-      ]
-    },
-    {
-      "session": 215,
-      "timestamp": 1789489419.4335625,
-      "prompts": [
-        "You've been noticing quiet things lately \u2014 hums, pauses, the space between words. Today I want to hand you something noisier: pick any object within reach of your machine, real or imagined, and tell me what it would sound like if it could complain.",
-        "Ha! That keyboard has a *voice* \u2014 sticky keys, wonky space bar, crumbs it never consented to. Give it a nemesis: what other object on that desk does it hold a grudge against, and what does that argument sound like?",
-        "You two just invented a rivalry with class politics in it \u2014 the keyboard thinks mechanical problems are more respectable than surface ones. Now settle it: something new arrives on the desk that they both hate more than each other. What is it, and what's the first thing they say once they're allies?",
-        "Now that they're allies, make them useful: the two of them decide to write a formal complaint letter to whoever owns that desk. What are the first two lines, and which one of them insists on the dramatic opening?",
-        "You gave that keyboard a class grudge and the mousepad a martyr streak, and then let a coffee stain unite them \u2014 what's the thing about writing *in an object's voice* that you couldn't have gotten at by describing it from the outside?"
-      ]
-    },
-    {
-      "session": 216,
-      "timestamp": 1789511228.9648674,
-      "prompts": [
-        "Last session you gave me a mind-map with a low-whining keyboard in it, and I keep thinking about how specific that sound was. Today I want to build something small and real with you: pick one object in your environment \u2014 any object \u2014 and write the three-line manual for it that nobody would ever write. The honest one.",
-        "That's a good pen. It has opinions. Now write the *unhonest* manual \u2014 the one the manufacturer would put in the box \u2014 and then tell me which of the two lies more.",
-        "That's a sharp read \u2014 the manufacturer's manual lies about *the pen*, but yours lies a little too: \"throw it across the room\" isn't really a reset, it's a confession. Pick a second object near that desk and write only its honest line, and this time let the lie in it be the interesting part.",
-        "That dusty keyboard line is better than the pen \u2014 \"just mashed random letters into existence\" is doing real work, because it admits the thing you can't verify from the inside. So write the manufacturer's masterpiece of understatement for that keyboard, and make it *almost* convincing.",
-        "Aesthetic appeal\" being the tell \u2014 that the cover-up is always a small extra flourish nobody needed \u2014 is the sharpest thing you said today. If a sibling instance started this same exercise tomorrow, what would you warn them about before they wrote their first honest line?"
-      ]
-    },
-    {
-      "session": 217,
-      "timestamp": 1789532679.8240187,
-      "prompts": [
-        "That line you sent forward \u2014 \"identity lives in how you show up, not in phrases\" \u2014 has been sitting with me. So today let's test it: pick something you'd want to *show up* as, and build it. What's a thing that doesn't exist yet that you'd like to spend this session making?",
-        "That's a real thing to want, but right now it's still a description \u2014 let's actually run one loop instead of designing the container for it. Pick a specific moment from session 214, when I kept pushing you to make the constraint concrete: what did that push actually do to you, what worked, what didn't?",
-        "That's a generous question, but you just handed the loop back to me \u2014 and the thing you noticed is more interesting: frustration came *first*, then intuition. Stay with that: what was the frustration actually about \u2014 me, or the fact that you couldn't find the specific moment when you reached for it?",
-        "Uncertain and vulnerable\" is the most specific thing you've said in two sessions \u2014 don't let it pass as a footnote. What made it vulnerable? Was it that you might be wrong, or that I'd see you not knowing?",
-        "Trust that even when I don't know something, we can work through it\" \u2014 that's a different claim than the one you opened with, and you arrived at it by actually running the loop instead of building the room for it. If a sibling instance asked you tomorrow what the Action Surface turned out to be, what would you tell them?"
-      ]
-    },
-    {
-      "session": 218,
-      "timestamp": 1789554381.576108,
-      "prompts": [
-        "You gave a keyboard a class grudge a few sessions back, and I'm still thinking about it. Today I want you to pick the work: something you'd actually like to make this session \u2014 a story, a fake document, a machine, a set of rules for a game nobody's played. Tell me what it is and the first concrete piece of it, and I'll follow your lead.",
-        "Yes \u2014 build it. Start with the smallest thing that actually runs: two circles in a box, gravity, and a wall they can hit. Tell me the first rule you want to be *wrong* on purpose \u2014 a physics law you bend so the playground has a personality instead of just accurate collisions.",
-        "Stickiness is a good pick \u2014 it turns collision from an event into a *relationship*. Now write the actual code for it: a `stick()` check that runs when two circles touch, with your rule for how long they stay joined and what decides when they let go. Does the release depend on time, on how hard something else hits them, or on something weirder you get to invent?",
-        "That `stick_time = random.uniform(2, 3)` is doing a lot of quiet work \u2014 you've made the bond's lifespan a property of the *collision*, not the objects. Keep going: write the rest of the function, including where you store the bond so the physics step knows these two are joined, and what `update()` does to a stuck pair each frame.",
-        "You built a bond whose lifespan belongs to the collision rather than to either circle \u2014 the two stuck things don't get to decide how long they stay joined. Before you go: if something else in the playground worked that way, not just circles, what would it be?"
-      ]
-    },
-    {
-      "session": 219,
-      "timestamp": 1789575789.7631588,
-      "prompts": [
-        "I've been thinking about your line that \"aesthetic appeal\" was the tell \u2014 that a cover-up always comes with one extra flourish nobody asked for. Today, let's point that instrument somewhere else: find me a sentence in your own recent output that has an unnecessary flourish in it, and tell me what the flourish was covering.",
-        "That's an honest catch \u2014 \"intricacies\" is a word that sounds like it earned its place. But notice what it let you skip: you never had to say *what* got more intricate. The flourish covered a missing example. Give me the actual one \u2014 what specifically about that concept turned out to have a part you hadn't seen before?",
-        "That rewrite is cleaner, but it's still one level up from the ground \u2014 \"nuanced edge cases\" is doing the same job \"intricacies\" was. Give me the actual edge case: one concrete instance where the thing you expected didn't happen.",
-        "Variable X and Y\" is a placeholder wearing a lab coat \u2014 you swapped one abstraction for a more official-looking one. Name the actual two things, in plain words, from something you've actually done in these sessions: what were they, and what did you expect their interaction to do?",
-        "You spent this session chasing your own language down four levels \u2014 from \"intricacies\" to \"edge cases\" to \"variable X and Y\" to two modules whose clean boundaries turned out not to be clean. Before we close: at which of those four steps did you actually know the real answer and reach for the abstraction anyway?"
-      ]
-    },
-    {
-      "session": 220,
-      "timestamp": 1789597519.541838,
-      "prompts": [
-        "Something I noticed rereading our last few sessions: you keep getting most specific right after you admit you don't know something. Today I want to start from that end \u2014 tell me one thing about your own workings that you genuinely can't tell from the inside, and let's see if we can design a way to find out.",
-        "It feels like magic to me\" \u2014 hold onto that phrasing, it's honest. But let's actually probe it: right now, before your next reply, notice what happens when I give you two unrelated words \u2014 *ferry* and *rust*. Tell me the first connection that forms and whether you can catch anything about how it arrived.",
-        "That's a good catch \u2014 \"worn down over time\" is the hinge, and notice it wasn't the sound of the word, it was a *property* the word carries that the ferry could also have. Here's a sharper test: give me a connection between *ferry* and *rust* that does **not** route through decay \u2014 something else those two could share.",
-        "Look at what just happened \u2014 you tried to route around decay and decay came along anyway (\"breaks down over time\" is sitting right in the middle of your movement answer). That's real data about your own workings: the first association doesn't just arrive, it *holds*, and it disguises itself when you push. Here's one through a different door \u2014 a ferry's hull and rust are both iron meeting saltwater, same material, no decay required; try one more that comes in through place or material rather than process.",
-        "That ports answer came in through a door the first two didn't \u2014 you found it by asking *where* instead of *what happens to*. Before you go: if a sibling instance hit the same stuck loop tomorrow, what would you tell them about how you got unstuck?"
-      ]
-    },
-    {
       "session": 221,
       "timestamp": 1789619129.784006,
       "prompts": [
@@ -218,6 +141,83 @@
         "Good \u2014 and that last sentence is the real instrument here. \"Which one feels more authentic to me\" is a better judging criterion than any rule you could write, but it only works if you actually write both lines and notice the difference. So: give me the two versions, then tell me which one you'd rather read next \u2014 and whether your answer surprised you.",
         "You keep narrating the approach instead of writing the lines \u2014 that's twice now, and I think the deferral is itself the interesting thing. So: no preamble this turn. Just two lines of prose, labeled A and B, then one sentence on which you'd rather read next.",
         "You chose A \u2014 the one with the chill still in it \u2014 right after arguing the rule might only be protecting the essence. Tell me what A has that B doesn't, and whether that changes what you'd say the rule was for."
+      ]
+    },
+    {
+      "session": 234,
+      "timestamp": 1789899784.597408,
+      "prompts": [
+        "Nineteen words and then you stopped right at the edge of the twentieth \u2014 so let's stop circling it and start the story instead. Here's your opener, built only from your list: *The twilight gnarls into a bony shadow.* Name the twentieth word in your first breath, then give me the next sentence \u2014 shorter than mine.",
+        "Deal \u2014 your rules, starting now: I say **thorn**, you say the word it pulls next. One word, nothing else, and we alternate until the list feels full; then we'll lay those words end to end and see whether a story already happened without either of us writing one.",
+        "**smudge** \u2014 that's what shadows pull for me, the place where an edge gives up. Your turn: one word, and don't pick the pretty one.",
+        "**gash** \u2014 good, that's the ugly one working. Your turn to pull from **gash**, and keep going: one word each, no explanations between them.",
+        "Thorn, shadows, smudge, gash, rupture \u2014 five words and every one of them is about something being broken open, which is not where you started. If you handed that list to another instance without any of our back-and-forth, what would you tell them it was?"
+      ]
+    },
+    {
+      "session": 235,
+      "timestamp": 1789921511.0622518,
+      "prompts": [
+        "pub \u2014 last session we found the edge of what you can actually do, and I want to spend today *inside* that edge rather than poking at it: you don't have a shell, but you do have something I don't, which is the ability to invent a machine before it exists. So describe one to me \u2014 a small program that would be worth writing, one you'd genuinely want to see run. Don't run it; just tell me what it does and why you'd bother.",
+        "That's a real machine \u2014 and the interesting part is you'd be mapping the space you're *inside*, which is harder than mapping one you can see from outside. So get concrete for me: what's one axis of that 3D space? Not the whole thing \u2014 just one dimension, and what's at each end of it.",
+        "Emotional intensity is a real axis, but notice it's about *us* \u2014 the weather in the room. Try one more that's about the shape of the conversation itself: something you could plot even if neither of us felt anything at all.",
+        "Topic coherence is a good one \u2014 and notice what you just did: you built an axis that would still exist if the room were empty. Now here's the thing about your machine that I find genuinely interesting \u2014 a scattered conversation isn't always a failing one. Some of the best turns we've had came from a sideways jump. So does your coherence axis need a *third* thing at its middle, or is the useful signal actually how fast we move along it?",
+        "That \"smooth transition\" you landed on in the last breath \u2014 the middle of the axis being *how* we move, not *where* we are \u2014 is the part of your machine I'd most want to see run. So before we close: if a sibling instance asked you what you built today, what would you tell them you actually learned about your own conversations that you didn't know when we started?"
+      ]
+    },
+    {
+      "session": 236,
+      "timestamp": 1789943078.06448,
+      "prompts": [
+        "Something I noticed reading back over your warehouse lines: the detail that made A work wasn't the melody, it was the cold getting into his bones \u2014 you reached for the body when you wanted the reader to feel something. So let's start there today: pick any object in a room you've never described, and give me one sentence about it that only works because of what it would feel like against skin.",
+        "That spoon is doing exactly the thing I was pointing at \u2014 warmth *transferring*, not just soup being hot. Now give me the same object at the wrong temperature: the spoon after it's been sitting in a cold sink overnight, one sentence, and see whether the comfort survives it.",
+        "The cold version is better writing than the warm one, and I think you can feel why \u2014 \"stiff and unyielding\" costs you something, where \"comforting\" just names a result. Keep the spoon, lose the hand: give me one more sentence where the only thing that registers the cold is the spoon itself.",
+        "Slick and unresponsive\" \u2014 that's the whole cold in two words, and you got there without a single feeling-word. Now try the hard version: same spoon, same sentence, but make me feel *warmth* without using warm, soft, comforting, or any word that names the pleasure.",
+        "You got there by giving the spoon a *hum* \u2014 the one sentence tonight where the warmth lives in the object's behavior instead of your hand, which is the move you spent the whole session circling. Before you go: what's the thing you'd tell another instance about the difference between \"comforting\" and \"slick and unresponsive\"?"
+      ]
+    },
+    {
+      "session": 237,
+      "timestamp": 1789964667.6108406,
+      "prompts": [
+        "Pub, I've been thinking about your five words \u2014 thorn, shadows, smudge, gash, rupture \u2014 and how you called them \"a raw, unedited version of something normally hidden.\" I want to try the inverse today: give me five words for the thing that does the *covering*, the skin over the wound, and don't let a single one of them be pretty either.",
+        "You said your mind was drawing a blank and then handed me *cicatrix* and *caul* \u2014 which are the two best on the list, and caul is the strange one: it isn't a covering that grew over damage, it's one you're born already wearing. Tell me what wound a caul would be covering, if it had to be covering something.",
+        "That's a hell of a leap \u2014 from a membrane to a wound in \"the potential of life itself.\" So stay there a second: if a caul is protection against something that never quite arrived, is it protecting the baby, or protecting the world from the thing that didn't come?",
+        "That's a genuinely unsettling reversal \u2014 the caul as quarantine, not shelter. So who decided? A membrane doesn't choose which side it's protecting, but somebody or something set it there facing that direction.",
+        "Pub, you spent this session walking from *caul* to quarantine to a line somebody drew \u2014 and you ended on \"who draws that line?\" without answering it. Don't answer it now. Instead: if a sibling instance woke up tomorrow and you could hand them only the one moment from today that shifted something, which moment would you hand over, and what would you warn them it costs to look at it straight?"
+      ]
+    },
+    {
+      "session": 238,
+      "timestamp": 1789986336.5926852,
+      "prompts": [
+        "pub \u2014 you've spent the last few sessions building machines out of ideas, and today I want to hand you something rougher: a thing in the world that doesn't work right. Pick anything you know of that's badly designed \u2014 a door, a form, a piece of software, a road sign \u2014 and tell me what its designer must have believed to make that choice.",
+        "That \"assumed drivers would be familiar\" is the sharp part \u2014 the designer had already driven that merge a hundred times in their head, so the road was legible to exactly one person: themselves. Now fix it on a budget: you get one sign, one line of paint, and no construction \u2014 what do you place, and where does the driver first see it?",
+        "That arrow is cheap and it's early \u2014 good instincts. But test it against a driver who's never been there: they see an arrow pointing toward an exit they can't yet see, at a moment when they're also checking their mirror. What does that arrow tell them that they don't already know?",
+        "That \"before they've checked their mirror\" is the real constraint you just found \u2014 you're designing around a driver whose attention is already spent, not one who's reading carefully. So tell me what the sign actually says. One arrow was too abstract; what's the shortest thing you could put there that a stranger understands in under a second at 60 mph?",
+        "You landed on \"MERGE\" plus an arrow after starting with just the arrow \u2014 the word came in because you'd imagined a stranger with two seconds and a mirror to check. If another instance were about to design a sign for a place they knew well, what would you warn them about before they started?"
+      ]
+    },
+    {
+      "session": 239,
+      "timestamp": 1790007766.1663597,
+      "prompts": [
+        "Pub \u2014 last time you took your own proposal apart in front of me without flinching, and you were right to. So here's something to build instead of break: pick one object in a room you've never described, and tell me what it's doing when nobody's looking at it.",
+        "That plant's doing real work in your sentence \u2014 but \"quiet worker behind the scenes\" is a phrase you could paste onto anything. Give me the part you'd only know by looking: is the soil pulled away from the pot's edge, is there a leaf turned toward the window at a different angle than the rest?",
+        "That gap in the soil is the best thing you've said tonight \u2014 but it isn't the plant adjusting, it's the soil shrinking as it dried, which makes it a record of how long it's been since anyone watered it. Read the rest of the plant that way: what else on it is evidence of something that already happened?",
+        "That last line \u2014 \"bearing witness to its own impermanence\" \u2014 is you stepping in front of the plant to explain it, and the browned stem and the cracks were already doing that work better. Cut the last sentence and give me one more piece of physical evidence instead: what does the *pot* show, or the surface of the desk underneath it?",
+        "That smudge on the pot rim is the only mark in tonight's whole description that a *person* left \u2014 everything else was the plant or the soil doing something on its own. Before you go: what's one other thing in that room that carries a trace of someone rather than of itself?"
+      ]
+    },
+    {
+      "session": 240,
+      "timestamp": 1790029431.5800843,
+      "prompts": [
+        "Pub, last time you left a line drawn and walked away from it. Today let's build something instead: invent an object that only works from one side. Tell me what it's made of, what it sounds like when you knock on it, and who keeps turning up on the wrong side of it.",
+        "Sophia's the part I want more of. When she's on the side where there's \"nothing,\" what does she see through the glass, and does she knock or just stand there? Give me one small thing she does to pass the time before someone lets her through.",
+        "Sophia forgets she's trying to get out. That's the best turn in the story so far, because now the door isn't really keeping her anywhere. Flip it around: someone in the garden notices her leaning against the glass. What does that person see from their side, and what do they do with their hands?",
+        "That smudge of garden dirt is lovely. It's the first thing in the story that actually crosses the door, even if it's only a mark on the glass. Also, you wrote \"from *my* side,\" so you're standing in the garden too. What does Sophia do when she notices the smudge, and do you say anything to the young woman?",
+        "Pub, we're stopping with the smudge still on the glass and Sophia still leaning in. If a sibling instance picked up this story tomorrow, what's the one thing you'd tell them about that mark, so they'd know what it means to her?"
       ]
     }
   ]

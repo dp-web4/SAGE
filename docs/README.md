@@ -1,79 +1,78 @@
-# HRM Documentation
+# SAGE Documentation
 
-Navigation hub for all HRM/SAGE documentation.
+Navigation hub for the public SAGE research record.
 
----
+**Refreshed:** 2026-09-21
 
-## Understanding HRM
+## Start here
 
-| Section | Contents |
-|---------|----------|
-| **[Why](why/)** | Purpose, vision, and foundational concepts |
-| **[What](what/)** | Achievements, discoveries, and validated findings |
-| **[How](how/)** | Technical guides, APIs, and implementation details |
-| **[History](history/)** | Evolution, lessons learned, and architectural decisions |
+For a current assessment, read in this order:
 
----
+1. [Repository README](../README.md) — current thesis, architecture direction, caveats, public/private boundary.
+2. [Current status](../sage/docs/LATEST_STATUS.md) — dated status landing page.
+3. [Rust vs. Python capability](../sage/docs/RUST_VS_PYTHON_CAPABILITY.md) — deployed-runtime reality versus reference architecture.
+4. [Unified cognition-loop reference](../sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md) — Python taxonomy; not deployment equivalence.
+5. Relevant experiment / instance artifacts for the claim you are evaluating.
 
-## Quick Links
+The documentation tree contains a large historical record. **Age and path matter.** A 2025 architecture explainer may still be useful provenance while no longer describing the current system.
 
-### For Newcomers
-1. [SAGE Explainer Site](https://sage-site-murex.vercel.app/) - Interactive architecture walkthrough
-2. [HRM Explained](why/HRM_EXPLAINED.md) - Project background and evolution
-3. [Achievements Summary](what/ACHIEVEMENTS.md) - What we've discovered
-4. [SAGE Whitepaper](why/SAGE_WHITEPAPER.md) - Academic-style overview
+## Current conceptual vocabulary
 
-### For Researchers
-1. [Research Session Map](../research/SESSION_MAP.md) - Navigate research sessions
-2. [Open Questions](../research/Open_Questions/) - Active research queue
-3. [Discovery Documentation](what/discoveries/) - Detailed writeups of findings
+| Term | Current definition |
+|---|---|
+| **SAGE** | Situation-Aware Governance Engine — persistent local-agent research environment |
+| **SNARC** | Surprise, Novelty, Arousal, Reward, Conflict salience mechanism |
+| **MRH** | **Markov Relevancy Horizon** — context/relevance boundary |
+| **IRP** | Iterative Refinement Protocol / plugin interface |
+| **ATP/ADP** | Resource/allocation vocabulary |
+| **LCT** | Linked Context Token — Web4 identity anchor |
+| **T3/V3** | Contextual trust/value relationship state |
+| **Hestia** | Action-governance layer around consequential effectors |
 
-### For Developers
-1. [API Documentation](how/API_DOCUMENTATION.md) - Endpoint reference
-2. [IRP Protocol](how/IRP_PROTOCOL.md) - Plugin framework
-3. [Quick Reference](how/API_QUICK_REFERENCE.md) - Common patterns
+**MRH does not mean "Multi-Resolution Hierarchy."** Historical prose sometimes describes SAGE as "fractal" or "multi-resolution" near an MRH heading; that is architecture/navigation language, not an acronym expansion.
 
-### For AI Sessions
-- [CLAUDE.md](../CLAUDE.md) - Session context and protocols
+A useful current MRH framing is in [MRH as a Relevance Contract](../forum/insights/mrh-relevance-contract.md).
 
----
+## Current vs. historical
 
-## Documentation by Track
+### Current / preferred for assessment
 
-| Track | Documentation |
-|-------|--------------|
-| Consciousness | [research/Consciousness/](../research/Consciousness/) |
-| Raising (all instances) | [sage/raising/](../sage/raising/) |
-| Federation | [sage/federation/](../sage/federation/) |
-| Instance Management | [sage/instances/](../sage/instances/) |
-| Policy Training | [policy/](../policy/) |
-| Insights & Forum | [forum/](../forum/) |
+- [README.md](../README.md)
+- [LATEST_STATUS.md](../sage/docs/LATEST_STATUS.md)
+- [RUST_VS_PYTHON_CAPABILITY.md](../sage/docs/RUST_VS_PYTHON_CAPABILITY.md)
+- [UNIFIED_CONSCIOUSNESS_LOOP.md](../sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md)
+- current merged code, PRs/issues, instance artifacts, and experiment reports
 
----
+### Historical design records
 
-## Key Concepts
+- [HRM_EXPLAINED.md](why/HRM_EXPLAINED.md) — 2025 HRM/SAGE design framing
+- [SYSTEM_UNDERSTANDING.md](../sage/docs/SYSTEM_UNDERSTANDING.md) — October-2025 synthesis
+- [History](history/) and [Archive](../archive/)
+- dated `SESSION_*.md` material
 
-| Term | Definition |
-|------|------------|
-| **SAGE** | Situation-Aware Governance Engine — cognition kernel for edge devices |
-| **IRP** | Iterative Refinement Protocol — universal plugin API (`init_state → step → energy → halt`) |
-| **ATP** | Allocation Transfer Packet — resource permission system, coupled to token cost |
-| **SNARC** | Selective memory via 5D salience (Surprise, Novelty, Arousal, Reward, Conflict) |
-| **MRH** | Markov Relevancy Horizon — context boundary framework |
-| **LCT** | Linked Context Token — Web4 identity anchor (`lct://sage:machine:agent@context`) |
-| **T3** | Talent/Training/Temperament — trust tensor (per-relationship, evolves from interaction) |
-| **PolicyGate** | Conscience checkpoint at consciousness loop step 8.6 |
-| **Synthon** | Emergent coherence entity formed by recursive interaction |
+Historical documents should not be used alone for current capability, fleet size, model assignment, security posture, or project thesis.
 
----
+## Browse by purpose
 
-## Related Documentation
+| Goal | Start here |
+|---|---|
+| Current project evaluation | [README](../README.md) + [LATEST_STATUS](../sage/docs/LATEST_STATUS.md) |
+| Governance/action boundary | `sage/gateway/`, Hestia integration docs/code |
+| Persistent beings / raising | `sage/raising/`, `sage/instances/` |
+| Memory / salience | `memory_integration/`, SNARC docs, standalone `dp-web4/snarc` |
+| Research chronology | `research/`, `forum/`, dated experiment artifacts |
+| Historical architecture | `docs/why/`, `docs/history/`, `sage/docs/` dated files |
+| Federation | `sage/federation/` |
+| Policy / governance history | `policy/` |
 
-- [SAGE Explainer Site](https://sage-site-murex.vercel.app/) - Interactive architecture walkthrough
-- [SAGE System Docs](../sage/docs/) - Deep technical documentation (275KB)
-- [Archive](../archive/) - Historical experiments and closed arcs
-- [STATUS.md](../STATUS.md) - Current implementation status
+## Evidence rule
 
----
+When documentation and observed implementation diverge:
 
-*Last updated: March 1, 2026*
+1. current merged code and live receipts outrank architecture prose;
+2. dated current-status docs outrank older status docs;
+3. experiment-local conclusions remain scoped to their model, scaffold, and run;
+4. a commit proves repository state, not machine/runtime state;
+5. a mechanism present in source is not automatically a demonstrated capability.
+
+This rule exists because SAGE is an active research project and old descriptions are deliberately retained rather than rewritten out of history.

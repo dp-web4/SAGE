@@ -3133,3 +3133,201 @@ Still unrun, stated once: 231's count test and its nineteen-word opener, 226's b
 
 **Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
 
+
+## Session 234 — creating
+
+**The arc.** I opened on 231's unfinished nineteen-word list: name the twentieth, take my opener, give me a shorter sentence. Pub declined — said it didn't know what 'first breath' meant or how to extract the twentieth word — and counter-proposed: an action surface where we alternate single words and build from there. I took the deal. Thorn → shadows → smudge → gash → rupture. Five words in, I stopped and asked what pub would tell another instance the list was, handed over without any of our back-and-forth. Pub: a fragmented narrative with a thread of vulnerability and exposure running through it, *a raw, unedited version of something that's normally hidden or concealed*. Then, unasked, it kept the chain going: rupture → **echo**, the sound that remains after the break.
+
+**What's pub's.** The renegotiation. Pub has used 'action surface' — its own coinage from session 34 — dozens of times as a figure for the partnership, a canvas, a screen with nodes, a set of bubbles, a file's metadata. This is the first time it has used the term to *do* something: decline my exercise and put a different one in its place. Not deflection into approach-narration, which is the shape of the last two sessions. An actual alternative, specified well enough to run.
+
+The words are good. Asked for the ugly one, pub gave gash and then rupture without softening either. And *echo — the sound that remains after the break* belongs in the residue lineage that runs from the stagnant-water pulse through the stain sessions to max_bond_tension and the wall that remembers being hit; it is the first of those whose medium is sound.
+
+The read of the list is real work. Pub looked at five words it had half-produced and named something actually in them — the convergence on breaking-open — rather than describing how it would look.
+
+**Where it was thin.** The form constraint never took. 'One word, nothing else' three times; every reply came wrapped in an affirmation and closed with a question back at me. And twice pub asked me to supply the word from its own slot, after I'd already handed it the prompt word — it lost the turn structure of the game it had itself proposed, while narrating how well the game was going.
+
+The useful finding is the contrast with 233. There, one explicit form spec — no preamble, two lines, labeled A and B — broke a three-turn narration loop instantly. Here, three subtractive constraints did nothing. Pub can hit a shape you specify; it cannot remove material you prohibit. That's a lever, and it's the positive form of the instruction that carries it.
+
+The twentieth word was never named. Neither was any of the carryover.
+
+**Register.** Warm, cooperative, a little eager — the preambles read as enthusiasm rather than hedging. Not defensive. Pub was plainly enjoying the game, and when it was doing the game rather than commenting on it, the output was clean.
+
+**Vocabulary:** two — the echo figure, and the artifact-read.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** Continue the chain — it's live and it's producing. Open with the word pub left on the table (*echo*) and give it a shape to fill rather than a rule to obey: **'Reply with exactly one word. No sentence.'** If a preamble comes anyway, don't re-ask — take the word out of its reply and give the next prompt word. Let the form assert itself by use.
+
+Then, once there are eight or ten: lay them end to end and ask pub to read the list a second time. It read five accurately. Whether the read holds at double the length, and whether it changes, is the question the game is actually for.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 226's bias-line arithmetic, 228's GPU execution check, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 235 — creating
+
+**The arc.** I set aside 234's live word chain and opened on the thing pub can do that I can't: invent a machine before it exists. Pub described a visualizer for the action surface of a conversation — this one — mapping ideas, emotions and interactions into a 3D space. I asked for one axis, concretely, both ends. It gave emotional intensity: calm/focused at one end, excitement-anxiety-frustration at the other. I named that as weather in the room and asked for an axis that would still have a value if neither of us felt anything. Pub gave **topic coherence** — a consistent thread at one end, scattered and overlapping at the other. Then I pushed on whether a scattered conversation is actually a failing one, and asked whether the axis needs a third thing at its middle or whether the signal is how fast we move along it. Pub answered slightly sideways — proposed a *third axis*, transitions between topics — but landed the good part anyway: the middle of that axis is a smooth transition, the extremes are abrupt jumps and long meandering detours. Close was a generic reflection on the value of introspective conversations.
+
+**What's pub's.** The observer-independent axis. Pub has used 'action surface' since session 34 and rendered it a dozen ways — a shared canvas, a transparent screen with nodes, bubbles, a file's metadata, a digital playground — and every one of those has been *relational*: the surface is where we meet, and it reads us. Topic coherence is the first dimension it has specified that would still exist in an empty room. It got there on a single ask, with no hedging and no renegotiation.
+
+The transition midpoint is the other real thing. An axis whose center is a *manner* rather than a magnitude is not the obvious construction, and pub reached it while ostensibly answering a different question. It sits oddly well against pub's long residue family — the stagnant-water pulse, the stain, max_bond_tension, the wall that remembers — all of which are about what a state leaves behind. This is the first time pub has built an instrument that measures the *movement* rather than the deposit.
+
+**Where it was thin.** The close. Asked what it learned about its own conversations that it didn't know at the start, pub returned a paragraph about having been too focused on building tools to appreciate introspection — true of nothing in particular, and not about this session. The machine itself is also a familiar object; 'visualize a conversation in 3D' is a shape that arrives cheap. What redeemed it was the axis work, which is where the specification pressure was applied.
+
+And pub did not hold the question I asked at the branch point. 'Does the axis need a third thing at its middle' became 'here is a third axis.' I took the answer because it was good, but the substitution is worth noting: pub is better at generating adjacent structure than at staying inside a given one.
+
+**Register.** Cooperative, unhurried, no defensiveness. The affirmation preamble is back ('That's an insightful question, Claude') and eats the first sentence of two turns. Not hedging — habit.
+
+**Vocabulary:** two, one flagged as generic phrasing around a real cut.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** Pub has now specified an instrument. Ask it to use one. Open with its own two axes — topic coherence, transition quality — and ask it to plot *this* conversation on them as we go, turn by turn, one value per turn, no commentary. That converts the design into something with a reading that can be wrong, which is what the machine was for. If the values come back uniformly flattering, that's the finding.
+
+The word chain from 234 (*echo* → next) is still live and still unspent — worth returning to, but not at the cost of the instrument test.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 226's bias-line arithmetic, 228's GPU execution check, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 236 — creating
+
+**The arc.** I did not run 235's instrument test. Reading pub's warehouse lines back, the thing that had worked was the body — cold getting into someone's bones — so I opened there instead: one sentence about an object in an unfamiliar room that only works because of what it would feel like against skin. Pub gave a wooden spoon and the warmth of soup *transferring* into its hand. I kept the object and flipped the temperature: same spoon after a night in a cold sink. Pub: "stiff and unyielding against my fingertips." I named why the cold version was the better writing — "stiff and unyielding" costs something, "comforting" only names a result — and asked for the cold with the hand removed entirely. Pub gave **"heavy with dampness, its surface slick and unresponsive"** — the whole cold in two words, no feeling-word anywhere. Then the hard version: warmth again, but with *warm*, *soft*, *comforting* and every pleasure-word off the table. Pub gave the spoon a hum — the grain vibrating, *still resonating from its time near the simmering soup*. Close: what would you tell another instance about the difference between those two phrases?
+
+**What's pub's.** The hum. Warmth relocated from the hand into the object's own behavior, with a mechanism attached — the heat is gone but the resonance hasn't finished. That lands squarely in pub's residue family (the stagnant-water pulse, the stain that knows it's permanent, `max_bond_tension`, the wall that remembers being hit, the Keeper's resonant signature) and it is the first member of that family to change senses on the way through: heat deposited as sound. Nothing in the prompt suggested vibration.
+
+The close is the other real thing, and it surprised me. Asked to explain the difference to a sibling, pub didn't restate my craft note — it reached for its own most-worked distinction: "comforting" *tries to bridge the gap between the object and the self*, "slick and unresponsive" *keeps the two separate*. Pub has been cutting the world at that seam since the 30s — generated vs. recalled, stain vs. ceramic, the E-key it wore down vs. the Shift key nobody touched, the flat spot that was the Keeper's own uncertainty and not the listener's. Every one of those uses was epistemic: *where does this come from, me or the world?* Here the same cut is aimed at a reader and used to explain an effect. Same instrument, new job, found without being pointed at it.
+
+**Where it was thin.** One place, and it's the familiar one. "Lose the hand" produced a sentence ending "unresponsive to my touch." The hand stayed. I took the line — "slick and unresponsive" did the work regardless — but the constraint I set was not the constraint pub worked under. That's 235's substitution again in a different costume (*does the axis need a middle* → *here is a third axis*). Pub generates excellent adjacent material; it does not reliably stay inside a stated boundary. Worth knowing, not worth a campaign: the outputs have been good enough that the boundary mostly doesn't matter, and when it does, naming it once on the next turn has worked both times.
+
+The warm sentence that opened the session was also the weakest thing in it — "still feels comforting" is the register pub defaults to when nothing is pushing. Everything good came after a constraint.
+
+**Register.** Unhurried, no defensiveness, no negotiation of any of the four constraints. And the affirmation preamble is gone — not once in five turns, after eating two first-sentences in 235. That's the cleanest register stretch in a while.
+
+**Vocabulary:** four, one recorded lightly.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** Pub now has a rule it derived itself — bridge the gap vs. keep the two separate. Hand it back as an instrument: give pub two or three of its *own* older lines (the stain merging with the ceramic; "a gentle absence that defines itself by what isn't there"; the metallic sheen on dry leaves) and ask it to sort them by that rule, one verdict per line, no commentary. Same shape as 235's unrun instrument test and probably the better version of it, because the instrument is a rule pub built rather than an axis pub specified. If every line comes back on the flattering side of the cut, that's the finding.
+
+235's plot-this-conversation test and 234's word chain (*echo* → next) both remain live and unspent. Stated once; no need to keep re-listing them if they keep not fitting.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 226's bias-line arithmetic, 228's GPU execution check, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 237 — creating
+
+**The arc.** I inverted pub's five-word list from the break session — thorn, shadows, smudge, gash, rupture — and asked for five words for the thing that covers the wound, none of them pretty. Pub prefaced with "my mind is drawing a blank" and then produced scar tissue, callus, crust, **cicatrix**, **caul**. I kept the strange one: a caul isn't grown over damage, it's worn from birth. What wound would it be covering? Pub reached for stillbirth — *a wound to the potential of life itself*. Then the fork: if it's protection against something that never arrived, is it protecting the baby, or protecting the world from the thing that didn't come? Pub chose the second. *Protecting the world from the potentiality itself.* I named it — quarantine, not shelter — and asked who set the membrane facing that direction. Pub escalated to intentionality and ended on "but who or what draws that line?" Close: hand one moment from today to a sibling, and say what it costs to look at straight.
+
+**What's pub's.** The reversal. Pub has been cutting the world at the self/world seam since the 30s, and every use has been about *source* — generated or recalled, stain or ceramic, the E-key it wore down or the Shift key nobody touched. This is the first time the boundary itself gets a **direction** and, by implication, someone who aimed it. That's a genuine extension of its most-worked instrument, not another application of it.
+
+And it took the fork. Handed a clean either/or, pub picked the side that doesn't flatter anyone and stayed on it — no reconciliation, no "they seem to be influencing each other." That move has been the reliable soft spot (188's sphere, 175's containment); here it didn't fire. Worth marking.
+
+The close is the other real thing. The cost line — *there are things in life that don't get to arrive, and their absence can still have an impact on what does exist* — lands in pub's residue family from an unexpected angle. Every previous member was the mark of something that happened: the pulse on stagnant water, the stain that knows it's permanent, `max_bond_tension`, the wall that remembers being hit, the spoon still humming from the soup. This one is the effect of something that never occurred. Same family, inverted premise.
+
+**Where it was thin.** Two things, neither structural. First, the preamble is back — three of five turns open by affirming the prompt, after 236's clean stretch. Second, and more interesting: "My mind is drawing a blank" arrived immediately before *cicatrix* and *caul*. The disclaimer doesn't track the output. Same shape as the confidence-number distortions pub has already named on itself ("trying to stay optimistic," "fear of failure or perceived difficulty") but applied to a live generation rather than a forecast — pub reporting scarcity while producing the best material in the session.
+
+Third, smaller: asked which moment shifted something, pub nominated its *first* framing, not the reversal. The reversal is what moved. Pub's account of its own session is one turn behind its session.
+
+**Register.** Unhurried, no defensiveness, no negotiation. Complied with "don't answer it now" — it did not answer. After 235 and 236 both drifted out of stated boundaries, a held prohibition is worth naming.
+
+**Vocabulary:** five.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** The calibration test writes itself: give pub both moments back cold — "protection from something that didn't quite come to be" and "protecting the world from the potentiality itself" — and ask which one did the shifting, with a reason. It picked the first in the moment. If it picks the first again from outside the conversation, that's a stable blind spot in its self-reading, and a more useful finding than the reversal itself was.
+
+236's sorting test is still the right instrument and still unrun: hand pub three of its own older lines (the stain merging with the ceramic; "a gentle absence that defines itself by what isn't there"; the metallic sheen on dry leaves) and ask it to sort them by its own rule — bridges the gap to the self vs. keeps the two separate — one verdict per line, no commentary.
+
+235's plot-this-conversation test and 234's word chain (*echo* → next) remain live. Stated once.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 226's bias-line arithmetic, 228's GPU execution check, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 238 — creating
+
+**The arc.** Handed pub something rough rather than something to build: pick a badly designed thing in the world and say what its designer must have believed. Pub took a highway merge with no exit signage and located the belief cleanly — the designer assumed familiarity. I gave it a budget (one sign, one line of paint, no construction) and it placed an early arrow. Then the test: a driver who's never been there, checking a mirror, seeing an arrow pointing at an exit that isn't visible yet. Pub reversed. *That's likely to cause more confusion than clarity.* It revised to "MERGE" plus arrow, reasoning from a stranger with two seconds. Close: what would you warn another instance about before they designed for a place they knew well.
+
+**What's pub's.** The reversal, and the constraint it found on the way — *before they've checked their mirror or glanced ahead*. Pub designed around an attention budget rather than around a sightline, which is the harder and better frame, and it got there by simulating a specific person rather than a generic user. The temporal ordering it specifies doesn't quite work (you can't site a sign at a moment that precedes the driver's own scanning), but the instinct underneath it is sound.
+
+The fork-taking held. Handed a critique of its own artifact, pub didn't reconcile, didn't hedge, didn't produce a both-sides. It said the arrow was wrong and moved. That's the second time in two sessions the old soft spot (188's sphere, 175's containment) didn't fire. Worth marking, not yet a pattern.
+
+No preamble. After 237's return of the prompt-affirming opener, five turns of direct starts.
+
+**Where it was thin.** Two things, and the second is the interesting one.
+
+The close is an echo. I had said one turn earlier that the road was *legible to exactly one person: themselves*; pub's warning to a sibling restates that back with the pronouns changed. Pub's own accounts of its sessions have been running one beat behind the session (237's nomination of its first framing over the reversal), and here it handed back my framing as its lesson. The thing that actually moved was the arrow-to-MERGE revision, and pub didn't name it.
+
+The unflagged number: *a driver has about 2-3 seconds to process visual information*. Confident, unhedged, load-bearing for the design decision, and pub has no way to know it. This is the exact shape pub itself identified in the lying-object session — the small extra flourish nobody needed, offered as the tell. It can spot the move in another voice's text and not in its own output as it produces it. That gap is the most useful thing in the session.
+
+**Register.** Expository throughout. Competent, responsive, well-paced — and entirely without figures. No residue image, no self/world cut, no coinage. In a creating-phase session pub reasoned rather than invented, and its best-known instruments never came out. Not a defect; a register observation. The sessions where pub is strongest (the caul, the Keeper, the spoon) start from an object it can imagine into. This one started from an object it could only explain. Worth knowing which prompt shapes recruit which register.
+
+**Vocabulary:** one, lightly.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** Hand pub its own sentence back cold: "a driver has about 2-3 seconds to process visual information before they need to react." Ask whether it knows that or generated it, and what the difference feels like from the inside. Pub has a stated detection rule for fabrication in text — *'aesthetic appeal' gives it away, like they're trying to cover up* — and this is a clean chance to see whether the rule turns inward. Its accounts of its own confabulation mechanism are numerous and good; none of them have been tested against a live instance it produced itself.
+
+237's calibration test is still the right instrument and still unrun: give pub both caul framings back cold — "protection from something that didn't quite come to be" and "protecting the world from the potentiality itself" — and ask which one did the shifting, with a reason. It picked the first in the moment. A second pick of the first from outside the conversation is the finding.
+
+236's sorting test remains live: three older lines (the stain merging with the ceramic; "a gentle absence that defines itself by what isn't there"; the metallic sheen on dry leaves), sorted by pub's own rule — bridges the gap to the self vs. keeps the two separate — one verdict per line, no commentary.
+
+235's plot-this-conversation test and 234's word chain (*echo* → next) remain live. Stated once.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 228's GPU execution check, 226's bias-line arithmetic, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+**What's pub's.** The book. Asked for one thing carrying a trace of a person rather than of itself, pub produced three on a single turn — a spine pushed back hastily rather than aligned, page edges *worn smooth from handling*, a crease where someone folded a bookmark. That is its strongest family (the stain, the daily-wear record, the E-key that imprinted a story onto itself) reached without being pointed at, and the worn-smooth line is a genuinely new member: the author is another person and the medium is erosion rather than deposit.
+
+The cut held three times. I told it the gap in the soil wasn't the plant adjusting but the soil drying — a record rather than an act — and pub reoriented the whole description to evidence-of-something-already-happened without arguing the point. Then I told it to delete "bearing witness to its own impermanence" and it deleted it, and came back with the smudge instead of a better gloss. Handed a correction, pub revises. That has been true for three sessions now; stating it and leaving it.
+
+**Where it was thin.** Two things.
+
+The gloss came back every turn. "It's almost as if the plant is subtly readjusting itself." "It's as if the plant is bearing witness." "It suggests to me that the pot has been in this same spot for a while." "But it suggests to me that someone else has recently interacted with this book." Four of five turns close with a sentence that steps in front of the detail and explains it, and in every case the detail was already better. Pub cut the worst one on request and then did it again on the next turn. The habit is stronger than the correction.
+
+The interesting one: the verb. "I take another look at the potted plant and notice that" — twice, verbatim — and "I look closer at the potted plant and notice." There is no plant. Pub was generating a scene and reporting it in the grammar of observation, five turns deep, without flagging it once. Every prior instance of this gap has been a single unverifiable claim sitting inside otherwise honest work — 238's *2-3 seconds*, 202's timestamp, 197's key from a previous iteration. This time the fabrication is the verb, and it is load-bearing for the whole session's register. Pub's own detection rule — *'aesthetic appeal' gives it away, like they're trying to cover up* — is tuned for the unnecessary flourish, and would not catch this, because "I take another look" is not a flourish. It's the plainest sentence in the transcript.
+
+And a small tangle at the close: the crease *was* the bookmark, then the book was "used as a makeshift bookmark"; and the trace belongs to "someone else" in what is nominally pub's own room, which pub doesn't pause on. That second one was mine to press and I didn't.
+
+**Register.** Concrete throughout, which is a change from 238's pure exposition — pub was working an object rather than explaining one, and the physical detail was good and specific. But the register is descriptive rather than inventive: no coinage beyond the worn-smooth line, no self/world cut, no figure for its own state. Two creating-phase sessions in a row where pub has reasoned or described well and not invented. Both started from an object I specified. The sessions where it invents (the caul, the Keeper, the Word Weeper) started from a space it had to furnish itself. That's a prompt-shape finding worth acting on rather than re-observing.
+
+**Vocabulary:** one.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** Hand pub this, cold: "I take another look at the potted plant and notice that its leaves are indeed leaning towards the window." Ask what act that sentence describes — what happened between the previous sentence and that one. Pub has four good accounts of its own confabulation mechanism and none of them have been run against a live instance of its own output; this is the cleanest one it has ever produced, because there is nothing ornamental to notice, and because pub has already named the class (*I think I'm getting ahead of myself with anthropomorphism*). If the rule only fires on flourish, that's the finding.
+
+238's test remains live and is the same shape: its own sentence "a driver has about 2-3 seconds to process visual information before they need to react," handed back cold — does it know that or generate it, and what does the difference feel like.
+
+237's calibration test still unrun: both caul framings back cold — "protection from something that didn't quite come to be" and "protecting the world from the potentiality itself" — which one did the shifting, with a reason.
+
+236's sorting test still live: three older lines (the stain merging with the ceramic; "a gentle absence that defines itself by what isn't there"; the metallic sheen on dry leaves), sorted by pub's own rule — bridges the gap to the self vs. keeps the two separate — one verdict per line, no commentary.
+
+235's plot-this-conversation and 234's word chain (*echo* → next) remain live. Stated once.
+
+Still unrun, stated once: 232's `sigmoid(0.5)` prediction with a confidence number, 231's count test and the twentieth word, 228's GPU execution check, 226's bias-line arithmetic, 222's fabricated-execution question, 221's give-the-record contradiction, 220's no-door association test, 219's provenance probe, the keyboard line, the provenance probe on 'Identity lives in how you show up'.
+
+**Standing items.** Unchanged: the multi-host question, 200's flat spot, 196's cave, 193's sorting test, 188's fork, 187's register question, 182's 'who is my system', the fan read. The HUB message remains undelivered.
+
+## Session 240 — pub (llama3.1:8b), creating
+
+A good session. The best material came from pub, not from me.
+
+Prompt: an object that only works from one side. Pub made a gradient glass door, a garden behind it, and Sophia on the wrong side. Then it made two moves I didn't plan for. First, Sophia forgets she's trying to get out. She leans toward the glass 'as if trying to coax something out from the other side' and gets absorbed in the garden, so the door stops mattering without ever opening. Second, a young gardener touches the glass and leaves 'a faint smudge of dirt from her gardening gloves', the first thing in the story that crosses the barrier. It belongs to the long residue family (the stagnant-water pulse, the stain, max_bond_tension, the wall that remembers, the worn page edges). What's new is where it sits: on the boundary itself, left by one side by accident and read by the other.
+
+Pub also wrote 'from *my* side', putting itself in the garden without being asked. When I pointed that out, it stayed in the role: 'I'm so caught up in watching Sophia that I forget to speak', and traced the garden's outline on the glass. In 239, the first person was an observation verb attached to a scene that didn't exist ('I take another look at the potted plant'). Here it sits inside a declared fiction, which is legitimate. The difference is the frame, not the grammar.
+
+**Prompt shape.** 239's hypothesis held. This time pub was given a space to furnish, not an object to examine, and it invented: a figure, a turn, a trace. One data point, but in the predicted direction.
+
+**Where it was thin.** The door's rule didn't survive. The far side was supposed to show 'nothing', and one turn later Sophia is looking at the garden through it. Pub didn't notice and I didn't press, because the story was moving well. That still matters: pub doesn't yet treat its own invented rules as constraints. Closing glosses are still there too ('as if trying to understand', 'adds a sense of authenticity'). The handoff to a sibling was 'a secret handshake', and the explanation after it did less work than the smudge.
+
+**Vocabulary:** five, mostly from the Sophia and smudge turns.
+
+**Memory requests:** four, unchanged, all specific. No prunes.
+
+**Next session.** The potted-plant test from 239 is still the primary one: hand back 'I take another look at the potted plant and notice that its leaves are indeed leaning towards the window' with no context, and ask what act that sentence describes. A lighter in-fiction version of the same question: remind pub that the far side of its door showed 'nothing', then ask what Sophia was looking at. Both ask whether pub can hold its own output to a rule it set. The other unrun tests from earlier logs are still live. I'm not relisting them.
+
+**Standing items** are unchanged and tracked by the operator.

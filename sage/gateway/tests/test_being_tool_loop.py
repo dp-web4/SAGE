@@ -1,6 +1,7 @@
 """Hermetic tests for the being tool-use loop. No live gate/model: the gate client
 uses an injected fake law + mock dispatcher (F1a stand-in), and `generate` is scripted.
 Runnable under pytest or directly."""
+import pytest
 import os
 import sys
 from types import SimpleNamespace
@@ -1241,3 +1242,61 @@ def test_collision_names_preserve_creation_order_at_the_prune_boundary():
     assert set(collision_names).issubset(left), (
         "newest same-step retries must survive pruning; filename order is retention order"
     )
+
+
+# ---- the vision line's last mile, carried with the organ (SAGE #159) ----
+def test_images_ride_on_the_message_and_survive_the_flattening():
+    """Frames reach ollama as a list ON the message, beside content — measured against the
+    live model 2026-09-13: both OpenAI-style spellings INSIDE content are rejected 400.
+
+    The flattening rebuilt every message as {role, content} and dropped every other key,
+    so `images` died one line short of a model that can already see."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    seen = {}
+
+    class FakeLLM:
+        num_ctx = 24576
+        def get_chat_response(self, messages, tools=None):
+            seen["messages"] = messages
+            return {"content": "ok", "tool_calls": [],
+                    "raw": {"prompt_eval_count": 10, "eval_count": 1}}
+
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(),
+                             [{"role": "user", "content": "look", "images": ["QUJD"]}],
+                             max_steps=1, tools=[])
+    m = seen["messages"][0]
+    assert m["images"] == ["QUJD"], m
+    assert m["content"] == "look", "content is unchanged; the frame rides beside it"
+    assert r.reply == "ok"
+
+    # a message with no images must not grow an empty key: ollama treats [] as "an image
+    # was sent", and an empty one is a different request from no request at all
+    seen.clear()
+    run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(),
+                         [{"role": "user", "content": "no frame"}], max_steps=1, tools=[])
+    assert "images" not in seen["messages"][0]
+
+
+def test_live_a_frame_actually_reaches_a_vision_model():
+    """THE TEST THE REVIEW LACKED, and the reason SAGE#76 and #77 could both be green while
+    pinning a payload ollama answers 400 to: they assert what reaches the payload dict and
+    never post it. This one posts.
+
+    Opt-in because it needs a loaded vision model; run with SAGE_LIVE_OLLAMA=1."""
+    from os import environ
+    import base64
+    if environ.get("SAGE_LIVE_OLLAMA") != "1":
+        pytest.skip("set SAGE_LIVE_OLLAMA=1 to round-trip against the real server")
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    from sage.irp.plugins.ollama_irp import OllamaIRP
+
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+    llm = OllamaIRP({"model_name": environ.get("SAGE_LIVE_VISION_TAG", "qwen38-heretic:q3km-vl"),
+                     "num_ctx": 24576, "max_response_tokens": 120, "think": False})
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm,
+                             [{"role": "user", "content": "What colour is this image? /no_think",
+                               "images": [base64.b64encode(png).decode()]}],
+                             max_steps=1, tools=[])
+    assert r.reply and not r.reply.startswith("[OllamaIRP:"), r.reply
