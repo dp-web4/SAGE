@@ -134,19 +134,28 @@ def test_the_answer_ask_appears_only_when_there_is_someone_to_answer():
 
 
 
-def test_the_conversation_header_says_whether_anyone_is_waiting():
-    """2026-09-19..22 on Sprout: after dp's last turn the being sent twelve consecutive messages
-    into dp's channel, two from the explore phase after #147 had gated the answer phase. The
-    header carried a standing "reply with `say`" whatever the channel's state, and at 2B a
-    header instruction outranks the marker below that said the last word was its own."""
-    import re, tempfile
+def test_the_conversation_header_keys_on_reply_expectation_not_on_pending():
+    """Legion's four-row table (review of #172), as a real store, not source introspection —
+    the first cut's test pinned two strings and passed with `owed` forced either way.
+
+    2026-09-19..22: dp's last turn was a STATEMENT; the being sent twelve messages into the
+    channel. #147 gated the answer phase on reply-expectation; the header must key on the same
+    thing, or it is the standing invitation again, conditioned on the wrong fact."""
+    import tempfile
     from pathlib import Path
     from sage.gateway import conversations as c
-    from sage.gateway import heartbeat as h
-    src = open(h.__file__).read()
-    assert 'Nobody is waiting on you' in src and 'Someone is waiting on you' in src
-    assert "kept forever; reply with `say`)" not in src, "the unconditional invitation is gone"
-
+    from sage.gateway.heartbeat import conversation_header
+    inst = Path(tempfile.mkdtemp(prefix="hdr-")); me = "b"
+    c.create(inst, "dp", title="t", participants=["dp", me], writable_by=["dp", me])
+    assert "Nobody is waiting" in conversation_header(inst, me), "empty"
+    c.append(inst, "dp", speaker="dp", text="hello, how are you?")
+    assert "Someone is waiting" in conversation_header(inst, me), "a question is owed"
+    c.append(inst, "dp", speaker=me, text="well, thanks")
+    assert "Nobody is waiting" in conversation_header(inst, me), "answered"
+    c.append(inst, "dp", speaker="dp", text="good, keep going!")
+    assert "Nobody is waiting" in conversation_header(inst, me), \
+        "a STATEMENT asks nothing — the row that produced twelve messages"
+    assert "say` is for answering a person" in conversation_header(inst, me)
 
 if __name__ == "__main__":
     for n, f in list(globals().items()):
