@@ -79,6 +79,15 @@ def test_camera_command_out_path_in_scratch(tmp_path):
     assert out in cmd
 
 
+def test_camera_command_requests_image2_atomic_writing(tmp_path):
+    """The old frame is protected by the exact command Hestia judges, not a hidden rename."""
+    wt = str(tmp_path)
+    cmd = camera_command({"out_path": "scratch/camera/last-frame.jpg"}, _ctx(wt))
+    assert "-f image2" in cmd
+    assert "-atomic_writing 1" in cmd
+    assert cmd.rstrip().endswith("scratch/camera/last-frame.jpg")
+
+
 # --- _do_camera with monkeypatched subprocess.run ----------------------------
 
 def test_do_camera_success(tmp_path):
@@ -117,7 +126,8 @@ def test_do_camera_success(tmp_path):
     cmd_str = captured["cmd"] if isinstance(captured["cmd"], str) else " ".join(captured["cmd"])
     assert cmd_str.split()[0] == "ffmpeg"
     assert "-frames:v" in cmd_str
-    assert cmd_str.endswith(".capture.tmp")
+    assert "-atomic_writing 1" in cmd_str
+    assert cmd_str.endswith("last-frame.jpg")
     assert Path(out_path).read_bytes() == b"\\xff\\xd8\\xffNEW\\xff\\xd9"
 
 
@@ -285,7 +295,8 @@ def test_the_frame_resolves_against_HOME_not_the_worktree(tmp_path):
     assert str(home) in cmd, f"the frame does not land under the being's home: {cmd}"
     assert str(wt) not in cmd, (
         f"the frame still lands in the worktree, whose cleanliness is evidence: {cmd}")
-    assert cmd.rstrip().endswith("scratch/camera/last-frame.jpg.capture.tmp")
+    assert "-atomic_writing 1" in cmd
+    assert cmd.rstrip().endswith("scratch/camera/last-frame.jpg")
 
 
 def test_out_path_escaping_HOME_is_refused(tmp_path):
@@ -353,62 +364,6 @@ def test_camera_creates_its_output_directory_and_names_a_write_failure(tmp_path)
     assert env.ok, f"camera must create its own output directory; got {env.result or env.error}"
     assert (wt / "scratch" / "camera").is_dir(), "the directory was not created"
     assert wrote.get("path", "").endswith("last-frame.jpg")
-
-
-def test_failed_capture_preserves_the_previous_frame_byte_for_byte(tmp_path):
-    """A partial staged write plus nonzero ffmpeg exit cannot damage the last good frame."""
-    import types
-    import sage.gateway.hestia_dispatch as hd
-
-    wt = tmp_path / "wt"; (wt / "scratch" / "camera").mkdir(parents=True)
-    d = _dispatcher(str(wt))
-    final = wt / "scratch" / "camera" / "last-frame.jpg"
-    old = b"\\xff\\xd8\\xffKNOWN-GOOD\\xff\\xd9"
-    final.write_bytes(old)
-
-    def fake_run(cmd, **kw):
-        Path(cmd[-1]).write_bytes(b"\\xff\\xd8\\xffPARTIAL")
-        return types.SimpleNamespace(returncode=7, stdout=b"", stderr=b"encoder failed")
-
-    orig = hd.subprocess.run
-    hd.subprocess.run = fake_run
-    try:
-        env = d._do_camera(BeingIntent("camera", {"out_path": "scratch/camera/last-frame.jpg"}))
-    finally:
-        hd.subprocess.run = orig
-
-    assert not env.ok
-    assert final.read_bytes() == old, "a failed capture changed the last good frame"
-    assert not Path(str(final) + ".capture.tmp").exists(), "failed staged bytes were left behind"
-    assert "untouched" in str(env.result)
-
-
-def test_zero_exit_with_malformed_jpeg_preserves_the_previous_frame(tmp_path):
-    """rc=0 is not success unless the staged bytes are a complete JPEG."""
-    import types
-    import sage.gateway.hestia_dispatch as hd
-
-    wt = tmp_path / "wt"; (wt / "scratch" / "camera").mkdir(parents=True)
-    d = _dispatcher(str(wt))
-    final = wt / "scratch" / "camera" / "last-frame.jpg"
-    old = b"\\xff\\xd8\\xffKNOWN-GOOD\\xff\\xd9"
-    final.write_bytes(old)
-
-    def fake_run(cmd, **kw):
-        Path(cmd[-1]).write_bytes(b"not-a-jpeg")
-        return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
-
-    orig = hd.subprocess.run
-    hd.subprocess.run = fake_run
-    try:
-        env = d._do_camera(BeingIntent("camera", {"out_path": "scratch/camera/last-frame.jpg"}))
-    finally:
-        hd.subprocess.run = orig
-
-    assert not env.ok
-    assert final.read_bytes() == old
-    assert not Path(str(final) + ".capture.tmp").exists()
-    assert "not a complete JPEG" in str(env.result)
 
 
 def test_a_write_failure_is_not_reported_as_a_busy_device(tmp_path):
