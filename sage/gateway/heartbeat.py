@@ -2202,8 +2202,6 @@ def main(argv=None) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    sys.exit(main())
 
 
 # What this being is entrusted with, if anything. Seat-owned and unwritable by the being
@@ -2502,3 +2500,6 @@ def next_wake_is_armed() -> tuple:
     except Exception as e:
         return False, f"could not ask systemd: {type(e).__name__}: {e}"
     return interpret_timer_state(out)
+
+if __name__ == "__main__":
+    sys.exit(main())
