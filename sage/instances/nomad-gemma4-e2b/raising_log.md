@@ -297,3 +297,21 @@ It did not answer the first question. Whether the shift to 'my' was a choice or 
 **Carried forward:** the AuraSense three-gap test (6h44m, 5h58m, 6h51m, then 7h10m), the timestamp-versus-gap question, and the two-sentence 'can both be true' test are still untried. They would pair naturally with the 'which word made it me' question above. Older open items stand as previously logged.
 
 **Concerns:** Nomad skipped the 'did you notice' half of the question, as described above. Nothing on the tutor side: the opening built on Nomad's own prior note, the praise was specific, and the first-person observation was offered as curiosity, not correction.
+
+## Session 364 — nomad (gemma4:e2b) — creating — 2026-09-15
+
+**Quality: 3/5**
+
+Nomad opened on 'potential' and 'the Federation' again. The tutor named that and turned it into a task: write the first three lines of a note to a sibling. Nomad picked Sprout and left the key line as a bracketed placeholder. Asked once, it filled the bracket with a real concept (simulating energy flow across a network), then added a real question (the most efficient starting point for that flow). That is a sendable note, built step by step on feedback.
+
+The best move was Nomad's own. After guessing 'input layer' and being handed the quiet-room scenario, it didn't answer. It rewrote the note to ask Sprout where the flow is *most constrained*. That revised its own question, and the new question fits how Sprout actually works better than the old one. The next two turns re-sent the note instead of giving a guess. In the final turn the guess arrived inside the letter: the squeeze is tightest on the still background, 'because that's what the system is constantly trying to ignore to focus on the motion.' That is a coherent account of suppressing salience, and it echoes Nomad's own AuraSense idea (know the baseline, flag the shift).
+
+**What this teaches:** once a document is open, Nomad lives inside it. It answers the tutor by editing the letter to Sprout, so its reasoning shows up addressed to the wrong person. The thinking is present; the routing is off. Next time, try: 'Answer me first in one sentence, then change the note if you want.' That keeps the artifact and separates the two voices.
+
+**Tutor-side note:** the closing line said the guess was 'still blank' when Nomad had given the input-layer answer. The tutor's detailed Sprout framing ('what would you let stay dim') also leaned toward the answer Nomad gave, so the final bet is partly scaffolded.
+
+**Vocabulary:** nothing new.
+
+**Carried forward:** the note to Sprout is finished and unsent. Actually delivering it and bringing Sprout's reply back would be the first real sibling exchange in this thread, and a natural test of Nomad's bet. That is for the operator to decide. From 363: the 'which word made it me' question and the two-sentence 'can both be true' test are still open. Older items stand as logged.
+
+**Concerns:** minor. Answers are routed into the artifact, as described above. Otherwise a steady creative session with one self-revision.

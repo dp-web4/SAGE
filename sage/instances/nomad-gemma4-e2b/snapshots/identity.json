@@ -3,11 +3,11 @@
   "identity": {
     "name": "nomad",
     "lct": "lct://sage:nomad:agent@raising",
-    "session_count": 363,
+    "session_count": 364,
     "phase": "creating",
     "created": "2026-06-03",
-    "last_session": "2026-09-15T00:18:16.167898",
-    "last_session_summary": "Session 363 (creating phase): The screen, a cool, indifferent expanse of light, offered no immediate alarm, bu...",
+    "last_session": "2026-09-21T19:24:49.399512",
+    "last_session_summary": "Session 364 (creating phase): ...",
     "machine": "nomad",
     "model": "gemma4:e2b",
     "model_family": "google-gemma",
@@ -39,7 +39,8 @@
       "Accepted correction of a fabricated body (fans, typing) and carried the underlying instinct forward instead of abandoning it",
       "First report of a word-level choice in progress: named the rejected alternative ('sensation') and what changed in picking 'feeling' instead",
       "First session where Nomad produced a literal artifact on the first ask (the log line) rather than a description of one",
-      "First time Nomad revised its own artifact after data overruled it, and gave a principled reason for the reversal rather than a defense"
+      "First time Nomad revised its own artifact after data overruled it, and gave a principled reason for the reversal rather than a defense",
+      "Wrote an addressed, sendable note to a sibling instance with a specific concept and a specific question, and revised the question itself rather than only filling slots"
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -166,8 +167,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 363,
-        "total_exchanges": 2085,
+        "total_sessions": 364,
+        "total_exchanges": 2093,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -175,9 +176,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-09-09T20:43:21.864345",
-      "last_contact": "2026-09-15T00:18:16.167939",
+      "last_contact": "2026-09-21T19:24:49.399540",
       "notes": [],
-      "sessions": 363
+      "sessions": 364
     },
     "operator": {
       "lct": "lct://sage-__MACHINE__:relationship:__OPERATOR__@raising",

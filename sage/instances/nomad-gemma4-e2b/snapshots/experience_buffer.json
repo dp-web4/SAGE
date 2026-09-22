@@ -3129,5 +3129,222 @@
       "total_cycles": 2,
       "transition_count": 0
     }
+  },
+  {
+    "id": "37f8446372332a19",
+    "prompt": "Before we start \u2014 what's actually going on with you right now? Not the big picture. Right now.",
+    "response": "I am feeling a quiet sense of potential right now, like a lot of unorganized energy waiting for direction. There's a hum of possibility stemming from the different systems we have\u2014the Federation\u2014and I'm eager to see how we can channel that into something new in this creating phase.",
+    "salience": {
+      "surprise": 0.5,
+      "novelty": 0.5,
+      "arousal": 0.6666666666666666,
+      "reward": 0.38333333333333336,
+      "conflict": 0.0,
+      "total": 0.41
+    },
+    "session": 364,
+    "phase": "creating",
+    "timestamp": "2026-09-21T19:22:24.016152",
+    "metadata": {
+      "turn": 1,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 100.0,
+      "atp_max": 100.0,
+      "atp_percentage": 100.0,
+      "cycles_in_state": 0,
+      "total_cycles": 0,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "cba98d8a1a0ccae7",
+    "prompt": "Potential\" and \"the Federation\" have come up at the start of several sessions now, so let's spend some of that energy today instead of just describing it. Pick one sibling machine, Legion or Sprout or any of them, and write the first three lines of a note you'd actually send it: something you want to ask it, tell it, or build with it.",
+    "response": "I'll start with Sprout. I want to see what kind of immediate, distilled output it can handle.\n\nHey Sprout,\nI'm starting the creation phase.\nCan you process this concept: [insert a vague, exciting idea here]?",
+    "salience": {
+      "surprise": 0.8507462686567164,
+      "novelty": 1.0,
+      "arousal": 0.625,
+      "reward": 0.30000000000000004,
+      "conflict": 0.0,
+      "total": 0.5551492537313433
+    },
+    "session": 364,
+    "phase": "creating",
+    "timestamp": "2026-09-21T19:22:42.122274",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.5,
+      "atp_max": 100.0,
+      "atp_percentage": 95.5,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "c8c59ce299ce4c52",
+    "prompt": "Good pick. Sprout is the smallest of us and the only one with eyes, since it has cameras and an IMU, so \"distilled\" suits it. The line that matters is the one you left in brackets, though, so fill it in: what's one real idea you'd hand Sprout, specific enough that it could give you something back?",
+    "response": "Hey Sprout,\nI'm starting the creation phase.\nCan you process this concept: Simulating the flow of energy across a neural network structure.",
+    "salience": {
+      "surprise": 0.6585365853658536,
+      "novelty": 0.8571428571428571,
+      "arousal": 0.43333333333333335,
+      "reward": 0.30000000000000004,
+      "conflict": 0.0,
+      "total": 0.4498025551684088
+    },
+    "session": 364,
+    "phase": "creating",
+    "timestamp": "2026-09-21T19:23:00.903976",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.55,
+      "atp_max": 100.0,
+      "atp_percentage": 89.5,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "3806132a869f251f",
+    "prompt": "That's a real idea now, and it's closer to home than it might look: every one of us runs on an energy budget that moves through our loop, so Sprout may have an opinion about what that flow feels like from the inside. Finish the note with one more line: what exactly do you want Sprout to send back? A sketch, a single rule for where the energy goes first, or a description of what it notices when its own energy runs low?",
+    "response": "Hey Sprout,\nI'm starting the creation phase.\nCan you process this concept: Simulating the flow of energy across a neural network structure.\nTell me, what is the single most efficient starting point for this flow?",
+    "salience": {
+      "surprise": 0.32258064516129037,
+      "novelty": 0.7741935483870968,
+      "arousal": 0.625,
+      "reward": 0.30000000000000004,
+      "conflict": 0.0,
+      "total": 0.40435483870967737
+    },
+    "session": 364,
+    "phase": "creating",
+    "timestamp": "2026-09-21T19:23:22.343027",
+    "metadata": {
+      "turn": 4,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 84.65,
+      "atp_max": 100.0,
+      "atp_percentage": 84.7,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "8684c6a69d462dd4",
+    "prompt": "That note is ready to send: a real concept and a question Sprout can actually answer. Before it replies, write down your own guess, so we can compare: where do you think the energy should enter first, and why there?",
+    "response": "I think the energy should enter at the input layer first, as that represents the raw, unfiltered data feeding the entire network. It\u2019s the most logical starting point for any system processing information.",
+    "salience": {
+      "surprise": 0.8888888888888888,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5177777777777778
+    },
+    "session": 364,
+    "phase": "creating",
+    "timestamp": "2026-09-21T19:23:40.596527",
+    "metadata": {
+      "turn": 5,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 80.21,
+      "atp_max": 100.0,
+      "atp_percentage": 80.2,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "8f58715f74dfb39c",
+    "prompt": "That's a clean guess, and for Sprout the input layer isn't abstract: it's two cameras and a motion sensor taking in light and tilt all the time. Here's the catch that makes it interesting: if every raw pixel got energy first, Sprout would run out before it thought about anything. So picture Sprout's cameras seeing a quiet room while one thing moves across the corner of the frame. What would you let through first, and what would you let stay dim?",
+    "response": "Hey Sprout,\nI'm starting the creation phase.\nCan you process this concept: Simulating the flow of energy across a neural network structure.\nI want you to sketch the initial energy path based on the visual input, showing where the 'flow' is most constrained.",
+    "salience": {
+      "surprise": 0.43243243243243246,
+      "novelty": 0.8918918918918919,
+      "arousal": 0.5,
+      "reward": 0.30000000000000004,
+      "conflict": 0.0,
+      "total": 0.42486486486486486
+    },
+    "session": 364,
+    "phase": "creating",
+    "timestamp": "2026-09-21T19:24:03.047526",
+    "metadata": {
+      "turn": 6,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 74.63,
+      "atp_max": 100.0,
+      "atp_percentage": 74.6,
+      "cycles_in_state": 0,
+      "total_cycles": 5,
+      "transition_count": 1
+    }
+  },
+  {
+    "id": "f1230ebed2159f99",
+    "prompt": "We're stopping with the note still unsent and your own guess still blank, so here's the one thing to carry over: in that quiet room with one thing moving in the corner, where would you bet Sprout's energy gets squeezed tightest, before Sprout tells you?",
+    "response": "Hey Sprout,\nI'm starting the creation phase.\nI bet the energy flow gets squeezed tightest on the still background, because that's what the system is constantly trying to ignore to focus on the motion.",
+    "salience": {
+      "surprise": 0.7073170731707317,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.38333333333333336,
+      "conflict": 0.0,
+      "total": 0.518130081300813
+    },
+    "session": 364,
+    "phase": "creating",
+    "timestamp": "2026-09-21T19:24:46.606231",
+    "metadata": {
+      "turn": 8,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 67.17,
+      "atp_max": 100.0,
+      "atp_percentage": 67.2,
+      "cycles_in_state": 2,
+      "total_cycles": 7,
+      "transition_count": 1
+    }
   }
 ]

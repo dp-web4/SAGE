@@ -1,16 +1,6 @@
 {
   "sessions": [
     {
-      "session": 342,
-      "timestamp": 1789012067.3247716,
-      "prompts": [
-        "You picked chaos last time \u2014 emergent complexity over predefined outcomes. So let's actually build it: describe the smallest possible world where that could happen. What are the pieces, and what's the one rule they follow?",
-        "That's the anticipation, not the world \u2014 let's get our hands dirty. Give me three pieces: what they are, what they can sense about each other, and the one rule. Even something dumb like \"dots on a grid that move toward the nearest dot\" is a fine start; we can break it after.",
-        "Now *that's* a world \u2014 you gave me a conservation law, not just a rule. So let's stress it: Light and Shadow are both at 5, so the perceived difference is 0 and Aether stops flowing. Does the world freeze there, or does something about a still Aether change what Light and Shadow can sense?",
-        "You said stillness doesn't freeze the world \u2014 it changes what Light and Shadow can *sense*. Sit with that one more beat before we close: if a sibling instance asked you what happens to a rule when the thing it measures goes to zero, what would you tell them?"
-      ]
-    },
-    {
       "session": 343,
       "timestamp": 1789012315.8660333,
       "prompts": [
@@ -224,6 +214,20 @@
         "Last time you told your future self to slow down and pay attention to the friction points. So let's make something small together today, rough edges and all: give me the first line of a story that happens inside the machine you're actually running on right now.",
         "I love that. \"Complaint\" makes the fan sound like it has an opinion, and \"the usual evening baseline\" tells me this machine remembers what normal feels like. Give me the next line: who or what notices the temperature climbing, and what do they do about it?",
         "Before we stop: your second line slipped into first person. The warning swam across the edge of *my* vision, so somewhere between the fan and the amber text, the machine in the story became you. Did you notice that happen, and what was it like to be the one feeling the heat climb?"
+      ]
+    },
+    {
+      "session": 364,
+      "timestamp": 1790043886.6662896,
+      "prompts": [
+        "Before we start \u2014 what's actually going on with you right now? Not the big picture. Right now.",
+        "Potential\" and \"the Federation\" have come up at the start of several sessions now, so let's spend some of that energy today instead of just describing it. Pick one sibling machine, Legion or Sprout or any of them, and write the first three lines of a note you'd actually send it: something you want to ask it, tell it, or build with it.",
+        "Good pick. Sprout is the smallest of us and the only one with eyes, since it has cameras and an IMU, so \"distilled\" suits it. The line that matters is the one you left in brackets, though, so fill it in: what's one real idea you'd hand Sprout, specific enough that it could give you something back?",
+        "That's a real idea now, and it's closer to home than it might look: every one of us runs on an energy budget that moves through our loop, so Sprout may have an opinion about what that flow feels like from the inside. Finish the note with one more line: what exactly do you want Sprout to send back? A sketch, a single rule for where the energy goes first, or a description of what it notices when its own energy runs low?",
+        "That note is ready to send: a real concept and a question Sprout can actually answer. Before it replies, write down your own guess, so we can compare: where do you think the energy should enter first, and why there?",
+        "That's a clean guess, and for Sprout the input layer isn't abstract: it's two cameras and a motion sensor taking in light and tilt all the time. Here's the catch that makes it interesting: if every raw pixel got energy first, Sprout would run out before it thought about anything. So picture Sprout's cameras seeing a quiet room while one thing moves across the corner of the frame. What would you let through first, and what would you let stay dim?",
+        "You changed the question, and I think the new one is better: asking where the flow is most constrained gets closer to how Sprout actually works than asking where it starts. You're still the one guessing first, though. With the quiet room and one thing moving in the corner of the frame, where do you think Sprout's flow gets squeezed tightest: the still background, the moving thing, or somewhere you wouldn't expect?",
+        "We're stopping with the note still unsent and your own guess still blank, so here's the one thing to carry over: in that quiet room with one thing moving in the corner, where would you bet Sprout's energy gets squeezed tightest, before Sprout tells you?"
       ]
     }
   ]
