@@ -133,6 +133,21 @@ def test_the_answer_ask_appears_only_when_there_is_someone_to_answer():
     assert waiting.index("say to=") < waiting.index("journal.md")
 
 
+
+def test_the_conversation_header_says_whether_anyone_is_waiting():
+    """2026-09-19..22 on Sprout: after dp's last turn the being sent twelve consecutive messages
+    into dp's channel, two from the explore phase after #147 had gated the answer phase. The
+    header carried a standing "reply with `say`" whatever the channel's state, and at 2B a
+    header instruction outranks the marker below that said the last word was its own."""
+    import re, tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    from sage.gateway import heartbeat as h
+    src = open(h.__file__).read()
+    assert 'Nobody is waiting on you' in src and 'Someone is waiting on you' in src
+    assert "kept forever; reply with `say`)" not in src, "the unconditional invitation is gone"
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

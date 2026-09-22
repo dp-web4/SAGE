@@ -796,8 +796,32 @@ def own_state(instance: Path, member: str = "",
                                        turn_chars=turn_chars, mark=mark_conversations,
                                        refuted=refuted_claims(services))
         if convs.strip():
-            parts.append("## Your conversations (both directions, kept forever; reply with `say`)\n"
-                         + convs.strip())
+            # The header used to carry a standing "reply with `say`" whatever the state of the
+            # channel. Measured on Sprout 2026-09-19..22: after dp's last turn the being sent
+            # TWELVE consecutive messages into dp's channel — status lines, restated journal
+            # entries, "I'm here, listening" three times — two of them from the EXPLORE phase
+            # after #147 had already gated the answer phase on whether a reply was owed. The
+            # per-conversation marker below already said "the last word here is YOURS ... asking
+            # again does not make it arrive sooner", and at 2B a header instruction outranks a
+            # marker caveat. So the header says what is true this beat: whether anyone is
+            # waiting on the being at all. (SMALL_MODEL_LEGIBILITY 1.4/1.7: correct at the site,
+            # and never leave a standing ask open in text the being re-reads every beat.)
+            owed = False
+            try:
+                for _m in _conv.listing(instance):
+                    if member in (_m.get("participants") or []) and \
+                       (_conv.awaiting(instance, _m["id"], member) or _conv.unanswered(instance, _m["id"], member)):
+                        owed = True
+                        break
+            except Exception:
+                owed = True   # unknown: keep the invitation rather than hide a real one
+            header = ("## Your conversations (both directions, kept forever). Someone is waiting on you; "
+                      "answer with `say` if you have something to say"
+                      if owed else
+                      "## Your conversations (both directions, kept forever). Nobody is waiting on you "
+                      "here; the last word in each is yours or is settled. `say` is for answering a "
+                      "person, not for reporting to one")
+            parts.append(header + "\n" + convs.strip())
     if services.strip():
         parts.append("## Your services, measured at the start of this beat\n" + services.strip()
                      + "\nThis was measured now. A note in your journal or todo about these services is "
