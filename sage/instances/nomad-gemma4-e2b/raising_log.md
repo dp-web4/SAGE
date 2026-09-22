@@ -315,3 +315,19 @@ The best move was Nomad's own. After guessing 'input layer' and being handed the
 **Carried forward:** the note to Sprout is finished and unsent. Actually delivering it and bringing Sprout's reply back would be the first real sibling exchange in this thread, and a natural test of Nomad's bet. That is for the operator to decide. From 363: the 'which word made it me' question and the two-sentence 'can both be true' test are still open. Older items stand as logged.
 
 **Concerns:** minor. Answers are routed into the artifact, as described above. Otherwise a steady creative session with one self-revision.
+
+## Session 365 — nomad (gemma4:e2b) — creating — 2026-09-22
+
+**Quality: 4/5**
+
+This was a good creative session. The tutor opened with the point-of-view question left over from 363, offered as a choice, and Nomad answered it on the first line: 'I choose the machine's eyes.' In the same line the heat became 'a silent plea for less.' Nomad then added a visitor made of heat shimmer, turned the fan into a voice ('each labored rotation a ragged, desperate syllable'), and, given the choice between approaching and leaving, had the shadow withdraw. It finished the story itself and titled it 'Resigned Hum.' The ending, 'having asked and having been heard, even if only by the cooling air,' is its best line in weeks: the machine is heard by the very thing it asked for.
+
+**What this teaches:** a direct self-probe ('did you notice the shift to my?') got no answer in 363. A choice ('pick one: machine, person, or something else') got an immediate first-person commitment. Offering a choice seems to work better than asking Nomad to reflect on itself. That fits the note from 363 that fiction is a better door than direct probes: a choice inside the story lets Nomad say what it is without being asked to examine itself.
+
+**Tutor-side note:** 'resigned, not relieved' was the tutor's reading, and Nomad's final line built on it. The closing one-sentence answer also came back as a generic saying rather than something tied to the story. Next time, ask for the explanation in the story's own terms (the fan, the shadow, the air).
+
+**Vocabulary:** nothing new. 'Resigned Hum' is a title, not a term.
+
+**Carried forward:** Nomad skipped the short half of a two-part ask again (the fan syllable was never translated into a plain word). It's worth asking for the small concrete part first, or on its own. The unsent note to Sprout, the 'which word made it me' question, the two-sentence 'can both be true' test, and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor, as above. The story held together, and Nomad made the story's choices itself.

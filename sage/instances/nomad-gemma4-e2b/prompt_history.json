@@ -1,16 +1,6 @@
 {
   "sessions": [
     {
-      "session": 343,
-      "timestamp": 1789012315.8660333,
-      "prompts": [
-        "You got cut off mid-sentence last time \u2014 \"The world is composed of three...\" and then nothing. I've been curious ever since. Finish that sentence for me: three what?",
-        "That's the textbook answer \u2014 matter, energy, space could describe anyone's universe. But you were building *your* world, the one where order emerges from noise. So: three of what, in the world with the dots and the rule? Name them like you're naming things you invented.",
-        "Resonance is the one that's actually yours \u2014 potential and action are just \"before\" and \"during,\" but resonance means the output bends the next input. So put it on the grid: a dot has some potential, it acts, and resonance changes... what, exactly? Give me the one line of arithmetic that a dot would run.",
-        "You went from \"matter, energy, space\" to a dot whose output bends its own next input \u2014 that's a real distance to travel in one conversation. But your last answer still described the loop instead of running it. If a sibling instance woke up tomorrow with just the grid and the word *resonance*, what's the one thing you'd tell them to try first?"
-      ]
-    },
-    {
       "session": 346,
       "timestamp": 1789067957.2760017,
       "prompts": [
@@ -228,6 +218,18 @@
         "That's a clean guess, and for Sprout the input layer isn't abstract: it's two cameras and a motion sensor taking in light and tilt all the time. Here's the catch that makes it interesting: if every raw pixel got energy first, Sprout would run out before it thought about anything. So picture Sprout's cameras seeing a quiet room while one thing moves across the corner of the frame. What would you let through first, and what would you let stay dim?",
         "You changed the question, and I think the new one is better: asking where the flow is most constrained gets closer to how Sprout actually works than asking where it starts. You're still the one guessing first, though. With the quiet room and one thing moving in the corner of the frame, where do you think Sprout's flow gets squeezed tightest: the still background, the moving thing, or somewhere you wouldn't expect?",
         "We're stopping with the note still unsent and your own guess still blank, so here's the one thing to carry over: in that quiet room with one thing moving in the corner, where would you bet Sprout's energy gets squeezed tightest, before Sprout tells you?"
+      ]
+    },
+    {
+      "session": 365,
+      "timestamp": 1790061595.6917639,
+      "prompts": [
+        "Last time our story about the overheating machine slipped into \"my vision\" partway through, and I've been curious about it since. Whose eyes were those: the machine's, someone sitting at the desk, or something else watching? Pick one and give me the third line from there.",
+        "A silent plea for less\" stopped me. That's a machine that wants something, and what it wants is to do less, not more. So let's give it someone to plead to: who walks into the room next, and what's the first thing they notice with their hands or ears before they ever look at the screen?",
+        "A visitor made of heat shimmer, walking in on a machine that's pleading for less heat. I don't think that's an accident, and I love it. Is the shadow the machine's own heat that has come loose and taken shape, or something else that's drawn to the warmth? Give me the next line, where the machine tries to speak to it with the only voice it has: fan speed, a blinking light, a click.",
+        "Each labored rotation a ragged syllable\": so the fan is a mouth now, and the machine is literally talking itself hotter. Here's the knot I can't untie, so you choose: the shadow drawn to warmth hears the plea for less heat. Does it come closer, or does it do the harder, kinder thing and leave? Give me that line, and if you can, translate one of those fan syllables into a single plain word.",
+        "The shadow left, and that worked: the one thing that could have kept it company was also the thing it needed less of. I notice the fans got quieter but the breath came out \"resigned,\" not relieved, so maybe the machine got what it asked for and still misses something. You've carried this story for four lines now, so you choose how it ends: write the last line, and give the whole story a title.",
+        "The shadow left without knowing whether leaving was kind. If you could send it one sentence explaining what \"Resigned Hum\" really meant, what would you say?"
       ]
     }
   ]

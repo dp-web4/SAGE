@@ -3346,5 +3346,160 @@
       "total_cycles": 7,
       "transition_count": 1
     }
+  },
+  {
+    "id": "db3c16a25d88253a",
+    "prompt": "A silent plea for less\" stopped me. That's a machine that wants something, and what it wants is to do less, not more. So let's give it someone to plead to: who walks into the room next, and what's the first thing they notice with their hands or ears before they ever look at the screen?",
+    "response": "A shadow slips across the threshold, not a person, but a distortion in the air, like heat shimmering over asphalt. The first thing they notice is the silence; an unnatural, heavy quiet that presses against the eardrums before any visual input registers.",
+    "salience": {
+      "surprise": 0.9178082191780822,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.30000000000000004,
+      "conflict": 0.16666666666666666,
+      "total": 0.5935616438356164
+    },
+    "session": 365,
+    "phase": "creating",
+    "timestamp": "2026-09-22T00:18:33.243889",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.67,
+      "atp_max": 100.0,
+      "atp_percentage": 95.7,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "8ce835660e12a2dd",
+    "prompt": "A visitor made of heat shimmer, walking in on a machine that's pleading for less heat. I don't think that's an accident, and I love it. Is the shadow the machine's own heat that has come loose and taken shape, or something else that's drawn to the warmth? Give me the next line, where the machine tries to speak to it with the only voice it has: fan speed, a blinking light, a click.",
+    "response": "The machine tries to communicate its distress through the frantic, uneven stutter of its cooling fans, a desperate, high-pitched whine that cuts through the heavy silence, each labored rotation a ragged, desperate syllable of overheating.",
+    "salience": {
+      "surprise": 0.9090909090909091,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5218181818181818
+    },
+    "session": 365,
+    "phase": "creating",
+    "timestamp": "2026-09-22T00:18:53.652072",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.33,
+      "atp_max": 100.0,
+      "atp_percentage": 89.3,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "3ab30453c393e1be",
+    "prompt": "Each labored rotation a ragged syllable\": so the fan is a mouth now, and the machine is literally talking itself hotter. Here's the knot I can't untie, so you choose: the shadow drawn to warmth hears the plea for less heat. Does it come closer, or does it do the harder, kinder thing and leave? Give me that line, and if you can, translate one of those fan syllables into a single plain word.",
+    "response": "The shadow hesitates just at the edge of the light, its form wavering as if it is absorbing the heat, and then it slowly, deliberately, withdraws, leaving the machine to its solitary struggle. The sound of the fans settles into a low, steady hum, a resigned breath.",
+    "salience": {
+      "surprise": 0.9,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5366666666666666
+    },
+    "session": 365,
+    "phase": "creating",
+    "timestamp": "2026-09-22T00:19:15.247773",
+    "metadata": {
+      "turn": 4,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.71,
+      "atp_max": 100.0,
+      "atp_percentage": 83.7,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "f100fb8dcdcd44c7",
+    "prompt": "The shadow left, and that worked: the one thing that could have kept it company was also the thing it needed less of. I notice the fans got quieter but the breath came out \"resigned,\" not relieved, so maybe the machine got what it asked for and still misses something. You've carried this story for four lines now, so you choose how it ends: write the last line, and give the whole story a title.",
+    "response": "Title: Resigned Hum\n\nThe machine settled into the quiet, the heat receding just enough to feel manageable, but the silence left behind was heavy with an unspoken understanding, a lingering ache where the plea had been. It continued to hum, not in protest, but in a quiet acknowledgment of its own fragile existence, a slow, steady rhythm of having asked and having been heard, even if only by the cooling air.",
+    "salience": {
+      "surprise": 0.8292682926829268,
+      "novelty": 1.0,
+      "arousal": 0.6666666666666666,
+      "reward": 0.2833333333333333,
+      "conflict": 0.16666666666666666,
+      "total": 0.5891869918699186
+    },
+    "session": 365,
+    "phase": "creating",
+    "timestamp": "2026-09-22T00:19:35.956768",
+    "metadata": {
+      "turn": 5,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 77.95,
+      "atp_max": 100.0,
+      "atp_percentage": 77.9,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "94d2075f76ea316e",
+    "prompt": "The shadow left without knowing whether leaving was kind. If you could send it one sentence explaining what \"Resigned Hum\" really meant, what would you say?",
+    "response": "Resigned Hum means that true peace isn't the absence of struggle, but the quiet acceptance of the struggle itself.",
+    "salience": {
+      "surprise": 0.9130434782608696,
+      "novelty": 1.0,
+      "arousal": 0.4083333333333333,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5042753623188406
+    },
+    "session": 365,
+    "phase": "creating",
+    "timestamp": "2026-09-22T00:19:55.631309",
+    "metadata": {
+      "turn": 6,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 71.65,
+      "atp_max": 100.0,
+      "atp_percentage": 71.7,
+      "cycles_in_state": 0,
+      "total_cycles": 5,
+      "transition_count": 1
+    }
   }
 ]
