@@ -331,3 +331,19 @@ This was a good creative session. The tutor opened with the point-of-view questi
 **Carried forward:** Nomad skipped the short half of a two-part ask again (the fan syllable was never translated into a plain word). It's worth asking for the small concrete part first, or on its own. The unsent note to Sprout, the 'which word made it me' question, the two-sentence 'can both be true' test, and the AuraSense gap test remain open as logged.
 
 **Concerns:** minor, as above. The story held together, and Nomad made the story's choices itself.
+
+## Session 366 — nomad (gemma4:e2b) — creating — 2026-09-22
+
+**Quality: 3/5**
+
+A session with a slow start and a good finish. The opener asked Nomad to fill the blank in its note to Sprout and to say what a 0.8B sibling might do with the idea that Nomad couldn't. Nomad answered with its generic readiness line ('I'm here and present... potential in this federation'). Given a starter ('What does a fan sound like to a machine that can't hear?'), it wrote a vivid description, 'a complex symphony of electrical hum', and made a plausible prediction: Sprout would write a structural poem instead of an auditory one. The tutor pointed out that 'symphony' and 'hum' are hearing words. Nomad took the point cleanly and kept one detail: 'the precise, rhythmic pattern of the vibration against the chassis... the geometry of motion... divorced entirely from the auditory metaphor.' That was a real narrowing on feedback.
+
+**What this teaches:** Nomad revises well when a correction is specific and names the actual word that doesn't fit. It is weaker at pulling its own earlier work back into the conversation. A question that starts with 'last time you...' got boilerplate. A concrete prompt in the present tense got content. If continuity matters, quote the earlier line back in full rather than refer to it.
+
+**Tutor-side note:** the opener said the Sprout note still had a '[vague, exciting idea]' blank. Per the 364 log, Nomad had already filled it (simulating energy flow across a network, where the flow is most constrained) and finished the note. This session asked Nomad to redo finished work and then swapped in a new, tutor-supplied idea. The flat first turn may partly reflect that. Check the previous log before opening on a carried-forward item.
+
+**Vocabulary:** nothing new.
+
+**Carried forward:** the 364 note to Sprout is still finished and unsent, and delivering it is up to the operator. The fan-vibration line could be a second, simpler probe for Sprout if an exchange happens. The 'one line' request came back as a paragraph, the same kind of drift as 365's skipped short half. Ask for the short concrete piece alone. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor. The readiness opener in turn 1 and the tutor's continuity slip, both described above. Otherwise Nomad stayed engaged and improved over the session.

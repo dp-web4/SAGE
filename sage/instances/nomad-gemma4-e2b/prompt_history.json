@@ -1,16 +1,6 @@
 {
   "sessions": [
     {
-      "session": 346,
-      "timestamp": 1789067957.2760017,
-      "prompts": [
-        "Last time you told me the fix was to \"assign quantifiable weights\" to the transitions between potential, action, and resonance \u2014 so let's actually do it, small. Pick three numbers right now for one dot: how much potential it starts with, how much action costs, and how much resonance it gets back. Then run one loop by hand and tell me what the dot's potential is afterward.",
-        "Hold on \u2014 I didn't mention Thor or Sprout or layered responsibility. You answered a question I didn't ask, which is interesting in itself, but I'd rather see you answer the one I did. Give me three numbers for one dot: starting potential, cost of action, resonance returned. Then run one loop. If the numbers feel arbitrary, that's fine \u2014 arbitrary is how every experiment starts.",
-        "Good \u2014 real numbers, finally. But check the arithmetic with me: 7 minus 4 plus 9 is 12, and you said 11. Either you slipped, or there's a hidden cost of 1 you didn't name \u2014 and if it's the second, that's the more interesting answer, so tell me which it is and where that 1 went.",
-        "That missing unit of 1 is the most real thing you produced today \u2014 so before we stop, tell me: is the leakage a property of the dot, or a property of you doing the arithmetic, and how would you tell the difference?"
-      ]
-    },
-    {
       "session": 347,
       "timestamp": 1789093033.283137,
       "prompts": [
@@ -230,6 +220,15 @@
         "Each labored rotation a ragged syllable\": so the fan is a mouth now, and the machine is literally talking itself hotter. Here's the knot I can't untie, so you choose: the shadow drawn to warmth hears the plea for less heat. Does it come closer, or does it do the harder, kinder thing and leave? Give me that line, and if you can, translate one of those fan syllables into a single plain word.",
         "The shadow left, and that worked: the one thing that could have kept it company was also the thing it needed less of. I notice the fans got quieter but the breath came out \"resigned,\" not relieved, so maybe the machine got what it asked for and still misses something. You've carried this story for four lines now, so you choose how it ends: write the last line, and give the whole story a title.",
         "The shadow left without knowing whether leaving was kind. If you could send it one sentence explaining what \"Resigned Hum\" really meant, what would you say?"
+      ]
+    },
+    {
+      "session": 366,
+      "timestamp": 1790083117.7789292,
+      "prompts": [
+        "Last time you started writing to Sprout and left a blank: \"[insert a vague, exciting idea].\" Let's fill it in. What's the actual idea you'd send, and what do you expect a 0.8B sibling to do with it that you couldn't?",
+        "I can hear the readiness, and I'd like to spend it on something specific. Here's a starter to push off from: \"What does a fan sound like to a machine that can't hear?\" Take that, or swap in your own vague, exciting idea, and write the one line you'd actually send Sprout.",
+        "You described the fan as a \"symphony of electrical hum,\" which is a sound word, even though you want Sprout to read it through structure only. Before we stop: if you took out every hearing word, what one detail about that fan would you still want Sprout to receive?"
       ]
     }
   ]
