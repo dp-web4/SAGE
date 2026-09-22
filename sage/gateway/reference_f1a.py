@@ -372,12 +372,47 @@ class ReferenceF1aDispatcher:
         # refusing it teaches nothing and sends it back to the verb that cannot edit.
         a = intent.args
         old = str(next((a[k] for k in ("old", "old_text", "old_str", "old_string") if k in a), ""))
-        new = str(next((a[k] for k in ("new", "new_text", "new_str", "new_string") if k in a), ""))
-        if not path or not old:
+        # A MISSING replacement is not an empty one. Measured 2026-09-22 02:30Z: cbp-being sent
+        # `new_content` (the seat's own letter spelled it that way) to add `.reshape(-1, 1)`
+        # to line 336. No alias matched, `new` defaulted to "", and the receipt said "replaced
+        # lines 336-336" while the line was simply gone; the being then asked the seat to run
+        # the fix. Only a replacement key that is present may delete; an absent one refuses.
+        new_keys = ("new", "new_text", "new_str", "new_string", "new_content", "replacement",
+                    "content", "new_lines")
+        new_key = next((k for k in new_keys if k in a), None)
+        new = str(a[new_key]) if new_key is not None else ""
+        # BY LINE NUMBER, TOO. Measured 2026-09-21 19:01Z: cbp-being called memory_edit with
+        # `old_line: "411"`, i.e. by line number, which is how it reads files (`memory_read`
+        # takes `start_line`) and how every seat message names a fix ("line 335", "the 7
+        # lines from 1610"). Text mode then asked it to reproduce seven indented lines
+        # character for character; across three seat answers it never did, and after the one
+        # refused call it stopped trying for four beats while re-reading the same lines. The
+        # tool was shaped for a different reader. So: `start_line` (and `end_line`, inclusive)
+        # replaces those lines with `new`. With `old` as well, the lines must equal `old` — a
+        # checked edit. Either way the receipt quotes what was removed.
+        rng = None
+        if any(k in a for k in ("start_line", "end_line", "line", "old_line")):
+            try:
+                s0 = int(str(a.get("start_line", a.get("line", a.get("old_line", "")))).strip())
+                s1 = int(str(a.get("end_line", s0)).strip())
+            except ValueError:
+                return ResultEnvelope(ok=False, error=(
+                    "start_line and end_line must be line numbers, like start_line 1610 and "
+                    "end_line 1616. Nothing was changed."))
+            rng = (s0, s1)
+        if not path or (not old and rng is None):
             got = ", ".join(sorted(a)) or "nothing"
             return ResultEnvelope(ok=False, error=(
-                f"memory_edit needs 'path', 'old' (the exact text to replace, unique in the "
-                f"file) and 'new' (what replaces it; empty string deletes it). You sent: {got}."))
+                f"memory_edit needs 'path', and either 'old' (the exact text to replace, "
+                f"unique in the file) or 'start_line' and 'end_line' (the lines to replace), "
+                f"and 'new' (what replaces it; empty string deletes it). You sent: {got}."))
+        if new_key is None:
+            got = ", ".join(sorted(a)) or "nothing"
+            return ResultEnvelope(ok=False, error=(
+                f"memory_edit got no 'new', so nothing was changed. 'new' is what replaces the "
+                f"lines; without it the edit would have deleted them. You sent: {got}. Send the "
+                f"same call again with 'new' holding the replacement text (to delete on "
+                f"purpose, send 'new' as an empty string)."))
         p = self._safe_path(path, writing=True)
         if not p.exists():
             return ResultEnvelope(ok=False, error=(
@@ -401,6 +436,27 @@ class ReferenceF1aDispatcher:
                 f"…]'. That note is not in '{path}': the harness put it in your view to save "
                 f"room. Nothing was changed. Read a few lines at a time, so nothing is elided, "
                 f"and copy from that result.{where}"))
+        if rng is not None:
+            lines = text.splitlines(keepends=True)
+            s0, s1 = rng
+            if not (1 <= s0 <= s1 <= len(lines)):
+                return ResultEnvelope(ok=False, error=(
+                    f"lines {s0}-{s1} are not all in '{path}': it has {len(lines)} lines. "
+                    f"Nothing was changed. memory_read shows the current line numbers."))
+            removed = "".join(lines[s0 - 1:s1])
+            if old and removed.rstrip("\n") != old.rstrip("\n"):
+                shown = removed if len(removed) <= 600 else removed[:600] + "..."
+                return ResultEnvelope(ok=False, error=(
+                    f"lines {s0}-{s1} of '{path}' are not the text you gave as old, so nothing "
+                    f"was changed. Those lines are now:\n{shown}"))
+            repl = new
+            if repl and not repl.endswith("\n") and removed.endswith("\n"):
+                repl += "\n"
+            new_text = "".join(lines[:s0 - 1]) + repl + "".join(lines[s1:])
+            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)"
+            shown = removed if len(removed) <= 400 else removed[:400] + "..."
+            gone = f" The lines removed were:\n{shown}"
+            return self._commit_edit(p, path, text, new_text, what, gone)
         hits = text.count(old)
         if hits == 0:
             return ResultEnvelope(ok=False, error=(
@@ -422,9 +478,15 @@ class ReferenceF1aDispatcher:
         # three times over (tmp beside the target, then os.replace); this is the same pattern,
         # not a new one. os.replace is atomic on the same filesystem, so a reader either sees
         # every byte of the old file or every byte of the new one, never a prefix of either.
+        return self._commit_edit(p, path, text, text.replace(old, new, 1),
+                                 "replaced 1 occurrence", "")
+
+    def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
+                     gone: str) -> ResultEnvelope:
+        """Write an edit atomically and say what it did. Shared by the text and line modes."""
         tmp = p.with_name(p.name + ".edit.tmp")
         try:
-            tmp.write_text(text.replace(old, new, 1))
+            tmp.write_text(new_text)
             os.replace(tmp, p)
         except OSError as e:
             # The original is untouched — os.replace either happened or did not.
@@ -439,8 +501,8 @@ class ReferenceF1aDispatcher:
         after = p.read_text(errors="replace").count("\n") + 1
         return ResultEnvelope(
             ok=True,
-            result=(f"edited {p.name}: replaced 1 occurrence; the file went from {before} to "
-                    f"{after} lines. This changed the file on disk — it is not an append."),
+            result=(f"edited {p.name}: {what}; the file went from {before} to "
+                    f"{after} lines. This changed the file on disk — it is not an append.{gone}"),
             witness_id=self._witness(f"memory_edit {p.name} ({before}->{after} lines)"))
 
     def _do_retire_note(self, intent: BeingIntent) -> ResultEnvelope:
