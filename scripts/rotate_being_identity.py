@@ -95,6 +95,102 @@ def _seal_digest(home: Path) -> str:
     return hashlib.sha256((home / "identity.sealed").read_bytes()).hexdigest()
 
 
+_MUTABLE_FILES = (
+    "identity.json",
+    "identity.sealed",
+    "identity.attest.json",
+    "identity.sealed.v1",   # authorize() may create this while healing a v1 seal
+    "instance.json",
+    "identity.sealed.tmp",
+    "instance.json.tmp",
+)
+
+
+def _snapshot_live(home: Path) -> dict:
+    """Bytes + mode for every path this script/provider may mutate during a real attempt."""
+    snap = {}
+    for name in _MUTABLE_FILES:
+        p = home / name
+        if p.exists():
+            st = p.stat()
+            snap[name] = {"bytes": p.read_bytes(), "mode": st.st_mode & 0o777}
+        else:
+            snap[name] = None
+    return snap
+
+
+def _restore_live(home: Path, snap: dict) -> None:
+    """Restore a snapshot with same-directory atomic replaces, including prior absence."""
+    for name, saved in snap.items():
+        p = home / name
+        if saved is None:
+            try:
+                p.unlink()
+            except FileNotFoundError:
+                pass
+            continue
+        tmp = p.with_name(p.name + ".rollback.tmp")
+        try:
+            with open(tmp, "wb") as out:
+                out.write(saved["bytes"])
+                out.flush()
+                os.fsync(out.fileno())
+            os.chmod(tmp, saved["mode"])
+            os.replace(tmp, p)
+        finally:
+            try:
+                tmp.unlink()
+            except FileNotFoundError:
+                pass
+    # Best-effort directory durability: the byte contract above is the authority; this makes
+    # the restored names survive a crash on filesystems that require an fsync of the directory.
+    try:
+        fd = os.open(str(home), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except OSError:
+        pass
+
+
+def _snapshot_matches(home: Path, snap: dict) -> bool:
+    for name, saved in snap.items():
+        p = home / name
+        if saved is None:
+            if p.exists():
+                return False
+        else:
+            try:
+                if p.read_bytes() != saved["bytes"]:
+                    return False
+            except OSError:
+                return False
+    return True
+
+
+def _probe_authorization_and_restore(home: Path, snap: dict) -> tuple:
+    """Measure authorization without letting the measurement itself change the live bytes.
+
+    authorize() may update the attestation and may migrate a v1 seal to v2. We therefore
+    probe only while holding a byte snapshot, then restore it immediately. This lets rollback
+    prove the same authorization state as before the attempt even for the healthy v1 case;
+    a CBP-like already-broken seal has baseline ('none', None) and is restored to that state.
+    """
+    state = ("none", None)
+    try:
+        ctx = _provider(home).authorize()
+        if ctx is not None:
+            state = ("authorized", ctx.public_key_fingerprint)
+    except Exception as e:
+        state = ("error", type(e).__name__)
+    finally:
+        _restore_live(home, snap)
+    if not _snapshot_matches(home, snap):
+        raise RuntimeError("authorization probe could not restore the pre-attempt identity bytes")
+    return state
+
+
 def rotate(home: Path, real: bool, rehearsed: str = "") -> int:
     home = Path(home).resolve()
     for f in ("identity.json", "identity.sealed"):
@@ -105,12 +201,14 @@ def rotate(home: Path, real: bool, rehearsed: str = "") -> int:
     old_fp, lct = ident["public_key_fingerprint"], ident["lct"]
     live_seal = _seal_digest(home)
 
+    token_file = None
     if real:
         tok = _token_path(home)
         if not rehearsed:
             raise SystemExit(f"REFUSED: --real needs --rehearsed {tok} -- run the rehearsal first and read it.")
+        token_file = Path(rehearsed)
         try:
-            t = json.loads(Path(rehearsed).read_text())
+            t = json.loads(token_file.read_text())
         except OSError as e:
             raise SystemExit(f"REFUSED: cannot read the rehearsal token ({e}). Run the rehearsal first.")
         if not t.get("ok"):
@@ -126,62 +224,123 @@ def rotate(home: Path, real: bool, rehearsed: str = "") -> int:
     if not real:
         work = Path(tempfile.mkdtemp(prefix="rotate-rehearsal-")) / home.name
         work.mkdir(parents=True)
-        for f in ("identity.json", "identity.sealed", "identity.attest.json", "instance.json"):
+        for f in ("identity.json", "identity.sealed", "identity.attest.json", "instance.json",
+                  "identity.sealed.v1"):
             if (home / f).is_file():
                 shutil.copy2(home / f, work / f)
 
-    stamp = time.strftime(RETIRED_FMT, time.gmtime())
+    # A REAL ATTEMPT IS ONE TRANSACTION. Snapshot before even probing authorization, because
+    # authorize() itself may migrate a v1 seal and rewrite the attestation. The probe is
+    # immediately rolled back; after any failed rotation we require the same bytes AND the
+    # same authorization state that existed before the attempt.
+    live_snapshot = _snapshot_live(work) if real else None
+    baseline_auth = _probe_authorization_and_restore(work, live_snapshot) if real else None
+
     if real:
-        for f in ("identity.json", "identity.sealed", "identity.attest.json"):
-            if (work / f).is_file():
-                shutil.copy2(work / f, work / f"{f}.retired-{stamp}")
+        # Consume the token BEFORE the first live mutation. If anything below fails, a fresh
+        # rehearsal is required even if rollback restores the same fingerprint/seal.
+        try:
+            token_file.unlink()
+        except OSError as e:
+            raise SystemExit(f"REFUSED: cannot consume rehearsal token {token_file} ({e}); live identity untouched.")
 
-    _provider(work).initialize(
-        name=ident["name"], lct_id=lct, machine=ident.get("machine", ""),
-        model=ident.get("model", ""), model_family=ident.get("model_family", ""),
-        anchor_type="software")
+    stamp = time.strftime(RETIRED_FMT, time.gmtime())
+    checks = {}
+    new_fp = "(not created)"
+    rotation_error = None
 
-    after = _read_manifest(work)
-    new = after["identity"]
-    new_fp = new["public_key_fingerprint"]
-    fresh = _provider(work).authorize()          # a FRESH provider: the returned context proves nothing
-    header = (work / "identity.sealed").open("rb").readline().strip()
-    skip = {"identity", "anchor_type", "trust_ceiling", "sealed_path"}
-    checks = {
-        "fingerprint rotated": new_fp != old_fp and len(new_fp) == 16,
-        "a FRESH provider authorizes as the being": fresh is not None and fresh.public_key_fingerprint == new_fp,
-        "seal header is SAGE_SEALED_v2": header == b"SAGE_SEALED_v2",
-        "lct unchanged": new.get("lct") == lct,
-        "name unchanged": new.get("name") == ident.get("name"),
-        "created preserved": new.get("created") == ident.get("created"),
-        "session_count preserved": new.get("session_count") == ident.get("session_count"),
-        "no identity key lost": not [k for k in ident if k not in new],
-        "only the fingerprint changed": [k for k in ident if new.get(k) != ident.get(k)] == ["public_key_fingerprint"],
-        "every other top-level block byte-equal": all(
-            json.dumps(after.get(k), sort_keys=True) == json.dumps(before.get(k), sort_keys=True)
-            for k in before if k not in skip),
-    }
-    ok = all(checks.values())
-    print(f"{old_fp} -> {new_fp}")
-    for k, v in checks.items():
-        print(("  PASS  " if v else "  FAIL  ") + k)
+    try:
+        if real:
+            for f in ("identity.json", "identity.sealed", "identity.attest.json"):
+                if (work / f).is_file():
+                    shutil.copy2(work / f, work / f"{f}.retired-{stamp}")
 
-    if real and ok:
-        ip = work / "instance.json"
-        inst = json.loads(ip.read_text()) if ip.is_file() else {}
-        inst.setdefault("former_fingerprints", []).append({
-            "fingerprint": old_fp, "successor": new_fp,
-            "retired": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "reason": "rotated, not migrated: the v1 seal was recoverable (tracked in public SAGE) "
-                      "or no longer opened. Continuity rests on this record and the LCT.",
-            "retired_files": f"identity.*.retired-{stamp}",
-        })
-        tmp = ip.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(inst, indent=2))
-        os.replace(tmp, ip)
-        print("  lineage recorded in instance.json -> former_fingerprints")
-        print("  NEXT: add a row to the being's LINEAGE.md, back it up, and tell the being in past tense.")
+        _provider(work).initialize(
+            name=ident["name"], lct_id=lct, machine=ident.get("machine", ""),
+            model=ident.get("model", ""), model_family=ident.get("model_family", ""),
+            anchor_type="software")
+
+        after = _read_manifest(work)
+        new = after["identity"]
+        new_fp = new["public_key_fingerprint"]
+        fresh = _provider(work).authorize()          # a FRESH provider: returned init context proves nothing
+        header = (work / "identity.sealed").open("rb").readline().strip()
+        checks = {
+            "fingerprint rotated": new_fp != old_fp and len(new_fp) == 16,
+            "a FRESH provider authorizes as the being": fresh is not None and fresh.public_key_fingerprint == new_fp,
+            "seal header is SAGE_SEALED_v2": header == b"SAGE_SEALED_v2",
+            "lct unchanged": new.get("lct") == lct,
+            "name unchanged": new.get("name") == ident.get("name"),
+            "created preserved": new.get("created") == ident.get("created"),
+            "session_count preserved": new.get("session_count") == ident.get("session_count"),
+            "no identity key lost": not [k for k in ident if k not in new],
+            "only the fingerprint changed": [k for k in ident if new.get(k) != ident.get(k)] == ["public_key_fingerprint"],
+            "top-level key set preserved": set(after) == set(before),
+            "every other top-level block byte-equal": all(
+                json.dumps(after.get(k), sort_keys=True) == json.dumps(before.get(k), sort_keys=True)
+                for k in before if k != "identity"),
+        }
+        ok = all(checks.values())
+
+        print(f"{old_fp} -> {new_fp}")
+        for k, v in checks.items():
+            print(("  PASS  " if v else "  FAIL  ") + k)
+
+        if not ok:
+            raise RuntimeError("one or more rotation postconditions failed")
+
+        if real:
+            ip = work / "instance.json"
+            inst = json.loads(ip.read_text()) if ip.is_file() else {}
+            inst.setdefault("former_fingerprints", []).append({
+                "fingerprint": old_fp, "successor": new_fp,
+                "retired": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "reason": "rotated, not migrated: the v1 seal was recoverable (tracked in public SAGE) "
+                          "or no longer opened. Continuity rests on this record and the LCT.",
+                "retired_files": f"identity.*.retired-{stamp}",
+            })
+            tmp = ip.with_suffix(".json.tmp")
+            with open(tmp, "w") as out:
+                out.write(json.dumps(inst, indent=2))
+                out.flush()
+                os.fsync(out.fileno())
+            os.replace(tmp, ip)
+            print("  lineage recorded in instance.json -> former_fingerprints")
+            print("  NEXT: add a row to the being's LINEAGE.md, back it up, and tell the being in past tense.")
+
+    except Exception as e:
+        rotation_error = f"{type(e).__name__}: {e}"
+        if real:
+            rollback_error = None
+            rollback_auth = None
+            try:
+                _restore_live(work, live_snapshot)
+                if not _snapshot_matches(work, live_snapshot):
+                    raise RuntimeError("restored files do not match the pre-attempt bytes")
+                rollback_auth = _probe_authorization_and_restore(work, live_snapshot)
+                if rollback_auth != baseline_auth:
+                    raise RuntimeError(
+                        f"authorization state after rollback {rollback_auth!r} != baseline {baseline_auth!r}")
+                if not _snapshot_matches(work, live_snapshot):
+                    raise RuntimeError("authorization verification changed the restored bytes")
+            except Exception as rb:
+                rollback_error = f"{type(rb).__name__}: {rb}"
+
+            print(f"RESULT NOT OK (real): {rotation_error}")
+            if rollback_error:
+                print(f"  ROLLBACK FAILED: {rollback_error}")
+                print("  STOP: inspect the retired copies and live identity before any further attempt.")
+            else:
+                print("  ROLLBACK OK: every live byte restored and authorization state matches baseline.")
+                print("  rehearsal token consumed; rehearse again before another real attempt.")
+            return 1
+
+        # Rehearsal failure is still a measured result; write a token that --real refuses.
+        ok = False
+        print(f"REHEARSAL FAILED: {rotation_error}")
+
     if not real:
+        ok = all(checks.values()) if checks else False
         tok = _token_path(home)
         tok.write_text(json.dumps({"ok": ok, "home": str(home), "seal_sha256": live_seal,
                                    "old_fingerprint": old_fp, "at": time.time()}, indent=2))
