@@ -83,8 +83,8 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The shell command the seat runs for a camera intent, built from validated args.
 
     One frame on demand, no stream, no state across beats: ffmpeg captures exactly one
-    JPEG from the device (default /dev/video0) into a file inside the being's own
-    scratch. The being names only the output path — never the tool, its flags, or the
+    JPEG from the device (default /dev/video0) into a staged file inside the being's own
+    scratch. The being names only the final output path — never the tool, its flags, or the
     device node beyond naming it plainly; the SEAT builds the command and the law judges
     THAT string. A missing or busy device is reported by ffmpeg's exit code, which the
     dispatcher interprets (see _do_camera).
@@ -102,7 +102,7 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
         raise ValueError(f"camera 'out_path' may not contain whitespace: {out_rel!r}")
     if out_rel.startswith("-") or ".." in out_rel.split("/"):
         raise ValueError(
-            f"camera 'out_path' must be a plain path inside your worktree, got {out_rel!r}"
+            f"camera 'out_path' must be a plain path inside your home, got {out_rel!r}"
         )
     # Frames are transient by contract — one JPEG per act, nothing to carry across
     # beats. Resolve them against the being's home (memory_root) rather than the SAGE
@@ -112,9 +112,14 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     if not (full == memory_root or full.startswith(memory_root + os.sep)):
         raise ValueError(f"camera 'out_path' escapes your home: {out_rel!r}")
 
+    # The GATE judges the staged write, and the dispatcher runs this exact same command.
+    # Only after a valid JPEG exists does the dispatcher atomically publish it at `full`.
+    # A deterministic sibling name keeps judged-command == executed-command while giving
+    # the final frame old-or-new semantics.
+    staged = full + ".capture.tmp"
     device = args.get("device", "/dev/video0")
     return (f"ffmpeg -hide_banner -loglevel error -y -f v4l2 -i {shlex.quote(device)} "
-            f"-frames:v 1 -qscale:v 3 -f image2 {shlex.quote(full)}")
+            f"-frames:v 1 -qscale:v 3 -f image2 {shlex.quote(staged)}")
 
 
 # --------------------------------------------------------------------------
@@ -847,12 +852,12 @@ _TOOL_SCHEMAS = {
     "camera": ("Capture ONE frame from this machine's camera into your own scratch — no "
               "stream, nothing persists across beats. The seat runs ffmpeg against /dev/"
               "video0 (or a plain device node you name) and writes one JPEG to the path "
-              "you give inside your worktree; default is scratch/camera/last-frame.jpg, "
+              "you give inside your home; default is scratch/camera/last-frame.jpg, "
               "overwritten each time. A missing or busy device comes back as an error "
               "envelope that names which: 'device absent' means no frame could be opened, "
               "'device busy' means another process holds it — in both cases nothing was "
               "written, so the last good file (if any) is untouched.",
-               {"out_path": "optional: where the JPEG lands, a plain path inside your worktree (default scratch/camera/last-frame.jpg)",
+               {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
                 "device": "optional: a plain device node to read from (default /dev/video0)"},
                []),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
