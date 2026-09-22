@@ -89,13 +89,14 @@ def test_do_camera_success(tmp_path):
     os.makedirs(out_dir, exist_ok=True)
     out_path = f"{out_dir}/last-frame.jpg"
 
-    # Create a fake frame file so os.path.exists(full_out) passes.
-    Path(out_path).write_bytes(b"\xff\xd8\xff\xdbfake-jpeg")
+    old = b"\\xff\\xd8\\xffOLD\\xff\\xd9"
+    Path(out_path).write_bytes(old)
 
     captured = {}
 
     def fake_run(cmd, **kwargs):
         captured["cmd"] = cmd
+        Path(cmd[-1]).write_bytes(b"\\xff\\xd8\\xffNEW\\xff\\xd9")
         return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
 
     d = _dispatcher(wt)
