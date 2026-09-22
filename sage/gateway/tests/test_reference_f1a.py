@@ -373,7 +373,7 @@ def test_the_append_receipt_names_memory_edit_for_a_one_line_change():
     disp, _ = _disp()
     disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "a = 1"}), _ALLOW)
     env = disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "a = 2"}), _ALLOW)
-    assert "memory_edit" in env.result and "old_text" in env.result and "new_text" in env.result
+    assert "memory_edit" in env.result and "start_line and end_line" in env.result and "old (copied" in env.result
     # and the named door works with exactly those names
     ed = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old_text": "a = 1", "new_text": "a = 3"}), _ALLOW)
     assert ed.ok, ed.error
@@ -500,3 +500,38 @@ def test_memory_edit_without_a_replacement_refuses_instead_of_deleting():
                                           "new_content": "y = load().reshape(-1, 1)"}), _ALLOW)
     assert r.ok, r.error
     assert f.read_text() == "a = 1\ny = load().reshape(-1, 1)\nb = 2\n"
+
+
+def test_a_py_receipt_says_whether_python_can_parse_the_file_now():
+    """2026-09-21: from 18:22 the being's script could not be parsed, and for two hours it
+    recorded "runs correctly" and "Applied fix" while every write left it unparseable. The
+    receipts never said. Parsing executes nothing; the sentence says it is not a run."""
+    disp, root = _disp()
+    home = Path(root)
+    r = disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "def main():\n    pass\n"}), _ALLOW)
+    assert r.ok and "Python can parse s.py now. That is not the same as running it." in r.result
+    # the being's real 20:18 write: a bracketed description appended where an edit was meant
+    r = disp(BeingIntent("memory_write", {"path": "notes/s.py",
+                                          "content": "            noise=0.1,\n        )"}), _ALLOW)
+    assert r.ok and "Python cannot parse s.py now: IndentationError at line 3" in r.result, r.result
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3, "end_line": 4, "new": ""}), _ALLOW)
+    assert r.ok and "Python can parse s.py now" in r.result, r.result
+
+
+def test_a_non_python_receipt_says_nothing_about_parsing():
+    disp, root = _disp()
+    r = disp(BeingIntent("memory_write", {"path": "journal.md", "content": "a note"}), _ALLOW)
+    assert r.ok and "parse" not in r.result
+
+
+def test_the_edit_receipt_counts_lines_the_way_memory_read_does():
+    """2026-09-21: the receipt said 1637 lines while memory_read said 1636 (count+1 vs
+    splitlines, for a file ending in a newline). The being edits by line number now."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a = 1\nb = 2\nc = 3\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3, "end_line": 3, "new": ""}), _ALLOW)
+    assert r.ok and "went from 3 to 2 lines" in r.result, r.result
+    rd = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
+    assert rd.ok and (home / "notes" / "s.py").read_text().count("\n") == 2
