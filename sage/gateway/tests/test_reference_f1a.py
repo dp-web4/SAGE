@@ -400,10 +400,10 @@ def test_a_missed_edit_anchor_says_where_it_stopped_matching():
 
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": '    p.add_argument("--lr ")',
                                          "new": ""}), _ALLOW)
-    assert not r.ok and "closest line is line 1" in r.error, r.error
+    assert not r.ok and "Line 1 is almost the same" in r.error, r.error
 
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "q"}), _ALLOW)
-    assert not r.ok and "Not even your first line" in r.error, r.error
+    assert not r.ok and "none is close to it" in r.error, r.error
     assert f.read_text() == before
 
 
@@ -500,3 +500,53 @@ def test_memory_edit_without_a_replacement_refuses_instead_of_deleting():
                                           "new_content": "y = load().reshape(-1, 1)"}), _ALLOW)
     assert r.ok, r.error
     assert f.read_text() == "a = 1\ny = load().reshape(-1, 1)\nb = 2\n"
+
+
+def test_a_missed_anchor_whose_prefix_repeats_names_every_place():
+    """2026-09-21: cbp-being's refused `old` began with 3 lines of a stray block (1610-1612)
+    that also occur at 330-332, the working branch. Naming only the first match says "your
+    lines are at 330"; a 4B acting on that deletes code that works. Every place is named, at
+    the first line where the places differ (the line right after the prefix was shared)."""
+    from sage.gateway.reference_f1a import _where_it_diverged
+    block = ["            noise=0.1,", "        )", "        print('gen')", "    else:"]
+    have = (["# top"] + block + ["        print('Loading')", "        X, y = load()"]
+            + ["# middle", "main()"] + block + ["        X = load()", "        y = load2()"])
+    text = "\n".join(have)
+    msg = _where_it_diverged(text, "\n".join(block[:3] + ["        print('X shape')"]))
+    assert "in 2 places" in msg
+    assert "lines 2-4" in msg and "lines 10-12" in msg
+    assert "print('Loading')" in msg and "X = load()" in msg, "each place shown where they differ"
+
+
+def test_a_missed_anchor_with_one_match_reads_as_before():
+    from sage.gateway.reference_f1a import _where_it_diverged
+    text = "a\nb\nc\nd"
+    msg = _where_it_diverged(text, "b\nc\nX")
+    assert "match lines 2-3 of the file exactly" in msg and "places" not in msg
+
+
+def test_a_missed_first_line_that_is_invented_gets_no_direction():
+    """2026-09-21 19:53Z: the being's old began with a line it invented. A 0.6-similarity
+    "closest line" (0.72, a docstring at 1012) sent it to read the wrong region. A hint is
+    now given only for a specific difference: indentation, or near-identical text."""
+    from sage.gateway.reference_f1a import _where_it_diverged
+    text = '    """Generate synthetic data with a linear mechanism and noise."""\n            noise=0.1,\n'
+    msg = _where_it_diverged(text, "# Generate synthetic data with known mechanism\nnp.random.seed(42)")
+    assert "none is close to it" in msg and "line 1" not in msg
+    msg = _where_it_diverged(text, "        noise=0.1,")
+    assert "different indentation, at line 2" in msg
+
+
+def test_memory_edit_names_the_harness_elision_note_when_it_is_copied_as_file_text():
+    """2026-09-21 20:04Z: the being's old held the tool loop's elision note, copied from a
+    shortened read result, and was told only "first line not in file"."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text('"""Doc"""\nx = 1\n')
+    old = ('"""Doc\n[… 143 characters elided from the middle of your NEWEST result to leave room. '
+           'The whole result is saved at scratch/elided/20260921-200407-012-000.txt …]\nx = 1')
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": old, "new": ""}), _ALLOW)
+    assert not r.ok and "harness's note" in r.error
+    assert "scratch/elided/20260921-200407-012-000.txt" in r.error
+    assert (home / "notes" / "s.py").read_text() == '"""Doc"""\nx = 1\n'
