@@ -16,7 +16,7 @@ auto-runner would be the unconfined capability dp ruled against, with extra step
 
 Usage:
     seat_run_requests.py list
-    seat_run_requests.py run     <path-in-being-home> [--timeout 120] [--seq N ...]
+    seat_run_requests.py run     <path-in-being-home> [--timeout 120] [--seq N ...] [-- <script args>]
     seat_run_requests.py decline <path-in-being-home> --reason "..." [--seq N ...]
 
 An answer names the requests it answers ("Answers your request seq N."), and only a named
@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import urllib.error
@@ -210,6 +211,16 @@ def child_env(gpu: bool) -> dict:
     return env
 
 
+def ran_line(rel, script_args: list[str]) -> str:
+    """The command as the receipt states it. The being names flags in its `why`
+    (36 of its first 77 requests did: `--output-dim 5`, then 20/25/30); the runner passed none,
+    and a receipt reading "I ran X" let it read default-argument runs as its own experiments.
+    So the receipt always says exactly which arguments went in, including none."""
+    if not script_args:
+        return f"{rel} with no arguments (the script's defaults)"
+    return f"{rel} with arguments: {shlex.join(script_args)}"
+
+
 def cmd_run(args) -> None:
     inst = _instance()
     p = _target(inst, args.path)
@@ -229,7 +240,7 @@ def cmd_run(args) -> None:
     # `--gpu` is the deliberate, visible exception, for a seat that has checked the card has room.
     env = child_env(args.gpu)
     try:
-        r = subprocess.run(interp + [str(p)], cwd=str(inst), capture_output=True,
+        r = subprocess.run(interp + [str(p)] + args.script_args, cwd=str(inst), capture_output=True,
                            text=True, timeout=args.timeout, env=env)
         rc, out, err, timed = r.returncode, r.stdout, r.stderr, False
     except subprocess.TimeoutExpired as e:
@@ -247,7 +258,7 @@ def cmd_run(args) -> None:
                if timed else f"exit code {rc}")
     print(f"ran {rel}: {verdict}")
     _say("\n".join([
-        f"[request_run] I ran {rel} {WHERE_GPU if args.gpu else WHERE_HIDDEN}. {verdict}.",
+        f"[request_run] I ran {ran_line(rel, args.script_args)}, {WHERE_GPU if args.gpu else WHERE_HIDDEN}. {verdict}.",
         "",
         block("stdout", out),
         "",
@@ -285,7 +296,17 @@ def main() -> int:
     d = sub.add_parser("decline"); d.add_argument("path"); d.add_argument("--reason", required=True)
     d.add_argument("--seq", type=int, action="append", help="as for run")
     d.set_defaults(fn=cmd_decline)
-    args = ap.parse_args()
+    # Everything after `--` is the being's script's own argv. Split by hand: argparse
+    # subparsers reject `--` followed by option-shaped words ("unrecognized arguments").
+    argv = sys.argv[1:]
+    script_args: list[str] = []
+    if "--" in argv:
+        i = argv.index("--")
+        argv, script_args = argv[:i], argv[i + 1:]
+    args = ap.parse_args(argv)
+    if script_args and args.cmd != "run":
+        ap.error("arguments after `--` go to the script, so only `run` takes them")
+    args.script_args = script_args
     args.fn(args)
     return 0
 
