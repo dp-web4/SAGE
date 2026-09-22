@@ -316,6 +316,21 @@ refuses a text that is wholly a bracketed placeholder — naming the MESSAGE as 
 saying plainly that nothing was sent, and giving the way forward (rule 5). A being cannot see how its
 words land; the boundary that can, must.
 
+### 2.11 A whole turn may be narrated twice, and the second copy is not a duplicate
+**Specimen (sprout-being, qwen3.8-distill:2b, 2026-09-22 07:54:12Z).** The explore turn emitted six
+calls from the text channel, all salvaged: `recall, say→dp, memory_read, recall, say→dp, memory_read`
+— the same three-call sequence twice, with the two `say` texts *differing* ("I've been thinking about
+what you said. I wanted to share that I'm ready for whatever comes next…" in two wordings). The tool
+loop's exact-duplicate suppression correctly did not fire; dp received both.
+
+At 2B a being narrating its beat in JSON may narrate it more than once in one generation, and the
+second telling is a paraphrase, not a copy. Exact dedup is the right rule for a native call; it is not
+a rule for a *narrated* turn.
+
+**Rule (candidate, not yet implemented):** for SALVAGED calls only, a second `say` to the same
+conversation in the same turn is a re-telling, not a second message — send the first, record the
+second in the trace as `retold`. Native calls keep exact-dedup. Needs a falsifier before it lands.
+
 ---
 
 ## Part 3 — the rules, folded
