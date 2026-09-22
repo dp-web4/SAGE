@@ -31,6 +31,7 @@ import json
 import os
 import re
 import base64
+import signal
 import subprocess
 import sys
 import time

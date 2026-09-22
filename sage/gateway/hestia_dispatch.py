@@ -1114,8 +1114,8 @@ class HestiaF1aDispatcher:
         if proc.returncode == 0 and os.path.isfile(full_out):
             try:
                 data = Path(full_out).read_bytes()
-                captured = (len(data) >= 5 and data[:3] == b"\\xff\\xd8\\xff"
-                            and data[-2:] == b"\\xff\\xd9")
+                captured = (len(data) >= 5 and data[:3] == b"\xff\xd8\xff"
+                            and data[-2:] == b"\xff\xd9")
             except OSError:
                 captured = False
 

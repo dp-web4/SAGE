@@ -265,13 +265,15 @@ def test_confinement_follows_the_verdicts_granted_roots():
     other = tempfile.mkdtemp(prefix="ref-f1a-granted-")
     target = os.path.join(other, "forum", "note.md")
     os.makedirs(os.path.dirname(target)); open(target, "w").write("a note from a peer")
-    r = disp(BeingIntent("memory_read", {"path": target}), GatewayVerdict("allow", granted=(other,)))
+    # The reach is SAID, not implied: a bare root is exact since hestia #1002, and this test
+    # wants the subtree (reconciliation 2026-09-22).
+    r = disp(BeingIntent("memory_read", {"path": target}), GatewayVerdict("allow", granted=(other,), granted_reach=((other, True),)))
     assert r.ok and "a note from a peer" in r.result
     r = disp(BeingIntent("memory_read", {"path": target}), _ALLOW)
     assert not r.ok and "outside your reach" in (r.error or "")
     # a granted root never widens to its parent or a sibling
     r = disp(BeingIntent("memory_read", {"path": os.path.join(os.path.dirname(other), "x.md")}),
-             GatewayVerdict("allow", granted=(other,)))
+             GatewayVerdict("allow", granted=(other,), granted_reach=((other, True),)))
     assert not r.ok and "outside your reach" in (r.error or "")
 
 
@@ -619,7 +621,7 @@ def test_a_truncated_read_says_so_and_names_what_it_hid():
     assert r.ok
     assert r.result.startswith("A" * 40), "the head it was given is intact"
     assert "the_thing_it_came_for" not in r.result, "the tail really is withheld"
-    assert "truncated" in r.result and "first 50 of 74 characters" in r.result, r.result[-200:]
+    assert "truncated" in r.result and "were NOT shown" in r.result, r.result[-200:]   # main's line-window marker (2026-09-22 reconciliation)
     assert "absence here is not evidence of absence" in r.result
 
     # a file that fits carries no marker at all
@@ -683,7 +685,7 @@ def test_ranged_reads_share_the_citation_coordinate_system():
     # a whole-file read that truncates now says how to get the rest
     disp.max_read_chars = 200
     r3 = disp(BeingIntent("memory_read", {"path": "long.py"}), _ALLOW)
-    assert "Read the rest with from_line" in r3.result and "(500 lines)" in r3.result
+    assert "start_line=" in r3.result and "of 500" in r3.result   # main's window marker names the way on
     # garbage is a refusal, not a crash
     assert not disp(BeingIntent("memory_read", {"path": "long.py", "from_line": "ten"}), _ALLOW).ok
 
@@ -709,12 +711,12 @@ def test_confinement_honours_exact_vs_recursive_reach():
 
     exact = GatewayVerdict("allow", granted=((other, False),))
     assert str(confine(exact, other)) == os.path.realpath(other), "exact admits the root itself"
-    with pytest.raises(ValueError, match="escapes"):
+    with pytest.raises(ValueError, match="escapes|outside your reach"):
         confine(exact, child)                                  # exact must NOT admit a child
 
     rec = GatewayVerdict("allow", granted=((other, True),))
     assert confine(rec, child).name == "note.md", "recursive admits the child"
-    with pytest.raises(ValueError, match="escapes"):
+    with pytest.raises(ValueError, match="escapes|outside your reach"):
         confine(rec, os.path.join(sibling, "x"))               # never a prefix-sharing sibling
     assert disp(BeingIntent("memory_read", {"path": child}), rec).ok and \
         "deep" in disp(BeingIntent("memory_read", {"path": child}), rec).result
@@ -728,7 +730,7 @@ def test_confinement_honours_exact_vs_recursive_reach():
     # an older gate client hands bare strings: read as EXACT, never guessed wider
     bare = GatewayVerdict("allow", granted=(other,))
     assert str(confine(bare, other)) == os.path.realpath(other)
-    with pytest.raises(ValueError, match="escapes"):
+    with pytest.raises(ValueError, match="escapes|outside your reach"):
         confine(bare, child)
 
 
@@ -769,7 +771,7 @@ def test_memory_write_appends_by_default_and_says_so_and_can_replace():
     v = GatewayVerdict("allow", granted=())
 
     r = disp(BeingIntent("memory_write", {"path": "notes.md", "content": "first"}), v)
-    assert r.ok and "APPENDED" in r.result and "was 0 bytes, now" in r.result
+    assert r.ok and "created" in r.result and "was 0 bytes, now" in r.result   # main's wording: created/appended, lowercase
     disp(BeingIntent("memory_write", {"path": "notes.md", "content": "second"}), v)
     body = open(os.path.join(root, "notes.md")).read()
     assert body == "first\nsecond\n", body           # append is still the default

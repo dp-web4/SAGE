@@ -5,6 +5,7 @@ this exercises the Stage-2 policy in isolation. Runnable under pytest or directl
 (`python3 test_being_gate_client.py`).
 """
 import os
+import tempfile
 import sys
 from types import SimpleNamespace
 
@@ -394,7 +395,10 @@ def test_search_refuses_what_its_grammar_cannot_represent():
         ({"pattern": "a\nb"}, "single line"),
         ({"pattern": "x" * 201}, "under 200"),
         ({"pattern": "x", "path": "../escape"}, "plain path"),
-        ({"pattern": "x", "path": "/etc/passwd"}, "escapes your worktree"),
+        # absolute and off the tree: refused for REACH now, not for escaping the worktree
+        # (search_command grew a workspace-wide reach; see the reach test below)
+        ({"pattern": "x", "path": "/etc/passwd"}, "outside anything you can reach"),
+        ({"pattern": "x", "path": "/etc/../etc/passwd"}, "plain path"),
         ({"pattern": "x", "path": "has space"}, "whitespace"),
         ({"pattern": "x", "path": "-rf"}, "plain path"),
     ]:
@@ -429,7 +433,10 @@ def test_git_read_refuses_what_its_grammar_cannot_represent():
         ({"op": ""}, "must be one of"),
         ({"op": "log", "rev": "; rm -rf /"}, "sha"),
         ({"op": "show", "path": "../../etc/passwd"}, "plain path"),
-        ({"op": "show", "path": "/etc/passwd"}, "escapes"),
+        # /etc is not an escape from the worktree any more — it is OUTSIDE the machine's
+        # shared tree, which is a different refusal with a different remedy (the reach
+        # widened to the granted tree on this branch; the refusal names what is reachable).
+        ({"op": "show", "path": "/etc/passwd"}, "outside anything you can reach"),
         ({"op": "show", "path": "has space"}, "whitespace"),
         ({"op": "show", "path": "-rf"}, "plain path"),
     ]:
