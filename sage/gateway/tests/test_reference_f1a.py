@@ -479,3 +479,24 @@ def test_the_offered_schema_no_longer_requires_old():
     i = src.index('"memory_edit": ("Change part')
     block = src[i:i + 1600]
     assert '["path", "new"]' in block and '"start_line"' in block
+
+
+def test_memory_edit_without_a_replacement_refuses_instead_of_deleting():
+    """2026-09-22 02:30Z: cbp-being sent `new_content` to add `.reshape(-1, 1)` to line 336.
+    No alias matched, the replacement defaulted to "", and line 336 was deleted under a receipt
+    reading "replaced lines 336-336". An absent replacement must refuse; only a present one
+    (even empty) may delete."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("a = 1\ny = load()\nb = 2\n")
+    for args in ({"start_line": 2, "end_line": 2, "new_line": "y = load().reshape(-1, 1)"},
+                 {"old": "y = load()", "with": "y = load().reshape(-1, 1)"}):
+        r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", **args}), _ALLOW)
+        assert not r.ok and "got no 'new'" in r.error and "nothing was changed" in r.error, r.error
+        assert f.read_text() == "a = 1\ny = load()\nb = 2\n"
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": "2", "end_line": "2",
+                                          "new_content": "y = load().reshape(-1, 1)"}), _ALLOW)
+    assert r.ok, r.error
+    assert f.read_text() == "a = 1\ny = load().reshape(-1, 1)\nb = 2\n"
