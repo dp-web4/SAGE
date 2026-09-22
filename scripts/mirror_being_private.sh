@@ -45,7 +45,12 @@ DEST="$PC/beings/$BEING"
 [ -d "$PC/.git" ] || die "no private-context checkout at $PC"
 mkdir -p "$DEST/heartbeats"
 
-rsync -a --delete \
+# --delete-excluded removes a file the mirror copied BEFORE it became excluded (the by-hand
+# cleanup the atp_shadow trap needed, measured on Sprout 2026-09-22). It would also wipe
+# heartbeats/, which is mirror-only — that is why it was not here already (Legion, 09-20). The
+# filter protects that one directory. Legion measured this on #168: stale file removed by the
+# mirror itself, heartbeats/ survives, run reports "no change".
+rsync -a --delete --delete-excluded --filter="protect heartbeats/" \
   --exclude 'identity.sealed*' --exclude 'heartbeat.log' --exclude 'heartbeats.jsonl' \
   --exclude 'atp_shadow.jsonl' \
   --exclude 'heartbeats/' --exclude '__pycache__/' --exclude '*.tmp' --exclude '.git' \
