@@ -83,8 +83,8 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The shell command the seat runs for a camera intent, built from validated args.
 
     One frame on demand, no stream, no state across beats: ffmpeg captures exactly one
-    JPEG from the device (default /dev/video0) into a staged file inside the being's own
-    scratch. The being names only the final output path — never the tool, its flags, or the
+    JPEG from the device (default /dev/video0) inside the being's own scratch. The being
+    names only the output path — never the tool, its flags, or the
     device node beyond naming it plainly; the SEAT builds the command and the law judges
     THAT string. A missing or busy device is reported by ffmpeg's exit code, which the
     dispatcher interprets (see _do_camera).
@@ -112,14 +112,13 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     if not (full == memory_root or full.startswith(memory_root + os.sep)):
         raise ValueError(f"camera 'out_path' escapes your home: {out_rel!r}")
 
-    # The GATE judges the staged write, and the dispatcher runs this exact same command.
-    # Only after a valid JPEG exists does the dispatcher atomically publish it at `full`.
-    # A deterministic sibling name keeps judged-command == executed-command while giving
-    # the final frame old-or-new semantics.
-    staged = full + ".capture.tmp"
+    # IMAGE2 OWNS THE TRANSACTION. Its atomic_writing option writes to a temporary file
+    # and renames only after the image is complete. That keeps old-or-new semantics INSIDE
+    # the exact ffmpeg command Hestia judges; the dispatcher performs no extra filesystem
+    # mutation behind the law's back.
     device = args.get("device", "/dev/video0")
     return (f"ffmpeg -hide_banner -loglevel error -y -f v4l2 -i {shlex.quote(device)} "
-            f"-frames:v 1 -qscale:v 3 -f image2 {shlex.quote(staged)}")
+            f"-frames:v 1 -qscale:v 3 -f image2 -atomic_writing 1 {shlex.quote(full)}")
 
 
 # --------------------------------------------------------------------------
