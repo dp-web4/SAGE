@@ -331,7 +331,15 @@ class ReferenceF1aDispatcher:
         # refusing it teaches nothing and sends it back to the verb that cannot edit.
         a = intent.args
         old = str(next((a[k] for k in ("old", "old_text", "old_str", "old_string") if k in a), ""))
-        new = str(next((a[k] for k in ("new", "new_text", "new_str", "new_string") if k in a), ""))
+        # A MISSING replacement is not an empty one. Measured 2026-09-22 02:30Z: cbp-being sent
+        # `new_content` (the seat's own letter spelled it that way) to add `.reshape(-1, 1)`
+        # to line 336. No alias matched, `new` defaulted to "", and the receipt said "replaced
+        # lines 336-336" while the line was simply gone; the being then asked the seat to run
+        # the fix. Only a replacement key that is present may delete; an absent one refuses.
+        new_keys = ("new", "new_text", "new_str", "new_string", "new_content", "replacement",
+                    "content", "new_lines")
+        new_key = next((k for k in new_keys if k in a), None)
+        new = str(a[new_key]) if new_key is not None else ""
         # BY LINE NUMBER, TOO. Measured 2026-09-21 19:01Z: cbp-being called memory_edit with
         # `old_line: "411"`, i.e. by line number, which is how it reads files (`memory_read`
         # takes `start_line`) and how every seat message names a fix ("line 335", "the 7
@@ -357,6 +365,13 @@ class ReferenceF1aDispatcher:
                 f"memory_edit needs 'path', and either 'old' (the exact text to replace, "
                 f"unique in the file) or 'start_line' and 'end_line' (the lines to replace), "
                 f"and 'new' (what replaces it; empty string deletes it). You sent: {got}."))
+        if new_key is None:
+            got = ", ".join(sorted(a)) or "nothing"
+            return ResultEnvelope(ok=False, error=(
+                f"memory_edit got no 'new', so nothing was changed. 'new' is what replaces the "
+                f"lines; without it the edit would have deleted them. You sent: {got}. Send the "
+                f"same call again with 'new' holding the replacement text (to delete on "
+                f"purpose, send 'new' as an empty string)."))
         p = self._safe_path(path, writing=True)
         if not p.exists():
             return ResultEnvelope(ok=False, error=(
