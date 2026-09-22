@@ -535,3 +535,32 @@ def test_the_edit_receipt_counts_lines_the_way_memory_read_does():
     assert r.ok and "went from 3 to 2 lines" in r.result, r.result
     rd = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
     assert rd.ok and (home / "notes" / "s.py").read_text().count("\n") == 2
+
+
+def test_a_record_write_stamps_when_each_named_code_file_last_changed():
+    """2026-09-22: 14 of cbp-being's beats claimed a code change no beat had made, with the
+    refusal in view. The receipt of the journal write now carries the named file's mtime."""
+    import os, time
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    s = home / "mechanism.py"
+    s.write_text("x = 1\n")
+    old = time.time() - 7200
+    os.utime(s, (old, old))
+    (home / "notes" / "helper.py").write_text("y = 2\n")
+    r = disp(BeingIntent("memory_write", {"path": "journal.md",
+                                          "content": "Fixed mechanism.py. Also touched helper.py and ghost.py."}), _ALLOW)
+    assert r.ok
+    assert "mechanism.py was last changed at" in r.result
+    import datetime as dt
+    stamp = dt.datetime.fromtimestamp(old, dt.timezone.utc).strftime("%Y-%m-%d %H:%M")
+    assert stamp in r.result, "the stamp is the file's real mtime, a fact to compare with the claim"
+    assert "notes/helper.py was last changed at" in r.result, "a bare name found under notes/ says where"
+    assert "ghost.py is not a file in your home" in r.result
+
+
+def test_a_record_write_naming_no_code_file_is_unchanged():
+    disp, root = _disp()
+    r = disp(BeingIntent("memory_write", {"path": "journal.md", "content": "a quiet beat"}), _ALLOW)
+    assert r.ok and "Files this names" not in r.result

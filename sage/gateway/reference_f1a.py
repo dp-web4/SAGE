@@ -47,6 +47,40 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl")
 
 
+def _named_file_stamps(content: str, root, written) -> str:
+    """For a record write (journal, todo, a note): when each code file it names last changed.
+
+    MEASURED, 2026-09-22, over cbp-being's 114 beats on 09-21/22 (sage/scripts/being_act_ledger.py):
+    14 beats wrote a journal/todo/say line claiming a code change ("Fixed
+    mechanism-training-script-clean.py.", "[done] memory_edit ... remove lines 1610-1616") in a
+    beat where neither it nor the previous beat changed any .py file. Two explanations were tested
+    against that data and neither held: the refusals were IN VIEW (reflect has shown the beat's
+    record, REFUSED lines included, since 2026-09-09; 6 of the 14 had one), and the claims did not
+    copy its own closing words (closer to them in 4 of 14). In 8 of 14 no edit was attempted at
+    all: the claim came from the plan. What did change behaviour this week was a factual receipt at
+    the moment of acting ("appended ... memory_write only adds"). So: no judgement of the claim,
+    which a heuristic would get wrong. A fact, stamped where the claim is written, that the being
+    can compare with what it just wrote. Executes nothing; reads mtimes only."""
+    import re as _re
+    import datetime as _dt
+    out, seen = [], set()
+    for name in _re.findall(r"[\w./-]+\.py\b", content or ""):
+        name = name.strip("./")
+        if name in seen or len(out) >= 3:
+            continue
+        seen.add(name)
+        cand = [root / name]
+        if "/" not in name:
+            cand.append(root / "notes" / name)
+        hit = next((c for c in cand if c.is_file() and c.resolve() != written.resolve()), None)
+        if hit is None:
+            out.append(f"{name} is not a file in your home")
+            continue
+        t = _dt.datetime.fromtimestamp(hit.stat().st_mtime, _dt.timezone.utc)
+        out.append(f"{hit.relative_to(root)} was last changed at {t:%Y-%m-%d %H:%M} UTC")
+    return (" Files this names: " + "; ".join(out) + ".") if out else ""
+
+
 def _python_status(p) -> str:
     """For a .py file: whether Python can PARSE it now, as one sentence for a receipt.
 
@@ -560,5 +594,7 @@ class ReferenceF1aDispatcher:
                 result += (f" To start {p.name} fresh, retire_note it first, then memory_write "
                            f"the whole new version.")
         result += _python_status(p)
+        if not str(p).endswith(".py"):
+            result += _named_file_stamps(content, self.memory_root, p)
         return ResultEnvelope(ok=True, result=result,
                               witness_id=self._witness(f"memory_write {p.name}"))
