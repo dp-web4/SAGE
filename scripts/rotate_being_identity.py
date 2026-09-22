@@ -230,19 +230,31 @@ def rotate(home: Path, real: bool, rehearsed: str = "") -> int:
                 shutil.copy2(home / f, work / f)
 
     # A REAL ATTEMPT IS ONE TRANSACTION. Snapshot before even probing authorization, because
-    # authorize() itself may migrate a v1 seal and rewrite the attestation. The probe is
-    # immediately rolled back; after any failed rotation we require the same bytes AND the
-    # same authorization state that existed before the attempt.
+    # authorize() itself may migrate a v1 seal and rewrite the attestation. Consuming the
+    # rehearsal token comes BEFORE that first reversible mutation: once a real attempt starts,
+    # even a probe failure requires a fresh rehearsal.
     live_snapshot = _snapshot_live(work) if real else None
-    baseline_auth = _probe_authorization_and_restore(work, live_snapshot) if real else None
+    baseline_auth = None
 
     if real:
-        # Consume the token BEFORE the first live mutation. If anything below fails, a fresh
-        # rehearsal is required even if rollback restores the same fingerprint/seal.
         try:
             token_file.unlink()
         except OSError as e:
             raise SystemExit(f"REFUSED: cannot consume rehearsal token {token_file} ({e}); live identity untouched.")
+        try:
+            baseline_auth = _probe_authorization_and_restore(work, live_snapshot)
+        except Exception as e:
+            # The probe's finally already attempted restoration. Try once more from the
+            # authoritative snapshot before stopping; never continue into rotation with a
+            # baseline we failed to re-establish.
+            try:
+                _restore_live(work, live_snapshot)
+            except Exception:
+                pass
+            state = "restored" if _snapshot_matches(work, live_snapshot) else "NOT restored"
+            raise SystemExit(
+                f"REFUSED: pre-rotation authorization probe failed ({type(e).__name__}: {e}); "
+                f"live identity is {state}. Rehearsal token was consumed; inspect if not restored.")
 
     stamp = time.strftime(RETIRED_FMT, time.gmtime())
     checks = {}
