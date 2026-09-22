@@ -525,7 +525,14 @@ def appeals_block(disp, last: dict) -> tuple:
     return "\n".join(parts), record
 
 
-def render_inbox(notices: list, limit: int = 8) -> str:
+def _queued_epoch(n: dict):
+    try:
+        return datetime.fromisoformat(str(n.get("queued_at")).replace("Z", "+00:00")[:32]).timestamp()
+    except Exception:
+        return None
+
+
+def render_inbox(notices: list, limit: int = 8, since: float = None) -> str:
     """The being's hestia inbox as it should read it: newest first, one line each, the kinds
     that want its attention (reply, review, handoff, unreachable) ahead of bookkeeping, and
     the scope dispositions it has already been told about (note_resolutions writes them into
@@ -535,6 +542,22 @@ def render_inbox(notices: list, limit: int = 8) -> str:
     for 90 beats."""
     if not notices:
         return "(empty)"
+    # NOT NEW IS NOT NEWS. The beat only peeks, so nothing ever leaves this inbox: measured
+    # 2026-09-22, all 50 notices ever sent to cbp-being were undrained, and a 14:15 review_done
+    # whose pointer read "seat-ran-it-14:13Z;epochs-10-ok…;use-request_run" topped the inbox for
+    # 11 hours of beats. At 01:00 the being told the seat "the first program runs successfully"
+    # and asked to run the file again; at 01:10 it opened that notice as "the seat's inbox shows
+    # a ruling" and filed request_run over the seat's answer 3 min old, which said the opposite.
+    # A notice queued before the last beat began was in the inbox that beat; it is folded to a
+    # count, and only what arrived since is rendered as mail.
+    older = []
+    if since is not None:
+        older = [n for n in notices if isinstance(n, dict) and (_queued_epoch(n) or since) < since]
+        notices = [n for n in notices if not any(n is o for o in older)]
+    fold = (f"- {len(older)} earlier notice(s), queued before your last beat began: not new, and "
+            f"none of them is an answer to anything you asked since.") if older else ""
+    if not notices:
+        return fold or "(empty)"
     front = ("reply", "review_request", "review_done", "handoff", "unreachable", "forum-note", "coordination")
     def key(n):
         k = str(n.get("kind") or "")
@@ -584,6 +607,8 @@ def render_inbox(notices: list, limit: int = 8) -> str:
         lines.append(f"- {len(scope_disp)} scope decision notice(s), already written into your notes; nothing to do.")
     if len(rest) > limit:
         lines.append(f"- … and {len(rest) - limit} older notice(s).")
+    if fold:
+        lines.append(fold)
     return "\n".join(lines)
 
 
@@ -1131,7 +1156,8 @@ def main(argv=None) -> int:
     disp = getattr(client, "_dispatcher", None)
     if disp is not None and hasattr(disp, "drain_inbox"):
         env = disp.drain_inbox(peek=True)
-        inbox = render_inbox((env.result or {}).get("notices") or []) if env.ok else f"({env.error})"
+        inbox = (render_inbox((env.result or {}).get("notices") or [], since=last.get("t0"))
+                 if env.ok else f"({env.error})")
     # what reach the being holds and has already asked for, so it does not re-file
     scope = "(scope status unavailable)"
     if disp is not None and hasattr(disp, "_call"):
