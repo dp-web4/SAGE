@@ -1026,11 +1026,18 @@ def pending_selection(instance: Path, member: str) -> tuple:
                          f'it shows, or what you will do next — call say with to set to {cid}. '
                          f'Replying is not required; the writes below happen either way.\n')
             else:
-                first = (f'FIRST, before the numbered writes below: {who} told you something '
-                         f'and asked nothing, so no reply is owed. {who} already has their own '
-                         f'words. If you have something of your own to add — a follow-up '
-                         f'question, or what you will do now — call say with to set to {cid}. '
-                         f'Otherwise go straight to the writes below.\n')
+                # SAY ONLY WHAT WAS MEASURED (GPT on #147, seat seq 2966). This said "asked
+                # nothing" -- but the heuristic detects questions and requests for a REPLY, not
+                # instructions. Seq 2966 told the being to memory_edit, read, then request_run,
+                # with no "?" and no request phrase; told "asked nothing", the being repeated
+                # that there was no instruction. Absence of a question is not absence of an
+                # instruction. The durable fix is speaker-declared `expects:` metadata.
+                first = (f'FIRST, before the numbered writes below: no question or request for a '
+                         f'reply was detected in what {who} last said, so no reply is owed. It may '
+                         f'still tell you to do something; whether you do it is your choice. If '
+                         f'you have something of your own to add — a follow-up question, or what '
+                         f'you will do now — call say with to set to {cid}. The writes below happen '
+                         f'either way.\n')
             return "", block, first, cid, sel
         if ids:
             return ('If someone has spoken to you and you have not answered, and you have '

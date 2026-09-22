@@ -321,3 +321,18 @@ def test_prior_words_are_offered_as_material_not_as_an_undelivered_message():
     assert "may have been about something else" in w, "the possibility has to be said out loud"
     assert "only use it if it actually answers" in w
     assert _prior_words(SimpleNamespace(reply="")) == ""
+
+
+def test_an_instruction_without_a_question_is_not_called_asking_nothing():
+    """GPT on #147, seat seq 2966: an instruction (memory_edit, read, then request_run) had no
+    "?" and no request phrase. The line said the seat "asked nothing"; the being repeated that
+    there was no instruction. Only the measured fact may be stated."""
+    from sage.gateway.heartbeat import pending_selection
+    inst = _inst(); _channel(inst, cid="seat", other="seat")
+    conv.append(inst, "seat", speaker=ME, text="Got it, thanks.")
+    conv.append(inst, "seat", speaker="seat",
+                text="memory_edit line 322 of your script to os.path.exists, then memory_read from 320, then request_run it.")
+    *_, first, _t, sel = pending_selection(inst, ME)
+    assert "asked nothing" not in first
+    assert "no question or request for a reply was detected" in first
+    assert "may still tell you to do something" in first
