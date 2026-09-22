@@ -88,6 +88,10 @@ def _hestia_error(env: dict) -> Optional[str]:
 # file sideways; past this the being should narrow rather than scroll.
 SEARCH_LINES_SHOWN = 40
 
+# How much of the seat's last answer an unchanged-file receipt carries back verbatim.
+# Enough for a traceback's last frames and its exception line; not the whole transcript.
+RUN_ANSWER_CARRIED = 900
+
 
 class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
@@ -1838,13 +1842,22 @@ class HestiaF1aDispatcher:
         rel = str(p.relative_to(self.memory_root))
         digest = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
         unchanged = None  # (seq it asked at, seq the seat answered at)
+        answer_text = ""   # what that answer SAID, to hand back rather than point at
         asked_at = None
         for t in conv.recent(self.memory_root, seat_conv, limit=80):
             text = str(t.get("text", ""))
             if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
                 asked_at = t.get("seq") if f"sha256:{digest}" in text else None
             elif asked_at is not None and t.get("from") != self.member:
+                # The seat's ANSWER carries the marker (seat_run_requests.py writes it for
+                # both a run and a decline). A later remark about that answer does not, and
+                # must not displace it: on 2026-09-22 this pointed at seq 3300, a seat aside,
+                # while the run it was about was seq 3299.
+                if unchanged and answer_text.startswith(_RUN_MARKER) \
+                        and not text.startswith(_RUN_MARKER):
+                    continue
                 unchanged = (asked_at, t.get("seq"))
+                answer_text = text
         lines = [f"[request_run] {rel}",
                  f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
                  f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it and answers here)"]
@@ -1856,11 +1869,23 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=f"could not hand the request to the seat: {said.error}")
         result = {}
         if unchanged:
+            # CARRY THE ANSWER, DO NOT POINT AT IT. Measured 2026-09-22 over cbp-being's 556
+            # beats: an edit receipt that names the defect in its own return value ("Python
+            # cannot parse ... now: IndentationError at line N") is followed by another edit
+            # 39/46 = 0.85 of the time, against a 0.49 base rate; the SAME defect delivered
+            # as the seat's traceback in the conversation is followed by an edit 20/45 = 0.44
+            # — no lift at all (Fisher p=7e-5). A seq number is a pointer to a channel that
+            # does not move it. So the receipt says what the run said.
+            carried = answer_text.strip()
+            if len(carried) > RUN_ANSWER_CARRIED:
+                carried = "..." + carried[-RUN_ANSWER_CARRIED:]
             result["unchanged"] = (
                 f"This file is byte-for-byte the one you asked about at seq {unchanged[0]}, and "
                 f"the seat answered that at seq {unchanged[1]}. Nothing in it has changed since, "
-                f"so running it again will give the same result. To change what runs: "
-                f"memory_edit the lines, or retire_note the file and then memory_write it anew.")
+                f"so running it again will give the same result — which was:\n"
+                f"--- seq {unchanged[1]} ---\n{carried}\n--- end ---\n"
+                f"To change what runs: memory_edit the lines, or retire_note the file and then "
+                f"memory_write it anew.")
         return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
             **result,
             "requested": rel,

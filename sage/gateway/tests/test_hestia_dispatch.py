@@ -1623,6 +1623,62 @@ def test_request_run_says_when_the_file_is_unchanged_since_the_seat_answered():
     assert r.ok and "unchanged" not in r.result, r.result
 
 
+def test_an_unchanged_receipt_carries_the_seat_answer_not_a_pointer_to_it():
+    """Measured 2026-09-22 over cbp-being's 556 beats: an edit receipt naming the defect in
+    its own return value is followed by another edit 39/46 = 0.85 of the time, against a
+    0.49 base rate; the same defect as the seat's traceback in the conversation, 20/45 =
+    0.44 — no lift (Fisher p=7e-5). A seq number points at the channel that does not move
+    it. The receipt must SAY what the run said, and must quote the run, not a later aside."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print('a')\n")
+
+    d(BeingIntent("request_run", {"path": "notes/train.py", "why": "first"}), _ALLOW)
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text="[request_run] I ran notes/train.py. exit code 1.\n\nstderr:\n"
+                     "NameError: name 'model' is not defined\n\nAnswers your request.")
+    ran_at = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text="About that run: two ways forward, both yours to pick.")
+    aside_at = conv.recent(home, "seat", limit=1)[-1]["seq"]
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
+    got = r.result["unchanged"]
+    assert "NameError: name 'model' is not defined" in got, got
+    assert "exit code 1" in got, got
+    assert f"seq {ran_at}" in got and f"seq {aside_at}" not in got, (ran_at, aside_at, got)
+
+
+def test_an_unchanged_receipt_caps_what_it_carries():
+    """A seat answer is capped at both ends by the seat, but a decline can be prose of any
+    length. The tail is what carries the exception line, so the cap keeps the tail."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print('a')\n")
+
+    d(BeingIntent("request_run", {"path": "notes/train.py", "why": "first"}), _ALLOW)
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text="[request_run] " + ("x" * 4000) + "\nZeroDivisionError: division by zero")
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
+    got = r.result["unchanged"]
+    assert "ZeroDivisionError: division by zero" in got, "the cap dropped the tail"
+    assert len(got) < 4000, len(got)
+
+
 def test_a_say_that_asks_for_a_run_is_routed_as_request_run():
     """Measured 2026-09-21 00:00-03:52Z: 24 `say`, 0 `request_run`, after the seat named
     request_run in four turns. The say got the file run, so it was the cheaper door. Route
