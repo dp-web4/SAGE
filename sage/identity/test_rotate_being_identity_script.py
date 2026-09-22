@@ -47,7 +47,7 @@ def test_failure_after_new_seal_restores_every_live_byte_and_consumes_token(tmp_
     names = ("identity.json", "identity.sealed", "identity.attest.json", "instance.json")
     before = {n: (home / n).read_bytes() for n in names}
 
-    token = tmp_path / "rehearsed.json"
+    token = R._token_path(home.resolve())
     token.write_text(json.dumps({
         "ok": True,
         "home": str(home.resolve()),
