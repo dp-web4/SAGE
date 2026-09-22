@@ -206,7 +206,10 @@ def rotate(home: Path, real: bool, rehearsed: str = "") -> int:
         tok = _token_path(home)
         if not rehearsed:
             raise SystemExit(f"REFUSED: --real needs --rehearsed {tok} -- run the rehearsal first and read it.")
-        token_file = Path(rehearsed)
+        token_file = Path(rehearsed).resolve()
+        if token_file != tok.resolve():
+            raise SystemExit(
+                f"REFUSED: --rehearsed must be the token this script wrote for this home: {tok}")
         try:
             t = json.loads(token_file.read_text())
         except OSError as e:
