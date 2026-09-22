@@ -99,3 +99,12 @@ def test_an_explicit_seq_must_name_a_pending_request(inst):
 def test_an_unasked_run_says_it_answers_nothing(inst):
     assert srr.bind(inst, CID, "notes/b.py", None) == []
     assert "answers none" in srr._answers([])
+
+
+def test_an_explicit_seq_for_a_different_file_is_refused(inst):
+    """GPT on #149: seq 11 asked for b.py; `run a.py --seq 11` must not claim to answer it."""
+    sa, sb = ask(inst, "notes/a.py"), ask(inst, "notes/b.py")
+    with pytest.raises(SystemExit) as e:
+        srr.bind(inst, CID, "notes/a.py", [sb])
+    assert "asked for 'notes/b.py'" in str(e.value)
+    assert srr.bind(inst, CID, "notes/a.py", [sa]) == [sa]

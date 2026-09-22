@@ -141,10 +141,17 @@ def bind(inst: Path, cid: str, rel: str, seqs: list[int] | None) -> list[int]:
     allowed — the seat may run a file unasked — but it then closes nothing, and says so."""
     open_reqs = pending(inst, cid)
     if seqs:
-        known = {int(t["seq"]) for t in open_reqs}
-        stray = [s for s in seqs if s not in known]
+        by_seq = {int(t["seq"]): t for t in open_reqs}
+        stray = [s for s in seqs if s not in by_seq]
         if stray:
-            sys.exit(f"refusing: seq {stray} is not a pending request (pending: {sorted(known)})")
+            sys.exit(f"refusing: seq {stray} is not a pending request (pending: {sorted(by_seq)})")
+        # THE REQUEST NAMES THE FILE (GPT on #149). Checking only "pending" let the seat run
+        # notes/a.py with --seq 11 when request 11 asked for notes/b.py, and the answer would
+        # claim to answer 11 -- the object-binding hole request ids exist to close.
+        other = [s for s in seqs if not _same_file(inst, request_path(by_seq[s]), rel)]
+        if other:
+            asked = ", ".join(f"seq {s} asked for {request_path(by_seq[s])!r}" for s in other)
+            sys.exit(f"refusing: {asked}, not {rel!r}. A run answers only requests for the file it ran.")
         return sorted(seqs)
     return sorted(int(t["seq"]) for t in open_reqs if _same_file(inst, request_path(t), rel))
 
