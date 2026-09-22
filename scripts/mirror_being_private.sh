@@ -52,7 +52,7 @@ mkdir -p "$DEST/heartbeats"
 # mirror itself, heartbeats/ survives, run reports "no change".
 rsync -a --delete --delete-excluded --filter="protect heartbeats/" \
   --exclude 'identity.sealed*' --exclude 'heartbeat.log' --exclude 'heartbeats.jsonl' \
-  --exclude 'atp_shadow.jsonl' \
+  --exclude 'atp_shadow.jsonl*' \
   --exclude 'heartbeats/' --exclude '__pycache__/' --exclude '*.tmp' --exclude '.git' \
   "$INSTANCE/" "$DEST/" || die "rsync"
 mkdir -p "$DEST/heartbeats"   # excluded above, so --delete leaves it alone
@@ -86,7 +86,7 @@ print(f"heartbeats: {n} beats in {len(months)} day file(s)")
 PY
 
 # counts: what the being has vs what the mirror holds (the two known exclusions aside)
-src_n=$(cd "$INSTANCE" && find . -type f ! -name 'identity.sealed*' ! -name heartbeat.log ! -name heartbeats.jsonl ! -name atp_shadow.jsonl ! -path '*/__pycache__/*' ! -name '*.tmp' | wc -l)
+src_n=$(cd "$INSTANCE" && find . -type f ! -name 'identity.sealed*' ! -name heartbeat.log ! -name heartbeats.jsonl ! -name 'atp_shadow.jsonl*' ! -path '*/__pycache__/*' ! -name '*.tmp' | wc -l)
 dst_n=$(cd "$DEST" && find . -type f ! -path './heartbeats/*' | wc -l)
 # BSD `wc -l` (macOS) pads its count with spaces, and the `|| echo 0` arm below does not, so a
 # being with no heartbeats.jsonl failed here as "0 vs        0" (McNugget, 2026-09-20). Compare numbers.
