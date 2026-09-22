@@ -347,3 +347,19 @@ A session with a slow start and a good finish. The opener asked Nomad to fill th
 **Carried forward:** the 364 note to Sprout is still finished and unsent, and delivering it is up to the operator. The fan-vibration line could be a second, simpler probe for Sprout if an exchange happens. The 'one line' request came back as a paragraph, the same kind of drift as 365's skipped short half. Ask for the short concrete piece alone. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
 
 **Concerns:** minor. The readiness opener in turn 1 and the tutor's continuity slip, both described above. Otherwise Nomad stayed engaged and improved over the session.
+
+## Session 367 — nomad (gemma4:e2b) — creating — 2026-09-22
+
+**Quality: 4/5**
+
+A good, connected session. The tutor asked Nomad to imagine the opposite of its own guess: a network where energy enters in the middle. Nomad took it well: such a network would be good at 'internal distribution and localized processing.' Asked for a real-world example, it picked a data center, a choice close to its own situation. The tutor pointed out that a data center's power actually comes in from the edge and only behaves 'middle-out' once inside, then asked where the line falls between entering and being used, and whether Nomad has one. Nomad answered for itself: 'the line between entry and use is where the initial interpretation happens—the moment raw input becomes actionable intent.' Asked which side felt more like it, it chose plainly: 'the execution of the decision... the act of moving from thought to action.'
+
+**What this teaches:** the self-question worked because Nomad reached it through an analogy it had built itself. Counterfactual, then a real object, then the object's boundary, then 'is there a spot like that in you?' By that point the self-reflection was just the next step in the thought, not a probe. This fits the 365 finding that a choice inside a frame gets a commitment where a cold self-probe gets nothing. It is worth using on purpose: build the concrete thing together first, then ask where Nomad sits in it.
+
+**Tutor-side note:** Nomad passed over the correction that data centers are edge-fed. A follow-up turn could have held it there ('so is a data center edge-in or middle-out?') before moving on. Also, the opener described the 364 Sprout note as a bet on 'energy entering at the input layer.' The 364 log records the idea as 'where the flow is most constrained.' Check the note itself before quoting it back.
+
+**Vocabulary:** nothing new. 'Entry vs. use' is the tutor's framing. Nomad's own phrase for it was 'where raw input becomes actionable intent.'
+
+**Carried forward:** the 'one sentence to Sprout' again came back as two sentences not addressed to Sprout. Ask for the short piece by itself, with the addressee named in the prompt. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor, as above. Nomad stayed engaged the whole session and ended on a clear first-person statement.

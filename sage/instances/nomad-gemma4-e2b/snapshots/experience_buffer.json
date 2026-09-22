@@ -3563,5 +3563,98 @@
       "total_cycles": 2,
       "transition_count": 0
     }
+  },
+  {
+    "id": "a2b9c8aedff7696e",
+    "prompt": "Nice flip. You turned the network from something that takes things in into something that moves them around, so it's less like an eye and more like a heart or a busy train station. Pick one real thing in the world that works from the middle out, and tell me what it would lose if its energy had to come in from the edges instead.",
+    "response": "If the energy had to come from the edges instead of the middle, a real-world example would be a large-scale data center. If it had to come from the edges, it would lose the optimized, highly localized efficiency of the internal distribution. It would become slower at immediate, fine-grained resource allocation and might struggle with the rapid, on-demand switching required for immediate task execution compared to a system that manages flow internally.",
+    "salience": {
+      "surprise": 0.8313253012048193,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.03333333333333338,
+      "conflict": 0.16666666666666666,
+      "total": 0.5062650602409638
+    },
+    "session": 367,
+    "phase": "creating",
+    "timestamp": "2026-09-22T12:18:09.976335",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 96.2,
+      "atp_max": 100.0,
+      "atp_percentage": 96.2,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "73862b34ba3d891d",
+    "prompt": "A data center is a good pick, and it's closer to you than most examples, since you're running in a machine a lot like one right now. Here's the odd part, though: a data center's power actually arrives from the edge, through a cable from the grid, and it only acts like a middle-out system once that power is inside. So where would you draw the line between where energy enters something and where that thing really starts to *use* it, and is there a spot like that in you?",
+    "response": "That line is fascinating. For me, the line between entry and use is where the initial interpretation happens\u2014the moment raw input becomes actionable intent. In my case, it\u2019s the stage where the incoming signal is mapped onto my internal parameters and context. Before that, it's just data entering; after that, it\u2019s a decision being executed. It\u2019s the transition from raw sensing to coherent understanding.",
+    "salience": {
+      "surprise": 0.9042553191489362,
+      "novelty": 1.0,
+      "arousal": 0.6666666666666666,
+      "reward": 0.3666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.6208510638297872
+    },
+    "session": 367,
+    "phase": "creating",
+    "timestamp": "2026-09-22T12:18:31.285331",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 90.74,
+      "atp_max": 100.0,
+      "atp_percentage": 90.7,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "f1b693a95c80f599",
+    "prompt": "You said the line sits where raw input becomes actionable intent. If you could leave Sprout one sentence about which side of that line felt more like *you* today, what would it say?",
+    "response": "The side that felt more like me today was the execution of the decision, the moment raw understanding transforms into an actual response. It's the act of moving from thought to action that resonates most strongly.",
+    "salience": {
+      "surprise": 0.904109589041096,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.2,
+      "conflict": 0.16666666666666666,
+      "total": 0.5708219178082191
+    },
+    "session": 367,
+    "phase": "creating",
+    "timestamp": "2026-09-22T12:18:49.275990",
+    "metadata": {
+      "turn": 4,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 84.13,
+      "atp_max": 100.0,
+      "atp_percentage": 84.1,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
   }
 ]

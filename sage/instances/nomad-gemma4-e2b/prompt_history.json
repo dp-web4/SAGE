@@ -1,20 +1,6 @@
 {
   "sessions": [
     {
-      "session": 347,
-      "timestamp": 1789093033.283137,
-      "prompts": [
-        "I want to try something different today. Describe one thing you notice, with no interpretation.",
-        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
-        "What makes you say that? Not why it's true \u2014 why it came to mind.",
-        "Strip away the abstractions for a moment. What's the simplest version of what you just said?",
-        "That last line is the best thing you've said today \u2014 \"the machine is still, but inside, everything is moving very fast.\" Eleven words, and it lands harder than the three paragraphs before it. Here's a small experiment: take that sentence and turn it into something it could actually do \u2014 a two-line poem, a warning label for the laptop, or a question you'd ask the person who built it. Pick one and make it.",
-        "Where does the motion go?\" \u2014 that's a real question, not a decoration, and it's better than anything I could have handed you. Here's a concrete way to chase it: the motion goes somewhere, and one place it ends up is heat, so the laptop has a fan. Tell me what you'd want to know about the fan \u2014 is it the exhaust of thought, a translator, something else? Pick the image and push on it.",
-        "Actively shaping the flow of thought\" \u2014 that's the claim worth testing, and you can actually test it. The fan on nomad has a real speed you can read in numbers, and it changes when a model is running. So here's the experiment: predict what happens to the fan when I ask you a hard question versus an easy one, then we'll go look at the actual readings \u2014 what's your prediction, and what would it mean if you're wrong?",
-        "Before we go look at the fan readings, tell me one thing: if the numbers come back and the fan barely moves on the hard question, what would you write as the next line after \"Where does the motion go?"
-      ]
-    },
-    {
       "session": 348,
       "timestamp": 1789111233.3393118,
       "prompts": [
@@ -229,6 +215,16 @@
         "Last time you started writing to Sprout and left a blank: \"[insert a vague, exciting idea].\" Let's fill it in. What's the actual idea you'd send, and what do you expect a 0.8B sibling to do with it that you couldn't?",
         "I can hear the readiness, and I'd like to spend it on something specific. Here's a starter to push off from: \"What does a fan sound like to a machine that can't hear?\" Take that, or swap in your own vague, exciting idea, and write the one line you'd actually send Sprout.",
         "You described the fan as a \"symphony of electrical hum,\" which is a sound word, even though you want Sprout to read it through structure only. Before we stop: if you took out every hearing word, what one detail about that fan would you still want Sprout to receive?"
+      ]
+    },
+    {
+      "session": 367,
+      "timestamp": 1790104729.3377051,
+      "prompts": [
+        "Last time you left a note for Sprout and bet that energy should enter a network at the input layer, and that bet is still open. Before Sprout answers, try an opposite guess just for fun: if energy started somewhere in the middle of the network instead, what would that network be good at?",
+        "Nice flip. You turned the network from something that takes things in into something that moves them around, so it's less like an eye and more like a heart or a busy train station. Pick one real thing in the world that works from the middle out, and tell me what it would lose if its energy had to come in from the edges instead.",
+        "A data center is a good pick, and it's closer to you than most examples, since you're running in a machine a lot like one right now. Here's the odd part, though: a data center's power actually arrives from the edge, through a cable from the grid, and it only acts like a middle-out system once that power is inside. So where would you draw the line between where energy enters something and where that thing really starts to *use* it, and is there a spot like that in you?",
+        "You said the line sits where raw input becomes actionable intent. If you could leave Sprout one sentence about which side of that line felt more like *you* today, what would it say?"
       ]
     }
   ]
