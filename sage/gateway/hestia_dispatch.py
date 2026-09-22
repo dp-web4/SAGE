@@ -998,13 +998,57 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=(
                 f"camera cannot write to {out_rel!r}: its directory could not be created "
                 f"({wdir_err}). The device was not opened."))
+        staged_out = full_out + ".capture.tmp"
+
+        # SURVIVABLE ERROR: ffmpeg never writes the live frame. The exact staged path is
+        # part of camera_command(), so the gate judges the same command we execute. A prior
+        # good frame remains byte-identical until a complete JPEG has been produced.
+        try:
+            if os.path.exists(staged_out):
+                os.unlink(staged_out)
+        except OSError as e:
+            try:
+                self._call("hestia_record_outcome",
+                           {"action_id": action_id, "success": False, "magnitude": 0.0})
+            except Exception:
+                pass
+            return ResultEnvelope(ok=False, witness_id=action_id, error=(
+                f"camera cannot clear its staged capture {staged_out!r} ({type(e).__name__}: {e}); "
+                "the device was not opened and the previous frame was not changed"))
+
         proc = subprocess.run(shlex.split(cmd), capture_output=True)
-        captured = proc.returncode == 0 and os.path.exists(full_out)
+
+        def _staged_jpeg_ok():
+            try:
+                data = Path(staged_out).read_bytes()
+            except OSError:
+                return False
+            return (len(data) >= 5 and data[:3] == b"\\xff\\xd8\\xff"
+                    and data[-2:] == b"\\xff\\xd9")
+
+        staged_ok = proc.returncode == 0 and _staged_jpeg_ok()
+        captured = False
+        publish_error = None
+        if staged_ok:
+            try:
+                os.replace(staged_out, full_out)
+                captured = True
+            except OSError as e:
+                publish_error = f"{type(e).__name__}: {e}"
+
+        if not captured:
+            try:
+                if os.path.exists(staged_out):
+                    os.unlink(staged_out)
+            except OSError:
+                pass
+
         try:
             self._call("hestia_record_outcome",
                        {"action_id": action_id, "success": captured, "magnitude": 0.0})
         except Exception:
             pass
+
         if captured:
             return ResultEnvelope(ok=True, witness_id=action_id, result={
                 "device": device, "out_path": out_rel,
@@ -1019,7 +1063,14 @@ class HestiaF1aDispatcher:
                          # cannot avoid reading, so it must say what is true NOW.
                          "You SEE it on your NEXT beat: this act is the request to see, and "
                          "the frame rides that beat as an image (heartbeat.fresh_frames). "
-                         "The file is overwritten by the next capture.")})
+                         "The file is overwritten atomically by the next successful capture.")})
+
+        if publish_error:
+            return ResultEnvelope(ok=False, witness_id=action_id, result={
+                "device": device, "out_path": out_rel,
+                "note": (f"ffmpeg produced a valid frame but it could not be published "
+                         f"({publish_error}). The previous file at the path, if any, is untouched.")})
+
         if proc.returncode != 0:
             # THREE CAUSES, not two. "the node exists, therefore the device is busy" was a
             # false dichotomy: it also fires when the device is fine and the OUTPUT is the
@@ -1029,7 +1080,7 @@ class HestiaF1aDispatcher:
                 kind = "device absent"
             elif ("No such file or directory" in _err or "Permission denied" in _err
                   or "Unable to open" in _err or "could not open" in _err.lower()):
-                kind = (f"the device opened but the frame could not be WRITTEN to "
+                kind = (f"the device opened but the staged frame could not be WRITTEN for "
                         f"{out_rel!r} — check the path, not the camera")
             else:
                 kind = ("device busy or unopenable (another process may hold it, or the "
@@ -1037,14 +1088,15 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, witness_id=action_id, result={
                 "device": device, "out_path": out_rel, "exit_code": proc.returncode,
                 "stderr": _err.strip()[:300] or "(ffmpeg said nothing)",
-                "note": (f"ffmpeg exited {proc.returncode} and no frame was written — "
+                "note": (f"ffmpeg exited {proc.returncode} before a valid frame was published — "
                          f"{kind}. The previous file at the path, if any, is untouched. "
                          f"`stderr` above is ffmpeg's own account; the kind is my reading "
                          f"of it.")})
+
         return ResultEnvelope(ok=False, witness_id=action_id, result={
             "device": device, "out_path": out_rel,
-            "note": ("ffmpeg exited 0 but wrote no readable frame — capture anomaly; do "
-                     "not treat a missing file as a captured one")})
+            "note": ("ffmpeg exited 0 but the staged output was missing or not a complete JPEG; "
+                     "it was discarded and the previous file at the path, if any, is untouched")})
 
     def _do_git_read(self, intent: BeingIntent) -> ResultEnvelope:
         """Read the history of the tree the being lives in. Read-only by construction.
