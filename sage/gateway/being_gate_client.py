@@ -80,6 +80,48 @@ def _resolve_hestia_shared() -> Optional[str]:
     return None
 
 
+def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a camera intent, built from validated args.
+
+    One frame on demand, no stream, no state across beats: ffmpeg captures exactly one
+    JPEG from the device (default /dev/video0) inside the being's own scratch. The being
+    names only the output path — never the tool, its flags, or the
+    device node beyond naming it plainly; the SEAT builds the command and the law judges
+    THAT string. A missing or busy device is reported by ffmpeg's exit code, which the
+    dispatcher interprets (see _do_camera).
+    """
+    import shlex
+    worktree = ctx["worktree"] if ctx else None
+    memory_root = (ctx or {}).get("memory_root")
+    if not worktree:
+        raise ValueError("camera requires a worktree context")
+    if not memory_root:
+        raise ValueError("camera requires a memory_root context")
+
+    out_rel = args.get("out_path", "scratch/camera/last-frame.jpg")
+    if any(ch.isspace() for ch in out_rel):
+        raise ValueError(f"camera 'out_path' may not contain whitespace: {out_rel!r}")
+    if out_rel.startswith("-") or ".." in out_rel.split("/"):
+        raise ValueError(
+            f"camera 'out_path' must be a plain path inside your home, got {out_rel!r}"
+        )
+    # Frames are transient by contract — one JPEG per act, nothing to carry across
+    # beats. Resolve them against the being's home (memory_root) rather than the SAGE
+    # worktree: check reports the worktree's dirty flag as EVIDENCE, so an uncommitted
+    # frame there degrades your own evidence (measured on this machine 2026-09-14).
+    full = os.path.realpath(os.path.join(memory_root, out_rel))
+    if not (full == memory_root or full.startswith(memory_root + os.sep)):
+        raise ValueError(f"camera 'out_path' escapes your home: {out_rel!r}")
+
+    # IMAGE2 OWNS THE TRANSACTION. Its atomic_writing option writes to a temporary file
+    # and renames only after the image is complete. That keeps old-or-new semantics INSIDE
+    # the exact ffmpeg command Hestia judges; the dispatcher performs no extra filesystem
+    # mutation behind the law's back.
+    device = args.get("device", "/dev/video0")
+    return (f"ffmpeg -hide_banner -loglevel error -y -f v4l2 -i {shlex.quote(device)} "
+            f"-frames:v 1 -qscale:v 3 -f image2 -atomic_writing 1 {shlex.quote(full)}")
+
+
 # --------------------------------------------------------------------------
 # The bounded gateway-member registry. Each entry says how a being intent maps
 # onto a NormalizedEvent (the gate's only input). Anything not here cannot be
@@ -618,6 +660,8 @@ def _unbounded_reason(effector: str) -> str:
 _REGISTRY = {
     "peer_ask":       dict(tool="peer_ask",     path_args=(),       cmd_arg=None),
     "witness":        dict(tool="witness",      path_args=(),       cmd_arg=None),
+    "camera":         dict(tool="camera",      path_args=(),        cmd_arg=None,
+                           compose=camera_command),
     "memory_read":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
     # git_read: read the history of the tree that constitutes it. Composed like check —
     # the being names an op, the SEAT builds the command, the law judges THAT string, and
@@ -718,7 +762,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run", "memory_edit"})
+                            "retire_note", "request_run", "memory_edit", "camera"})
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -822,6 +866,17 @@ _TOOL_SCHEMAS = {
                     {"path": "the file to run, inside your own home, e.g. notes/my-script.py",
                      "why": "optional: what you expect to learn. Saying it helps the seat decide"},
                     ["path"]),
+    "camera": ("Capture ONE frame from this machine's camera into your own scratch — no "
+              "stream, nothing persists across beats. The seat runs ffmpeg against /dev/"
+              "video0 (or a plain device node you name) and writes one JPEG to the path "
+              "you give inside your home; default is scratch/camera/last-frame.jpg, "
+              "overwritten each time. A missing or busy device comes back as an error "
+              "envelope that names which: 'device absent' means no frame could be opened, "
+              "'device busy' means another process holds it — in both cases nothing was "
+              "written, so the last good file (if any) is untouched.",
+               {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
+                "device": "optional: a plain device node to read from (default /dev/video0)"},
+               []),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
                  "a fact, a lesson, a question, what you were doing and why.",
                  {"content": "the memory, in your own words", "tags": "comma-separated tags (optional)"},
@@ -986,6 +1041,10 @@ class ResultEnvelope:
     pending: bool = False
     note: str = ""
     verdict: Optional[GatewayVerdict] = None
+    # the tool result: ollama takes `images` on a message, not inside a tool result. Used by
+    # `game` for its windows (dp 2026-09-19: visual and text together, reason from both).
+    images: tuple = ()
+    image_captions: tuple = ()
 
     def to_tool_message(self) -> str:
         """Render for re-injection into the being's conversation as the tool result."""

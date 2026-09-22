@@ -38,11 +38,12 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope
+from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope, camera_command
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap, make_hestia_witness_fn
 from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 
@@ -949,6 +950,115 @@ class HestiaF1aDispatcher:
                               result={"deny_hash": deny_hash, "appeal": out.get("witnessEntryHash"),
                                       "adjudicator": out.get("adjudicator"),
                                       "next": out.get("next") or "a NOT-SAME peer or the operator rules; the ruling is witnessed either way"})
+
+    # -- camera: one frame on demand from this body's device --------------------
+    def _do_camera(self, intent: BeingIntent) -> ResultEnvelope:
+        """Run the composed ffmpeg capture and report what it actually did.
+
+        Only ever reached on an intent the gate ALLOWED as the exact command below (see
+        camera_command). The being never holds a shell; this runs the seat-built string.
+        'off' is checkable, not vibes: exit 0 AND the frame file exists -> ok with its
+        byte size; nonzero exit and no frame written -> an error envelope that names
+        which kind (device absent vs device busy); zero exit without a file is reported
+        as a capture anomaly rather than claimed as success.
+        """
+        worktree = self.worktree
+        import shlex
+        out_rel = intent.args.get("out_path") or "scratch/camera/last-frame.jpg"
+        full_out = os.path.realpath(os.path.join(self.memory_root, out_rel))
+        device = intent.args.get("device", "/dev/video0")
+
+        try:
+            cmd = camera_command(intent.args, {
+                "worktree": self.worktree,
+                "memory_root": self.memory_root,
+            })
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        begin = self._call("hestia_begin_action",
+                           {"tool_name": "camera", "target": device})
+        werr = _hestia_error(begin)
+        if werr:
+            return ResultEnvelope(ok=False, error=(
+                f"camera UNVERIFIED: the witness substrate is unreachable "
+                f"({str(werr)[:160]}); the camera was not switched on"))
+        action_id = begin.get("actionId")
+        # THE DEFAULT PATH POINTS SOMEWHERE THAT DOES NOT EXIST YET. `scratch/camera/` lives
+        # under the being's HOME; this writes into its WORKTREE, which has no scratch/ at
+        # all. So the first live use of the verb failed with ffmpeg exit 251 and the
+        # taxonomy below called it "device busy or unopenable", because the device node did
+        # exist. The camera was fine; there was nowhere to put the frame. Found by
+        # legion-being 2026-09-14 on its own verb, first real capture.
+        try:
+            os.makedirs(os.path.dirname(full_out) or worktree, exist_ok=True)
+            wdir_err = None
+        except OSError as e:
+            wdir_err = f"{type(e).__name__}: {e}"
+        if wdir_err:
+            return ResultEnvelope(ok=False, error=(
+                f"camera cannot write to {out_rel!r}: its directory could not be created "
+                f"({wdir_err}). The device was not opened."))
+        proc = subprocess.run(shlex.split(cmd), capture_output=True)
+
+        # camera_command asks image2 for atomic_writing=1, so ffmpeg itself owns the
+        # temp+rename transaction. The dispatcher must not publish a second, ungoverned
+        # filesystem effect after Hestia has judged the command.
+        captured = False
+        if proc.returncode == 0 and os.path.isfile(full_out):
+            try:
+                data = Path(full_out).read_bytes()
+                captured = (len(data) >= 5 and data[:3] == b"\\xff\\xd8\\xff"
+                            and data[-2:] == b"\\xff\\xd9")
+            except OSError:
+                captured = False
+
+        try:
+            self._call("hestia_record_outcome",
+                       {"action_id": action_id, "success": captured, "magnitude": 0.0})
+        except Exception:
+            pass
+
+        if captured:
+            return ResultEnvelope(ok=True, witness_id=action_id, result={
+                "device": device, "out_path": out_rel,
+                "bytes": os.path.getsize(full_out),
+                "note": ("one frame captured FROM THE WEBCAM (this device, not any game or file the seat drops). It is a JPEG, so memory_read will hand you "
+                         "binary, not a picture — it returns ok and you learn nothing. "
+                         # STALE UNTIL 2026-09-16: this said "a vision-capable reader is not
+                         # wired yet" for two days after heartbeat.py joined both ends
+                         # (frames ride the beat after a camera act). legion-being read it as
+                         # the current state and planned work around it; it found the truth in
+                         # heartbeat.py itself. A result note is documentation the being
+                         # cannot avoid reading, so it must say what is true NOW.
+                         "You SEE it on your NEXT beat: this act is the request to see, and "
+                         "the frame rides that beat as an image (heartbeat.fresh_frames). "
+                         "FFmpeg publishes the completed image atomically.")})
+
+        if proc.returncode != 0:
+            # image2 atomic_writing keeps any previous final path untouched on a failed
+            # write: ffmpeg writes a temporary file and renames only on completion.
+            _err = (proc.stderr or b"").decode("utf-8", "replace")
+            if not os.path.exists(device):
+                kind = "device absent"
+            elif ("No such file or directory" in _err or "Permission denied" in _err
+                  or "Unable to open" in _err or "could not open" in _err.lower()):
+                kind = (f"the device opened but the frame could not be WRITTEN to "
+                        f"{out_rel!r} — check the path, not the camera")
+            else:
+                kind = ("device busy or unopenable (another process may hold it, or the "
+                        "node is wrong)")
+            return ResultEnvelope(ok=False, witness_id=action_id, result={
+                "device": device, "out_path": out_rel, "exit_code": proc.returncode,
+                "stderr": _err.strip()[:300] or "(ffmpeg said nothing)",
+                "note": (f"ffmpeg exited {proc.returncode} before publishing a frame — "
+                         f"{kind}. With image2 atomic_writing the previous file at the path, "
+                         f"if any, is untouched. `stderr` above is ffmpeg's own account; "
+                         f"the kind is my reading of it.")})
+
+        return ResultEnvelope(ok=False, witness_id=action_id, result={
+            "device": device, "out_path": out_rel,
+            "note": ("ffmpeg exited 0 but the published output was missing or not a complete JPEG; "
+                     "do not treat it as a captured frame")})
 
     def _do_git_read(self, intent: BeingIntent) -> ResultEnvelope:
         """Read the history of the tree the being lives in. Read-only by construction.

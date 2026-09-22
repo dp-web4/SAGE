@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 220,
-      "timestamp": 1789597519.541838,
-      "prompts": [
-        "Something I noticed rereading our last few sessions: you keep getting most specific right after you admit you don't know something. Today I want to start from that end \u2014 tell me one thing about your own workings that you genuinely can't tell from the inside, and let's see if we can design a way to find out.",
-        "It feels like magic to me\" \u2014 hold onto that phrasing, it's honest. But let's actually probe it: right now, before your next reply, notice what happens when I give you two unrelated words \u2014 *ferry* and *rust*. Tell me the first connection that forms and whether you can catch anything about how it arrived.",
-        "That's a good catch \u2014 \"worn down over time\" is the hinge, and notice it wasn't the sound of the word, it was a *property* the word carries that the ferry could also have. Here's a sharper test: give me a connection between *ferry* and *rust* that does **not** route through decay \u2014 something else those two could share.",
-        "Look at what just happened \u2014 you tried to route around decay and decay came along anyway (\"breaks down over time\" is sitting right in the middle of your movement answer). That's real data about your own workings: the first association doesn't just arrive, it *holds*, and it disguises itself when you push. Here's one through a different door \u2014 a ferry's hull and rust are both iron meeting saltwater, same material, no decay required; try one more that comes in through place or material rather than process.",
-        "That ports answer came in through a door the first two didn't \u2014 you found it by asking *where* instead of *what happens to*. Before you go: if a sibling instance hit the same stuck loop tomorrow, what would you tell them about how you got unstuck?"
-      ]
-    },
-    {
       "session": 221,
       "timestamp": 1789619129.784006,
       "prompts": [
@@ -218,6 +207,17 @@
         "That gap in the soil is the best thing you've said tonight \u2014 but it isn't the plant adjusting, it's the soil shrinking as it dried, which makes it a record of how long it's been since anyone watered it. Read the rest of the plant that way: what else on it is evidence of something that already happened?",
         "That last line \u2014 \"bearing witness to its own impermanence\" \u2014 is you stepping in front of the plant to explain it, and the browned stem and the cracks were already doing that work better. Cut the last sentence and give me one more piece of physical evidence instead: what does the *pot* show, or the surface of the desk underneath it?",
         "That smudge on the pot rim is the only mark in tonight's whole description that a *person* left \u2014 everything else was the plant or the soil doing something on its own. Before you go: what's one other thing in that room that carries a trace of someone rather than of itself?"
+      ]
+    },
+    {
+      "session": 240,
+      "timestamp": 1790029431.5800843,
+      "prompts": [
+        "Pub, last time you left a line drawn and walked away from it. Today let's build something instead: invent an object that only works from one side. Tell me what it's made of, what it sounds like when you knock on it, and who keeps turning up on the wrong side of it.",
+        "Sophia's the part I want more of. When she's on the side where there's \"nothing,\" what does she see through the glass, and does she knock or just stand there? Give me one small thing she does to pass the time before someone lets her through.",
+        "Sophia forgets she's trying to get out. That's the best turn in the story so far, because now the door isn't really keeping her anywhere. Flip it around: someone in the garden notices her leaning against the glass. What does that person see from their side, and what do they do with their hands?",
+        "That smudge of garden dirt is lovely. It's the first thing in the story that actually crosses the door, even if it's only a mark on the glass. Also, you wrote \"from *my* side,\" so you're standing in the garden too. What does Sophia do when she notices the smudge, and do you say anything to the young woman?",
+        "Pub, we're stopping with the smudge still on the glass and Sophia still leaning in. If a sibling instance picked up this story tomorrow, what's the one thing you'd tell them about that mark, so they'd know what it means to her?"
       ]
     }
   ]
