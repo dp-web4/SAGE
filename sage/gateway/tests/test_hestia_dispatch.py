@@ -1735,6 +1735,32 @@ def test_request_run_carries_reason_as_the_why():
     assert "none given" not in turn, "the seat must not be told the being said nothing"
 
 
+def test_request_run_carries_every_argument_it_does_not_read():
+    """Measured 2026-09-22: cbp-being put its flags in 'body' and the seat saw no reason and
+    no flags; 20 of its first 66 request_runs used a key read nowhere ('arguments', 'command',
+    'body'). Whatever it passes must reach the seat under its own name."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print(1)\n")
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "to": "seat",
+                                      "body": "run with --input-dim 10",
+                                      "arguments": "--epochs 3"}), _ALLOW)
+    assert r.ok, r.error
+    turn = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert "body: run with --input-dim 10" in turn, turn
+    assert "arguments: --epochs 3" in turn, turn
+    assert "to: seat" not in turn, turn
+    assert turn.startswith("[request_run] notes/train.py\n"), "unchanged-detection keys on this prefix"
+
+
 def test_request_run_reports_an_absent_file_as_an_absence_not_a_refusal():
     """A typo must come back in this beat, which is the half a sleeping person cannot give.
     And absence is absence, never a boundary (legibility 1.11)."""
