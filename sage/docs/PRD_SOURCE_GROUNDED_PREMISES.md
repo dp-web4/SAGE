@@ -1,6 +1,6 @@
 # PRD — Source-grounded premises and epistemic promotion
 
-**Status:** v0.1, 2026-09-22 — proposed, buildable slice  
+**Status:** v0.2, 2026-09-22 — proposed, buildable slice; semantic-relation/reconstructibility clarifications added  
 **Owner:** SAGE  
 **Motivation:** cbp-being source-attribution/confabulation incidents; `PREMISE_FIDELITY.md`; current feedback-surface and belief-correction work.
 
@@ -85,7 +85,7 @@ Initial mechanically checkable claim kinds:
 - file-read content/range identity;
 - request/action/outcome linkage.
 
-"Paraphrase" may remain `inference` until a semantic checker exists.
+"Paraphrase" may remain `inference` until a semantic checker exists. A later semantic checker must return an explicit source/claim relation (for example entailed, contradicted, ambiguous, unrelated) with source refs; vector similarity or model confidence alone may not upgrade support status.
 
 ## 5. Promotion boundary
 
@@ -146,6 +146,35 @@ The challenger output must itself be evidence, not authority:
 `entailed | contradicted | ambiguous | unrelated` plus source refs and model/provenance.
 
 Nominal role separation is insufficient; model/context lineage must be recorded so correlated review is visible.
+
+### 6.3 Relation-first semantic checking
+
+If/when a semantic challenger is added, freeze the relation vocabulary and evaluation cases before comparing models. The primary object is the source/claim relation, not representational similarity.
+
+Requirements:
+
+- declare the expected relation for benchmark cases before the run;
+- keep exact source spans / refs available for audit;
+- treat cross-model agreement as robustness evidence, not authority;
+- never infer `supported` from embedding/latent similarity alone;
+- calibrate any auxiliary representation metric against an appropriate null before interpreting magnitude;
+- for grouped paraphrases/minimal pairs, preserve family dependence in permutation/null tests.
+
+A useful research-side concept is **Semantic Closure Horizon (SCH)**: the minimum evidence/context sufficient to establish a coherent relation. SCH can help design progressive-evidence fixtures, but it is not itself a support verdict and is distinct from Web4 MRH.
+
+### 6.4 Reconstructible epistemic records
+
+Promotion records should retain enough constraint that a later being/substrate can reconstruct why the state was licensed.
+
+At minimum, durable promoted state should preserve:
+
+- source pointer(s);
+- support relation/status;
+- relevant completeness state;
+- unresolved alternatives where material;
+- falsifier / re-check path where available.
+
+A compact summary that preserves only the conclusion but destroys the evidentiary relation is lossy in the wrong dimension for epistemic continuity.
 
 ## 7. Integration points
 
@@ -233,6 +262,8 @@ Secondary:
 - correlated-review rate for semantic challengers.
 
 Do not score "confidence" as correctness. Record it only as an explanatory variable.
+
+Representational metrics, if collected as an exploratory RT-30 side channel, are not correctness scores. Current external evidence suggests global similarity can be width/layer confounded while local neighborhood relations are more robust. Any such metric must be null-calibrated and subordinate to the predeclared source/claim relation labels.
 
 ## 10. RT-30 — comparative source-grounding / epistemic self-monitoring
 
