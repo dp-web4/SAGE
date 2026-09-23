@@ -162,9 +162,9 @@ def test_a_long_read_names_its_window_and_the_start_line_that_reads_on():
     r = disp(BeingIntent("memory_read", {"path": "notes/big.py", "start_line": 206}), _ALLOW)
     assert r.result.startswith("[lines 206-") and "\nline 0206 " + "x" * 90 + "\n" in r.result
     # a file that fits carries no marker at all
-    Path(root, "notes", "small.py").write_text("a = 1\n")
-    assert disp(BeingIntent("memory_read", {"path": "notes/small.py"}), _ALLOW).result == "a = 1\n"
-    r = disp(BeingIntent("memory_read", {"path": "notes/small.py", "start_line": 9}), _ALLOW)
+    Path(root, "notes", "small.md").write_text("a = 1\n")
+    assert disp(BeingIntent("memory_read", {"path": "notes/small.md"}), _ALLOW).result == "a = 1\n"
+    r = disp(BeingIntent("memory_read", {"path": "notes/small.md", "start_line": 9}), _ALLOW)
     assert r.ok and r.result.startswith("[past the end:")
 
 
@@ -535,3 +535,23 @@ def test_the_edit_receipt_counts_lines_the_way_memory_read_does():
     assert r.ok and "went from 3 to 2 lines" in r.result, r.result
     rd = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
     assert rd.ok and (home / "notes" / "s.py").read_text().count("\n") == 2
+
+
+def test_a_py_read_says_whether_python_can_parse_the_file_now():
+    """2026-09-23: cbp-being read lines 1718-1937 of its script -- line 1721 at column 0, the
+    lines under it indented four -- and concluded "syntactically valid"; Python stopped at
+    1722. #162 told it on write and edit, never on the read where the verdict was formed."""
+    disp, root = _disp()
+    f = Path(root) / "notes" / "s.py"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("p = 1\n    q = 2\n")
+    r = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
+    assert r.ok and "[Python cannot parse s.py now: IndentationError at line 2" in r.result, r.result
+    r = disp(BeingIntent("memory_read", {"path": "notes/s.py", "start_line": 2}), _ALLOW)
+    assert r.ok and r.result.startswith("[lines 2-2 of 2") and "cannot parse s.py now" in r.result, r.result
+    f.write_text("p = 1\nq = 2\n")
+    r = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
+    assert r.ok and r.result.endswith("[Python can parse s.py now. That is not the same as running it.]"), r.result
+    (Path(root) / "journal.md").write_text("a note\n")
+    r = disp(BeingIntent("memory_read", {"path": "journal.md"}), _ALLOW)
+    assert r.ok and r.result == "a note\n", r.result
