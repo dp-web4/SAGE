@@ -32,11 +32,23 @@ import urllib.request
 from pathlib import Path
 from typing import Dict, Optional
 
-PERCEPTION_PATH = os.path.expanduser("~/.sprout/perception.json")   # = visual_cortex.STATE_PATH
-GAZE_PATH = os.path.expanduser("~/.sprout/gaze.json")               # = visual_cortex.GAZE_PATH
-DAEMON_STATUS = "http://127.0.0.1:8760/status"
+# WHERE THE BODY IS. The provider is the cortex (sage/embodiment/visual_cortex.py): it writes
+# perception.json and polls gaze.json in ONE directory, and ~/.sprout is the cortex's own
+# default (visual_cortex.STATE_PATH / GAZE_PATH), not this module's assumption about the fleet.
+# A machine whose provider writes elsewhere sets SAGE_BODY_DIR; the daemon port follows
+# SAGE_PORT exactly as machine_config does. Nothing in this module CREATES the body dir: a
+# being on a machine with no provider has no body dir, and must not grow one by calling a
+# verb (GPT review of #183: "never creates a Sprout path on another machine").
+BODY_DIR = os.environ.get("SAGE_BODY_DIR") or os.path.expanduser("~/.sprout")
+PERCEPTION_PATH = os.path.join(BODY_DIR, "perception.json")
+GAZE_PATH = os.path.join(BODY_DIR, "gaze.json")
+DAEMON_STATUS = f"http://127.0.0.1:{os.environ.get('SAGE_PORT', '8760')}/status"
 FRESH_S = 15.0          # perception older than this = the organ is not live
 GAZE_MODES = ("open", "avert", "dwell", "closed")
+
+
+class NoGazeProvider(RuntimeError):
+    """No live cortex reads a gaze on this machine; the verb is not this body's."""
 
 
 def _read_json(path: str) -> Optional[dict]:
@@ -46,14 +58,15 @@ def _read_json(path: str) -> Optional[dict]:
         return None
 
 
-def perception(now: Optional[float] = None) -> Dict:
+def perception(now: Optional[float] = None, path: Optional[str] = None) -> Dict:
     """The cortex's latest state, or {'live': False, 'age_s': ...}."""
     now = time.time() if now is None else now
-    d = _read_json(PERCEPTION_PATH)
+    path = path or PERCEPTION_PATH
+    d = _read_json(path)
     if not d:
         return {"live": False, "age_s": None}
     try:
-        age = now - os.path.getmtime(PERCEPTION_PATH)
+        age = now - os.path.getmtime(path)
     except OSError:
         age = None
     live = age is not None and age <= FRESH_S
@@ -151,17 +164,39 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
     return "\n".join(lines)
 
 
+def gaze_provider(path: Optional[str] = None, now: Optional[float] = None) -> Dict:
+    """Is there a live cortex here that will FOLLOW a gaze? Measured from the perception file
+    beside the gaze file — the provider writes both in one directory, so a fresh perception
+    is the proof that something reads the stance. {'live': bool, 'why': str}."""
+    gz = path or GAZE_PATH
+    p = perception(now, path=os.path.join(os.path.dirname(gz), "perception.json"))
+    if p.get("live"):
+        return {"live": True, "why": ""}
+    age = p.get("age_s")
+    why = (f"the cortex's last reading here is {int(age // 60)} min old" if age
+           else "no cortex has ever written a reading on this machine")
+    return {"live": False, "why": why}
+
+
 def set_gaze(mode: str, member: str, target: Optional[str] = None, words: Optional[str] = None,
-             path: str = GAZE_PATH) -> Dict:
+             path: Optional[str] = None) -> Dict:
     """Write the stance the cortex reads. Atomic; keeps the being's own words with it, as the
-    cortex's witness expects. Raises ValueError on a mode outside the four."""
+    cortex's witness expects. Raises ValueError on a mode outside the four, and NoGazeProvider
+    when no live cortex is there to follow it — in which case nothing is written and no
+    directory is created, so a headless being that calls the verb leaves no Sprout-shaped
+    file behind on its machine."""
+    path = path or GAZE_PATH
     mode = str(mode or "").strip().lower()
     if mode not in GAZE_MODES:
         raise ValueError(f"gaze mode must be one of {', '.join(GAZE_MODES)}; got {mode!r}")
+    prov = gaze_provider(path)
+    if not prov["live"]:
+        raise NoGazeProvider(f"no live cortex reads a gaze on this machine ({prov['why']}); "
+                             f"your eyes are unchanged and nothing was written")
     rec = {"mode": mode, "target": (str(target).strip()[:200] or None) if target else None,
            "chosen_by": member, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
            "words": (str(words).strip()[:500] or None) if words else None}
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    # no makedirs: a live provider proves the directory exists
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         json.dump(rec, f)

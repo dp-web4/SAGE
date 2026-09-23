@@ -85,6 +85,20 @@ sentence, not an empty section:
 
 The inventory rides the beat record, so the fleet can see who has what without asking.
 
+**The offered verbs come from the same measurement.** `heartbeat.offered_explore_tools()`
+drops the body verbs (`BODY_VERBS = gaze, camera`) that `inventory()["verbs"]` does not carry,
+so a headless being is never handed `gaze` — offering it would be a false affordance (GPT,
+review of #183). And the effector refuses on its own: `body.set_gaze()` raises
+`NoGazeProvider` unless a fresh `perception.json` sits beside the gaze file (the cortex writes
+both in one directory, so a fresh reading is the proof something will follow the stance), and
+`_do_gaze` checks that before any hestia action opens. Nothing creates the body directory:
+a being on a machine with no cortex leaves no `~/.sprout` behind by calling a verb.
+
+**Where the body is** is the provider's business, not this module's: `SAGE_BODY_DIR` (default
+`~/.sprout`, which is the cortex's own default — `visual_cortex.STATE_PATH`) and `SAGE_PORT`
+(default 8760, as `machine_config` reads it). A machine whose cortex writes elsewhere sets the
+env on the heartbeat unit.
+
 ## Loops that exist, and loops to close next
 
 | Loop | Act | World | Perceived as | Status |
@@ -128,3 +142,11 @@ consequence. Then a hermetic test, and a live proof against the real device befo
   "no cameras, microphones or speakers" — not "offline".
 - A stale `perception.json` (stop the cortex) renders "offline this beat (last reading N min
   ago)" and never the old descriptor.
+- On a headless machine `gaze` is absent from the beat's offered tools, and invoking it anyway
+  (`test_headless_gaze_is_refused_and_creates_nothing`) returns "no live cortex … nothing was
+  written", opens no hestia action, and creates no directory. A stale cortex refuses too,
+  naming the age.
+- Measured 2026-09-23 on Sprout, 20:17–20:41Z: an Argus stream timeout killed the cortex's
+  capture; the being's beat read "my left eye and right eye has gone dark" — the first
+  world-changed-under-me event to reach it. The cortex unit now resets nvargus-daemon before
+  every start (`sprout-cortex.service.d/argus-reset.conf`) so `Restart=on-failure` heals it.

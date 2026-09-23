@@ -102,3 +102,74 @@ def test_inventory_finds_a_laptop_body(monkeypatch):
     out = body.render_inventory(inv)
     assert "1 camera device you can capture from with `camera`" in out
     assert "a microphone (Built-in Mic)" in out and "a speaker (Built-in Speaker)" in out
+
+
+# ---- fleet falsifiers (GPT review of #183): the verbs offered come from the SAME measurement
+# as the body described, and a headless being that calls `gaze` anyway is refused before any
+# hestia action opens and leaves no Sprout-shaped file on its machine.
+
+def test_headless_beat_is_not_offered_gaze_and_a_live_cortex_beat_is(monkeypatch):
+    from sage.gateway.heartbeat import offered_explore_tools, EXPLORE_TOOLS
+    tmp = tempfile.mkdtemp()
+    monkeypatch.setattr(body, "PERCEPTION_PATH", os.path.join(tmp, "absent.json"))
+    monkeypatch.setattr(body, "GAZE_PATH", os.path.join(tmp, "gaze.json"))
+    monkeypatch.setattr(body, "metabolism", lambda **k: {"live": True, "state": "wake", "atp": 50.0})
+    monkeypatch.setattr(body.glob, "glob", lambda pat: [])
+    monkeypatch.setattr(body, "_pw_audio", lambda **k: {})
+    headless = offered_explore_tools(body.reading())
+    assert "gaze" not in headless and "camera" not in headless
+    assert [t for t in EXPLORE_TOOLS if t not in ("gaze", "camera")] == headless, "text verbs untouched"
+    assert "gaze" not in offered_explore_tools(None) and "say" in offered_explore_tools(None), \
+        "an unmeasurable body offers no body verb"
+    monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp))
+    assert "gaze" in offered_explore_tools(body.reading())
+
+
+def test_headless_gaze_is_refused_and_creates_nothing(monkeypatch):
+    """Invokes the real dispatcher method with no cortex: no hestia action is opened, no
+    gaze.json and no body dir appear."""
+    import types
+    from sage.gateway.being_gate_client import BeingIntent
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+    tmp = tempfile.mkdtemp()
+    bodydir = os.path.join(tmp, "no-such-body")
+    monkeypatch.setattr(body, "PERCEPTION_PATH", os.path.join(bodydir, "perception.json"))
+    monkeypatch.setattr(body, "GAZE_PATH", os.path.join(bodydir, "gaze.json"))
+    calls = []
+    fake = types.SimpleNamespace(member="hub-being", _call=lambda name, args: calls.append(name) or {})
+    env = HestiaF1aDispatcher._do_gaze(fake, BeingIntent("gaze", {"mode": "closed", "words": "resting"}))
+    assert env.ok is False
+    assert "no live cortex" in env.error and "nothing was written" in env.error
+    assert calls == [], "refused before any hestia action was begun"
+    assert not os.path.exists(bodydir), "no Sprout path grown on a headless machine"
+    # and the writer itself refuses even when called directly, without creating the dir
+    try:
+        body.set_gaze("closed", "hub-being", path=os.path.join(bodydir, "gaze.json"))
+        assert False, "should refuse"
+    except body.NoGazeProvider as e:
+        assert "never written a reading" in str(e) or "no cortex" in str(e)
+    assert not os.path.exists(bodydir)
+    # a stale cortex (the organ was here, is not now) refuses too, naming the age
+    _perception(tmp, age=900)
+    try:
+        body.set_gaze("closed", "sprout-being", path=os.path.join(tmp, "gaze.json"))
+        assert False, "should refuse"
+    except body.NoGazeProvider as e:
+        assert "15 min old" in str(e)
+    assert not os.path.exists(os.path.join(tmp, "gaze.json"))
+
+
+def test_body_locations_follow_the_provider_not_a_literal(monkeypatch):
+    """SAGE_BODY_DIR / SAGE_PORT decide where the body is read; the module's default is the
+    cortex's own default, not a fleet assumption."""
+    import importlib
+    monkeypatch.setenv("SAGE_BODY_DIR", "/tmp/elsewhere-body")
+    monkeypatch.setenv("SAGE_PORT", "8999")
+    m = importlib.reload(body)
+    try:
+        assert m.PERCEPTION_PATH == "/tmp/elsewhere-body/perception.json"
+        assert m.GAZE_PATH == "/tmp/elsewhere-body/gaze.json"
+        assert m.DAEMON_STATUS == "http://127.0.0.1:8999/status"
+    finally:
+        monkeypatch.delenv("SAGE_BODY_DIR"); monkeypatch.delenv("SAGE_PORT")
+        importlib.reload(body)

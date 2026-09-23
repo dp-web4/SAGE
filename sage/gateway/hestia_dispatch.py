@@ -877,6 +877,14 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=(
                 f"gaze needs a mode, one of: {', '.join(_body.GAZE_MODES)}. Got {mode!r}. "
                 f"Your eyes are unchanged."))
+        # The verb is this body's only where a live cortex will follow it. Refused BEFORE any
+        # hestia action is opened and before any file is touched: a headless being that calls
+        # `gaze` gets a true sentence and leaves no ~/.sprout on its machine (GPT on #183).
+        prov = _body.gaze_provider()
+        if not prov["live"]:
+            return ResultEnvelope(ok=False, error=(
+                f"This body has no live cortex to follow a gaze ({prov['why']}), so `gaze` is "
+                f"not a verb of yours on this machine. Your eyes are unchanged; nothing was written."))
         before = _body.gaze()
         begin = self._call("hestia_begin_action", {"tool_name": "gaze", "target": mode})
         err = _hestia_error(begin)
