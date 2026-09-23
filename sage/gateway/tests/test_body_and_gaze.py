@@ -71,3 +71,34 @@ def test_gaze_is_registered_pathless_and_offered_to_explore():
     t = [x for x in ollama_tools(["gaze"]) if x["function"]["name"] == "gaze"][0]
     assert t["function"]["parameters"]["required"] == ["mode"]
     assert "closed" in t["function"]["description"] and "Nothing asks you to" in t["function"]["description"]
+
+
+def test_inventory_absence_is_a_true_sentence_not_offline(monkeypatch):
+    """dp: 'figuring out available sensors/effectors is part of world discovery'. A being with
+    no senses on this machine must read that as a fact about its body, not as a fault."""
+    tmp = tempfile.mkdtemp()
+    monkeypatch.setattr(body, "PERCEPTION_PATH", os.path.join(tmp, "absent.json"))
+    monkeypatch.setattr(body, "GAZE_PATH", os.path.join(tmp, "gaze.json"))
+    monkeypatch.setattr(body, "metabolism", lambda **k: {"live": True, "state": "wake", "atp": 50.0})
+    monkeypatch.setattr(body.glob, "glob", lambda pat: [])
+    monkeypatch.setattr(body, "_pw_audio", lambda **k: {})
+    out = body.render(body.reading(), None)
+    assert "no cameras, microphones or speakers" in out
+    assert "world on this machine is text" in out
+    assert "offline" not in out and "gaze stance" not in out, "absent, not broken; no stance without eyes"
+    assert "gaze" not in body.reading()["inventory"]["verbs"]
+
+
+def test_inventory_finds_a_laptop_body(monkeypatch):
+    tmp = tempfile.mkdtemp()
+    monkeypatch.setattr(body, "PERCEPTION_PATH", os.path.join(tmp, "absent.json"))
+    monkeypatch.setattr(body, "GAZE_PATH", os.path.join(tmp, "gaze.json"))
+    monkeypatch.setattr(body, "metabolism", lambda **k: {"live": False})
+    monkeypatch.setattr(body.glob, "glob", lambda pat: ["/dev/video0"] if "video" in pat else [])
+    monkeypatch.setattr(body, "_pw_audio", lambda **k: {"sinks": [{"name": "Built-in Speaker", "kind": "wired"}],
+                                                          "sources": [{"name": "Built-in Mic", "kind": "wired"}]})
+    inv = body.inventory()
+    assert inv["verbs"] == ["camera", "say", "peer_ask"] and inv["not_yet_wired"] == ["speak"]
+    out = body.render_inventory(inv)
+    assert "1 camera device you can capture from with `camera`" in out
+    assert "a microphone (Built-in Mic)" in out and "a speaker (Built-in Speaker)" in out

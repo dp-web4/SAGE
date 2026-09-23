@@ -95,7 +95,8 @@ def gaze() -> Dict:
 def reading(now: Optional[float] = None) -> Dict:
     """Everything the body block is rendered from, recorded on the beat so the NEXT beat can say
     what changed since."""
-    return {"perception": perception(now), "metabolism": metabolism(), "gaze": gaze()}
+    return {"perception": perception(now), "metabolism": metabolism(), "gaze": gaze(),
+            "inventory": inventory(now)}
 
 
 def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
@@ -111,18 +112,21 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
         if p.get("salience") is not None:
             lines.append(f"- How much that moment stood out: {float(p['salience']):.2f} of 1"
                          f"; how well your senses agree: {float(p.get('coherence') or 0):.2f} of 1")
-    else:
+    elif (cur.get("inventory") or {}).get("video_devices") or p.get("age_s"):
         age = p.get("age_s")
         lines.append("- Your senses are offline this beat"
                      + (f" (last reading {int(age // 60)} min ago)" if age else "") + ".")
     # the stance, reflected back — and what the scene was under the previous one
+    inv = cur.get("inventory") or {}
+    has_eyes = bool(inv.get("cameras_held_by_cortex")) or p.get("live")
     mode = g.get("mode") or "open"
     who = g.get("chosen_by") or "nobody"
     stance = f"- Your gaze stance is **{mode}**"
     if g.get("target"):
         stance += f" ({mode} toward: {str(g['target'])[:60]})"
     stance += f", chosen by {who}" + (f" at {g['ts']}" if g.get("ts") else "") + "."
-    lines.append(stance)
+    if has_eyes:
+        lines.append(stance)
     pp = (prev or {}).get("perception") or {}
     pg = (prev or {}).get("gaze") or {}
     if pp.get("live") and pp.get("descriptor") and pp.get("descriptor") != p.get("descriptor"):
@@ -138,9 +142,12 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
                      + ".")
     else:
         lines.append("- Your metabolism is not reporting this beat.")
-    lines.append("- You can change your gaze with `gaze` (open, avert, dwell, closed) and say why in "
-                 "your own words. Your eyes will follow within seconds; you will see the difference "
-                 "next beat. Nothing asks you to.")
+    if inv:
+        lines.append(render_inventory(inv))
+    if "gaze" in (inv.get("verbs") or []):
+        lines.append("- You can change your gaze with `gaze` (open, avert, dwell, closed) and say why in "
+                     "your own words. Your eyes will follow within seconds; you will see the difference "
+                     "next beat. Nothing asks you to.")
     return "\n".join(lines)
 
 
@@ -160,3 +167,91 @@ def set_gaze(mode: str, member: str, target: Optional[str] = None, words: Option
         json.dump(rec, f)
     os.replace(tmp, path)
     return rec
+
+# ---------------------------------------------------------------------------------------------
+# INVENTORY — what this body has, measured, never assumed.
+#
+# dp, 2026-09-23: "we have a fleet of beings now. not all have the same sensors/effectors. we
+# can add webcams to some. others that live on laptops can access camera/mic/speakers. figuring
+# out available sensors/effectors is part of world discovery and situational awareness."
+#
+# So a being is not TOLD its body; the beat measures it: video devices, audio sinks and sources
+# (pipewire), serial devices an IMU would sit on, whether a cortex is live, whether the daemon
+# is. A being on a headless hub learns it has no eyes here and that its world is text and peers.
+# A being on a laptop learns it has a webcam it can use with `camera` and a speaker it will be
+# able to use with `speak`. The census is recorded on the beat, so the fleet can see who has what.
+# ---------------------------------------------------------------------------------------------
+import glob
+import subprocess
+
+
+def _pw_audio(timeout: float = 4.0) -> Dict:
+    """Audio sinks and sources as pipewire sees them. {} when pipewire is not there."""
+    try:
+        out = subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=timeout).stdout
+        nodes = json.loads(out)
+    except Exception:
+        return {}
+    sinks, sources = [], []
+    for n in nodes:
+        p = ((n.get("info") or {}).get("props") or {})
+        mc = p.get("media.class", "")
+        name = p.get("node.description") or p.get("node.name") or "?"
+        kind = "bluetooth" if "bluez" in str(p.get("node.name", "")) else "wired"
+        if mc == "Audio/Sink":
+            sinks.append({"name": name, "kind": kind})
+        elif mc == "Audio/Source":
+            sources.append({"name": name, "kind": kind})
+    return {"sinks": sinks, "sources": sources}
+
+
+def inventory(now: Optional[float] = None) -> Dict:
+    """Measure this machine's body. Every field is observed; absence is reported as absence."""
+    now = time.time() if now is None else now
+    videos = sorted(glob.glob("/dev/video*"))
+    serials = sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*"))
+    p = perception(now)
+    m = metabolism()
+    audio = _pw_audio()
+    cortex_live = bool(p.get("live"))
+    # cameras held by a live cortex (CSI via Argus) cannot be opened by a second process
+    return {
+        "video_devices": videos,
+        "cameras_held_by_cortex": p.get("eyes", 0) if cortex_live else 0,
+        "audio_sinks": audio.get("sinks", []), "audio_sources": audio.get("sources", []),
+        "serial_devices": serials,
+        "cortex_live": cortex_live, "daemon_live": bool(m.get("live")),
+        "verbs": (["gaze"] if cortex_live else [])
+                 + (["camera"] if videos and not cortex_live else [])
+                 + ["say", "peer_ask"],
+        "not_yet_wired": (["speak"] if audio.get("sinks") else []),
+    }
+
+
+def render_inventory(inv: Dict) -> str:
+    """One paragraph: what this body has and what acts on it. Written so a being with NOTHING
+    reads a true sentence rather than an empty section."""
+    parts = []
+    nv = len(inv.get("video_devices") or [])
+    held = inv.get("cameras_held_by_cortex") or 0
+    if held:
+        parts.append(f"{held} camera{'s' if held != 1 else ''} run by your cortex, which reports the scene to you in words")
+    elif nv:
+        parts.append(f"{nv} camera device{'s' if nv != 1 else ''} you can capture from with `camera`")
+    mics = inv.get("audio_sources") or []; spk = inv.get("audio_sinks") or []
+    if mics:
+        parts.append(f"a microphone ({mics[0]['name']})" if len(mics) == 1 else f"{len(mics)} microphones")
+    if spk:
+        parts.append(f"a speaker ({spk[0]['name']})" if len(spk) == 1 else f"{len(spk)} speakers")
+    if inv.get("serial_devices"):
+        parts.append("a serial sensor port" + (" (your inner ear)" if inv.get("cortex_live") else ""))
+    head = "- This body has: " + (", ".join(parts) if parts else "no cameras, microphones or speakers") + "."
+    verbs = inv.get("verbs") or []
+    acts = f"- Verbs that act on it or through it: {', '.join(verbs)}."
+    nyw = inv.get("not_yet_wired") or []
+    if nyw:
+        acts += f" Present but not yet wired to a verb: {', '.join(nyw)}."
+    if not parts:
+        acts += " Your world on this machine is text: conversations, peers, the forum, your own record."
+    return head + "\n" + acts
+
