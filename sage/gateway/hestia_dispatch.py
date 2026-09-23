@@ -91,6 +91,22 @@ SEARCH_LINES_SHOWN = 40
 # How much of the seat's last answer an unchanged-file receipt carries back verbatim.
 # Enough for a traceback's last frames and its exception line; not the whole transcript.
 RUN_ANSWER_CARRIED = 900
+# ...and how much of its FIRST line is kept ahead of that tail. The seat puts its verdict
+# there ("I ran x.py ..." / "I did not run x.py."). Measured 2026-09-23 seq 3506: a tail-only
+# cut of a 1,100-char decline dropped "I did not run" and kept "...the same error as my
+# run at seq 3499"; the being journaled "the seat ran it and it passed" the same beat.
+RUN_ANSWER_HEAD = 240
+
+
+def _carry_head_and_tail(text: str) -> str:
+    """The seat's verdict is its first line and the exception is its last; a cut keeps both
+    and says, in words, where and how much it cut. A bare "..." reads as a quote's start."""
+    if len(text) <= RUN_ANSWER_HEAD + RUN_ANSWER_CARRIED:
+        return text
+    first = text.split("\n", 1)[0][:RUN_ANSWER_HEAD]
+    tail = text[-RUN_ANSWER_CARRIED:]
+    cut = len(text) - len(first) - len(tail)
+    return f"{first}\n[... {cut} characters of the seat's answer cut here ...]\n{tail}"
 
 
 class HestiaF1aDispatcher:
@@ -1876,9 +1892,7 @@ class HestiaF1aDispatcher:
             # as the seat's traceback in the conversation is followed by an edit 20/45 = 0.44
             # — no lift at all (Fisher p=7e-5). A seq number is a pointer to a channel that
             # does not move it. So the receipt says what the run said.
-            carried = answer_text.strip()
-            if len(carried) > RUN_ANSWER_CARRIED:
-                carried = "..." + carried[-RUN_ANSWER_CARRIED:]
+            carried = _carry_head_and_tail(answer_text.strip())
             result["unchanged"] = (
                 f"This file is byte-for-byte the one you asked about at seq {unchanged[0]}, and "
                 f"the seat answered that at seq {unchanged[1]}. Nothing in it has changed since, "
