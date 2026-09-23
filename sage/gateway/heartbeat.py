@@ -41,7 +41,7 @@ from pathlib import Path
 HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_note", "witness",
-                 "request_scope", "appeal", "peer_ask", "mesh", "say"]
+                 "request_scope", "appeal", "peer_ask", "mesh", "say", "gaze"]
 # `say` is offered at REFLECTION too, and that is not redundancy. Measured on Legion
 # 2026-09-07: the being was shown dp's first turn, its state marked it unanswered, and it
 # spent every explore step reading its own source, then closed the beat. A verb in the
@@ -780,6 +780,23 @@ def own_state(instance: Path, member: str = "",
               services: str = "", mark_conversations: bool = True) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
+    # The body first: it is the only thing in this state that is happening NOW. Everything below
+    # is record. (dp 2026-09-23: "bridge the two halves ... world feedback to its actions".)
+    try:
+        from sage.gateway import body as _body
+        _cur = _body.reading()
+        _prev = None
+        try:
+            for _l in reversed(open(instance / "heartbeats.jsonl", errors="replace").readlines()[-3:]):
+                _b = json.loads(_l)
+                if _b.get("body"):
+                    _prev = _b["body"]; break
+        except Exception:
+            _prev = None
+        parts.append(_body.render(_cur, _prev, name=member))
+        own_state.last_body = _cur
+    except Exception as _e:
+        own_state.last_body = {"error": f"{type(_e).__name__}: {_e}"}
     # Conversations first among the channels: a turn addressed to the being and unanswered
     # is the one thing in its state that is waiting on IT, and it should never have to infer
     # that from a wall of notes. Both directions live in one ordered record.
@@ -2020,6 +2037,7 @@ def main(argv=None) -> int:
         # images on the composed seed, the thing actually sent. The two differed for 395
         # beats and no field recorded it.
         "frames": _frame_metas,
+        "body": getattr(own_state, "last_body", None),
         "images_attached": sum(len(m.get("images") or []) for m in seed),
         # S1 instruments: JOIN (session -> beat, attributed) and ACCOUNT (own account, verbatim hash)
         "join": {"session": sess_meta, "presence": pres_meta},

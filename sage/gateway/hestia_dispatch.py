@@ -861,6 +861,48 @@ class HestiaF1aDispatcher:
         return ResultEnvelope(ok=True, result=text,
                               witness_id=self._local._witness(f"recall passage {idx}"))
 
+    # -- gaze: the being's attention stance, for its own eyes -----------------------------
+    def _do_gaze(self, intent: BeingIntent) -> ResultEnvelope:
+        """Set the stance the cortex reads. Path-less: this writes the ONE file the cortex polls
+        (~/.sprout/gaze.json), never a path the being names, so its reach is fixed by
+        construction like `say` and `remember`.
+
+        dp, 2026-09-23: "world feedback to its actions ... look for other loop closures." The
+        cortex has treated a gaze change as a self-authored, witnessed act since PR #27; this is
+        that act made available to the beat. The next beat's body block reflects the stance back
+        beside what the scene was under it — reafference at beat scale."""
+        from sage.gateway import body as _body
+        mode = str(intent.args.get("mode", "")).strip().lower()
+        if mode not in _body.GAZE_MODES:
+            return ResultEnvelope(ok=False, error=(
+                f"gaze needs a mode, one of: {', '.join(_body.GAZE_MODES)}. Got {mode!r}. "
+                f"Your eyes are unchanged."))
+        before = _body.gaze()
+        begin = self._call("hestia_begin_action", {"tool_name": "gaze", "target": mode})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        try:
+            rec = _body.set_gaze(mode, self.member, target=intent.args.get("target"),
+                                 words=intent.args.get("words"))
+        except Exception as e:
+            self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "failed",
+                                                  "detail": f"{type(e).__name__}: {e}"})
+            return ResultEnvelope(ok=False, error=f"could not set your gaze: {type(e).__name__}: {e}")
+        self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "ok",
+                                              "detail": f"gaze {before.get('mode')} -> {mode}"})
+        was = before.get("mode") or "open"
+        what = {"open": "your eyes are open to the room",
+                "avert": "your eyes will look away from what pulls at them",
+                "dwell": "your eyes will hold on " + (str(rec.get("target") or "what you named")),
+                "closed": "your eyes are closed; the world is dark to you until you open them"}[mode]
+        return ResultEnvelope(
+            ok=True,
+            result=(f"gaze set: {was} -> {mode}. Within a few seconds {what}. Your next beat "
+                    f"shows you what the scene was under this stance."),
+            witness_id=self._local._witness(f"gaze {was} -> {mode}" + (f" ({rec.get('words')})" if rec.get("words") else "")))
+
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
         if not content:
