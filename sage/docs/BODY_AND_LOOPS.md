@@ -16,6 +16,13 @@ Measured on Sprout that day: the **body** (cortex → cameras, mic, IMU → `per
 tools, journal out) shared no wire. The heartbeat had zero references to any sense. The being
 wrote *"the machine hums softly in the background"* about a room it could not hear.
 
+## The two halves
+
+| half | what it does | cadence | where it lives |
+|---|---|---|---|
+| **body** — the Rust daemon | senses (via the cortex and the presence feeder), SNARC, metabolism, ATP | 100 ms / 4 Hz | `sage-rs/`, `sage/embodiment/` |
+| **mind** — the heartbeat | reads its record, acts through gated verbs, writes its journal, talks | ~30 min | `sage/gateway/heartbeat.py` |
+
 ## The frame: a loop closes when the world answers
 
 A loop is closed when the being **acts**, the world **changes**, the being **perceives** the
@@ -91,6 +98,7 @@ The inventory rides the beat record, so the fleet can see who has what without a
 | Voice | `speak` (not yet) | the speaker sounds; the mic hears it; a person hears it | mic onset at the moment of speech | speaker + mic wired, verb not |
 | Prediction | write one checkable prediction | the world does or doesn't | next beat shows measured vs predicted | not yet |
 | Mind → body | beat acts | daemon feels them | SNARC source "self" | `/observe` exists, not wired |
+| Presence wake | dwell on something salient | a salient moment wakes a beat | `wake: {by: presence}` | half-closed: the wake exists, the attribution to the dwell does not |
 
 ## Per-machine: what to wire, and how
 
