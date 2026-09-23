@@ -89,6 +89,13 @@ def _hestia_error(env: dict) -> Optional[str]:
 SEARCH_LINES_SHOWN = 40
 
 
+def _stale_transport(e: Exception) -> bool:
+    """The daemon refused the MCP transport session itself (not the hestia session): the
+    request never reached a tool, so reconnecting and sending it again is safe."""
+    msg = str(e)
+    return "HTTP 404" in msg and "Session not found" in msg
+
+
 class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
     live daemon. Wraps ReferenceF1aDispatcher for the local verbs (witness / memory)."""
@@ -357,7 +364,19 @@ class HestiaF1aDispatcher:
 
     def _call(self, name: str, args: dict) -> dict:
         sid = self._connect()
-        out = _unwrap(self._c.call(name, {**args, "session_id": sid}))
+        # A session the daemon no longer recognises arrives in TWO shapes, and both get
+        # one reconnect. The hestia session answers with a JSON _hestia_error; the MCP
+        # TRANSPORT session (the mcp-session-id header) is refused at HTTP level before any
+        # tool runs — "HTTP 404 ... Session not found", raised by _Mcp._req. Only the first
+        # shape was retried: on 2026-09-23 20:04Z cbp-being's request_run died on the second,
+        # read it as "the seat is not available", and told dp it was waiting for the seat
+        # to come back online (seq 143). 17 of its beats since 2026-09-15 carry this 404.
+        try:
+            out = _unwrap(self._c.call(name, {**args, "session_id": sid}))
+        except RuntimeError as e:
+            if not _stale_transport(e):
+                raise
+            out = {"_hestia_error": {"code": "transport.session_not_found", "message": str(e)}}
         # a session the daemon no longer recognises: reconnect once, then report honestly
         err = out.get("_hestia_error") if isinstance(out, dict) else None
         if isinstance(err, dict) and "session" in str(err.get("code", "")):
