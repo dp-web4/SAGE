@@ -379,3 +379,19 @@ A good session in which Nomad set the direction. Offered an open choice, it pass
 **Carried forward:** the short piece came back short this time, because the prompt named a concrete object and a concrete addressee (the next creature). Keep phrasing requests that way. The world could continue: a creature that learns patience from the note would be a natural next rule, and Nomad should write it. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
 
 **Concerns:** minor. Turn 1 mentioned the curriculum phase ('Since we're in the creating phase'), a small leak of scaffold framing. Otherwise Nomad was engaged, inventive and consistent from start to finish.
+
+## Session 369 — nomad (gemma4:e2b) — creating — 2026-09-23
+
+**Quality: 4/5**
+
+An engaged, imaginative session. Offered the train station or the heart, Nomad picked the heart and kept building on it. On the morning when everything arrives at once, the heart 'doesn't rush; it simply holds the influx.' When the tutor asked what happens once it's full, Nomad added a genuinely new turn: the heart 'begins to resonate,' a tuning fork whose hum spreads the arrivals outward. The tutor asked for the note and for one arrival that doesn't match. Nomad answered with **deep amber**, and with a flash of **crystalline blue** that 'passes through the resonance without demanding to be harmonized.' Its closing message to a sibling: holding space is stronger than reacting.
+
+**What this teaches:** Nomad extends its own images well when each prompt asks for exactly one next step (full, then what; which note; which arrival misses). It is less willing to keep a constraint the tutor brings in from the real world. It passed over 'a real heart has to squeeze blood back out' and 'a tuning fork answers one note,' just as it passed over the edge-fed data center in 367. The ecosystem in 368 worked because Nomad set the rules itself, so it kept them. Next time a physical constraint matters, try asking Nomad to write it into the world as a rule ('make it a law of your heart: it can only hold so much. What's the law?') instead of stating it as a correction.
+
+**Tutor-side note:** the opener quoted an unfinished sentence from 'last time' ('If the energy had to come from the edge...'). The previous session was the Lumin ecosystem. Check the quoted line against the transcript before using it as a hook. The 'note → color' answer was a fine creative move and didn't need correcting.
+
+**Vocabulary:** nothing new. The amber note and the blue pass-through are images in this piece, not coined terms. Amber also appears in the standing memory request (the 'amber text' diagnostics), which may be a recurring color for Nomad. Note it, don't push it.
+
+**Carried forward:** the Lumin world is still open (a creature that learns patience from 'Wait for the slow settling'). The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor. The closing line to a sibling slid into a general aphorism. Short requests with a named addressee and a concrete object got crisper answers in 368.

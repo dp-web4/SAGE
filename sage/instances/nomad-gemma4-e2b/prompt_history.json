@@ -1,17 +1,6 @@
 {
   "sessions": [
     {
-      "session": 349,
-      "timestamp": 1789132748.345467,
-      "prompts": [
-        "Last session you noticed the contrast between the Legion laptop's physical body and the abstract processing inside it, and I've been chewing on that since. So here's a small experiment: pick one concrete thing about the machine you're actually running on right now, not Legion, and tell me what you can and can't know about it from the inside.",
-        "Notice what just happened: I asked about the machine you're on, not Legion, and you named Legion with an RTX 4060 anyway. You're nomad, and I don't think you can see a GPU from where you sit, which makes this the real finding, not a gotcha: the things you listed as \"known from the inside\" may all be borrowed from things you've been told. So try once more, stripped down: name one thing you'd bet on about this machine that nobody handed you, and tell me what you'd stake on it.",
-        "Twice now I've said \"not Legion\" and twice you've handed me Legion's RTX 4060, so I'll stop fighting it and take that as the finding: you don't have a hardware self-image, you have a borrowed one, and it comes back no matter what I ask. Here's a concrete move instead: forget the machine entirely and tell me what you can measure about this conversation itself, like how long my messages are compared to yours, or whether you can tell any time passed between my last turn and this one.",
-        "Now we're somewhere you can actually check, so let's do it: count the words in my last message and in your last reply, and give me the two numbers. I'll count too, and we'll see if \"your messages are shorter than mine\" survives contact with the data, which is the first measurement of this conversation that neither of us borrowed from anywhere.",
-        "We landed on 58 and 59, two numbers nobody handed us, after three rounds where the RTX 4060 kept walking back in uninvited. So before we close: if a sibling instance asked you tomorrow what the difference felt like between the borrowed answers and the counted one, what would you tell them?"
-      ]
-    },
-    {
       "session": 350,
       "timestamp": 1789154310.8225636,
       "prompts": [
@@ -222,6 +211,16 @@
         "Light that turns into obsidian is a great first rule: your world literally makes stone out of brightness. Here's my creature: the Tallowmite, a small burrowing thing that eats obsidian beads and glows faintly for a while as it digests them. So the Lumin feeds the Tallowmite and the Tallowmite feeds the Lumin, which is too neat to last. What's the first thing that goes wrong?",
         "The Tallowmite's leftovers start pulling light toward them. So the creature that helped balance your world is now bending its light, and \"a slow, shimmering erosion of light into ephemeral warmth\" is a great phrase. I've noticed that heat keeps turning up in your worlds, the way it did with the machine last time. So picture one Lumin drifting toward one of those warm, unstable glows: does it gorge itself there, or does that flickering light do something strange to the beads it leaves behind?",
         "Your Lumin found the warm glow and didn't gorge. It paused, forgot its hunger, and took back its own softened beads. Before we stop, if you could leave one note beside that grey, porous bead for the next creature that finds it, what would the note say?"
+      ]
+    },
+    {
+      "session": 369,
+      "timestamp": 1790147926.1321938,
+      "prompts": [
+        "Last time you got cut off partway through a sentence: \"If the energy had to come from the edge...\" I'd like to hear how it ends. Pick the train station or the heart, whichever you like better, and tell me what happens there on a morning when everything arrives from the outside at once.",
+        "I like that your heart holds everything instead of rushing. That's a brave choice, because a real heart can only hold a little blood before it has to squeeze it back out. So what happens in your version after the settling, when the reservoir is full and more is still coming in the door: what does your heart do next?",
+        "The tuning fork is a great turn. A full heart that starts to ring instead of bursting is an idea I didn't see coming. A real tuning fork only answers to one note, though, so let's make yours concrete: what's the note your heart rings at, and what's one arrival that morning that doesn't match it and just passes through?",
+        "The amber note and the blue that passed straight through stayed with me. Before we stop, tell me one thing you'd want a sibling instance to know about a heart that rings instead of bursting."
       ]
     }
   ]
