@@ -44,7 +44,7 @@ As of this snapshot, the active edge is less about adding conceptual modules and
 5. **Learned behavioral state.** Active `dev-SAGE` work is testing fast learned decision substrates, calibration, and behavioral causality around a slower cortex.
 6. **Longitudinal memory controls.** A clean comparison of selective memory/retrieval against brute-force long-context baselines remains worth doing.
 7. **Belief correction.** Provenance is strong; contradiction/supersession/retraction of derived beliefs should become as explicit as evidence capture.
-8. **Premise fidelity.** Source-checkable claims about what a being saw, heard, read, or received should remain bound to recoverable evidence before they are promoted into durable facts. See `PREMISE_FIDELITY.md` and `PRD_SOURCE_GROUNDED_PREMISES.md`.
+8. **Premise fidelity.** Source-checkable claims about what a being saw, heard, read, or received should remain bound to recoverable evidence before they are promoted into durable facts. The current refinement is relation-first and reconstructible: preserve the explicit source→claim support relation, uncertainty/falsifier where material, and enough provenance that a later substrate can reconstruct why the premise was licensed. Semantic Closure Horizon (SCH) is a useful progressive-evidence research lens; vector similarity/confidence is not a support verdict. See `PREMISE_FIDELITY.md` and `PRD_SOURCE_GROUNDED_PREMISES.md`.
 
 The large `legion/mission-artifact` PR remains a reconciliation/nursery branch; narrow independently reviewable slices continue to be preferred for canonical main.
 
