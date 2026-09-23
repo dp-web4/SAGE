@@ -137,3 +137,27 @@ if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):
             f(); print("ok", n)
+
+
+def test_the_conversation_header_keys_on_reply_expectation_not_on_pending():
+    """Legion's four-row table (review of #172), as a real store, not source introspection —
+    the first cut's test pinned two strings and passed with `owed` forced either way.
+
+    2026-09-19..22: dp's last turn was a STATEMENT; the being sent twelve messages into the
+    channel. #147 gated the answer phase on reply-expectation; the header must key on the same
+    thing, or it is the standing invitation again, conditioned on the wrong fact."""
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    from sage.gateway.heartbeat import conversation_header
+    inst = Path(tempfile.mkdtemp(prefix="hdr-")); me = "b"
+    c.create(inst, "dp", title="t", participants=["dp", me], writable_by=["dp", me])
+    assert "Nobody is waiting" in conversation_header(inst, me), "empty"
+    c.append(inst, "dp", speaker="dp", text="hello, how are you?")
+    assert "Someone is waiting" in conversation_header(inst, me), "a question is owed"
+    c.append(inst, "dp", speaker=me, text="well, thanks")
+    assert "Nobody is waiting" in conversation_header(inst, me), "answered"
+    c.append(inst, "dp", speaker="dp", text="good, keep going!")
+    assert "Nobody is waiting" in conversation_header(inst, me), \
+        "a STATEMENT asks nothing — the row that produced twelve messages"
+    assert "say` is for answering a person" in conversation_header(inst, me)
