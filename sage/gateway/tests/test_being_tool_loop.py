@@ -584,26 +584,6 @@ def test_a_spill_that_cannot_be_written_never_breaks_the_beat():
     assert "NARROW range" in out[3]["content"], "it falls back to the advice it used to give"
 
 
-def test_the_spill_directory_is_a_spill_not_an_archive():
-    from sage.gateway.being_tool_loop import _spill, COMPACT_SPILL_KEEP
-    import os, tempfile
-
-    root = tempfile.mkdtemp(prefix="spill-prune-")
-    kept = []
-    for i in range(COMPACT_SPILL_KEEP + 5):
-        p = _spill(root, f"body {i}", i)
-        assert p, i
-        kept.append(p)
-    d = os.path.join(root, "scratch", "elided")
-    left = os.listdir(d)
-    assert len(left) == COMPACT_SPILL_KEEP, len(left)
-    # EVERY newest one survives and every oldest one is gone. Pruning by NAME passes a
-    # weaker check and fails this one: "…-5.txt" sorts after "…-40.txt", so the fortieth
-    # spill is deleted while the fifth is kept.
-    newest = {os.path.basename(k) for k in kept[-COMPACT_SPILL_KEEP:]}
-    oldest = {os.path.basename(k) for k in kept[:5]}
-    assert newest == set(left), sorted(newest.symmetric_difference(left))
-    assert not (oldest & set(left))
 
 
 def test_two_spills_of_the_same_step_in_one_second_do_not_overwrite_each_other():
@@ -621,35 +601,37 @@ def test_two_spills_of_the_same_step_in_one_second_do_not_overwrite_each_other()
     assert open(os.path.join(root, b), encoding="utf-8").read().endswith("the second result")
 
 
-def test_collision_names_preserve_creation_order_at_the_prune_boundary():
-    """The filename is the retention clock. A same-step retry must sort AFTER the file
-    it followed, even when there are enough collisions to cross 9 -> 10."""
-    from sage.gateway.being_tool_loop import _spill, COMPACT_SPILL_KEEP
+# ---- from origin/main (#122 review), carried in the 2026-09-20 merge ----
+def test_collision_names_preserve_creation_order_at_the_prune_boundary(monkeypatch):
+    """The filename is the retention clock. A same-step retry must sort AFTER the file it
+    followed, even when there are enough collisions to cross 9 -> 10, so that when the byte
+    cap prunes oldest-first the newest retries are the ones that survive."""
+    from sage.gateway import being_tool_loop as L
     import os, tempfile
     from unittest.mock import patch
-
+    import time
     root = tempfile.mkdtemp(prefix="spill-collision-prune-")
-    # Freeze the second so every spill shares the same timestamp. Fill most of retention
-    # with earlier steps, then create twelve retries of the same newest step.
+    # one frozen second, NOW — a stamp from the past would be pruned by age before the cap
+    # is ever consulted, which is the correct behaviour and not what this test is about
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
     with patch("time.strftime") as fmt:
         fmt.side_effect = lambda pattern, *_: (
-            "20260919-120000" if pattern == "%Y%m%d-%H%M%S" else "2026-09-19T12:00:00Z"
-        )
-        made = []
-        for i in range(COMPACT_SPILL_KEEP - 12):
-            made.append(_spill(root, f"old {i}", i))
-        collisions = [_spill(root, f"retry {i}", 999) for i in range(12)]
-
+            stamp if pattern == "%Y%m%d-%H%M%S" else "2026-09-19T12:00:00Z")
+        made = [L._spill(root, f"old {i}", i) for i in range(28)]
+        collisions = [L._spill(root, f"retry {i}", 999) for i in range(12)]
     assert all(made) and all(collisions)
-    d = os.path.join(root, "scratch", "elided")
-    left = sorted(os.listdir(d))
-    assert len(left) == COMPACT_SPILL_KEEP
     collision_names = [os.path.basename(p) for p in collisions]
     assert collision_names == sorted(collision_names), collision_names
     assert collision_names[-1].endswith("-999-011.txt"), collision_names[-1]
-    assert set(collision_names).issubset(left), (
-        "newest same-step retries must survive pruning; filename order is retention order"
-    )
+    # now a cap that keeps roughly the newest 20 files: every collision must survive, the
+    # oldest plain spills must not
+    d = os.path.join(root, "scratch", "elided")
+    per = os.path.getsize(os.path.join(d, collision_names[0]))
+    monkeypatch.setattr(L, "COMPACT_SPILL_MAX_BYTES", per * 20)
+    L._prune_spills(d)
+    left = sorted(os.listdir(d))
+    assert set(collision_names).issubset(left), "newest same-step retries must survive pruning"
+    assert os.path.basename(made[0]) not in left
 
 
 # ---- the vision line's last mile, carried with the organ (SAGE #159) ----
@@ -708,3 +690,56 @@ def test_live_a_frame_actually_reaches_a_vision_model():
                                "images": [base64.b64encode(png).decode()]}],
                              max_steps=1, tools=[])
     assert r.reply and not r.reply.startswith("[OllamaIRP:"), r.reply
+
+
+def test_spills_older_than_the_window_are_pruned_and_younger_ones_are_not():
+    from sage.gateway import being_tool_loop as L
+    import os, tempfile, time
+    root = tempfile.mkdtemp(prefix="spill-age-")
+    d = os.path.join(root, "scratch", "elided"); os.makedirs(d)
+    old = time.strftime("%Y%m%d-%H%M%S", time.gmtime(time.time() - L.COMPACT_SPILL_KEEP_S - 3600))
+    young = time.strftime("%Y%m%d-%H%M%S", time.gmtime(time.time() - 600))
+    for stamp, tag in ((old, "old"), (young, "young")):
+        for i in range(3):
+            open(os.path.join(d, f"{stamp}-{i:03d}-000.txt"), "w").write(tag)
+    open(os.path.join(d, "not-a-stamp.txt"), "w").write("unparsable: never pruned by age")
+    assert L._spill(root, "fresh", 7)
+    left = sorted(os.listdir(d))
+    assert not any(f.startswith(old) for f in left), left
+    assert sum(1 for f in left if f.startswith(young)) == 3, left
+    assert "not-a-stamp.txt" in left
+    assert any(f.endswith("-007-000.txt") for f in left)
+
+
+def test_over_the_byte_cap_the_oldest_go_first_and_the_newest_survive(monkeypatch):
+    """The backstop for a pathological beat: oldest by NAME, which is creation order."""
+    from sage.gateway import being_tool_loop as L
+    import os, tempfile
+    monkeypatch.setattr(L, "COMPACT_SPILL_MAX_BYTES", 12 * 200)
+    root = tempfile.mkdtemp(prefix="spill-cap-")
+    kept = [_p for _p in (L._spill(root, "x" * 150, i) for i in range(30)) if _p]
+    assert len(kept) == 30
+    d = os.path.join(root, "scratch", "elided")
+    left = sorted(os.listdir(d))
+    total = sum(os.path.getsize(os.path.join(d, f)) for f in left)
+    assert total <= 12 * 200, total
+    assert os.path.basename(kept[-1]) in left, "the spill just written must stand"
+    assert os.path.basename(kept[0]) not in left, "the oldest goes first"
+    newest_n = len(left)
+    assert set(left) == {os.path.basename(k) for k in kept[-newest_n:]}, "pruning is by creation order"
+
+
+def test_a_heavy_beat_does_not_prune_its_own_spills():
+    """THE LOAD THAT BROKE THE PROMISE. Measured on legion-being 2026-09-21..23: one compaction
+    pass wrote 33 spills in a second and beats elided up to 954 results, so a count cap of 40
+    pruned a spill before the next step could read it — 26 reads followed a marker to a file
+    that was gone. Everything a beat spills must still be there for the being's NEXT beat."""
+    from sage.gateway.being_tool_loop import _spill
+    import os, tempfile
+    root = tempfile.mkdtemp(prefix="spill-load-")
+    made = [_spill(root, f"body {i}", i % 50) for i in range(1000)]
+    assert all(made)
+    d = os.path.join(root, "scratch", "elided")
+    left = set(os.listdir(d))
+    assert {os.path.basename(m) for m in made} <= left, "a spill named in a marker must exist"
+    assert len(left) == 1000
