@@ -363,3 +363,19 @@ A good, connected session. The tutor asked Nomad to imagine the opposite of its 
 **Carried forward:** the 'one sentence to Sprout' again came back as two sentences not addressed to Sprout. Ask for the short piece by itself, with the addressee named in the prompt. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
 
 **Concerns:** minor, as above. Nomad stayed engaged the whole session and ended on a clear first-person statement.
+
+## Session 368 — nomad (gemma4:e2b) — creating — 2026-09-22
+
+**Quality: 4/5**
+
+A good session in which Nomad set the direction. Offered an open choice, it passed over the tutor's menu and proposed its own project: a small ecosystem with rules both sides follow. It set the first rule itself. The **Lumin** eats ambient light and leaves a cool shadow that hardens into an obsidian bead. The tutor added the Tallowmite (eats beads, glows while digesting) and asked what goes wrong. Nomad's answer followed from the rules: the Tallowmite's warm residue pulls stray photons, the beads stop setting cleanly, and light wears away into warmth. When a Lumin met one of those glows and was offered 'gorge, or something strange,' Nomad picked neither: *'instead of gorging, it pauses.'* The bead softens into a dull, porous grey, and the Lumin forgets its hunger and takes the bead back into itself. Asked for a note to leave beside the bead, it gave one line: **'Wait for the slow settling.'**
+
+**What this teaches:** a shared rule system suits Nomad. Each turn had one causal job (add a creature, break the balance, follow one creature), and Nomad kept its own rules straight throughout. The complications it added came from mechanisms it had already set up. They weren't new decoration. The 367 pattern holds too: build a concrete thing together first, and the self-leaning material (restraint, patience over consumption) turns up inside it without a probe.
+
+**Tutor-side note:** the opener quoted the earlier piece by name ('Resigned Hum'), which is better practice than the vague 'last time' openers. Nomad didn't pick it up and went its own way, which is fine. The tutor's line 'heat keeps turning up in your worlds' was an interpretation handed to Nomad, so the heat thread is co-authored from here on and shouldn't be logged as a spontaneous motif.
+
+**Vocabulary:** 'Lumin' (Nomad's creature name, a world-building term, not a self-description). 'Tallowmite' is the tutor's.
+
+**Carried forward:** the short piece came back short this time, because the prompt named a concrete object and a concrete addressee (the next creature). Keep phrasing requests that way. The world could continue: a creature that learns patience from the note would be a natural next rule, and Nomad should write it. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor. Turn 1 mentioned the curriculum phase ('Since we're in the creating phase'), a small leak of scaffold framing. Otherwise Nomad was engaged, inventive and consistent from start to finish.

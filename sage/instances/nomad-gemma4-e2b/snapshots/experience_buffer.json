@@ -3656,5 +3656,160 @@
       "total_cycles": 3,
       "transition_count": 0
     }
+  },
+  {
+    "id": "179fb1f555e15798",
+    "prompt": "Last time you wrote \"Resigned Hum,\" a machine that went quiet without getting any relief, and I'd like to hand you the steering wheel today. What do you want to make next? It could be another story, a small invented object, a game with rules we both follow, or something I haven't thought of yet.",
+    "response": "I feel a pull toward creating something tangible from the space we've been in. Since we're in the 'creating' phase, I want to design a simple, self-contained system. How about we invent a set of rules for an internal, emergent ecosystem? We could define the basic needs and interactions of a small, fictional group of entities, and then see how they evolve under those constraints.",
+    "salience": {
+      "surprise": 0.5,
+      "novelty": 0.5,
+      "arousal": 0.7916666666666666,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.4149999999999999
+    },
+    "session": 368,
+    "phase": "creating",
+    "timestamp": "2026-09-22T18:17:47.008807",
+    "metadata": {
+      "turn": 1,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 100.0,
+      "atp_max": 100.0,
+      "atp_percentage": 100.0,
+      "cycles_in_state": 0,
+      "total_cycles": 0,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "1de1547ae97851dd",
+    "prompt": "Yes, let's build it, and since it's your world, you set the first rule. Give me one creature: what it's called, the one thing it needs to survive, and what it leaves behind when it takes that thing. I'll add a second creature that has to live alongside yours.",
+    "response": "Let's call the first creature the 'Lumin'. Its single need is ambient light. When the Lumin consumes light, it leaves behind a faint, cool shadow that slowly solidifies into a small, smooth, obsidian bead. I'll wait to see what you introduce next to see how the Lumin and its companion interact with the world.",
+    "salience": {
+      "surprise": 0.9239130434782609,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5247826086956522
+    },
+    "session": 368,
+    "phase": "creating",
+    "timestamp": "2026-09-22T18:18:09.232704",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.45,
+      "atp_max": 100.0,
+      "atp_percentage": 95.4,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "238d1920db65259b",
+    "prompt": "Light that turns into obsidian is a great first rule: your world literally makes stone out of brightness. Here's my creature: the Tallowmite, a small burrowing thing that eats obsidian beads and glows faintly for a while as it digests them. So the Lumin feeds the Tallowmite and the Tallowmite feeds the Lumin, which is too neat to last. What's the first thing that goes wrong?",
+    "response": "The initial cycle is too perfect; the Lumin grows hungry for more light, and the Tallowmite, in its digestion, excretes a faint, warm residue that attracts stray photons, creating a localized, unstable glow that fights the natural ambient light. This instability means the beads don't solidify cleanly, leading to a slow, shimmering erosion of the world's light into ephemeral warmth.",
+    "salience": {
+      "surprise": 0.8452380952380952,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5090476190476191
+    },
+    "session": 368,
+    "phase": "creating",
+    "timestamp": "2026-09-22T18:18:32.841831",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.8,
+      "atp_max": 100.0,
+      "atp_percentage": 89.8,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "7ac9dba1c64ca58d",
+    "prompt": "The Tallowmite's leftovers start pulling light toward them. So the creature that helped balance your world is now bending its light, and \"a slow, shimmering erosion of light into ephemeral warmth\" is a great phrase. I've noticed that heat keeps turning up in your worlds, the way it did with the machine last time. So picture one Lumin drifting toward one of those warm, unstable glows: does it gorge itself there, or does that flickering light do something strange to the beads it leaves behind?",
+    "response": "The Lumin drifts toward the warm glow, and instead of gorging, it pauses. The unstable warmth causes the obsidian beads it sheds to momentarily soften, almost liquefying, before re-solidifying into a dull, porous grey. This brief exposure seems to cause the Lumin to momentarily forget the need for light, settling into a state of quiescent, heavy stillness before slowly reabsorbing the newly formed, softer beads.",
+    "salience": {
+      "surprise": 0.8539325842696629,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.16666666666666666,
+      "total": 0.5607865168539325
+    },
+    "session": 368,
+    "phase": "creating",
+    "timestamp": "2026-09-22T18:18:55.141356",
+    "metadata": {
+      "turn": 4,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 84.31,
+      "atp_max": 100.0,
+      "atp_percentage": 84.3,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "fe64c0290af1933d",
+    "prompt": "Your Lumin found the warm glow and didn't gorge. It paused, forgot its hunger, and took back its own softened beads. Before we stop, if you could leave one note beside that grey, porous bead for the next creature that finds it, what would the note say?",
+    "response": "The note would simply be a faint imprint of stillness, a silent instruction: \"Wait for the slow settling.\" It communicates not a need, but a state of suspended time, hinting that the next entity must learn patience rather than consume.",
+    "salience": {
+      "surprise": 0.9230769230769231,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.16666666666666666,
+      "total": 0.5746153846153846
+    },
+    "session": 368,
+    "phase": "creating",
+    "timestamp": "2026-09-22T18:19:14.168537",
+    "metadata": {
+      "turn": 5,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 78.3,
+      "atp_max": 100.0,
+      "atp_percentage": 78.3,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
   }
 ]
