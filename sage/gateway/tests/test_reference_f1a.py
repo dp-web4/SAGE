@@ -648,3 +648,27 @@ def test_editing_prose_inside_a_docstring_is_not_refused():
     r = disp(BeingIntent("memory_edit", {"path": "notes/d.py", "start_line": 7, "end_line": 7,
                                          "new": "[remove these lines]"}), _ALLOW)
     assert not r.ok and "memory_edit refused" in (r.error or ""), r.error
+
+
+def test_prose_below_an_existing_error_is_still_refused():
+    """GPT's review of #188. The first version let the standalone verdict be overridden
+    whenever the edit did not move the FIRST SyntaxError earlier — and a file under repair is
+    almost always already broken, so that escape was open nearly all the time and a new defect
+    could be planted anywhere BELOW the existing one. Asking where the edit LANDS (inside a
+    docstring or not) answers the real question and has no such hole."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    # already broken at line 1; the edit lands far below it
+    (home / "notes" / "b.py").write_text("def f(:\n" + "".join(f"x{i} = {i}\n" for i in range(2, 30)))
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/b.py", "start_line": 20,
+                                         "end_line": 20, "new": "[remove these lines]"}), _ALLOW)
+    assert not r.ok, "prose below an existing error must still be refused"
+    assert "memory_edit refused" in (r.error or ""), r.error
+    assert "[remove these lines]" not in (home / "notes" / "b.py").read_text()
+
+    # ...and the deletion path through the same region is untouched.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/b.py", "start_line": 20,
+                                         "end_line": 20, "new": ""}), _ALLOW)
+    assert r.ok, f"deletion must still work in a broken file: {r.error}"

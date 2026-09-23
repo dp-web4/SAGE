@@ -73,27 +73,38 @@ def _python_status(p) -> str:
 
 
 
-def _edit_moves_the_error_earlier(before: str, after: str) -> bool:
-    """Did this edit introduce a parse error, or push the first one further up the file?
+def _inside_a_string_literal(before: str, edit_line: int) -> bool:
+    """Is the line this edit replaces inside a string literal (a docstring) already?
 
-    The file the being is repairing is usually already broken, so "does it parse after" is
-    useless on its own. What distinguishes a repair from a new defect is WHERE the parser
-    now stops: a fix moves the stop down the file or removes it; writing prose into the
-    middle of a program moves it up to the prose."""
-    def stop(src: str):
-        try:
-            compile(src, "<check>", "exec")
-        except SyntaxError as e:
-            return e.lineno or 1
-        except ValueError:
-            return None
-        return None
-    b, a = stop(before), stop(after)
-    if a is None:
-        return False                      # it parses now; whatever it was, it helped
-    if b is None:
-        return True                       # it parsed before and does not now
-    return a < b
+    This is the ONLY reason to accept a replacement that is not Python: a line inside a
+    docstring IS prose, and refusing an ordinary docstring edit to prevent a rarer mistake is
+    the friction that gets a guard routed around.
+
+    It replaces a first-SyntaxError comparison, which GPT's review of #188 correctly refused:
+    comparing only the FIRST error lets a new defect be planted anywhere BELOW an existing
+    one, and the file being repaired is almost always already broken -- so that escape was
+    open nearly all the time, which is the opposite of what it was for. Asking where the edit
+    lands answers the real question and has no such hole.
+    """
+    import io as _io
+    import tokenize as _tok
+    try:
+        for t in _tok.generate_tokens(_io.StringIO(before).readline):
+            if t.type == _tok.STRING and t.start[0] <= edit_line <= t.end[0]:
+                return True
+    except (_tok.TokenError, IndentationError, SyntaxError):
+        # An unreadable file cannot vouch for the edit; fall back to refusing.
+        return False
+    return False
+
+
+def _first_changed_line(before: str, after: str) -> int:
+    """Where the edit landed, from the two versions -- no extra plumbing through both modes."""
+    b, a = before.splitlines(), after.splitlines()
+    for i in range(min(len(b), len(a))):
+        if b[i] != a[i]:
+            return i + 1
+    return min(len(b), len(a)) + 1
 
 
 def _not_python(content: str, before: str) -> str:
@@ -534,14 +545,9 @@ class ReferenceF1aDispatcher:
         if (replacement is not None and replacement.strip()
                 and str(p).endswith(".py")):
             why = _not_python(replacement, text)
-            # A replacement that does not stand alone as code is still fine IN PLACE: a line
-            # inside a docstring is prose by definition, and refusing to edit one would block
-            # ordinary work to stop a rarer mistake. So the standalone verdict is only acted
-            # on when the edit actually makes the file worse -- when it moves the first parse
-            # error EARLIER, or introduces one. Measured: replacing 974-976 with
-            # "[remove these lines]" moved the stop from 975 to 974 and is refused; replacing
-            # a "Dictionary of updated gradients." line inside a docstring moves nothing.
-            if why and not _edit_moves_the_error_earlier(text, new_text):
+            # ...unless the line being replaced is inside a docstring, where prose is the
+            # correct content. Anything else that is not Python is refused.
+            if why and _inside_a_string_literal(text, _first_changed_line(text, new_text)):
                 why = ""
             if why:
                 return ResultEnvelope(ok=False, error=(
