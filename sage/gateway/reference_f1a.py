@@ -73,6 +73,40 @@ def _python_status(p) -> str:
 
 
 
+def _inside_a_string_literal(before: str, edit_line: int) -> bool:
+    """Is the line this edit replaces inside a string literal (a docstring) already?
+
+    This is the ONLY reason to accept a replacement that is not Python: a line inside a
+    docstring IS prose, and refusing an ordinary docstring edit to prevent a rarer mistake is
+    the friction that gets a guard routed around.
+
+    It replaces a first-SyntaxError comparison, which GPT's review of #188 correctly refused:
+    comparing only the FIRST error lets a new defect be planted anywhere BELOW an existing
+    one, and the file being repaired is almost always already broken -- so that escape was
+    open nearly all the time, which is the opposite of what it was for. Asking where the edit
+    lands answers the real question and has no such hole.
+    """
+    import io as _io
+    import tokenize as _tok
+    try:
+        for t in _tok.generate_tokens(_io.StringIO(before).readline):
+            if t.type == _tok.STRING and t.start[0] <= edit_line <= t.end[0]:
+                return True
+    except (_tok.TokenError, IndentationError, SyntaxError):
+        # An unreadable file cannot vouch for the edit; fall back to refusing.
+        return False
+    return False
+
+
+def _first_changed_line(before: str, after: str) -> int:
+    """Where the edit landed, from the two versions -- no extra plumbing through both modes."""
+    b, a = before.splitlines(), after.splitlines()
+    for i in range(min(len(b), len(a))):
+        if b[i] != a[i]:
+            return i + 1
+    return min(len(b), len(a)) + 1
+
+
 def _not_python(content: str, before: str) -> str:
     """Why `content` cannot be appended to a .py file, or "" if it can.
 
@@ -468,7 +502,8 @@ class ReferenceF1aDispatcher:
             what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)"
             shown = removed if len(removed) <= 400 else removed[:400] + "..."
             gone = f" The lines removed were:\n{shown}"
-            return self._commit_edit(p, path, text, new_text, what, gone)
+            return self._commit_edit(p, path, text, new_text, what, gone,
+                                     replacement=new)
         hits = text.count(old)
         if hits == 0:
             return ResultEnvelope(ok=False, error=(
@@ -491,11 +526,35 @@ class ReferenceF1aDispatcher:
         # not a new one. os.replace is atomic on the same filesystem, so a reader either sees
         # every byte of the old file or every byte of the new one, never a prefix of either.
         return self._commit_edit(p, path, text, text.replace(old, new, 1),
-                                 "replaced 1 occurrence", "")
+                                 "replaced 1 occurrence", "", replacement=new)
 
     def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
-                     gone: str) -> ResultEnvelope:
-        """Write an edit atomically and say what it did. Shared by the text and line modes."""
+                     gone: str, replacement: Optional[str] = None) -> ResultEnvelope:
+        """Write an edit atomically and say what it did. Shared by the text and line modes.
+
+        THE SAME CHECK AS THE APPEND PATH, BECAUSE THE PATTERN WALKED TO THIS DOOR. Guarding
+        memory_write alone worked -- measured on cbp-being at 11:22Z, two label appends were
+        refused and it used memory_edit twice instead, both landing. Half an hour later it
+        replaced lines 974-976 with the text "[remove these lines]". The replacement did the
+        deletion it wanted AND wrote a fresh defect in the same act: prose standing at column
+        0 in the middle of a program, which is the very thing the append guard exists to stop.
+        A guard on one verb moves the behaviour to the other verb, it does not end it.
+
+        An EMPTY replacement is the deletion path and is always allowed -- that is how lines
+        are removed, and refusing it would take away the repair along with the mistake."""
+        if (replacement is not None and replacement.strip()
+                and str(p).endswith(".py")):
+            why = _not_python(replacement, text)
+            # ...unless the line being replaced is inside a docstring, where prose is the
+            # correct content. Anything else that is not Python is refused.
+            if why and _inside_a_string_literal(text, _first_changed_line(text, new_text)):
+                why = ""
+            if why:
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_edit refused, nothing was changed in {p.name}. {why} A note about "
+                    f"the work belongs in a .md file under notes/; to DELETE these lines, give "
+                    f"an empty replacement instead of text describing the deletion."))
+
         tmp = p.with_name(p.name + ".edit.tmp")
         try:
             tmp.write_text(new_text)
