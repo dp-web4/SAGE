@@ -147,6 +147,36 @@ SAGE should not require those protocols as runtime dependencies to adopt the les
 
 > **mechanical source grounding first; independent semantic challenge only where the claim cannot be mechanically decided.**
 
+## Relation to representational convergence / semantic closure
+
+Recent representation work sharpens this note without changing its boundary.
+
+The Platonic Representation Hypothesis (Huh et al., 2024) argues that independently trained systems can preserve common **relations among observations** even when their native coordinates differ. A 2026 calibrated re-analysis finds that apparent global geometric convergence can be inflated by model width/depth, while **local neighborhood relations** remain more robust. A current world-model extension reports a related pattern for learned state transitions: heterogeneous visual priors can converge under a shared predictive objective, with some functional compatibility under model stitching.
+
+For premise fidelity, the useful lesson is not "embeddings agree, therefore the claim is true." It is the opposite:
+
+> **the load-bearing object is the declared relation between source, claim, and evidence; a similarity score is at most supporting instrumentation.**
+
+A source-grounding checker should therefore preserve explicit relations such as:
+
+- SOURCE-SUPPORTS-CLAIM;
+- SOURCE-CONTRADICTS-CLAIM;
+- SOURCE-IS-INCOMPLETE;
+- CLAIM-IS-INFERENCE;
+- SOURCE/CLAIM-RELATION-UNKNOWN.
+
+Those relations are declared by the checker contract before any model comparison. Agreement among models may be evidence about robustness, never authority.
+
+The AI-DNA 2.0 work calls the evidence-sufficiency point for a coherent semantic state a **Semantic Closure Horizon (SCH)**. That concept is useful here as a research lens: a premise should not be promoted merely because a model sounds settled; ask what minimum recoverable evidence actually licenses the relation being promoted, and whether additional irrelevant context should leave it unchanged.
+
+This is not Web4 MRH. Web4 MRH remains its declared/signed graph-neighborhood construct.
+
+The reconstructibility work adds another consequence: summaries, procedures, tests, and notes are **compressed constraints on future cognition**. If SAGE compresses a source into durable memory, preservation should optimize not only compactness but **reconstructibility of the evidentiary relation**. A future being should be able to tell what evidence licensed the claim, what remained uncertain, and what would falsify it — not merely inherit the conclusion.
+
+This suggests a stronger formulation of epistemic continuity:
+
+> **preserve enough source relation and uncertainty that a later substrate can reconstruct why a durable premise was licensed, challenge it, or revise it.**
+
 ## Relation to memory trust
 
 This also sharpens the memory question raised by external review.
