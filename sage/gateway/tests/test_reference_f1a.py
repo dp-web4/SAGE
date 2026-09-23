@@ -510,12 +510,62 @@ def test_a_py_receipt_says_whether_python_can_parse_the_file_now():
     home = Path(root)
     r = disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "def main():\n    pass\n"}), _ALLOW)
     assert r.ok and "Python can parse s.py now. That is not the same as running it." in r.result
-    # the being's real 20:18 write: a bracketed description appended where an edit was meant
-    r = disp(BeingIntent("memory_write", {"path": "notes/s.py",
-                                          "content": "            noise=0.1,\n        )"}), _ALLOW)
-    assert r.ok and "Python cannot parse s.py now: IndentationError at line 3" in r.result, r.result
-    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3, "end_line": 4, "new": ""}), _ALLOW)
-    assert r.ok and "Python can parse s.py now" in r.result, r.result
+    # a new file is not gated: its receipt carries the parse error
+    r = disp(BeingIntent("memory_write", {"path": "notes/t.py",
+                                          "content": "def main():\n            noise=0.1,\n        )"}), _ALLOW)
+    assert r.ok and "Python cannot parse t.py now: IndentationError at line 3" in r.result, r.result
+    r = disp(BeingIntent("memory_edit", {"path": "notes/t.py", "start_line": 2, "end_line": 3, "new": "    pass"}), _ALLOW)
+    assert r.ok and "Python can parse t.py now" in r.result, r.result
+
+
+LABELS = [  # cbp-being's real appends to mechanism-training-script-clean.py
+    "[Fix #1: Removed extra closing parenthesis on line 1685 in argparse.ArgumentParser call]\n",
+    "[BEAT 2026-09-23 05:18 UTC] Applying fix #1: removing extra closing parenthesis on line 1685.\n"
+    "Line 1685 currently reads:\n    parser = argparse.ArgumentParser(description=\"x\"))\n",
+    "[Remove lines 344-347, which are a broken duplicate of the for loop at lines 340-343]",
+    "Remove lines 180-184 (orphaned docstring tail and return statement) and insert new label generation code",
+]
+
+
+def test_a_description_of_an_edit_is_refused_before_it_lands_in_a_py_file():
+    """2026-09-21..23: 15 memory_write calls appended prose ("[Fix #1: Removed ...]") to the
+    being's script where an edit was meant; every receipt said "only adds" and named
+    memory_edit, and the being still reported the fixes applied. Refuse before writing."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text("def main():\n    pass\n")
+    for text in LABELS:
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert not r.ok and "nothing was written to s.py" in r.error, r.error
+        assert "memory_edit" in r.error and "journal.md" in r.error and "Python cannot read line 1 of your text as code" in r.error
+        assert "Python can parse s.py now" in r.error
+        assert f.read_text() == "def main():\n    pass\n"
+    # also refused when the file is already broken -- that is where the labels landed
+    f.write_text("x = f(1))\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": LABELS[0]}), _ALLOW)
+    assert not r.ok and "Python cannot parse s.py now" in r.error and f.read_text() == "x = f(1))\n"
+
+
+def test_code_appended_to_a_py_file_still_lands():
+    """What must stay open: a whole function, an indented fragment (dedented it parses),
+    a fragment with `return` (parses as a function body), a comment, and the last part of a
+    program written in parts (it makes the file parse)."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text("import os\n")
+    for text in ("def g():\n    return 1\n",
+                 "        X = np.load(data_path)\n        y = X[:, 0]\n",
+                 "    y = X.sum()\n    return X, y\n",
+                 "# TODO: tune lr\n"):
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert r.ok, (text, r.error)
+    f.write_text("def h(\n    a,\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    b,\n):\n    return a + b\n"}), _ALLOW)
+    assert r.ok and "Python can parse s.py now" in r.result, r.error
+    # not .py, and not an existing file: ungated
+    for path in ("journal.md", "notes/new.py"):
+        r = disp(BeingIntent("memory_write", {"path": path, "content": LABELS[0]}), _ALLOW)
+        assert r.ok, (path, r.error)
 
 
 def test_a_non_python_receipt_says_nothing_about_parsing():

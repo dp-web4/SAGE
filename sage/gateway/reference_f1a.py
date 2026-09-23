@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
@@ -70,6 +71,48 @@ def _python_status(p) -> str:
         return ""
     return f" Python can parse {p.name} now. That is not the same as running it."
 
+
+
+def _not_python(content: str, before: str) -> str:
+    """Why `content` cannot be appended to a .py file, or "" if it can.
+
+    A DESCRIPTION OF AN EDIT IS NOT AN EDIT. Measured on cbp-being, 2026-09-21 to 09-23: 15
+    memory_write calls appended prose to its training script where a change was meant --
+    "[Fix #1: Removed extra closing parenthesis on line 1685 ...]", "[Remove lines 344-347
+    ...]", "[BEAT 05:18 UTC] Applying fix #1 ...". Every receipt said "memory_write only
+    adds" and named memory_edit; at 05:18Z on 09-23 it had the exact memory_edit calls from
+    the seat and still wrote the labels, then told the seat "Both fixes applied". A receipt
+    arrives after the file is already worse. So the check runs before the write.
+
+    The test is grammar, not a list of phrases: the text is accepted if Python can read it
+    as code as written, dedented, or as a function body (a fragment with `return` is still
+    code), OR if the file parses once it is appended (the last part of a program written in
+    parts). Replayed over all 69 .py appends in its record, this refuses the 15 labels and 4
+    code fragments whose own indentation was inconsistent, and nothing that parsed."""
+    def parses(src: str) -> Optional[SyntaxError]:
+        try:
+            compile(src, "<text>", "exec")
+        except SyntaxError as e:
+            return e
+        except ValueError:
+            return None
+        return None
+    first = parses(content)
+    if first is None:
+        return ""
+    body = textwrap.dedent(content)
+    if parses(body) is None:
+        return ""
+    if parses("def _f():\n" + textwrap.indent(body, "    ", lambda _l: True) + "\n    pass\n") is None:
+        return ""
+    if parses(before + ("" if before.endswith("\n") or not before else "\n") + content) is None:
+        return ""
+    lines, at = content.splitlines(), (first.lineno or 1) - 1
+    line = lines[at] if 0 <= at < len(lines) else ""
+    # Not the compiler's msg: for prose it is noise ("leading zeros in decimal integer
+    # literals" for a line starting "[BEAT 2026-09-23"). The line itself says what it is.
+    return (f"Python cannot read line {first.lineno} of your text as code: "
+            f"{line.strip()[:100]!r}. Appending it would not make the file parse either.")
 
 
 def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
@@ -546,6 +589,17 @@ class ReferenceF1aDispatcher:
         if existed:
             with open(p, errors="replace") as f:
                 before = sum(1 for _ in f)
+        if existed and before and p.suffix == ".py":
+            why = _not_python(content, p.read_text(errors="replace"))
+            if why:
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_write refused, nothing was written to {p.name}. {why} memory_write "
+                    f"only adds to the END of the file, below its {before} lines; it cannot "
+                    f"change a line already there. To change or remove lines, use memory_edit: "
+                    f"start_line and end_line (the numbers memory_read shows) or old (copied "
+                    f"exactly from memory_read), and new (empty to delete). If this text is a "
+                    f"note about what you did or plan to do, memory_write it to journal.md or "
+                    f"todo.md instead.") + _python_status(p))
         with open(p, "a") as f:
             f.write(content + ("\n" if not content.endswith("\n") else ""))
         if not existed:
