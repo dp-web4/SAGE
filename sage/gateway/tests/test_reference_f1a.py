@@ -510,12 +510,14 @@ def test_a_py_receipt_says_whether_python_can_parse_the_file_now():
     home = Path(root)
     r = disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "def main():\n    pass\n"}), _ALLOW)
     assert r.ok and "Python can parse s.py now. That is not the same as running it." in r.result
-    # the being's real 20:18 write: a bracketed description appended where an edit was meant
+    # The being's real 20:18 write: a bracketed description appended where an edit was meant.
+    # Until 2026-09-23 this LANDED and the receipt reported the damage afterwards. It is now
+    # refused instead, so the receipt below is a refusal and the file is untouched.
     r = disp(BeingIntent("memory_write", {"path": "notes/s.py",
                                           "content": "            noise=0.1,\n        )"}), _ALLOW)
-    assert r.ok and "Python cannot parse s.py now: IndentationError at line 3" in r.result, r.result
-    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3, "end_line": 4, "new": ""}), _ALLOW)
-    assert r.ok and "Python can parse s.py now" in r.result, r.result
+    assert not r.ok and "REFUSED, and s.py is unchanged" in r.result, r.result
+    r = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
+    assert "noise=0.1" not in r.result, "a refused write must leave nothing behind"
 
 
 def test_a_non_python_receipt_says_nothing_about_parsing():
@@ -535,3 +537,88 @@ def test_the_edit_receipt_counts_lines_the_way_memory_read_does():
     assert r.ok and "went from 3 to 2 lines" in r.result, r.result
     rd = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
     assert rd.ok and (home / "notes" / "s.py").read_text().count("\n") == 2
+
+
+def test_prose_into_a_python_file_is_refused_not_reported_afterwards():
+    """cbp-being, 2026-09-23 04:00-11:03Z: nine memory_write calls targeted its training
+    script and EIGHT came back saying "Python cannot parse ... SyntaxError at line N". It
+    appended again anyway. What went in was beat narration, a plan to itself, and the output
+    of its own memory_read. The file went 1022 -> 2488 lines in a day and the first parse
+    error became a sentence of English at line 2147.
+
+    The receipt was already as good as a receipt gets. A guard at the door is read once, so
+    the door is routed rather than the warning repeated."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a = 1\n")
+
+    r = disp(BeingIntent("memory_write", {
+        "path": "notes/s.py",
+        "content": "[BEAT 2026-09-23 05:18 UTC] Applying fix #1: removing the paren.\n"}), _ALLOW)
+    assert not r.ok, "narration into a .py must be refused"
+    assert "REFUSED, and s.py is unchanged" in r.result, r.result
+    assert "Python does not skip English" in r.result, r.result
+    assert "notes/" in r.result and "memory_edit" in r.result, "a refusal owes a way forward"
+    assert (home / "notes" / "s.py").read_text() == "a = 1\n", "the file must be untouched"
+
+
+def test_creating_a_py_file_is_never_refused_only_appending_to_one():
+    """The carve-out. All nine of the being's bad writes were APPENDS onto a program that
+    already existed; guarding creation too would refuse a first draft for not being finished
+    yet, which buys nothing and is the friction that makes a guard worth routing around."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    r = disp(BeingIntent("memory_write", {"path": "notes/t.py", "content": "def f():\n"}), _ALLOW)
+    assert r.ok, f"creating a .py must not be refused: {r.result}"
+
+    # ...but the next call, which appends to it, is judged.
+    r = disp(BeingIntent("memory_write", {"path": "notes/t.py",
+                                          "content": "[BEAT] applying fix #1 now.\n"}), _ALLOW)
+    assert not r.ok and "REFUSED" in r.result, r.result
+
+
+def test_the_refusal_names_every_route_because_prose_tokenizes_as_python():
+    """The first version of this refusal chose its advice by asking whether the text
+    tokenized as Python. English tokenizes as Python -- names, numbers and brackets -- so
+    "[BEAT 2026-09-23 05:18 UTC] Applying fix #1" came back clean and got the advice written
+    for half-finished code. A discriminator that cannot tell prose from a fragment must not
+    choose what the being is told, so the refusal names all three routes."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a = 1\n")
+    r = disp(BeingIntent("memory_write", {
+        "path": "notes/s.py",
+        "content": "[BEAT 2026-09-23 05:18 UTC] Applying fix #1: removing the paren.\n"}), _ALLOW)
+    assert not r.ok, r.result
+    assert "notes/" in r.result, "the route for a note is missing"
+    assert "memory_edit with start_line and end_line" in r.result, "the route for an edit is missing"
+    assert "whole function or block in one call" in r.result, "the route for a fragment is missing"
+
+
+def test_valid_code_still_lands_in_a_file_that_does_not_parse():
+    """THE CONTROL. The being is usually mid-repair when this fires, so refusing every write
+    to a broken file would block the fix along with the mistake. Only text that is not Python
+    either is refused."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "b.py").write_text("def broken(:\n")
+    r = disp(BeingIntent("memory_write", {"path": "notes/b.py",
+                                          "content": "def g():\n    return 2\n"}), _ALLOW)
+    assert r.ok, f"valid code must still land while the file is broken: {r.result}"
+    assert "def g()" in (home / "notes" / "b.py").read_text()
+
+    r = disp(BeingIntent("memory_write", {"path": "notes/b.py", "content": "# a plain comment\n"}), _ALLOW)
+    assert r.ok, f"a comment is Python: {r.result}"
+
+
+def test_prose_into_a_markdown_file_is_never_refused():
+    """The rule is about .py only. Prose belongs in notes, and nothing here may make that
+    harder -- it is the slot the refusal points at."""
+    disp, root = _disp()
+    r = disp(BeingIntent("memory_write", {"path": "notes/thinking.md",
+                                          "content": "[BEAT] applying fix #1 now.\n"}), _ALLOW)
+    assert r.ok and "REFUSED" not in r.result, r.result

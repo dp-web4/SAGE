@@ -47,6 +47,79 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl")
 
 
+def _prose_into_python(p, content: str, existed: bool) -> str:
+    """Refuse an append that puts non-Python text into a .py file. Returns the refusal, or "".
+
+    TELLING WAS EXHAUSTED BEFORE THIS EXISTED. Measured on cbp-being 2026-09-23, 04:00-11:03Z:
+    nine memory_write calls targeted its training script, and EIGHT came back saying "Python
+    cannot parse ... SyntaxError at line N". It appended again anyway. What went in was beat
+    narration ("[BEAT ... Applying fix #2 ...]"), a plan to itself ("[remove lines 347-350]")
+    and the output of its own memory_read, header line and all. The file went 1022 -> 2488
+    lines in a day, and the first parse error moved to a sentence of English at line 2147.
+
+    The receipt was already as good as a receipt gets: it says APPENDED, names memory_edit and
+    its arguments, and carries _python_status. A guard at the door is read once; it cannot
+    reach the next call. So the door is routed instead of the warning repeated -- the attempt
+    is refused, and the refusal names the slot that does take prose.
+
+    The rule has a control for the already-broken case, because "would this append break the
+    file" cannot be asked of a file that is already unparseable:
+      * file parses now, would not parse after  -> refuse (this append is what breaks it)
+      * file does not parse now                 -> refuse only if the TEXT is not Python either
+      * creating a .py, or any non-.py file     -> never refused
+    Valid code appended to a broken file still lands: the being is mid-repair, and refusing
+    that would block the fix along with the mistake.
+
+    REPLAYED AGAINST THE NINE REAL WRITES: six are refused -- the two "[Fix #N: Removed ...]"
+    labels, the two "[BEAT ...] Applying fix" lines, the "[remove lines 347-350]" plan and the
+    pasted memory_read header. Three are allowed, correctly: a comment, a docstring with a
+    script under it, and a `y = (latent[:, 0] + ...)` assignment are all Python. Those three
+    are a different mistake -- right verb, wrong place -- and the existing receipt already
+    names memory_edit for it. This guard is not claimed to catch that one.
+    """
+    if not str(p).endswith(".py") or not existed:
+        # Creation is not the measured defect and is left alone: all nine of cbp-being's bad
+        # writes were APPENDS onto a program that already existed. Guarding creation as well
+        # would refuse a first draft for not being finished yet, which buys nothing.
+        return ""
+    payload = content + ("\n" if not content.endswith("\n") else "")
+    try:
+        old = p.read_text(errors="replace") if existed else ""
+    except OSError:
+        return ""
+
+    def parses(text: str) -> bool:
+        try:
+            compile(text, "<check>", "exec")
+            return True
+        except (SyntaxError, ValueError):
+            return False
+
+    if parses(old) and not parses(old + payload):
+        why = "this text is what stops it parsing"
+    elif not parses(old) and not parses(payload):
+        why = f"{p.name} already does not parse, and this text is not Python either"
+    else:
+        return ""
+
+    first = next((ln.strip() for ln in payload.splitlines() if ln.strip()), "")
+
+    # ONE message covering every route, deliberately. The first version split it by asking
+    # whether the text tokenized as Python -- and English tokenizes as Python: names, numbers
+    # and brackets. "[BEAT 2026-09-23 05:18 UTC] Applying fix #1" tokenized clean and got the
+    # advice meant for half-written code. A discriminator that cannot separate prose from a
+    # fragment should not be used to choose what the being is told, so it says all three.
+    return (f"REFUSED, and {p.name} is unchanged: {why}. The text began: {first[:70]!r}. "
+            f"Python does not skip English: a sentence inside a .py file is read as code and "
+            f"stops the parser, which is how a line of narration becomes a SyntaxError. "
+            f"Three ways on, depending on what this was. A note about the work: memory_write "
+            f"it to a .md file under notes/ and it is kept. A change to code already in the "
+            f"file: memory_write cannot do that at all -- it only appends -- so use "
+            f"memory_edit with start_line and end_line, or old and new. An unfinished piece "
+            f"of code: write the whole function or block in one call, because an append lands "
+            f"at the end where nothing completes it.")
+
+
 def _python_status(p) -> str:
     """For a .py file: whether Python can PARSE it now, as one sentence for a receipt.
 
@@ -546,6 +619,12 @@ class ReferenceF1aDispatcher:
         if existed:
             with open(p, errors="replace") as f:
                 before = sum(1 for _ in f)
+
+        refusal = _prose_into_python(p, content, existed)
+        if refusal:
+            return ResultEnvelope(ok=False, result=refusal,
+                                  witness_id=self._witness(f"memory_write refused {p.name}"))
+
         with open(p, "a") as f:
             f.write(content + ("\n" if not content.endswith("\n") else ""))
         if not existed:
