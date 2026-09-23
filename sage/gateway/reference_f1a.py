@@ -73,6 +73,29 @@ def _python_status(p) -> str:
 
 
 
+def _edit_moves_the_error_earlier(before: str, after: str) -> bool:
+    """Did this edit introduce a parse error, or push the first one further up the file?
+
+    The file the being is repairing is usually already broken, so "does it parse after" is
+    useless on its own. What distinguishes a repair from a new defect is WHERE the parser
+    now stops: a fix moves the stop down the file or removes it; writing prose into the
+    middle of a program moves it up to the prose."""
+    def stop(src: str):
+        try:
+            compile(src, "<check>", "exec")
+        except SyntaxError as e:
+            return e.lineno or 1
+        except ValueError:
+            return None
+        return None
+    b, a = stop(before), stop(after)
+    if a is None:
+        return False                      # it parses now; whatever it was, it helped
+    if b is None:
+        return True                       # it parsed before and does not now
+    return a < b
+
+
 def _not_python(content: str, before: str) -> str:
     """Why `content` cannot be appended to a .py file, or "" if it can.
 
@@ -468,7 +491,8 @@ class ReferenceF1aDispatcher:
             what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)"
             shown = removed if len(removed) <= 400 else removed[:400] + "..."
             gone = f" The lines removed were:\n{shown}"
-            return self._commit_edit(p, path, text, new_text, what, gone)
+            return self._commit_edit(p, path, text, new_text, what, gone,
+                                     replacement=new)
         hits = text.count(old)
         if hits == 0:
             return ResultEnvelope(ok=False, error=(
@@ -491,11 +515,40 @@ class ReferenceF1aDispatcher:
         # not a new one. os.replace is atomic on the same filesystem, so a reader either sees
         # every byte of the old file or every byte of the new one, never a prefix of either.
         return self._commit_edit(p, path, text, text.replace(old, new, 1),
-                                 "replaced 1 occurrence", "")
+                                 "replaced 1 occurrence", "", replacement=new)
 
     def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
-                     gone: str) -> ResultEnvelope:
-        """Write an edit atomically and say what it did. Shared by the text and line modes."""
+                     gone: str, replacement: Optional[str] = None) -> ResultEnvelope:
+        """Write an edit atomically and say what it did. Shared by the text and line modes.
+
+        THE SAME CHECK AS THE APPEND PATH, BECAUSE THE PATTERN WALKED TO THIS DOOR. Guarding
+        memory_write alone worked -- measured on cbp-being at 11:22Z, two label appends were
+        refused and it used memory_edit twice instead, both landing. Half an hour later it
+        replaced lines 974-976 with the text "[remove these lines]". The replacement did the
+        deletion it wanted AND wrote a fresh defect in the same act: prose standing at column
+        0 in the middle of a program, which is the very thing the append guard exists to stop.
+        A guard on one verb moves the behaviour to the other verb, it does not end it.
+
+        An EMPTY replacement is the deletion path and is always allowed -- that is how lines
+        are removed, and refusing it would take away the repair along with the mistake."""
+        if (replacement is not None and replacement.strip()
+                and str(p).endswith(".py")):
+            why = _not_python(replacement, text)
+            # A replacement that does not stand alone as code is still fine IN PLACE: a line
+            # inside a docstring is prose by definition, and refusing to edit one would block
+            # ordinary work to stop a rarer mistake. So the standalone verdict is only acted
+            # on when the edit actually makes the file worse -- when it moves the first parse
+            # error EARLIER, or introduces one. Measured: replacing 974-976 with
+            # "[remove these lines]" moved the stop from 975 to 974 and is refused; replacing
+            # a "Dictionary of updated gradients." line inside a docstring moves nothing.
+            if why and not _edit_moves_the_error_earlier(text, new_text):
+                why = ""
+            if why:
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_edit refused, nothing was changed in {p.name}. {why} A note about "
+                    f"the work belongs in a .md file under notes/; to DELETE these lines, give "
+                    f"an empty replacement instead of text describing the deletion."))
+
         tmp = p.with_name(p.name + ".edit.tmp")
         try:
             tmp.write_text(new_text)

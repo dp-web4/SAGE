@@ -585,3 +585,66 @@ def test_the_edit_receipt_counts_lines_the_way_memory_read_does():
     assert r.ok and "went from 3 to 2 lines" in r.result, r.result
     rd = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
     assert rd.ok and (home / "notes" / "s.py").read_text().count("\n") == 2
+
+
+def test_memory_edit_refuses_a_prose_replacement_but_never_a_deletion():
+    """The append guard worked and the pattern walked to the other verb. cbp-being,
+    2026-09-23: at 11:22Z two label APPENDS were refused and it used memory_edit twice
+    instead, both landing — then at ~11:50Z it replaced lines 974-976 with the text
+    "[remove these lines]". That did the deletion it wanted and wrote a fresh defect in the
+    same act: prose at column 0 in the middle of a program.
+
+    The deletion path must stay open: an empty replacement is how lines are removed."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a = 1\nb = 2\nc = 3\n")
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2,
+                                         "end_line": 2, "new": "[remove these lines]"}), _ALLOW)
+    assert not r.ok, "a prose replacement must be refused"
+    assert "memory_edit refused" in (r.error or ""), r.error
+    assert "empty replacement" in (r.error or ""), "it must name the deletion path"
+    assert (home / "notes" / "s.py").read_text() == "a = 1\nb = 2\nc = 3\n", "file must be untouched"
+
+    # THE CONTROL: deletion still works, and so does a real code replacement.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2,
+                                         "end_line": 2, "new": ""}), _ALLOW)
+    assert r.ok, f"an empty replacement is a deletion and must be allowed: {r.error}"
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "a = 1",
+                                         "new": "a = 42"}), _ALLOW)
+    assert r.ok, f"a real code replacement must be allowed: {r.error}"
+    assert "a = 42" in (home / "notes" / "s.py").read_text()
+
+
+def test_memory_edit_in_a_non_python_file_takes_any_text():
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "j.md").write_text("one\ntwo\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/j.md", "start_line": 1,
+                                         "end_line": 1, "new": "[a label]"}), _ALLOW)
+    assert r.ok, f"prose belongs in notes and must never be refused there: {r.error}"
+
+
+def test_editing_prose_inside_a_docstring_is_not_refused():
+    """THE CONTROL that shapes the rule. A line inside a docstring IS prose, so the
+    standalone "is this Python" test refuses it — and refusing an ordinary docstring edit to
+    stop a rarer mistake is the kind of friction that gets a guard routed around. So the
+    standalone verdict is only acted on when the edit actually makes the file worse: when it
+    moves the first parse error earlier, or introduces one."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "d.py").write_text(
+        'def f(x):\n    """Do a thing.\n\n    Returns:\n        Dictionary of gradients.\n    """\n    return x\n')
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/d.py", "start_line": 5, "end_line": 5,
+                                         "new": "        Dictionary of updated gradients."}), _ALLOW)
+    assert r.ok, f"a docstring edit must not be refused: {r.error}"
+    assert "updated gradients" in (home / "notes" / "d.py").read_text()
+
+    # ...while replacing a CODE line with the same shape of text is still refused.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/d.py", "start_line": 7, "end_line": 7,
+                                         "new": "[remove these lines]"}), _ALLOW)
+    assert not r.ok and "memory_edit refused" in (r.error or ""), r.error
