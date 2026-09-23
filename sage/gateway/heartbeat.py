@@ -813,8 +813,7 @@ def own_state(instance: Path, member: str = "",
                                        turn_chars=turn_chars, mark=mark_conversations,
                                        refuted=refuted_claims(services))
         if convs.strip():
-            parts.append("## Your conversations (both directions, kept forever; reply with `say`)\n"
-                         + convs.strip())
+            parts.append(conversation_header(instance, member) + "\n" + convs.strip())
     if services.strip():
         parts.append("## Your services, measured at the start of this beat\n" + services.strip()
                      + "\nThis was measured now. A note in your journal or todo about these services is "
@@ -975,6 +974,35 @@ class SelectedTurn:
         target, which is a second way to splice one conversation's words into another."""
         txt = " ".join(self.text.split())[:PENDING_CHARS]
         return f'In "{self.cid}", {self.speaker} said: {txt}'
+
+
+def conversation_header(instance: Path, member: str) -> str:
+    """The heading over the being's conversations, saying what is true THIS beat.
+
+    It used to carry a standing "reply with `say`" whatever the channel's state. Measured on
+    Sprout 2026-09-19..22: after dp's last turn — a statement — the being sent twelve
+    consecutive messages into dp's channel, two from the explore phase after #147 had gated the
+    answer phase. The per-conversation marker said "the last word here is YOURS"; at 2B a header
+    instruction outranks a marker caveat.
+
+    Decided by the SAME question the answer phase asks — does the newest pending turn EXPECT a
+    reply — not merely "is a turn pending". Legion's review of #172 measured the difference: on
+    "good, keep going!" the first cut said "Someone is waiting" while #147 correctly kept the
+    answer phase shut. One function, `pending_selection`, now answers both, so header and ask
+    cannot disagree by construction. When the check itself fails the invitation is kept: hiding
+    a real one is the worse error.
+    """
+    try:
+        sel = pending_selection(instance, member)[4]
+        owed = bool(sel is not None and sel.expects_reply)
+    except Exception:
+        owed = True
+    if owed:
+        return ("## Your conversations (both directions, kept forever). Someone is waiting on you; "
+                "answer with `say` if you have something to say")
+    return ("## Your conversations (both directions, kept forever). Nobody is waiting on you "
+            "here; the last word in each is yours or is settled. `say` is for answering a "
+            "person, not for reporting to one")
 
 
 def pending_and_say_line(instance: Path, member: str) -> tuple:
