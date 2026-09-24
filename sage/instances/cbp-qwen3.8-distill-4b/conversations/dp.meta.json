@@ -13,5 +13,8 @@
   "created": "2026-09-14T00:47:04Z",
   "also_known_as": [
     "Sovereign"
-  ]
+  ],
+  "notify_watchers": {
+    "cbp-claude": "claude-code"
+  }
 }
