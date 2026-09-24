@@ -21,10 +21,11 @@ FAKE_HESTIA = r'''#!/bin/bash
 echo "$*" >> "$FAKE_LOG"
 case "$1 $2" in
   "delegate agent-id") echo "agent-id for $3: 11111111-2222-3333-4444-555555555555";;
-  "delegate list") [ -n "$FAKE_EXPIRES" ] && echo "d-1 → agent=11111111-2222-3333-4444-555555555555 actions=[$FAKE_ACTION] expires=$FAKE_EXPIRES"; true;;
+  "delegate list") [ -n "$FAKE_EXPIRES" ] && echo "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee → agent=11111111-2222-3333-4444-555555555555 actions=[$FAKE_ACTION] expires=$FAKE_EXPIRES"; true;;
   "gate pending") echo "$FAKE_PENDING";;
   "scope arbitrate") echo "error: hestia.scope_request_unknown"; exit 1;;
   "delegate grant") echo "granted";;
+  "delegate revoke") [ -n "$FAKE_REVOKE_FAILS" ] && { echo "revoke failed"; exit 1; }; echo "Delegation $3 revoked";;
   "witness onboard") echo "onboarded";;
 esac
 '''
@@ -104,3 +105,50 @@ def test_expiry_is_parsed_without_gnu_date_and_a_far_expiry_does_nothing():
     r, calls, units = _run(tempfile.mkdtemp(), '{"count": 0, "pending_scope_count": 0}', expires="yesterday-ish")
     assert r.returncode == 1 and "cannot parse expiry" in r.stdout and units == "", \
         "an unparseable expiry is not 'due'"
+
+
+def test_renewal_supersedes_the_old_delegation_instead_of_accumulating():
+    """`delegate grant` ADDS a delegation; it does not extend one.
+
+    Measured on Sprout 2026-09-24, the first time the renewal path ran for real: two live
+    grants for the identical action (8717267c and 395a7042), different expiries. Not
+    dangerous — same seat, same action — but standing authority nobody can enumerate is the
+    opposite of what a delegation is for, and the operator's stated remedy is
+    `hestia delegate revoke <id>`, which needs there to be ONE id to name.
+
+    The revoke must happen while the daemon is still stopped (same writer lease) and only
+    after the new grant landed.
+    """
+    tmp = tempfile.mkdtemp()
+    near = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() + 2 * 86400))
+    r, calls, units = _run(tmp, '{"count": 0, "pending_scope_count": 0}', expires=near)
+    assert r.returncode == 0, r.stdout + r.stderr
+    lines = calls.splitlines()
+    i_grant = next(i for i, l in enumerate(lines) if l.startswith("delegate grant"))
+    i_revoke = next(i for i, l in enumerate(lines)
+                    if l.startswith("delegate revoke aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"))
+    assert i_grant < i_revoke, "the old grant is revoked only after the new one is in the vault"
+    assert units.split() == ["stop", "start"], "both happen inside ONE stop/start"
+    assert "superseded: revoked aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" in r.stdout
+
+
+def test_a_covered_delegation_revokes_nothing():
+    """Idempotent means idempotent: nothing due, nothing granted, nothing revoked."""
+    tmp = tempfile.mkdtemp()
+    far = time.strftime("%Y-%m-%d %H:%M", time.gmtime(time.time() + 30 * 86400))
+    r, calls, units = _run(tmp, '{"count": 0, "pending_scope_count": 0}', expires=far)
+    assert r.returncode == 0 and "ok: test-seat may rule" in r.stdout
+    assert "delegate revoke" not in calls and "delegate grant" not in calls
+    assert units == ""
+
+
+def test_a_failed_revoke_warns_but_does_not_lose_the_new_grant():
+    """The new grant is the thing this script exists to guarantee; a revoke that fails after
+    it landed must not abort the run and strand the seat mid-renewal."""
+    tmp = tempfile.mkdtemp()
+    near = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() + 2 * 86400))
+    r, calls, units = _run(tmp, '{"count": 0, "pending_scope_count": 0}', expires=near,
+                           extra_env={"FAKE_REVOKE_FAILS": "1"})
+    assert r.returncode == 0, "a failed revoke is not a failed renewal: " + r.stdout + r.stderr
+    assert "could not revoke superseded delegation" in r.stdout
+    assert "verified" in r.stdout, "the ladder is still proven"
