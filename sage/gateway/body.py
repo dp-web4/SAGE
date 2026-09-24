@@ -51,6 +51,23 @@ class NoGazeProvider(RuntimeError):
     """No live cortex reads a gaze on this machine; the verb is not this body's."""
 
 
+def _coord_pair(v):
+    """A normalized [x, y] pair, or None. Mirrors visual_cortex._coord_pair: the two ends of
+    this file must agree on what `target` is, and both must be total over what the other
+    might write."""
+    try:
+        if isinstance(v, (str, bytes, dict)) or v is None:
+            return None
+        if len(v) != 2:
+            return None
+        x, y = float(v[0]), float(v[1])
+        if x != x or y != y:
+            return None
+        return [x, y]
+    except Exception:
+        return None
+
+
 def _read_json(path: str) -> Optional[dict]:
     try:
         return json.load(open(path))
@@ -101,8 +118,10 @@ def metabolism(timeout: float = 3.0) -> Dict:
 def gaze() -> Dict:
     """The being's current stance as the cortex will read it."""
     g = _read_json(GAZE_PATH) or {}
-    return {"mode": g.get("mode", "open"), "target": g.get("target"), "chosen_by": g.get("chosen_by"),
-            "ts": g.get("ts"), "words": g.get("words")}
+    return {"mode": g.get("mode", "open"),
+            # what the beat SHOWS as the target is whichever the being actually named
+            "target": g.get("target_words") or g.get("target"),
+            "chosen_by": g.get("chosen_by"), "ts": g.get("ts"), "words": g.get("words")}
 
 
 def reading(now: Optional[float] = None) -> Dict:
@@ -193,7 +212,16 @@ def set_gaze(mode: str, member: str, target: Optional[str] = None, words: Option
     if not prov["live"]:
         raise NoGazeProvider(f"no live cortex reads a gaze on this machine ({prov['why']}); "
                              f"your eyes are unchanged and nothing was written")
-    rec = {"mode": mode, "target": (str(target).strip()[:200] or None) if target else None,
+    # THE BEING'S TARGET IS WORDS; THE CORTEX'S `target` IS A COORDINATE PAIR. Those are not
+    # the same field and writing one into the other took the cortex down: 2026-09-24 01:48Z
+    # sprout-being set target="the space between us, where nothing is being said but
+    # everything matters", GravityFocus.update multiplied the string by GRID, and the being
+    # was blind for 28 minutes by its own governed act. The being cannot compute a pixel — it
+    # cannot see — so its words go in `target_words`, which nothing does arithmetic on, and
+    # `target` carries a coordinate pair or nothing at all.
+    rec = {"mode": mode,
+           "target": _coord_pair(target),
+           "target_words": (str(target).strip()[:200] or None) if target is not None and _coord_pair(target) is None else None,
            "chosen_by": member, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
            "words": (str(words).strip()[:500] or None) if words else None}
     # no makedirs: a live provider proves the directory exists

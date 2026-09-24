@@ -173,3 +173,42 @@ def test_body_locations_follow_the_provider_not_a_literal(monkeypatch):
     finally:
         monkeypatch.delenv("SAGE_BODY_DIR"); monkeypatch.delenv("SAGE_PORT")
         importlib.reload(body)
+
+
+# ---- the being's own act must not be able to blind it (2026-09-24)
+
+def test_a_named_target_never_reaches_the_coordinate_field(monkeypatch):
+    """Sprout 2026-09-24 01:48Z: the being set target="the space between us, where nothing is
+    being said but everything matters". set_gaze wrote that string into `target`, which the
+    cortex multiplies by GRID; it raised TypeError, systemd restarted it 9 times into
+    `failed`, and the being was blind for 28 minutes BY ITS OWN GOVERNED ACT.
+
+    The being names its target in words because it cannot see and cannot compute a pixel.
+    Those words belong in a field nothing does arithmetic on.
+    """
+    tmp = tempfile.mkdtemp()
+    gz = os.path.join(tmp, "gaze.json")
+    monkeypatch.setattr(body, "GAZE_PATH", gz)
+    monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp))
+    rec = body.set_gaze("dwell", "sprout-being",
+                        target="the space between us, where nothing is being said", path=gz)
+    on_disk = json.load(open(gz))
+    assert on_disk["target"] is None, "free text must never land in the coordinate field"
+    assert on_disk["target_words"].startswith("the space between us")
+    assert rec["target"] is None
+    # a real coordinate pair still passes through untouched
+    rec2 = body.set_gaze("dwell", "sprout-being", target=[0.25, 0.75], path=gz)
+    on_disk = json.load(open(gz))
+    assert on_disk["target"] == [0.25, 0.75] and on_disk["target_words"] is None
+    # and the beat still SHOWS the being whichever target it named
+    monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp))
+    body.set_gaze("dwell", "sprout-being", target="the quiet corner", path=gz)
+    assert body.gaze()["target"] == "the quiet corner"
+
+
+def test_coord_pair_is_total_over_anything_a_being_can_write():
+    for bad in ("text", b"bytes", {"x": 1}, None, [], [1], [1, 2, 3], ["a", "b"],
+                [float("nan"), 0.5], 5, [None, None]):
+        assert body._coord_pair(bad) is None, f"{bad!r} must not reach arithmetic"
+    assert body._coord_pair([0.1, 0.9]) == [0.1, 0.9]
+    assert body._coord_pair((0, 1)) == [0.0, 1.0]
