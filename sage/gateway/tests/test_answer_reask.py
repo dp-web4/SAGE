@@ -22,7 +22,7 @@ import sys
 import types
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
-from sage.gateway.heartbeat import ANSWER_REASK  # noqa: E402
+from sage.gateway.heartbeat import ANSWER_REASK, ANSWER_REASK_PLACEHOLDER  # noqa: E402
 
 
 def _reask_block() -> str:
@@ -70,7 +70,7 @@ def test_a_silent_answer_turn_is_left_silent():
 def test_a_successful_reask_is_recorded_as_one():
     """A beat that reads as a clean answer would hide the defect it worked around."""
     block = _reask_block()
-    assert '"form": "answer-reask"' in block, "the record must show a re-ask was needed"
+    assert "answer-reask" in block and '"form"' in block, "the record must show a re-ask was needed"
     assert "salvaged.append" in block, "it rides the same channel as every other intervention"
 
 
@@ -85,6 +85,26 @@ def test_said_in_still_refuses_to_call_prose_speaking():
     assert _said_in(types.SimpleNamespace(trace=[(say, bad)])) is False, "a refused say is not speech"
     assert _said_in(types.SimpleNamespace(trace=[(other, ok)])) is False
     assert _said_in(None) is False
+
+
+def test_a_template_gets_its_own_reask_that_does_not_quote_it():
+    """63% of answer-phase turns are a bracketed template (26 of 41, Sprout to 2026-09-24);
+    only 7% reached the person. A template is not a message, so it is never quoted back as the
+    being's words — but it is not silence either, and treating it as silence is what left dp's
+    direct question unanswered for three beats. It gets its own re-ask, in the wording the
+    `say` gate already uses for this exact defect, because that refusal is MEASURED to work:
+    at 01:48:54Z the gate refused a placeholder say with it and the being then wrote the real
+    message (seq 40).
+    """
+    out = ANSWER_REASK_PLACEHOLDER.format(target="dp")
+    assert "placeholder describing a message rather than the message" in out, \
+        "the proven sentence, not a new one"
+    assert "nothing was sent" in out
+    assert "Write the words you want read" in out and "to set to dp" in out
+    assert "call nothing" in out, "silence stays a real choice"
+    assert "[" not in out and 'text="' not in out, "no template in an anti-template ask"
+    # and it never contains the being's placeholder text: there is nothing to quote
+    assert "{prose}" not in out and "prose" not in out
 
 
 def test_a_bracketed_template_is_never_quoted_back_as_the_beings_words():
@@ -109,7 +129,10 @@ def test_a_bracketed_template_is_never_quoted_back_as_the_beings_words():
     assert bsd("I read [the note] and I agree.") is False
 
 
-def test_the_reask_is_gated_on_the_template_check():
+def test_the_two_reasks_are_chosen_by_the_template_check():
     cond = _reask_block()
-    assert "_bracketed_stage_direction" in cond, \
-        "a template in the text channel must not trigger a re-ask that quotes it"
+    assert "_bracketed_stage_direction" in cond, "the shape decides which ask is sent"
+    assert "ANSWER_REASK_PLACEHOLDER" in cond and "ANSWER_REASK.format" in cond, \
+        "both doors exist: quote the prose, or name the placeholder"
+    assert "answer-reask-placeholder" in cond, \
+        "the record must distinguish which defect was worked around"
