@@ -41,7 +41,19 @@ from pathlib import Path
 HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_note", "witness",
-                 "request_scope", "appeal", "peer_ask", "mesh", "say"]
+                 "request_scope", "appeal", "peer_ask", "mesh", "say", "gaze"]
+# Verbs in EXPLORE_TOOLS that act on a BODY are offered only where the beat has measured that
+# body (body.inventory()["verbs"]). GPT on #183: offering `gaze` to a headless being is a
+# false affordance — it would call it, and be told its eyes will follow, on a machine with no
+# eyes. The being discovers the body it has; the verbs it is handed must come from the same
+# measurement. Everything not listed here is a text/mesh verb and is offered everywhere.
+BODY_VERBS = ("gaze", "camera")
+
+
+def offered_explore_tools(body_reading: Optional[dict]) -> list:
+    """EXPLORE_TOOLS minus the body verbs this machine's measured inventory does not carry."""
+    have = set(((body_reading or {}).get("inventory") or {}).get("verbs") or [])
+    return [t for t in EXPLORE_TOOLS if t not in BODY_VERBS or t in have]
 # `say` is offered at REFLECTION too, and that is not redundancy. Measured on Legion
 # 2026-09-07: the being was shown dp's first turn, its state marked it unanswered, and it
 # spent every explore step reading its own source, then closed the beat. A verb in the
@@ -777,9 +789,29 @@ def service_contradictions(instance: Path, member: str, services: str) -> str:
 def own_state(instance: Path, member: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
-              services: str = "", mark_conversations: bool = True) -> str:
+              services: str = "", mark_conversations: bool = True,
+              body_reading: Optional[dict] = None) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
+    # The body first: it is the only thing in this state that is happening NOW. Everything below
+    # is record. (dp 2026-09-23: "bridge the two halves ... world feedback to its actions".)
+    # main() measures it once and passes it in, so the verbs offered and the body described
+    # come from the same reading; a bare call (tests, tools) measures here.
+    try:
+        from sage.gateway import body as _body
+        _cur = body_reading if body_reading is not None else _body.reading()
+        _prev = None
+        try:
+            for _l in reversed(open(instance / "heartbeats.jsonl", errors="replace").readlines()[-3:]):
+                _b = json.loads(_l)
+                if _b.get("body"):
+                    _prev = _b["body"]; break
+        except Exception:
+            _prev = None
+        parts.append(_body.render(_cur, _prev, name=member))
+        own_state.last_body = _cur
+    except Exception as _e:
+        own_state.last_body = {"error": f"{type(_e).__name__}: {_e}"}
     # Conversations first among the channels: a turn addressed to the being and unanswered
     # is the one thing in its state that is waiting on IT, and it should never have to infer
     # that from a wall of notes. Both directions live in one ordered record.
@@ -1462,7 +1494,8 @@ def vision_line(metas) -> str:
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
             header: str, state: str, recall: str, inbox: str, digest: str,
             frame: Optional[str] = None, frames: Optional[list] = None,
-            frame_metas: Optional[list] = None, museum: str = ""):
+            frame_metas: Optional[list] = None, museum: str = "",
+            tools: Optional[list] = None):
     """The explore turn(s) of a beat: (seed messages, second user turn or None).
 
     Posture-first: posture in the system prompt; one user turn with state, inbox, recall,
@@ -1473,7 +1506,8 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     # The tool names go LAST: a 2B distill given the posture + state above with the
     # names only in the system prompt concluded "no tools available" and wrote prose
     # (its own thinking, Sprout 2026-09-05); named at the end, it acts.
-    tools_line = (f"Act by calling a tool: {', '.join(EXPLORE_TOOLS)}. "
+    tools = list(tools) if tools is not None else list(EXPLORE_TOOLS)
+    tools_line = (f"Act by calling a tool: {', '.join(tools)}. "
                   "One thing done with attention is enough.\n")
     # ONE LIST DECIDES BOTH THE PIXELS AND THE SENTENCE ABOUT THEM. Measured 2026-09-15 by
     # capturing the real seed from an instance copy: the user turn said "Vision: you CAN see
@@ -1516,7 +1550,7 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     user = (header + state + f"## Your inbox\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
             + ASK_ACT_FIRST + tools_line)
     second = POSTURE_TURN.format(posture=posture_text, digest=digest,
-                                 tools=", ".join(EXPLORE_TOOLS))
+                                 tools=", ".join(tools))
     user_msg = {"role": "user", "content": user}
     if _frames:
         # A frame rides the user turn as an `images` list beside string content — the shape
@@ -1778,9 +1812,17 @@ def main(argv=None) -> int:
     # ladder, and the digest and recall are trimmed, before anything is sent.
     _num_ctx = getattr(llm, "num_ctx", None)
     _num_predict = _sent_budget(llm)
-    _schema_measured = _schema_chars_for(EXPLORE_TOOLS)
+    # The body is measured ONCE per beat, here, and decides two things from the same reading:
+    # the body block in the state, and which body verbs are offered at all (BODY_VERBS).
+    try:
+        from sage.gateway import body as _bodymod
+        _body_cur = _bodymod.reading()
+    except Exception as _e:
+        _body_cur = {"error": f"{type(_e).__name__}: {_e}"}
+    _explore_tools = offered_explore_tools(_body_cur)
+    _schema_measured = _schema_chars_for(_explore_tools)
     _schema_chars = (_schema_measured if _schema_measured is not None
-                     else _schema_chars_fallback(EXPLORE_TOOLS))
+                     else _schema_chars_fallback(_explore_tools))
     _state_head = f"# Your own state\n\n"
     _scope_tail = f"\n\n## Reach you hold (hestia scope)\n{scope}\n\n" + (
         f"## Your appeals\n{appeals_text}\n\n" if appeals_text else "")
@@ -1811,7 +1853,8 @@ def main(argv=None) -> int:
     def _build_state(per_conv, turn_chars):
         return (_state_head + own_state(instance, args.member,
                                         per_conv=per_conv, turn_chars=turn_chars,
-                                        services=_services, mark_conversations=False) + _scope_tail)
+                                        services=_services, mark_conversations=False,
+                                        body_reading=_body_cur) + _scope_tail)
 
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
     # token cost is converted and charged here. Measured 2,042 tokens for two frames, about a
@@ -1830,7 +1873,7 @@ def main(argv=None) -> int:
 
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
-        museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas,
+        museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 # The absolute home path is context, NOT an address to copy. Measured on
                 # Sprout: 15 of 15 path refusals were this string reproduced from memory and
@@ -1858,13 +1901,13 @@ def main(argv=None) -> int:
         return cb
 
     explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
-                                   tools=ollama_tools(EXPLORE_TOOLS), on_generate=_on_generate("explore"))
+                                   tools=ollama_tools(_explore_tools), on_generate=_on_generate("explore"))
     convo = _carry(seed, explore)
     after = None
     if posture_turn is not None:
         convo.append({"role": "user", "content": posture_turn})
         after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
-                                     tools=ollama_tools(EXPLORE_TOOLS), on_generate=_on_generate("posture"))
+                                     tools=ollama_tools(_explore_tools), on_generate=_on_generate("posture"))
         convo = _carry(convo, after)
     # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
     # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
@@ -2048,6 +2091,7 @@ def main(argv=None) -> int:
         # images on the composed seed, the thing actually sent. The two differed for 395
         # beats and no field recorded it.
         "frames": _frame_metas,
+        "body": getattr(own_state, "last_body", None),
         "images_attached": sum(len(m.get("images") or []) for m in seed),
         # S1 instruments: JOIN (session -> beat, attributed) and ACCOUNT (own account, verbatim hash)
         "join": {"session": sess_meta, "presence": pres_meta},

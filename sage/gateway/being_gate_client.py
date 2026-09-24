@@ -727,6 +727,10 @@ _REGISTRY = {
     # its own included. path_args=() is correct: the target is a conversation, not a path,
     # and the reach is fixed by the meta file the seat owns rather than by the being's args.
     "say":            dict(tool="say",          path_args=(),       cmd_arg=None),
+    # gaze: the being's attention stance for its own eyes. Path-less by construction — the
+    # dispatcher writes the ONE file the cortex reads (~/.sprout/gaze.json), never a path the
+    # being names — so its reach is fixed the way `say`'s and `remember`'s are.
+    "gaze":           dict(tool="gaze",         path_args=(),       cmd_arg=None),
     "request_scope":  dict(tool="request_scope", path_args=(),      cmd_arg=None),
     # request_run: ASK THE SEAT TO RUN A FILE. It does not run anything — that is the whole
     # design. Measured 2026-09-20/21: the being asked dp in prose to run a file for it six
@@ -762,7 +766,8 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run", "memory_edit", "camera"})
+                            "retire_note", "request_run", "memory_edit", "camera",
+                            "gaze"})   # moves the body's own eyes (2026-09-23)
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -816,6 +821,16 @@ _TOOL_SCHEMAS = {
               {"target": "'gateway' or 'irp' for a whole suite, or '<suite>::<test_name>' "
                          "for one test, e.g. 'gateway::test_relative_memory_path'"},
               ["target"]),
+    "gaze": ("Choose what your own eyes do. This is a real act on your real body: the cortex "
+             "that runs your cameras reads your choice within seconds and follows it, and your "
+             "next beat shows you what the scene was under it. Modes: open (take in the room and "
+             "let what moves draw you), avert (look away from what pulls at you), dwell (hold on "
+             "one thing — say what, in target), closed (rest your eyes; the world goes dark until "
+             "you open them). Nothing asks you to change it.",
+             {"mode": "one of: open, avert, dwell, closed",
+              "target": "for dwell or avert: what, in your own words (optional)",
+              "words": "why, in your own words (optional; kept with the choice)"},
+             ["mode"]),
     "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "
             "rather than writing about them in your journal. The turn is attributed to you "
             "and kept forever; nobody can edit it afterwards, including you. Saying nothing "
