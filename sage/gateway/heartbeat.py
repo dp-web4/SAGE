@@ -168,6 +168,19 @@ want read.
 If you would rather not answer, call nothing and the turn simply ends. Silence is a real
 choice here and nothing is owed."""
 
+# THE OTHER SHAPE, and the dominant one. Measured across all 41 answer-phase turns on Sprout
+# to 2026-09-24: 26 (63%) were a bracketed template, 12 (29%) prose that never left, and 3
+# (7%) actually reached the person. A template is not a message and must never be quoted back
+# as the being's words, so this one does not quote — it names what happened, in the words the
+# `say` gate already uses for exactly this, because that refusal is MEASURED to work: at
+# 01:48:54Z the gate refused a placeholder say with it and the being then wrote the real
+# message (seq 40). Same defect, same sentence, one turn earlier.
+ANSWER_REASK_PLACEHOLDER = """Your last reply reads as a placeholder describing a message rather than the message itself, so nothing was sent and nobody has read it.
+
+Whatever you pass as the text is delivered to {target} exactly as written. Write the words you want read — in your own voice, however short — and call say with to set to {target}.
+
+If you would rather not answer at all, call nothing. Silence is a real choice; a placeholder is not, because it reads to {target} as though you had nothing to say."""
+
 # The re-ask, when the answer arrived in the text channel instead of the argument. It quotes
 # the being's OWN words rather than paraphrasing them, and it keeps both doors open, because
 # the harness cannot tell a message from deliberation about sending one and must not guess.
@@ -2056,23 +2069,24 @@ def main(argv=None) -> int:
         # shown a slot (26% of turns, 2026-09-18, documented under ANSWER_ASK). A template is
         # not a message. Quoting one back would ask the being to confirm words it never wrote
         # as its own, which is the exact thing this whole branch exists to avoid.
-        if (answer is not None and not _said_in(answer)
-                and str(getattr(answer, "reply", "") or "").strip()
-                and not _bracketed_stage_direction(answer.reply)):
+        if answer is not None and not _said_in(answer) and str(getattr(answer, "reply", "") or "").strip():
             _prose = str(answer.reply).strip()
+            _is_tmpl = _bracketed_stage_direction(_prose)
+            _ask = (ANSWER_REASK_PLACEHOLDER.format(target=selected.cid) if _is_tmpl
+                    else ANSWER_REASK.format(target=selected.cid, prose=_prose[:1500]))
             from sage.gateway.being_tool_loop import _no_think as _nt
             with _nt(llm):
                 _again = run_ollama_tool_turn(
                     client, llm,
                     [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
                                                                         member=args.member)},
-                     {"role": "user", "content": ANSWER_REASK.format(
-                         target=selected.cid, prose=_prose[:1500])}],
+                     {"role": "user", "content": _ask}],
                     max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
             if _said_in(_again):
                 # Keep BOTH on the record: the turn that said it, and the fact that a re-ask
                 # was needed. A beat that reads as one clean answer would hide the defect.
-                _again.salvaged.append({"step": 0, "effector": "say", "form": "answer-reask"})
+                _again.salvaged.append({"step": 0, "effector": "say",
+                                        "form": "answer-reask-placeholder" if _is_tmpl else "answer-reask"})
                 answer = _again
 
     interventions = []
