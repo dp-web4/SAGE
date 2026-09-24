@@ -56,6 +56,15 @@ KEY=$(hx delegate agent-id "$SEAT" 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{
 [ -n "$KEY" ] || { log "cannot derive agent-id for seat '$SEAT'"; exit 1; }
 
 # Live delegation for this key + action, and its expiry.
+# Every id for this key+action, because `delegate grant` ADDS a delegation, it does not extend
+# one: without revoking the superseded ids a "renewal" leaves two live grants for the same
+# action, and the next leaves three. Measured on Sprout 2026-09-24 the first time the renewal
+# path ran for real (8717267c and 395a7042 live together, identical action, different expiry).
+# The duplicate is not dangerous — same seat, same action — but standing authority nobody can
+# enumerate is the opposite of what a delegation is for, and `delegate revoke <id>` is the
+# operator's stated remedy, which only works if there is ONE id to name.
+OLD_IDS=$(hx delegate list 2>/dev/null | grep -F "agent=$KEY" | grep -F "$ACTION" \
+          | grep -oE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' || true)
 LINE=$(hx delegate list 2>/dev/null | grep -F "agent=$KEY" | grep -F "$ACTION" | head -1 || true)
 if [ -n "$LINE" ]; then
   EXP=$(echo "$LINE" | grep -oE 'expires=[0-9-]+ [0-9:]+' | cut -d= -f2 || true)
@@ -103,6 +112,14 @@ log "stopping $UNIT (vault writer lease)"
 sc stop "$UNIT"
 trap 'sc start "$UNIT"' EXIT
 hx delegate grant "$KEY" --action "$ACTION" --expires "$EXPIRES_H" | sed 's/^/  /'
+# Supersede, do not accumulate. Only AFTER the new grant is in the vault, and only while the
+# daemon is still stopped (the revoke needs the same writer lease). A revoke that fails leaves
+# a harmless duplicate and says so; it must never abort the run, because the new grant — the
+# thing this script exists to guarantee — has already landed by here.
+for _old in $OLD_IDS; do
+  if hx delegate revoke "$_old" >/dev/null 2>&1; then log "superseded: revoked $_old"
+  else log "WARN: could not revoke superseded delegation $_old; it stays live until it expires"; fi
+done
 if [ "$NEED_VOUCH" = 1 ]; then hx witness onboard "$SEAT" | sed 's/^/  /'; fi
 sc start "$UNIT"; trap - EXIT; sleep 3
 hx delegate list | grep -F "$ACTION" | sed 's/^/  live: /' || log "WARN: the delegation is not in 'delegate list' after the grant"
