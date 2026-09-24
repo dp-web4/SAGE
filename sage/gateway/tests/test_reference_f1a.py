@@ -473,6 +473,27 @@ def test_memory_edit_with_lines_and_old_is_a_checked_edit():
     assert r.ok and (home / "notes" / "s.py").read_text() == "a\nB\nc\n"
 
 
+def test_a_range_edit_missed_only_by_indentation_names_the_space_counts():
+    """cbp-being 2026-09-24: old without the line's 4 leading spaces, refused twice with the
+    line shown, then appended with memory_write instead. The refusal now gives the counts."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("def main():\n    m = M(10)\n    run(m)\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 2,
+                                         "old": "m = M(10)", "new": "m = M(50)"}), _ALLOW)
+    assert not r.ok
+    assert "Line 2 in the file starts with 4 spaces; that line of your old starts with 0" in r.error
+    assert (home / "notes" / "s.py").read_text() == "def main():\n    m = M(10)\n    run(m)\n"
+    # A real content miss gets no indentation note: the note must not explain a wrong line.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3,
+                                         "old": "m = M(10)", "new": "m = M(50)"}), _ALLOW)
+    assert not r.ok and "spaces at the start" not in r.error
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2,
+                                         "old": "    m = M(10)", "new": "    m = M(50)"}), _ALLOW)
+    assert r.ok and (home / "notes" / "s.py").read_text() == "def main():\n    m = M(50)\n    run(m)\n"
+
+
 def test_the_offered_schema_no_longer_requires_old():
     from sage.gateway import being_gate_client as bgc
     src = open(bgc.__file__).read()

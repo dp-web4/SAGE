@@ -115,6 +115,31 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     return head + "the file ends there."
 
 
+def _indent_only_miss(have: str, old: str, first_line: int) -> str:
+    """A range edit whose old differs from the lines only in leading spaces says so, in counts.
+
+    Measured 2026-09-24 on cbp-being: memory_edit start_line=394 with old
+    'model = Model(n_components=10, ...)' was refused twice in one beat, because the
+    file's line 394 starts with 4 spaces. The refusal printed the line WITH its spaces,
+    which the being cannot see, so it read the file's line as its own old. Next it used
+    memory_write, which appended the line at the end of the file (line 864), where it
+    never runs, then asked for a run. A count is visible where the spaces are not. The
+    note covers new too: a replacement without the spaces would move the crash to an
+    IndentationError (a dedent it sent on 2026-09-24 did exactly that)."""
+    h = have.rstrip("\n").split("\n")
+    w = old.rstrip("\n").split("\n")
+    if len(h) != len(w) or any(a.strip() != b.strip() for a, b in zip(h, w)):
+        return ""
+    for k, (a, b) in enumerate(zip(h, w)):
+        na, nb = len(a) - len(a.lstrip()), len(b) - len(b.lstrip())
+        if na != nb:
+            return (f"\nThey differ only in the spaces at the start of the line. Line "
+                    f"{first_line + k} in the file starts with {na} spaces; that line of your old "
+                    f"starts with {nb}. The spaces are part of the text: put {na} in old, and in "
+                    f"new as well, or the replaced line will not line up with the ones around it.")
+    return ""
+
+
 class ReferenceF1aDispatcher:
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
 
@@ -417,7 +442,8 @@ class ReferenceF1aDispatcher:
                 shown = removed if len(removed) <= 600 else removed[:600] + "..."
                 return ResultEnvelope(ok=False, error=(
                     f"lines {s0}-{s1} of '{path}' are not the text you gave as old, so nothing "
-                    f"was changed. Those lines are now:\n{shown}"))
+                    f"was changed. Those lines are now:\n{shown}"
+                    + _indent_only_miss(removed, old, s0)))
             repl = new
             if repl and not repl.endswith("\n") and removed.endswith("\n"):
                 repl += "\n"
