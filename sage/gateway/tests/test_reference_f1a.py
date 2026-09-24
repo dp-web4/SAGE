@@ -358,6 +358,20 @@ def test_appending_to_the_journal_does_not_offer_retire_note():
     assert env.ok and "appended" in env.result and "retire_note" not in env.result
 
 
+def test_appending_to_a_top_level_script_names_a_new_name_as_the_way_to_start_fresh():
+    """2026-09-24 15:19Z: cbp-being chose "a new file", then wrote it twice to the old file's
+    name; both copies were appended and retire_note refused the path. Outside notes/ and
+    scratch/ a fresh name is the only fresh start, so the receipt must name it — and the
+    named door must actually create a file."""
+    disp, root = _disp()
+    disp(BeingIntent("memory_write", {"path": "train.py", "content": "a = 1"}), _ALLOW)
+    env = disp(BeingIntent("memory_write", {"path": "train.py", "content": "a = 2"}), _ALLOW)
+    assert env.ok and "appended" in env.result and "does not exist yet" in env.result, env.result
+    assert "train-new.py" in env.result and "retire_note" not in env.result
+    new = disp(BeingIntent("memory_write", {"path": "train-new.py", "content": "a = 3"}), _ALLOW)
+    assert new.ok and new.result.startswith("created train-new.py"), new.result
+
+
 def test_appending_to_an_existing_empty_file_does_not_say_created():
     """An existing empty file has 0 lines but this write did not create it (GPT review, #141)."""
     disp, root = _disp()
