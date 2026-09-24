@@ -136,3 +136,34 @@ def test_the_two_reasks_are_chosen_by_the_template_check():
         "both doors exist: quote the prose, or name the placeholder"
     assert "answer-reask-placeholder" in cond, \
         "the record must distinguish which defect was worked around"
+
+
+def test_a_reask_that_fails_is_still_on_the_record():
+    """"It never fired" and "it fired and the being still did not answer" must not be the
+    same record.
+
+    Measured 2026-09-24 20:51Z, the placeholder door's first live trial: it fired — two
+    answer generates, 20:52:50Z and 20:52:56Z — and delivered nothing. The beat record was
+    byte-identical to a beat with no re-ask at all, because `_again` was dropped whole on
+    failure. Proving it had run meant reading heartbeat.partial.jsonl by hand. An
+    intervention nobody can count is one nobody can judge.
+    """
+    block = _reask_block()
+    assert '"delivered"' in block, "every attempt records whether it worked"
+    assert '"produced"' in block, "and what the re-ask itself produced, so a failure has a shape"
+    assert "answer.salvaged.append(_entry)" in block, \
+        "a FAILED re-ask is appended to the answer that stands, not discarded with _again"
+    assert "answer.generates.extend" in block, \
+        "the failed attempt's window cost belongs to this beat"
+    # the success path still replaces the answer and keeps the first attempt's cost
+    assert "_again.salvaged.append(_entry)" in block and "answer = _again" in block
+    assert "_again.generates[:0]" in block, \
+        "a successful re-ask must not lose the first attempt's tokens from the census"
+
+
+def test_the_record_distinguishes_the_two_doors_and_both_outcomes():
+    block = _reask_block()
+    for token in ("answer-reask-placeholder", '"form"', "_is_tmpl"):
+        assert token in block, token
+    # delivered is a real bool, never a truthy object that json would render oddly
+    assert "bool(_delivered)" in block

@@ -2082,12 +2082,39 @@ def main(argv=None) -> int:
                                                                         member=args.member)},
                      {"role": "user", "content": _ask}],
                     max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
-            if _said_in(_again):
-                # Keep BOTH on the record: the turn that said it, and the fact that a re-ask
-                # was needed. A beat that reads as one clean answer would hide the defect.
-                _again.salvaged.append({"step": 0, "effector": "say",
-                                        "form": "answer-reask-placeholder" if _is_tmpl else "answer-reask"})
+            # THE ATTEMPT GOES ON THE RECORD, NOT ONLY THE SUCCESS. Until now this appended
+            # to `salvaged` only when the re-ask worked, and on failure `_again` was dropped
+            # whole — its reply, its thinking and its generates with it. The beat then looked
+            # EXACTLY like a beat where no re-ask existed, so "it never fired" and "it fired
+            # and the being still did not answer" were the same record. Measured 2026-09-24
+            # 20:51Z, the placeholder door's first live trial: it fired (two answer generates,
+            # 20:52:50Z and 20:52:56Z) and delivered nothing, and the only way to know that
+            # was to read heartbeat.partial.jsonl by hand. An intervention nobody can count is
+            # an intervention nobody can judge — the same defect this whole file has been
+            # fixing all day, committed by the fix itself.
+            _delivered = _said_in(_again)
+            _entry = {"step": 0, "effector": "say",
+                      "form": "answer-reask-placeholder" if _is_tmpl else "answer-reask",
+                      "delivered": bool(_delivered),
+                      # what the re-ask itself produced, so a failure is legible as a shape
+                      # rather than as an absence
+                      "produced": str(getattr(_again, "reply", "") or "")[:300]}
+            if _delivered:
+                _again.salvaged.append(_entry)
+                # the first attempt's generates are part of this beat's window cost too
+                try:
+                    _again.generates[:0] = list(getattr(answer, "generates", []) or [])
+                except Exception:
+                    pass
                 answer = _again
+            else:
+                # the re-ask ran and the being still did not speak: keep the original turn as
+                # the answer of record, and carry the attempt and its cost onto it
+                answer.salvaged.append(_entry)
+                try:
+                    answer.generates.extend(list(getattr(_again, "generates", []) or []))
+                except Exception:
+                    pass
 
     interventions = []
     if act_first:
