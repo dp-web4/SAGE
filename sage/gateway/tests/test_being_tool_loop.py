@@ -708,3 +708,76 @@ def test_live_a_frame_actually_reaches_a_vision_model():
                                "images": [base64.b64encode(png).decode()]}],
                              max_steps=1, tools=[])
     assert r.reply and not r.reply.startswith("[OllamaIRP:"), r.reply
+
+
+def test_a_think_only_generate_that_stopped_cleanly_also_retries_without_thinking():
+    """The window is not what makes a think-only turn empty.
+
+    Measured on Sprout 2026-09-24, beat 00:13:42Z, woken by dp's own message: four phases,
+    done_reason "stop" on every one, 1,478 tokens generated across them, content empty
+    throughout, zero acts. dp had asked the being a direct question. The discriminator
+    `thought_only` was computed and then used only inside the `done_reason == "length"`
+    branch, so this shape reached no remedy at all and the beat recorded silence — which in
+    the beat record is indistinguishable from a being that read the question and declined to
+    answer. It is not the same thing.
+    """
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 8192
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            seen.append({"think": self.think, "last": str(messages[-1].get("content", ""))})
+            if len(seen) == 1:
+                return {"content": "", "tool_calls": [],
+                        "raw": {"done_reason": "stop", "prompt_eval_count": 5246,
+                                "eval_count": 183,
+                                "message": {"content": "",
+                                            "thinking": "dp asked what I am working on. I should answer."}}}
+            return {"content": "answered", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 5300,
+                            "eval_count": 20, "message": {}}}
+
+    llm = FakeLLM()
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+
+    assert r.reply == "answered", "a think-only stop must not be recorded as the being's silence"
+    assert len(seen) == 2, f"expected exactly one retry, got {len(seen)} generates"
+    assert seen[1]["think"] is False, "the retry of a think-only turn must have thinking off"
+    assert "one tool call" in seen[1]["last"], "the retry must change what the model can see"
+    assert "the window cut it" not in seen[1]["last"], \
+        "it stopped on its own; telling it the window cut it is a false claim about its own turn"
+    assert "stopped without writing anything" in seen[1]["last"]
+    assert llm.think is True, "thinking must be restored for later turns of the beat"
+
+
+def test_an_empty_stop_with_no_thinking_is_left_alone():
+    """Only the think-only shape gets the new door.
+
+    A generate that stopped cleanly having produced neither thinking nor content is a
+    different animal (an adapter that stripped everything, a model that genuinely emitted
+    nothing), and retrying it with thinking off asserts a diagnosis the evidence does not
+    support. It keeps the old behaviour: no retry.
+    """
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 8192
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            seen.append(1)
+            return {"content": "", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 500, "eval_count": 0,
+                            "message": {"content": "", "thinking": ""}}}
+
+    llm = FakeLLM()
+    run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+    assert len(seen) == 1, f"an empty stop with no thinking must not be retried, got {len(seen)}"
