@@ -171,7 +171,10 @@ class ReferenceF1aDispatcher:
                     raise ValueError(
                         f"{sub}/ is reserved: a turn enters a conversation only through `say`, "
                         "which checks who may speak, witnesses the act and numbers it. Writing "
-                        "the store directly would let a turn appear that nobody said")
+                        "the store directly would let a turn appear that nobody said. Nothing "
+                        f"was changed. If you meant to change one of your own files, "
+                        f"{sub}/ is not its path: give that file's path instead (a `say` "
+                        "does not change any file)")
             if p.parent == self.memory_root / "notes" and p.name in SEAT_OWNED_NOTES:
                 raise ValueError(
                     f"notes/{p.name} is what was said TO you, and it stays as it was said. Your "
@@ -453,6 +456,16 @@ class ReferenceF1aDispatcher:
     def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
                      gone: str) -> ResultEnvelope:
         """Write an edit atomically and say what it did. Shared by the text and line modes."""
+        # AN IDENTICAL REPLACEMENT IS NOT AN EDIT. 2026-09-24 10:42 cbp-being replaced line 2686
+        # with the exact text already there, and the receipt said "This changed the file on
+        # disk"; its closing note then listed line 2686 as fixed. Nothing is written, so the
+        # receipt must say nothing changed and what that means about the fix it intended.
+        if new_text == text:
+            return ResultEnvelope(ok=False, error=(
+                f"memory_edit changed nothing in '{path}': the new text is identical to the "
+                f"text it replaces, so the file on disk is exactly as it was. If you meant "
+                f"to fix those lines, the fix is not in this edit: memory_read them and give "
+                f"new text that differs."))
         tmp = p.with_name(p.name + ".edit.tmp")
         try:
             tmp.write_text(new_text)
