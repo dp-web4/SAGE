@@ -1,7 +1,7 @@
 # SAGE Repository Index
 # Machine-readable metadata for AI-agent discovery.
 # Schema version: 2.0
-# Refreshed: 2026-09-21
+# Refreshed: 2026-09-24
 #
 # IMPORTANT: this file is intentionally conservative. Volatile fleet counts,
 # model assignments, session totals, and interpretive "discoveries" are not
@@ -14,7 +14,7 @@ metadata:
   type: research
   production_ready: false
   active_development: true
-  last_updated: "2026-09-21"
+  last_updated: "2026-09-24"
 
 current_thesis:
   summary: "Persistent identity, memory, evidence, learned behavioral state, and governed action should live around a model substrate rather than be rebuilt every prompt."
@@ -111,8 +111,10 @@ related_repos:
     relationship: "Local authority/action governance"
   snarc:
     relationship: "Standalone salience-gated memory project"
+  SWE-SAGE:
+    relationship: "Public Gemma 4 software-engineering-agent competition/reproducibility surface; benchmark-specific ablations of post-training, persistence, premise fidelity, and governed execution"
   dev-SAGE:
-    relationship: "Active/private capability research; not equivalent to public-main capability"
+    relationship: "Active/private capability research and incubation; not equivalent to public-main capability"
   Synchronism:
     relationship: "Separate theoretical physics/modeling project; some concepts cross-pollinate"
 
