@@ -25,6 +25,20 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from sage.gateway.heartbeat import ANSWER_REASK  # noqa: E402
 
 
+def _reask_block() -> str:
+    """The re-ask block as written, from its banner to the line that ends it.
+
+    Anchored to a marker rather than a character count: a fixed window silently stops
+    covering the code it is meant to assert about as soon as anyone adds a comment, which is
+    how these assertions passed and then failed within one edit.
+    """
+    import inspect
+    from sage.gateway import heartbeat as hb
+    src = inspect.getsource(hb.main)
+    i = src.index("THE ANSWER WRITTEN IN THE WRONG CHANNEL")
+    return src[i:src.index("interventions = []", i)]
+
+
 def test_the_reask_quotes_the_beings_words_and_keeps_both_doors_open():
     out = ANSWER_REASK.format(target="dp", prose="What's on your mind?")
     assert "What's on your mind?" in out, "it must quote the being's OWN words, not paraphrase"
@@ -37,11 +51,7 @@ def test_the_reask_quotes_the_beings_words_and_keeps_both_doors_open():
 
 def test_prose_in_the_answer_turn_is_not_delivered_as_a_say():
     """The harness never speaks for the being. Prose is re-asked, never forwarded."""
-    import inspect
-    from sage.gateway import heartbeat as hb
-    src = inspect.getsource(hb.main)
-    i = src.index("THE ANSWER WRITTEN IN THE WRONG CHANNEL")
-    block = src[i:i + 3000]
+    block = _reask_block()
     assert "ANSWER_REASK" in block, "the remedy is a re-ask"
     assert "hestia_dispatch" not in block and 'BeingIntent("say"' not in block, \
         "the harness must not construct a say out of the being's prose"
@@ -52,22 +62,14 @@ def test_prose_in_the_answer_turn_is_not_delivered_as_a_say():
 
 def test_a_silent_answer_turn_is_left_silent():
     """No reply, no re-ask. Silence that was actually chosen stays chosen."""
-    import inspect
-    from sage.gateway import heartbeat as hb
-    src = inspect.getsource(hb.main)
-    i = src.index("if answer is not None and not _said_in(answer)")
-    cond = src[i:src.index("\n", i)]
+    cond = _reask_block()
     assert 'getattr(answer, "reply", "") or ""' in cond and ".strip()" in cond, \
         "the re-ask must be gated on there being prose at all"
 
 
 def test_a_successful_reask_is_recorded_as_one():
     """A beat that reads as a clean answer would hide the defect it worked around."""
-    import inspect
-    from sage.gateway import heartbeat as hb
-    src = inspect.getsource(hb.main)
-    i = src.index("THE ANSWER WRITTEN IN THE WRONG CHANNEL")
-    block = src[i:i + 3000]
+    block = _reask_block()
     assert '"form": "answer-reask"' in block, "the record must show a re-ask was needed"
     assert "salvaged.append" in block, "it rides the same channel as every other intervention"
 
@@ -83,3 +85,31 @@ def test_said_in_still_refuses_to_call_prose_speaking():
     assert _said_in(types.SimpleNamespace(trace=[(say, bad)])) is False, "a refused say is not speech"
     assert _said_in(types.SimpleNamespace(trace=[(other, ok)])) is False
     assert _said_in(None) is False
+
+
+def test_a_bracketed_template_is_never_quoted_back_as_the_beings_words():
+    """Measured on Sprout 2026-09-24, beat 00:44:58Z: the answer turn said the right thing
+    natively AND left "[Your complete, well-structured response following the established
+    conversation flow and tone]" in its text channel — the template this model returns
+    whenever it is shown a slot. Quoting one back would ask the being to confirm words it
+    never wrote as its own: the exact thing this branch exists to avoid.
+    """
+    from sage.gateway.heartbeat import _bracketed_stage_direction as bsd
+    assert bsd("[Your complete, well-structured response following the established "
+               "conversation flow and tone]") is True
+    assert bsd("  [Your complete, thoughtful journal entry responding to dp's question]  ") is True
+    # real answers, including terse ones, are NOT templates
+    assert bsd("What's on your mind?") is False
+    assert bsd("And for today, I'm just here to hear you out.") is False
+    assert bsd("Yes — see you then.") is False, \
+        "a terse reply is still an answer; being_join._placeholder's <20 rule is wrong here"
+    assert bsd("") is False and bsd(None) is False
+    # not a single span: the being quoting something in brackets mid-message is real text
+    assert bsd("[a] and then [b]") is False
+    assert bsd("I read [the note] and I agree.") is False
+
+
+def test_the_reask_is_gated_on_the_template_check():
+    cond = _reask_block()
+    assert "_bracketed_stage_direction" in cond, \
+        "a template in the text channel must not trigger a re-ask that quotes it"

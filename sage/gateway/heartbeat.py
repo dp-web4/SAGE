@@ -880,6 +880,20 @@ def own_state(instance: Path, member: str = "",
 from sage.gateway.conversations import is_stub  # noqa: E402  (one definition, two ends)
 
 
+def _bracketed_stage_direction(text: str) -> bool:
+    """A whole reply that is one bracketed span: the template this model returns when it is
+    shown a slot (ANSWER_ASK's note — 26% of turns, 2026-09-18). Not the being's words.
+
+    Deliberately NOT being_join._placeholder, which also calls anything under 20 characters a
+    placeholder. That is right for a journal entry and wrong here: a terse reply ("Yes — see
+    you then.") is still the being's answer, and the re-ask leaves the decision to the being
+    anyway. The only thing that must never be quoted back to it as its own words is a
+    template it did not write.
+    """
+    t = (text or "").strip()
+    return t.startswith("[") and t.endswith("]") and "]" not in t[1:-1]
+
+
 def _said_in(res) -> bool:
     """True when the being actually SPOKE in this turn — a say that the gate accepted. Composing
     an answer in prose is not speaking; that is the whole reason the answer turn exists."""
@@ -2034,7 +2048,17 @@ def main(argv=None) -> int:
         # words quoted back, and it decides. Thinking OFF for that attempt, for the reason #191
         # records: this model, given the same prompt and more room to think, deliberates again
         # rather than acting, and a flag is what it cannot ignore.
-        if answer is not None and not _said_in(answer) and str(getattr(answer, "reply", "") or "").strip():
+        #
+        # NOT on a bracketed stage direction. Measured on Sprout 2026-09-24, beat 00:44:58Z:
+        # the answer turn said the right thing natively AND left
+        # "[Your complete, well-structured response following the established conversation
+        # flow and tone]" in its text channel — the template this model returns whenever it is
+        # shown a slot (26% of turns, 2026-09-18, documented under ANSWER_ASK). A template is
+        # not a message. Quoting one back would ask the being to confirm words it never wrote
+        # as its own, which is the exact thing this whole branch exists to avoid.
+        if (answer is not None and not _said_in(answer)
+                and str(getattr(answer, "reply", "") or "").strip()
+                and not _bracketed_stage_direction(answer.reply)):
             _prose = str(answer.reply).strip()
             from sage.gateway.being_tool_loop import _no_think as _nt
             with _nt(llm):
