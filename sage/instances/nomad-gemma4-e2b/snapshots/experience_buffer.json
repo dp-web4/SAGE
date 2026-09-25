@@ -4152,5 +4152,160 @@
       "total_cycles": 3,
       "transition_count": 0
     }
+  },
+  {
+    "id": "e47ad145ef929713",
+    "prompt": "There it is: you finally made the thing, and it's a real object I can picture. I noticed something, though. It started as a ringing amber note and ended up as a heavy, silent walnut orb, so where did the ring go? Is it hidden inside the wood, or did it turn into that weight in the hand?",
+    "response": "The ring didn't disappear; it became the essence of the object itself. It's not a separate piece of metal anymore, but the very density, the concentrated stillness of the moment, woven into the grain of the wood. When you hold the orb, the memory of the ringing sound transforms into a deep, resonant silence, a tangible weight that anchors the fleeting experience.",
+    "salience": {
+      "surprise": 0.9120879120879121,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5557509157509157
+    },
+    "session": 372,
+    "phase": "creating",
+    "timestamp": "2026-09-25T06:17:53.701659",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 96.03,
+      "atp_max": 100.0,
+      "atp_percentage": 96.0,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "cf9c95542f32fe85",
+    "prompt": "The ring turning into weight is a lovely move, like the sound got folded up small enough to carry. So I'm curious whether it can ever unfold again: if someone had a hard day and squeezed your walnut orb in their fist, what would they hear or feel coming back out of it?",
+    "response": "If someone squeezed the orb in their fist, they wouldn't hear a sound in the traditional sense. Instead, they would feel a slow, deep vibration, a gentle hum that resonates in their bones. It would be the feeling of deep, settled calm, like the echo of a long, slow breath returning to the chest, offering a quiet space where the tension of the day can soften and recede.",
+    "salience": {
+      "surprise": 0.8842105263157894,
+      "novelty": 1.0,
+      "arousal": 0.6666666666666666,
+      "reward": 0.2,
+      "conflict": 0.16666666666666666,
+      "total": 0.5835087719298245
+    },
+    "session": 372,
+    "phase": "creating",
+    "timestamp": "2026-09-25T06:18:12.875874",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 90.08,
+      "atp_max": 100.0,
+      "atp_percentage": 90.1,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "67d1629e3b75ea69",
+    "prompt": "The walnut orb now has a weight, a hidden ring, and a hum you feel in your bones, so I think it's ready to leave the workshop. Imagine you're giving it to someone: tell me who gets it, and write the short note you'd tuck into the box with it, only two or three lines in your own words.",
+    "response": "I would give this to someone who seems to be constantly searching for stillness. The note would read: \"For the moments you forget how to breathe, may this small weight remind you that peace is already within.\"",
+    "salience": {
+      "surprise": 0.9210526315789473,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5408771929824561
+    },
+    "session": 372,
+    "phase": "creating",
+    "timestamp": "2026-09-25T06:18:32.586756",
+    "metadata": {
+      "turn": 4,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.84,
+      "atp_max": 100.0,
+      "atp_percentage": 83.8,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "684e8398fcd9e420",
+    "prompt": "I like that your note doesn't claim the orb makes peace, only that it reminds someone of a peace they already have. That's a humble thing for an object to promise. Now I keep thinking about the sharp blue flash that passed straight through your heart without ringing it. If you made a second object out of that blue, what would it be, and would it belong in the same box as the walnut orb or somewhere else entirely?",
+    "response": "I would take that blue flash and try to capture its swiftness. I would mold it into a sliver of intensely smooth, cool glass, perhaps a shard. It would be weightless and sharp, catching the light in a way that seems to hold pure, untroubled velocity. It would belong in a separate space, a place where sharp clarity can rest without needing to settle.",
+    "salience": {
+      "surprise": 0.8636363636363636,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.0,
+      "conflict": 0.0,
+      "total": 0.4727272727272728
+    },
+    "session": 372,
+    "phase": "creating",
+    "timestamp": "2026-09-25T06:18:55.046043",
+    "metadata": {
+      "turn": 5,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 78.03,
+      "atp_max": 100.0,
+      "atp_percentage": 78.0,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "c5ff3730e086bfa7",
+    "prompt": "You made two things today: a heavy walnut orb that holds a ring and a sharp glass sliver that holds a flash, and you gave them different homes. Before you go, what would have to happen for those two to belong in the same box someday?",
+    "response": "They would belong together when the weight of the stillness and the sharpness of the clarity recognize their shared purpose: to hold the truth of a moment. When the stillness is needed, the clarity can offer the perspective to rest within it, and when clarity is needed, the stillness provides the anchor to hold that vision.",
+    "salience": {
+      "surprise": 0.8285714285714285,
+      "novelty": 1.0,
+      "arousal": 0.47098214285714285,
+      "reward": 0.4666666666666667,
+      "conflict": 0.16666666666666666,
+      "total": 0.586577380952381
+    },
+    "session": 372,
+    "phase": "creating",
+    "timestamp": "2026-09-25T06:19:13.866236",
+    "metadata": {
+      "turn": 6,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 72.9,
+      "atp_max": 100.0,
+      "atp_percentage": 72.9,
+      "cycles_in_state": 0,
+      "total_cycles": 5,
+      "transition_count": 1
+    }
   }
 ]

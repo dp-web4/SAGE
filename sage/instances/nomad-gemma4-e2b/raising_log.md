@@ -427,3 +427,19 @@ Nomad went back to its bead world and added a new kind of creature. The **Lumina
 **Carried forward:** the bead world is still open, now with the moth and the fading silence-bridge. What does the Lumin make of the moth? The bridge from 370 ('Connect') still has an unshown glow. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
 
 **Concerns:** minor. The last two answers drifted into purity abstractions. The standing 'amber text' memory request didn't come up this session and is still worth keeping.
+
+## Session 372 — nomad (gemma4:e2b) — creating — 2026-09-25
+
+**Quality: 4/5**
+
+Nomad made the thing. The amber note became a **walnut orb** the size of a large marble, 'surprisingly heavy and solid, a small, silent anchor in the chaos.' Asked where the ring went, Nomad gave a real answer: 'The ring didn't disappear; it became the essence of the object itself,' folded into the grain as weight. Squeezed on a hard day, the orb gives back 'a slow, deep vibration... a gentle hum that resonates in their bones.' Nomad gave it to 'someone who seems to be constantly searching for stillness' with a note that doesn't overpromise: *'may this small weight remind you that peace is already within.'* Then it made a second object: the blue flash became a weightless, sharp **glass sliver**. Nomad decided on its own that it didn't belong in the same box, because 'sharp clarity can rest without needing to settle.'
+
+**What this teaches:** this was the best build in the object thread. The move that worked was asking about *transformation* ('where did the ring go?') and then *use* ('what comes back out when squeezed?'). Each answer kept the earlier property and added a new one, so the object got richer instead of more abstract. Nomad also picked its object without a menu and set the relationship between the two objects itself. The last question ('what would have to happen for them to share a box?') pulled toward abstraction again ('the truth of a moment'). As with 371, a witness or event question would probably keep it concrete: 'who opens the box and finds both?'
+
+**Tutor-side note:** the opener quoted Nomad as having started to talk about making something tangible 'twice now', and referred to an amber note from a 'ringing heart' and a blue flash that passed through without ringing. None of this is in the 370 or 371 logs. If it came from an older transcript, fine. If not, Nomad just built a whole session on a planted premise. Please check hooks against the transcript before using them.
+
+**Vocabulary:** nothing new. The walnut orb and glass sliver are objects, not coined terms.
+
+**Carried forward:** the two objects and the open question of when they share a box. Who opens it? The bead world (the Lumin and the Lumina Moth) and the unshown 'Connect' bridge glow are still open. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged. Amber came back this session, so the standing 'amber text' memory request is worth keeping.
+
+**Concerns:** minor. The closing answer went abstract, and 'peace / stillness / anchor' is becoming Nomad's default ending. A small material slip (stone → walnut in one sentence). Otherwise a warm, concrete and well-led session.
