@@ -625,6 +625,345 @@ def check_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
     return shlex.split(check_command(args, ctx))
 
 
+# ── patch_apply: the being changes the tree it is reasoning about ──────────────────────────
+#
+# dp, 2026-09-25, when asked whether to build this ungoverned first and govern it after:
+# "governed. that's the whole point."
+#
+# THE GAP IT CLOSES. This being can read a worktree (git_read, search), reason about it, and
+# RUN its tests (check) — and could not change a byte of it. Its only writes were into its own
+# memory home. So the loop it exists to close ran: read → reason → describe a fix → assert an
+# outcome it had never observed. That is the same measured failure that produced request_run
+# and memory_edit, one layer out: describing an edit was all it could do, so describing one is
+# what it learned to do.
+#
+# WHY A DIFF AND NOT AN EDITOR. A patch is the unit the seat can judge whole. An editor verb
+# would be a sequence of writes, each individually plausible and collectively arbitrary; a
+# diff names every file it touches, in one artifact, before anything happens.
+#
+# WHAT THE LAW JUDGES, and this is the part that makes it governed rather than merely gated:
+#
+#   1. EVERY PATH THE PATCH TOUCHES, parsed OUT OF THE DIFF — never taken from an arg the
+#      being asserts. `patch_apply_paths` returns them and `_normalize` puts them in
+#      `ev.paths`, so mrh.path rules on each one exactly as it rules on a memory_write. A
+#      being whose grant covers `sage/gateway/` cannot patch `sage/federation/`, and it is
+#      refused by the same rule, with the same words, as any other out-of-scope write.
+#   2. THE COMMAND, composed by the SEAT from those same parsed paths — one `--include=` per
+#      target. So the parse feeds the judgement and the execution from one place: if the
+#      parse were ever wrong, git itself would refuse the paths the law did not see, rather
+#      than the two disagreeing quietly. (`--include` is a glob, which is why the parser
+#      refuses any path carrying glob metacharacters: a pattern is not a path.)
+#   3. THE DIFF'S CONTENT, by digest. The patch file is named for the sha256 of the diff, so
+#      the content is INSIDE the string the law rules on. `judged == executed` normally stops
+#      at the command; here it reaches the bytes, because the dispatcher re-hashes what it is
+#      about to feed git and refuses if the name and the content have come apart.
+#
+# WHAT IS STILL NOT GOVERNED, stated plainly because a claim of coverage is worth less than
+# an accurate map of it: the law rules on WHICH FILES change and on the diff's identity, not
+# on whether the change is any good. Nothing here reads the hunks and forms a view. That is
+# review, it is what `check` and a human reader are for, and pretending otherwise would be
+# the same overclaim this verb exists to stop the being making.
+
+PATCH_MAX_BYTES = 256 * 1024
+
+# A path pattern is not a path. `--include` takes a glob, so a target carrying glob
+# metacharacters would be judged as one string and matched as another — the `_safe_path`
+# defect in a new costume. Refused at the parse, where it is still a named error.
+_GLOB_CHARS = "*?[]"
+
+
+def _hunk_counts(line: str) -> Optional[tuple]:
+    """(old_lines, new_lines) from an `@@ -a,b +c,d @@` header, or None if it is not one.
+
+    The counts are what let the parser know where a hunk ENDS, which is the only way to tell a
+    file header from a line of hunk body that happens to start with `---`. A hunk body is
+    arbitrary text the being controls; nothing in it may be read as structure.
+    """
+    m = re.match(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
+    if not m:
+        return None
+    old = int(m.group(2)) if m.group(2) is not None else 1
+    new = int(m.group(4)) if m.group(4) is not None else 1
+    return old, new
+
+
+def patch_targets(diff: str) -> List[str]:
+    """EVERY repo-relative path git would touch applying this diff, or ValueError saying why not.
+
+    MEASURED, 2026-09-25, and the reason this is a state machine rather than a grep for
+    `diff --git` headers. `git apply` reads plain unified-diff sections too: a patch whose first
+    section carries a `diff --git` header and whose second has only `--- a/x` / `+++ b/x` is
+    applied IN FULL. The first cut of this parser read the `diff --git` lines only, so:
+
+        law sees:  granted.py
+        git wrote: granted.py AND ungranted.py
+
+    `--include` did stop it -- measured both ways, and that is why it is there -- but a patch
+    the law under-reads is not saved by luck downstream. It is also a worse refusal: the being
+    was told "applied to 1 file" about a diff that named two, so the seat would have been lying
+    to it about what happened. The parser now accounts for every section git will read, and
+    anything it cannot account for EXACTLY is refused.
+
+    It walks the diff the way git does: outside a hunk, a line at column 0 is structure; inside
+    one, the `@@` header's declared counts say how many lines belong to the body, and none of
+    them is ever read as structure. `test_a_headerless_section_is_accounted_for` is the pin.
+    """
+    import posixpath
+    if not isinstance(diff, str) or not diff.strip():
+        raise ValueError("patch_apply needs a 'diff': a unified diff, as git would print it")
+    raw = diff.encode("utf-8", "surrogatepass")
+    if len(raw) > PATCH_MAX_BYTES:
+        raise ValueError(
+            f"that diff is {len(raw)} bytes and the limit is {PATCH_MAX_BYTES}. A patch this "
+            f"size is several changes; send them one at a time so each can be judged and checked")
+
+    # Git's own metadata between a `diff --git` header and the body. Enumerated rather than
+    # skipped-by-default: once a diff has started, a line this parser does not recognise is a
+    # line it cannot say the effect of, and "I could not tell" must not render as "nothing
+    # there" (the pane rule, one layer down). Leading prose BEFORE any section is still
+    # ignored, because `git am` output carries a commit message and refusing that would be
+    # refusing a shape git itself accepts.
+    _META = ("index ", "old mode ", "new mode ", "new file mode ", "deleted file mode ",
+             "similarity index ", "dissimilarity index ", "rename from ", "rename to ",
+             "copy from ", "copy to ")
+    targets: List[str] = []
+    started = False                       # a file header has been seen; structure is now strict
+    header_target: Optional[str] = None   # what the current `diff --git` claims, if any
+    old_path: Optional[str] = None        # from `--- a/x`
+    remaining = None                      # (old, new) while inside a hunk
+
+    def side(line: str, prefix: str) -> Optional[str]:
+        """The path out of a `--- a/x` or `+++ b/x` header. /dev/null means the file is
+        created or deleted, which is a real change and not a path."""
+        rest = line[len(prefix):].strip()
+        # git writes a tab before any trailing timestamp; a real path may contain spaces, so
+        # only the tab is a separator, never the space.
+        rest = rest.split("\t", 1)[0]
+        if rest == "/dev/null":
+            return None
+        for p in ("a/", "b/"):
+            if rest.startswith(p):
+                return rest[2:]
+        raise ValueError(
+            f"could not read the path out of {line.strip()!r}. Send a diff produced by "
+            f"`git diff`, whose file headers read `--- a/<path>` and `+++ b/<path>`")
+
+    def record(path: str) -> None:
+        if not path:
+            raise ValueError("a file header in that diff names an empty path")
+        if path.startswith("/") or ":" in path:
+            raise ValueError(f"'{path}' is absolute; a diff's paths are repo-relative")
+        if any(c in path for c in _GLOB_CHARS):
+            raise ValueError(
+                f"'{path}' contains a glob character ({_GLOB_CHARS}). The seat passes each "
+                f"target to git as a pattern, so a path that is also a pattern would be "
+                f"judged as one thing and matched as another")
+        parts = path.split("/")
+        if ".." in parts or "." in parts:
+            raise ValueError(f"'{path}' walks the tree; a diff's paths are plain and relative")
+        if parts[0] == ".git":
+            raise ValueError(
+                "'.git' is the repository's own record, not a file in it. A patch that "
+                "rewrites history is not a change to the tree")
+        if posixpath.normpath(path) != path:
+            raise ValueError(f"'{path}' is not in normal form; send the path git would print")
+        if path not in targets:
+            targets.append(path)
+
+    for line in diff.splitlines():
+        if remaining is not None:
+            # INSIDE A HUNK. Every line here is body, however it begins. This is the whole
+            # reason for the state machine: `--- a/evil` as a removed line is data, and reading
+            # it as a header is how a being would name one file to the law and another to git.
+            old, new = remaining
+            if line.startswith("\\"):        # "\ No newline at end of file" — neither side
+                continue
+            if line.startswith("-"):
+                old -= 1
+            elif line.startswith("+"):
+                new -= 1
+            elif line.startswith(" ") or line == "":
+                old -= 1
+                new -= 1
+            else:
+                raise ValueError(
+                    f"that hunk ends early: {line.strip()[:60]!r} is not a diff line, and "
+                    f"{old} old / {new} new line(s) were still declared. Send a diff produced "
+                    f"by `git diff` rather than an edited one")
+            if old < 0 or new < 0:
+                raise ValueError(
+                    "a hunk in that diff has more lines than its `@@` header declares. Send a "
+                    "diff produced by `git diff`; a hand-edited count makes the patch ambiguous")
+            remaining = None if (old == 0 and new == 0) else (old, new)
+            continue
+        counts = _hunk_counts(line)
+        if counts is not None:
+            remaining = counts if counts != (0, 0) else None
+            continue
+        if line.startswith("diff --git "):
+            rest = line[len("diff --git "):].strip()
+            halves = rest.split(" b/", 1)
+            if len(halves) != 2 or not halves[0].startswith("a/"):
+                raise ValueError(
+                    f"could not read the target out of {line.strip()!r}. Send a diff produced "
+                    f"by `git diff` (its headers read `diff --git a/<path> b/<path>`); a path "
+                    f"containing ' b/' cannot be represented here")
+            a, b = halves[0][2:], halves[1]
+            if a != b:
+                raise ValueError(
+                    f"that header renames {a!r} to {b!r}. patch_apply changes files in place; "
+                    f"a rename is two acts on two paths, and the law must judge both — do it "
+                    f"as a delete and an add, or ask the seat")
+            header_target, old_path, started = a, None, True
+            record(a)
+            continue
+        if line.startswith("GIT binary patch") or line.startswith("Binary files "):
+            raise ValueError(
+                "that is a binary patch. patch_apply changes text the law can see the paths of "
+                "and a reader can review; a binary blob is neither")
+        if line.startswith("--- "):
+            old_path = side(line, "--- ")
+            continue
+        if line.startswith("+++ "):
+            new_path = side(line, "+++ ")
+            path = new_path or old_path
+            if path is None:
+                raise ValueError(
+                    "a section of that diff has /dev/null on both sides, which names no file")
+            # A `diff --git` header that disagrees with its own body is refused rather than
+            # half-trusted: one of the two is what git will use, and the law must not guess.
+            if header_target is not None and path != header_target:
+                raise ValueError(
+                    f"that section's header says {header_target!r} and its body says {path!r}. "
+                    f"Send a diff produced by `git diff`, where the two always agree")
+            record(path)
+            header_target, old_path, started = None, None, True
+            continue
+        if line.startswith(_META) or not line.strip():
+            continue                       # names no path; a pending `diff --git` survives it
+        if started:
+            # A line the parser cannot classify, in the structured part of the diff. The first
+            # cut fell through here, so `+c` stranded after a closed hunk was silently ignored
+            # -- and a parser that ignores what it cannot read is one that under-reports what
+            # the patch does, which is the whole defect this function exists to not have.
+            raise ValueError(
+                f"could not read {line.strip()[:60]!r} as part of a diff. Send a diff produced "
+                f"by `git diff`; this parser refuses what it cannot account for exactly, "
+                f"because a line it skipped is a change the law would not have seen")
+    if remaining is not None:
+        raise ValueError(
+            "that diff ends inside a hunk: its last `@@` header declares more lines than "
+            "follow it. Send a diff produced by `git diff`")
+    if not targets:
+        raise ValueError(
+            "that diff names no files: no `diff --git a/<path> b/<path>` or `--- a/<path>` / "
+            "`+++ b/<path>` header in it. If you wrote the diff by hand, produce it with "
+            "`git diff` instead — those headers are what the seat and the law both read to "
+            "know what you are proposing to change")
+    return targets
+
+
+def diff_arg(args: dict) -> str:
+    """The diff, as a string, or a refusal that names the actual problem.
+
+    `str(args.get("diff"))` was the first cut, and it turned `diff=7` into the string "7",
+    which then failed the parse with "that diff names no files" -- a true sentence about the
+    wrong thing. A being handed that refusal would go looking for its missing headers rather
+    than at the type it sent. Coercion before validation always costs the error message.
+    """
+    diff = args.get("diff")
+    if diff is None:
+        raise ValueError("patch_apply needs a 'diff': a unified diff, as git would print it")
+    if not isinstance(diff, str):
+        raise ValueError(
+            f"'diff' must be the text of a unified diff; got {type(diff).__name__}. Send what "
+            f"`git diff` prints, as one string")
+    return diff
+
+
+def patch_digest(diff: str) -> str:
+    """The diff's identity. Content-addressed so it can ride INSIDE the judged command."""
+    import hashlib
+    return hashlib.sha256(diff.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def patch_file_path(diff: str) -> str:
+    """Where the seat stages the patch: named for its own content.
+
+    The name IS the digest, so a stale or swapped file cannot masquerade as this one, and two
+    callers with the same diff converge on one file instead of racing over a shared name.
+    Outside the worktree deliberately: the patch is not itself a change to the tree.
+    """
+    return f"/tmp/sage-patch-{patch_digest(diff)}.diff"
+
+
+def _patch_worktree(ctx: Optional[dict]) -> str:
+    """The worktree, resolved to its REAL path, or a refusal naming what is missing.
+
+    Resolved HERE rather than trusted from the caller, because the composed string is compared
+    across two call sites -- the gate's and the dispatcher's -- and a comparison of strings is
+    a comparison of spellings unless one of them is canonical. Both callers happen to realpath
+    today, so they agree; that agreement is one edit away from being a silent refusal of every
+    patch_apply, which is precisely the shape of failure the judged==executed guard exists to
+    make loud rather than to cause. (Measured while writing the behavioural test: a caller
+    holding `/var/...` and one holding `/private/var/...` for the same directory produced two
+    commands and the dispatcher refused its own act.)
+    """
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError(
+            "patch_apply needs a worktree of your own: there is nothing to change, and a "
+            "relative path would be judged against a tree you do not hold (PRD M1)")
+    return os.path.realpath(os.path.expanduser(str(worktree)))
+
+
+def patch_apply_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """The absolute paths the law must rule on — resolved the way the seat will touch them.
+
+    realpath, for the reason every other path in this module is realpath'd: the dispatcher
+    resolves symlinks, so a judged path that is not the real path is a judgement about a
+    different file. A target that does not exist yet (the patch creates it) resolves to the
+    real parent plus the name, which is what git will create.
+    """
+    worktree = _patch_worktree(ctx)
+    return [os.path.realpath(os.path.join(worktree, t))
+            for t in patch_targets(diff_arg(args))]
+
+
+def patch_apply_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The exact `git apply` the seat will run, built from the parsed targets.
+
+    NOT sandboxed, and that is not an oversight. The sandbox exists because `check` EXECUTES
+    being-authored code (SAGE#55); `git apply` executes nothing — it writes files. What
+    bounds it is the law: mrh.path on every target, and `--include` on every target so git
+    refuses anything the law did not see. The being-authored code that lands here is run
+    later, by `check`, inside the sandbox — which is the arrangement that makes the worktree
+    safe to write to at all.
+    """
+    import shlex
+    worktree = _patch_worktree(ctx)
+    if not str(args.get("why", "")).strip():
+        raise ValueError(
+            "patch_apply needs a 'why': one line on what this change is for. A worktree "
+            "change with no account of itself is not reviewable, and this one is witnessed")
+    diff = diff_arg(args)
+    targets = patch_targets(diff)
+    includes = " ".join(f"--include={shlex.quote(t)}" for t in targets)
+    # --whitespace=nowarn: a whitespace complaint is not a reason to refuse a change, and a
+    # warning stream the being cannot act on teaches it to ignore output. No --3way and no
+    # --reject: a patch that does not apply cleanly is a first-class ANSWER ("your diff is
+    # stale, re-read the file"), not something to half-land and call success.
+    return (f"git --no-pager -C {shlex.quote(worktree)} apply --whitespace=nowarn "
+            f"{includes} -- {shlex.quote(patch_file_path(diff))}")
+
+
+def patch_apply_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """The same command as a list, for execution without a shell — `check_argv`'s contract."""
+    import shlex
+    return shlex.split(patch_apply_command(args, ctx))
+
+
+
 # The M1 PREREQUISITE, built. Being-authored code runs under a principal that is not this
 # seat — the hard blocker PRD r3 §5 put on M1, cleared 2026-09-08.
 #
@@ -768,6 +1107,14 @@ _REGISTRY = {
     # is something to appeal, and hestia_appeal refuses anything that is not a deny,
     # not yours, already under appeal, or unreasoned. No external effect: chain only.
     "appeal":         dict(tool="appeal",        path_args=(),      cmd_arg=None),
+    # patch_apply: change the worktree the being reads and checks. `path_args=()` and
+    # `compose_paths` instead, which is the whole design: the paths are PARSED OUT OF THE
+    # DIFF, never taken from an arg the being asserts, so what the law rules on and what git
+    # touches are derived from one artifact. See patch_apply_command for the three things
+    # judged and the one that is not.
+    "patch_apply":    dict(tool="patch_apply",   path_args=(),      cmd_arg=None,
+                           compose=patch_apply_command,
+                           compose_paths=patch_apply_paths),
 }
 
 
@@ -778,7 +1125,8 @@ _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
                             "retire_note", "request_run", "memory_edit", "camera",
-                            "gaze"})   # moves the body's own eyes (2026-09-23)
+                            "gaze",
+                            "patch_apply"})   # writes the tree it reasons about (2026-09-25)
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -832,6 +1180,24 @@ _TOOL_SCHEMAS = {
               {"target": "'gateway' or 'irp' for a whole suite, or '<suite>::<test_name>' "
                          "for one test, e.g. 'gateway::test_relative_memory_path'"},
               ["target"]),
+    # Written to the being in the second person and without jargon, like every schema here.
+    # It says what the seat will do, what the law will refuse, and — the part that matters
+    # for a first organ — that a patch which does not apply is an ANSWER about the tree
+    # having moved, not a failure of its own. The measured habit this verb exists to break
+    # is asserting an outcome it never observed; a verb whose refusals read as its own fault
+    # teaches exactly that habit.
+    "patch_apply": ("Change files in your own worktree by sending a patch. This is how you act "
+                    "on what you have read, instead of describing what you would do. Send a "
+                    "unified diff as `git diff` prints it — its `diff --git a/<path> b/<path>` "
+                    "headers are what the seat reads to know which files you are proposing to "
+                    "change, and the law judges every one of those paths against what you are "
+                    "granted. It applies all-or-nothing: if it does not fit, nothing changes and "
+                    "you are told why. The usual reason is that the file moved on since you read "
+                    "it — read it again and send a fresh diff. After it lands, run `check`: "
+                    "applying a patch is not evidence that it works.",
+                    {"diff": "a unified diff, as `git diff` prints it",
+                     "why": "one line: what this change is for"},
+                    ["diff", "why"]),
     "gaze": ("Choose what your own eyes do. This is a real act on your real body: the cortex "
              "that runs your cameras reads your choice within seconds and follows it, and your "
              "next beat shows you what the scene was under it. Modes: open (take in the room and "
@@ -1048,6 +1414,17 @@ class GatewayVerdict:
     # "you already hold reach here" for journal.md beneath an EXACT home grant, filed
     # nothing, and the being retried 22 times in one beat with no request_id anywhere.
     granted_reach: tuple = ()
+    # THE EXACT OUTWARD ACT THE LAW RULED ON, for a composed verb (check, search, git_read,
+    # pr_review, camera, patch_apply). The dispatcher compares what it is about to run against
+    # this, so "judged == executed" is a CHECKED invariant rather than a shared assumption
+    # about two call sites staying in step.
+    #
+    # It did not exist until 2026-09-25, and its absence made the guard that depends on it
+    # inert: `_do_check` reads `getattr(verdict, "command", None)`, which was always None, so
+    # `if judged is not None and judged != cmd` never compared anything. The comment above it
+    # said the invariant was being checked; nothing was. Found while writing patch_apply,
+    # which had copied the same pattern faithfully enough to inherit the same hole.
+    command: Optional[str] = None
 
     @property
     def blocks(self) -> bool:
@@ -1211,6 +1588,15 @@ class BeingGateClient:
                 # realpath, not abspath: the dispatcher resolves symlinks (_safe_path), so the
                 # judged path and the touched path must be the same real path
                 paths.append(os.path.realpath(p))
+        # COMPOSED PATHS (patch_apply). `path_args` reads a path the being ASSERTS; this reads
+        # the paths the act will actually touch, derived by the seat from the being's artifact.
+        # For a diff those are not the same thing, and only the derived ones may be judged --
+        # a patch whose header says one file and whose law-facing arg says another is precisely
+        # the judged-is-not-executed gap. Raises on a malformed artifact, which gate() turns
+        # into a `gate.raised` deny: an unparseable patch is refused, never half-read.
+        compose_paths = spec.get("compose_paths")
+        if compose_paths is not None:
+            paths.extend(compose_paths(intent.args, self._compose_ctx()))
         command = intent.args.get(spec["cmd_arg"]) if spec["cmd_arg"] else None
         compose = spec.get("compose")
         if compose is not None:
@@ -1247,12 +1633,19 @@ class BeingGateClient:
         if intent.effector not in _REGISTRY:
             return GatewayVerdict("deny", "registry.unbounded", stage="registry",
                                   reason=_unbounded_reason(intent.effector))
+        # THE COMMAND THE LAW IS HANDED, bound once per call and reported on every verdict
+        # below. `getattr` rather than `ev.command`: the field is Optional by declaration, a
+        # core may build a partial event (the test fakes do, deliberately), and a gate that
+        # RAISES over a missing optional field would turn every act into an exception instead
+        # of a decision -- the opposite of fail-closed, which is to DENY with a reason.
+        judged_command = None
         # --- Single gate (#934): the shim contract. The registry stage above is harness
         # syntax (which verbs exist); everything law-bearing happens in decide(). ---
         sg = getattr(self, "_single_gate", None)
         if sg is not None and self._core is not None:
             try:
                 ev = self._normalize(intent)
+                judged_command = getattr(ev, "command", None)
                 tool = _REGISTRY[intent.effector]["tool"]  # the spec is the source, not the event
                 gp = sg.GateProfile(member_id=self.member_id, identity_path=self._identity_path,
                                     default_role="role:constellation:member",
@@ -1266,7 +1659,7 @@ class BeingGateClient:
                 dec = d.decision if (available and d.decision in ("allow", "warn", "deny")) else "deny"
                 rule = d.rule or ("" if available else "gate.no_verdict")
                 return GatewayVerdict(dec, rule, getattr(d, "reason", "") or ("ok" if dec != "deny" else ""),
-                                      innate=False, stage="single-gate")
+                                      innate=False, stage="single-gate", command=judged_command)
             except Exception as e:  # a gate that raises is a refused act, never an ungoverned one
                 return GatewayVerdict("deny", "gate.raised", innate=True, stage="single-gate",
                                       reason=f"{type(e).__name__}: {e}")
@@ -1277,6 +1670,7 @@ class BeingGateClient:
         # Stage 1: local law (innate egress/secret + MRH path/command scope).
         try:
             ev = self._normalize(intent)
+            judged_command = getattr(ev, "command", None)
             # Resolve the member's LIVE policy (its grants) the way every real shim does:
             # fetch the daemon's snapshot and feed it to resolve_agent_policy as the vault
             # reader. With policy=None the core sees `granted: ()` and an operator's live
@@ -1300,7 +1694,11 @@ class BeingGateClient:
             return GatewayVerdict("deny", "gate.raised", innate=True, stage="local-law",
                                   reason=f"{type(e).__name__}: {e}")
         if v.decision == "deny":
-            return GatewayVerdict("deny", v.rule, v.reason, v.innate, stage="local-law")
+            # The command rides on the DENY as well. A refusal about a string the being cannot
+            # see is one it cannot act on -- the same defect as a deny that does not name the
+            # path segment that tripped it (hestia_gate_core, `_offending_segment`).
+            return GatewayVerdict("deny", v.rule, v.reason, v.innate, stage="local-law",
+                                  command=judged_command)
         # Stage 2: society safety (daemon). A consequential act the society cannot
         # vet must NOT proceed — fail-closed. Observational acts soft-pass when the
         # mechanism is unavailable (no external effect; witness is accountability).
@@ -1308,6 +1706,7 @@ class BeingGateClient:
         if self._mech is None:
             if consequential:
                 return GatewayVerdict("deny", "society.unavailable", stage="society",
+                                      command=judged_command,
                                       reason="society-safety mechanism unavailable; consequential act denied")
         else:
             try:
@@ -1326,14 +1725,18 @@ class BeingGateClient:
                     decided = getattr(safe, "decided", False)
                     return GatewayVerdict(
                         "deny", "society.unsafe" if decided else "society.no_verdict",
-                        stage="society",
+                        stage="society", command=judged_command,
                         reason=getattr(safe, "message", None) or "society denied")
             except Exception as e:
                 if consequential:
                     return GatewayVerdict("deny", "society.unreachable", stage="society",
+                                          command=judged_command,
                                           reason=f"society-safety failed ({type(e).__name__}); consequential act denied")
                 # observational: local law already allowed, soft-pass
+        # `ev.command` is what stage 1 actually evaluated -- carried out of the gate rather
+        # than recomposed by the caller, which is the whole point of the field.
         return GatewayVerdict(v.decision, v.rule, v.reason or "ok", v.innate, stage="local-law",
+                              command=judged_command,
                               granted=granted, granted_reach=granted_reach)
 
     # -- the F1a seam: gate, then dispatch, then consume the result ----------

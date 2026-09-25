@@ -23,7 +23,7 @@ def _client(mech):
     c._profile = object()
     c._mech = mech
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -114,7 +114,7 @@ def test_relative_memory_path_is_judged_at_the_being_memory_root():
     c = _client(_allows)
     c.memory_root = "/tmp/being-home"
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -131,7 +131,7 @@ def test_pr_review_is_judged_as_the_gh_command_the_seat_runs():
     seen = {}
     c = _client(_allows)
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -229,7 +229,7 @@ def test_request_scope_path_is_not_judged_under_mrh_path():
     seen = {}
     c = _client(_allows)
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
