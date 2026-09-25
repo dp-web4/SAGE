@@ -210,6 +210,21 @@ def child_env(gpu: bool) -> dict:
     return env
 
 
+def _text(b) -> str:
+    return b.decode("utf-8", "replace") if isinstance(b, bytes) else (b or "")
+
+
+def run_child(argv: list[str], cwd: str, timeout: float, env: dict):
+    """(returncode, stdout, stderr, timed_out). On a timeout CPython hands back the partial
+    output as BYTES even under text=True, so it is decoded here; before this, every run that
+    timed out raised a TypeError after the run and posted no answer (2026-09-25, seq 3755)."""
+    try:
+        r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
+        return r.returncode, r.stdout, r.stderr, False
+    except subprocess.TimeoutExpired as e:
+        return None, _text(e.stdout), _text(e.stderr), True
+
+
 def cmd_run(args) -> None:
     inst = _instance()
     p = _target(inst, args.path)
@@ -227,13 +242,7 @@ def cmd_run(args) -> None:
     # with the devices hidden, CUDA code falls back to the CPU and answers that question without
     # loading the card. That covers the measured path, not every path (see WHERE_HIDDEN).
     # `--gpu` is the deliberate, visible exception, for a seat that has checked the card has room.
-    env = child_env(args.gpu)
-    try:
-        r = subprocess.run(interp + [str(p)], cwd=str(inst), capture_output=True,
-                           text=True, timeout=args.timeout, env=env)
-        rc, out, err, timed = r.returncode, r.stdout, r.stderr, False
-    except subprocess.TimeoutExpired as e:
-        rc, out, err, timed = None, (e.stdout or ""), (e.stderr or ""), True
+    rc, out, err, timed = run_child(interp + [str(p)], str(inst), args.timeout, child_env(args.gpu))
 
     def block(name: str, s: str) -> str:
         s = (s or "").rstrip()
