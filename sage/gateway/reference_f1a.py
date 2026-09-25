@@ -408,15 +408,25 @@ class ReferenceF1aDispatcher:
             content, end = lines[end][: self.max_read_chars], end + 1
         else:
             content = "".join(lines[start - 1:end])
+        # A READ OF CODE IS WHERE THE VERDICT ON IT IS FORMED. #162 put the parse check on
+        # write and edit receipts only. Measured 2026-09-23 on cbp-being (beat
+        # heartbeat-f4be191ca52d): it read lines 1718-1937 of its script, which showed line
+        # 1721 at column 0 and the lines under it indented four spaces, and concluded "the
+        # file is syntactically valid" -- Python stopped at line 1722 with IndentationError.
+        # Its journal, todo and memory recorded "fix complete and verified", and it told the
+        # seat it had already run the script. Nothing it was shown contradicted the reading.
+        status = _python_status(p).strip()
+        parse = f"\n[{status}]" if status else ""
         if start == 1 and end >= len(lines):
-            return ResultEnvelope(ok=True, result=content, witness_id=self._witness(f"memory_read {p.name}"))
+            return ResultEnvelope(ok=True, result=content + parse,
+                                  witness_id=self._witness(f"memory_read {p.name}"))
         head = f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else ""
         tail = (f"\n[… truncated: this shows lines {start}-{end} of {len(lines)} "
                 f"({len(whole)} characters in all). Lines {end + 1}-{len(lines)} were NOT shown, so "
                 f"absence here is not evidence of absence in the file. To read on, call "
                 f"memory_read with path '{shown}' and start_line={end + 1}. …]"
                 if end < len(lines) else f"\n[end of file: line {len(lines)} is the last line.]")
-        return ResultEnvelope(ok=True, result=head + content + tail,
+        return ResultEnvelope(ok=True, result=head + content + tail + parse,
                               witness_id=self._witness(f"memory_read {p.name} (lines {start}-{end})"))
 
     def _do_memory_edit(self, intent: BeingIntent) -> ResultEnvelope:
