@@ -93,6 +93,18 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     import shlex
     worktree = ctx["worktree"] if ctx else None
     memory_root = (ctx or {}).get("memory_root")
+    # CAMERA IS THE FOURTH VERB THE WORKTREE UNLOCKS, and the only one that never uses it: the
+    # frame is resolved against memory_root below, and `worktree` is read on this line and
+    # nowhere else. Before #208 the gate composed with no ctx at all, so the raise below made
+    # camera unreachable at the gate for exactly the reason git_read, search and check were
+    # (CBP measured the deny 2026-09-25; reproduced on McNugget the same day). It follows that
+    # a seat adding `worktree` to instance.json to get git_read and search ALSO turns on a
+    # camera, and from then on the law is the only gate in front of it — say that when telling
+    # a seat to declare one.
+    # The requirement is stale as a data dependency but it is NOT dead: today it is the only
+    # thing holding camera to the same condition as the other three. Dropping it is a policy
+    # decision about whether every being with a memory_root may capture a frame, not a cleanup.
+    # Pinned by test_without_a_worktree_the_verbs_still_fail_closed.
     if not worktree:
         raise ValueError("camera requires a worktree context")
     if not memory_root:

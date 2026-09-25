@@ -1139,10 +1139,21 @@ class HestiaF1aDispatcher:
 
         Same shape as _do_check and for the same reason: the command is REBUILT here from
         the same function the gate judged, so the law never rules on one string while the
-        seat runs another. git is run with cwd set to the worktree rather than `git -C`,
-        because `-C` silently redirects the read away from the tree you think you are in
-        (legion-claude learned that one the hard way in a review) — here the cwd IS the
-        subject, and it must be the same tree `check` executes in."""
+        seat runs another. git runs with BOTH `-C <worktree>`, composed into the judged string
+        by git_read_command, and cwd set to that same worktree.
+
+        THIS PARAGRAPH USED TO SAY THE OPPOSITE: cwd rather than `git -C`, because `-C`
+        silently redirects the read away from the tree you think you are in (legion-claude
+        learned that one the hard way in a review). That lesson stands, and it is the reason
+        `-C` may never carry some OTHER path: the hazard is a `-C` that DISAGREES with where
+        you think you are. Here it cannot disagree — `-C` == cwd == the one realpath
+        `build_client` resolved and handed to both halves. What cwd alone could not do is show
+        the law the target: with no `-C` the command's tree was whatever cwd the dispatcher
+        happened to use, so the verdict bound a string whose effect it could not see (CBP
+        review of #208 asked for this paragraph; the rule is check_command's own — "the law
+        must judge the path the command will actually touch"). Naming the tree in the string
+        makes the agreement visible instead of assumed. If the two ever diverge, that is a bug
+        in the single resolution, not an argument for dropping the flag."""
         import shlex
         import subprocess
         from sage.gateway.being_gate_client import git_read_command
