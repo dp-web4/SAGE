@@ -78,16 +78,35 @@ def test_the_gate_composes_with_the_worktree():
             check(f"{eff}: the gate composed a command at all", bool(ev.command))
             check(f"{eff}: and it names the worktree the dispatcher will use",
                   c.worktree in (ev.command or ""))
+        # camera reaches the law once a worktree exists -- the fourth verb this unlocked. It
+        # aims at memory_root BY DESIGN (an uncommitted frame in the worktree would dirty the
+        # tree check reports as evidence), so it is the one ctx verb whose command must NOT
+        # name the worktree. Asserted, not assumed: it is why camera is absent from the loop
+        # above and present in the fail-closed one below.
+        ev = c._normalize(B.BeingIntent(effector="camera", args={}))
+        check("camera: the gate composed a command at all", bool(ev.command))
+        check("camera: aimed at the being's home", c.memory_root in (ev.command or ""))
+        check("camera: and not at the worktree it nonetheless requires",
+              c.worktree not in (ev.command or ""))
 
 
 def test_without_a_worktree_the_verbs_still_fail_closed():
     """The refusal is CORRECT and must survive. A seat with no worktree declared gets a deny
     that names what is missing -- not a command composed against the shared checkout, which is
-    the tree the being does not hold."""
+    the tree the being does not hold.
+
+    CAMERA IS IN THIS LIST AND NOT IN THE COMPOSE TEST ABOVE, which is the whole of CBP's
+    second note on #208. It is a composed verb whose composer requires a worktree, so it was
+    unreachable at the gate for the same reason as the other three and this PR makes it
+    reachable too -- but it uses memory_root, not the worktree, so it composes a command that
+    never names the tree. Pinning the deny here is what keeps that requirement from being
+    removed as "unused": it is the only thing holding a camera to the same condition as a
+    git log.
+    """
     c = _client(None)
     check("no worktree, no claim", c.worktree, None)
     for eff, args in (("search", {"pattern": "x"}), ("git_read", {"op": "log"}),
-                      ("check", {"target": "gateway"})):
+                      ("check", {"target": "gateway"}), ("camera", {})):
         v = c.gate(B.BeingIntent(effector=eff, args=args))
         check(f"{eff}: denied", v.decision, "deny")
         check(f"{eff}: and says a worktree is what is missing",

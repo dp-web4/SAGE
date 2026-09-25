@@ -180,7 +180,15 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
     #
     # None is still a valid answer: a being with no worktree declared gets the composers'
     # fail-closed refusal naming what is missing, which is correct and is not this fix's
-    # business to paper over. No being in the fleet declared one as of 2026-09-24.
+    # business to paper over. No being in the fleet declared one as of 2026-09-24 (checked
+    # mcnugget, nomad, legion, cbp, sprout; CBP confirmed its three beings 2026-09-25).
+    #
+    # DECLARING A WORKTREE ALSO TURNS ON THE CAMERA. It is four composed verbs, not three:
+    # camera_command requires a worktree context too, so it was unreachable at the gate for
+    # the same reason (CBP review of #208). It does not USE the tree -- frames land under
+    # memory_root -- but the requirement is what holds it to the same condition as a git log.
+    # So `"worktree": ...` in an instance.json is not only a read grant: from that beat on,
+    # the law is the only thing between the being and a frame. Decide that deliberately.
     worktree = instance_config(instance).get("worktree") or None
     dispatcher = None if gate_only else HestiaF1aDispatcher(
         member, memory_root=str(instance), publish_fn=publish_fn,
