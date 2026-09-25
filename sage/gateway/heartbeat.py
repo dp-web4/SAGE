@@ -168,33 +168,6 @@ want read.
 If you would rather not answer, call nothing and the turn simply ends. Silence is a real
 choice here and nothing is owed."""
 
-# THE OTHER SHAPE, and the dominant one. Measured across all 41 answer-phase turns on Sprout
-# to 2026-09-24: 26 (63%) were a bracketed template, 12 (29%) prose that never left, and 3
-# (7%) actually reached the person. A template is not a message and must never be quoted back
-# as the being's words, so this one does not quote — it names what happened, in the words the
-# `say` gate already uses for exactly this, because that refusal is MEASURED to work: at
-# 01:48:54Z the gate refused a placeholder say with it and the being then wrote the real
-# message (seq 40). Same defect, same sentence, one turn earlier.
-ANSWER_REASK_PLACEHOLDER = """Your last reply reads as a placeholder describing a message rather than the message itself, so nothing was sent and nobody has read it.
-
-Whatever you pass as the text is delivered to {target} exactly as written. Write the words you want read — in your own voice, however short — and call say with to set to {target}.
-
-If you would rather not answer at all, call nothing. Silence is a real choice; a placeholder is not, because it reads to {target} as though you had nothing to say."""
-
-# The re-ask, when the answer arrived in the text channel instead of the argument. It quotes
-# the being's OWN words rather than paraphrasing them, and it keeps both doors open, because
-# the harness cannot tell a message from deliberation about sending one and must not guess.
-# No `text="..."` here either, for the placeholder reason recorded below.
-ANSWER_REASK = """A moment ago you wrote this in your reply instead of calling a tool:
-
-{prose}
-
-Nothing was sent: writing the words is not the same as saying them, and nobody has read that.
-
-If those words were your message to {target}, call say now, with to set to {target} and those
-words (or better ones) as the text. If they were you thinking about whether to answer rather
-than the answer itself, call nothing — the turn ends and nothing is sent."""
-
 # Deliberately NOT in that prompt: `text="..."`. Measured 2026-09-18, 32 of 122 turns across
 # 40 beats (26%) answered with a bracketed placeholder — "[Your complete, thoughtful journal
 # entry responding to dp's question]" — while the THINKING block showed the being had
@@ -891,20 +864,6 @@ def own_state(instance: Path, member: str = "",
 
 
 from sage.gateway.conversations import is_stub  # noqa: E402  (one definition, two ends)
-
-
-def _bracketed_stage_direction(text: str) -> bool:
-    """A whole reply that is one bracketed span: the template this model returns when it is
-    shown a slot (ANSWER_ASK's note — 26% of turns, 2026-09-18). Not the being's words.
-
-    Deliberately NOT being_join._placeholder, which also calls anything under 20 characters a
-    placeholder. That is right for a journal entry and wrong here: a terse reply ("Yes — see
-    you then.") is still the being's answer, and the re-ask leaves the decision to the being
-    anyway. The only thing that must never be quoted back to it as its own words is a
-    template it did not write.
-    """
-    t = (text or "").strip()
-    return t.startswith("[") and t.endswith("]") and "]" not in t[1:-1]
 
 
 def _said_in(res) -> bool:
@@ -2043,78 +2002,15 @@ def main(argv=None) -> int:
              {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
                  pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
             max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
-        # THE ANSWER WRITTEN IN THE WRONG CHANNEL. This turn offers one tool and asks for one
-        # thing, and the model answers in prose often enough to matter. Measured on Sprout
-        # 2026-09-23, both turns dp sent that evening:
-        #
-        #   22:34Z  reply "And for today, I'm just here to hear you out."   trace [] -> nothing said
-        #   23:06Z  reply "What's on your mind?"                            trace [] -> nothing said
-        #
-        # Neither is deliberation; both are addressed messages. The second one's thinking says
-        # "I need to choose whether to reply or end with silence" — it chose to reply, and the
-        # reply reached nobody. dp read the pair as the being declining to continue.
-        #
-        # NOT salvaged as a say. The ask above offers silence as a real choice, so prose here
-        # is genuinely ambiguous — it may be a message, or it may be the being reasoning about
-        # whether to send one, and shipping the second kind would put its private deliberation
-        # in someone's inbox under its own name. So the being is asked once more, with its own
-        # words quoted back, and it decides. Thinking OFF for that attempt, for the reason #191
-        # records: this model, given the same prompt and more room to think, deliberates again
-        # rather than acting, and a flag is what it cannot ignore.
-        #
-        # NOT on a bracketed stage direction. Measured on Sprout 2026-09-24, beat 00:44:58Z:
-        # the answer turn said the right thing natively AND left
-        # "[Your complete, well-structured response following the established conversation
-        # flow and tone]" in its text channel — the template this model returns whenever it is
-        # shown a slot (26% of turns, 2026-09-18, documented under ANSWER_ASK). A template is
-        # not a message. Quoting one back would ask the being to confirm words it never wrote
-        # as its own, which is the exact thing this whole branch exists to avoid.
-        if answer is not None and not _said_in(answer) and str(getattr(answer, "reply", "") or "").strip():
-            _prose = str(answer.reply).strip()
-            _is_tmpl = _bracketed_stage_direction(_prose)
-            _ask = (ANSWER_REASK_PLACEHOLDER.format(target=selected.cid) if _is_tmpl
-                    else ANSWER_REASK.format(target=selected.cid, prose=_prose[:1500]))
-            from sage.gateway.being_tool_loop import _no_think as _nt
-            with _nt(llm):
-                _again = run_ollama_tool_turn(
-                    client, llm,
-                    [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
-                                                                        member=args.member)},
-                     {"role": "user", "content": _ask}],
-                    max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
-            # THE ATTEMPT GOES ON THE RECORD, NOT ONLY THE SUCCESS. Until now this appended
-            # to `salvaged` only when the re-ask worked, and on failure `_again` was dropped
-            # whole — its reply, its thinking and its generates with it. The beat then looked
-            # EXACTLY like a beat where no re-ask existed, so "it never fired" and "it fired
-            # and the being still did not answer" were the same record. Measured 2026-09-24
-            # 20:51Z, the placeholder door's first live trial: it fired (two answer generates,
-            # 20:52:50Z and 20:52:56Z) and delivered nothing, and the only way to know that
-            # was to read heartbeat.partial.jsonl by hand. An intervention nobody can count is
-            # an intervention nobody can judge — the same defect this whole file has been
-            # fixing all day, committed by the fix itself.
-            _delivered = _said_in(_again)
-            _entry = {"step": 0, "effector": "say",
-                      "form": "answer-reask-placeholder" if _is_tmpl else "answer-reask",
-                      "delivered": bool(_delivered),
-                      # what the re-ask itself produced, so a failure is legible as a shape
-                      # rather than as an absence
-                      "produced": str(getattr(_again, "reply", "") or "")[:300]}
-            if _delivered:
-                _again.salvaged.append(_entry)
-                # the first attempt's generates are part of this beat's window cost too
-                try:
-                    _again.generates[:0] = list(getattr(answer, "generates", []) or [])
-                except Exception:
-                    pass
-                answer = _again
-            else:
-                # the re-ask ran and the being still did not speak: keep the original turn as
-                # the answer of record, and carry the attempt and its cost onto it
-                answer.salvaged.append(_entry)
-                try:
-                    answer.generates.extend(list(getattr(_again, "generates", []) or []))
-                except Exception:
-                    pass
+        # NO RE-ASK HERE. Two were tried and both are reverted; the reasons are recorded as
+        # SMALL_MODEL_LEGIBILITY 1.14, and the short form is: a prompt written in the harness's
+        # voice, about the harness's mechanics, becomes the being's MESSAGE at this scale.
+        # Measured on Sprout 2026-09-24/25 across 9 firings — 0 delivered the answer, and the
+        # one that reached dp said "I'm sorry I didn't call a tool", which is this file's own
+        # subject matter arriving in dp's inbox under the being's name. An answer turn that
+        # produced no call is left as it is: the turn stays unanswered, the conversation stays
+        # unmarked, and the NEXT beat sees it still owed. That is the honest record, and it is
+        # what the reflect phase — where `say` actually works — gets to act on.
 
     interventions = []
     if act_first:
