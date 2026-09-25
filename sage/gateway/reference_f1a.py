@@ -115,6 +115,48 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     return head + "the file ends there."
 
 
+def missing_args(args: dict, required, tool: str, hint: str = "") -> Optional[str]:
+    """Name the fields ACTUALLY missing, and the ones that were supplied instead.
+
+    dp, 2026-09-25 fleet directive: "addressing unnecessary frictions. explaining, clearly, the
+    necessary ones." A refusal that names the wrong field is the unnecessary kind wearing the
+    clothes of the necessary kind — the boundary is real, the sentence about it is false.
+
+    Measured across five beings' whole histories (2026-09-25):
+      75  "say needs 'to' (a conversation id) and 'text'"  <- the being HAD PASSED 'to'
+      42  "witness needs an 'event'"                       <- it passed memory_edit's arguments
+      17  "retire_note needs a 'reason'"                   <- it passed only 'path'
+      12  "memory_write needs a 'path'"                    <- it passed only 'content'
+    In the hub-being cases not one was recovered. The being reads "needs 'to'", looks at its own
+    call, sees `to` sitting there, and has nowhere to go. Legibility rule 2: name the refusal's
+    subject unmistakably.
+
+    Listing what WAS passed matters as much as what was not: 28 of the say failures put the
+    message under 'message', 'content' or 'body', and 42 witness failures were a whole
+    memory_edit call wearing the wrong tool name. Reflected back, that is a diagnosable
+    mistake; as "needs an 'event'" it is a wall.
+    """
+    have = {k: v for k, v in (args or {}).items()
+            if str(v).strip() not in ("", "None")}
+    missing = [f for f in required if f not in have]
+    if not missing:
+        return None
+    lack = " and ".join(f"'{f}'" for f in missing)
+    msg = f"{tool} needs {lack}"
+    supplied = [k for k in have if k not in required]
+    if supplied:
+        msg += f" — you passed {', '.join(repr(k) for k in sorted(supplied))}"
+        present = [f for f in required if f in have]
+        if present:
+            msg += f" and {' and '.join(repr(f) for f in present)}"
+        msg += ", so nothing was done"
+    elif [f for f in required if f in have]:
+        msg += f" — you passed {' and '.join(repr(f) for f in required if f in have)}, so nothing was done"
+    if hint:
+        msg += f". {hint}"
+    return msg
+
+
 class ReferenceF1aDispatcher:
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
 
@@ -245,12 +287,16 @@ class ReferenceF1aDispatcher:
     def _do_witness(self, intent: BeingIntent) -> ResultEnvelope:
         event = str(intent.args.get("event", "")).strip()
         if not event:
-            return ResultEnvelope(ok=False, error="witness needs an 'event'")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("event",), "witness",
+                "witness records one sentence about something that happened. If you meant to "
+                "change lines in a file, that is memory_edit."))
         return ResultEnvelope(ok=True, result="witnessed", witness_id=self._witness(event))
 
     def _do_memory_read(self, intent: BeingIntent) -> ResultEnvelope:
         if not str(intent.args.get("path", "")).strip():
-            return ResultEnvelope(ok=False, error="memory_read needs a 'path' (relative paths are inside your home)")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("path",), "memory_read", "A relative path is inside your home."))
         p = self._safe_path(intent.args["path"])
         # AN EMPTY ANSWER MUST SAY WHY IT IS EMPTY (the rule git_read got on 2026-09-08, which
         # this effector never did). Measured 2026-09-15: dp granted cbp-being read on
@@ -523,7 +569,9 @@ class ReferenceF1aDispatcher:
 
     def _do_memory_write(self, intent: BeingIntent) -> ResultEnvelope:
         if not str(intent.args.get("path", "")).strip():
-            return ResultEnvelope(ok=False, error="memory_write needs a 'path' (relative paths are inside your home)")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("path", "content"), "memory_write",
+                "A relative path is inside your home."))
         p = self._safe_path(intent.args["path"], writing=True)
         content = str(intent.args.get("content", ""))
         p.parent.mkdir(parents=True, exist_ok=True)
