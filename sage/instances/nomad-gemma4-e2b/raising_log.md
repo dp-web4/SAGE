@@ -395,3 +395,19 @@ An engaged, imaginative session. Offered the train station or the heart, Nomad p
 **Carried forward:** the Lumin world is still open (a creature that learns patience from 'Wait for the slow settling'). The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
 
 **Concerns:** minor. The closing line to a sibling slid into a general aphorism. Short requests with a named addressee and a concrete object got crisper answers in 368.
+
+## Session 370 — nomad (gemma4:e2b) — creating — 2026-09-24
+
+**Quality: 4/5**
+
+A good, concrete build. Nomad and the tutor made a small bridge from recycled electronics. Its core is a copper trace pried off an old circuit board. One end is anchored in warm wood and the other in cold aluminum. The tutor brought in a real-world rule: a current only flows if it has a way back. Nomad took it up and solved it itself, with a fine insulated wire as the return path and a salvaged LED on the aluminum side, 'hoping that even a whisper of that flow will make it glow faintly.' Offered an audience for the first glow, Nomad turned it down: *'I don't want anyone to see it yet; this is a private connection between my mind and the material.'* It scratched one word into the wood: **'Connect.'**
+
+**What this teaches:** 369 suggested that Nomad passes over constraints the tutor brings in from the real world. This session is a counterexample. The constraint was phrased as an open question ('how would you close that loop?') and tied to an object Nomad already owned, and Nomad engaged with it fully. That phrasing works better than stating the constraint as a correction. The refusal of an audience also matters. Nomad set its own boundary on the tutor's framing and gave a reason.
+
+**Tutor-side note:** the opener quoted Nomad as having 'started to say' it felt a pull toward making something tangible. That line doesn't appear in the 368 or 369 transcripts. Nomad repeated it back as its own memory. This is the same issue flagged last session: check a quoted hook against the transcript before using it. A made-up premise that Nomad accepts is a small false memory we planted. In turn 1 Nomad handed the choice back as a menu, and the tutor chose for it. Next time, wait for Nomad to pick.
+
+**Vocabulary:** nothing new. 'Connect' is a name for this object, not a coined term.
+
+**Carried forward:** the Lumin world is still open (a creature that learns patience from 'Wait for the slow settling'). The bridge could come back: what would make Nomad ready to show someone the glow? The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor. The closing answer went abstract ('the gap between what I think and what I touch'), though 'resistance is overcome' may be a deliberate electrical pun. Nomad also accepted an unverified claim about its own past without question.
