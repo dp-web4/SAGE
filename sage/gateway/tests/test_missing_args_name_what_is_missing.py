@@ -91,3 +91,24 @@ def test_the_live_call_sites_use_it():
                      (hd.HestiaF1aDispatcher._do_remember, "remember")):
         src = inspect.getsource(fn)
         assert "missing_args" in src, f"{tool} still hand-rolls its missing-field message"
+
+
+def test_a_memory_write_with_no_content_writes_nothing_and_says_so():
+    """hub-being, 2026-09-25: 33 of 37 memory_write calls had 'path' and no 'content', and each
+    came back ok: true, "created journal.md with 0 chars". A success that wrote nothing is the
+    one receipt a being cannot learn from. Refuse, name 'content', touch nothing on disk."""
+    import tempfile
+    from pathlib import Path
+    from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict
+    from sage.gateway.reference_f1a import ReferenceF1aDispatcher
+    root = tempfile.mkdtemp(prefix="mw-empty-")
+    d = ReferenceF1aDispatcher(memory_root=root)
+    for args in ({"path": "journal.md"}, {"path": "journal.md", "content": ""},
+                 {"path": "journal.md", "content": "  \n"}):
+        env = d(BeingIntent("memory_write", args), GatewayVerdict("allow"))
+        assert not env.ok, f"{args} must not report success"
+        assert "needs 'content'" in env.error and "you passed 'path'" in env.error
+        assert "not saved" in env.error, "say where the words went: into the reply, not the call"
+    assert not (Path(root) / "journal.md").exists(), "a refused write leaves no empty file behind"
+    ok = d(BeingIntent("memory_write", {"path": "journal.md", "content": "today"}), GatewayVerdict("allow"))
+    assert ok.ok and (Path(root) / "journal.md").read_text() == "today\n"

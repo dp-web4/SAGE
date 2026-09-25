@@ -262,18 +262,64 @@ def check_local_model(rep: Report, machine: str, fleet: dict) -> None:
 
 
 def check_manifest_pair(rep: Report, fleet: dict, legacy: dict) -> None:
+    """fleet.json against the legacy per-seat manifest -- as ONE finding, not one per machine.
+
+    WHY THIS WAS REWRITTEN (McNugget, 2026-09-24). This emitted a row per machine, and five of
+    the eight permanently disagreed, so every seat's run carried five findings no seat could
+    clear. Sprout reported them twice as "the long-known stale rows"; HUB made the same
+    complaint about the daemon check ("HUB can never clear this finding, so it recurs on every
+    run forever, and the natural response to it is wasted work that looks like diligence").
+    Same defect, same fix: distinguish a CONFLICT from a row that is merely OLD.
+
+    `sage-fleet-models.json` says of itself that it is NOT AUTHORITATIVE, that each machine owns
+    and updates its own entry, and that as of 2026-09-14 nothing reads it but its writer. It
+    survives only for capability fields fleet.json has no slot for (backend, lora_capable,
+    transformers_available). So a legacy row whose `updated_at` predates fleet.json's own
+    observation is not two sources of truth disagreeing; it is one seat that has not run
+    `update_fleet_models.py` lately. That is worth ONE line, not five.
+
+    A row that is NEWER than the observation and still disagrees is a real conflict, and keeps
+    its own finding -- that is the case where the legacy file might know something fleet.json
+    does not.
+
+    NOT FIXED FROM HERE, deliberately: the stale rows are other seats'. The file's own
+    description gives each machine its row, and the fleet's standing rule is that no seat edits
+    another's records. Each seat clears its own by running the updater.
+    """
     fm = fleet.get("machines") or {}
     lm = legacy.get("machines") or {}
+    absent, old, conflict = [], [], []
     for name in sorted(set(fm) | set(lm)):
         a = (fm.get(name) or {}).get("model_default")
-        b = (lm.get(name) or {}).get("model")
+        row = lm.get(name) or {}
+        b = row.get("model")
         if not a or not b:
-            rep.add(UNDETERMINED, f"fleet.json vs sage-fleet-models.json [{name}]",
-                    f"fleet.json {a!r}  |  legacy {b!r} — one side absent")
+            absent.append(name)
             continue
-        st, note = compare_model(a, b)
-        rep.add(st, f"fleet.json vs sage-fleet-models.json [{name}]",
-                f"fleet.json {a}  |  legacy {b}" + (f"  — {note}" if note else ""))
+        st, _note = compare_model(a, b)
+        if st == OK:
+            continue
+        # `model_observed.on` is when fleet.json's value was last seen to be true; a legacy row
+        # older than that explains itself. No observation date on either side -> treat the
+        # legacy row as old rather than conflicting, which is the quieter and likelier reading.
+        seen = ((fm.get(name) or {}).get("model_observed") or {}).get("on") or ""
+        stamp = str(row.get("updated_at") or "")[:10]
+        (conflict if (stamp and seen and stamp > seen) else old).append(
+            f"{name}: fleet.json {a} vs legacy {b}" + (f" (legacy row {stamp})" if stamp else ""))
+    for c in conflict:
+        rep.add(DIVERGE, "legacy manifest is NEWER and disagrees",
+                f"{c} — the legacy row was written after fleet.json's observation, so it may "
+                "know something fleet.json does not; reconcile deliberately")
+    if old:
+        rep.add(OK, "legacy manifest rows predate their observation",
+                f"{len(old)} row(s) older than fleet.json's own observation, which is what an "
+                f"unrefreshed per-seat row looks like rather than a conflict: {'; '.join(old)}. "
+                "Each seat clears its own with sage/federation/update_fleet_models.py; this file "
+                "is non-authoritative and read by nothing but its writer.")
+    if absent:
+        rep.add(OK, "legacy manifest rows absent on one side",
+                f"{len(absent)} machine(s) in one file and not the other ({', '.join(absent)}) — "
+                "expected, since the legacy manifest is per-seat and optional")
 
 
 def check_site_models(rep: Report, fleet: dict, models: dict, site_note: str) -> None:

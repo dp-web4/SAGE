@@ -31,7 +31,7 @@ canonical_entry_points:
   status: "sage/docs/LATEST_STATUS.md"
   deployed_runtime_reality: "sage/docs/RUST_VS_PYTHON_CAPABILITY.md"
   python_reference_loop: "sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md"
-  governance_boundary: "sage/gateway/being_gate_client.py"
+  governance_boundary: "sage/gateway/being_gate_client.py"\n  state_conditioned_agency: "sage/docs/STATE_CONDITIONED_AGENCY.md"
   documentation_hub: "docs/README.md"
 
 historical_entry_points:
@@ -66,8 +66,7 @@ core_concepts:
     purpose: "Web4 identity anchor"
   T3_V3:
     purpose: "Contextual relationship trust/value state"
-  Hestia:
-    purpose: "Action-governance and witnessed dispatch boundary"
+  Hestia:\n    purpose: "Action-governance and witnessed dispatch boundary"\n  state_conditioned_agency:\n    purpose: "Substrate-symmetric study of endogenous/metabolic state, phenomenology, persistence, and action-policy effects"
 
 current_architecture_shape:
   - "observation / salience / evidence / memory"
@@ -102,7 +101,7 @@ evidence_rules:
   - "A mechanism in source is not automatically a demonstrated capability"
   - "Experiment findings remain scoped to model, scaffold, data, and run"
   - "Prefer causal controls, ablations, and trivial baselines where applicable"
-  - "Identify whether improvement came from weights, learned controller state, memory, source code, or human/fleet intervention"
+  - "Identify whether improvement came from weights, learned controller state, memory, source code, or human/fleet intervention"\n  - "Treat first-person phenomenology as evidence, not taboo and not automatic mechanistic proof; apply the same evidentiary standard across substrates"
 
 related_repos:
   web4:

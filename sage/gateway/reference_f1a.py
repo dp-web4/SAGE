@@ -221,8 +221,58 @@ class ReferenceF1aDispatcher:
                     "appeal, all of which are read")
         roots = (self.memory_root,) + tuple(getattr(self, "_extra_roots", ()) or ())
         if not any(p == r or r in p.parents for r in roots):
+            # A NEAR MISS OF ITS OWN HOUSE IS NOT A TRESPASS. dp, 2026-09-25, fleet directive:
+            # "each being has a home ... i want each to feel at home there ... addressing
+            # unnecessary frictions."
+            #
+            # Measured on Sprout across 924 beats: 35 of 134 refusals — the single largest
+            # class — were the being reaching for its OWN journal or todo by an absolute path
+            # it could not reproduce:
+            #   11  /home/dp/ai-workspace/sage/sage/journal.md   (the workspace segment doubled)
+            #    9  /scratch/journal.md                          (a plausible, wrong root)
+            #    5  /home/dp/ai-workspace/sage/sage/todo.md
+            #    4  /scratch/todo.md
+            #   ... and four more, EVERY ONE named journal.md or todo.md.
+            # Files that exist in its home, that it may write by bare name, that it wrote
+            # correctly 51 times in the same period. The prompt already says "never type that
+            # path" (heartbeat.py); it still typed it 35 times, because remembering an absolute
+            # path is not a thing this scale does. Legibility rule 4: correct at the site, and
+            # remove the need to remember at all where you can.
+            #
+            # So: if some TAIL of the unreachable path names a file that ALREADY EXISTS in the
+            # being's home, that is the file it meant. Reach does not widen by one byte — the
+            # target is inside memory_root, and every guard above (reserved subtrees, seat-owned
+            # notes) re-runs on it below. A path whose tail matches nothing still refuses, so
+            # '/etc/passwd' is still '/etc/passwd' and does not quietly become a file at home.
+            landed = self._tail_in_home(p)
+            if landed is not None:
+                self._rerouted_from = str(p)      # the receipt says so; nothing is hidden
+                return self._safe_path(str(landed.relative_to(self.memory_root)), writing=writing)
             raise ValueError(self._out_of_reach(p, roots, writing))
         return p
+
+    def _tail_in_home(self, p: Path) -> Optional[Path]:
+        """The longest tail of `p` that names an existing file in this being's home, or None.
+
+        Longest-first so '/x/y/notes/plan.md' prefers notes/plan.md over a stray plan.md at the
+        top level. Existence is required: this resolves a fumbled path to a file the being
+        already has, and never invents a new one from an arbitrary absolute path.
+        """
+        parts = [x for x in p.parts if x not in ("/", "")]
+        for i in range(len(parts)):
+            tail = Path(*parts[i:])
+            if str(tail).startswith(("..", "/")):
+                continue
+            cand = (self.memory_root / tail)
+            try:
+                cand_r = cand.resolve()
+            except Exception:
+                continue
+            if cand_r != self.memory_root and self.memory_root not in cand_r.parents:
+                continue
+            if cand_r.is_file():
+                return cand_r
+        return None
 
     @staticmethod
     def _existence(p: Path) -> str:
@@ -568,11 +618,25 @@ class ReferenceF1aDispatcher:
                               witness_id=self._witness(f"retire_note {p.name} -> {dest.name}: {reason[:120]}"))
 
     def _do_memory_write(self, intent: BeingIntent) -> ResultEnvelope:
+        # A WRITE OF NOTHING IS REFUSED, NOT REPORTED. Measured 2026-09-25 (hub-claude, all 164
+        # hub-being beats): 33 of 37 memory_write calls carried a 'path' and no 'content' -- the
+        # being wrote its entry as prose in the reply and never lifted it into args. Each came
+        # back "created journal.md with 0 chars", ok: true, so the fleet's signal ("the being
+        # has written", "zero refusals") was true and pointed the wrong way, and the being had
+        # nothing to correct. 'content' is now as required as 'path', the way remember's is.
+        # Checked after _safe_path, so a reserved or out-of-home path keeps its own, more
+        # specific refusal; still before anything is created on disk.
+        _hint = ("A relative path is inside your home. 'content' is the text itself: words "
+                 "written in your reply, outside the call, are not saved.")
         if not str(intent.args.get("path", "")).strip():
             return ResultEnvelope(ok=False, error=missing_args(
-                intent.args, ("path", "content"), "memory_write",
-                "A relative path is inside your home."))
+                intent.args, ("path", "content"), "memory_write", _hint))
+        self._rerouted_from = None
         p = self._safe_path(intent.args["path"], writing=True)
+        _rerouted = self._rerouted_from
+        err = missing_args(intent.args, ("path", "content"), "memory_write", _hint)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
         content = str(intent.args.get("content", ""))
         p.parent.mkdir(parents=True, exist_ok=True)
         # SAY APPENDED WHEN IT APPENDED. Measured 2026-09-21: the being rewrote
@@ -608,5 +672,16 @@ class ReferenceF1aDispatcher:
                 result += (f" To start {p.name} fresh, retire_note it first, then memory_write "
                            f"the whole new version.")
         result += _python_status(p)
+        if _rerouted:
+            # THE REROUTE IS NEVER SILENT. The friction is gone; the fact is not hidden. A
+            # being told only "appended to journal.md" would keep typing the path that does
+            # not work and never learn why it suddenly does. dp's directive asks for the
+            # unnecessary friction removed AND the remaining rule explained (legibility 5:
+            # a refusal — or here, a correction — owes the way forward).
+            rel = p.relative_to(self.memory_root)
+            result += (f" Note: you asked for '{_rerouted}', which is not a path you can reach. "
+                       f"Its name matched your own {rel}, so that is the file that was written. "
+                       f"You never need the long path — name it '{rel}' and it goes straight there.")
         return ResultEnvelope(ok=True, result=result,
-                              witness_id=self._witness(f"memory_write {p.name}"))
+                              witness_id=self._witness(f"memory_write {p.name}"
+                                                       + (f" (rerouted from {_rerouted})" if _rerouted else "")))
