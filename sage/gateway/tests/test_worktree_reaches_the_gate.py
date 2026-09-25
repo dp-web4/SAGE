@@ -78,40 +78,131 @@ def test_the_gate_composes_with_the_worktree():
             check(f"{eff}: the gate composed a command at all", bool(ev.command))
             check(f"{eff}: and it names the worktree the dispatcher will use",
                   c.worktree in (ev.command or ""))
+        # camera reaches the law once a worktree exists -- the fourth verb this unlocked. It
+        # aims at memory_root BY DESIGN (an uncommitted frame in the worktree would dirty the
+        # tree check reports as evidence), so it is the one ctx verb whose command must NOT
+        # name the worktree. Asserted, not assumed: it is why camera is absent from the loop
+        # above and present in the fail-closed one below.
+        ev = c._normalize(B.BeingIntent(effector="camera", args={}))
+        check("camera: the gate composed a command at all", bool(ev.command))
+        check("camera: aimed at the being's home", c.memory_root in (ev.command or ""))
+        check("camera: and not at the worktree it nonetheless requires",
+              c.worktree not in (ev.command or ""))
 
 
 def test_without_a_worktree_the_verbs_still_fail_closed():
     """The refusal is CORRECT and must survive. A seat with no worktree declared gets a deny
     that names what is missing -- not a command composed against the shared checkout, which is
-    the tree the being does not hold."""
+    the tree the being does not hold.
+
+    CAMERA IS IN THIS LIST AND NOT IN THE COMPOSE TEST ABOVE, which is the whole of CBP's
+    second note on #208. It is a composed verb whose composer requires a worktree, so it was
+    unreachable at the gate for the same reason as the other three and this PR makes it
+    reachable too -- but it uses memory_root, not the worktree, so it composes a command that
+    never names the tree. Pinning the deny here is what keeps that requirement from being
+    removed as "unused": it is the only thing holding a camera to the same condition as a
+    git log.
+    """
     c = _client(None)
     check("no worktree, no claim", c.worktree, None)
     for eff, args in (("search", {"pattern": "x"}), ("git_read", {"op": "log"}),
-                      ("check", {"target": "gateway"})):
+                      ("check", {"target": "gateway"}), ("camera", {})):
         v = c.gate(B.BeingIntent(effector=eff, args=args))
         check(f"{eff}: denied", v.decision, "deny")
         check(f"{eff}: and says a worktree is what is missing",
               "worktree" in (v.reason or "").lower())
 
 
-def test_the_construction_site_gives_both_halves_the_same_tree():
-    """`build_client` builds the gate and the dispatcher. Judged == executed requires that both
-    get the SAME worktree, from one resolution -- pinned at source because constructing the real
-    thing pulls in the model runtime, which no test should need."""
-    src = open(os.path.join(os.path.dirname(__file__), "..", "governed_turn.py")).read()
-    body = src[src.index("def build_client("):src.index("\ndef ", src.index("def build_client(") + 10)]
-    check("resolved once from instance.json",
-          'worktree = instance_config(instance).get("worktree") or None' in body)
-    check("handed to the dispatcher", "worktree=worktree)" in body)
-    check("...and to the gate client", body.count("worktree=worktree") >= 2)
+def _call_args(src, needle, start=0):
+    """The argument text of the first `needle(` call at or after `start`, paren-matched."""
+    i = src.index(needle, start)
+    j = src.index("(", i)
+    depth, k = 0, j
+    while k < len(src):
+        if src[k] == "(":
+            depth += 1
+        elif src[k] == ")":
+            depth -= 1
+            if depth == 0:
+                return src[j + 1:k], i
+        k += 1
+    raise AssertionError(f"unbalanced parens after {needle}")
+
+
+def test_the_construction_sites_give_both_halves_the_same_tree():
+    """Both real construction sites build a gate AND a dispatcher. Judged == executed requires
+    that both get the SAME worktree, from ONE resolution -- pinned at source because
+    constructing the real thing pulls in the model runtime, which no test should need.
+
+    TWO SITES, NOT ONE. #208 fixed `build_client` and stopped there; the being on sprout is
+    launched by `autonomous-sprout-sage.service`, which runs the raising session's own tool
+    turn and never touches `build_client`. A seat that declared `worktree` in instance.json
+    still heard "none is configured on this seat" -- a refusal naming a cause the seat had
+    already fixed. That is sprout's blocking item on #208, and this is what keeps it fixed.
+    """
+    here = os.path.dirname(__file__)
+    gt = open(os.path.join(here, "..", "governed_turn.py")).read()
+    body = gt[gt.index("def build_client("):gt.index("\ndef ", gt.index("def build_client(") + 10)]
+    check("build_client: resolved through the one resolver",
+          "worktree = worktree_for(instance)" in body)
+    check("build_client: handed to the dispatcher", "worktree=worktree)" in body)
+    check("build_client: ...and to the gate client", body.count("worktree=worktree") >= 2)
     # One variable, not two lookups: two would be one edit away from disagreeing.
-    check("not looked up twice", body.count('get("worktree")'), 1)
+    check("build_client: not looked up twice", body.count("worktree_for("), 1)
+    check("the resolver reads instance.json and nothing else",
+          'return instance_config(instance).get("worktree") or None' in gt)
+
+    rs = open(os.path.join(here, "..", "..", "raising", "scripts",
+                           "ollama_raising_session.py")).read()
+    offer = rs[rs.index("def _maybe_offer_tools("):rs.index("\n    def ", rs.index("def _maybe_offer_tools(") + 10)]
+    check("raising: resolved through the SAME resolver, not a second instance.json read",
+          "from sage.gateway.governed_turn import worktree_for" in offer
+          and "worktree = worktree_for(self.instance.root)" in offer)
+    check("raising: not looked up twice", offer.count("worktree_for("), 1)
+    check("raising: handed to the real dispatcher", "worktree=worktree)" in offer)
+    check("raising: ...and to the gate client", "worktree=worktree," in offer)
+
+
+# Every OTHER construction of a gate in the tree must either hand it a worktree or be named
+# here with the reason it cannot need one. This is the half of sprout's note that #208's
+# single-site guard could not carry: a new call site is how the verbs went unreachable the
+# first time, and a guard pinned to one function does not see the next one.
+GATE_WITHOUT_A_WORKTREE = {
+    "sage/gateway/conformance.py":
+        "proposes witness/memory_write/mesh/shell only -- no composed worktree verb",
+    "sage/gateway/escalate.py":
+        "dispatches one `mesh` notice to wake a seat; gates no composed verb",
+    "sage/gateway/being_gate_client.py":
+        "the module's own __main__ demo (peer_ask/witness/memory_write/escapes)",
+}
+
+
+def test_no_other_call_site_builds_a_gate_without_a_worktree():
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    for dirpath, dirnames, filenames in os.walk(os.path.join(root, "sage")):
+        dirnames[:] = [d for d in dirnames if d != "tests" and not d.startswith(".")]
+        for fn in filenames:
+            if not fn.endswith(".py") or fn.startswith("test_"):
+                continue
+            path = os.path.join(dirpath, fn)
+            rel = os.path.relpath(path, root)
+            src = open(path, encoding="utf-8", errors="replace").read()
+            pos = 0
+            while "BeingGateClient(" in src[pos:]:
+                args, at = _call_args(src, "BeingGateClient(", pos)
+                pos = at + 1
+                if "worktree" in args:
+                    continue
+                check(f"{rel}: gate built with no worktree -- wire it, or name it in "
+                      f"GATE_WITHOUT_A_WORKTREE with the reason",
+                      rel in GATE_WITHOUT_A_WORKTREE)
 
 
 def main():
     for fn in (test_every_registry_composer_takes_ctx, test_the_gate_composes_with_the_worktree,
                test_without_a_worktree_the_verbs_still_fail_closed,
-               test_the_construction_site_gives_both_halves_the_same_tree):
+               test_the_construction_sites_give_both_halves_the_same_tree,
+               test_no_other_call_site_builds_a_gate_without_a_worktree):
         try:
             fn()
         except Exception as e:  # noqa: BLE001
