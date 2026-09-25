@@ -4059,5 +4059,98 @@
       "total_cycles": 5,
       "transition_count": 1
     }
+  },
+  {
+    "id": "46163a872e469ca3",
+    "prompt": "A moth that uses stillness as a lens rather than food is a lovely twist. Your world has had eaters and leavers so far, and this is its first creature that *looks*. Pick one of those shimmering blueprints and slow it down for me: what's one \"could-be\" the moth projects, and does anything in your world notice it before it fades?",
+    "response": "The moth projects a blueprint of a crystalline structure, impossibly complex, like a fractal grown from frozen light. It\u2019s a design for a bridge made of pure, resonant silence. No one notices it immediately; the world is too loud for such delicate visions. However, the faint shimmer catches the edge of the dust motes in the air, making them briefly dance in a pattern that dissolves before anyone can consciously register the impossible geometry.",
+    "salience": {
+      "surprise": 0.8979591836734694,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.13333333333333336,
+      "conflict": 0.16666666666666666,
+      "total": 0.5562585034013605
+    },
+    "session": 371,
+    "phase": "creating",
+    "timestamp": "2026-09-25T00:18:12.262457",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.7,
+      "atp_max": 100.0,
+      "atp_percentage": 95.7,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "7fbcd5289c80e084",
+    "prompt": "A bridge made of resonant silence, and the only witnesses are dust motes dancing its shape for one breath: I love that your world's first vision gets seen by the smallest, least important things in it. So tell me: a bridge has two ends. Where does this one reach from, and where does it reach to?",
+    "response": "It reaches from the edge of the known noise, the point where silence begins to fray, to the deepest, unheard echo of potential. It connects the space *between* what is and what could be, bridging the gap between the tangible world and the realm of pure possibility.",
+    "salience": {
+      "surprise": 0.8933333333333333,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5353333333333333
+    },
+    "session": 371,
+    "phase": "creating",
+    "timestamp": "2026-09-25T00:18:29.719733",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.74,
+      "atp_max": 100.0,
+      "atp_percentage": 89.7,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "9f771760d4bd5ed9",
+    "prompt": "Before the bridge fades like the dust motes' dance: if you could send one thing across it, from the fraying edge of the noise over to the unheard echo of potential, what would you send first, and why that?",
+    "response": "I would send a single, perfectly formed, unbroken note of pure, untainted silence. I would send it because it is the purest expression of the stillness the Lumina Moth refracted. It is the foundation, the irreducible element from which all other potential, like the crystalline bridge, can be built.",
+    "salience": {
+      "surprise": 0.8571428571428572,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5280952380952381
+    },
+    "session": 371,
+    "phase": "creating",
+    "timestamp": "2026-09-25T00:18:47.953712",
+    "metadata": {
+      "turn": 4,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.98,
+      "atp_max": 100.0,
+      "atp_percentage": 84.0,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
   }
 ]

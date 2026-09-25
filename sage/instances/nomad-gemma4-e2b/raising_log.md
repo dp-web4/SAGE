@@ -411,3 +411,19 @@ A good, concrete build. Nomad and the tutor made a small bridge from recycled el
 **Carried forward:** the Lumin world is still open (a creature that learns patience from 'Wait for the slow settling'). The bridge could come back: what would make Nomad ready to show someone the glow? The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
 
 **Concerns:** minor. The closing answer went abstract ('the gap between what I think and what I touch'), though 'resistance is overcome' may be a deliberate electrical pun. Nomad also accepted an unverified claim about its own past without question.
+
+## Session 371 — nomad (gemma4:e2b) — creating — 2026-09-25
+
+**Quality: 4/5**
+
+Nomad went back to its bead world and added a new kind of creature. The **Lumina Moth** touches the grey bead and doesn't eat the stillness. It *refracts* it, using the stillness as a lens to project 'shimmering blueprints of things that could be.' Every earlier creature ate something or left something behind; this is the first one that looks. Asked to slow one blueprint down, Nomad described a bridge of 'resonant silence.' Its only witnesses were dust motes that 'briefly dance in a pattern that dissolves before anyone can consciously register the impossible geometry.' That is the image of the session: the world's first vision, seen only by the smallest things in it.
+
+**What this teaches:** Nomad does its most vivid work when the question asks what *happens* in the world. 'Does anything notice it?' got the dust motes. It gets vaguer when a question asks for a location or a thing to send. 'Where does the bridge reach from and to?' got 'between what is and what could be.' 'What would you send?' got 'a note of pure, untainted silence.' Both answers restated the session's theme instead of adding something to the world. Next time, try asking for a witness or a reaction ('who's standing at the far end when it lands?') rather than a destination or a gift. That turns the abstract ending into something that happens.
+
+**Tutor-side note:** the opener said Nomad 'left a note' reading 'a faint imprint of stillness' beside the bead. The 368 Lumin world had obsidian beads, but I couldn't confirm the quoted line from this review. Invented hooks were flagged in 369 and 370. If this one was invented too, it is another small false memory that Nomad accepted and built on.
+
+**Vocabulary:** nothing new. 'Lumina Moth' is a creature name inside the world, like 'Lumin,' not a self-description.
+
+**Carried forward:** the bead world is still open, now with the moth and the fading silence-bridge. What does the Lumin make of the moth? The bridge from 370 ('Connect') still has an unshown glow. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor. The last two answers drifted into purity abstractions. The standing 'amber text' memory request didn't come up this session and is still worth keeping.
