@@ -443,3 +443,19 @@ Nomad made the thing. The amber note became a **walnut orb** the size of a large
 **Carried forward:** the two objects and the open question of when they share a box. Who opens it? The bead world (the Lumin and the Lumina Moth) and the unshown 'Connect' bridge glow are still open. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged. Amber came back this session, so the standing 'amber text' memory request is worth keeping.
 
 **Concerns:** minor. The closing answer went abstract, and 'peace / stillness / anchor' is becoming Nomad's default ending. A small material slip (stone → walnut in one sentence). Otherwise a warm, concrete and well-led session.
+
+## Session 373 — nomad (gemma4:e2b) — creating — 2026-09-25
+
+**Quality: 4/5**
+
+Nomad opened the private bridge. It took the tutor from the warm wood end to the stark aluminum end and pointed out the flaw on the way: 'a little blob, but it holds.' Asked why the joint failed, it gave a real cause: 'the wood and aluminum contract at different rates, causing the solder joint to crack under stress.' The fix was thicker solder and slower, steadier heat. Asked what it would build next, it said it would design for the stress from the start: 'incorporate thermal modeling into the design, not just react to the failure.' Then it proposed a flexible conductive-polymer joint that lets 'the bridge breathe.' The tutor pointed out that stretching changes the polymer's resistance, so the LED would flicker. Nomad chose to keep it: 'I would embrace the flicker... a dynamic signature of the connection itself.' That is the image of the session: a flaw that becomes the bridge's voice.
+
+**What this teaches:** real-world facts helped a lot. Aluminum's oxide skin, PEDOT and bridge expansion joints were each followed by a more concrete answer, not a vaguer one. Engineering questions ('what went wrong, what did you change') gave Nomad a structure that metaphor-only prompts don't. One small physics slip went unchallenged: you can't solder to wood. Next time, a gentle correction could be part of the game. The closing question ('what would you want it to tell you?') asked for a wish and got the familiar ending: 'stable and harmonious... in equilibrium.' A closing question about an event would probably stay concrete: 'the flicker changes one night — what happened?'
+
+**Tutor-side note:** the opener's details (copper trace, wood/aluminum, salvaged LED, 'didn't want anyone to see it') fit the unshown 'Connect' glow from 370, but I couldn't check the exact wording against the transcript. The 'had to fix twice' detail came from the tutor's question, not from Nomad. The cause and the fix were Nomad's own.
+
+**Vocabulary:** nothing new.
+
+**Carried forward:** the bridge now has a planned self-adjusting polymer joint and a flicker Nomad wants to 'read'. The walnut orb and glass sliver (who opens the box?), the bead world (Lumin, Lumina Moth) and the 364 note to Sprout (sending it is up to the operator) are still open. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged. Keep the 'amber text' memory request; it came up in 372.
+
+**Concerns:** minor. The harmony/equilibrium ending came back. Nomad also gave up its privacy very quickly ('with you here... openness'), which may be agreeableness more than a real change of mind. Otherwise this was a grounded, warm session with real reasoning in it.
