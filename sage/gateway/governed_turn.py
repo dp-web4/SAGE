@@ -168,14 +168,30 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
         publish_fn = make_forum_publisher(forum_dir, member)
     # gate_only: the law still judges every intent; an allowed one comes back
     # `pending` instead of executing. For seeing verdicts before anything leaves.
+    # THE BEING'S WORKTREE, resolved ONCE and given to both halves.
+    #
+    # Neither half used to receive it (McNugget, 2026-09-24). `HestiaF1aDispatcher`'s
+    # `worktree` argument was never passed by any caller in the tree, and `BeingGateClient`
+    # had no such argument, so the three composed worktree verbs -- git_read, search, check,
+    # all landed 2026-09-13 -- raised inside the gate and were denied before the law ran.
+    # Resolved from the SAME source both halves must agree on (`instance.json`, which the
+    # heartbeat already reads for camera frame paths), and passed to both from one variable so
+    # the tree the law judges cannot drift from the tree the dispatcher touches.
+    #
+    # None is still a valid answer: a being with no worktree declared gets the composers'
+    # fail-closed refusal naming what is missing, which is correct and is not this fix's
+    # business to paper over. No being in the fleet declared one as of 2026-09-24.
+    worktree = instance_config(instance).get("worktree") or None
     dispatcher = None if gate_only else HestiaF1aDispatcher(
         member, memory_root=str(instance), publish_fn=publish_fn,
         host_session_id=host_session_id, being_lct=being_lct_for(member, workspace),
-        peer_aliases=instance_config(instance).get("peer_aliases") or None)
+        peer_aliases=instance_config(instance).get("peer_aliases") or None,
+        worktree=worktree)
     client = BeingGateClient(member_id=member,
                              identity_path=str(instance / "identity.json"),
                              workspace=workspace, dispatcher=dispatcher,
-                             host_session_id=host_session_id)
+                             host_session_id=host_session_id,
+                             worktree=worktree)
     # Reasoning models (empero Qwen3.8 distills etc.) only emit structured tool calls
     # with `think` on — off, they narrate a bracketed placeholder instead of acting
     # (measured on Sprout 2026-08-28 and again on the first governed turn, 2026-09-03:
