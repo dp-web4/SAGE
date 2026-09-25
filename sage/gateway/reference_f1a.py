@@ -182,6 +182,24 @@ class ReferenceF1aDispatcher:
             raise ValueError(self._out_of_reach(p, roots, writing))
         return p
 
+    def _same_name_elsewhere(self, p: Path, limit: int = 3) -> list:
+        """Home-relative paths of files named like `p` in the home root or one directory
+        below it. Bounded to that depth on purpose: every measured near-miss was a notes/
+        vs root confusion, and a deep walk of a home with backups/ in it costs a beat."""
+        root = self.memory_root
+        try:
+            dirs = [root] + sorted(d for d in root.iterdir() if d.is_dir() and not d.name.startswith("."))
+        except OSError:
+            return []
+        out = []
+        for d in dirs:
+            c = d / p.name
+            if c != p and c.is_file():
+                out.append(str(c.relative_to(root)))
+                if len(out) >= limit:
+                    break
+        return out
+
     @staticmethod
     def _existence(p: Path) -> str:
         """'absent' | 'present' | 'unknown'. Never guesses.
@@ -261,6 +279,23 @@ class ReferenceF1aDispatcher:
         # facts, and each now says which it is.
         shown = str(intent.args["path"]).strip()
         if not p.exists():
+            near = self._same_name_elsewhere(p)
+            if near:
+                # A MISS ONE DIRECTORY AWAY IS NOT AN ABSENCE. Measured 2026-09-21 on cbp-being:
+                # 28 of its 76 "no such path" reads named a file that existed under the same
+                # name one directory over (it writes into notes/ and reads from the root, or
+                # the reverse). Two beats that day read `mechanism-training-script.py`, got
+                # "does not exist" for a script sitting in notes/, and wrote "verified" notes
+                # about it anyway. The answer names where the file is, so the next step is a
+                # read rather than an invention.
+                where = ", ".join(f"'{n}'" for n in near)
+                return ResultEnvelope(
+                    ok=True,
+                    result=(f"[no such path: '{shown}' does not exist, but a file with that name "
+                            f"DOES exist at {where}. You probably meant that one: read it with "
+                            f"memory_read {{\"path\": \"{near[0]}\"}}. Nothing was read this time, "
+                            f"so nothing about its contents is known yet.]"),
+                    witness_id=self._witness(f"memory_read {p.name} (does not exist; same name at {near[0]})"))
             return ResultEnvelope(
                 ok=True,
                 result=(f"[no such path: '{shown}' does not exist. This is not an empty file: there is "
