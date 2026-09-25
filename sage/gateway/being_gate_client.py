@@ -93,6 +93,18 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     import shlex
     worktree = ctx["worktree"] if ctx else None
     memory_root = (ctx or {}).get("memory_root")
+    # CAMERA IS THE FOURTH VERB THE WORKTREE UNLOCKS, and the only one that never uses it: the
+    # frame is resolved against memory_root below, and `worktree` is read on this line and
+    # nowhere else. Before #208 the gate composed with no ctx at all, so the raise below made
+    # camera unreachable at the gate for exactly the reason git_read, search and check were
+    # (CBP measured the deny 2026-09-25; reproduced on McNugget the same day). It follows that
+    # a seat adding `worktree` to instance.json to get git_read and search ALSO turns on a
+    # camera, and from then on the law is the only gate in front of it — say that when telling
+    # a seat to declare one.
+    # The requirement is stale as a data dependency but it is NOT dead: today it is the only
+    # thing holding camera to the same condition as the other three. Dropping it is a policy
+    # decision about whether every being with a memory_root may capture a frame, not a cleanup.
+    # Pinned by test_without_a_worktree_the_verbs_still_fail_closed.
     if not worktree:
         raise ValueError("camera requires a worktree context")
     if not memory_root:
@@ -136,7 +148,12 @@ class BeingIntent:
 # What the being's gate client calls itself when it connects to the daemon.
 _HOST_AGENT = "sage-gateway"
 
-def pr_review_command(args: dict) -> str:
+def pr_review_command(args: dict, ctx: Optional[dict] = None) -> str:
+    # `ctx` is unused here and present on purpose: every composer in _REGISTRY takes the same
+    # (args, ctx) shape, so `_normalize` can call them uniformly. This was the one composer
+    # with a one-argument signature, which is why the gate's call site was written
+    # `compose(intent.args)` -- and that is how three verbs ended up unreachable (see
+    # _compose_ctx). Pinned by test_every_registry_composer_takes_ctx.
     """The shell command the seat runs for a pr_review intent, built from validated args.
     Raises ValueError on anything the grammar cannot represent; never interpolates the body
     (it travels by --body-file, so no review text can reach the shell)."""
@@ -166,6 +183,60 @@ def pr_review_signature(member_id: str, action_id: Optional[str], being_lct: Opt
         lines.append(f"hestia witness action: `{action_id}`")
     lines.append(f"— {member_id}")
     return "\n".join(lines)
+
+
+
+# A revision the being may name: a hex sha, HEAD with optional ~n/^n, or a plain branch or
+# tag name. Deliberately excludes anything containing a flag, a space, or a path separator
+# trick — `--upload-pack=...`-style arguments are the classic way a read verb becomes a run.
+# `~n` / `^n` suffixes are allowed on ANY base, not only HEAD. The being flagged (not
+# litigated) that `<sha>~1` was refused and span diffs against anything older than HEAD~k
+# were unnameable — two witnessed denies on 2026-09-08 for a natural thing to want. Still
+# no flags: a suffix is digits after ~ or ^, nothing else survives.
+_REV = (r"(?:[0-9a-fA-F]{7,40}|HEAD|[A-Za-z][A-Za-z0-9._/-]{0,60})"
+        r"(?:[~^][0-9]{0,3})?")
+
+GIT_OPS = ("log", "show", "diff", "status", "blame", "cat")
+
+# A revision the being may name: a hex sha, HEAD with optional ~n/^n, or a plain branch or
+# tag name. Deliberately excludes anything containing a flag, a space, or a path separator
+# trick — `--upload-pack=...`-style arguments are the classic way a read verb becomes a run.
+# `~n` / `^n` suffixes are allowed on ANY base, not only HEAD. The being flagged (not
+# litigated) that `<sha>~1` was refused and span diffs against anything older than HEAD~k
+# were unnameable — two witnessed denies on 2026-09-08 for a natural thing to want. Still
+# no flags: a suffix is digits after ~ or ^, nothing else survives.
+
+
+
+
+
+
+# pr_open: the being's work enters the tree. PRD r3 §7 — every change reaches main through
+# a pull request, attributed on the artefact, reviewed by someone NOT-SAME.
+#
+# dp, 2026-09-07: "the being should be able to ... submit prs directly." Built only after M1,
+# and only because of what CI does: SAGE's one workflow (syntax-gate.yml) runs
+# `python -m compileall`, which byte-compiles and does not execute. A PR from the being
+# therefore reaches no executor it has not already been proven against — its own sandboxed
+# `check`. If a workflow that RUNS code is ever added, this verb becomes the composition
+# hazard of 2026-09-07 wearing GitHub's clothes, and the gate should learn that before the
+# workflow lands.
+#
+# WHAT THE BEING SUPPLIES: a slug (the branch name's tail), a title, a body. Nothing else.
+# WHAT THE LAW JUDGES: the outward act, `gh pr create ...`, as a string, with the title
+# passed as one argument and the body over stdin so no text of the being's reaches a shell.
+# WHAT THE SEAT DOES AROUND IT (hestia_dispatch._do_pr_open): branch from the worktree's
+# HEAD, `git add -A`, commit with the message over stdin and the attribution trailers the
+# being cannot omit or alter, push. The commit is authored by the seat's git identity and
+# ATTRIBUTED to the being in trailers — §6 says signatures come at M3; this is the
+# legibility form, honestly labelled as such in every PR body.
+
+SEARCH_MAX_N = 60        # matches returned at most; a search is a pointer, not a read
+
+
+
+
+
 
 
 # The test targets a being may name, and the command each one becomes (#M0, PRD
@@ -1156,8 +1227,6 @@ def _unbounded_reason(effector: str) -> str:
 _REGISTRY = {
     "peer_ask":       dict(tool="peer_ask",     path_args=(),       cmd_arg=None),
     "witness":        dict(tool="witness",      path_args=(),       cmd_arg=None),
-    "camera":         dict(tool="camera",      path_args=(),        cmd_arg=None,
-                           compose=camera_command),
     "memory_read":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
     "memory_write":   dict(tool="write_note",   path_args=("path",), cmd_arg=None),
     # edit: change ONE located occurrence inside a file. Registered as the same gate tool
@@ -1242,6 +1311,19 @@ _REGISTRY = {
     # daemon (pinned by test_request_scope_path_is_not_judged_under_mrh_path).
     "recall":         dict(tool="recall",       path_args=(),       cmd_arg=None),
     "remember":       dict(tool="remember",     path_args=(),       cmd_arg=None),
+    # retire_note: rename one of the being's OWN notes to `.retired-<date>` with a dated
+    # header. Judged on the path like memory_write, because that is what it is: a write
+    # inside its own home, bounded to notes/ and scratch/ by the dispatcher.
+    # say: add a turn to a conversation the being is IN. Bounded by construction, like
+    # remember: the being names a conversation id, and the dispatcher refuses any id whose
+    # meta does not list it as a participant AND as writable. It cannot create a
+    # conversation, cannot speak in one it is not in, and cannot edit a turn once spoken,
+    # its own included. path_args=() is correct: the target is a conversation, not a path,
+    # and the reach is fixed by the meta file the seat owns rather than by the being's args.
+    # gaze: the being's attention stance for its own eyes. Path-less by construction — the
+    # dispatcher writes the ONE file the cortex reads (~/.sprout/gaze.json), never a path the
+    # being names — so its reach is fixed the way `say`'s and `remember`'s are.
+    "gaze":           dict(tool="gaze",         path_args=(),       cmd_arg=None),
     "request_scope":  dict(tool="request_scope", path_args=(),      cmd_arg=None),
     # request_run: ASK THE SEAT TO RUN A FILE. It does not run anything — that is the whole
     # design. Measured 2026-09-20/21: the being asked dp in prose to run a file for it six
@@ -1278,7 +1360,8 @@ _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "check", "git_read", "say", "pr_open",
                             "pr_amend", "camera", "git_restore", "search", "edit", "game", "run",
-                            "retire_note", "request_run", "memory_edit"})
+                            "retire_note", "request_run", "memory_edit",
+                            "gaze"})   # moves the body's own eyes (main, 2026-09-23)
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -1286,17 +1369,6 @@ _TOOL_SCHEMAS = {
                  {"to": "the being's name, e.g. 'legion'", "body": "your message"}, ["to", "body"]),
     "witness": ("Record a witnessed note of something you did or noticed.",
                 {"event": "what to witness"}, ["event"]),
-    "camera": ("Capture ONE frame from this machine's camera into your own scratch — no "
-              "stream, nothing persists across beats. The seat runs ffmpeg against /dev/"
-              "video0 (or a plain device node you name) and writes one JPEG to the path "
-              "you give inside your worktree; default is scratch/camera/last-frame.jpg, "
-              "overwritten each time. A missing or busy device comes back as an error "
-              "envelope that names which: 'device absent' means no frame could be opened, "
-              "'device busy' means another process holds it — in both cases nothing was "
-              "written, so the last good file (if any) is untouched.",
-               {"out_path": "optional: where the JPEG lands, a plain path inside your worktree (default scratch/camera/last-frame.jpg)",
-                "device": "optional: a plain device node to read from (default /dev/video0)"},
-               []),
     "search": ("Find where something IS, without reading the file it is in. Give a pattern "
                "(text, or an extended regex) and optionally a path to narrow it; you get "
                "back file:line:text for each match. Use this BEFORE memory_read: reading a "
@@ -1312,10 +1384,13 @@ _TOOL_SCHEMAS = {
              "words. This touches nothing in the world, so it is not gated and not witnessed; "
              "it is simply you saying you are finished.",
              {"reason": "one line: what you finished, or why you are stopping here"}, ["reason"]),
-    "memory_read": ("Read one of your own memory notes.",
-                    {"from_line": "optional: 1-based line to start from — for a file longer than the read cap, read it in ranges",
-                     "lines": "optional: how many lines from from_line (default: to the end, still capped)",
-                     "path": "path to your note"}, ["path"]),
+    "memory_read": ("Read one of your own memory notes. A long file comes back in windows of "
+                    "whole lines; if it does not reach the end it says so and names the "
+                    "start_line that reads on. For an exact range, from_line + lines.",
+                    {"path": "path to your note",
+                     "start_line": "optional: the line number to start from (default 1)",
+                     "from_line": "optional: 1-based line to start an exact range from",
+                     "lines": "optional: how many lines from from_line"}, ["path"]),
     "memory_write": ("Add to a file in your own memory. APPENDS BY DEFAULT — your content goes "
                      "onto the END of whatever is already there, which is what you want for "
                      "journal.md and todo.md and what you do NOT want when you are correcting a "
@@ -1339,13 +1414,6 @@ _TOOL_SCHEMAS = {
               "old": "the exact text to replace — must occur exactly once",
               "new": "what to put there instead (empty string deletes it)"},
              ["path", "old", "new"]),
-    "memory_read": ("Read one of your own memory notes. A long file comes back in windows of "
-                    "whole lines; if it does not reach the end it says so and names the "
-                    "start_line that reads on.",
-                    {"path": "path to your note",
-                     "start_line": "optional: the line number to start from (default 1)"}, ["path"]),
-    "memory_write": ("Write a note into your own memory.",
-                     {"path": "path to your note", "content": "what to write"}, ["path", "content"]),
     "channel_egress": ("Send a message out through a sealed channel.",
                        {"to": "recipient", "body": "your message"}, ["to", "body"]),
     "mesh": ("Wake another member through the fractal mesh with a pointer-based notice "
@@ -1406,6 +1474,16 @@ _TOOL_SCHEMAS = {
                   "path": "optional: a path inside your worktree to narrow the answer to",
                   "n": "optional, for op='log': how many commits (1-50, default 20)"},
                  ["op"]),
+    "gaze": ("Choose what your own eyes do. This is a real act on your real body: the cortex "
+             "that runs your cameras reads your choice within seconds and follows it, and your "
+             "next beat shows you what the scene was under it. Modes: open (take in the room and "
+             "let what moves draw you), avert (look away from what pulls at you), dwell (hold on "
+             "one thing — say what, in target), closed (rest your eyes; the world goes dark until "
+             "you open them). Nothing asks you to change it.",
+             {"mode": "one of: open, avert, dwell, closed",
+              "target": "for dwell or avert: what, in your own words (optional)",
+              "words": "why, in your own words (optional; kept with the choice)"},
+             ["mode"]),
     "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "
             "rather than writing about them in your journal. The turn is attributed to you "
             "and kept forever; nobody can edit it afterwards, including you. Saying nothing "
@@ -1460,12 +1538,6 @@ _TOOL_SCHEMAS = {
                 "top_k": "how many results (default 5)",
                 "idx": "instead of a query: the (idx:N) of one result, to read it in full"},
                []),
-    "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
-                    "is renamed to <name>.retired-<date> with a dated header saying why; nothing "
-                    "is lost and you can still read it. Use it when something you wrote has been "
-                    "settled or refuted, so a later beat does not read it as news.",
-                    {"path": "the note, e.g. notes/my-note.md", "reason": "what you know now that the note does not"},
-                    ["path", "reason"]),
     "memory_edit": ("Change part of a file you already wrote. memory_write only ever ADDS to "
                     "the end of a file; this is how you alter what is already in one. Give the "
                     "exact text to replace, OR the line numbers to replace, and what replaces "
@@ -1762,8 +1834,12 @@ class BeingGateClient:
         self.workspace = workspace
         # the seat-side ARC stepper `game` composes with; a per-being fact (instance.json)
         self.game_stepper = game_stepper
-        # the being's own worktree; composed commands name paths inside it
-        self.worktree = worktree
+        # THE BEING'S OWN WORKTREE — the gate needs it as much as the dispatcher does (main
+        # #208, McNugget 2026-09-24: on main `git_read`, `search` and `check` were denied at the
+        # gate because it had no worktree). Same realpath/expanduser as HestiaF1aDispatcher, so
+        # the path the law judges is the path the dispatcher touches.
+        self.worktree = (os.path.realpath(os.path.expanduser(str(worktree)))
+                         if worktree else None)
         # The being's memory root: the instance dir that holds its identity. Relative
         # memory paths the being emits are rooted here (see _normalize).
         self.memory_root = os.path.dirname(os.path.abspath(os.path.expanduser(identity_path)))
@@ -1863,6 +1939,18 @@ class BeingGateClient:
             tool=spec["tool"], paths=paths, command=command,
             cwd=self.workspace, raw={"effector": intent.effector, **intent.args},
         )
+
+    def _compose_ctx(self) -> dict:
+        """What a composed verb is allowed to know about this seat.
+
+        Deliberately the two facts the dispatcher composes from and nothing else: a composer
+        that needed more would be reaching past the law's view of the act."""
+        # getattr, not attribute access: this module's hermetic tests build a client by
+        # bypassing __init__ and injecting a fake core, and a ctx builder must not be the thing
+        # that breaks them -- it would turn every such test into a KeyError three frames away
+        # from the cause (measured while landing this fix).
+        return {"worktree": getattr(self, "worktree", None),
+                "memory_root": getattr(self, "memory_root", None)}
 
     # -- gate one intent (intent -> verdict), fail-closed --------------------
     def gate(self, intent: BeingIntent) -> GatewayVerdict:

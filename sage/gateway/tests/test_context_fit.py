@@ -113,7 +113,7 @@ def test_the_tool_schemas_are_measured_not_budgeted():
     import inspect
     from sage.gateway import heartbeat as hb
     body = inspect.getsource(hb.main)
-    assert "_schema_chars_for(EXPLORE_TOOLS)" in body, \
+    assert "_schema_chars_for(_explore_tools)" in body, \
         "the fitter must call the same helper the record does"
     assert "len(json.dumps(ollama_tools(" not in body, \
         "main() is recomputing the schema size instead of using the helper"

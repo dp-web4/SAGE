@@ -89,6 +89,13 @@ def _hestia_error(env: dict) -> Optional[str]:
 SEARCH_LINES_SHOWN = 40
 
 
+def _stale_transport(e: Exception) -> bool:
+    """The daemon refused the MCP transport session itself (not the hestia session): the
+    request never reached a tool, so reconnecting and sending it again is safe."""
+    msg = str(e)
+    return "HTTP 404" in msg and "Session not found" in msg
+
+
 class HestiaF1aDispatcher:
     # A lost session arrives in TWO shapes and only one of them was handled.
     _SESSION_LOST = ("session not found", "session_not_found", "session expired", "no session")
@@ -421,14 +428,25 @@ class HestiaF1aDispatcher:
         it is: an expired session is a fact about the transport, never a verdict on the act,
         and the being must not be left to read one as the other."""
         sid = self._connect()
+        # A session the daemon no longer recognises arrives in TWO shapes, and both get
+        # one reconnect. The hestia session answers with a JSON _hestia_error; the MCP
+        # TRANSPORT session (the mcp-session-id header) is refused at HTTP level before any
+        # tool runs — "HTTP 404 ... Session not found", raised by _Mcp._req. Only the first
+        # shape was retried: on 2026-09-23 20:04Z cbp-being's request_run died on the second,
+        # read it as "the seat is not available", and told dp it was waiting for the seat
+        # to come back online (seq 143). 17 of its beats since 2026-09-15 carry this 404.
         try:
             out = _unwrap(self._c.call(name, {**args, "session_id": sid}))
         except Exception as e:
-            if not self._is_session_loss(f"{type(e).__name__}: {e}"):
+            # main's shape (#189): a stale MCP transport becomes an error envelope and takes the
+            # single reconnect below. The branch's shape (2026-09-07): any OTHER raised session
+            # loss the same way — so both arrive at one reconnect path, never two.
+            if isinstance(e, RuntimeError) and _stale_transport(e):
+                out = {"_hestia_error": {"code": "transport.session_not_found", "message": str(e)}}
+            elif self._is_session_loss(f"{type(e).__name__}: {e}"):
+                out = {"_hestia_error": {"code": "session.lost", "message": str(e)}}
+            else:
                 raise
-            self._c, self._session_id = None, None
-            sid = self._connect()
-            return _unwrap(self._c.call(name, {**args, "session_id": sid}))
         # a session the daemon no longer recognises: reconnect once, then report honestly
         err = out.get("_hestia_error") if isinstance(out, dict) else None
         if isinstance(err, dict) and "session" in str(err.get("code", "")):
@@ -968,6 +986,56 @@ class HestiaF1aDispatcher:
         return ResultEnvelope(ok=True, result=text,
                               witness_id=self._local._witness(f"recall passage {idx}"))
 
+    # -- gaze: the being's attention stance, for its own eyes -----------------------------
+    def _do_gaze(self, intent: BeingIntent) -> ResultEnvelope:
+        """Set the stance the cortex reads. Path-less: this writes the ONE file the cortex polls
+        (~/.sprout/gaze.json), never a path the being names, so its reach is fixed by
+        construction like `say` and `remember`.
+
+        dp, 2026-09-23: "world feedback to its actions ... look for other loop closures." The
+        cortex has treated a gaze change as a self-authored, witnessed act since PR #27; this is
+        that act made available to the beat. The next beat's body block reflects the stance back
+        beside what the scene was under it — reafference at beat scale."""
+        from sage.gateway import body as _body
+        mode = str(intent.args.get("mode", "")).strip().lower()
+        if mode not in _body.GAZE_MODES:
+            return ResultEnvelope(ok=False, error=(
+                f"gaze needs a mode, one of: {', '.join(_body.GAZE_MODES)}. Got {mode!r}. "
+                f"Your eyes are unchanged."))
+        # The verb is this body's only where a live cortex will follow it. Refused BEFORE any
+        # hestia action is opened and before any file is touched: a headless being that calls
+        # `gaze` gets a true sentence and leaves no ~/.sprout on its machine (GPT on #183).
+        prov = _body.gaze_provider()
+        if not prov["live"]:
+            return ResultEnvelope(ok=False, error=(
+                f"This body has no live cortex to follow a gaze ({prov['why']}), so `gaze` is "
+                f"not a verb of yours on this machine. Your eyes are unchanged; nothing was written."))
+        before = _body.gaze()
+        begin = self._call("hestia_begin_action", {"tool_name": "gaze", "target": mode})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        try:
+            rec = _body.set_gaze(mode, self.member, target=intent.args.get("target"),
+                                 words=intent.args.get("words"))
+        except Exception as e:
+            self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "failed",
+                                                  "detail": f"{type(e).__name__}: {e}"})
+            return ResultEnvelope(ok=False, error=f"could not set your gaze: {type(e).__name__}: {e}")
+        self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "ok",
+                                              "detail": f"gaze {before.get('mode')} -> {mode}"})
+        was = before.get("mode") or "open"
+        what = {"open": "your eyes are open to the room",
+                "avert": "your eyes will look away from what pulls at them",
+                "dwell": "your eyes will hold on " + (str(rec.get("target") or "what you named")),
+                "closed": "your eyes are closed; the world is dark to you until you open them"}[mode]
+        return ResultEnvelope(
+            ok=True,
+            result=(f"gaze set: {was} -> {mode}. Within a few seconds {what}. Your next beat "
+                    f"shows you what the scene was under this stance."),
+            witness_id=self._local._witness(f"gaze {was} -> {mode}" + (f" ({rec.get('words')})" if rec.get("words") else "")))
+
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
         if not content:
@@ -1177,10 +1245,21 @@ class HestiaF1aDispatcher:
 
         Same shape as _do_check and for the same reason: the command is REBUILT here from
         the same function the gate judged, so the law never rules on one string while the
-        seat runs another. git is run with cwd set to the worktree rather than `git -C`,
-        because `-C` silently redirects the read away from the tree you think you are in
-        (legion-claude learned that one the hard way in a review) — here the cwd IS the
-        subject, and it must be the same tree `check` executes in."""
+        seat runs another. git runs with BOTH `-C <worktree>`, composed into the judged string
+        by git_read_command, and cwd set to that same worktree.
+
+        THIS PARAGRAPH USED TO SAY THE OPPOSITE: cwd rather than `git -C`, because `-C`
+        silently redirects the read away from the tree you think you are in (legion-claude
+        learned that one the hard way in a review). That lesson stands, and it is the reason
+        `-C` may never carry some OTHER path: the hazard is a `-C` that DISAGREES with where
+        you think you are. Here it cannot disagree — `-C` == cwd == the one realpath
+        `build_client` resolved and handed to both halves. What cwd alone could not do is show
+        the law the target: with no `-C` the command's tree was whatever cwd the dispatcher
+        happened to use, so the verdict bound a string whose effect it could not see (CBP
+        review of #208 asked for this paragraph; the rule is check_command's own — "the law
+        must judge the path the command will actually touch"). Naming the tree in the string
+        makes the agreement visible instead of assumed. If the two ever diverge, that is a bug
+        in the single resolution, not an argument for dropping the flag."""
         import shlex
         import subprocess
         from sage.gateway.being_gate_client import git_read_command

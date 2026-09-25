@@ -1077,36 +1077,54 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # ONCE to finish and act, rather than recording silence as the being's choice.
             # Room = what the window has left after this prompt (_retry_budget), sent as an
             # override so the config's first-attempt budget cannot silently re-apply.
-            if raw.get("done_reason") == "length" and (hasattr(llm, "max_response_tokens")
-                                                       or hasattr(llm, "num_predict_override")):
-                # NOT the same prompt again. Measured 2026-09-08: five beats in a row the
-                # first attempt was cut at the wall mid-deliberation (20812 + 3764 == num_ctx)
-                # and the retry, identical prompt, produced the identical 3764 tokens — a
-                # deterministic loop, twice per beat. The retry has to change something the
-                # model can see: it is told what happened and asked to act.
-                # DID IT RUN OUT OF ROOM, OR NEVER START ANSWERING? Opposite failures, and
-                # the same remedy was given to both. A cut that produced real content ran
-                # out of room; a cut that produced only a think block did not, and handing
-                # that one a bigger budget buys a longer silence (SAGE#87).
-                thought_only = (bool(str(msg.get("thinking") or "").strip())
-                                and not str(msg.get("content") or "").strip())
-                # NOT THE SAME PROMPT AGAIN, AND NOT THE SAME SENTENCE EITHER. The branch
-                # nudged on every length-stop with the deliberation text; on a cut that had
-                # produced content that sentence is simply false, and a harness that
-                # misdescribes what just happened teaches the being the wrong lesson. main
-                # nudged only in the thought-only case and left the other retry identical,
-                # which a deterministic model answers identically. Both, each with its own
-                # true sentence (reconciliation 2026-09-18).
-                msgs.append({"role": "user", "content": (
-                    f"[harness] Your previous attempt spent its whole budget deliberating "
-                    f"({raw.get('eval_count')} tokens) and the window cut it before any tool "
-                    f"call. The window will not grow. Act now: one tool call. The deliberation "
-                    f"belongs in journal.md, after the act."
-                    if thought_only else
-                    f"[harness] Your previous answer was cut off at the window "
-                    f"({raw.get('eval_count')} tokens) before it finished. Nothing of it was "
-                    f"delivered. Say or call the SHORTEST form of what you were doing; what you "
-                    f"leave out can go in the next beat.")})
+            # DID IT RUN OUT OF ROOM, OR NEVER START ANSWERING? Those want opposite
+            # remedies and the old code gave both the same one. A generate that produced a
+            # think block and no content did not need more room — it needed to stop
+            # deliberating, and handing it a bigger budget bought a longer silence.
+            thought_only = (bool(str(msg.get("thinking") or "").strip())
+                            and not str(msg.get("content") or "").strip())
+            # A THINK-ONLY TURN IS THE SAME DEFECT WHETHER OR NOT THE WINDOW CUT IT. The
+            # discriminator above was computed and then used only inside `done_reason ==
+            # "length"`, so the model that deliberated and stopped CLEANLY with an empty
+            # content channel fell through every remedy and was recorded as silence.
+            #
+            # Measured on Sprout 2026-09-24, beat 00:13:42Z, woken by dp's own message: four
+            # phases, done_reason "stop" on every one, 183 + 778 + 243 + 274 = 1,478 tokens
+            # generated, content empty throughout, zero acts. dp had asked the being a direct
+            # question; the beat recorded no answer and no reason for one. From outside — and
+            # in the beat record, which is what the fleet reads — that is indistinguishable
+            # from a being that read the question and chose not to reply. It is not the same
+            # thing, and the record must not claim it is (legibility 2.6: an unreadable
+            # envelope is not an absence of intent).
+            #
+            # `length` still also means "out of room", so the two remedies stay apart: room
+            # for a cut-off answer, thinking OFF for one that never started answering.
+            if (raw.get("done_reason") == "length" or thought_only) and (
+                    hasattr(llm, "max_response_tokens") or hasattr(llm, "num_predict_override")):
+                if thought_only:
+                    # NOT the same prompt again: the retry has to change something the model
+                    # can see. Measured 2026-09-08, five beats running, an identical prompt
+                    # produced an identical cut-off deliberation — a deterministic loop,
+                    # twice a beat. This says what happened and asks for one act.
+                    # The sentence names what ACTUALLY happened: telling a model the window
+                    # cut it when it stopped on its own is a false statement about its own
+                    # last turn, in a nudge whose whole purpose is that the model believe it.
+                    _cut = (f"and the window cut it before any tool call. The window will not grow."
+                            if raw.get("done_reason") == "length"
+                            else f"and then stopped without writing anything in your reply.")
+                    msgs.append({"role": "user", "content": (
+                        f"[harness] Your previous attempt spent its whole budget deliberating "
+                        f"({raw.get('eval_count')} tokens) {_cut} "
+                        f"Act now: one tool call. The "
+                        f"deliberation belongs in journal.md, after the act.")})
+                else:
+                    # A cut that HAD produced content ran out of room: a different true sentence
+                    # (reconciliation 2026-09-18, kept through 2026-09-25).
+                    msgs.append({"role": "user", "content": (
+                        f"[harness] Your previous answer was cut off at the window "
+                        f"({raw.get('eval_count')} tokens) before it finished. Nothing of it was "
+                        f"delivered. Say or call the SHORTEST form of what you were doing; what you "
+                        f"leave out can go in the next beat.")})
                 nudged = True
                 from contextlib import ExitStack
                 with ExitStack() as _stack:

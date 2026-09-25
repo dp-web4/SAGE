@@ -281,6 +281,14 @@ class ReferenceF1aDispatcher:
                      " If you need this written, appeal for the affordance and name what "
                      "you would write, rather than asking for the path — a seat can also "
                      "carry it for you if you say what and where."))
+            # A NEAR MISS OF ITS OWN HOUSE IS NOT A TRESPASS (main, dp directive 2026-09-25): if
+            # some TAIL of the unreachable path names a file that ALREADY EXISTS in the being's
+            # home, that is the file it meant. Reach does not widen by one byte; every guard
+            # above re-runs on the rerouted path. '/etc/passwd' is still '/etc/passwd'.
+            landed = self._tail_in_home(p)
+            if landed is not None:
+                self._rerouted_from = str(p)      # the receipt says so; nothing is hidden
+                return self._safe_path(str(landed.relative_to(self.memory_root)), writing=writing)
             raise ValueError(self._out_of_reach(p, roots, writing))
         return p
 
@@ -704,7 +712,9 @@ class ReferenceF1aDispatcher:
     def _do_memory_write(self, intent: BeingIntent) -> ResultEnvelope:
         if not str(intent.args.get("path", "")).strip():
             return ResultEnvelope(ok=False, error="memory_write needs a 'path' (relative paths are inside your home)")
+        self._rerouted_from = None
         p = self._safe_path(intent.args["path"], writing=True)
+        _rerouted = self._rerouted_from
         content = str(intent.args.get("content", ""))
         # APPEND OR REPLACE, SAID OUT LOUD. The verb has always opened with "a". For journal
         # and todo that is exactly right; for a source file it is a trap — the being twice got a
@@ -767,8 +777,15 @@ class ReferenceF1aDispatcher:
                            f"the whole new version.")
             result += where_line + "."
         result += repeat + _python_status(p)
+        if _rerouted:
+            # THE REROUTE IS NEVER SILENT (main): the friction is gone, the fact is not hidden.
+            rel = p.relative_to(self.memory_root)
+            result += (f" Note: you asked for '{_rerouted}', which is not a path you can reach. "
+                       f"Its name matched your own {rel}, so that is the file that was written. "
+                       f"You never need the long path — name it '{rel}' and it goes straight there.")
         return ResultEnvelope(ok=True, result=result,
-                              witness_id=self._witness(f"memory_write {p.name} ({mode})"))
+                              witness_id=self._witness(f"memory_write {p.name} ({mode})"
+                                                       + (f" (rerouted from {_rerouted})" if _rerouted else "")))
 
     def _do_edit(self, intent: BeingIntent) -> ResultEnvelope:
         """Replace one exact occurrence of `old` with `new` inside a file.
@@ -860,6 +877,29 @@ class ReferenceF1aDispatcher:
                 cached = False
             self._wt_writable = cached
         return cached
+
+    def _tail_in_home(self, p: Path) -> Optional[Path]:
+        """The longest tail of `p` that names an existing file in this being's home, or None.
+
+        Longest-first so '/x/y/notes/plan.md' prefers notes/plan.md over a stray plan.md at the
+        top level. Existence is required: this resolves a fumbled path to a file the being
+        already has, and never invents a new one from an arbitrary absolute path.
+        """
+        parts = [x for x in p.parts if x not in ("/", "")]
+        for i in range(len(parts)):
+            tail = Path(*parts[i:])
+            if str(tail).startswith(("..", "/")):
+                continue
+            cand = (self.memory_root / tail)
+            try:
+                cand_r = cand.resolve()
+            except Exception:
+                continue
+            if cand_r != self.memory_root and self.memory_root not in cand_r.parents:
+                continue
+            if cand_r.is_file():
+                return cand_r
+        return None
 
 
 # Files inside the being's own home that the SEAT owns and the being may not write.

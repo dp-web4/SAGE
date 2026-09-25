@@ -1,10 +1,38 @@
 # Directory Map — repo responsibilities
 
-Four repos, four visibilities, four purposes. Artifacts land in exactly one. Cross-contamination is a bug.
+Repositories have explicit roles and visibility boundaries. Artifacts land in exactly one canonical home. Cross-contamination is a bug.
 
-## ARC-SAGE (public, MIT-0) — competition face
+## SWE-SAGE (public, MIT-0) — current software-engineering competition / reproducibility surface
 
-**What it is**: The competition deliverable. Public repo. Consumers: ARC-AGI-3 organizers, external researchers, submission pipeline.
+**What it is**: Public implementation and experiment record for the Gemma 4 Developer Agent Competition, designed to remain useful as a reproducible SWE-agent research artifact after the competition.
+
+**What goes here**:
+- Competition agent runtime and adapters
+- Public post-training recipes that are legal/reproducible
+- SWE-specific persistent-state and premise-fidelity implementations
+- Public ablation configs, traces, metrics, and results
+- Kaggle submission packaging
+- Paper-track manuscript/assets
+- SWE-specific findings and failure analyses
+
+**What does NOT go here**:
+- General SAGE kernel mechanisms that are not SWE-specific
+- Private fleet traces or unreleasable training data
+- Credentials or machine-specific operational state
+- Exploratory mechanisms whose provenance/publication status is not clean
+
+**Rule**: a public SWE-SAGE result must be reproducible without access to `dev-SAGE`, `shared-context`, or `private-context`.
+
+**Canonical on-disk**:
+- WSL: `/mnt/c/exe/projects/ai-agents/SWE-SAGE/`
+- Linux: `/home/dp/ai-workspace/SWE-SAGE/`
+- macOS: `~/ai-agents/SWE-SAGE/` or `~/repos/SWE-SAGE/`
+
+---
+
+## ARC-SAGE (public, MIT-0) — historical ARC-AGI-3 benchmark artifact
+
+**What it is**: Historical/public ARC-AGI-3 research artifact. Consumers: ARC-AGI-3 researchers and anyone auditing the spring-2026 work. It is not the canonical home for the Gemma 4 developer-agent competition.
 
 **What goes here**:
 - Solvers (`solvers/{game}.py`)
@@ -117,7 +145,8 @@ Four repos, four visibilities, four purposes. Artifacts land in exactly one. Cro
 | Artifact type | Repo |
 |---|---|
 | New PRD / training plan | shared-context |
-| Solver code | ARC-SAGE |
+| SWE competition agent / submission code | SWE-SAGE |
+| ARC-AGI-3 historical solver code | ARC-SAGE |
 | New SAGE test | SAGE |
 | World model for game X | shared-context |
 | Per-machine capture data | private-context |
@@ -126,7 +155,8 @@ Four repos, four visibilities, four purposes. Artifacts land in exactly one. Cro
 | Game mechanics analysis | shared-context |
 | Fleet ping | shared-context |
 | Operational runbook | private-context |
-| Public solver documentation | ARC-SAGE |
+| Public SWE competition documentation | SWE-SAGE |
+| Public ARC-AGI-3 historical solver documentation | ARC-SAGE |
 | Insight on consciousness framing | shared-context (forum/) or SAGE (forum/) |
 | Membot cartridge | shared-context (fleet-learning) |
 | SAGE adapter binary | SAGE or private-context depending on visibility |
@@ -139,7 +169,8 @@ Four repos, four visibilities, four purposes. Artifacts land in exactly one. Cro
 Ask: "who needs to read this?"
 - Other machines' runtime code → SAGE
 - Other machines' knowledge → shared-context
-- External researchers → ARC-SAGE
+- External SWE-agent / Gemma competition researchers → SWE-SAGE
+- ARC-AGI-3 researchers → ARC-SAGE
 - Operators (humans or supervisor scripts) → private-context
 
 If multiple, pick the most public one and cross-reference from the others.

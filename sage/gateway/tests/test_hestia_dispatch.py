@@ -2725,3 +2725,37 @@ def test_say_instead_also_names_request_run():
     msg = d._say_instead("sprout-claude")
     assert msg and 'say with the conversation id "sprout-claude"' in msg, msg
     assert "request_run" in msg, msg
+
+
+def test_a_stale_transport_session_reconnects_once():
+    """The daemon's HTTP-level "Session not found" (a stale mcp-session-id) is a lost session
+    like the JSON one: reconnect once and send again. 2026-09-23 20:04Z a request_run died on
+    it and the being told dp it was waiting for the seat to come back online."""
+    class StaleOnce(FakeMcp):
+        refused = []
+        def call(self, name, args):
+            if name == "hestia_member_notify" and not StaleOnce.refused:
+                StaleOnce.refused.append(1)
+                raise RuntimeError("MCP tools/call hestia_member_notify -> HTTP 404 at "
+                                   "http://127.0.0.1:7711/mcp (as sprout-being): Not Found: Session not found")
+            return super().call(name, args)
+    FakeMcp.calls = []
+    d = HestiaF1aDispatcher("sprout-being", tempfile.mkdtemp(prefix="hd-"),
+                            mcp_factory=lambda ep, pid: StaleOnce(ep, pid))
+    env = d(BeingIntent("mesh", {"to": "legion", "kind": "reply", "pointer": "p"}), _ALLOW)
+    assert env.ok, env.error
+    assert sum(1 for n, _ in FakeMcp.calls if n == "hestia_connect") == 2
+
+
+def test_any_other_transport_failure_is_not_retried():
+    class Down(FakeMcp):
+        def call(self, name, args):
+            if name == "hestia_member_notify":
+                raise RuntimeError("MCP tools/call hestia_member_notify -> HTTP 500 at x (as y)")
+            return super().call(name, args)
+    FakeMcp.calls = []
+    d = HestiaF1aDispatcher("sprout-being", tempfile.mkdtemp(prefix="hd-"),
+                            mcp_factory=lambda ep, pid: Down(ep, pid))
+    env = d(BeingIntent("mesh", {"to": "legion", "kind": "reply", "pointer": "p"}), _ALLOW)
+    assert not env.ok and "HTTP 500" in env.error
+    assert sum(1 for n, _ in FakeMcp.calls if n == "hestia_connect") == 1

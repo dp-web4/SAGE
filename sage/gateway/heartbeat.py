@@ -43,7 +43,19 @@ HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_note", "witness",
                  "request_scope", "appeal", "peer_ask", "mesh", "check", "git_read", "say",
-                 "pr_open", "pr_amend", "git_restore", "search", "camera", "edit", "game", "run", "rest"]
+                 "pr_open", "pr_amend", "git_restore", "search", "camera", "edit", "game", "run", "rest", "gaze"]
+# Verbs in EXPLORE_TOOLS that act on a BODY are offered only where the beat has measured that
+# body (body.inventory()["verbs"]). GPT on #183: offering `gaze` to a headless being is a
+# false affordance — it would call it, and be told its eyes will follow, on a machine with no
+# eyes. The being discovers the body it has; the verbs it is handed must come from the same
+# measurement. Everything not listed here is a text/mesh verb and is offered everywhere.
+BODY_VERBS = ("gaze", "camera")
+
+
+def offered_explore_tools(body_reading: Optional[dict]) -> list:
+    """EXPLORE_TOOLS minus the body verbs this machine's measured inventory does not carry."""
+    have = set(((body_reading or {}).get("inventory") or {}).get("verbs") or [])
+    return [t for t in EXPLORE_TOOLS if t not in BODY_VERBS or t in have]
 # `say` is offered at REFLECTION too, and that is not redundancy. Measured on Legion
 # 2026-09-07: the being was shown dp's first turn, its state marked it unanswered, and it
 # spent every explore step reading its own source, then closed the beat. A verb in the
@@ -813,9 +825,29 @@ def conversation_header(instance: Path, member: str) -> str:
 def own_state(instance: Path, entrusted: str = "", member: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
-              services: str = "", mark_conversations: bool = True) -> str:
+              services: str = "", mark_conversations: bool = True,
+              body_reading: Optional[dict] = None) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
+    # The body first: it is the only thing in this state that is happening NOW. Everything below
+    # is record. (dp 2026-09-23: "bridge the two halves ... world feedback to its actions".)
+    # main() measures it once and passes it in, so the verbs offered and the body described
+    # come from the same reading; a bare call (tests, tools) measures here.
+    try:
+        from sage.gateway import body as _body
+        _cur = body_reading if body_reading is not None else _body.reading()
+        _prev = None
+        try:
+            for _l in reversed(open(instance / "heartbeats.jsonl", errors="replace").readlines()[-3:]):
+                _b = json.loads(_l)
+                if _b.get("body"):
+                    _prev = _b["body"]; break
+        except Exception:
+            _prev = None
+        parts.append(_body.render(_cur, _prev, name=member))
+        own_state.last_body = _cur
+    except Exception as _e:
+        own_state.last_body = {"error": f"{type(_e).__name__}: {_e}"}
     if entrusted:
         # Ahead of everything else the being holds: what it has been entrusted with is the
         # frame the rest of its state is read in. Labelled by provenance, and pointed at
@@ -999,6 +1031,8 @@ class SelectedTurn:
         target, which is a second way to splice one conversation's words into another."""
         txt = " ".join(self.text.split())[:PENDING_CHARS]
         return f'In "{self.cid}", {self.speaker} said: {txt}'
+
+
 
 
 def pending_and_say_line(instance: Path, member: str) -> tuple:
@@ -1475,7 +1509,8 @@ def vision_line(metas) -> str:
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
             header: str, state: str, recall: str, inbox: str, digest: str,
             frame: Optional[str] = None, frames: Optional[list] = None,
-            frame_metas: Optional[list] = None, museum: str = ""):
+            frame_metas: Optional[list] = None, museum: str = "",
+            tools: Optional[list] = None):
     """The explore turn(s) of a beat: (seed messages, second user turn or None).
 
     Posture-first: posture in the system prompt; one user turn with state, inbox, recall,
@@ -1486,7 +1521,8 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     # The tool names go LAST: a 2B distill given the posture + state above with the
     # names only in the system prompt concluded "no tools available" and wrote prose
     # (its own thinking, Sprout 2026-09-05); named at the end, it acts.
-    tools_line = (f"Act by calling a tool: {', '.join(EXPLORE_TOOLS)}. "
+    tools = list(tools) if tools is not None else list(EXPLORE_TOOLS)
+    tools_line = (f"Act by calling a tool: {', '.join(tools)}. "
                   "One thing done with attention is enough.\n")
     # ONE LIST DECIDES BOTH THE PIXELS AND THE SENTENCE ABOUT THEM. Measured 2026-09-15 by
     # capturing the real seed from an instance copy: the user turn said "Vision: you CAN see
@@ -1529,7 +1565,7 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     user = (header + state + f"## Inbox (peek)\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
             + ASK_ACT_FIRST + tools_line)
     second = POSTURE_TURN.format(posture=posture_text, inbox="(shown with your own state, above)",
-                                 digest=digest, tools=", ".join(EXPLORE_TOOLS))
+                                 digest=digest, tools=", ".join(tools))
     user_msg = {"role": "user", "content": user}
     if _frames:
         # A frame rides the user turn as an `images` list beside string content —
@@ -1818,8 +1854,21 @@ def main(argv=None) -> int:
     # being: two beats at 16,380 / 16,323 prompt tokens against a 16,384 window returned 4
     # and 61 tokens, done_reason "length".
     _num_ctx = getattr(llm, "num_ctx", None)
-    _num_predict = (llm.resolve_num_predict() if hasattr(llm, "resolve_num_predict")
-                    else getattr(llm, "max_response_tokens", None))
+    _num_predict = _sent_budget(llm)
+    # The body is measured ONCE per beat, here, and decides two things from the same reading:
+    # the body block in the state, and which body verbs are offered at all (BODY_VERBS).
+    try:
+        from sage.gateway import body as _bodymod
+        _body_cur = _bodymod.reading()
+    except Exception as _e:
+        _body_cur = {"error": f"{type(_e).__name__}: {_e}"}
+    _explore_tools = offered_explore_tools(_body_cur)
+    _schema_measured = _schema_chars_for(_explore_tools)
+    _schema_chars = (_schema_measured if _schema_measured is not None
+                     else _schema_chars_fallback(_explore_tools))
+    _state_head = f"# Your own state\n\n"
+    _scope_tail = f"\n\n## Reach you hold (hestia scope)\n{scope}\n\n" + (
+        f"## Your appeals\n{appeals_text}\n\n" if appeals_text else "")
 
     # Measured once per beat, before the state is composed (SAGE #92).
     _membot_url = getattr(getattr(client, "_dispatcher", None), "membot_endpoint", None) \
@@ -1849,7 +1898,8 @@ def main(argv=None) -> int:
     def _build_state(per_conv, turn_chars):
         return ("# Your own state\n\n"
                 + own_state(instance, entrusted, args.member, per_conv=per_conv,
-                            turn_chars=turn_chars, services=_services, mark_conversations=False)
+                            turn_chars=turn_chars, services=_services, mark_conversations=False,
+                            body_reading=_body_cur)
                 + _scope_tail)
     # The conversations step down only when the rest cannot fit with digest and recall at
     # their floors (1200 + 400): fit_to_window's worst case is this fitter's input.
@@ -1872,9 +1922,9 @@ def main(argv=None) -> int:
     # ONE source of truth with the beat record's `tool_schema_chars`: two sites computing
     # the same number separately is how they drift apart, which is the defect this whole
     # change is about.
-    _schema_measured = _schema_chars_for(EXPLORE_TOOLS)
+    _schema_measured = _schema_chars_for(_explore_tools)
     _schema_chars = (_schema_measured if _schema_measured is not None
-                     else _schema_chars_fallback(EXPLORE_TOOLS))
+                     else _schema_chars_fallback(_explore_tools))
     _template_guess = 1200
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
     # token cost is converted and charged here. Measured 2,042 tokens, about a third of the
@@ -1908,7 +1958,7 @@ def main(argv=None) -> int:
     }
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
-        museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas,
+        museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 f"Your home: {instance}\n"
                 + body_line(args.model, instance, _num_ctx,
@@ -1954,14 +2004,14 @@ def main(argv=None) -> int:
             return _c.drain_new_for(instance, args.member)
 
         explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
-                                       tools=ollama_tools(EXPLORE_TOOLS), on_generate=_on_generate("explore"),
+                                       tools=ollama_tools(_explore_tools), on_generate=_on_generate("explore"),
                                        deadline=explore_deadline, interject=_interject)
         convo = _carry(seed, explore)
         after = None
         if posture_turn is not None:
             convo.append({"role": "user", "content": posture_turn})
             after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
-                                         tools=ollama_tools(EXPLORE_TOOLS), on_generate=_on_generate("posture"),
+                                         tools=ollama_tools(_explore_tools), on_generate=_on_generate("posture"),
                                          deadline=explore_deadline, interject=_interject)
             convo = _carry(convo, after)
         # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
@@ -2158,11 +2208,15 @@ def main(argv=None) -> int:
         # whose config resolved a 4096 window while the tree offered a verb the model was
         # never shown. A starved beat and a silent one are indistinguishable unless the
         # record says which tools were offered and whether the window is the intended one.
-        "config": _fill_headroom({**_config_check(instance, args.model, llm, EXPLORE_TOOLS), **prompt_sizes},
+        "config": _fill_headroom({**_config_check(instance, args.model, llm, _explore_tools), **prompt_sizes},
                                  partial, host_session_id),
         "scope": scope_record,
         "appeals": appeals_record,
         "conversations_marked": conversations_marked,
+        # the body as measured at the start of this beat (main #183), so the next beat's
+        # state can describe what CHANGED rather than only what is
+        "body": getattr(own_state, "last_body", None),
+
         # what it has made, if anything: never silently lost, never auto-published
         "museum": {"offered": bool(museum_line), "candidates": _museum.candidates(instance)},
         # which harness produced this beat; pairs with the `tree` block on any check result
