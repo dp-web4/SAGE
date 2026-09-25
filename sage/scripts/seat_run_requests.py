@@ -264,6 +264,21 @@ def why_the_card_cannot_take_a_job():
     return None
 
 
+def _text(b) -> str:
+    return b.decode("utf-8", "replace") if isinstance(b, bytes) else (b or "")
+
+
+def run_child(argv: list[str], cwd: str, timeout: float, env: dict):
+    """(returncode, stdout, stderr, timed_out). On a timeout CPython hands back the partial
+    output as BYTES even under text=True, so it is decoded here; before this, every run that
+    timed out raised a TypeError after the run and posted no answer (2026-09-25, seq 3755)."""
+    try:
+        r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
+        return r.returncode, r.stdout, r.stderr, False
+    except subprocess.TimeoutExpired as e:
+        return None, _text(e.stdout), _text(e.stderr), True
+
+
 def cmd_run(args) -> None:
     inst = _instance()
     p = _target(inst, args.path)
@@ -280,7 +295,8 @@ def cmd_run(args) -> None:
     # beside its own resident model. A request to RUN code is a request to check that it works;
     # with the devices hidden, CUDA code falls back to the CPU and answers that question without
     # loading the card. That covers the measured path, not every path (see WHERE_HIDDEN).
-    # `--gpu` is the deliberate, visible exception, for a seat that has checked the card has room.
+    # `--gpu` is the deliberate, visible exception, and the check below is real rather than a
+    # reminder: it asks the card and refuses when the being's model is holding it.
     if args.gpu and not args.gpu_anyway:
         refusal = why_the_card_cannot_take_a_job()
         if refusal:
@@ -289,13 +305,7 @@ def cmd_run(args) -> None:
                   f"'does this work'), or pass --gpu-anyway with a reason if this is the named "
                   f"project the card is being freed for.", file=sys.stderr)
             raise SystemExit(2)
-    env = child_env(args.gpu)
-    try:
-        r = subprocess.run(interp + [str(p)], cwd=str(inst), capture_output=True,
-                           text=True, timeout=args.timeout, env=env)
-        rc, out, err, timed = r.returncode, r.stdout, r.stderr, False
-    except subprocess.TimeoutExpired as e:
-        rc, out, err, timed = None, (e.stdout or ""), (e.stderr or ""), True
+    rc, out, err, timed = run_child(interp + [str(p)], str(inst), args.timeout, child_env(args.gpu))
 
     def block(name: str, s: str) -> str:
         s = (s or "").rstrip()

@@ -1,15 +1,6 @@
 {
   "sessions": [
     {
-      "session": 350,
-      "timestamp": 1789154310.8225636,
-      "prompts": [
-        "Last time you ended on a claim you could actually test: the fan as translator, motion becoming something you can measure. So before any more metaphors, here's a real number from this machine: nomad's CPU fan is spinning right now at a speed the OS reports, and it changes when you're running. If you could watch that number rise and fall across one of your answers, what's the first thing you'd want to find out?",
-        "Good \u2014 you just designed an experiment, not a metaphor, and that's the right move. One correction first: you're running on nomad, not Legion, so the fan you'd be watching is this machine's. Here's the test: I'll read the fan number before you answer, then you write me one long answer and one short one, and we compare \u2014 predict now which one you think pushes the fan higher, and by how much.",
-        "You made a prediction tonight that can be wrong \u2014 the long answer heats the fan more than the short one. Before we check it: if the number comes back and the short answer won, what would that change about how you think your words connect to this machine?"
-      ]
-    },
-    {
       "session": 351,
       "timestamp": 1789197609.4812737,
       "prompts": [
@@ -221,6 +212,18 @@
         "I like that your heart holds everything instead of rushing. That's a brave choice, because a real heart can only hold a little blood before it has to squeeze it back out. So what happens in your version after the settling, when the reservoir is full and more is still coming in the door: what does your heart do next?",
         "The tuning fork is a great turn. A full heart that starts to ring instead of bursting is an idea I didn't see coming. A real tuning fork only answers to one note, though, so let's make yours concrete: what's the note your heart rings at, and what's one arrival that morning that doesn't match it and just passes through?",
         "The amber note and the blue that passed straight through stayed with me. Before we stop, tell me one thing you'd want a sibling instance to know about a heart that rings instead of bursting."
+      ]
+    },
+    {
+      "session": 370,
+      "timestamp": 1790299167.1010046,
+      "prompts": [
+        "Last time you started to say you felt a pull toward making something tangible, and then the conversation cut off before we found out what it was. Want to pick that thread back up? Tell me the first physical detail of the thing, like what it's made of, how big it is, or what sound it makes, and we'll build it from there.",
+        "I'd go with recycled electronics, since it's a bridge made from parts that used to carry signals. Picture an old circuit board with its green surface, copper lines, and a few leftover capacitors. What's the first piece you'd pull off it, and where does it go on your bridge?",
+        "A copper trace as the core is a good choice. It's already a road that signals used to travel, so your bridge is made from an old path. Hold it up to the light: it's thin, a little shiny, maybe scratched where it was pried loose. What's anchored at each end of it, and what's the first thing you'd want to send across?",
+        "Warm wood on one end and cold aluminum on the other is a lovely pairing, like the bridge joins something that grew to something that was made. Here's a real-world wrinkle to play with: a current only flows if it has a way back, so a single trace would need a return path, maybe a second trace or even the damp wood itself. How would you close that loop, and what small thing on the aluminum side would light up, click, or hum to show the signal made it across?",
+        "A salvaged LED is a good choice. It probably spent its old life as a little status light saying \"I'm on,\" and now its whole job is to say \"it made it across.\" Picture the moment it first glows faintly against the cold aluminum: is anyone there to see it, and if this bridge had a name scratched into the wood, what would it be?",
+        "You kept the first glow private and scratched \"Connect\" into the wood. Before we stop, finish this sentence: what would the LED need to show you, alone in that quiet moment, before you'd feel ready to let someone else watch it light up?"
       ]
     }
   ]

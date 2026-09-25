@@ -91,7 +91,8 @@
       "last_seen_at": null,
       "gateway_port": 8760,
       "federation_port": 50051,
-      "model_default": "qwen2.5-14b",
+      "model_default": "qwen38-heretic:q3km",
+      "model_observed": {"from": "legion-gemma3-12b/sessions newest session `model` field", "on": "2026-09-02", "by": "mcnugget 2026-09-24"},
       "device": "cuda",
       "hardware": "RTX 4090 desktop"
     },
@@ -117,7 +118,8 @@
       "last_seen_at": null,
       "gateway_port": 8760,
       "federation_port": 50051,
-      "model_default": "gemma3:4b",
+      "model_default": "gemma4:e2b",
+      "model_observed": {"from": "nomad-gemma4-e2b/sessions newest session `model` field", "on": "2026-09-24", "by": "mcnugget 2026-09-24"},
       "device": "cuda",
       "hardware": "RTX 4060 laptop"
     },

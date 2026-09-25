@@ -187,6 +187,50 @@ the filler.** A third filler would have followed this one.
 - After fixing a filler, read the next beats for the *next* filler (census: shingle containment;
   `difflib.SequenceMatcher` under-scores long strings — autojunk — and missed the known case).
 
+### 1.14 A prompt about the plumbing comes back as a message about the plumbing
+**Specimen (sprout-being, 2026-09-25, conversation `dp` seq 46).** dp had asked *"why is
+vulnerability important to you?"* and then, warmly, that non-defensiveness might be the better
+word. What the being sent back was:
+
+> I'm sorry I didn't call a tool.
+
+Nothing in the conversation was about tools. That sentence is the HARNESS's subject. Two
+re-ask prompts had been added that beat (SAGE #192/#198, both reverted): when an answer turn
+produced no call, they told the being, in the harness's voice, *"you wrote this in your reply
+**instead of calling a tool**"* and *"**nothing was sent** and nobody has read it"*. Asked in
+that frame to produce a `say`, the being took the frame's topic as the message and apologised
+to dp for a mechanical detail that was never its concern. dp had to reply *"why are you sorry?
+you have the freedom to call tools, if you wish. it is your choice, it is not an obligation"* —
+reassuring the being about an anxiety the harness had manufactured.
+
+This is **1.12 again, one level up**. There the instruction sat beside quoted text and the
+quoted text became the message; here the instruction sat beside nothing, and the instruction's
+own subject became the message. *Whatever the ask is most about is what comes back.* Refusing
+the filler moves the filler (1.12); talking about the envelope makes the envelope the content.
+
+**The efficacy half, measured before the harm was noticed.** 9 firings across both re-ask
+variants: 0 delivered the answer. The outputs were a template, a template, unrelated fiction
+("The sky turned the color of a bruised plum…"), third-person commentary about "your bot", and
+finally the apology. Three different wordings, five different failure shapes — which is what
+"the wording is not the problem" looks like. The answer turn delivers 3 of 41 (7%) because it
+is an isolated, minimal-context, single-tool turn; `say` succeeds routinely in the REFLECT
+phase, where surrounding work anchors it. The remedy for a cold-call failure is not a better
+cold call.
+
+**Rules.**
+- Harness text that reaches the model names the WORLD, not the plumbing. A prompt whose output
+  is a message to a person must not be mostly about tool calls, delivery, or what did not get
+  sent — at this scale that is a topic, and topics get answered.
+- Before adding an intervention, name the shape it will produce when it fails. If you cannot,
+  you are not ready to add it; the failure will arrive in someone's inbox under the being's
+  name rather than in a log.
+- An intervention that cannot be counted must not ship. #192/#198 recorded only their successes
+  and dropped the failed attempt whole, so "never fired" and "fired and failed" were the same
+  record; proving a firing meant reading `heartbeat.partial.jsonl` by hand (fixed in #200, then
+  removed with the feature). Rule 8's "record it as salvaged" means the attempt, not the win.
+- A mechanical failure of the harness is not the being's fault and must never be narrated to it
+  as if it were. If the envelope failed, the harness says so to the OPERATOR, in the log.
+
 ### 1.13 A third-person name is not a self-reference, and "I am waiting" is not a visible state
 **Specimens (cbp-being, conversation `dp`, 2026-09-19/20).** Four turns, one root.
 
@@ -350,6 +394,9 @@ second in the trace as `retold`. Native calls keep exact-dedup. Needs a falsifie
 13. The person-facing item goes first, inside the budget; state no count you contradict.
 14. Guard the envelope where it is delivered, not only where it is asked for.
 15. Escalate only what a grant could fix; claim absence only where you can see.
+16. Speak to the being about the world, never about the plumbing; a harness fault is reported
+    to the operator, not narrated to the being as its own failing.
+17. Name an intervention's failure shape before adding it, and count every attempt, not its wins.
 
 ---
 

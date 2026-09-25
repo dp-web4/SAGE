@@ -72,6 +72,49 @@ def test_dirty_build_no_sha_and_unresolvable_commit():
     assert F.daemon_verdict(**dict(UP, newest="", caveat="no origin/main"))[0] == F.UNDETERMINED
 
 
+def _pair(fleet_rows, legacy_rows):
+    """(statuses, details) from check_manifest_pair over hand-built manifests."""
+    rep = F.Report()
+    F.check_manifest_pair(rep, {"machines": fleet_rows}, {"machines": legacy_rows})
+    return [(st, chk) for st, chk, _d in rep.rows], " | ".join(d for _s, _c, d in rep.rows)
+
+
+def test_a_legacy_row_older_than_the_observation_is_not_a_conflict():
+    """The five rows every seat could never clear. Sprout reported them twice; HUB made the same
+    complaint about the daemon check. A row that is merely OLD is one seat that has not run the
+    updater -- worth one line, not one finding per machine."""
+    fleet = {m: {"model_default": "new:1", "model_observed": {"on": "2026-09-24"}}
+             for m in ("a", "b", "c", "d", "e")}
+    legacy = {m: {"model": "old:0", "updated_at": "2026-03-08T00:00:00"} for m in fleet}
+    sts, detail = _pair(fleet, legacy)
+    assert sts == [(F.OK, "legacy manifest rows predate their observation")], sts
+    assert "5 row(s)" in detail, detail
+    assert "rather than a conflict" in detail
+
+def test_a_legacy_row_newer_than_the_observation_and_disagreeing_is_a_real_finding():
+    """The case where the legacy file might know something fleet.json does not."""
+    fleet = {"a": {"model_default": "new:1", "model_observed": {"on": "2026-09-01"}}}
+    legacy = {"a": {"model": "other:2", "updated_at": "2026-09-20T00:00:00"}}
+    sts, detail = _pair(fleet, legacy)
+    assert sts == [(F.DIVERGE, "legacy manifest is NEWER and disagrees")], sts
+    assert "reconcile deliberately" in detail
+
+def test_agreement_produces_no_finding_at_all():
+    sts, _ = _pair({"a": {"model_default": "same:1"}}, {"a": {"model": "same:1"}})
+    assert sts == [], sts
+
+def test_absent_on_one_side_is_expected_not_a_gap():
+    sts, detail = _pair({"a": {"model_default": "x:1"}}, {"b": {"model": "y:1"}})
+    assert sts == [(F.OK, "legacy manifest rows absent on one side")], sts
+    assert "per-seat and optional" in detail
+
+def test_with_no_dates_a_disagreement_reads_as_old_not_as_conflict():
+    """The quieter and likelier reading: an undated legacy row is an unrefreshed one. Pinned so a
+    later change cannot silently turn every undated row back into a permanent finding."""
+    sts, _ = _pair({"a": {"model_default": "new:1"}}, {"a": {"model": "old:0"}})
+    assert sts == [(F.OK, "legacy manifest rows predate their observation")], sts
+
+
 def _repo_pair(tmp: Path):
     """An origin with two sage-rs commits and a clone that has only fetched the first."""
     def g(cwd, *a):

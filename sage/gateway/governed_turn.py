@@ -156,6 +156,39 @@ def instance_config(instance: Path) -> dict:
         return {}
 
 
+def worktree_for(instance: Path | str) -> str | None:
+    """THE being's own git worktree, read from `instance.json`. ONE resolver, every seat.
+
+    Neither half of a being used to receive it (McNugget, 2026-09-24). `HestiaF1aDispatcher`'s
+    `worktree` argument was never passed by any caller in the tree, and `BeingGateClient` had
+    no such argument, so the composed worktree verbs -- git_read, search, check, all landed
+    2026-09-13 -- raised inside the gate and were denied before the law ever ran.
+
+    #208 fixed that in `build_client`. THE BEING ON SPROUT DOES NOT GO THROUGH `build_client`
+    (sprout's review of #208, measured): `autonomous-sprout-sage.service` runs the raising
+    session, whose tool turn constructs both halves itself and read no config at all. So a
+    seat that did exactly what #208 asked -- declare `worktree` in `instance.json` -- still
+    got "none is configured on this seat". That refusal had been true and precise, which is
+    the property the fix was built on; pointing it at a cause the seat has ALREADY FIXED is
+    worse than the bug, because the seat's correct response becomes to distrust the message.
+    Hence a named resolver rather than a second lookup: a third construction site imports
+    this, and `test_worktree_reaches_the_gate` fails on one that does not.
+
+    None is still a valid answer. A being with no worktree declared gets the composers'
+    fail-closed refusal naming what is missing, which is correct and is not this function's
+    business to paper over. The shared checkout is NOT a substitute: a being reasons about
+    the code that constitutes it, and the shared tree is a different one that drifts (PRD M1).
+
+    DECLARING A WORKTREE ALSO TURNS ON THE CAMERA. It is four composed verbs, not three:
+    camera_command requires a worktree context too, so it was unreachable at the gate for the
+    same reason (CBP and sprout, both on #208). It does not USE the tree -- frames land under
+    memory_root -- but the requirement is what holds it to the same condition as a git log.
+    So `"worktree": ...` in an instance.json is not only a read grant: from that beat on, the
+    law is the only thing between the being and a frame. Decide that deliberately.
+    """
+    return instance_config(instance).get("worktree") or None
+
+
 def build_client(member: str, instance: Path, model: str, workspace: str,
                  forum_dir: str | None, host_session_id: str, temperature: float,
                  max_tokens: int, gate_only: bool = False, num_ctx: int = 8192):
@@ -168,14 +201,21 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
         publish_fn = make_forum_publisher(forum_dir, member)
     # gate_only: the law still judges every intent; an allowed one comes back
     # `pending` instead of executing. For seeing verdicts before anything leaves.
+    # THE BEING'S WORKTREE, resolved ONCE and given to both halves from ONE variable, so the
+    # tree the law judges cannot drift from the tree the dispatcher touches. The resolution
+    # itself, and why None is a real answer, live in `worktree_for` -- this is not the only
+    # place a being is constructed, which is the whole of sprout's review of #208.
+    worktree = worktree_for(instance)
     dispatcher = None if gate_only else HestiaF1aDispatcher(
         member, memory_root=str(instance), publish_fn=publish_fn,
         host_session_id=host_session_id, being_lct=being_lct_for(member, workspace),
-        peer_aliases=instance_config(instance).get("peer_aliases") or None)
+        peer_aliases=instance_config(instance).get("peer_aliases") or None,
+        worktree=worktree)
     client = BeingGateClient(member_id=member,
                              identity_path=str(instance / "identity.json"),
                              workspace=workspace, dispatcher=dispatcher,
-                             host_session_id=host_session_id)
+                             host_session_id=host_session_id,
+                             worktree=worktree)
     # Reasoning models (empero Qwen3.8 distills etc.) only emit structured tool calls
     # with `think` on — off, they narrate a bracketed placeholder instead of acting
     # (measured on Sprout 2026-08-28 and again on the first governed turn, 2026-09-03:
