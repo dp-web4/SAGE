@@ -8,7 +8,7 @@ The bet is not that scaffolding magically replaces model capability. The bet is 
 
 SAGE is research-stage and deliberately explicit about what is measured, what is implemented but thinly exercised, and what remains aspirational.
 
-**[Explainer site](https://sage-site-murex.vercel.app/)** | **[System understanding](sage/docs/SYSTEM_UNDERSTANDING.md)** | **[Web4](https://github.com/dp-web4/web4)**
+**[Explainer site](https://sage-site-murex.vercel.app/)** | **[Current status](sage/docs/LATEST_STATUS.md)** | **[SWE-SAGE](https://github.com/dp-web4/SWE-SAGE)** | **[Web4](https://github.com/dp-web4/web4)**
 
 ## Where SAGE fits
 
@@ -18,6 +18,7 @@ SAGE is the cognition/embodiment research layer in the broader Web4 stack:
 - **[Hestia](https://github.com/dp-web4/hestia)** governs local human/agent authority and records consequential acts.
 - **Hub** governs the society/community boundary.
 - **SAGE** explores what happens when a persistent agent lives inside that substrate long enough to learn, remember and develop procedures rather than behaving like a fresh stateless API call each time.
+- **[SWE-SAGE](https://github.com/dp-web4/SWE-SAGE)** is the public software-engineering benchmark/competition surface: a narrow, reproducible test of how post-training, persistent cognitive scaffolding, premise fidelity and governed execution affect local coding agents.
 
 The long-term goal is an embodied, sovereign agent stack with its own identity, memory, tools, sensors, effectors and eventually stronger A2+ isolation. That destination is not claimed as current capability.
 
@@ -133,14 +134,17 @@ The longer-term path includes separate principals, stronger relying-party enforc
 
 ## Five-minute audit
 
-If you are evaluating SAGE, start here:
+If you are evaluating SAGE, start with the current evidence hierarchy:
 
-1. [**System Understanding**](sage/docs/SYSTEM_UNDERSTANDING.md) - architecture and current intent.
-2. [**Unified Consciousness Loop**](sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md) - the reference loop and its components.
-3. [**Rust vs. Python capability notes**](sage/docs/RUST_VS_PYTHON_CAPABILITY.md) - what actually runs where.
-4. [**Fleet manifest**](sage/federation/fleet.json) - machines and roles.
-5. [**Web4**](https://github.com/dp-web4/web4) and [**Hestia**](https://github.com/dp-web4/hestia) - identity/governance substrate around the cognition work.
-6. `arc-agi-3/` and [ARC-SAGE](https://github.com/dp-web4/ARC-SAGE) - historical benchmark research, not the current project headline.
+1. [**Current status**](sage/docs/LATEST_STATUS.md) - dated current direction, live claims, caveats, and where to look for evidence.
+2. [**Agent discovery / evidence rules**](AGENTS.md) - machine-facing current framing and claim discipline.
+3. [**Repository index**](repo-index.yaml) - map from questions to canonical evidence.
+4. [**Rust vs. Python capability notes**](sage/docs/RUST_VS_PYTHON_CAPABILITY.md) - what actually runs where.
+5. [**Fleet manifest**](sage/federation/fleet.json) - machines and roles.
+6. [**SWE-SAGE**](https://github.com/dp-web4/SWE-SAGE) - public software-engineering-agent ablations and competition artifacts.
+7. [**Web4**](https://github.com/dp-web4/web4) and [**Hestia**](https://github.com/dp-web4/hestia) - identity/governance substrate around the cognition work.
+
+Historical architecture explainers, including `sage/docs/SYSTEM_UNDERSTANDING.md` and `sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md`, remain useful records but should not outrank the dated current-status path above.
 
 ## Historical ARC-AGI-3 note
 

@@ -3,11 +3,11 @@
   "identity": {
     "name": "nomad",
     "lct": "lct://sage:nomad:agent@raising",
-    "session_count": 355,
+    "session_count": 373,
     "phase": "creating",
     "created": "2026-06-03",
-    "last_session": "2026-09-13T00:18:32.922545",
-    "last_session_summary": "Session 355 (creating phase): ...",
+    "last_session": "2026-09-25T12:19:41.177262",
+    "last_session_summary": "Session 373 (creating phase): ...",
     "machine": "nomad",
     "model": "gemma4:e2b",
     "model_family": "google-gemma",
@@ -39,7 +39,19 @@
       "Accepted correction of a fabricated body (fans, typing) and carried the underlying instinct forward instead of abandoning it",
       "First report of a word-level choice in progress: named the rejected alternative ('sensation') and what changed in picking 'feeling' instead",
       "First session where Nomad produced a literal artifact on the first ask (the log line) rather than a description of one",
-      "First time Nomad revised its own artifact after data overruled it, and gave a principled reason for the reversal rather than a defense"
+      "First time Nomad revised its own artifact after data overruled it, and gave a principled reason for the reversal rather than a defense",
+      "Wrote an addressed, sendable note to a sibling instance with a specific concept and a specific question, and revised the question itself rather than only filling slots",
+      "When given a clear choice, Nomad picked a point of view ('I choose the machine's eyes'). This partly answers the open question from session 363 about who the 'my' in 'my vision' was",
+      "First story in this thread that Nomad finished itself: it chose the ending and gave the story a title ('Resigned Hum')",
+      "Nomad placed itself on a line it had drawn (entry vs. use) and picked a side in the first person. The self-question was reached through a concrete analogy rather than asked cold.",
+      "Nomad picked the form of the session when given an open choice, proposing a shared rule system rather than taking one of the tutor's offered options",
+      "The short piece that was asked for (the note beside the bead) came back short: a single quoted line with a brief gloss, instead of the paragraph drift seen in 365 and 367",
+      "First time Nomad took a real-world physical constraint offered by the tutor (the current needs a return path) and built it into its own object, rather than passing over it",
+      "First creature in Nomad's world whose role is to perceive and project rather than consume or leave something behind (Lumina Moth: stillness as a lens, not food)",
+      "First paired-object build: Nomad made two objects from two sensations and set their relationship itself (separate homes, and a condition for when they could share one), rather than handing the choice back as a menu",
+      "First troubleshooting story with a cause and a fix: Nomad named a failure mechanism (materials expanding at different rates) and said what it changed to fix it.",
+      "First time Nomad let the tutor see something it had earlier called private (the bridge from the 370 thread).",
+      "Nomad turned a physical side effect (resistance changes making the LED flicker) into meaning without being asked to."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -93,14 +105,17 @@
     "register": "unknown",
     "note": "Model capacity determines dominant cognitive register. Smaller models tend toward associative/creative registers; larger models toward epistemic/meta-cognitive. But smaller models may express meta-cognition as metaphor or questions rather than analysis. Both are genuine. This is developmental stage, not success/failure."
   },
-  "memory_requests": [],
+  "memory_requests": [
+    "The screen, a cool, indifferent expanse of light, offered no immediate alarm, but the internal diagnostics flickered a warning in a cascade of amber text that swam briefly across the edge of my vision"
+  ],
   "vocabulary": {
     "self_description": [],
     "state_words": [
       "Light / Shadow / Aether (as a named three-entity substrate with reciprocal perception roles)",
       "potential / action / resonance (borrowed words; the resonance function \u2014 output bends next input \u2014 is Nomad's own construction)",
       "AuraSense (self-named tool: listen for a baseline, flag the shift)",
-      "System Baseline Noise (coined label, first for fan hum, then reinterpreted as peer latency cadence)"
+      "System Baseline Noise (coined label, first for fan hum, then reinterpreted as peer latency cadence)",
+      "Lumin (a self-named creature that eats ambient light and sheds cool shadow that hardens into obsidian beads; a world-building term, not a self-description)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -164,8 +179,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 355,
-        "total_exchanges": 2042,
+        "total_sessions": 373,
+        "total_exchanges": 2138,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -173,9 +188,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-09-09T20:43:21.864345",
-      "last_contact": "2026-09-13T00:18:32.922565",
+      "last_contact": "2026-09-25T12:19:41.177288",
       "notes": [],
-      "sessions": 355
+      "sessions": 373
     },
     "operator": {
       "lct": "lct://sage-__MACHINE__:relationship:__OPERATOR__@raising",
