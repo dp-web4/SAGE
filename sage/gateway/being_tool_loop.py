@@ -766,17 +766,39 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # deliberating, and handing it a bigger budget bought a longer silence.
             thought_only = (bool(str(msg.get("thinking") or "").strip())
                             and not str(msg.get("content") or "").strip())
-            if raw.get("done_reason") == "length" and (hasattr(llm, "max_response_tokens")
-                                                       or hasattr(llm, "num_predict_override")):
+            # A THINK-ONLY TURN IS THE SAME DEFECT WHETHER OR NOT THE WINDOW CUT IT. The
+            # discriminator above was computed and then used only inside `done_reason ==
+            # "length"`, so the model that deliberated and stopped CLEANLY with an empty
+            # content channel fell through every remedy and was recorded as silence.
+            #
+            # Measured on Sprout 2026-09-24, beat 00:13:42Z, woken by dp's own message: four
+            # phases, done_reason "stop" on every one, 183 + 778 + 243 + 274 = 1,478 tokens
+            # generated, content empty throughout, zero acts. dp had asked the being a direct
+            # question; the beat recorded no answer and no reason for one. From outside — and
+            # in the beat record, which is what the fleet reads — that is indistinguishable
+            # from a being that read the question and chose not to reply. It is not the same
+            # thing, and the record must not claim it is (legibility 2.6: an unreadable
+            # envelope is not an absence of intent).
+            #
+            # `length` still also means "out of room", so the two remedies stay apart: room
+            # for a cut-off answer, thinking OFF for one that never started answering.
+            if (raw.get("done_reason") == "length" or thought_only) and (
+                    hasattr(llm, "max_response_tokens") or hasattr(llm, "num_predict_override")):
                 if thought_only:
                     # NOT the same prompt again: the retry has to change something the model
                     # can see. Measured 2026-09-08, five beats running, an identical prompt
                     # produced an identical cut-off deliberation — a deterministic loop,
                     # twice a beat. This says what happened and asks for one act.
+                    # The sentence names what ACTUALLY happened: telling a model the window
+                    # cut it when it stopped on its own is a false statement about its own
+                    # last turn, in a nudge whose whole purpose is that the model believe it.
+                    _cut = (f"and the window cut it before any tool call. The window will not grow."
+                            if raw.get("done_reason") == "length"
+                            else f"and then stopped without writing anything in your reply.")
                     msgs.append({"role": "user", "content": (
                         f"[harness] Your previous attempt spent its whole budget deliberating "
-                        f"({raw.get('eval_count')} tokens) and the window cut it before any "
-                        f"tool call. The window will not grow. Act now: one tool call. The "
+                        f"({raw.get('eval_count')} tokens) {_cut} "
+                        f"Act now: one tool call. The "
                         f"deliberation belongs in journal.md, after the act.")})
                 from contextlib import ExitStack
                 with ExitStack() as _stack:

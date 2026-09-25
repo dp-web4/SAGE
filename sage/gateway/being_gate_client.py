@@ -93,6 +93,18 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     import shlex
     worktree = ctx["worktree"] if ctx else None
     memory_root = (ctx or {}).get("memory_root")
+    # CAMERA IS THE FOURTH VERB THE WORKTREE UNLOCKS, and the only one that never uses it: the
+    # frame is resolved against memory_root below, and `worktree` is read on this line and
+    # nowhere else. Before #208 the gate composed with no ctx at all, so the raise below made
+    # camera unreachable at the gate for exactly the reason git_read, search and check were
+    # (CBP measured the deny 2026-09-25; reproduced on McNugget the same day). It follows that
+    # a seat adding `worktree` to instance.json to get git_read and search ALSO turns on a
+    # camera, and from then on the law is the only gate in front of it — say that when telling
+    # a seat to declare one.
+    # The requirement is stale as a data dependency but it is NOT dead: today it is the only
+    # thing holding camera to the same condition as the other three. Dropping it is a policy
+    # decision about whether every being with a memory_root may capture a frame, not a cleanup.
+    # Pinned by test_without_a_worktree_the_verbs_still_fail_closed.
     if not worktree:
         raise ValueError("camera requires a worktree context")
     if not memory_root:
@@ -136,7 +148,12 @@ class BeingIntent:
 # What the being's gate client calls itself when it connects to the daemon.
 _HOST_AGENT = "sage-gateway"
 
-def pr_review_command(args: dict) -> str:
+def pr_review_command(args: dict, ctx: Optional[dict] = None) -> str:
+    # `ctx` is unused here and present on purpose: every composer in _REGISTRY takes the same
+    # (args, ctx) shape, so `_normalize` can call them uniformly. This was the one composer
+    # with a one-argument signature, which is why the gate's call site was written
+    # `compose(intent.args)` -- and that is how three verbs ended up unreachable (see
+    # _compose_ctx). Pinned by test_every_registry_composer_takes_ctx.
     """The shell command the seat runs for a pr_review intent, built from validated args.
     Raises ValueError on anything the grammar cannot represent; never interpolates the body
     (it travels by --body-file, so no review text can reach the shell)."""
@@ -277,7 +294,13 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     # judged==executed invariant is a property of the STRING, not of the fleet's current
     # directory names. `path` here is an absolute realpath built from the worktree, so a
     # worktree containing a space would split into extra argv (GPT review of #83).
-    base = "git --no-pager"
+    # `-C <worktree>`, like `search` one composer down. Without it the command's target tree
+    # is whatever cwd the dispatcher happens to use, so the law judged a string whose effect
+    # it could not see -- the judged/executed drift this file argues against everywhere else
+    # (check_command: "the law must judge the path the command will actually touch"). The
+    # dispatcher also sets cwd to the same tree; `-C` makes that agreement visible in the
+    # string the verdict binds, instead of leaving it an assumption.
+    base = f"git --no-pager -C {shlex.quote(worktree)}"
     if op == "status":
         return f"{base} status --porcelain=v1 --branch"
     if op == "log":
@@ -727,6 +750,10 @@ _REGISTRY = {
     # its own included. path_args=() is correct: the target is a conversation, not a path,
     # and the reach is fixed by the meta file the seat owns rather than by the being's args.
     "say":            dict(tool="say",          path_args=(),       cmd_arg=None),
+    # gaze: the being's attention stance for its own eyes. Path-less by construction — the
+    # dispatcher writes the ONE file the cortex reads (~/.sprout/gaze.json), never a path the
+    # being names — so its reach is fixed the way `say`'s and `remember`'s are.
+    "gaze":           dict(tool="gaze",         path_args=(),       cmd_arg=None),
     "request_scope":  dict(tool="request_scope", path_args=(),      cmd_arg=None),
     # request_run: ASK THE SEAT TO RUN A FILE. It does not run anything — that is the whole
     # design. Measured 2026-09-20/21: the being asked dp in prose to run a file for it six
@@ -762,7 +789,8 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run", "memory_edit", "camera"})
+                            "retire_note", "request_run", "memory_edit", "camera",
+                            "gaze"})   # moves the body's own eyes (2026-09-23)
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -816,6 +844,16 @@ _TOOL_SCHEMAS = {
               {"target": "'gateway' or 'irp' for a whole suite, or '<suite>::<test_name>' "
                          "for one test, e.g. 'gateway::test_relative_memory_path'"},
               ["target"]),
+    "gaze": ("Choose what your own eyes do. This is a real act on your real body: the cortex "
+             "that runs your cameras reads your choice within seconds and follows it, and your "
+             "next beat shows you what the scene was under it. Modes: open (take in the room and "
+             "let what moves draw you), avert (look away from what pulls at you), dwell (hold on "
+             "one thing — say what, in target), closed (rest your eyes; the world goes dark until "
+             "you open them). Nothing asks you to change it.",
+             {"mode": "one of: open, avert, dwell, closed",
+              "target": "for dwell or avert: what, in your own words (optional)",
+              "words": "why, in your own words (optional; kept with the choice)"},
+             ["mode"]),
     "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "
             "rather than writing about them in your journal. The turn is attributed to you "
             "and kept forever; nobody can edit it afterwards, including you. Saying nothing "
@@ -1093,9 +1131,23 @@ class BeingGateClient:
 
     def __init__(self, member_id: str, identity_path: str, workspace: str,
                  dispatcher: "Optional[Dispatcher]" = None,
-                 host_session_id: Optional[str] = None):
+                 host_session_id: Optional[str] = None,
+                 worktree: Optional[str] = None):
         self.member_id = member_id
         self.workspace = workspace
+        # THE BEING'S OWN WORKTREE, and the gate needs it as much as the dispatcher does.
+        #
+        # WHY THIS PARAMETER EXISTS (McNugget, 2026-09-24). `git_read`, `search` and `check`
+        # landed on 2026-09-13 as composed verbs whose composer reads the worktree out of a
+        # `ctx` dict. The DISPATCHER passed one; the GATE never did -- `_normalize` called
+        # `compose(intent.args)`, one argument -- and this class had no worktree at all. So
+        # every one of those three raised inside the gate and came back
+        # `deny / gate.raised: "needs a worktree of your own; none is configured on this seat"`.
+        # Measured on this seat: check, search and git_read all denied; witness allowed.
+        # The deny was correct and nobody read it. Same realpath/expanduser treatment as
+        # HestiaF1aDispatcher, so the path the law judges is the path the dispatcher touches.
+        self.worktree = (os.path.realpath(os.path.expanduser(str(worktree)))
+                         if worktree else None)
         # The being's memory root: the instance dir that holds its identity. Relative
         # memory paths the being emits are rooted here (see _normalize).
         self.memory_root = os.path.dirname(os.path.abspath(os.path.expanduser(identity_path)))
@@ -1174,15 +1226,32 @@ class BeingGateClient:
         command = intent.args.get(spec["cmd_arg"]) if spec["cmd_arg"] else None
         compose = spec.get("compose")
         if compose is not None:
+            # WITH ctx. The composers read the worktree and the memory root from here, and
+            # the dispatcher composes the same verbs from the same two facts
+            # (hestia_dispatch: `check_command(intent.args, {"worktree": self.worktree})`).
+            # Passing nothing is what made three verbs unreachable; passing the SAME dict the
+            # dispatcher will use is what keeps judged == executed.
             # a COMPOSED verb: the seat builds the exact outward act (a shell line) from the
             # being's args, and THAT is what the law judges. Bad args raise here and gate()
             # turns that into a deny (gate.raised), never a silent pass. The being never
             # fills a command; the registry never carries a cmd_arg for a composed verb.
-            command = compose(intent.args)
+            command = compose(intent.args, self._compose_ctx())
         return self._core.NormalizedEvent(
             tool=spec["tool"], paths=paths, command=command,
             cwd=self.workspace, raw={"effector": intent.effector, **intent.args},
         )
+
+    def _compose_ctx(self) -> dict:
+        """What a composed verb is allowed to know about this seat.
+
+        Deliberately the two facts the dispatcher composes from and nothing else: a composer
+        that needed more would be reaching past the law's view of the act."""
+        # getattr, not attribute access: this module's hermetic tests build a client by
+        # bypassing __init__ and injecting a fake core, and a ctx builder must not be the thing
+        # that breaks them -- it would turn every such test into a KeyError three frames away
+        # from the cause (measured while landing this fix).
+        return {"worktree": getattr(self, "worktree", None),
+                "memory_root": getattr(self, "memory_root", None)}
 
     # -- gate one intent (intent -> verdict), fail-closed --------------------
     def gate(self, intent: BeingIntent) -> GatewayVerdict:

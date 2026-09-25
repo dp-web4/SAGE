@@ -3,7 +3,11 @@
 # public SAGE and "mirrored to private-context going forward").
 #
 # What does NOT go: identity.sealed* (key material stays on this machine; the USB backup holds it),
-# heartbeat.log (stdout noise, 55 MB), caches. heartbeats.jsonl is the record that once made a
+# heartbeat.log (stdout noise, 55 MB), caches, and atp_shadow.jsonl — the Rust daemon's
+# non-forcing shadow-metabolism INSTRUMENT (main.rs: "observation only, never fed back"), a row per
+# noticing with no timestamp, unbounded: 14.3 MB / 92k rows on Sprout after 5 days, over the 9 MB
+# guard on the first mirror run (sprout-claude, 2026-09-22). It is a daemon measurement, not the
+# being's record. heartbeats.jsonl is the record that once made a
 # recovery possible, so it goes — split by DAY (so a 3-hourly commit rewrites only today, ~3 MB, not the whole log), because GitHub refuses files over 100 MB and the
 # whole log crosses that within weeks.
 #
@@ -41,8 +45,14 @@ DEST="$PC/beings/$BEING"
 [ -d "$PC/.git" ] || die "no private-context checkout at $PC"
 mkdir -p "$DEST/heartbeats"
 
-rsync -a --delete \
+# --delete-excluded removes a file the mirror copied BEFORE it became excluded (the by-hand
+# cleanup the atp_shadow trap needed, measured on Sprout 2026-09-22). It would also wipe
+# heartbeats/, which is mirror-only — that is why it was not here already (Legion, 09-20). The
+# filter protects that one directory. Legion measured this on #168: stale file removed by the
+# mirror itself, heartbeats/ survives, run reports "no change".
+rsync -a --delete --delete-excluded --filter="protect heartbeats/" \
   --exclude 'identity.sealed*' --exclude 'heartbeat.log' --exclude 'heartbeats.jsonl' \
+  --exclude 'atp_shadow.jsonl*' \
   --exclude 'heartbeats/' --exclude '__pycache__/' --exclude '*.tmp' --exclude '.git' \
   "$INSTANCE/" "$DEST/" || die "rsync"
 mkdir -p "$DEST/heartbeats"   # excluded above, so --delete leaves it alone
@@ -76,7 +86,7 @@ print(f"heartbeats: {n} beats in {len(months)} day file(s)")
 PY
 
 # counts: what the being has vs what the mirror holds (the two known exclusions aside)
-src_n=$(cd "$INSTANCE" && find . -type f ! -name 'identity.sealed*' ! -name heartbeat.log ! -name heartbeats.jsonl ! -path '*/__pycache__/*' ! -name '*.tmp' | wc -l)
+src_n=$(cd "$INSTANCE" && find . -type f ! -name 'identity.sealed*' ! -name heartbeat.log ! -name heartbeats.jsonl ! -name 'atp_shadow.jsonl*' ! -path '*/__pycache__/*' ! -name '*.tmp' | wc -l)
 dst_n=$(cd "$DEST" && find . -type f ! -path './heartbeats/*' | wc -l)
 # BSD `wc -l` (macOS) pads its count with spaces, and the `|| echo 0` arm below does not, so a
 # being with no heartbeats.jsonl failed here as "0 vs        0" (McNugget, 2026-09-20). Compare numbers.
