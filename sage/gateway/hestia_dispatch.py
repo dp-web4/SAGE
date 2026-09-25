@@ -96,6 +96,29 @@ def _stale_transport(e: Exception) -> bool:
     return "HTTP 404" in msg and "Session not found" in msg
 
 
+def _worktree_env() -> dict:
+    """The environment for EVERY process the seat runs inside the being's worktree: git hooks OFF.
+
+    THE HOOK IS THE DOOR. SAGE sets `core.hooksPath=.githooks`, a TRACKED directory, and that
+    setting is shared by every worktree of the repository — including the being's. The being can
+    write its own worktree (M1, wherever `check` gets its sandbox), so it can write
+    `.githooks/pre-commit`; and `pr_open` / `pr_amend` then run `git commit` in that worktree AS
+    THE SEAT, outside bubblewrap, with the vault passphrase and every key on this box in reach.
+    A gated write plus a seat-run commit is ungated arbitrary code — the composition the sandbox
+    exists to prevent, arriving through git instead of pytest. Measured on Legion 2026-09-25: gate
+    ALLOWED and harness ALLOWED a write to `.githooks/pre-commit`; nothing had exploited it.
+
+    Set through GIT_CONFIG_* rather than `-c` so it reaches git without changing any command
+    string the law judged (judged argv == executed argv is kept exactly), and so it covers every
+    git the process spawns, not only the ones this file names."""
+    env = dict(os.environ)
+    n = int(env.get("GIT_CONFIG_COUNT", "0") or 0)
+    env.update({"GIT_CONFIG_COUNT": str(n + 1),
+                f"GIT_CONFIG_KEY_{n}": "core.hooksPath",
+                f"GIT_CONFIG_VALUE_{n}": "/dev/null"})
+    return env
+
+
 class HestiaF1aDispatcher:
     # A lost session arrives in TWO shapes and only one of them was handled.
     _SESSION_LOST = ("session not found", "session_not_found", "session expired", "no session")
@@ -1279,7 +1302,7 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=err)
         action_id = begin.get("actionId")
         try:
-            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(), text=True,
                                   capture_output=True, timeout=60)
             out = ((proc.stdout or "") + (proc.stderr or "")).strip()
             ran, rc = True, proc.returncode
@@ -1363,7 +1386,7 @@ class HestiaF1aDispatcher:
                                                   f"is unreachable ({str(err)[:160]})")
         action_id = begin.get("actionId")
         try:
-            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(), text=True,
                                   capture_output=True, timeout=60)
             ran = True
         except Exception as e:
@@ -1441,7 +1464,7 @@ class HestiaF1aDispatcher:
                         probe = subprocess.run(
                             ["git", "-C", self.worktree, "ls-files", "--error-unmatch",
                              "--", spec],
-                            cwd=self.worktree, text=True, capture_output=True, timeout=15)
+                            cwd=self.worktree, env=_worktree_env(), text=True, capture_output=True, timeout=15)
                         missing = probe.returncode != 0
                     except Exception:
                         missing = None
@@ -1485,7 +1508,7 @@ class HestiaF1aDispatcher:
 
         def _git(*args):
             try:
-                r = subprocess.run(("git", *args), cwd=self.worktree, text=True,
+                r = subprocess.run(("git", *args), cwd=self.worktree, env=_worktree_env(), text=True,
                                    capture_output=True, timeout=15)
                 return r.stdout.strip() if r.returncode == 0 else None
             except Exception:
@@ -1561,7 +1584,7 @@ class HestiaF1aDispatcher:
                         "tree": self._worktree_revision(), "worktree": self.worktree})
         action_id = begin.get("actionId")
         try:
-            proc = subprocess.run(argv, cwd=self.worktree, text=True,
+            proc = subprocess.run(argv, cwd=self.worktree, env=_worktree_env(), text=True,
                                   capture_output=True, timeout=600)
             passed = proc.returncode == 0
             raw_out = (proc.stdout or "") + (proc.stderr or "")
@@ -2302,7 +2325,7 @@ class HestiaF1aDispatcher:
         target = os.path.realpath(os.path.join(self.worktree, str(intent.args["path"])))
         before = os.path.getsize(target) if os.path.exists(target) else 0
         try:
-            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(), text=True,
                                   capture_output=True, timeout=120)
         except Exception as e:
             return ResultEnvelope(ok=False, error=f"git_restore could not run: {type(e).__name__}: {e}")
@@ -2344,7 +2367,7 @@ class HestiaF1aDispatcher:
         new_body = str(intent.args.get("body", "") or "").rstrip()
 
         def git(*a, inp=None):
-            return subprocess.run(["git", *a], cwd=self.worktree, text=True, input=inp,
+            return subprocess.run(["git", *a], cwd=self.worktree, env=_worktree_env(), text=True, input=inp,
                                   capture_output=True, timeout=120)
 
         branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
@@ -2400,7 +2423,7 @@ class HestiaF1aDispatcher:
                         f"hestia witness action: `{action_id}`\n")
             try:
                 proc = subprocess.run(shlex.split(cmd), input=body_out, text=True,
-                                      cwd=self.worktree, capture_output=True, timeout=120)
+                                      cwd=self.worktree, env=_worktree_env(), capture_output=True, timeout=120)
             except Exception as e:
                 proc = subprocess.CompletedProcess(cmd, 1, "", f"{type(e).__name__}: {e}")
             if proc.returncode != 0:
@@ -2444,7 +2467,7 @@ class HestiaF1aDispatcher:
         branch = f"legion-being/{slug}"
 
         def git(*a, inp=None):
-            return subprocess.run(["git", *a], cwd=self.worktree, text=True, input=inp,
+            return subprocess.run(["git", *a], cwd=self.worktree, env=_worktree_env(), text=True, input=inp,
                                   capture_output=True, timeout=120)
 
         # nothing to propose is a refusal with a reason, not an empty PR
@@ -2546,7 +2569,7 @@ class HestiaF1aDispatcher:
                    + f"hestia witness action: `{action_id}`\n")
         try:
             proc = subprocess.run(shlex.split(cmd), input=pr_body, text=True,
-                                  cwd=self.worktree, capture_output=True, timeout=120)
+                                  cwd=self.worktree, env=_worktree_env(), capture_output=True, timeout=120)
         except Exception as e:
             proc = subprocess.CompletedProcess(cmd, 1, "", f"{type(e).__name__}: {e}")
         if proc.returncode != 0:

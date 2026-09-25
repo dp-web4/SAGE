@@ -19,6 +19,10 @@
 # progress, and merging under it is how you lose it); untracked files do not, and are named
 # so the record shows what was carried across.
 set -euo pipefail
+# Hooks OFF for every git this script runs in the being's worktree: .githooks is a tracked
+# directory the being can write (M1), and checkout/merge run post-checkout/post-merge hooks as the
+# seat (2026-09-25).
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null
 WT="${1:-/home/dp/ai-workspace/being-worktrees/legion-being}"
 REF="${2:-legion/mission-artifact}"
 cd "$WT"

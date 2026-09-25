@@ -231,6 +231,24 @@ class ReferenceF1aDispatcher:
             wt = getattr(self, "worktree", None)
             if wt and self._worktree_writable():
                 roots.append((Path(wt).resolve(), True))
+        # WHAT GIT EXECUTES IS NOT A FILE THE BEING WRITES. `core.hooksPath=.githooks` is a
+        # tracked directory shared by every worktree, and the seat runs `git commit` in this one
+        # (pr_open, pr_amend). A being-written hook would run as the seat, outside the sandbox
+        # that makes M1 safe. hestia_dispatch._worktree_env() switches hooks off for every
+        # seat-run git; this refusal is the second layer, and the one the being can read.
+        # `.git` is refused for the same reason: it is the repository's machinery, not a file.
+        _wt = getattr(self, "worktree", None)
+        if writing and _wt:
+            _wr = Path(_wt).resolve()
+            if p == _wr or _wr in p.parents:
+                _first = p.relative_to(_wr).parts[:1]
+                if _first and _first[0] in (".githooks", ".git"):
+                    raise ValueError(
+                        f"{_first[0]}/ in your worktree is not writable: it holds what git "
+                        f"EXECUTES (hooks) or git's own machinery, and the seat runs git in this "
+                        f"tree, so a file there would run as the seat outside your sandbox. This is "
+                        f"not about you; no being may write there. Everything else in the worktree "
+                        f"is yours to change.")
         if writing and p.parent == self.memory_root / "notes" and p.name in SEAT_OWNED_NOTES:
             raise ValueError(
                 f"notes/{p.name} is what was said TO you, and it stays as it was said. Your "
