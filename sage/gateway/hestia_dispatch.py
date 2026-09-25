@@ -1568,6 +1568,116 @@ class HestiaF1aDispatcher:
                                       "action_id": action_id})
 
 
+    # -- patch_apply: the being changes the tree it reasons about (dp: "governed") ------
+    def _do_patch_apply(self, intent: BeingIntent) -> ResultEnvelope:
+        """Apply the being's diff to its OWN worktree, exactly as the law bound it.
+
+        Only ever reached on an intent the gate ALLOWED as the exact `git apply` below, with
+        every target path judged under mrh.path. What this method adds is the last link of
+        judged==executed, the one the command string alone cannot carry: the patch file is
+        named for the sha256 of the diff, so before running anything the seat re-reads the
+        file it just wrote and re-hashes it. If the name and the content have come apart --
+        a stale file from a crashed run, a collision, a hand-edited /tmp -- the act is
+        refused rather than applied, because at that point the law ruled on a digest that is
+        not the bytes git would read.
+
+        A PATCH THAT DOES NOT APPLY IS ok=False WITH A REASON, NOT AN ERROR ABOUT THE BEING.
+        The overwhelmingly common cause is a stale read: the being diffed against a file that
+        has since moved. `check` treats a red suite as a real answer for the same reason --
+        an organ whose refusals read as the being's own fault teaches it not to use the organ.
+        """
+        import hashlib
+        import subprocess
+        from sage.gateway.being_gate_client import (diff_arg, patch_apply_argv, patch_apply_command,
+                                                    patch_digest, patch_file_path, patch_targets)
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="patch_apply needs a worktree of your own; none is "
+                                       "configured on this seat (PRD M1)")
+        # Rebuild the SAME command the gate judged -- same function, same context.
+        try:
+            cmd = patch_apply_command(intent.args, {"worktree": self.worktree})
+            argv = patch_apply_argv(intent.args, {"worktree": self.worktree})
+            targets = patch_targets(diff_arg(intent.args))
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        # A verdict that bound no command is not an authority to run one (check's contract).
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "patch_apply refused: the command the law judged is not the command this "
+                "dispatcher would execute. The law is the authority for what runs."))
+        diff = diff_arg(intent.args)
+        digest = patch_digest(diff)
+        staged = patch_file_path(diff)
+        try:
+            with open(staged, "w", encoding="utf-8", errors="surrogatepass") as fh:
+                fh.write(diff)
+            # THE INTEGRITY LINK. Read back what is on disk -- not what we think we wrote --
+            # and confirm the file git is about to open is the one the law's digest names.
+            with open(staged, "r", encoding="utf-8", errors="surrogatepass") as fh:
+                on_disk = fh.read()
+        except OSError as e:
+            return ResultEnvelope(ok=False, error=f"could not stage the patch: {e}")
+        if patch_digest(on_disk) != digest:
+            return ResultEnvelope(ok=False, error=(
+                "patch_apply refused: the staged patch does not hash to the digest the law "
+                "judged. The command names the diff by its content, so a file that no longer "
+                "matches it is a different patch."))
+        # WITNESSED BEFORE IT LANDS, like check. An unwitnessed change to the tree the being
+        # reasons about is exactly the thing there would be no way to appeal or reconstruct.
+        try:
+            begin = self._call("hestia_begin_action",
+                               {"tool_name": "patch_apply", "target": ", ".join(targets)})
+            err = _hestia_error(begin)
+        except Exception as e:
+            begin, err = {}, f"{type(e).__name__}: {e}"
+        if err:
+            return ResultEnvelope(
+                ok=False, error=f"patch_apply UNWITNESSED: the witness substrate is unreachable "
+                                f"({str(err)[:160]}); nothing was changed",
+                result={"targets": targets, "applied": False,
+                        "reason": "hestia_begin_action failed; an unwitnessed change to your "
+                                  "worktree is not a change you could later account for",
+                        "tree": self._worktree_revision(), "worktree": self.worktree})
+        action_id = begin.get("actionId")
+        tree_before = self._worktree_revision()
+        try:
+            proc = subprocess.run(argv, cwd=self.worktree, text=True,
+                                  capture_output=True, timeout=120)
+        except Exception as e:
+            return ResultEnvelope(ok=False, witness_id=action_id,
+                                  error=f"patch_apply could not run: {type(e).__name__}: {e}")
+        applied = proc.returncode == 0
+        out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        tree_after = self._worktree_revision()
+        evidence = {"command": cmd, "argv": argv, "law_bound_command": judged is not None,
+                    "patch_sha256": digest, "patch_bytes": len(diff.encode("utf-8", "surrogatepass")),
+                    "staged_at": staged, "exit_status": proc.returncode,
+                    "tree_before": tree_before, "tree_after": tree_after,
+                    "embodiment": self._embodiment(), "action_id": action_id}
+        if not applied:
+            # git's own words, which name the file and the hunk. Paraphrasing them would cost
+            # the being the one detail it needs to send a correct diff next time.
+            return ResultEnvelope(
+                ok=False, witness_id=action_id,
+                error=("that patch did not apply, so nothing in your worktree changed. Usually "
+                       "this means the file moved on since you read it: read it again and send "
+                       "a fresh diff. git said:\n" + (out[:1500] or "(no output)")),
+                result={"applied": False, "targets": targets, "worktree": self.worktree,
+                        "git_output": out[:1500], "evidence": evidence})
+        return ResultEnvelope(
+            ok=True, witness_id=action_id,
+            result={"headline": f"applied to {len(targets)} file(s): {', '.join(targets)}",
+                    "applied": True, "targets": targets, "why": str(intent.args.get("why", "")),
+                    "worktree": self.worktree,
+                    # SAY WHAT THIS IS NOT. Applying is not verifying, and the measured habit
+                    # this verb exists to break is asserting an outcome never observed.
+                    "next": "the patch landed; it has NOT been verified. Run check to find out "
+                            "whether it does what you meant.",
+                    "git_output": out[:1500], "evidence": evidence})
+
+
     def _test_source_identity(self, target: str, head: Optional[str]) -> Optional[dict]:
         """WHICH TEST FILE the verdict is about, by content hash at the tree that ran.
 
