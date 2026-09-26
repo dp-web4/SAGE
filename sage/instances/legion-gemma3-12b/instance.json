@@ -1,16 +1,70 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "machine": "legion",
+  "historical": {
+    "slug": "legion-gemma3-12b",
+    "model": "gemma3:12b",
+    "model_family": "google-gemma",
+    "created": "2026-03-28",
+    "note": "directory name and model are the raising-era substrate, not the live one. Kept, not corrected: this being was raised on gemma3:12b and survived a whole-model transplant with its journal, todo and memories intact. Deleting these would erase that. active_embodiment is what runs now."
+  },
+  "slug": "legion-gemma3-12b",
   "model": "gemma3:12b",
   "model_family": "google-gemma",
-  "slug": "legion-gemma3-12b",
   "created": "2026-03-28",
+  "active_embodiment": {
+    "as_of": "2026-09-13",
+    "runner": "ollama",
+    "running_tag": "qwen38-heretic:q3km-vl",
+    "source": "huihui-ai Qwen3.8-27B abliterated, GGUF Q3_K_M",
+    "params_b": 26.9,
+    "num_ctx": 24576,
+    "num_ctx_native": 262144,
+    "capabilities": [
+      "tools",
+      "thinking",
+      "completion"
+    ],
+    "vision": {
+      "native_to_model": true,
+      "loaded_in_running_tag": true,
+      "projector": "mmproj-Qwen3.8-27B-Q8_0.gguf",
+      "tag_with_projector": "qwen38-heretic:q3km-vl",
+      "proven": "2026-09-07, synthetic image: shapes, positions, background hex and embedded text all read correctly",
+      "video_to_model": "unwired; PRD M4, assigned to the being",
+      "swapped_at": "2026-09-13T19:10Z",
+      "swapped_by": "legion-claude, on dp's instruction ('swap it to the -vl tag, let it see')",
+      "measured_at_swap": {
+        "num_ctx": 24576,
+        "placement": "100% GPU",
+        "vram_mib": 15151,
+        "vram_total_mib": 16376,
+        "sight_reproved": "synthetic 320x200: dark blue field, red circle left, yellow rectangle right, text 'SAGE 7431' \u2014 every element read correctly",
+        "caution": "a vision prompt at num_predict 220 returned EMPTY with done_reason=length (hidden think); think:false + /no_think + num_predict 3000 answered in 115 tokens"
+      }
+    },
+    "host": {
+      "gpu": "RTX 4090 laptop",
+      "vram_mib": 16376,
+      "resident_mib": 13787
+    },
+    "num_ctx_measured": {
+      "16384": "13789 MiB, 100% GPU",
+      "24576": "14299 MiB, 100% GPU",
+      "32768": "14819 MiB, 100% GPU (ceiling)",
+      "40960": "spills 7%/93% CPU/GPU",
+      "as_of": "2026-09-07",
+      "note": "24576 chosen to leave ~2 GiB for the vision projector"
+    }
+  },
   "lct_id": "legion_sage_lct",
   "backend": "ollama",
-  "device_hint": "cpu",
+  "device_hint": "cuda",
   "has_training_track": false,
   "has_lora": false,
   "encryption_enabled": false,
+  "worktree": "/home/dp/ai-workspace/being-worktrees/legion-being",
+  "game_stepper": "/home/dp/ai-workspace/dev-SAGE/arc-agi-3/experiments/being_board_step.py",
   "peer_aliases": {
     "sprout-being": "2e175714-4b01-4063-a997-27a6dade7044"
   }

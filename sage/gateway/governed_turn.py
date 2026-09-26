@@ -8,7 +8,7 @@ intent is executed and witnessed by the F1a dispatcher against the running daemo
 The being never holds a tool; the seat never fabricates a result.
 
     python3 -m sage.gateway.governed_turn \
-        --member legion-being --model qwen38-heretic:q3km \
+        --member legion-being --model qwen38-heretic:q3km-vl \
         --instance sage/instances/legion-gemma3-12b \
         --task-file task.md [--system-file system.md] [--max-steps 2] [--out trace.json]
 
@@ -97,10 +97,25 @@ def review_task(view: dict, diff: str) -> str:
 
 
 def is_reasoning_model(model: str) -> bool:
-    """Models that only emit structured tool calls with `think` on (empero Qwen3.8
-    distills, R1-style). Measured on Sprout 2026-09-05: with thinking off, the first two
-    heartbeats narrated a summary with steps=0. The switch is the request's `think` field
-    (irp/plugins/ollama_irp.py:165); a `/no_think` prompt suffix never was one and is no longer sent."""
+    """Models for which `think` is turned ON. The name overclaims: it says "reasoning
+    model" but what it decides is a config default (`think_default` in the model family's
+    JSON), not a measured need.
+
+    The switch is the request's `think` field (irp/plugins/ollama_irp.py); a `/no_think`
+    prompt suffix never was one and is no longer sent (retired fleet-wide 2026-09-12 —
+    no fleet template parses it out of the prompt, so it arrived as literal text).
+
+    The measurement behind the default is SPROUT'S, 2026-09-05: under `/no_think` its first
+    two heartbeats narrated a summary with steps=0 and never called a tool. That is real for
+    that body. It is NOT true of Legion's qwen38-heretic:q3km-vl — measured 2026-09-15, three
+    runs, beat-shaped prompt with 19 tools declared: tool calls survive `think=False` every
+    time. legion-being said so first, from reading this file.
+
+    Thinking stays ON for heretic anyway, for a different reason: under the beat's own ask
+    ("do one thing now"), `think=False` goes straight to a tool call in ~26 tokens and
+    describes nothing, while `think=True` both acts and describes. So the behaviour this
+    function produces is right for that body and the justification above it was wrong.
+    Do not cite one machine's measurement as a property of another's model."""
     try:
         from sage.irp.adapters.model_capabilities import load_capabilities
         return load_capabilities(model).resolve_think(model)
@@ -210,12 +225,18 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
         member, memory_root=str(instance), publish_fn=publish_fn,
         host_session_id=host_session_id, being_lct=being_lct_for(member, workspace),
         peer_aliases=instance_config(instance).get("peer_aliases") or None,
-        worktree=worktree)
+        # the being's own worktree, resolved once by worktree_for (main #208)
+        worktree=worktree,
+        # so the dispatcher composes `search` exactly as the client judges it
+        workspace=workspace,
+        # the ARC stepper `game` composes with — both sites, or the mismatch guard refuses
+        game_stepper=instance_config(instance).get("game_stepper") or None)
     client = BeingGateClient(member_id=member,
                              identity_path=str(instance / "identity.json"),
                              workspace=workspace, dispatcher=dispatcher,
                              host_session_id=host_session_id,
-                             worktree=worktree)
+                             worktree=worktree,
+                             game_stepper=instance_config(instance).get("game_stepper") or None)
     # Reasoning models (empero Qwen3.8 distills etc.) only emit structured tool calls
     # with `think` on — off, they narrate a bracketed placeholder instead of acting
     # (measured on Sprout 2026-08-28 and again on the first governed turn, 2026-09-03:

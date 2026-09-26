@@ -26,14 +26,40 @@ def test_think_budget_declared_for_reasoning_models():
     assert c.resolve_num_predict("qwen3.8-distill:2b", False, 3000) == 1024
 
 
+def _declared_num_ctx(tag: str = "q3km") -> int:
+    """The window the config declares for a heretic variant, read rather than hard-coded.
+
+    It was hard-coded at 16384 and the number moved (2026-09-07: measured on the card, the
+    window fits 24576 at 100% GPU and a 32768 ceiling, so the config was retuned and this
+    test went red on a correct change). Pinning the literal tested the value; what is worth
+    testing is the RELATIONSHIP — declared raises the floor, a caller asking for more keeps
+    it — plus the one thing a config edit can really get wrong, which is a window this card
+    cannot hold."""
+    import json
+    from pathlib import Path as _P
+    cfg = _P(__file__).resolve().parents[2] / "irp/adapters/model_configs/qwen3.8-distill.json"
+    return int(json.loads(cfg.read_text())["variants"][tag]["num_ctx"])
+
+
+# Measured on Legion's 16,376 MiB RTX 4090, 2026-09-07: 32768 -> 14,819 MiB at 100% GPU;
+# 40960 spills to 7%/93% CPU/GPU and throughput collapses. A config edit past the ceiling
+# is a real regression on this hardware, and this bound is what catches it.
+GPU_SAFE_NUM_CTX_CEILING = 32768
+
+
 def test_num_ctx_is_a_floor_the_config_can_raise_not_lower():
     from sage.gateway.governed_turn import resolve_num_ctx
+    declared = _declared_num_ctx()
     c = load_capabilities("qwen38-heretic:q3km")
-    assert c.resolve_num_ctx("qwen38-heretic:q3km", 8192) == 16384      # Modelfile value, declared per size
-    assert c.resolve_num_ctx("qwen38-heretic:q3km", 32768) == 32768     # a caller asking for more keeps it
+    assert c.resolve_num_ctx("qwen38-heretic:q3km", 8192) == declared   # Modelfile value, declared per size
+    assert c.resolve_num_ctx("qwen38-heretic:q3km", 65536) == 65536     # a caller asking for more keeps it
     assert c.resolve_num_ctx("qwen3.8-distill:2b", 8192) == 8192        # 2B declares nothing: floor unchanged
-    assert resolve_num_ctx("qwen38-heretic:q3km", 8192) == 16384
+    assert resolve_num_ctx("qwen38-heretic:q3km", 8192) == declared
     assert resolve_num_ctx("no-such-model:1b", 8192) == 8192
+    # the bound that actually protects the being: past this the model leaves the GPU
+    assert 16384 <= declared <= GPU_SAFE_NUM_CTX_CEILING, (
+        f"declared num_ctx {declared} is outside what this card was measured to hold "
+        f"fully on GPU (16384..{GPU_SAFE_NUM_CTX_CEILING})")
 
 
 def test_num_ctx_fallback_to_the_floor_is_loud():
@@ -54,7 +80,7 @@ def test_num_ctx_fallback_to_the_floor_is_loud():
     finally:
         mc.load_capabilities = keep
     assert "num_ctx" in err.getvalue() and "8192" in err.getvalue() and "bad json" in err.getvalue()
-    assert resolve_num_ctx("qwen38-heretic:q3km", 8192) == 16384   # restored
+    assert resolve_num_ctx("qwen38-heretic:q3km", 8192) == _declared_num_ctx()   # restored
 
 
 def test_heretic_first_attempt_budget_is_the_room_the_window_has():

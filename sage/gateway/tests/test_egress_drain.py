@@ -331,3 +331,43 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_the_drain_reports_who_actually_signed(monkeypatch):
+    """hestia #1030: a being's mesh act leaves the host under the SEAT's hub identity and
+    nothing records the carrier. Replies follow the signer, land in the seat's mailbox, and
+    the being concludes nobody answered — cbp-being asked 92 times in 30 hours into that.
+
+    RECONCILED 2026-09-18. This branch reported ONE label for the pass (`signed_as`, plus a
+    `carrier_gap` sentence). main replaced that with a PER-ROW record, and its reasoning
+    holds: the signer is chosen per row, so a pass-level label is false by construction the
+    moment a drain carries a row for another member. The property this test exists for —
+    the record says who carried the act, rather than a log line nobody kept — is asserted
+    against the per-row fields.
+    """
+    from sage.gateway import egress_drain as E
+
+    # no hub identity for this member -> the seat signs, which is today's silent default
+    monkeypatch.setattr(E, "signer_for", lambda row, pid: (None, "seat", None, None))
+    m = FakeMcp(pending=[ROW])
+    r = drain_once(mcp=m, plugin_id="legion-being", log=lambda *_: None,
+                   sender=lambda to, kind, ptr, **kw: (True, "ledger=77"))
+    assert r["forwarded"] == 1
+    (row,) = r["forwarded_rows"]
+    assert row["signed_as"] == "seat", r          # who actually carried it, on the row
+    assert row["from_plugin"] == ROW.get("from_plugin"), r
+    # the default identity is resolved through the same path and is a fact about the HOST,
+    # not a claim about this row: with no env for the member it signs as nothing at all.
+    assert r["drainer_default_identity"]["member"] == "legion-being", r
+
+    # with the being's own hub identity present the row says the being signed
+    monkeypatch.setattr(E, "signer_for", lambda row, pid: ("/x/being-hub-identity", "being", "lct:being", None))
+    r2 = drain_once(mcp=FakeMcp(pending=[ROW]), plugin_id="legion-being", log=lambda *_: None,
+                    sender=lambda to, kind, ptr, **kw: (True, "ledger=77"))
+    (row2,) = r2["forwarded_rows"]
+    assert row2["signed_as"] == "being" and row2["carrier_lct"] == "lct:being", r2
+
+    # and nothing forwarded reports no rows, not a carrier complaint
+    r3 = drain_once(mcp=FakeMcp(pending=[]), plugin_id="legion-being", log=lambda *_: None,
+                    sender=lambda to, kind, ptr, **kw: (True, "ledger=77"))
+    assert r3["forwarded_rows"] == [] and r3["empty"] is True

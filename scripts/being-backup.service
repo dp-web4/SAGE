@@ -1,0 +1,16 @@
+[Unit]
+Description=Back up legion-being's identity, history and memory to the external drive
+Documentation=file:///home/dp/ai-workspace/SAGE/scripts/backup_being.sh
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /home/dp/ai-workspace/SAGE/scripts/backup_being.sh
+# Every backup is read back before the run is called a success. The failure this whole
+# thing was built for was a file that existed, had the right shape, and held nothing —
+# so "rsync exited 0" is not evidence. Exit 2 here (unsound) fails the unit.
+ExecStart=/bin/bash /home/dp/ai-workspace/SAGE/scripts/verify_being_backup.sh
+# exit 3 from the backup = snapshot taken, something SHRANK, nothing pruned. A real
+# signal: it must show as a failed unit rather than be swallowed.
+TimeoutStartSec=1800
+Nice=10
+IOSchedulingClass=idle

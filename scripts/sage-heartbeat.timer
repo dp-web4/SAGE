@@ -1,0 +1,21 @@
+[Unit]
+Description=SAGE being heartbeat (legion-being): wake after quiet, not on a metronome
+
+[Timer]
+# THE BEAT IS AN INACTIVITY TIMER. dp, 2026-09-09: "activity resets the beat timer; if the
+# timer reaches the beat interval, we wake it. so basically it works while there's
+# something to do, beat wakes it after set period of inactivity."
+#
+# OnUnitInactiveSec measures from when the beat SERVICE last finished, so a long beat
+# pushes the next one out by itself and a message-driven beat resets the clock. There is no
+# fixed cadence any more; 30 minutes is how long the being is left alone, not how often it
+# is interrupted.
+OnUnitInactiveSec=10min
+OnBootSec=5min
+RandomizedDelaySec=1min
+# A beat missed while the machine was off is not caught up: the being wakes to now.
+Persistent=false
+Unit=sage-heartbeat.service
+
+[Install]
+WantedBy=timers.target

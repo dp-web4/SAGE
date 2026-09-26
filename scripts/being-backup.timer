@@ -1,0 +1,15 @@
+[Unit]
+Description=Back up legion-being every 3 hours (and shortly after boot)
+
+[Timer]
+# A fixed schedule rather than OnUnitActiveSec: the monotonic form computes no next
+# elapse until the service has run once under the timer, and a backup whose next run is
+# "-" is the kind of quiet nothing this whole exercise exists to prevent.
+OnCalendar=*-*-* 00/3:07:00
+OnBootSec=10min
+# A run missed while the machine was off happens at the next start rather than being lost.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

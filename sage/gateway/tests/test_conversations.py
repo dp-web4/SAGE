@@ -376,7 +376,9 @@ def test_the_beat_state_puts_a_ceiling_on_the_conversations_block(tmp_path, monk
         seen.update(kw)
         return ""
     monkeypatch.setattr(C, "render_for_being", spy)
-    heartbeat.own_state(tmp_path, "b")
+    # `member` is a keyword now: own_state grew an `entrusted` block ahead of it in the
+    # 2026-09-18 reconciliation, and a positional "b" would have been the entrustment.
+    heartbeat.own_state(tmp_path, member="b")
     assert seen.get("per_conv") == heartbeat.CONV_PER_CONV and seen.get("turn_chars") == heartbeat.CONV_TURN_CHARS
     assert heartbeat.CONV_TURN_CHARS and heartbeat.CONV_PER_CONV <= 12
 

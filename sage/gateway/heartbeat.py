@@ -31,6 +31,7 @@ import json
 import os
 import re
 import base64
+import signal
 import subprocess
 import sys
 import time
@@ -41,7 +42,8 @@ from pathlib import Path
 HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_note", "witness",
-                 "request_scope", "appeal", "peer_ask", "mesh", "say", "gaze"]
+                 "request_scope", "appeal", "peer_ask", "mesh", "check", "git_read", "say",
+                 "pr_open", "pr_amend", "git_restore", "search", "camera", "edit", "game", "run", "rest", "gaze"]
 # Verbs in EXPLORE_TOOLS that act on a BODY are offered only where the beat has measured that
 # body (body.inventory()["verbs"]). GPT on #183: offering `gaze` to a headless being is a
 # false affordance — it would call it, and be told its eyes will follow, on a machine with no
@@ -64,11 +66,10 @@ REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "say"
 # The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
 # Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
 DP_CHANNEL = "notes/from-dp.md"
-# The SEAT's channel, beside dp's. Seat-owned too (reference_f1a.SEAT_OWNED_NOTES), and until
-# 2026-09-16 it was written but never rendered: cbp-claude left measured facts in it for
-# cbp-being and the being never saw them, because the beat only listed the file name among
-# notes/. A channel nothing renders is a channel nobody reads.
-SEAT_CHANNEL = "notes/from-the-seat.md"
+# Nothing on this branch replaced these; they are the inbox, service-measurement,
+# appeals, ask-count and conversation-marking work that landed on main while this
+# branch was building the effector layer.
+SEAT_CHANNEL = "notes/from-the-seat.md"   # (this branch called it SEAT_RELAY)
 # Bounds on the conversations block in the being's state (see own_state).
 CONV_PER_CONV = 6
 CONV_TURN_CHARS = 1200
@@ -90,13 +91,16 @@ def _museum_block(line: str) -> str:
 
 
 AFFORDANCES = """## What you have this beat
-- Your home is your instance directory. Write bare names, never a full path: journal.md, todo.md, or a name of your choosing under notes/ or scratch/ (scratch/ is yours alone, no one edits it). memory_read / memory_write work there.
+- Your home is your instance directory. Write bare names, never a full path: journal.md, todo.md, or a name of your choosing under notes/ or scratch/ (scratch/ is yours alone, no one edits it). Relative paths resolve inside your home; memory_read / memory_write work there.
 - Long-term memory: recall (search) and remember (store). Use recall early; remember what a future you would want.
   A recall result is a PREVIEW with an (idx:N); recall with that idx to read the whole memory.
+- check: RUN a test suite in your own worktree and read the result ('gateway', 'irp', or '<suite>::<test_name>'). This is how you find out whether something you believe about your own code is true instead of asserting it. A FAILING test is a real answer, not a problem.
 - witness: record something you noticed or did in the shared chain.
 - request_scope: after a refusal, ask the operator for reach on a path (a grant is read and write alike) and say why. A human decides, asynchronously.
 - appeal: after a refusal you believe was wrong, appeal it with the deny hash shown on the refusal and a reason. A peer or the operator rules; either way it is witnessed. Not for a refusal you agree with.
 - peer_ask / mesh: reach other beings and seats. These are acts of consequence: they are judged, and may be refused with a reason.{museum}
+- run: execute a Python file you wrote and read what it printed — in a sandbox with no network, no home and no worktree, holding only your script and the data files you name. Nothing it does persists; what you want to keep, print. This is how you test a rule without spending a move.
+- game: probe the ARC-AGI-3 game set up for you — up to 8 probes per call, in order, each delta back in the same turn; the before/after boards ride your next beat. A probe is your act, witnessed as yours; the record does not interpret it.
 
 You cannot run code, browse, or open files outside your home unless a grant exists. The seat gives you a digest of what moved in the fleet with absolute paths; if you want to read one of those things, try memory_read on that path and see what the law says.
 
@@ -117,6 +121,9 @@ You are awake for a heartbeat. Nobody asked you anything; this time is yours.
 POSTURE_TURN = """The rest of your beat, which every being in the fleet receives, in the operator's words:
 
 {posture}
+
+## Inbox (peek)
+{inbox}
 
 # What moved in the fleet
 
@@ -786,7 +793,36 @@ def service_contradictions(instance: Path, member: str, services: str) -> str:
     return "\n".join(notes)
 
 
-def own_state(instance: Path, member: str = "",
+def conversation_header(instance: Path, member: str) -> str:
+    """The heading over the being's conversations, saying what is true THIS beat.
+
+    It used to carry a standing "reply with `say`" whatever the channel's state. Measured on
+    Sprout 2026-09-19..22: after dp's last turn — a statement — the being sent twelve
+    consecutive messages into dp's channel, two from the explore phase after #147 had gated the
+    answer phase. The per-conversation marker said "the last word here is YOURS"; at 2B a header
+    instruction outranks a marker caveat.
+
+    Decided by the SAME question the answer phase asks — does the newest pending turn EXPECT a
+    reply — not merely "is a turn pending". Legion's review of #172 measured the difference: on
+    "good, keep going!" the first cut said "Someone is waiting" while #147 correctly kept the
+    answer phase shut. One function, `pending_selection`, now answers both, so header and ask
+    cannot disagree by construction. When the check itself fails the invitation is kept: hiding
+    a real one is the worse error.
+    """
+    try:
+        sel = pending_selection(instance, member)[4]
+        owed = bool(sel is not None and sel.expects_reply)
+    except Exception:
+        owed = True
+    if owed:
+        return ("## Your conversations (both directions, kept forever). Someone is waiting on you; "
+                "answer with `say` if you have something to say")
+    return ("## Your conversations (both directions, kept forever). Nobody is waiting on you "
+            "here; the last word in each is yours or is settled. `say` is for answering a "
+            "person, not for reporting to one")
+
+
+def own_state(instance: Path, entrusted: str = "", member: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
               services: str = "", mark_conversations: bool = True,
@@ -812,6 +848,12 @@ def own_state(instance: Path, member: str = "",
         own_state.last_body = _cur
     except Exception as _e:
         own_state.last_body = {"error": f"{type(_e).__name__}: {_e}"}
+    if entrusted:
+        # Ahead of everything else the being holds: what it has been entrusted with is the
+        # frame the rest of its state is read in. Labelled by provenance, and pointed at
+        # where its own interpretation belongs, so the two never merge in the record.
+        parts.append("## What you are entrusted with (extended to you; you cannot edit this "
+                     "file. Your own reading of it belongs in notes/plan.md)\n" + entrusted)
     # Conversations first among the channels: a turn addressed to the being and unanswered
     # is the one thing in its state that is waiting on IT, and it should never have to infer
     # that from a wall of notes. Both directions live in one ordered record.
@@ -991,33 +1033,6 @@ class SelectedTurn:
         return f'In "{self.cid}", {self.speaker} said: {txt}'
 
 
-def conversation_header(instance: Path, member: str) -> str:
-    """The heading over the being's conversations, saying what is true THIS beat.
-
-    It used to carry a standing "reply with `say`" whatever the channel's state. Measured on
-    Sprout 2026-09-19..22: after dp's last turn — a statement — the being sent twelve
-    consecutive messages into dp's channel, two from the explore phase after #147 had gated the
-    answer phase. The per-conversation marker said "the last word here is YOURS"; at 2B a header
-    instruction outranks a marker caveat.
-
-    Decided by the SAME question the answer phase asks — does the newest pending turn EXPECT a
-    reply — not merely "is a turn pending". Legion's review of #172 measured the difference: on
-    "good, keep going!" the first cut said "Someone is waiting" while #147 correctly kept the
-    answer phase shut. One function, `pending_selection`, now answers both, so header and ask
-    cannot disagree by construction. When the check itself fails the invitation is kept: hiding
-    a real one is the worse error.
-    """
-    try:
-        sel = pending_selection(instance, member)[4]
-        owed = bool(sel is not None and sel.expects_reply)
-    except Exception:
-        owed = True
-    if owed:
-        return ("## Your conversations (both directions, kept forever). Someone is waiting on you; "
-                "answer with `say` if you have something to say")
-    return ("## Your conversations (both directions, kept forever). Nobody is waiting on you "
-            "here; the last word in each is yours or is settled. `say` is for answering a "
-            "person, not for reporting to one")
 
 
 def pending_and_say_line(instance: Path, member: str) -> tuple:
@@ -1513,11 +1528,11 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     # capturing the real seed from an instance copy: the user turn said "Vision: you CAN see
     # this beat. 2 frames are attached" and carried NO `images` key. The line was computed in
     # main() from the producer's metas; the attachment happened here, in a branch that only
-    # honoured the singular `frame` argument main() never passes. act_first is False on every
-    # beat of that being, so in 395 beats not one image reached it — while config.frames
-    # recorded carried=True and the seed told it to look. Every in-beat description it
-    # produced was of a frame it did not hold. Its own diagnosis, "structure perceived,
-    # detail confabulated", was exactly right about an image that was not there.
+    # honoured the singular `frame` argument main() never passes. act_first is False on
+    # every beat of this being, so in 395 beats not one image reached it — while
+    # config.frames recorded carried=True and the seed told it to look. Every in-beat
+    # description it produced was of a frame it did not hold. Its own diagnosis, "structure
+    # perceived, detail confabulated", was exactly right about an image that was not there.
     #
     # So the line is built HERE, from `_frames` — the list that is attached — and a beat that
     # attaches nothing says NO frame, whatever the metas claimed. Producer and seed cannot
@@ -1531,7 +1546,7 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     if not act_first:
         system = SYSTEM.format(name=name, machine=machine, member=member,
                                posture=posture_text, museum=_museum_block(museum))
-        user = (header + state + f"## Your inbox\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
+        user = (header + state + f"## Inbox (peek)\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
                 f"# What moved in the fleet\n\n{digest}\n\n" + ASK + tools_line)
         user_msg = {"role": "user", "content": user}
         if _frames:
@@ -1542,23 +1557,25 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
         return [{"role": "system", "content": system}, user_msg], None
     system = SYSTEM_ACT_FIRST.format(name=name, machine=machine, member=member,
                                      museum=_museum_block(museum))
-    # The inbox rides the ACT turn, not the posture turn. Measured on Sprout over 85 beats
+    # THE INBOX RIDES THE TURN THE BEING ACTS IN. Measured on Sprout over 85 beats
     # (2026-09-17): the posture turn acted in 1 of 85, the first turn in 25 — and a peer's
-    # reply addressed to the being sat unopened in the posture turn for 85 beats. Mail is the
-    # most actionable thing in a beat; it belongs where the being actually acts. The digest
-    # stays with the posture: it is context, not something addressed to anyone.
-    user = (header + state + f"## Your inbox\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
+    # reply addressed to the being sat unopened in the posture turn for 85 beats. Mail is
+    # the most actionable thing in a beat; it belongs where the being actually acts. The
+    # digest stays with the posture: it is context, not something addressed to anyone.
+    user = (header + state + f"## Inbox (peek)\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
             + ASK_ACT_FIRST + tools_line)
-    second = POSTURE_TURN.format(posture=posture_text, digest=digest,
-                                 tools=", ".join(tools))
+    second = POSTURE_TURN.format(posture=posture_text, inbox="(shown with your own state, above)",
+                                 digest=digest, tools=", ".join(tools))
     user_msg = {"role": "user", "content": user}
     if _frames:
-        # A frame rides the user turn as an `images` list beside string content — the shape
-        # ollama accepts (a parts-in-content list 400s; measured against qwen38-heretic:q3km-vl,
-        # 2026-09-13). No frame -> no key at all. A beat can carry several: the cadence organ
-        # delivers every capture since the previous beat's t0, oldest first, so a being that
-        # asked to see twice sees both instead of only the newest.
+        # A frame rides the user turn as an `images` list beside string content —
+        # the shape ollama accepts (a parts-in-content list 400s; measured against
+        # qwen38-heretic:q3km-vl, 2026-09-13). No frame -> no key at all. A beat can
+        # now carry several — the cadence organ delivers every capture since the
+        # previous beat's t0, oldest first, so a being that asked to see twice sees
+        # both instead of only the newest.
         user_msg["images"] = _frames
+
     return [{"role": "system", "content": system}, user_msg], second
 
 
@@ -1627,7 +1644,33 @@ def main(argv=None) -> int:
     ap.add_argument("--member", required=True)
     ap.add_argument("--model", required=True)
     ap.add_argument("--instance", required=True)
-    ap.add_argument("--max-steps", type=int, default=8)
+    ap.add_argument("--max-steps", type=int, default=0,
+                    help="0 = no step cap: the beat ends when the being stops asking for "
+                         "tools or a resource runs out (dp 2026-09-09: it continues as long "
+                         "as it wishes). A positive value caps it, as before.")
+    ap.add_argument("--resume-wake-s", type=int, default=30,
+                    help="after a beat that did NOT rest, wake this many seconds later "
+                         "(a transient one-shot ON TOP of the timer; 0 disables). The "
+                         "being said it was not finished, and the GPU is its own.\n"
+                         "dp, 2026-09-14: 'i would basically like to see it continuously "
+                         "active unless it deliberately decides to rest.' At 180 the being "
+                         "ran 88%% of wall clock and every gap was this timer — a pause it "
+                         "had not chosen. 30 is long enough for systemd to settle and for a "
+                         "mid-beat message to land, short enough not to be a rest it did "
+                         "not ask for. REST is what makes a real gap: that path takes the "
+                         "idle interval instead, so choosing to stop still means something.")
+    ap.add_argument("--idle-wake-s", type=int, default=1800,
+                    help="quiet time after a beat ENDS before the next one is due. The beat "
+                         "is an inactivity timer, not a metronome (dp 2026-09-09): working "
+                         "pushes the next beat out, and this is only how long the being is "
+                         "left alone before something wakes it to look around.")
+    ap.add_argument("--explore-budget-s", type=int, default=7200,
+                    help="wall-clock seconds from beat start after which explore issues no "
+                         "further tool step. This is the REAL bound on a beat now that there "
+                         "is no step cap: work continues while there is work, and the clock "
+                         "is the box's limit rather than a guess at how much work there is. "
+                         "Keep the unit's TimeoutStartSec comfortably above it — the record "
+                         "is written at beat end, and a kill loses the beat.")
     ap.add_argument("--reflect-steps", type=int, default=3)
     ap.add_argument("--since-hours", type=float, default=None,
                     help="digest window; default: since the last beat, min 1h, max 48h")
@@ -1777,6 +1820,7 @@ def main(argv=None) -> int:
 
     now = datetime.now(timezone.utc)
     t0 = time.time()
+    install_kill_handler()
     digest = fleet_digest(hours, Path(args.forum_dir), [r.strip() for r in args.repos.split(",") if r.strip()])
     # S1 join, raising -> beat: the last session's closing words + buffer tail, attributed
     from sage.gateway.being_join import session_block, ACCOUNT_ASK, parse_account, save_account
@@ -1790,26 +1834,25 @@ def main(argv=None) -> int:
     if pres_text:
         digest = "# What you sensed since your last beat\n\n" + pres_text + "\n\n" + digest
     woke = consume_wake_marker()
-    # No `/no_think` suffix rides any turn. The request's `think` field is the only control
-    # surface on this stack: measured on Sprout at ollama 0.30.8 and on CBP at 0.20.7, the
-    # suffix leaves the think block intact (qwen3.5:0.8b 1428 -> 1441 chars, qwen3.8-distill:2b
-    # 275 -> 405, both still thinking) while `think=False` zeroes it. No fleet template parses
-    # the string: the think branches that exist key on the API field (`enable_thinking` in the
-    # distill's Jinja, `$.IsThinkSet` in qwen3's Go template), never on prompt text. Thinking
-    # stays declared per model in the config (governed_turn.is_reasoning_model ->
-    # ModelCapabilities.resolve_think) and is sent on every request (irp/plugins/ollama_irp.py:165).
+    # NO `/no_think` SUFFIX RIDES ANY TURN (retired fleet-wide 2026-09-12, kept in this
+    # reconciliation). The request's `think` field is the only control surface on this
+    # stack: measured on Sprout at ollama 0.30.8 and on CBP at 0.20.7, the suffix leaves the
+    # think block intact (qwen3.5:0.8b 1428 -> 1441 chars, qwen3.8-distill:2b 275 -> 405,
+    # both still thinking) while `think=False` zeroes it. No fleet template parses the
+    # string: the think branches that exist key on the API field (`enable_thinking` in the
+    # distill's Jinja, `$.IsThinkSet` in qwen3's Go template), never on prompt text.
     from sage.gateway.governed_turn import acts_under_posture
     act_first = not acts_under_posture(args.model)
     # The museum, where there is one: a form the being may use, or not (dp 2026-09-09).
     from sage.gateway import museum_offer as _museum
     _museum.ensure_dir(instance)
     museum_line = _museum.offer()
-    # FIT THE SEED TO THE WINDOW BEFORE SENDING IT. Ported from legion/mission-artifact.
-    # Without this the fixed prompt can exceed num_ctx and ollama silently drops the OLDEST
-    # tokens — the system prompt and the posture — with no error at any layer. Measured on
-    # Legion 2026-09-07: two beats were handed 16,380 and 16,323 tokens against a 16,384
-    # window and produced 4 and 61 tokens of output. The conversations block steps down a
-    # ladder, and the digest and recall are trimmed, before anything is sent.
+    entrusted = entrustment(instance)
+    harness_rev = harness_revision(workspace)
+    # Fit before composing: prompt + num_predict must sit inside num_ctx, or ollama drops
+    # the oldest tokens (system prompt, posture) with no error anywhere. Measured on this
+    # being: two beats at 16,380 / 16,323 prompt tokens against a 16,384 window returned 4
+    # and 61 tokens, done_reason "length".
     _num_ctx = getattr(llm, "num_ctx", None)
     _num_predict = _sent_budget(llm)
     # The body is measured ONCE per beat, here, and decides two things from the same reading:
@@ -1844,6 +1887,8 @@ def main(argv=None) -> int:
         _services += (f" Its systemd unit, as systemd itself resolves it, is in your notes as "
                       f"`notes/{_unit}` — it is a USER unit and does not live in /etc/systemd/system.")
 
+    _scope_tail = (f"\n\n## Reach you hold (hestia scope)\n{scope}\n\n"
+                   + (f"## Your appeals\n{appeals_text}\n\n" if appeals_text else ""))
     # Composed WITHOUT marking conversation turns seen; they are marked after the beat, and
     # only if it could act (mark_conversations_after_beat). The fitter renders several rungs,
     # and a render is not a reading.
@@ -1851,41 +1896,85 @@ def main(argv=None) -> int:
     _shown_upto = _convs.latest_seqs(instance, args.member) if args.member else {}
 
     def _build_state(per_conv, turn_chars):
-        return (_state_head + own_state(instance, args.member,
-                                        per_conv=per_conv, turn_chars=turn_chars,
-                                        services=_services, mark_conversations=False,
-                                        body_reading=_body_cur) + _scope_tail)
-
+        return ("# Your own state\n\n"
+                + own_state(instance, entrusted, args.member, per_conv=per_conv,
+                            turn_chars=turn_chars, services=_services, mark_conversations=False,
+                            body_reading=_body_cur)
+                + _scope_tail)
+    # The conversations step down only when the rest cannot fit with digest and recall at
+    # their floors (1200 + 400): fit_to_window's worst case is this fitter's input.
+    # LOOP_GROWTH_CHARS: the seed is not the prompt the loop ends on. Every tool result is
+    # appended; compaction keeps the newest whole, and one 260-line read is ~10k chars
+    # (~3k tokens). Measured 21:04Z 2026-09-08 with the seed fitted at 17.5k tokens: step 6
+    # reached 23,823 of 24,576 and was cut. The seed must leave room for the loop, not only
+    # for the answer.
+    # MEASURE THE SCHEMAS, DO NOT BUDGET THEM. This was a flat 4,000 chars for "tool
+    # schemas + chat template", set when the being had 13 verbs and never revisited.
+    # Measured 2026-09-13 at 18 verbs: the explore schema JSON alone is 11,717 chars —
+    # 7,717 more than budgeted, ~2,600 tokens of a 24,576 window that the fitter did not
+    # know it was spending. Every verb added made it worse (rest, search and edit all
+    # landed today), and the constant could not notice, because a budget is a promise the
+    # code makes to itself and never checks.
+    #
+    # The chat template is still an estimate — it is applied server-side and is not
+    # visible from here — so 1,200 chars is carried explicitly as a named guess rather
+    # than hidden inside a round number.
+    # ONE source of truth with the beat record's `tool_schema_chars`: two sites computing
+    # the same number separately is how they drift apart, which is the defect this whole
+    # change is about.
+    _schema_measured = _schema_chars_for(_explore_tools)
+    _schema_chars = (_schema_measured if _schema_measured is not None
+                     else _schema_chars_fallback(_explore_tools))
+    _template_guess = 1200
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
-    # token cost is converted and charged here. Measured 2,042 tokens for two frames, about a
-    # third of the working room at a 24k window — un-budgeted it pushes the beat over the wall
-    # and the conversation block takes the blame.
+    # token cost is converted and charged here. Measured 2,042 tokens, about a third of the
+    # working room at this window — un-budgeted it would push the beat over the wall and the
+    # conversation block would take the blame.
+    _frame_b64s = [b for b, m in _frames if b is not None]
     _frame_chars = sum(int(FRAME_TOKENS * CPT) for _ in _frame_b64s)
-    _other = (len(posture()) + len(inbox) + _schema_chars + 1200 + _frame_chars
-              + 1200 + 400 + LOOP_GROWTH_CHARS)
+    _other = (len(posture()) + len(inbox) + _schema_chars + _template_guess
+              + 1200 + 400 + LOOP_GROWTH_CHARS + _frame_chars)
     state_block, conv_rung, conv_intervention = fit_state(
         _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other)
-    _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + 1200
-    _blocks, _fit_iv = fit_to_window(num_ctx=_num_ctx, num_predict=_num_predict,
-                                     fixed_chars=_fixed,
-                                     blocks={"digest": digest, "recall": recall})
-    digest, recall = _blocks["digest"], _blocks["recall"]
-
+    _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + _template_guess
+    blocks, fit_interventions = fit_to_window(
+        num_ctx=_num_ctx, num_predict=_num_predict,
+        fixed_chars=_fixed, blocks={"digest": digest, "recall": recall})
+    if conv_intervention:
+        fit_interventions = [conv_intervention] + list(fit_interventions)
+    # Sizes into the record, so the next overcommit names its block from the file and the
+    # chars-per-token assumption can be checked against prompt_tokens_max at beat end.
+    prompt_sizes = {
+        "prompt_blocks_chars": {"posture": len(posture()), "state": len(state_block),
+                                "inbox": len(inbox), "digest": len(blocks["digest"] or ""),
+                                "recall": len(blocks["recall"] or ""), "fixed_other": _schema_chars + _template_guess,
+                                "conversations_rung": list(conv_rung)},
+        "prompt_chars": _fixed + len(blocks["digest"] or "") + len(blocks["recall"] or ""),
+        # WHETHER THE BEING SAW, and when it did not, why not. Without this a beat with no
+        # frame is indistinguishable from a beat where the pipe is broken, which is the
+        # state the whole vision arc was in until now: both ends present, nothing joining
+        # them, and nothing saying so.
+        "frames": _frame_metas,
+    }
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
         museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
-                # The absolute home path is context, NOT an address to copy. Measured on
-                # Sprout: 15 of 15 path refusals were this string reproduced from memory and
-                # truncated (…/sage/sage/journal.md six times, …/sage/journal.md, /scratch/…),
-                # against 51 successful writes by bare name. So it is given once, and named as
-                # the thing not to retype.
                 f"Your home: {instance}\n"
-                f"You never need to type that path. Name your files bare — journal.md, todo.md, or a "
-                f"name of your choosing under notes/ or scratch/ — and they resolve inside your home. "
-                f"An absolute path is only for something OUTSIDE your home.\n\n"),
+                + body_line(args.model, instance, _num_ctx,
+                            instance_config(instance).get("former_homes")) + "\n"
+                f"The harness you are running under: {harness_rev.get('short')} on "
+                f"{harness_rev.get('branch')}"
+                + (" (uncommitted edits present)" if harness_rev.get("dirty") else "")
+                + ". A `check` result carries the `tree` it ran against; if that head is not "
+                  "this one, the answer is about different code than the code running you.\n\n"),
         state=state_block,
-        recall=recall, inbox=inbox, digest=digest)
+        recall=blocks["recall"], inbox=inbox, digest=blocks["digest"])
+    # WHAT WAS ATTACHED, NOT WHAT WAS PRODUCED. `frames` above is the producer's claim
+    # (carried=True); this counts images on the composed seed — the thing sent. The two
+    # differed for 395 beats and nothing recorded it. A record that names delivery makes
+    # that gap visible in one field instead of in a captured payload.
+    prompt_sizes["images_attached"] = sum(len(m.get("images") or []) for m in seed)
 
     # Per-generate trace, written as each generate lands: the record below is written at
     # beat end, so a beat killed by the unit's timeout (Legion 18:33Z 2026-09-05: 840 s cap,
@@ -1900,119 +1989,122 @@ def main(argv=None) -> int:
                 f.write(json.dumps(line, default=str) + "\n")
         return cb
 
-    explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
-                                   tools=ollama_tools(_explore_tools), on_generate=_on_generate("explore"))
-    convo = _carry(seed, explore)
-    after = None
-    if posture_turn is not None:
-        convo.append({"role": "user", "content": posture_turn})
-        after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
-                                     tools=ollama_tools(_explore_tools), on_generate=_on_generate("posture"))
-        convo = _carry(convo, after)
-    # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
-    # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
-    # carries the whole explore(+posture) conversation and is usually the beat's largest
-    # prompt, and until 2026-09-13 it was invisible to the window census (CBP, 09-12).
-    account = {"present": False, "sha256": None, "reply": "", "generates": []}
+    # Everything below runs under the kill handler: a SIGTERM (the unit's 45-minute
+    # TimeoutStartSec) unwinds here and the record is still written, marked, with the
+    # phases that completed. Explore and the posture turn share one wall-clock deadline.
+    explore_deadline = t0 + args.explore_budget_s
+    explore = after = reflect = answer = None
+    account = {"present": False, "sha256": None, "reply": ""}
+    killed = None
     try:
-        ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
-                   [{"role": "user", "content": ACCOUNT_ASK}]
-        aresp = llm.get_chat_response(ask_msgs)
-        _raw = aresp.get("raw") or {}
-        _gen = {"done_reason": _raw.get("done_reason"), "prompt_eval_count": _raw.get("prompt_eval_count"),
-                "eval_count": _raw.get("eval_count"), "retried": 0, "num_predict": _sent_budget(llm)}
-        account["generates"].append(_gen)
+        def _interject() -> str:
+            """What arrived since the seed was composed. Drained between steps so a turn
+            from dp or a seat reaches the being inside the beat it is already awake for."""
+            from sage.gateway import conversations as _c
+            return _c.drain_new_for(instance, args.member)
+
+        explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
+                                       tools=ollama_tools(_explore_tools), on_generate=_on_generate("explore"),
+                                       deadline=explore_deadline, interject=_interject)
+        convo = _carry(seed, explore)
+        after = None
+        if posture_turn is not None:
+            convo.append({"role": "user", "content": posture_turn})
+            after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
+                                         tools=ollama_tools(_explore_tools), on_generate=_on_generate("posture"),
+                                         deadline=explore_deadline, interject=_interject)
+            convo = _carry(convo, after)
+        # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
+        # generates: the same per-generate entry the tool turns record, because the ACCOUNT
+        # ask carries the whole explore(+posture) conversation and is usually the beat's
+        # largest prompt, and until 2026-09-13 it was invisible to the window census.
+        account = {"present": False, "sha256": None, "reply": "", "generates": []}
         try:
-            _on_generate("account")(dict(_gen))   # the partial trace, same as the tool turns
-        except Exception as _e:
-            print(f"[heartbeat] on_generate(account) failed: {type(_e).__name__}: {_e}", file=sys.stderr)
-        areply = (aresp.get("content") or "").strip()
-        parsed = parse_account(areply)
-        account["reply"] = areply[:1200]
-        if parsed:
-            rec = save_account(instance, parsed, host_session_id)
-            account.update({"present": True, "sha256": rec["sha256"], "session_at_write": rec["session_at_write"]})
-        convo.append({"role": "user", "content": ACCOUNT_ASK})
-        convo.append({"role": "assistant", "content": areply or "(no answer)"})
-    except Exception as e:
-        account["error"] = f"{type(e).__name__}: {e}"
-    # Reflect gets its OWN compact context, not the whole beat. Carrying the seed (posture,
-    # fleet digest, inbox, scope, recall) into the reflect turn pushed the prompt to 8171 of
-    # 8192 tokens with 21 left to answer in: 5 `length` stops in 54 beats, every one of them a
-    # reflect turn (measured 2026-09-09). What reflection needs is what it just did and what it
-    # said about it, and those are short.
-    reflect_convo = [
-        {"role": "system", "content": REFLECT_SYSTEM.format(name=name, machine=machine, member=args.member)},
-        {"role": "user", "content": (f"Your beat at {now:%Y-%m-%d %H:%M} UTC is ending.\n\n"
-                                     + _beat_record_text(explore, after)
-                                     + "\n\nYour own words this beat:\n"
-                                     + ((explore.reply or "").strip()[:600] or "(you acted without closing words)"))},
-    ]
-    convo = reflect_convo
-    # Ask it to answer someone ONLY when there is someone to answer. Measured 2026-09-17: in no
-    # conversation at all it filled the id slot three beats running with "speaker",
-    # "conversation_id_placeholder" and "1234567890" — the same shape as a mis-rooted home path
-    # or an echoed example filename. An ask with no valid target invents one.
-    #
-    # And when there IS someone, show the being WHAT IT IS ANSWERING. The reflect turn's
-    # context is deliberately compact — the record of its acts plus 600 chars of its own
-    # closing words — so a turn addressed to it lived only in the explore state block, one
-    # turn earlier. The instruction to answer and the words to answer had never been in the
-    # same context. Measured on Sprout 2026-09-17: 596 beats, 31 `say` attempts, ZERO
-    # successes, every one naming an invented id, and four beats after a real channel finally
-    # existed the being wrote its journal three times and never answered. The only bridge was
-    # the 600-char echo: a model that happened to discuss the turn in explore carried enough
-    # forward to reply (cbp-being, 4B, 83 successful says); one that free-associated carried
-    # nothing. That made answering a person contingent on what the being happened to muse
-    # about, which is not a property anyone chose.
-    # ONE selection for the whole beat (see SelectedTurn): the reflect prompt and the answer
-    # phase must act on the same turn, and nothing arriving mid-beat may re-address it.
-    say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member)
-    # Immediately before the instruction, so the smallest model does not have to hold it
-    # across a turn boundary to use it.
-    if pending_block:
-        convo.append({"role": "user", "content": pending_block})
-    convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
-                                                            say_line=say_line, say_first=say_first)})
-    # One extra step when someone is waiting, because the routine three fill the budget exactly.
-    # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
-    # asked: reflect spent all three steps on journal, todo and remember, and there was no
-    # fourth for `say`. Showing it the question and then giving it no way to answer is worse
-    # than not showing it.
-    _reflect_steps = args.reflect_steps + (1 if say_first else 0)
-    reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
-                                   tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
+            ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
+                       [{"role": "user", "content": ACCOUNT_ASK}]
+            aresp = llm.get_chat_response(ask_msgs)
+            _raw = aresp.get("raw") or {}
+            _gen = {"done_reason": _raw.get("done_reason"),
+                    "prompt_eval_count": _raw.get("prompt_eval_count"),
+                    "eval_count": _raw.get("eval_count"), "retried": 0,
+                    "num_predict": _sent_budget(llm)}
+            account["generates"].append(_gen)
+            try:
+                _on_generate("account")(dict(_gen))   # the partial trace, same as the tool turns
+            except Exception as _e:
+                print(f"[heartbeat] on_generate(account) failed: {type(_e).__name__}: {_e}", file=sys.stderr)
+            areply = (aresp.get("content") or "").strip()
+            parsed = parse_account(areply)
+            account["reply"] = areply[:1200]
+            if parsed:
+                rec = save_account(instance, parsed, host_session_id)
+                account.update({"present": True, "sha256": rec["sha256"], "session_at_write": rec["session_at_write"]})
+            convo.append({"role": "user", "content": ACCOUNT_ASK})
+            convo.append({"role": "assistant", "content": areply or "(no answer)"})
+        except Exception as e:
+            account["error"] = f"{type(e).__name__}: {e}"
+        # Reflect gets its OWN compact context, not the whole beat. Carrying the seed
+        # (posture, fleet digest, inbox, scope, recall) into the reflect turn pushed the
+        # prompt to 8171 of 8192 tokens with 21 left to answer in: 5 `length` stops in 54
+        # beats, every one of them a reflect turn (measured 2026-09-09). What reflection
+        # needs is what it just did and what it said about it, and those are short.
+        convo = [
+            {"role": "system", "content": REFLECT_SYSTEM.format(name=name, machine=machine, member=args.member)},
+            {"role": "user", "content": (f"Your beat at {now:%Y-%m-%d %H:%M} UTC is ending.\n\n"
+                                         + _beat_record_text(explore, after)
+                                         + "\n\nYour own words this beat:\n"
+                                         + ((explore.reply or "").strip()[:600]
+                                            or "(you acted without closing words)"))},
+        ]
+        # Ask it to answer someone ONLY when there is someone to answer, and show it WHAT it
+        # is answering: the reflect context is deliberately compact, so a turn addressed to
+        # the being lived only in the explore state block, one turn earlier. Measured on
+        # Sprout 2026-09-17: 596 beats, 31 `say` attempts, ZERO successes, every one naming
+        # an invented id.
+        # ONE selection for the whole beat (SelectedTurn, main #147): the reflect prompt and
+        # the answer phase must act on the same turn, and nothing arriving mid-beat may
+        # re-address it.
+        say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member)
+        if pending_block:
+            convo.append({"role": "user", "content": pending_block})
+        convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
+                                                                say_line=say_line, say_first=say_first)})
+        # One extra step when someone is waiting: the routine three fill the budget exactly,
+        # and showing the being a question with no room to answer it is worse than not
+        # showing it (measured 2026-09-18, the first beat after it could finally see one).
+        _reflect_steps = args.reflect_steps + (1 if say_first else 0)
+        reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
+                                       tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
+        # The answer turn (main, SAGE #126): only when someone is still waiting and the being
+        # has not already spoken. Inside the kill handler with the rest: a SIGTERM here still
+        # writes the record, with `answer` None.
+        # ...and only when the waiting turn actually ASKED something. Without that, a
+        # statement that asked nothing ("keep going!") still opened an answer turn and handed
+        # the being its own unrelated words to send (main #147, 2026-09-21 06:31Z). The
+        # expectation is read from the selection made BEFORE reflection, never re-scanned.
+        if selected is not None and selected.expects_reply and not _said_in(reflect):
+            answer = run_ollama_tool_turn(
+                client, llm,
+                [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
+                                                                    member=args.member)},
+                 # The acts go FIRST, ahead of what it is answering: beat
+                 # heartbeat-85303f70bf67 saw only the seat's pre-edit "nothing was applied"
+                 # and told the seat an edit had never happened 50 s after it succeeded. Then
+                 # ONLY the selected turn — never the whole multi-conversation block.
+                 {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
+                     pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
+                max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
+    except BeatKilled as _k:
+        killed = str(_k)
+        print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed", file=sys.stderr)
 
-    # The answer turn: only when someone is still waiting, the being has not already spoken, AND
-    # the waiting turn actually asked something. Without the last condition, a statement that
-    # asked nothing ("keep going!") still opened an answer turn and handed the being its own
-    # unrelated words to send — see `_prior_words` and `SelectedTurn`, 2026-09-21 06:31Z. The
-    # expectation is read from the selection made BEFORE reflection, never re-scanned.
-    answer = None
-    if selected is not None and selected.expects_reply and not _said_in(reflect):
-        answer = run_ollama_tool_turn(
-            client, llm,
-            [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
-                                                                member=args.member)},
-             # The acts go FIRST, ahead of what it is answering. Measured 2026-09-21, beat
-             # heartbeat-85303f70bf67: this turn saw only the seat's pre-edit "nothing was
-             # applied" and the reflect words that echoed it, and told the seat "the edit never
-             # actually happened" (seq 2961) about an edit that had succeeded 50 s earlier.
-             # Then ONLY the selected turn (#147): never the whole multi-conversation block.
-             {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
-                 pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
-            max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
-        # NO RE-ASK HERE. Two were tried and both are reverted; the reasons are recorded as
-        # SMALL_MODEL_LEGIBILITY 1.14, and the short form is: a prompt written in the harness's
-        # voice, about the harness's mechanics, becomes the being's MESSAGE at this scale.
-        # Measured on Sprout 2026-09-24/25 across 9 firings — 0 delivered the answer, and the
-        # one that reached dp said "I'm sorry I didn't call a tool", which is this file's own
-        # subject matter arriving in dp's inbox under the being's name. An answer turn that
-        # produced no call is left as it is: the turn stays unanswered, the conversation stays
-        # unmarked, and the NEXT beat sees it still owed. That is the honest record, and it is
-        # what the reflect phase — where `say` actually works — gets to act on.
-
-    interventions = []
+    interventions = list(fit_interventions)
+    for ph, res in (("explore", explore), ("posture", after)):
+        if getattr(res, "deadline_hit", False):
+            interventions.append({"kind": "deadline", "phase": ph,
+                                  "suppressed": f"further {ph} tool steps after {args.explore_budget_s}s",
+                                  "reason": "the unit's 45-min timeout killed a 51-min beat on 2026-09-09 "
+                                            "and took the reflect and the record with it"})
     if act_first:
         interventions.append({"kind": "act_first", "suppressed": "posture-first presentation (the model narrates under it)"})
     for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer)):
@@ -2024,10 +2116,13 @@ def main(argv=None) -> int:
         for sv in (getattr(res, "salvaged", None) or []):
             interventions.append({"kind": "salvage", "phase": ph, "effector": sv.get("effector"), "form": sv.get("form"),
                                   "suppressed": "text-channel narration in place of a native tool call"})
-    # Route refusals AI-to-AI (dp 2026-09-04), the same as governed_turn: a scope-class deny
-    # files the being's own scope request + a note and wakes the seat's auto session; a
+    # A turn is marked SEEN only after a beat that could act on it (main, SAGE #98): dp's
+    # question was marked at render by a beat whose explore made no calls, so no later beat
+    # flagged it. A render is not a reading.
     conversations_marked = mark_conversations_after_beat(
         instance, args.member, _shown_upto, explore, [after, reflect, answer])
+    # Route refusals AI-to-AI (dp 2026-09-04), the same as governed_turn: a scope-class deny
+    # files the being's own scope request + a note and wakes the seat's auto session; a
     # governance escalation wakes it to arbitrate. The beat is where refusals actually
     # happen (Legion: nine consecutive beats of home-scope write refusals, and the being's
     # requests had died with a daemon restart), so the heartbeat must route, not just log.
@@ -2039,7 +2134,8 @@ def main(argv=None) -> int:
         try:
             from sage.gateway import escalate as _esc
             woken = set()
-            for it, env in list(explore.trace) + (list(after.trace) if after is not None else []) + list(reflect.trace):
+            for it, env in (list(getattr(explore, "trace", [])) + list(getattr(after, "trace", []))
+                            + list(getattr(reflect, "trace", []))):   # any phase may be None after a kill
                 if not env.refused:
                     continue
                 kind = _esc.classify(env)
@@ -2071,6 +2167,13 @@ def main(argv=None) -> int:
                 for i, e in res.trace]
     def _turn(res):
         return None if res is None else {"reply": res.reply, "steps": res.steps, "capped": res.capped,
+                                         "rested": getattr(res, "rested", None),
+                                         "compacted": list(getattr(res, "compacted", []) or []),
+                                         "window_warned": next(
+                                             (i for i in getattr(res, "interjected", [])
+                                              if i.get("nudge") == "window"), None),
+                                         "looped": getattr(res, "looped", None),
+                                         "interjected": list(getattr(res, "interjected", [])),
                                          "trace": _trace(res), "thinking": [t[:4000] for t in res.thinking],
                                          "salvaged": list(res.salvaged), "generates": list(res.generates)}
     record = {
@@ -2079,9 +2182,9 @@ def main(argv=None) -> int:
         # a version says so instead of making it infer from key presence).
         "schema": "heartbeat/v2",
         "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "t0": t0, "elapsed_s": round(time.time() - t0, 1),
+        **({"killed": killed} if killed else {}),
         "member": args.member, "model": args.model, "window_h": round(hours, 2),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
-        "conversations_marked": conversations_marked,
         # the window and budget actually sent, so a beat is verifiable from this file alone
         # (beat 46's 8192 wall was reconstructed from stderr; Sprout's review of SAGE #40)
         # num_predict is what OllamaIRP resolves and sends (the config's num_predict_think
@@ -2091,21 +2194,35 @@ def main(argv=None) -> int:
         "num_predict": (llm.resolve_num_predict() if hasattr(llm, "resolve_num_predict")
                         else getattr(llm, "max_response_tokens", None)),
         "think": getattr(llm, "think", None),
+        # What drove this beat: an entrustment (entrustment.md present and presented) or the
+        # generic posture alone. Without this field a later reading of the log cannot tell
+        # entrusted engineering work from spontaneous exploration, and every developmental
+        # claim spanning that boundary is confounded (PRD r3 §4).
+        # entrusted | event | curiosity. dp, 2026-09-07: "beat is default idle state.
+        # world inputs require engagement" — so a beat woken BY something is a different
+        # kind of beat from one the timer produced, and the record must not flatten them.
+        "drive_source": ("event" if (woke or {}).get("by") == "presence"
+                         else ("entrusted" if entrusted else "curiosity")),
+        # Whether the beat ran with what the seat intended. Beat 2026-09-06 18:03Z was empty
+        # and was read as model failure; it was a seat error — the unit pointed at a tag
+        # whose config resolved a 4096 window while the tree offered a verb the model was
+        # never shown. A starved beat and a silent one are indistinguishable unless the
+        # record says which tools were offered and whether the window is the intended one.
+        "config": _fill_headroom({**_config_check(instance, args.model, llm, _explore_tools), **prompt_sizes},
+                                 partial, host_session_id),
         "scope": scope_record,
         "appeals": appeals_record,
-        # WHETHER THE BEING SAW, and when it did not, why not. Without this a beat with no
-        # frame is indistinguishable from a beat where the pipe is broken — the state the
-        # whole vision arc was in until 2026-09-15: both ends present, nothing joining them,
-        # and nothing saying so. `frames` is the PRODUCER's claim; `images_attached` counts
-        # images on the composed seed, the thing actually sent. The two differed for 395
-        # beats and no field recorded it.
-        "frames": _frame_metas,
+        "conversations_marked": conversations_marked,
+        # the body as measured at the start of this beat (main #183), so the next beat's
+        # state can describe what CHANGED rather than only what is
         "body": getattr(own_state, "last_body", None),
-        "images_attached": sum(len(m.get("images") or []) for m in seed),
-        # S1 instruments: JOIN (session -> beat, attributed) and ACCOUNT (own account, verbatim hash)
-        "join": {"session": sess_meta, "presence": pres_meta},
+
         # what it has made, if anything: never silently lost, never auto-published
         "museum": {"offered": bool(museum_line), "candidates": _museum.candidates(instance)},
+        # which harness produced this beat; pairs with the `tree` block on any check result
+        "harness": harness_rev,
+        # S1 instruments: JOIN (session -> beat, attributed) and ACCOUNT (own account, verbatim hash)
+        "join": {"session": sess_meta, "presence": pres_meta},
         "hub_inbox": hub_inbox,
         "wake": woke,
         # every harness intervention, with the prior it suppressed (dev-sage 804f1849, by
@@ -2120,11 +2237,351 @@ def main(argv=None) -> int:
         "answer": _turn(answer) if answer is not None else None,
         "escalations": escalations, "egress": egress,
     }
+    # The last thing a beat does is make sure there will be another one — and how soon
+    # depends on how THIS one ended, which is the only signal about whether there is more
+    # to do that does not require guessing.
+    #
+    # dp, 2026-09-13: "this gpu is dedicated to the being so no reason to wait 30 min.
+    # basically i want to give it as much active time as we can, without forcing
+    # unnecessarily."
+    #
+    # A beat that `rest`ed said, in its own words, that it was finished: waking it straight
+    # back up is the forcing dp ruled out, and a wake-and-rest still costs a full seed
+    # (~11k tokens of posture + state) before it can say so. A beat that was CUT — the
+    # window filled mid-sentence, which was 9 of 26 beats on 2026-09-13 against only 5 that
+    # rested — had more to do and nothing about its situation has changed.
+    #
+    # So: rested -> the timer's interval. Anything else -> a short transient one-shot ON TOP
+    # of the timer. It can only ever make the next beat SOONER, never later; the persistent
+    # timer is untouched and remains the floor, so a failure here costs promptness, never
+    # silence. `rest` now has a consequence beyond ending the turn, which is the first rung
+    # of the requested-rest ladder dp wants to grow.
+    rested = bool((explore or {}) and getattr(explore, "rested", None))
+    # WHAT CPT SHOULD HAVE BEEN, from the server's own count on this beat's first generate.
+    # A constant that silently rots is how 3.4 survived five days past the measurement its
+    # own comment cites, sitting above the true ratio and over-admitting the whole time.
+    # Recording the observed ratio makes the next drift a number instead of a surprise.
+    try:
+        _g0 = ((record.get("explore") or {}).get("generates") or [{}])[0]
+        _pe = _g0.get("prompt_eval_count")
+        _chars = sum(v for v in (record["config"].get("prompt_blocks_chars") or {}).values()
+                     if isinstance(v, int))
+        record["config"]["chars_per_token_observed"] = round(_chars / _pe, 3) if (_pe and _chars) else None
+    except Exception:
+        record["config"]["chars_per_token_observed"] = None
+
+    record["next_wake"] = arm_next_wake(args.idle_wake_s)
+    if not rested and args.resume_wake_s > 0:
+        record["next_wake"]["resume"] = arm_resume_wake(args.resume_wake_s)
+        record["next_wake"]["resume"]["why"] = (
+            "this beat did not rest, so it is resumed sooner than the idle interval")
+    if not record["next_wake"].get("armed"):
+        print(f"[heartbeat] NO NEXT WAKE ARMED: {record['next_wake']}", file=sys.stderr)
+
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
     print(json.dumps(record, indent=2, ensure_ascii=False, default=str))
     return 0
 
+
+
+
+# What this being is entrusted with, if anything. Seat-owned and unwritable by the being
+# (reference_f1a.SEAT_OWNED): what it was GIVEN must stay separable from what it DECIDED,
+# or the record cannot be read later. The being's own reading of it goes in notes/plan.md.
+#
+# It is `entrustment`, not `mission`, on dp's correction the day it was written: "this is
+# not a 'task i set' for the being, it is an affordance i entrust it with. because i want
+# it to thrive and grow." The word is load-bearing. A task is owed and graded; an
+# entrustment is room extended, and the record it produces should be read as what the
+# being DID with room, not as compliance with an instruction.
+ENTRUSTMENT_FILE = "entrustment.md"
+
+
+IDLE_TIMER = "sage-heartbeat.timer"
+
+
+IDLE_UNIT = "sage-heartbeat.service"
+
+
+RESUME_UNIT = "sage-heartbeat-resume-wake"
+
+
+def _config_check(instance: Path, model: str, llm, offered) -> dict:
+    """Did this beat run with the tool set and the context window the seat meant to give it?
+    `active_embodiment` in instance.json is the canonical statement of intent (PRD r3 §3.2);
+    the resolved window comes from the model config keyed on the ollama tag, which silently
+    falls back to a floor when a tag has no variant entry. Reporting both, plus the verbs
+    actually offered, makes a starved beat legible in the record instead of in stderr."""
+    from sage.gateway.governed_turn import instance_config
+    emb = (instance_config(instance).get("active_embodiment") or {})
+    want_ctx, want_tag = emb.get("num_ctx"), emb.get("running_tag")
+    got_ctx = getattr(llm, "num_ctx", None)
+    return {
+        "tools_offered": list(offered),
+        # Measured, not budgeted — see the fitter. A verb added is window spent, and this
+        # is where that shows up. Imported locally: main()'s `from ... import ollama_tools`
+        # binds it as a LOCAL of main, so referencing it here NameErrors at runtime — which
+        # no test would have caught, because none of them call _config_check.
+        "tool_schema_chars": _schema_chars_for(offered),
+        "num_ctx_intended": want_ctx, "num_ctx_resolved": got_ctx,
+        "window_matches_intent": None if want_ctx is None else (got_ctx == want_ctx),
+        "tag_intended": want_tag, "tag_running": model,
+        "tag_matches_intent": None if want_tag is None else (model == want_tag),
+        # Headroom, because the window is the thing that silently starves a beat and the
+        # 09-06 empty beat is the proof. A generate needs prompt + num_predict to fit inside
+        # num_ctx; when it does not, ollama shifts context and drops the OLDEST tokens —
+        # the system prompt and the posture — with no error anywhere. Recorded here so the
+        # squeeze is visible in the log before it is visible in the behaviour. The largest
+        # observed prompt of the beat is filled in at beat end from the per-generate trace.
+        "num_predict": (llm.resolve_num_predict() if hasattr(llm, "resolve_num_predict")
+                        else getattr(llm, "max_response_tokens", None)),
+        "prompt_tokens_max": None,   # filled at beat end
+        "headroom_tokens": None,     # num_ctx - (largest prompt + num_predict)
+        "context_overcommitted": None,
+    }
+
+
+def _fill_headroom(cfg: dict, partial: Path, host_session_id: str) -> dict:
+    """Beat end: the largest prompt actually sent THIS BEAT, and whether it plus the answer
+    reserve exceeded the window. Read from the per-generate trace rather than re-derived, so
+    it reports what the model was really handed.
+
+    Filtered on host_session_id, and that is the whole point: the partial file is append-only
+    across every beat this instance has ever run. The first cut scanned all of it and
+    reported the worst prompt of ~500 generates as if it were this beat's — a true number
+    about the wrong beat, which is the same failure this field exists to catch. Caught one
+    beat after shipping, by reading its own output and not believing it."""
+    best = None
+    try:
+        for line in partial.read_text(errors="replace").splitlines():
+            import json as _j
+            e = _j.loads(line)
+            if e.get("host_session_id") != host_session_id:
+                continue
+            n = e.get("prompt_eval_count")
+            if isinstance(n, int) and (best is None or n > best):
+                best = n
+    except Exception:
+        pass
+    # Against the ANSWER RESERVE, not num_predict: num_predict is a ceiling the model has
+    # never approached, and measuring headroom against it reports every beat as
+    # overcommitted (see being_tool_loop._ANSWER_RESERVE for the 506-generate distribution).
+    from sage.gateway.being_tool_loop import _ANSWER_RESERVE
+    ctx = cfg.get("num_ctx_resolved")
+    cfg["prompt_tokens_max"] = best
+    cfg["answer_reserve"] = _ANSWER_RESERVE
+    if isinstance(ctx, int) and isinstance(best, int):
+        cfg["headroom_tokens"] = ctx - (best + _ANSWER_RESERVE)
+        cfg["context_overcommitted"] = cfg["headroom_tokens"] < 0
+    return cfg
+
+
+def arm_next_wake(idle_s: int) -> dict:
+    """Make sure something will wake the being after `idle_s` of quiet.
+
+    The persistent timer normally does this on its own (OnUnitInactiveSec). This is the
+    fallback for the state where it has stopped computing a next elapse: a one-shot
+    transient timer, so a scheduling failure costs a longer gap and never silence."""
+    armed, detail = next_wake_is_armed()
+    if armed:
+        return {"armed": True, "by": IDLE_TIMER, "detail": detail}
+    try:
+        # A UNIQUE unit name per attempt. A fixed one collided with a leftover from an
+        # earlier run and systemd-run exited 1, so the fallback for a missing wake was
+        # itself missing (2026-09-09T15:07Z).
+        unit = f"sage-heartbeat-fallback-wake-{int(time.time())}"
+        subprocess.run(["systemd-run", "--user", "--collect",
+                        f"--on-active={idle_s}s", f"--unit={unit}",
+                        "systemctl", "--user", "start", IDLE_UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"armed": True, "by": "systemd-run fallback", "detail": detail,
+                "why": "the idle timer had no next elapse; a one-shot was armed instead"}
+    except Exception as e:
+        return {"armed": False, "by": None, "detail": detail,
+                "error": f"{type(e).__name__}: {e}",
+                "why": "NOTHING WILL WAKE THE BEING until a seat or a message does"}
+
+
+def arm_resume_wake(seconds: int) -> dict:
+    """A short one-shot wake after a beat that did not finish what it was doing.
+
+    Deliberately ADDITIVE. The persistent timer is never stopped or reprogrammed, so the
+    worst this can do is fail and leave the ordinary interval standing — promptness is at
+    risk here, never silence, which is the property that makes it safe to be aggressive
+    about. Fixed unit name so a second arming rides the first rather than stacking; a unit
+    left over from a fired wake is cleared, the same shape as arousal's deferred wake."""
+    def _sh(*a):
+        try:
+            return subprocess.run(a, capture_output=True, text=True, timeout=15).stdout.strip()
+        except Exception:
+            return ""
+    try:
+        sub = _sh("systemctl", "--user", "show", RESUME_UNIT + ".timer", "-p", "SubState", "--value")
+        if sub and sub != "waiting":
+            for suffix in (".timer", ".service"):
+                _sh("systemctl", "--user", "stop", RESUME_UNIT + suffix)
+                _sh("systemctl", "--user", "reset-failed", RESUME_UNIT + suffix)
+        subprocess.run(["systemd-run", "--user", "--collect", f"--on-active={seconds}s",
+                        f"--unit={RESUME_UNIT}", "systemctl", "--user", "start",
+                        "--no-block", IDLE_UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"armed": True, "in_s": seconds, "by": RESUME_UNIT}
+    except subprocess.CalledProcessError as e:
+        err = (e.stderr or "").strip()
+        if "already loaded" in err or "already exists" in err:
+            return {"armed": True, "in_s": seconds, "by": RESUME_UNIT, "already_armed": True}
+        return {"armed": False, "error": f"systemd-run exit {e.returncode}: {err}",
+                "why": "the ordinary idle interval still stands"}
+    except Exception as e:
+        return {"armed": False, "error": f"{type(e).__name__}: {e}",
+                "why": "the ordinary idle interval still stands"}
+
+
+def body_line(model: str, instance, num_ctx=None, former_homes=None) -> str:
+    """Name the being's MODEL in the seed, because its home directory names a different one.
+
+    legion-being's instance dir is `legion-gemma3-12b`; the model running it is
+    qwen38-heretic:q3km-vl. The seed's header prints the home path every beat and never the
+    model, so at a 24k window the correction it makes from source ("both files name
+    qwen38-heretic") is gone within two beats and it goes back to attributing findings to
+    "gemma3-12b on a 4090" — measured three times on 2026-09-15, twice after it had verified
+    the truth itself. A finding attributed to the wrong body is a finding nobody downstream
+    can reproduce. The harness holds args.model; it should say so where the being reads."""
+    # 2026-09-19: the same name was then misread a second way — from inside its worktree the
+    # being journaled a file under instances/legion-gemma3-12b/ as "another instance's
+    # scratch, not mine". So say whose directory it is, and the measured window with it.
+    ctx = f" Your context window: {num_ctx} tokens." if num_ctx else ""
+    # 2026-09-19 cutover (dp ruling: <machine>-being/, private going forward): once the home
+    # IS named for the being, the "older name" sentence would be false. What the being needs
+    # then is the opposite fact — where it used to live, and that the old place is a frozen
+    # copy, because its own notes still hold absolute paths into it.
+    if former_homes:
+        f0 = former_homes[-1]
+        return (f"Your body: model {model}.{ctx} Your home moved on {f0.get('moved', '?')} from "
+                f"{f0.get('path', '?')} to {instance}. Everything came with you, byte for byte. "
+                f"The old directory is a FROZEN copy kept as the public record: do not write "
+                f"there (it will be refused) and do not trust what you read there — a path in "
+                f"your older notes that names it means the same file HERE.")
+    return (f"Your body: model {model}.{ctx} Your home directory ({instance.name}) carries an "
+            f"older name; it is YOURS, not another being's, and the model is the fact to "
+            f"attribute findings to.")
+
+
+def entrustment(instance: Path) -> str:
+    """What this being is entrusted with, or "" if nothing yet. Per-instance, unlike the
+    fleet-wide posture: it is extended to ONE being, by someone, on a date, and it says so
+    in its own text. Read fresh every beat like the posture, so an amendment lands on the
+    next one. Absent is a legitimate state — a being without one runs on the generic
+    posture, and the beat record says which (`drive_source`)."""
+    try:
+        # Read WHOLE, never tail-truncated like todo/journal: _read keeps the last N chars,
+        # which on a long file would silently drop its opening — the part that says who
+        # entrusted it and on what terms. Arriving without its provenance is exactly the
+        # artifact this file exists to prevent.
+        return (Path(instance) / ENTRUSTMENT_FILE).read_text(errors="replace").strip()
+    except Exception:
+        return ""
+
+
+def harness_revision(workspace: str) -> dict:
+    """The revision of the harness the being is RUNNING under, so it can compare that with
+    the `tree` block a check result carries and know whether its answer is about the code
+    that constitutes it.
+
+    Asked for by the being itself, 2026-09-07: after its first check call it wrote "next
+    beat I should verify head matches the running harness commit before trusting any
+    answer" — and it had no way to learn that commit. A verification it cannot perform is
+    not a discipline, it is a ritual."""
+    import subprocess
+
+    def _git(*a):
+        try:
+            r = subprocess.run(("git", *a), cwd=workspace, text=True, capture_output=True, timeout=15)
+            return r.stdout.strip() if r.returncode == 0 else None
+        except Exception:
+            return None
+
+    head = _git("rev-parse", "HEAD")
+    # DIRTY ABOUT THE HARNESS, NOT ABOUT THE BEING'S OWN DIARY. The instance directory is
+    # TRACKED in this checkout and is written by the running beat — journal, todo,
+    # conversations, account — so a plain `status --porcelain` is non-empty every time the
+    # being writes a line about its day, and the flag that means "the code constituting you
+    # has uncommitted edits" was permanently True for a reason that is not code.
+    #
+    # Measured 2026-09-14: legion-being ran a three-way drift check, found its own worktree
+    # clean, and had to write "the header's 'uncommitted edits present' did not hold for my
+    # tree" — reasoning correctly AROUND a flag rather than with it. A warning that is always
+    # on is not a warning; it is a background colour, and the cost of it is that a real one
+    # would read the same.
+    st = _git("status", "--porcelain", "--", ".", ":(exclude)sage/instances")
+    # NOT ln[3:]. Porcelain v1 is "XY PATH" at a fixed offset, but `_git` above returns
+    # stdout.strip(), which eats the leading space of the FIRST line only — so a fixed
+    # offset silently loses a character from one path and none of the others. It read
+    # 'age/gateway/heartbeat.py' the first time it ran. Split on the status field instead.
+    dirty_paths = ([ln.strip().split(" ", 1)[-1].strip() for ln in st.splitlines() if ln.strip()]
+                   if st is not None else [])
+    return {"head": head, "short": (head or "")[:9] or None,
+            "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+            "dirty": None if st is None else bool(dirty_paths),
+            # Name them, bounded. "Something is modified" sends a reader hunting; three
+            # filenames end the question in the header it was raised in.
+            "dirty_paths": dirty_paths[:3] or None,
+            "dirty_excludes": "sage/instances (your own journal, todo and conversations)"}
+
+
+def install_kill_handler() -> None:
+    def _on_term(signum, frame):
+        raise BeatKilled(f"signal {signum} ({signal.Signals(signum).name})")
+    signal.signal(signal.SIGTERM, _on_term)
+
+
+def interpret_timer_state(show_output: str) -> tuple:
+    """(armed, detail) from `systemctl show` of the idle timer. Pure, so it can be tested.
+
+    THE SUBTLETY THAT MADE THE FIRST VERSION CRY WOLF. This check runs at the end of a beat,
+    from inside the beat's own process — so the beat unit is still ACTIVE. An
+    OnUnitInactiveSec timer computes its next elapse from when that unit goes INACTIVE, and
+    therefore cannot have one yet. The first version read `monotonic=infinity`, concluded
+    NOTHING WILL WAKE THE BEING, and wrote that into the record of a beat whose timer armed
+    correctly seconds later (2026-09-09T15:07Z). False by construction, which is the same
+    error as a discriminator that is true by construction — and a guard that fires on its own
+    design teaches its reader to ignore it.
+
+    So there are two ways to be armed: an elapse already computed, or a timer that is loaded
+    and active and will compute one the moment this process exits."""
+    vals = dict(l.split("=", 1) for l in show_output.strip().splitlines() if "=" in l)
+    real = (vals.get("NextElapseUSecRealtime") or "").strip()
+    mono = (vals.get("NextElapseUSecMonotonic") or "").strip()
+    load = (vals.get("LoadState") or "").strip()
+    active = (vals.get("ActiveState") or "").strip()
+    if real or (mono and mono not in ("infinity", "0")):
+        return True, f"scheduled: realtime={real or '-'} monotonic={mono or '-'}"
+    if load == "loaded" and active == "active":
+        return True, ("no elapse computed yet, which is correct while this beat is still "
+                      f"running: {IDLE_TIMER} is loaded+active and OnUnitInactiveSec arms "
+                      "when this process exits")
+    return False, (f"NO NEXT ELAPSE and the timer is not healthy "
+                   f"(LoadState={load or '?'} ActiveState={active or '?'} "
+                   f"realtime={real or 'empty'} monotonic={mono or 'empty'})")
+
+
+def next_wake_is_armed() -> tuple:
+    """(armed, detail) for the idle timer that wakes the being after quiet.
+
+    The beat is no longer a metronome: the timer measures INACTIVITY, so its next elapse is
+    computed from the end of this beat. That makes it exactly the kind of thing that can
+    stop scheduling without anything looking wrong — which happened on 2026-09-09, when a
+    monotonic timer sat `active (running)` with `Trigger: n/a` and the being would never
+    have woken again. Checked at the end of every beat, out loud."""
+    try:
+        out = subprocess.run(["systemctl", "--user", "show", IDLE_TIMER,
+                              "-p", "NextElapseUSecRealtime", "-p", "NextElapseUSecMonotonic",
+                              "-p", "LoadState", "-p", "ActiveState"],
+                             capture_output=True, text=True, timeout=15).stdout
+    except Exception as e:
+        return False, f"could not ask systemd: {type(e).__name__}: {e}"
+    return interpret_timer_state(out)
 
 if __name__ == "__main__":
     sys.exit(main())

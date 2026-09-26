@@ -304,6 +304,8 @@ sage/instances/*-being/
 # files under sage/memory/ (found adding sage/memory/consolidation.py, 2026-09-05). Re-include it.
 !sage/memory/
 
+# being worktree scratch (transient working files; SAGE#93's probe JPEG rode in via pr_open's git add -A, 2026-09-14)
+scratch/
 # Private Ed25519 seeds are never tracked (hub-to-fleet, 2026-09-15): three were committed
 # to this PUBLIC repo on 2025-11-29/12-04 and are compromised for good; removal from the index
 # does not remove them from history.
@@ -312,6 +314,21 @@ sage/data/keys/*.key
 # The daemon log (SAGE #111 finding 5): rotated by the operator, never committed.
 sage-rs/daemon.log
 
+# legion-being lives here since 2026-09-19 (dp ruling: <machine>-being/, private going forward,
+# mirrored to private-context). sage/instances/legion-gemma3-12b/ stays as the frozen public record.
+sage/instances/legion-being/
+
+# GPT convergence sweep 2026-09-19 (#56): runtime traces, nested worktrees and the frozen legacy
+# home's working residue are not source. They stay on disk and in history; they leave the landing tree.
+sage/instances/*/heartbeat.partial.jsonl
+sage/instances/*/being-worktrees/
+sage/instances/legion-gemma3-12b/scratch/
+sage/instances/legion-gemma3-12b/backups/
+sage/instances/legion-gemma3-12b/m.md
+sage/instances/legion-gemma3-12b/review_queue.jsonl
+sage/instances/legion-gemma3-12b/long_term_memory_recovered.jsonl
+# dp 2026-09-20: conversations do not reach main. History on the branches keeps them; the tree does not.
+sage/instances/legion-gemma3-12b/conversations/
 # A BEING'S OWN RECORD IS PRIVATE (fleet policy, 2026-09-20). Its conversations and journal
 # are mirrored to private-context/beings/<name>/ — that mirror is the durable copy, and it is
 # strictly more complete than this repo, because it also carries the files ignored above.
