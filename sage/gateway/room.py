@@ -48,16 +48,31 @@ def _watermark_path(instance: Path) -> Path:
     return conv.conv_dir(Path(instance)) / WATERMARK
 
 
+OVERLAP_S = 600      # the watermark bounds the search; this much before it is re-read and deduped
+
+
+def heard_id(h: dict) -> str:
+    """A heard event's stable identity: when, which mic node, what words."""
+    import hashlib
+    key = f"{float(h.get('ts', 0)):.3f}|{h.get('source') or ''}|{str(h.get('text') or '').strip()}"
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
 def ingest_heard(instance: Path, member: str, inventory: Optional[dict] = None,
                  heard: Optional[list] = None) -> list:
-    """Carry heard words newer than the watermark into the room as `voice` turns. Idempotent:
-    the watermark only moves past what was appended. Returns the turns appended."""
+    """Carry heard words into the room as `voice` turns, each exactly once.
+
+    THE CONVERSATION IS THE AUTHORITY (GPT review of #228). Each turn carries `heard_id`, and an
+    event whose id is already in the room is skipped. The watermark is only a search bound, read
+    back OVERLAP_S early, so neither failure GPT named can break "once each": an append that
+    lands before a watermark write fails is found by id next time, and same-timestamp siblings
+    are both inside the overlap and told apart by id. Returns the turns appended."""
     from sage.gateway import body
     from sage.gateway import conversations as conv
     instance = Path(instance)
     wm = _watermark_path(instance)
     try:
-        after = float(wm.read_text().strip())
+        after = float(wm.read_text().strip()) - OVERLAP_S
     except Exception:
         after = time.time() - 3 * 3600      # first run: only recent words, never the whole log
     new = [h for h in (heard if heard is not None else body._heard_since(after))
@@ -65,14 +80,27 @@ def ingest_heard(instance: Path, member: str, inventory: Optional[dict] = None,
     if not new:
         return []
     ensure(instance, member)
-    out = []
+    have = {t.get("heard_id") for t in conv.recent(instance, ROOM, limit=1000) if t.get("heard_id")}
+    out, top = [], None
     for h in sorted(new, key=lambda h: float(h["ts"])):
+        hid = heard_id(h)
+        if hid in have:
+            continue
         mic = body._heard_mic([h], inventory)
         t = conv.append(instance, ROOM, speaker=VOICE, text=str(h["text"]).strip(), via="voice",
-                        ts=_iso(h["ts"]), enforce_write=False)
-        t["mic"] = mic
+                        ts=_iso(h["ts"]), enforce_write=False, extra={"heard_id": hid, "mic": mic})
+        have.add(hid)
         out.append(t)
-        wm.write_text(str(float(h["ts"])))
+        top = max(top or 0.0, float(h["ts"]))
+    if top is not None:
+        try:
+            prev = float(wm.read_text().strip())
+        except Exception:
+            prev = 0.0
+        try:
+            wm.write_text(str(max(prev, top)))
+        except Exception:
+            pass    # the ids in the room already make a re-read safe
     return out
 
 

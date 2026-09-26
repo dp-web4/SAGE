@@ -249,7 +249,7 @@ def recent(instance: Path, conv_id: str, limit: int = DEFAULT_LIMIT) -> list[dic
 def append(instance: Path, conv_id: str, *, speaker: str, text: str,
            witness: Optional[str] = None, beat: Optional[str] = None,
            enforce_write: bool = True, via: Optional[str] = None,
-           ts: Optional[str] = None) -> dict:
+           ts: Optional[str] = None, extra: Optional[dict] = None) -> dict:
     """Add one turn. Refuses a speaker the conversation does not permit.
 
     `via` is PROVENANCE, recorded on the turn: which channel asserted the speaker's name.
@@ -303,6 +303,8 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
                 turn["witness"] = witness
             if beat:
                 turn["beat"] = beat
+            for k, v in (extra or {}).items():
+                turn.setdefault(k, v)        # never overrides ts/seq/from/text/via
             f.write(json.dumps(turn, ensure_ascii=False) + "\n")
             f.flush()
             os.fsync(f.fileno())

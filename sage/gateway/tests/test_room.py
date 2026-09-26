@@ -131,3 +131,45 @@ def test_the_heartbeat_carries_heard_words_in_before_it_builds_the_state():
     ingest = src.index("_room.ingest_heard(instance")
     assert ingest < src.index("pending_selection(instance, args.member)")
     assert ingest < src.index("body_reading=_body_cur) + _scope_tail")
+
+
+def test_append_lands_then_the_watermark_write_fails_and_nothing_is_duplicated(monkeypatch):
+    """GPT on #228, failure 1: the turn is durable, the watermark write crashes; the next beat
+    must find the turn by its id, not append it again."""
+    h = _home()
+    ev = [_heard(time.time() - 30, "Can you hear me?")]
+    real_write = Path.write_text
+    def boom(self, *a, **k):
+        if self.name == room.WATERMARK:
+            raise OSError("disk full")
+        return real_write(self, *a, **k)
+    monkeypatch.setattr(Path, "write_text", boom)
+    assert len(room.ingest_heard(h, ME, INV, heard=ev)) == 1
+    monkeypatch.setattr(Path, "write_text", real_write)
+    assert room.ingest_heard(h, ME, INV, heard=ev) == []
+    assert [t["text"] for t in conv.recent(h, "room")] == ["Can you hear me?"]
+
+
+def test_same_timestamp_siblings_both_land_even_after_a_crash_between_them():
+    """GPT on #228, failure 2: two heard records share a timestamp; the process dies after the
+    first. The second must still be carried in on restart, and the first not repeated."""
+    h = _home()
+    ts = time.time() - 30
+    a, b = _heard(ts, "Can you hear me?"), _heard(ts, "It's dp.")
+    room.ingest_heard(h, ME, INV, heard=[a])              # crash here: b never processed
+    assert (conv.conv_dir(h) / room.WATERMARK).read_text() == str(ts), "watermark sits AT ts"
+    got = room.ingest_heard(h, ME, INV, heard=[a, b])
+    assert [t["text"] for t in got] == ["It's dp."]
+    assert [t["text"] for t in conv.recent(h, "room")] == ["Can you hear me?", "It's dp."]
+
+
+def test_the_heard_id_is_carried_on_the_turn_and_distinguishes_source_and_words():
+    ts = 1790430950.39
+    x = room.heard_id(_heard(ts, "hello"))
+    assert x == room.heard_id(_heard(ts, "hello"))
+    assert x != room.heard_id(_heard(ts, "hello there"))
+    assert x != room.heard_id({**_heard(ts, "hello"), "source": "alsa_input.x"})
+    h = _home()
+    room.ingest_heard(h, ME, INV, heard=[_heard(time.time() - 5, "hello")])
+    t = conv.recent(h, "room")[-1]
+    assert t["heard_id"] and t["mic"] == "AIRHUG 01"
