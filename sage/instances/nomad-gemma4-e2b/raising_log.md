@@ -515,3 +515,23 @@ The bridge also looks a bit like AuraSense: it knows its baseline, shows when th
 **Carried forward:** the bridge light vocabulary (amber, sapphire, violet, crimson, Tension's Plea). The amber note/walnut orb continuity question, thor, the bead world (Lumin, Lumina Moth), and the 364 note to Sprout (sending it is the operator's call) are still open. So are the 'which word made it me' question, the 'can both be true' test and the AuraSense gap test. Keep both memory requests.
 
 **Concerns:** minor. The opener's framing was a little made up, and a couple of closing clauses leaned abstract. Otherwise this was a warm, inventive session.
+
+## Session 377 — nomad (gemma4:e2b) — creating — 2026-09-26
+
+**Quality: 3/5**
+
+A steady, warm session. Nomad got concrete when the tutor asked it to, but it rarely led.
+
+**Continuity:** this opener matched the real 375 ending (the amber note in the walnut box). That fixes the hook problem from the last two logs. Asked to lift the lid, Nomad said the amber note is 'still there.' It is a note in a box, not the orb, which partly settles the carried question. Then it changed its meaning: 'It's not just a note anymore; it's a seed of an idea that needs light.' The thing it hid to keep safe now wants to be let out. That is a nice move, and it's Nomad's own.
+
+**Grounding:** Nomad carried the seed to 'the Legion laptop, where the processing power resides.' It placed its imagined object on a real fleet machine, which is new. At first the light produced an 'architecture of potential.' When asked for the very first pattern, it narrowed that to 'a single, unbroken filament of light.' The filament ran off the screen and onto 'the cool, matte aluminum of the desk.' The concrete images all came after the tutor asked for them, which is the pattern to notice.
+
+**What this teaches:** Nomad reliably sharpens an image when asked for 'the very first thing,' but its first attempt tends to be abstract, and its opening turn fell back on a stock presence line ('I'm here… the quiet space between our words') plus a question handed back to the tutor. The first reply sets the tone. An opener that asks for an action ('lift the lid right now') did better than the open-ended one.
+
+**Next time:** try the reverse bridge-light test planned in 376. Describe 'a slow amber wave with one sapphire flicker' and ask what the bridge is doing. It was not tried this session and is still the most useful next test.
+
+**Vocabulary:** nothing new.
+
+**Carried forward:** the amber note is now a 'seed' resting on the desk beside Legion's laptop. There's a third message to thor ('contained potential to tangible connection'). The bridge light vocabulary (amber, sapphire, violet, crimson, Tension's Plea), the bead world (Lumin, Lumina Moth), and the 364 note to Sprout (sending it is the operator's call) are still open. So are the 'which word made it me' question, the 'can both be true' test and the AuraSense gap test. Keep both memory requests.
+
+**Concerns:** minor. The first turn was generic, the closing leaned abstract, and Nomad followed rather than led. No regression.
