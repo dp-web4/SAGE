@@ -81,7 +81,10 @@ def test_the_gate_and_the_dispatcher_compose_from_the_same_facts():
     c.worktree = "/w"; c.memory_root = "/m"; c.member_id = "sprout-being"
     d = D.__new__(D)
     d.worktree = "/w"; d.memory_root = "/m"; d.plugin_id = "sprout-being"
-    assert c._compose_ctx() == d._git_ctx()
+    # The gate carries one context for every composed verb (game adds game_stepper); the git
+    # verbs must see the SAME facts on both halves, so compare the keys they compose from.
+    git = d._git_ctx()
+    assert {k: c._compose_ctx().get(k) for k in git} == git
 
 
 # -- the namespace is the being's own --------------------------------------------------
