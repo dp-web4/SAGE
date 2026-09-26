@@ -109,7 +109,7 @@ env on the heartbeat unit.
 | Scope / appeal | `request_scope`, `appeal` | a ruling | inbox | closed (seat rules under delegation) |
 | **Gaze** | `gaze` | the cortex follows | next beat's descriptor + named cause | **closed, hardware** |
 | Metabolism | any act | ATP moves | "energy N%" next beat | visible; acts not yet costed |
-| Voice | `speak` (not yet) | the speaker sounds; the mic hears it; a person hears it | mic onset at the moment of speech | speaker + mic wired, verb not |
+| Voice | `speak` (#219) | the speaker sounds; the mic hears it; a person hears it | mic onset at the moment of speech | verb wired; the mic-onset reafference is not yet |
 | Prediction | write one checkable prediction | the world does or doesn't | next beat shows measured vs predicted | not yet |
 | Mind → body | beat acts | daemon feels them | SNARC source "self" | `/observe` exists, not wired |
 | Presence wake | dwell on something salient | a salient moment wakes a beat | `wake: {by: presence}` | half-closed: the wake exists, the attribution to the dwell does not |
@@ -150,3 +150,20 @@ consequence. Then a hermetic test, and a live proof against the real device befo
   capture; the being's beat read "my left eye and right eye has gone dark" — the first
   world-changed-under-me event to reach it. The cortex unit now resets nvargus-daemon before
   every start (`sprout-cortex.service.d/argus-reset.conf`) so `Restart=on-failure` heals it.
+
+## speak: a voice in the room (2026-09-26)
+
+`speak` turns words into sound through the machine's default audio sink (`espeak-ng` → `pw-play`).
+It is a body verb: offered only when the beat measures a sink **and** both engine halves
+(`body.speak_provider()`); a sink without the engine is reported under `not_yet_wired`.
+
+- **Words only.** The being supplies `text`; engine, voice, device and timeout are fixed. The text
+  reaches `espeak-ng` as one argv item after `--`, never through a shell. Control characters are
+  collapsed; over 400 characters is refused whole ("Nothing was said"), never truncated.
+- **Sound is not a message.** Nothing is added to a conversation; `say` remains the written answer.
+- **A record the being owns.** Every utterance that played is appended to `<home>/spoken.jsonl`,
+  opened/closed as a hestia action, and witnessed. A failed playback records `failed` and writes no line.
+  If the sound played but the append fails, the outcome is `partial` and the receipt and witness say
+  the record was not written; nothing claims it is kept.
+- **The receipt claims only what was measured:** "played aloud through <speaker>", never that anyone heard it.
+- **Pathless and consequential** in the gate registry, like `gaze`.
