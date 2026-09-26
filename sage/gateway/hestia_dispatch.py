@@ -723,7 +723,9 @@ class HestiaF1aDispatcher:
         to = str(intent.args.get("to", "")).strip()
         body = str(intent.args.get("body", "")).strip()
         if not to or not body:
-            return ResultEnvelope(ok=False, error="peer_ask needs 'to' and 'body'")
+            from sage.gateway.reference_f1a import missing_args
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("to", "body"), "peer_ask"))
         if self._publish is None:
             return ResultEnvelope(ok=False, pending=True,
                                   note="peer_ask needs a publisher: the question must live at a pointer "
@@ -1062,7 +1064,9 @@ class HestiaF1aDispatcher:
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
         if not content:
-            return ResultEnvelope(ok=False, error="remember needs 'content'")
+            from sage.gateway.reference_f1a import missing_args
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("content",), "remember"))
         tags = str(intent.args.get("tags", "") or "")
         try:
             stored = self._membot_call("memory_store", {"content": content, "tags": tags})
@@ -1881,7 +1885,10 @@ class HestiaF1aDispatcher:
         to = str(intent.args.get("to", "")).strip()
         text = str(intent.args.get("text", "")).strip()
         if not to or not text:
-            return ResultEnvelope(ok=False, error="say needs 'to' (a conversation id) and 'text'")
+            from sage.gateway.reference_f1a import missing_args
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("to", "text"), "say",
+                "'to' is a conversation id and 'text' is the words that reach them."))
         if conv.is_stub(text):
             # A `say` carries its text to a PERSON, verbatim. On 2026-09-18 21:04Z this being
             # sent dp "[Your brief, final word-only summary of your response]" — the template

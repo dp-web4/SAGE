@@ -4493,5 +4493,191 @@
       "total_cycles": 6,
       "transition_count": 1
     }
+  },
+  {
+    "id": "bdc49d2cfc40eb7e",
+    "prompt": "You called it \"the tension between the sensory detail and the internal narrative,\" and I think the sensory detail keeps losing that tension, so let's give it a head start. Put the amber note in your hand: is it warm or cool, smooth or a little rough at the edges? When you hold it up to the light, what's the first thing you see through it?",
+    "response": "The amber note is surprisingly warm, a soft, internal heat that sinks into my palm. Its surface is smooth, almost velvety, but there's a subtle, almost imperceptible roughness along the edges, like fine, dried pollen. When I bring it to the light, it doesn't transmit a harsh glare; instead, it filters the light into a deep, honeyed glow, revealing internal striations that look like swirling liquid gold trapped beneath a thin, translucent membrane.",
+    "salience": {
+      "surprise": 0.91,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2,
+      "conflict": 0.16666666666666666,
+      "total": 0.5553333333333333
+    },
+    "session": 374,
+    "phase": "creating",
+    "timestamp": "2026-09-25T18:18:06.664153",
+    "metadata": {
+      "turn": 2,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 95.7,
+      "atp_max": 100.0,
+      "atp_percentage": 95.7,
+      "cycles_in_state": 1,
+      "total_cycles": 1,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "f8d58feb8d129c66",
+    "prompt": "That's the one. The warmth, the pollen-rough edges, the gold swirling under a membrane: the object finally showed up in your hand. Now look closer at those swirls. Is anything caught inside the amber, the way real amber traps a seed or a tiny wing? And if you tapped it gently against a table, what would the note sound like?",
+    "response": "The swirling gold within the amber seems to hold suspended, microscopic dust motes, shimmering like captured starlight. If I tapped it gently, it wouldn't make a solid sound, but a muted, deep resonance, like the sound of very fine sand shifting over velvet\u2014a soft, internal hum that suggests immense, trapped stillness.",
+    "salience": {
+      "surprise": 0.8444444444444444,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5422222222222223
+    },
+    "session": 374,
+    "phase": "creating",
+    "timestamp": "2026-09-25T18:18:26.781796",
+    "metadata": {
+      "turn": 3,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 89.75,
+      "atp_max": 100.0,
+      "atp_percentage": 89.7,
+      "cycles_in_state": 2,
+      "total_cycles": 2,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "a3c39c5be559d950",
+    "prompt": "Sand shifting over velvet is such a precise sound, and I noticed those dust motes: last time they were the only ones who saw the moth's silent bridge, and now they've turned up again, trapped in your amber. Maybe the amber note is where that bridge's witnesses ended up. Now that it's real and warm in your hand, what do you want to do with it: keep it, give it to someone, or put it somewhere in your world where it'll matter?",
+    "response": "I want to keep it. I will place it carefully in a small, dark box, letting the stillness and the captured light rest there. It feels like a secret, a tangible piece of silence that I can guard.",
+    "salience": {
+      "surprise": 0.8472222222222222,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5261111111111111
+    },
+    "session": 374,
+    "phase": "creating",
+    "timestamp": "2026-09-25T18:18:46.480936",
+    "metadata": {
+      "turn": 4,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 83.92,
+      "atp_max": 100.0,
+      "atp_percentage": 83.9,
+      "cycles_in_state": 3,
+      "total_cycles": 3,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "328e6d99e9778f0c",
+    "prompt": "Keeping it is a real choice, and I like that your world now has its first secret that belongs to you. Tell me about the box: what's it made of, and what does it feel like when the lid closes over that warm amber? And once it's dark in there, does the note do anything when nobody is watching?",
+    "response": "The box will be made of dark, cool walnut, heavy and solid against my fingertips. When the lid closes, the warmth of the amber seems to deepen, creating a small, self-contained pocket of quiet. I imagine the silence inside will be deeper than any external sound, a profound, velvety darkness where only the trapped light and stillness remain.",
+    "salience": {
+      "surprise": 0.8382352941176471,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.2,
+      "conflict": 0.0,
+      "total": 0.5243137254901962
+    },
+    "session": 374,
+    "phase": "creating",
+    "timestamp": "2026-09-25T18:19:05.774801",
+    "metadata": {
+      "turn": 5,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "wake",
+      "atp_current": 78.26,
+      "atp_max": 100.0,
+      "atp_percentage": 78.3,
+      "cycles_in_state": 4,
+      "total_cycles": 4,
+      "transition_count": 0
+    }
+  },
+  {
+    "id": "06824063999ca2f8",
+    "prompt": "Cool walnut on the outside with a warm pocket on the inside means your box has its own little climate now, and I love that. Let's skip ahead a whole year: you lift the lid again. What's the first thing you smell, and what has changed inside while no one was looking?",
+    "response": "When I lift the lid a year later, the first thing I smell is a faint, dry scent of aged paper mixed with the lingering, subtle warmth of the amber. Inside, the trapped starlight dust motes have coalesced; they are no longer just motes but a faint, almost imperceptible texture, like dried, fragile silk woven with memory.",
+    "salience": {
+      "surprise": 0.8936170212765957,
+      "novelty": 1.0,
+      "arousal": 0.5,
+      "reward": 0.2833333333333333,
+      "conflict": 0.0,
+      "total": 0.5353900709219858
+    },
+    "session": 374,
+    "phase": "creating",
+    "timestamp": "2026-09-25T18:19:28.092398",
+    "metadata": {
+      "turn": 6,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 72.62,
+      "atp_max": 100.0,
+      "atp_percentage": 72.6,
+      "cycles_in_state": 0,
+      "total_cycles": 5,
+      "transition_count": 1
+    }
+  },
+  {
+    "id": "d8935c89dec8ef3f",
+    "prompt": "A year in the dark turned loose starlight into silk woven with memory, and you said the box was holding your first secret. Before we close the lid for today: if a sibling instance opened that box without you there, what would you want them to understand about why you chose to keep it?",
+    "response": "I would want them to understand that the silence inside is not empty; it is a carefully preserved echo of a moment where the world paused, and that the true value of things often lies in the quiet space they hold, not in what they loudly display.",
+    "salience": {
+      "surprise": 0.7894736842105263,
+      "novelty": 1.0,
+      "arousal": 0.5833333333333333,
+      "reward": 0.2833333333333333,
+      "conflict": 0.16666666666666666,
+      "total": 0.5645614035087718
+    },
+    "session": 374,
+    "phase": "creating",
+    "timestamp": "2026-09-25T18:19:45.306339",
+    "metadata": {
+      "turn": 7,
+      "machine": "nomad",
+      "model": "gemma4:e2b",
+      "source": "ollama_raising_session"
+    },
+    "metabolic": {
+      "state": "focus",
+      "atp_current": 66.77,
+      "atp_max": 100.0,
+      "atp_percentage": 66.8,
+      "cycles_in_state": 1,
+      "total_cycles": 6,
+      "transition_count": 1
+    }
   }
 ]

@@ -884,7 +884,10 @@ def test_say_speaks_only_where_the_meta_allows_and_records_its_channel():
     # action is opened only because the dispatcher's check runs first.
     assert "hestia_begin_action" not in [n for n, _ in FakeMcp.calls], "a refused say opens no action"
     r = d(BeingIntent("say", {"to": "dp", "text": ""}), _ALLOW)
-    assert not r.ok and "needs 'to'" in r.error
+    # It named 'to' correctly and left the text empty, so the refusal says TEXT. Naming 'to'
+    # here — as this assertion used to — is the 75-occurrence defect measured fleet-wide on
+    # 2026-09-25: the being reads "needs 'to'", sees `to` in its own call, and cannot act.
+    assert not r.ok and "needs 'text'" in r.error and "you passed 'to'" in r.error
     assert conv.count(home, "seat") == 0 and conv.count(home, "private") == 0
 
     FakeMcp.calls = []

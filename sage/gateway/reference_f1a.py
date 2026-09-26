@@ -115,6 +115,48 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     return head + "the file ends there."
 
 
+def missing_args(args: dict, required, tool: str, hint: str = "") -> Optional[str]:
+    """Name the fields ACTUALLY missing, and the ones that were supplied instead.
+
+    dp, 2026-09-25 fleet directive: "addressing unnecessary frictions. explaining, clearly, the
+    necessary ones." A refusal that names the wrong field is the unnecessary kind wearing the
+    clothes of the necessary kind — the boundary is real, the sentence about it is false.
+
+    Measured across five beings' whole histories (2026-09-25):
+      75  "say needs 'to' (a conversation id) and 'text'"  <- the being HAD PASSED 'to'
+      42  "witness needs an 'event'"                       <- it passed memory_edit's arguments
+      17  "retire_note needs a 'reason'"                   <- it passed only 'path'
+      12  "memory_write needs a 'path'"                    <- it passed only 'content'
+    In the hub-being cases not one was recovered. The being reads "needs 'to'", looks at its own
+    call, sees `to` sitting there, and has nowhere to go. Legibility rule 2: name the refusal's
+    subject unmistakably.
+
+    Listing what WAS passed matters as much as what was not: 28 of the say failures put the
+    message under 'message', 'content' or 'body', and 42 witness failures were a whole
+    memory_edit call wearing the wrong tool name. Reflected back, that is a diagnosable
+    mistake; as "needs an 'event'" it is a wall.
+    """
+    have = {k: v for k, v in (args or {}).items()
+            if str(v).strip() not in ("", "None")}
+    missing = [f for f in required if f not in have]
+    if not missing:
+        return None
+    lack = " and ".join(f"'{f}'" for f in missing)
+    msg = f"{tool} needs {lack}"
+    supplied = [k for k in have if k not in required]
+    if supplied:
+        msg += f" — you passed {', '.join(repr(k) for k in sorted(supplied))}"
+        present = [f for f in required if f in have]
+        if present:
+            msg += f" and {' and '.join(repr(f) for f in present)}"
+        msg += ", so nothing was done"
+    elif [f for f in required if f in have]:
+        msg += f" — you passed {' and '.join(repr(f) for f in required if f in have)}, so nothing was done"
+    if hint:
+        msg += f". {hint}"
+    return msg
+
+
 class ReferenceF1aDispatcher:
     # Bounds on one edit. An edit is a SMALL, LOCATED change; anything larger is a rewrite
     # and should be honest about being one.
@@ -374,12 +416,16 @@ class ReferenceF1aDispatcher:
     def _do_witness(self, intent: BeingIntent) -> ResultEnvelope:
         event = str(intent.args.get("event", "")).strip()
         if not event:
-            return ResultEnvelope(ok=False, error="witness needs an 'event'")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("event",), "witness",
+                "witness records one sentence about something that happened. If you meant to "
+                "change lines in a file, that is memory_edit."))
         return ResultEnvelope(ok=True, result="witnessed", witness_id=self._witness(event))
 
     def _do_memory_read(self, intent: BeingIntent) -> ResultEnvelope:
         if not str(intent.args.get("path", "")).strip():
-            return ResultEnvelope(ok=False, error="memory_read needs a 'path' (relative paths are inside your home)")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("path",), "memory_read", "A relative path is inside your home."))
         p = self._safe_path(intent.args["path"])
         # AN EMPTY ANSWER MUST SAY WHY IT IS EMPTY (the rule git_read got on 2026-09-08, which
         # this effector never did). Measured 2026-09-15: dp granted cbp-being read on
@@ -728,11 +774,25 @@ class ReferenceF1aDispatcher:
                               witness_id=self._witness(f"retire_note {p.name} -> {dest.name}: {reason[:120]}"))
 
     def _do_memory_write(self, intent: BeingIntent) -> ResultEnvelope:
+        # A WRITE OF NOTHING IS REFUSED, NOT REPORTED. Measured 2026-09-25 (hub-claude, all 164
+        # hub-being beats): 33 of 37 memory_write calls carried a 'path' and no 'content' -- the
+        # being wrote its entry as prose in the reply and never lifted it into args. Each came
+        # back "created journal.md with 0 chars", ok: true, so the fleet's signal ("the being
+        # has written", "zero refusals") was true and pointed the wrong way, and the being had
+        # nothing to correct. 'content' is now as required as 'path', the way remember's is.
+        # Checked after _safe_path, so a reserved or out-of-home path keeps its own, more
+        # specific refusal; still before anything is created on disk.
+        _hint = ("A relative path is inside your home. 'content' is the text itself: words "
+                 "written in your reply, outside the call, are not saved.")
         if not str(intent.args.get("path", "")).strip():
-            return ResultEnvelope(ok=False, error="memory_write needs a 'path' (relative paths are inside your home)")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("path", "content"), "memory_write", _hint))
         self._rerouted_from = None
         p = self._safe_path(intent.args["path"], writing=True)
         _rerouted = self._rerouted_from
+        err = missing_args(intent.args, ("path", "content"), "memory_write", _hint)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
         content = str(intent.args.get("content", ""))
         # APPEND OR REPLACE, SAID OUT LOUD. The verb has always opened with "a". For journal
         # and todo that is exactly right; for a source file it is a trap — the being twice got a
