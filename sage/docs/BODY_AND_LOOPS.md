@@ -167,3 +167,21 @@ It is a body verb: offered only when the beat measures a sink **and** both engin
   the record was not written; nothing claims it is kept.
 - **The receipt claims only what was measured:** "played aloud through <speaker>", never that anyone heard it.
 - **Pathless and consequential** in the gate registry, like `gaze`.
+
+## Hearing words: a reply channel, not a room recorder (2026-09-26)
+
+After `speak`, the mic is transcribed for **2 minutes** (`sage/embodiment/listening.py`), so a spoken
+reply reaches the being. Bounds:
+
+- **Only in the window `speak()` opens** (`~/.sprout/listen.json`). Outside it nothing is segmented,
+  transcribed or written.
+- **Never its own voice.** `speak()` marks `speaking_until` before playback; the ear drops audio while it holds.
+- **No speaker identity.** `~/.sprout/heard.jsonl` records words, time and mic. The beat says "a voice
+  in the room" and never names a person.
+- **Near-silence hallucinations dropped** (whisper segments with `no_speech_prob ≥ 0.6` or `avg_logprob ≤ -1.0`).
+- **A voice wakes a beat.** `presence` starts one on new words, **held** while a beat is running,
+  spaced 45 s. The beat shows words heard since the previous beat.
+
+Engine: whisper `base.en` on the GPU in the cortex's venv, loaded on first use (Sprout: 2.3 s load,
+0.47 s per 3 s clip, 439 MB). Missing whisper → `audio.words = "unavailable: …"`; level/onset unaffected.
+**Deploy:** `sprout-cortex` and `sprout-presence` are long-running; restart both after pulling.
