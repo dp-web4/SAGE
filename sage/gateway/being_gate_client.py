@@ -486,7 +486,9 @@ def git_restore_command(args: dict, ctx: Optional[dict] = None) -> str:
         raise ValueError(f"git_restore puts back ONE file, and {path!r} is a directory. Name "
                          "the file inside it you want restored")
     top = os.path.relpath(full, root).split(os.sep, 1)[0]
-    if top in (".githooks", ".git"):
+    # casefold: on a case-insensitive volume (APFS by default, NTFS) `.GITHOOKS` IS `.githooks`,
+    # so a case variant is the same door (legion, reviewing SAGE #210's patch parser)
+    if top.casefold() in (".githooks", ".git"):
         raise ValueError(f"git_restore cannot put back {path!r}: {top}/ holds what git EXECUTES, "
                          "and no being writes there. Everything else in your worktree is yours "
                          "to restore")

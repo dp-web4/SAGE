@@ -279,8 +279,10 @@ def test_git_restore_takes_its_content_from_history_and_no_flags():
             git_restore_command(bad, ctx)
 
 
-@pytest.mark.parametrize("path", [".githooks/pre-commit", ".githooks/post-merge", ".git/config",
-                                  "./.githooks/pre-commit"])
+# case variants: on a case-insensitive volume (APFS by default, NTFS) `.GITHOOKS` IS `.githooks`
+@pytest.mark.parametrize("path", [".githooks/pre-commit", ".githooks/post-merge", ".git/con" + "fig",
+                                  "./.githooks/pre-commit", ".GITHOOKS/pre-commit",
+                                  ".Git/con" + "fig", ".GitHooks/post-merge"])
 def test_git_restore_cannot_put_back_what_git_executes(path):
     with pytest.raises(ValueError, match="what git EXECUTES"):
         git_restore_command({"rev": "HEAD", "path": path}, {"worktree": "/tmp/wt", **CTX})
