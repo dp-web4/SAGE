@@ -8,16 +8,16 @@ Repositories have explicit roles and visibility boundaries. Artifacts land in ex
 
 **What goes here**:
 - Competition agent runtime and adapters
-- Competition post-training recipes that are legal/reproducible
+- Competition post-training recipes/configs and team-private training work that is legal for the intended use
 - SWE-specific persistent-state and premise-fidelity implementations
-- Competition ablation configs, traces, metrics, and results
+- Competition ablation configs, team-private traces, metrics, and results
 - Kaggle submission packaging
 - Paper-track manuscript/assets
 - SWE-specific findings and failure analyses
 
 **What does NOT go here**:
 - General SAGE kernel mechanisms that are not SWE-specific
-- Private fleet traces or unreleasable training data
+- Unrelated private fleet traces; training data whose competition legality/provenance is unresolved for the intended use
 - Credentials or machine-specific operational state
 - Exploratory mechanisms whose provenance/publication status is not clean
 
