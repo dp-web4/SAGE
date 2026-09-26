@@ -121,7 +121,7 @@ def test_run_ollama_tool_turn_with_fake_llm():
     # request_run and memory_edit, one layer out. It sends a unified diff; the seat parses every
     # path the diff touches OUT OF THE DIFF and the law rules on each under mrh.path, exactly as
     # for a memory_write. See test_patch_apply_is_governed.py for what is judged and what is not.
-    assert len(ollama_tools()) == 23   # + patch_apply (2026-09-25)   # + speak (a voice in the room, 2026-09-26)   # + rest (a verb for stopping, 2026-09-25)   # + gaze (the body's own eyes, 2026-09-23)   # + appeal (S4), + say, + git_read/search (#83), + check, + retire_note, + request_run, + memory_edit, + camera
+    assert len(ollama_tools()) == 26   # + pr_open, pr_amend, git_restore (#56 slice 5)   # + patch_apply (2026-09-25)   # + speak (a voice in the room, 2026-09-26)   # + rest (a verb for stopping, 2026-09-25)   # + gaze (the body's own eyes, 2026-09-23)   # + appeal (S4), + say, + git_read/search (#83), + check, + retire_note, + request_run, + memory_edit, + camera
 
     calls = {"n": 0}
 
