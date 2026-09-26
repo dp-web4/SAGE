@@ -155,11 +155,17 @@ def render_clock(c: dict) -> str:
     if c.get("since_last_beat_min") is not None:
         since.append(f"your last beat {c['since_last_beat_min']} min ago")
     for person, s in sorted((c.get("people") or {}).items()):
+        if person in ("voice", "room"):
+            continue            # the room is said below, in spoken words, not "wrote"
         if s.get("from"):
             then = _parse_ts(s["from"])
             since.append(f"{person} last wrote to you {_ago(now_utc, then)} ({then.astimezone():%A %H:%M} local)")
         if s.get("you_to"):
             since.append(f"you last wrote to {person} {_ago(now_utc, _parse_ts(s['you_to']))}")
+    heard = ((c.get("people") or {}).get("voice") or {}).get("from")
+    if heard:
+        then = _parse_ts(heard)
+        since.append(f"a voice in the room last spoke to you {_ago(now_utc, then)} ({then.astimezone():%A %H:%M} local)")
     if c.get("spoke_aloud"):
         since.append(f"you last spoke aloud {_ago(now_utc, _parse_ts(c['spoke_aloud']))}")
     if since:
@@ -2421,6 +2427,16 @@ def main(argv=None) -> int:
         _body_cur = _bodymod.reading()
     except Exception as _e:
         _body_cur = {"error": f"{type(_e).__name__}: {_e}"}
+    # THE ROOM (room.py): on a body that can speak, heard words become turns in the `room`
+    # conversation BEFORE the state and the waiting-turn selection are built, so a voice that
+    # answered the being is a turn waiting on it, like any other.
+    if "speak" in (((_body_cur or {}).get("inventory") or {}).get("verbs") or []):
+        try:
+            from sage.gateway import room as _room
+            _room.ensure(instance, args.member)
+            _room.ingest_heard(instance, args.member, (_body_cur or {}).get("inventory"))
+        except Exception as _e:
+            print(f"[heartbeat] room ingest failed ({type(_e).__name__}: {_e})", file=sys.stderr)
     _explore_tools = offered_explore_tools(_body_cur)
     _schema_measured = _schema_chars_for(_explore_tools)
     _schema_chars = (_schema_measured if _schema_measured is not None

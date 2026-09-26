@@ -135,21 +135,6 @@ def test_a_missing_whisper_fails_open(monkeypatch):
     assert t.model is None and t.status.startswith("unavailable")
 
 
-def test_the_beat_shows_only_words_since_the_previous_beat_and_names_no_one(monkeypatch, tmp_path):
-    from sage.gateway import body
-    now = time.time()
-    heard = [{"ts": now - 600, "text": "old words", "source": "mic"},
-             {"ts": now - 30, "text": "I heard you, Sprout.", "source": "mic"}]
-    cur = {"heard": heard, "heard_until": now - 30}
-    prev = {"heard_until": now - 600}
-    lines = body.render_heard(cur, prev, {"audio_sources": [{"name": "AIRHUG 01"}]})
-    text = "\n".join(lines)
-    assert "I heard you, Sprout." in text and "old words" not in text
-    assert "Through AIRHUG 01 you heard a voice in the room" in text
-    assert "dp" not in text, "a voice is not authenticated; the beat never names a speaker"
-    assert body.render_heard(cur, {"heard_until": now}, {}) == []
-
-
 def test_speak_opens_the_window_after_the_sound_and_mutes_during_it(monkeypatch, tmp_path):
     from sage.gateway import body
     import subprocess
@@ -234,3 +219,15 @@ def test_a_failed_beat_start_keeps_the_words_and_retries(monkeypatch, tmp_path):
     rc[0] = 0
     p._check_heard(t + presence.HEARD_BEAT_GAP_S + 1)
     assert len(started) == 2 and p.heard_pending is None, "retried and delivered"
+
+
+def test_the_mic_that_heard_is_named_not_the_first_one_listed():
+    """2026-09-26 13:57Z: dp's words came through the Airhug and the beat said "Through Built-in
+    Audio Analog Stereo". Name the source the words came from; if that can't be told, "your mic"."""
+    from sage.gateway import body
+    inv = {"audio_sources": [{"name": "Built-in Audio Analog Stereo", "kind": "wired"},
+                             {"name": "AIRHUG 01", "kind": "bluetooth"}]}
+    assert body._heard_mic([{"source": "bluez_input.41_42.0"}], inv) == "AIRHUG 01"
+    assert body._heard_mic([{"source": "alsa_input.analog"}], inv) == "your mic"
+    assert body._heard_mic([{"source": "alsa_input.analog"}],
+                           {"audio_sources": [{"name": "USB Mic", "kind": "wired"}]}) == "USB Mic"

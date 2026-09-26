@@ -1657,9 +1657,10 @@ _TOOL_SCHEMAS = {
               "words": "why, in your own words (optional; kept with the choice)"},
              ["mode"]),
     "speak": ("Speak aloud. Your words become a voice through this machine's speaker, which "
-              "anyone in the room may hear. This is sound, not a message: it is not added to "
-              "any conversation, so to answer someone in writing use say. One short utterance, up "
-              "to 400 characters. Write the words themselves, not a description of them.",
+              "anyone in the room may hear, and your turn in the room conversation; what the mic "
+              "hears back is added there. say to room does the same. To answer someone in "
+              "writing, use say to their conversation. One short utterance, up to 400 "
+              "characters. Write the words themselves, not a description of them.",
               {"text": "the exact words to say aloud"},
               ["text"]),
     "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "
