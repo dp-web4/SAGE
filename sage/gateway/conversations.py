@@ -248,7 +248,8 @@ def recent(instance: Path, conv_id: str, limit: int = DEFAULT_LIMIT) -> list[dic
 
 def append(instance: Path, conv_id: str, *, speaker: str, text: str,
            witness: Optional[str] = None, beat: Optional[str] = None,
-           enforce_write: bool = True, via: Optional[str] = None) -> dict:
+           enforce_write: bool = True, via: Optional[str] = None,
+           ts: Optional[str] = None, extra: Optional[dict] = None) -> dict:
     """Add one turn. Refuses a speaker the conversation does not permit.
 
     `via` is PROVENANCE, recorded on the turn: which channel asserted the speaker's name.
@@ -293,13 +294,17 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
             # Git's rewrite domain so a rollback of every tracked file is still detected.
             f.seek(0)
             seq = next_seq(instance, conv_id, f.read().splitlines())
-            turn = {"ts": _now(), "seq": seq, "from": speaker, "text": text}
+            # `ts` is when it was SAID, for a turn recorded after the fact (a heard voice is
+            # carried into the room at the next beat, minutes later). Default: now.
+            turn = {"ts": ts or _now(), "seq": seq, "from": speaker, "text": text}
             if via:
                 turn["via"] = via
             if witness:
                 turn["witness"] = witness
             if beat:
                 turn["beat"] = beat
+            for k, v in (extra or {}).items():
+                turn.setdefault(k, v)        # never overrides ts/seq/from/text/via
             f.write(json.dumps(turn, ensure_ascii=False) + "\n")
             f.flush()
             os.fsync(f.fileno())
@@ -546,10 +551,15 @@ def echo_of(instance: Path, conv_id: str, me: str, text: str, lookback: int = 4)
     return None
 
 
+VOICE_TAG = " _(heard through the mic; who spoke is not known unless the words say)_"
+
+
 def _provenance_tag(turn: dict) -> str:
     via = turn.get("via")
     if via is None:
         return " _(provenance unrecorded)_"
+    if via == "voice":
+        return VOICE_TAG
     return UNSIGNED_TAG if via in UNSIGNED_VIA else ""
 
 
