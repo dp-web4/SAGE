@@ -28,6 +28,7 @@ Env: SAGE_INSTANCE (the being's home), SAGE_SEAT_CONV (default cbp-claude),
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -154,6 +155,27 @@ def bind(inst: Path, cid: str, rel: str, seqs: list[int] | None) -> list[int]:
             sys.exit(f"refusing: {asked}, not {rel!r}. A run answers only requests for the file it ran.")
         return sorted(seqs)
     return sorted(int(t["seq"]) for t in open_reqs if _same_file(inst, request_path(t), rel))
+
+
+_ASKED_SHA = re.compile(r"sha256:([0-9a-f]{12})")
+
+
+def version_line(data: bytes, asked: dict[int, str]) -> str:
+    """Which version of the file ran, and whether it is the one each request named.
+
+    Measured 2026-09-23 on cbp-being: request seq 3364 named sha256:2f8fa7424641, the being
+    rewrote the file 38 s later, and the answer (3365) reported a different error from the
+    last run of 2f8fa... without saying the file was a different one. A receipt that does not
+    name its input lets the reader credit the output to the version they asked about."""
+    sha = hashlib.sha256(data).hexdigest()[:12]
+    n = data.count(b"\n")
+    line = f"The file I ran is sha256:{sha}, {n} lines."
+    stale = sorted(s for s, a in asked.items() if a and a != sha)
+    if stale:
+        named = ", ".join(f"seq {s} named sha256:{asked[s]}" for s in stale)
+        line += (f" That is not the version you asked about ({named}): the file changed after "
+                 f"you asked, so this output is the newer version's.")
+    return line
 
 
 def _target(inst: Path, raw: str) -> Path:
@@ -286,6 +308,9 @@ def cmd_run(args) -> None:
     # Bound BEFORE running, so the answer names the requests that existed when the seat chose
     # to act — not whatever arrived while the script ran.
     seqs = bind(inst, _conv_id(), str(rel), args.seq)
+    asked = {int(t["seq"]): (_ASKED_SHA.findall(t.get("text") or "") or [""])[0]
+             for t in pending(inst, _conv_id()) if int(t["seq"]) in seqs}
+    ran = version_line(p.read_bytes(), asked)
     interp = [sys.executable] if p.suffix == ".py" else ["bash"]
     # GPU HIDDEN, BY DEFAULT. The being shares this GPU with its own model. Measured on CBP
     # 2026-09-21: a beat holds the card at ~88-90% of 8 GB, and a model left resident after a
@@ -320,6 +345,7 @@ def cmd_run(args) -> None:
     print(f"ran {rel}: {verdict}")
     _say("\n".join([
         f"[request_run] I ran {rel} {WHERE_GPU if args.gpu else WHERE_HIDDEN}. {verdict}.",
+        ran,
         "",
         block("stdout", out),
         "",

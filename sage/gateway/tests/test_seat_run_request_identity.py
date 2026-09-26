@@ -108,3 +108,18 @@ def test_an_explicit_seq_for_a_different_file_is_refused(inst):
         srr.bind(inst, CID, "notes/a.py", [sb])
     assert "asked for 'notes/b.py'" in str(e.value)
     assert srr.bind(inst, CID, "notes/a.py", [sa]) == [sa]
+
+
+def test_the_answer_names_the_version_it_ran():
+    """seq 3364/3365: the file changed 38 s after the request; the answer did not say so."""
+    line = srr.version_line(b"x = 1\ny = 2\n", {7: ""})
+    assert line.startswith("The file I ran is sha256:") and "2 lines" in line
+    assert "not the version" not in line
+
+
+def test_a_request_for_an_older_version_is_told_it_got_the_newer_one():
+    data = b"x = 1\n"
+    import hashlib
+    same = hashlib.sha256(data).hexdigest()[:12]
+    line = srr.version_line(data, {5: same, 6: "2f8fa7424641"})
+    assert "seq 6 named sha256:2f8fa7424641" in line and "seq 5" not in line
