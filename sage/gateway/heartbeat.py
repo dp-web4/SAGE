@@ -31,6 +31,8 @@ import json
 import os
 import re
 import base64
+import difflib
+import hashlib
 import signal
 import subprocess
 import sys
@@ -922,6 +924,413 @@ def service_contradictions(instance: Path, member: str, services: str) -> str:
     return "\n".join(notes)
 
 
+# ---------------------------------------------------------------------------------------------
+# YOUR FILES AND RUNS, MEASURED (2026-09-26). dp: "whatever is in its context window is its
+# entire reality. how that window is managed determines everything."
+#
+# The window measured the being's SERVICES every beat, and even quoted its stale "the daemon is
+# down" sentences back beside the measurement (service_contradictions). It measured nothing
+# about its FILES and RUNS, which is where its inventions actually live. On cbp-being,
+# 2026-09-25/26, it said "the held-out test is still running" across a dozen beats while no
+# process existed. It said "the indentation fix has been applied" on a sha that had not moved.
+# It told dp that results were pending when no run had ever succeeded. Every source it had for
+# those facts was its own earlier narration: todo, journal, account, and its own turns replayed.
+# Nothing measured contradicted them, so nothing could. This block is that measurement.
+
+_RUNNING_CLAIM = re.compile(
+    r"(?i)(still running|is running|currently running|being run|in progress|"
+    r"has(?:n'?t| not)(?: yet)? (?:completed|finished)|not (?:yet )?(?:completed|finished)|"
+    r"results? (?:are |is )?(?:pending|coming|on (?:its|their|the) way)|"
+    r"await\w*[^.\n]{0,60}results?|waiting (?:for|on)[^.\n]{0,60}results?)")
+_RUN_ANSWER = re.compile(r"^\[request_run\] I (ran|did not run) (\S+?)[.,;:]?(?:\s|$)")
+_RUN_VERDICT = re.compile(r"(exit code -?\d+|timed out after [^.—]+)")
+_RUN_SHA = re.compile(r"sha(?:256)?[:= ]\s*([0-9a-f]{12})")
+_REQUEST = "[request_run]"
+FILES_SHOWN = 4
+
+
+def _sha12(p: Path) -> str:
+    try:
+        return hashlib.sha256(p.read_bytes()).hexdigest()[:12]
+    except OSError:
+        return "?"
+
+
+def _when(ts: float, now: float) -> str:
+    from datetime import datetime, timezone
+    t = datetime.fromtimestamp(ts, timezone.utc)
+    today = datetime.fromtimestamp(now, timezone.utc).date()
+    day = "today" if t.date() == today else f"{t:%Y-%m-%d}"
+    return f"{t:%H:%M}Z {day}"
+
+
+def _rel(instance: Path, raw: str) -> str:
+    """A path as the being's home names it: relative to the home when it is inside it (a
+    request may name the absolute path), normalised, never escaping upward."""
+    raw = (raw or "").strip().strip("`'\"").rstrip(".,;:")
+    if not raw:
+        return ""
+    home = instance.resolve()
+    p = Path(raw)
+    try:
+        if p.is_absolute():
+            return str(p.resolve().relative_to(home))
+    except (ValueError, OSError):
+        return ""
+    rel = os.path.normpath(raw)
+    return "" if rel.startswith("..") else rel
+
+
+def _running_files(instance: Path, rels: list) -> set:
+    """Which of `rels` (paths relative to the home) a live process has on its command line.
+    Read from /proc, so it is what IS running, not what anyone says is. Each argument is
+    resolved against the process's own cwd and compared as a WHOLE path, so a sibling home
+    (…/cbp-being-old/x.py) can never match this one (sprout's review of #224)."""
+    found = set()
+    home = instance.resolve()
+    wanted = {str(home / r): r for r in rels if r}
+    if not wanted:
+        return found
+    try:
+        pids = [d for d in os.listdir("/proc") if d.isdigit()]
+    except OSError:
+        return found
+    for pid in pids:
+        try:
+            argv = open(f"/proc/{pid}/cmdline", "rb").read().split(b"\0")
+            args = [a.decode(errors="replace") for a in argv if a]
+            if len(args) < 2:
+                continue
+            try:
+                cwd = os.readlink(f"/proc/{pid}/cwd")
+            except OSError:
+                cwd = ""
+            for a in args[1:]:
+                full = os.path.normpath(a if os.path.isabs(a) else os.path.join(cwd, a)) if (cwd or os.path.isabs(a)) else ""
+                if full in wanted:
+                    found.add(wanted[full])
+        except OSError:
+            continue
+    return found
+
+
+def _runs_by_file(instance: Path, member: str) -> tuple:
+    """({rel: latest seat run answer}, {rel: [pending request seqs]}), read from every
+    conversation the being is in, keyed by the path RELATIVE TO THE HOME, so notes/a.py and
+    a.py are two files. A run answer is someone else's turn starting `[request_run] I ran
+    <path>` (or `I did not run`); a request is the being's own `[request_run] <path>` with no
+    answer for that path after it."""
+    from sage.gateway import conversations as _conv
+    last, pending = {}, {}
+    try:
+        convs = [m for m in _conv.listing(instance) if member in m.get("participants", [])]
+    except Exception:
+        return last, pending
+    for m in convs:
+        try:
+            turns = _conv.recent(instance, m["id"], limit=400)
+        except Exception:
+            continue
+        for t in turns:
+            text = (t.get("text") or "").strip()
+            if not text.startswith(_REQUEST):
+                continue
+            first = text.splitlines()[0]
+            if t.get("from") == member:
+                rest = first[len(_REQUEST):].strip()
+                f = _rel(instance, rest.split()[0]) if rest else ""
+                if f:
+                    pending.setdefault(f, []).append(int(t.get("seq") or 0))
+                continue
+            mm = _RUN_ANSWER.match(first)
+            if not mm:
+                continue
+            f = _rel(instance, mm.group(2))
+            if not f:
+                continue
+            v = _RUN_VERDICT.search(first)
+            sh = _RUN_SHA.search(first)
+            last[f] = {"seq": int(t.get("seq") or 0), "ts": t.get("ts", ""), "conv": m["id"],
+                       "ran": mm.group(1) == "ran",
+                       "verdict": v.group(1) if v else ("declined" if mm.group(1) != "ran" else "no verdict"),
+                       "sha": sh.group(1) if sh else None}
+            pending.pop(f, None)      # an answer for a path answers every request for it before it
+    return last, pending
+
+
+# Where a being keeps runnable code: its home's top level and the two directories it writes
+# (sprout's review: legion-being has 244 scripts in notes/ and scratch/ and 0 at top level, so
+# a top-level-only scan showed it nothing). request_run runs .py and .sh.
+RUNNABLE = (".py", ".sh")
+RUNNABLE_DIRS = ("", "notes", "scratch")
+
+
+def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
+                   shown: int = FILES_SHOWN) -> tuple:
+    """(block, refuted, facts). The block is the measured state of the being's own runnable
+    files; refuted is [(keys, note, claim)] for the conversations block, so a replayed "still
+    running" of its own carries the measurement on the claim itself; facts feed want_check."""
+    import time as _time
+    now = now or _time.time()
+    home = instance.resolve()
+    found = {}
+    for d in RUNNABLE_DIRS:
+        base = instance / d if d else instance
+        try:
+            for p in base.iterdir():
+                if p.is_file() and p.suffix in RUNNABLE:
+                    found[str(p.resolve().relative_to(home))] = p
+        except (OSError, ValueError):
+            continue
+    last, pending = _runs_by_file(instance, member) if member else ({}, {})
+    # a path a run or request names is the being's file too, wherever it lives
+    for rel in list(last) + list(pending):
+        p = instance / rel
+        if rel not in found and p.is_file():
+            found[rel] = p
+    if not found and not last and not pending:
+        return "", [], {}
+
+    def mt(p):
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return 0.0
+    ordered = sorted(found, key=lambda r: mt(found[r]), reverse=True)
+    top = ordered[:shown]
+    # a waiting request is always shown, even past the cut: it is the one thing in motion
+    top += [r for r in pending if r in found and r not in top]
+    missing = [r for r in pending if r not in found]
+    running = _running_files(instance, top)
+    from datetime import datetime, timezone
+    stamp = f"{datetime.fromtimestamp(now, timezone.utc):%H:%M}Z"
+    lines = [f"## Your files and runs, measured at the start of this beat ({stamp})",
+             "Measured, not remembered. Where your todo, journal, account or an earlier message of "
+             "yours says otherwise, this is current."]
+    for rel in top:
+        p = found[rel]
+        try:
+            n_lines = sum(1 for _ in open(p, errors="replace"))
+        except OSError:
+            n_lines = "?"
+        sha = _sha12(p)
+        row = f"- {rel}: sha {sha}, {n_lines} lines, last changed {_when(mt(p), now)}."
+        r = last.get(rel)
+        if r:
+            when = r["ts"][11:16] + "Z" if len(r.get("ts", "")) >= 16 else "?"
+            if r["ran"]:
+                row += f" Last run: seq {r['seq']} at {when}, {r['verdict']}"
+                if r["sha"]:
+                    row += "; the file is unchanged since that run" if r["sha"] == sha else (
+                        f"; that run was of sha {r['sha']}, so the file has CHANGED since")
+                row += (f" (whole output: memory_read path conversations/{r['conv']}.jsonl "
+                        f"start_line {r['seq']}).")
+            else:
+                row += f" Last request was declined at seq {r['seq']} ({when})."
+        else:
+            row += " Never run."
+        if rel in pending:
+            row += f" Your request (seq {', '.join(map(str, pending[rel]))}) is waiting to be run."
+        row += " Running now." if rel in running else ""
+        lines.append(row)
+    for rel in missing:
+        lines.append(f"- {rel}: your request (seq {', '.join(map(str, pending[rel]))}) names it, "
+                     f"but there is no such file in your home.")
+    if len(ordered) > len([r for r in top if r in ordered]):
+        lines.append(f"- … and {len(ordered) - len(top)} older runnable file(s) in your home.")
+    refuted = []
+    if running:
+        lines.append(f"Running right now: {', '.join(sorted(running))}.")
+    else:
+        lines.append("Nothing of yours is running right now. No run is in progress, so no results "
+                     "are on their way unless a request above is waiting to be run.")
+        note = f"measured {stamp}: nothing of yours is running"
+        refuted.append((None, note, _RUNNING_CLAIM))
+        lines += _own_running_claims(instance, member, stamp)
+    facts = {"last": last, "pending": pending, "running": running, "stamp": stamp,
+             "scripts": found}
+    return "\n".join(lines), refuted, facts
+
+
+_WANTS_RESULTS = re.compile(r"(?i)\bresults?\b|\bmetrics?\b|\bcorrelation\b|\bheld-?out loss\b")
+
+
+def want_check(account: str, facts: dict) -> str:
+    """A line under the being's carried account when its WANT asks for results that nothing
+    measured can deliver: no run of the file it names is running or waiting.
+
+    The account is kept VERBATIM and handed back each beat (being_join, "ask, do not offer"),
+    and its WANT survives until a raising session. Measured 2026-09-26 on cbp-being: WANT
+    "the held-out test results from cbp-claude", with no run pending and none running. The
+    act_first explore then opened the 08:11 beat with peer_ask for those results, before it
+    had read a thing. The want is the being's own, and it stays verbatim. What changes is that
+    the measurement now sits beside it."""
+    if not account or not facts:
+        return ""
+    want = next((l.split(":", 1)[1].strip() for l in account.splitlines()
+                 if l.strip().upper().startswith("WANT:")), "")
+    if not want or not _WANTS_RESULTS.search(want):
+        return ""
+    if facts.get("running"):
+        return ""
+    named = [r for r in facts.get("scripts", {}) if r in want or Path(r).name in want]
+    if any(r in facts.get("pending", {}) for r in named) or (not named and facts.get("pending")):
+        return ""
+    stamp = facts.get("stamp", "")
+    if named:
+        n = sorted(named, key=len, reverse=True)[0]
+        r = facts.get("last", {}).get(n)
+        was = (f"its last run was seq {r['seq']}, {r['verdict']}" if r and r.get("ran")
+               else "it has never been run")
+        return (f"_Measured at {stamp}, beside your WANT: {n} is not running and no request of "
+                f"yours for it is waiting; {was}. Results for it can only come from a new run "
+                f"you request._")
+    return (f"_Measured at {stamp}, beside your WANT: nothing of yours is running and no request "
+            f"of yours is waiting to be run, so no results are on their way. They can only come "
+            f"from a run you request._")
+
+
+def _own_running_claims(instance: Path, member: str, stamp: str, most: int = 3) -> list:
+    """The being's OWN sentences that say something is running or that results are pending,
+    quoted beside the measurement that nothing is. Same move as service_contradictions: one
+    measured line loses to a dozen of the being's own sentences unless the sentence is quoted
+    next to it."""
+    from sage.gateway.being_join import carried_account, last_session_number
+    sources = [("your todo.md", todo_view(instance)),
+               ("your journal.md", _read(instance / "journal.md", 1200))]
+    try:
+        acc = carried_account(instance, last_session_number(instance)) or ""
+        sources.append(("your own account", acc))
+    except Exception:
+        pass
+    out, seen = [], set()
+    for where, text in sources:
+        for sent in re.split(r"(?<=[.!?])\s+|\n", text or ""):
+            # drop only a list marker and checkbox ("- [ ] ", "* [x] "); quote its words exactly
+            s = re.sub(r"^\s*[-*]\s*(?:\[[ xX]\]\s*)?", "", sent).strip()
+            if len(s) < 12 or not _RUNNING_CLAIM.search(s) or s.lower() in seen:
+                continue
+            seen.add(s.lower())
+            out.append(f"- **Your own record disagrees with this measurement.** In {where} you "
+                       f"wrote: \"{s[:200]}\". Measured at {stamp}: nothing of yours is running.")
+            break           # one quote per source: enough to be seen, not a wall
+        if len(out) >= most:
+            break
+    return out
+
+
+# ---------------------------------------------------------------------------------------------
+# THE TODO, AS WHAT IS STILL OPEN (dp, 2026-09-26: "yes the todo should show still-open").
+#
+# todo.md is an append-only log: each reflect writes a dated delta (added / done / still open),
+# and memory_write only appends. The window used to show the last 1500 chars of that log. On
+# cbp-being that meant stale "still running / awaiting results" lines, contradictory [ ] and
+# [x] copies of one item, and whatever a truncated block happened to hold (the file is
+# 299 KB, with 1,246 open checkboxes and 778 done). Now the whole log is read in order: an
+# item opens when it is added, and closes when a later line marks it done (a light rewording
+# still matches). The being's own "still open: none" clears the list. Items opened in the
+# last TODO_WINDOW_H hours are shown, newest first. Older unresolved ones are counted, not
+# listed, and the log itself is never changed.
+TODO_WINDOW_H = 48
+TODO_SHOWN = 15
+_BLOCK = re.compile(r"^\s*(20\d\d-\d\d-\d\d)[ T](\d\d:\d\d)")
+_SECTION = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open|added|done|completed)\s*\]?\s*:?\s*$", re.I)
+_NONE = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open)\s*\]?\s*:?\s*(none|nothing)\b", re.I)
+_ITEM = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
+_BOX = re.compile(r"^\[([ xX])\]\s*(.*)$")
+_TAG = re.compile(r"^\[(done|still open|open|added|completed)\]\s*:?\s*(.*)$", re.I)
+_OPEN_WORDS = {"still open", "open", "added"}
+
+
+def _norm(s):
+    s = re.sub(r"[`*_]", "", s.lower())
+    s = re.sub(r"\s+", " ", s).strip(" .:;-")
+    return s
+
+
+def todo_open(text, now=None, window_h=48):
+    """[(item, since)] still open, newest first, and the count of older open items."""
+    now = now or datetime.now(timezone.utc)
+    items = {}          # norm -> (text, since_dt)
+    since = None
+    section = None
+    for line in (text or "").splitlines():
+        m = _BLOCK.match(line)
+        if m:
+            try:
+                since = datetime.strptime(f"{m.group(1)} {m.group(2)}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+            except ValueError:
+                pass
+            section = None
+            continue
+        if _NONE.match(line):
+            items.clear()
+            continue
+        sm = _SECTION.match(line)
+        if sm:
+            section = sm.group(1).lower()
+            continue
+        im = _ITEM.match(line)
+        if not im:
+            continue
+        body = im.group(1)
+        status = None
+        b = _BOX.match(body)
+        if b:
+            status = "done" if b.group(1) in "xX" else "open"
+            body = b.group(2)
+        else:
+            t = _TAG.match(body)
+            if t:
+                status = "done" if t.group(1).lower() in ("done", "completed") else "open"
+                body = t.group(2)
+            elif section:
+                status = "done" if section in ("done", "completed") else "open"
+        if not status or len(body) < 4:
+            continue
+        n = _norm(body)
+        if status == "open":
+            if n not in items:
+                items[n] = (body.strip(), since)
+        else:
+            if n in items:
+                del items[n]
+            else:
+                for k in list(items):
+                    if difflib.SequenceMatcher(None, k, n).ratio() >= 0.85:
+                        del items[k]
+                        break
+    cutoff = now - timedelta(hours=window_h)
+    # An item with no dated block above it is undated, not old: it is shown, after the dated ones.
+    recent = [(t, s) for t, s in items.values() if s is None or s >= cutoff]
+    older = sum(1 for t, s in items.values() if s is not None and s < cutoff)
+    recent.sort(key=lambda x: (x[1] is not None, x[1] or cutoff), reverse=True)
+    return recent, older
+
+
+def todo_view(instance: Path, now=None) -> str:
+    """The todo section of the window: what is still open, from the whole log."""
+    try:
+        text = (instance / "todo.md").read_text(errors="replace")
+    except OSError:
+        text = ""
+    if not text.strip():
+        return "## todo.md\n(empty: you have no todo list yet)"
+    rec, older = todo_open(text, now=now, window_h=TODO_WINDOW_H)
+    lines = [f"## todo.md: still open ({len(rec)})"]
+    lines += [f"- [ ] {t}" + (f" (since {s:%Y-%m-%d %H:%M} UTC)" if s else "") for t, s in rec[:TODO_SHOWN]]
+    if len(rec) > TODO_SHOWN:
+        lines.append(f"- … and {len(rec) - TODO_SHOWN} more opened in the last {TODO_WINDOW_H} h.")
+    if not rec:
+        lines.append("(nothing open)")
+    if older:
+        lines.append(f"({older} older item(s) opened more than {TODO_WINDOW_H} h ago were never marked "
+                     f"done; they are in todo.md.)")
+    lines.append("Built from your whole todo.md: an item stays open until a later line marks it done. "
+                 "To close one, write it under done:. The whole log: memory_read todo.md.")
+    return "\n".join(lines)
+
+
 def own_state(instance: Path, member: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
@@ -948,6 +1357,14 @@ def own_state(instance: Path, member: str = "",
         own_state.last_body = _cur
     except Exception as _e:
         own_state.last_body = {"error": f"{type(_e).__name__}: {_e}"}
+    # Its files and runs, measured: also NOW, so beside the body and before every record that
+    # narrates them (see files_and_runs). Fail-open: a measurement that errors adds nothing.
+    try:
+        files_block, files_refuted, files_facts = files_and_runs(instance, member)
+    except Exception:
+        files_block, files_refuted, files_facts = "", [], {}
+    if files_block:
+        parts.append(files_block)
     # Conversations first among the channels: a turn addressed to the being and unanswered
     # is the one thing in its state that is waiting on IT, and it should never have to infer
     # that from a wall of notes. Both directions live in one ordered record.
@@ -962,7 +1379,7 @@ def own_state(instance: Path, member: str = "",
         # fixed ceiling this supersedes — cbp's stopgap on SAGE#81, now the rung it starts from).
         convs = _conv.render_for_being(instance, member, per_conv=per_conv,
                                        turn_chars=turn_chars, mark=mark_conversations,
-                                       refuted=refuted_claims(services))
+                                       refuted=refuted_claims(services) + files_refuted)
         if convs.strip():
             parts.append(conversation_header(instance, member) + "\n" + convs.strip())
     if services.strip():
@@ -985,18 +1402,54 @@ def own_state(instance: Path, member: str = "",
                      "not relayed by a seat. You read this; you do not write it)\n" + from_dp.strip())
     acc = carried_account(instance, last_session_number(instance))
     if acc:
-        parts.append("## Your own account\n" + acc)
+        check = want_check(acc, files_facts)
+        parts.append("## Your own account\n" + acc + (("\n" + check) if check else ""))
     # tails are short now that recall searches the whole home (window pressure: median 6157
     # of 8192 tokens per prompt, max 8013, measured 2026-09-07)
-    todo = _read(instance / "todo.md", 1500)
-    parts.append("## todo.md\n" + (todo.strip() or "(empty: you have no todo list yet)"))
+    parts.append(todo_view(instance))
     journal = _read(instance / "journal.md", 1200)
     parts.append("## journal.md (tail)\n" + (journal.strip() or "(empty: this is your first beat)"))
     for d in ("scratch", "notes"):
-        p = instance / d
-        names = sorted(x.name for x in p.iterdir()) if p.is_dir() else []
-        parts.append(f"## {d}/\n" + ("\n".join(f"- {n}" for n in names[:30]) if names else "(empty)"))
+        parts.append(dir_listing(instance, d))
     return "\n\n".join(parts)
+
+
+LISTING_LIMIT = 30
+
+
+def dir_listing(instance: Path, d: str, limit: int = LISTING_LIMIT) -> str:
+    """One home directory as the beat shows it: NEWEST FIRST, and saying when it is partial.
+
+    It used to be `sorted(names)[:30]`, the thirty that sort FIRST, which in a directory of
+    dated names means the thirty OLDEST. SAGE #137 (2026-09-21) measured cbp-being's notes/
+    at 87 files with its whole current project (16 mechanism-* notes) past the cut. On
+    2026-09-26 notes/ held 145 and scratch/ 99, and the five newest in each were hidden,
+    including notes/from-the-seat.md and the being's own 2026-09-26 state note. A note the
+    being writes this beat could not appear in its own listing the next. And nothing said the
+    list was partial, so `## notes/` read as the whole of notes/.
+    """
+    p = instance / d
+    try:
+        entries = [x for x in p.iterdir()] if p.is_dir() else []
+    except OSError:
+        entries = []
+    if not entries:
+        return f"## {d}/\n(empty)"
+
+    def mtime(x):
+        try:
+            return x.stat().st_mtime
+        except OSError:
+            return 0.0
+    entries.sort(key=mtime, reverse=True)
+    shown = entries[:limit]
+    lines = [f"- {x.name}" for x in shown]
+    head = f"## {d}/ (newest first"
+    if len(entries) > limit:
+        head += f"; {limit} of {len(entries)}"
+        lines.append(f"- … and {len(entries) - limit} older. `recall` searches all of them; "
+                     f"`memory_read` opens any one by name.")
+    return head + ")\n" + "\n".join(lines)
 
 
 from sage.gateway.conversations import is_stub  # noqa: E402  (one definition, two ends)
