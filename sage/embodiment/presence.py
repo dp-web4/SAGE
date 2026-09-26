@@ -22,6 +22,12 @@ import json, os, time, urllib.request
 
 PERCEPTION = os.path.expanduser("~/.sprout/perception.json")
 PRESENCE_LOG = os.path.expanduser("~/.sprout/presence_log.jsonl")
+HEARD = os.path.expanduser("~/.sprout/heard.jsonl")
+# WORDS HEARD WAKE A BEAT (2026-09-26). Someone answered the being's voice; waiting up to ~31 min
+# for the timer turns a conversation into a letter. A wake is HELD while a beat is already running
+# (a `start` on an active oneshot is a no-op, and the words would sit until the next timer), and
+# spaced by HEARD_BEAT_GAP_S so a long reply in several utterances wakes one beat, not several.
+HEARD_BEAT_GAP_S = 45
 # /chat/raw, not /chat. `/chat` became the governed CONVERSATION route: it files what it is
 # given as a turn spoken by dp and drops salience and coherence on the floor, so a perceptual
 # descriptor arrived in the operator's own channel wearing the operator's name. On Sprout it
@@ -79,6 +85,9 @@ class Presence:
     def __init__(self):
         self.last_wake = 0.0
         self.last_beat_wake = 0.0
+        self.heard_seen = self._heard_size()   # start at the end: old words never wake anything
+        self.heard_pending = None               # (ts, text) of words not yet delivered to a beat
+        self.last_heard_wake = 0.0
         self.wake_times: list[float] = []   # recent wake timestamps (rolling hourly cap)
         self.last_desc = ""
         self._since_trim = 0
@@ -135,6 +144,62 @@ class Presence:
         except Exception as ex:
             print(f"[presence] beat wake failed ({type(ex).__name__}: {ex})", flush=True)
 
+    @staticmethod
+    def _heard_size() -> int:
+        try:
+            return os.path.getsize(HEARD)
+        except OSError:
+            return 0
+
+    @staticmethod
+    def _beat_running() -> bool:
+        import subprocess
+        try:
+            r = subprocess.run(["systemctl", "--user", "is-active", "sage-heartbeat.service"],
+                               capture_output=True, text=True, timeout=10)
+            return r.stdout.strip() in ("active", "activating")
+        except Exception:
+            return False
+
+    def _check_heard(self, now: float):
+        """New words in heard.jsonl -> a beat, held while one runs, spaced by HEARD_BEAT_GAP_S."""
+        size = self._heard_size()
+        if size < self.heard_seen:
+            self.heard_seen = 0                 # rotated/truncated
+        if size > self.heard_seen:
+            with open(HEARD, errors="replace") as f:
+                f.seek(self.heard_seen)
+                for line in f.read().splitlines():
+                    try:
+                        h = json.loads(line)
+                        self.heard_pending = (h.get("ts"), str(h.get("text", ""))[:80])
+                    except Exception:
+                        pass
+            self.heard_seen = size
+        if not self.heard_pending or now - self.last_heard_wake < HEARD_BEAT_GAP_S:
+            return
+        if self._beat_running():
+            return                              # held: the next loop after this beat ends starts one
+        import subprocess
+        from sage.gateway.being_join import write_wake_marker
+        ts, text = self.heard_pending
+        write_wake_marker(f'heard a voice: "{text}"', 1.0)
+        self.last_heard_wake = now              # spaces retries as well as wakes
+        try:
+            r = subprocess.run(["systemctl", "--user", "start", "--no-block", "sage-heartbeat.service"],
+                               capture_output=True, text=True, timeout=10)
+            ok, err = r.returncode == 0, (r.stderr or "")[:120]
+        except Exception as e:
+            ok, err = False, f"{type(e).__name__}: {e}"[:120]
+        # THE WORDS STAY PENDING UNTIL A BEAT ACTUALLY STARTS (GPT review of #220). A failed start
+        # used to clear them, so the voice was never delivered; now the next loop past the gap
+        # tries again.
+        if ok:
+            self.heard_pending = None
+        self._log({"ts": round(now, 2), "kind": "beat_wake", "by": "heard", "heard_ts": ts,
+                   "text": text, "started": ok, "err": err})
+        print(f"[presence] heard a voice -> beat {'started' if ok else 'NOT started, will retry: ' + err}", flush=True)
+
     def _log(self, ev: dict):
         os.makedirs(os.path.dirname(PRESENCE_LOG), exist_ok=True)
         with open(PRESENCE_LOG, "a") as f:
@@ -176,6 +241,10 @@ class Presence:
                         print(f"[presence] noticed ({'rest' if resting else 'awake'}, "
                               f"sal={sal.get('salience')}): {noticing[:90]}", flush=True)
                         self._maybe_wake_beat(descriptor, sal.get("salience"), now)
+            except Exception:
+                pass
+            try:
+                self._check_heard(time.time())
             except Exception:
                 pass
             time.sleep(POLL_S)
