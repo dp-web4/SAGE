@@ -28,6 +28,7 @@ Env: SAGE_INSTANCE (the being's home), SAGE_SEAT_CONV (default cbp-claude),
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -305,6 +306,11 @@ def cmd_run(args) -> None:
                   f"'does this work'), or pass --gpu-anyway with a reason if this is the named "
                   f"project the card is being freed for.", file=sys.stderr)
             raise SystemExit(2)
+    # The receipt names its input: WHICH version of the file ran, hashed BEFORE the run. A run can
+    # outlast a beat, and a file edited mid-run would otherwise be named as the version that ran,
+    # and the heartbeat would call code that never ran "unchanged since that run" (sprout's
+    # review of SAGE #224). heartbeat.files_and_runs compares this sha with the file now.
+    ran_sha = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
     rc, out, err, timed = run_child(interp + [str(p)], str(inst), args.timeout, child_env(args.gpu))
 
     def block(name: str, s: str) -> str:
@@ -319,7 +325,7 @@ def cmd_run(args) -> None:
                if timed else f"exit code {rc}")
     print(f"ran {rel}: {verdict}")
     _say("\n".join([
-        f"[request_run] I ran {rel} {WHERE_GPU if args.gpu else WHERE_HIDDEN}. {verdict}.",
+        f"[request_run] I ran {rel} (sha {ran_sha}) {WHERE_GPU if args.gpu else WHERE_HIDDEN}. {verdict}.",
         "",
         block("stdout", out),
         "",
