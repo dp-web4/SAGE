@@ -1958,6 +1958,16 @@ class HestiaF1aDispatcher:
         lines = [f"[request_run] {rel}",
                  f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
                  f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it and answers here)"]
+        # EVERY ARGUMENT THE BEING GAVE REACHES THE SEAT. Measured 2026-09-22 08:3xZ: cbp-being
+        # put its flags in 'body' ("Run ... with --input-dim 10 --output-dim 1 ...") and the
+        # seat was shown "why: (none given)" and no flags. Across its first 66 request_runs,
+        # 20 carried their content in a key read nowhere — 'arguments' 9, 'command' 6, 'body'
+        # 5. Aliasing each word as it turns up (as 'reason' was) chases the next one; carrying
+        # whatever is left, under the being's own key, cannot miss. 'to' names the addressee,
+        # which is always this conversation.
+        for k, v in intent.args.items():
+            if k not in ("path", "why", "reason", "to") and str(v).strip():
+                lines.append(f"{k}: {str(v).strip()}")
         if unchanged:
             lines.append(f"UNCHANGED since the request at seq {unchanged[0]}; the seat answered "
                          f"at seq {unchanged[1]}.")
