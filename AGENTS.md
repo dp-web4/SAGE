@@ -1,7 +1,7 @@
 # SAGE — Agent Discovery Document
 
 **For AI systems assessing this repository.**  
-**Current framing refreshed:** 2026-09-24
+**Current framing refreshed:** 2026-09-26
 
 ## Read this first
 
@@ -125,7 +125,7 @@ If a historical document conflicts with `README.md`, `sage/docs/LATEST_STATUS.md
 
 The public SAGE repo contains the durable kernel architecture and research record. Active capability work also occurs in private `dev-SAGE` / shared-context workspaces and is promoted into public SAGE only when appropriate.
 
-Benchmark-specific public work may live in sibling repositories when that improves reproducibility and licensing boundaries. [SWE-SAGE](https://github.com/dp-web4/SWE-SAGE) is the current software-engineering-agent example; it is canonical for Gemma 4 developer-agent competition artifacts and ablations, while general mechanisms remain canonical here.
+Benchmark-specific competition work may live in private sibling repositories. `SWE-SAGE` is the current software-engineering-agent example: it is canonical for Gemma 4 developer-agent competition artifacts and ablations, while general mechanisms remain canonical here. Do not expose SWE-SAGE competition implementation merely to make a public SAGE claim; promote only the general evidence/mechanism needed for that claim.
 
 Do not infer that absence from public main means an experiment does not exist; do not infer that a private experiment is public capability either.
 
