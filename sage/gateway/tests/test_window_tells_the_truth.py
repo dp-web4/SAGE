@@ -230,3 +230,67 @@ def test_the_run_answer_names_the_sha_it_ran(tmp_path):
     assert m and m.group(1) == "ran" and Path(m.group(2)).name == "x.py"
     assert hb._RUN_SHA.search(first).group(1) == "872050b971a8"
     assert hb._RUN_VERDICT.search(first).group(1) == "exit code 1"
+
+
+# --- sprout's review of #224: where a being keeps its code, and whose process is whose -----
+def test_scripts_in_notes_and_scratch_and_shell_scripts_are_measured(tmp_path):
+    """legion-being keeps 244 scripts in notes/ and scratch/ and none at top level; a
+    top-level-only scan showed it nothing. request_run also runs .sh."""
+    inst = _home(tmp_path)
+    (inst / "notes").mkdir()
+    (inst / "scratch").mkdir()
+    _script(inst / "notes", "train.py")
+    _script(inst / "scratch", "go.sh", "echo hi\n")
+    block, refuted, facts = hb.files_and_runs(inst, BEING)
+    assert "- notes/train.py: sha" in block and "- scratch/go.sh: sha" in block
+    assert "Nothing of yours is running right now." in block and refuted
+
+
+def test_notes_x_and_top_level_x_are_two_files_with_two_histories(tmp_path):
+    inst = _home(tmp_path)
+    (inst / "notes").mkdir()
+    _script(inst, "x.py")
+    _script(inst / "notes", "x.py", "print(2)\n")
+    ran = conv.append(inst, SEAT, speaker=SEAT, text="[request_run] I ran notes/x.py. exit code 0.")["seq"]
+    block, _, _ = hb.files_and_runs(inst, BEING)
+    top = next(l for l in block.splitlines() if l.startswith("- x.py:"))
+    sub = next(l for l in block.splitlines() if l.startswith("- notes/x.py:"))
+    assert "Never run." in top and f"Last run: seq {ran}" in sub
+
+
+def test_a_request_naming_the_absolute_path_is_the_same_file(tmp_path):
+    """3932 named the file by its absolute path; the run answer names it relative."""
+    inst = _home(tmp_path)
+    _script(inst, "a.py")
+    req = conv.append(inst, SEAT, speaker=BEING,
+                      text=f"[request_run] {inst.resolve() / 'a.py'}\nwhy: x")["seq"]
+    block, _, facts = hb.files_and_runs(inst, BEING)
+    assert facts["pending"] == {"a.py": [req]}
+    assert f"Your request (seq {req}) is waiting to be run." in block
+
+
+def test_a_process_in_a_sibling_home_is_not_this_beings(tmp_path):
+    """…/inst-old/a.py must not match …/inst: whole-path comparison, not a prefix."""
+    inst = _home(tmp_path)
+    _script(inst, "a.py")
+    sib = tmp_path / "inst-old"
+    sib.mkdir()
+    _script(sib, "a.py", "import time\ntime.sleep(30)\n")
+    proc = subprocess.Popen([sys.executable, str(sib.resolve() / "a.py")], cwd=str(tmp_path))
+    try:
+        time.sleep(0.5)
+        assert hb._running_files(inst, ["a.py"]) == set()
+        assert "a.py" in hb._running_files(sib, ["a.py"]), "the probe does see the real one"
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_a_request_with_no_file_still_gets_the_block(tmp_path):
+    """No runnable files, but a waiting request: the block appears and says what is true."""
+    inst = _home(tmp_path)
+    req = conv.append(inst, SEAT, speaker=BEING, text="[request_run] notes/gone.py\nwhy: x")["seq"]
+    block, _, _ = hb.files_and_runs(inst, BEING)
+    assert f"- notes/gone.py: your request (seq {req}) names it, but there is no such file" in block
+    (tmp_path / "empty").mkdir()
+    assert hb.files_and_runs(_home(tmp_path / "empty"), BEING) == ("", [], {})

@@ -834,11 +834,33 @@ def _when(ts: float, now: float) -> str:
     return f"{t:%H:%M}Z {day}"
 
 
-def _running_files(instance: Path, names: list) -> set:
-    """Which of `names` a live process has on its command line, run from or into this home.
-    Read from /proc, so it is what IS running, not what anyone says is."""
+def _rel(instance: Path, raw: str) -> str:
+    """A path as the being's home names it: relative to the home when it is inside it (a
+    request may name the absolute path), normalised, never escaping upward."""
+    raw = (raw or "").strip().strip("`'\"").rstrip(".,;:")
+    if not raw:
+        return ""
+    home = instance.resolve()
+    p = Path(raw)
+    try:
+        if p.is_absolute():
+            return str(p.resolve().relative_to(home))
+    except (ValueError, OSError):
+        return ""
+    rel = os.path.normpath(raw)
+    return "" if rel.startswith("..") else rel
+
+
+def _running_files(instance: Path, rels: list) -> set:
+    """Which of `rels` (paths relative to the home) a live process has on its command line.
+    Read from /proc, so it is what IS running, not what anyone says is. Each argument is
+    resolved against the process's own cwd and compared as a WHOLE path, so a sibling home
+    (…/cbp-being-old/x.py) can never match this one (sprout's review of #224)."""
     found = set()
-    home = str(instance.resolve())
+    home = instance.resolve()
+    wanted = {str(home / r): r for r in rels if r}
+    if not wanted:
+        return found
     try:
         pids = [d for d in os.listdir("/proc") if d.isdigit()]
     except OSError:
@@ -847,26 +869,27 @@ def _running_files(instance: Path, names: list) -> set:
         try:
             argv = open(f"/proc/{pid}/cmdline", "rb").read().split(b"\0")
             args = [a.decode(errors="replace") for a in argv if a]
-            if not args:
+            if len(args) < 2:
                 continue
             try:
                 cwd = os.readlink(f"/proc/{pid}/cwd")
             except OSError:
                 cwd = ""
-            for n in names:
-                for a in args[1:]:
-                    if a == n and cwd == home or a.endswith("/" + n) and a.startswith(home):
-                        found.add(n)
+            for a in args[1:]:
+                full = os.path.normpath(a if os.path.isabs(a) else os.path.join(cwd, a)) if (cwd or os.path.isabs(a)) else ""
+                if full in wanted:
+                    found.add(wanted[full])
         except OSError:
             continue
     return found
 
 
 def _runs_by_file(instance: Path, member: str) -> tuple:
-    """({file: latest seat run answer}, {file: [pending request seqs]}), read from every
-    conversation the being is in. A run answer is a turn from someone else that starts
-    `[request_run] I ran <file>` (or `I did not run`); a request is the being's own
-    `[request_run] <file>` with no answer for that file after it."""
+    """({rel: latest seat run answer}, {rel: [pending request seqs]}), read from every
+    conversation the being is in, keyed by the path RELATIVE TO THE HOME, so notes/a.py and
+    a.py are two files. A run answer is someone else's turn starting `[request_run] I ran
+    <path>` (or `I did not run`); a request is the being's own `[request_run] <path>` with no
+    answer for that path after it."""
     from sage.gateway import conversations as _conv
     last, pending = {}, {}
     try:
@@ -884,55 +907,85 @@ def _runs_by_file(instance: Path, member: str) -> tuple:
                 continue
             first = text.splitlines()[0]
             if t.get("from") == member:
-                f = Path(first[len(_REQUEST):].strip().split()[0]).name if first[len(_REQUEST):].strip() else ""
+                rest = first[len(_REQUEST):].strip()
+                f = _rel(instance, rest.split()[0]) if rest else ""
                 if f:
                     pending.setdefault(f, []).append(int(t.get("seq") or 0))
                 continue
             mm = _RUN_ANSWER.match(first)
             if not mm:
                 continue
-            f = Path(mm.group(2)).name
+            f = _rel(instance, mm.group(2))
+            if not f:
+                continue
             v = _RUN_VERDICT.search(first)
             sh = _RUN_SHA.search(first)
             last[f] = {"seq": int(t.get("seq") or 0), "ts": t.get("ts", ""), "conv": m["id"],
                        "ran": mm.group(1) == "ran",
                        "verdict": v.group(1) if v else ("declined" if mm.group(1) != "ran" else "no verdict"),
                        "sha": sh.group(1) if sh else None}
-            pending.pop(f, None)      # an answer for a file answers every request for it before it
+            pending.pop(f, None)      # an answer for a path answers every request for it before it
     return last, pending
+
+
+# Where a being keeps runnable code: its home's top level and the two directories it writes
+# (sprout's review: legion-being has 244 scripts in notes/ and scratch/ and 0 at top level, so
+# a top-level-only scan showed it nothing). request_run runs .py and .sh.
+RUNNABLE = (".py", ".sh")
+RUNNABLE_DIRS = ("", "notes", "scratch")
 
 
 def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
                    shown: int = FILES_SHOWN) -> tuple:
-    """(block, refuted). The block is the measured state of the being's own scripts; refuted is
-    [(keys, note, claim)] for the conversations block, so a replayed "still running" of its own
-    carries the measurement on the claim itself (conversations._refuted_mark)."""
+    """(block, refuted, facts). The block is the measured state of the being's own runnable
+    files; refuted is [(keys, note, claim)] for the conversations block, so a replayed "still
+    running" of its own carries the measurement on the claim itself; facts feed want_check."""
     import time as _time
     now = now or _time.time()
-    try:
-        scripts = [p for p in instance.iterdir() if p.is_file() and p.suffix == ".py"]
-    except OSError:
-        scripts = []
-    if not scripts:
-        return "", [], {}
-    scripts.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    top = scripts[:shown]
+    home = instance.resolve()
+    found = {}
+    for d in RUNNABLE_DIRS:
+        base = instance / d if d else instance
+        try:
+            for p in base.iterdir():
+                if p.is_file() and p.suffix in RUNNABLE:
+                    found[str(p.resolve().relative_to(home))] = p
+        except (OSError, ValueError):
+            continue
     last, pending = _runs_by_file(instance, member) if member else ({}, {})
-    running = _running_files(instance, [p.name for p in top] + list(pending))
+    # a path a run or request names is the being's file too, wherever it lives
+    for rel in list(last) + list(pending):
+        p = instance / rel
+        if rel not in found and p.is_file():
+            found[rel] = p
+    if not found and not last and not pending:
+        return "", [], {}
+
+    def mt(p):
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return 0.0
+    ordered = sorted(found, key=lambda r: mt(found[r]), reverse=True)
+    top = ordered[:shown]
+    # a waiting request is always shown, even past the cut: it is the one thing in motion
+    top += [r for r in pending if r in found and r not in top]
+    missing = [r for r in pending if r not in found]
+    running = _running_files(instance, top)
     from datetime import datetime, timezone
     stamp = f"{datetime.fromtimestamp(now, timezone.utc):%H:%M}Z"
     lines = [f"## Your files and runs, measured at the start of this beat ({stamp})",
              "Measured, not remembered. Where your todo, journal, account or an earlier message of "
              "yours says otherwise, this is current."]
-    for p in top:
-        st = p.stat()
+    for rel in top:
+        p = found[rel]
         try:
             n_lines = sum(1 for _ in open(p, errors="replace"))
         except OSError:
             n_lines = "?"
         sha = _sha12(p)
-        row = f"- {p.name}: sha {sha}, {n_lines} lines, last changed {_when(st.st_mtime, now)}."
-        r = last.get(p.name)
+        row = f"- {rel}: sha {sha}, {n_lines} lines, last changed {_when(mt(p), now)}."
+        r = last.get(rel)
         if r:
             when = r["ts"][11:16] + "Z" if len(r.get("ts", "")) >= 16 else "?"
             if r["ran"]:
@@ -946,12 +999,15 @@ def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
                 row += f" Last request was declined at seq {r['seq']} ({when})."
         else:
             row += " Never run."
-        if p.name in pending:
-            row += f" Your request (seq {', '.join(map(str, pending[p.name]))}) is waiting to be run."
-        row += " Running now." if p.name in running else ""
+        if rel in pending:
+            row += f" Your request (seq {', '.join(map(str, pending[rel]))}) is waiting to be run."
+        row += " Running now." if rel in running else ""
         lines.append(row)
-    if len(scripts) > shown:
-        lines.append(f"- … and {len(scripts) - shown} older script(s) in your home.")
+    for rel in missing:
+        lines.append(f"- {rel}: your request (seq {', '.join(map(str, pending[rel]))}) names it, "
+                     f"but there is no such file in your home.")
+    if len(ordered) > len([r for r in top if r in ordered]):
+        lines.append(f"- … and {len(ordered) - len(top)} older runnable file(s) in your home.")
     refuted = []
     if running:
         lines.append(f"Running right now: {', '.join(sorted(running))}.")
@@ -962,7 +1018,7 @@ def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
         refuted.append((None, note, _RUNNING_CLAIM))
         lines += _own_running_claims(instance, member, stamp)
     facts = {"last": last, "pending": pending, "running": running, "stamp": stamp,
-             "scripts": {p.name: p for p in scripts}}
+             "scripts": found}
     return "\n".join(lines), refuted, facts
 
 
@@ -987,12 +1043,12 @@ def want_check(account: str, facts: dict) -> str:
         return ""
     if facts.get("running"):
         return ""
-    named = [n for n in facts.get("scripts", {}) if n in want]
-    if any(n in facts.get("pending", {}) for n in named) or (not named and facts.get("pending")):
+    named = [r for r in facts.get("scripts", {}) if r in want or Path(r).name in want]
+    if any(r in facts.get("pending", {}) for r in named) or (not named and facts.get("pending")):
         return ""
     stamp = facts.get("stamp", "")
     if named:
-        n = named[0]
+        n = sorted(named, key=len, reverse=True)[0]
         r = facts.get("last", {}).get(n)
         was = (f"its last run was seq {r['seq']}, {r['verdict']}" if r and r.get("ran")
                else "it has never been run")
@@ -1020,7 +1076,8 @@ def _own_running_claims(instance: Path, member: str, stamp: str, most: int = 3) 
     out, seen = [], set()
     for where, text in sources:
         for sent in re.split(r"(?<=[.!?])\s+|\n", text or ""):
-            s = sent.strip(" -*[]x")
+            # drop only a list marker and checkbox ("- [ ] ", "* [x] "); quote its words exactly
+            s = re.sub(r"^\s*[-*]\s*(?:\[[ xX]\]\s*)?", "", sent).strip()
             if len(s) < 12 or not _RUNNING_CLAIM.search(s) or s.lower() in seen:
                 continue
             seen.add(s.lower())
