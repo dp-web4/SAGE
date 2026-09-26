@@ -254,15 +254,36 @@ def test_a_long_turn_is_shown_capped_and_points_at_its_whole(tmp_path):
     from sage.gateway import conversations as C
     C.create(tmp_path, "s", title="s", participants=["a", "b"], writable_by=["a", "b"])
     C.append(tmp_path, "s", speaker="a", text="short", via="say")
-    long = "x" * 5000
+    long = "h" * 2500 + "t" * 2500
     t = C.append(tmp_path, "s", speaker="a", text=long, via="say")
     full = C.render_for_being(tmp_path, "b")
     assert long in full                                                  # uncapped by default
     capped = C.render_for_being(tmp_path, "b", turn_chars=1000)
-    assert long not in capped and "x" * 1000 in capped and "x" * 1001 not in capped
-    assert f"+4000 chars; the whole turn: memory_read path conversations/s.jsonl start_line {t['seq']}" in capped
+    assert long not in capped
+    # 1000 shown: 400 from the head and 600 from the tail, the cut in the middle
+    assert "h" * 400 in capped and "h" * 401 not in capped
+    assert "t" * 600 in capped and "t" * 601 not in capped
+    assert (f"4000 chars omitted from the middle; the whole turn: memory_read path "
+            f"conversations/s.jsonl start_line {t['seq']}") in capped
     assert "short" in capped                                             # a short turn is untouched
     assert C.recent(tmp_path, "s")[-1]["text"] == long                   # the record is whole
+
+
+def test_a_capped_run_answer_keeps_its_traceback(tmp_path):
+    """2026-09-26: in 24 of cbp-being's 128 seat run answers the error text lived ONLY in the
+    part a head-only cap removed. The being read the epoch losses and never the traceback,
+    and went on to say the run was still going. The end of a turn is where output fails."""
+    from sage.gateway import conversations as C
+    C.create(tmp_path, "s", title="s", participants=["seat", "b"], writable_by=["seat", "b"])
+    epochs = "\n".join(f"  Epoch {i}/1000, Loss: 0.0{i % 97:02d}" for i in range(0, 1000, 10))
+    answer = ("[request_run] I ran x.py with the GPU hidden. exit code 1.\n\nstdout:\n" + epochs
+              + "\n\nstderr:\nTraceback (most recent call last):\n  File \"x.py\", line 165\n"
+              "ValueError: operands could not be broadcast together with shapes (100,100) (10,10)")
+    C.append(tmp_path, "s", speaker="seat", text=answer, via="daemon-loopback")
+    shown = C.render_for_being(tmp_path, "b", turn_chars=1200)
+    assert "exit code 1" in shown                          # the head: what ran, and how it ended
+    assert "ValueError: operands could not be broadcast" in shown and "line 165" in shown
+    assert "omitted from the middle" in shown
 
 
 
@@ -338,12 +359,14 @@ def test_an_answered_turn_is_shown_briefly_and_a_live_one_in_full():
 
     out = conv.render_for_being(inst, "legion-being", per_conv=6, turn_chars=1200)
 
-    # the closed exchange: shortened, and the marker says where the rest is
-    assert ("S" * ANSWERED_TURN_CHARS) in out
-    assert ("S" * (ANSWERED_TURN_CHARS + 1)) not in out
+    import re
+    shown = lambda ch: sum(len(r) for r in re.findall(ch + "{20,}", out))
+    # the closed exchange: shortened to the short cap (head and tail, cut in the middle),
+    # and the marker says where the rest is
+    assert shown("S") == ANSWERED_TURN_CHARS
     assert "memory_read path conversations/seat.jsonl start_line" in out
     # the being's OWN answered turn is history too
-    assert ("B" * (ANSWERED_TURN_CHARS + 1)) not in out
+    assert shown("B") == ANSWERED_TURN_CHARS
     # what arrived after it last spoke is live and uncut at this rung
     assert ("L" * 1100) in out
 
@@ -362,7 +385,8 @@ def test_the_short_cap_never_widens_a_narrow_rung():
     conv.append(inst, "seat", speaker="legion-being", text="ack", enforce_write=False)
 
     out = conv.render_for_being(inst, "legion-being", per_conv=6, turn_chars=200)
-    assert ("S" * 200) in out and ("S" * 201) not in out
+    import re
+    assert sum(len(r) for r in re.findall("S{20,}", out)) == 200   # the rung's budget, exactly
 
 
 def test_the_beat_state_puts_a_ceiling_on_the_conversations_block(tmp_path, monkeypatch):

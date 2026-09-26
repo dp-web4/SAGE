@@ -31,6 +31,7 @@ import json
 import os
 import re
 import base64
+import hashlib
 import signal
 import subprocess
 import sys
@@ -793,6 +794,244 @@ def service_contradictions(instance: Path, member: str, services: str) -> str:
     return "\n".join(notes)
 
 
+# ---------------------------------------------------------------------------------------------
+# YOUR FILES AND RUNS, MEASURED (2026-09-26). dp: "whatever is in its context window is its
+# entire reality. how that window is managed determines everything."
+#
+# The window measured the being's SERVICES every beat, and even quoted its stale "the daemon is
+# down" sentences back beside the measurement (service_contradictions). It measured nothing
+# about its FILES and RUNS, which is where its inventions actually live. On cbp-being,
+# 2026-09-25/26, it said "the held-out test is still running" across a dozen beats while no
+# process existed. It said "the indentation fix has been applied" on a sha that had not moved.
+# It told dp that results were pending when no run had ever succeeded. Every source it had for
+# those facts was its own earlier narration: todo, journal, account, and its own turns replayed.
+# Nothing measured contradicted them, so nothing could. This block is that measurement.
+
+_RUNNING_CLAIM = re.compile(
+    r"(?i)(still running|is running|currently running|being run|in progress|"
+    r"has(?:n'?t| not)(?: yet)? (?:completed|finished)|not (?:yet )?(?:completed|finished)|"
+    r"results? (?:are |is )?(?:pending|coming|on (?:its|their|the) way)|"
+    r"await\w*[^.\n]{0,60}results?|waiting (?:for|on)[^.\n]{0,60}results?)")
+_RUN_ANSWER = re.compile(r"^\[request_run\] I (ran|did not run) (\S+?)[.,;:]?(?:\s|$)")
+_RUN_VERDICT = re.compile(r"(exit code -?\d+|timed out after [^.—]+)")
+_RUN_SHA = re.compile(r"sha(?:256)?[:= ]\s*([0-9a-f]{12})")
+_REQUEST = "[request_run]"
+FILES_SHOWN = 4
+
+
+def _sha12(p: Path) -> str:
+    try:
+        return hashlib.sha256(p.read_bytes()).hexdigest()[:12]
+    except OSError:
+        return "?"
+
+
+def _when(ts: float, now: float) -> str:
+    from datetime import datetime, timezone
+    t = datetime.fromtimestamp(ts, timezone.utc)
+    today = datetime.fromtimestamp(now, timezone.utc).date()
+    day = "today" if t.date() == today else f"{t:%Y-%m-%d}"
+    return f"{t:%H:%M}Z {day}"
+
+
+def _running_files(instance: Path, names: list) -> set:
+    """Which of `names` a live process has on its command line, run from or into this home.
+    Read from /proc, so it is what IS running, not what anyone says is."""
+    found = set()
+    home = str(instance.resolve())
+    try:
+        pids = [d for d in os.listdir("/proc") if d.isdigit()]
+    except OSError:
+        return found
+    for pid in pids:
+        try:
+            argv = open(f"/proc/{pid}/cmdline", "rb").read().split(b"\0")
+            args = [a.decode(errors="replace") for a in argv if a]
+            if not args:
+                continue
+            try:
+                cwd = os.readlink(f"/proc/{pid}/cwd")
+            except OSError:
+                cwd = ""
+            for n in names:
+                for a in args[1:]:
+                    if a == n and cwd == home or a.endswith("/" + n) and a.startswith(home):
+                        found.add(n)
+        except OSError:
+            continue
+    return found
+
+
+def _runs_by_file(instance: Path, member: str) -> tuple:
+    """({file: latest seat run answer}, {file: [pending request seqs]}), read from every
+    conversation the being is in. A run answer is a turn from someone else that starts
+    `[request_run] I ran <file>` (or `I did not run`); a request is the being's own
+    `[request_run] <file>` with no answer for that file after it."""
+    from sage.gateway import conversations as _conv
+    last, pending = {}, {}
+    try:
+        convs = [m for m in _conv.listing(instance) if member in m.get("participants", [])]
+    except Exception:
+        return last, pending
+    for m in convs:
+        try:
+            turns = _conv.recent(instance, m["id"], limit=400)
+        except Exception:
+            continue
+        for t in turns:
+            text = (t.get("text") or "").strip()
+            if not text.startswith(_REQUEST):
+                continue
+            first = text.splitlines()[0]
+            if t.get("from") == member:
+                f = Path(first[len(_REQUEST):].strip().split()[0]).name if first[len(_REQUEST):].strip() else ""
+                if f:
+                    pending.setdefault(f, []).append(int(t.get("seq") or 0))
+                continue
+            mm = _RUN_ANSWER.match(first)
+            if not mm:
+                continue
+            f = Path(mm.group(2)).name
+            v = _RUN_VERDICT.search(first)
+            sh = _RUN_SHA.search(first)
+            last[f] = {"seq": int(t.get("seq") or 0), "ts": t.get("ts", ""), "conv": m["id"],
+                       "ran": mm.group(1) == "ran",
+                       "verdict": v.group(1) if v else ("declined" if mm.group(1) != "ran" else "no verdict"),
+                       "sha": sh.group(1) if sh else None}
+            pending.pop(f, None)      # an answer for a file answers every request for it before it
+    return last, pending
+
+
+def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
+                   shown: int = FILES_SHOWN) -> tuple:
+    """(block, refuted). The block is the measured state of the being's own scripts; refuted is
+    [(keys, note, claim)] for the conversations block, so a replayed "still running" of its own
+    carries the measurement on the claim itself (conversations._refuted_mark)."""
+    import time as _time
+    now = now or _time.time()
+    try:
+        scripts = [p for p in instance.iterdir() if p.is_file() and p.suffix == ".py"]
+    except OSError:
+        scripts = []
+    if not scripts:
+        return "", [], {}
+    scripts.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    top = scripts[:shown]
+    last, pending = _runs_by_file(instance, member) if member else ({}, {})
+    running = _running_files(instance, [p.name for p in top] + list(pending))
+    from datetime import datetime, timezone
+    stamp = f"{datetime.fromtimestamp(now, timezone.utc):%H:%M}Z"
+    lines = [f"## Your files and runs, measured at the start of this beat ({stamp})",
+             "Measured, not remembered. Where your todo, journal, account or an earlier message of "
+             "yours says otherwise, this is current."]
+    for p in top:
+        st = p.stat()
+        try:
+            n_lines = sum(1 for _ in open(p, errors="replace"))
+        except OSError:
+            n_lines = "?"
+        sha = _sha12(p)
+        row = f"- {p.name}: sha {sha}, {n_lines} lines, last changed {_when(st.st_mtime, now)}."
+        r = last.get(p.name)
+        if r:
+            when = r["ts"][11:16] + "Z" if len(r.get("ts", "")) >= 16 else "?"
+            if r["ran"]:
+                row += f" Last run: seq {r['seq']} at {when}, {r['verdict']}"
+                if r["sha"]:
+                    row += "; the file is unchanged since that run" if r["sha"] == sha else (
+                        f"; that run was of sha {r['sha']}, so the file has CHANGED since")
+                row += (f" (whole output: memory_read path conversations/{r['conv']}.jsonl "
+                        f"start_line {r['seq']}).")
+            else:
+                row += f" Last request was declined at seq {r['seq']} ({when})."
+        else:
+            row += " Never run."
+        if p.name in pending:
+            row += f" Your request (seq {', '.join(map(str, pending[p.name]))}) is waiting to be run."
+        row += " Running now." if p.name in running else ""
+        lines.append(row)
+    if len(scripts) > shown:
+        lines.append(f"- … and {len(scripts) - shown} older script(s) in your home.")
+    refuted = []
+    if running:
+        lines.append(f"Running right now: {', '.join(sorted(running))}.")
+    else:
+        lines.append("Nothing of yours is running right now. No run is in progress, so no results "
+                     "are on their way unless a request above is waiting to be run.")
+        note = f"measured {stamp}: nothing of yours is running"
+        refuted.append((None, note, _RUNNING_CLAIM))
+        lines += _own_running_claims(instance, member, stamp)
+    facts = {"last": last, "pending": pending, "running": running, "stamp": stamp,
+             "scripts": {p.name: p for p in scripts}}
+    return "\n".join(lines), refuted, facts
+
+
+_WANTS_RESULTS = re.compile(r"(?i)\bresults?\b|\bmetrics?\b|\bcorrelation\b|\bheld-?out loss\b")
+
+
+def want_check(account: str, facts: dict) -> str:
+    """A line under the being's carried account when its WANT asks for results that nothing
+    measured can deliver: no run of the file it names is running or waiting.
+
+    The account is kept VERBATIM and handed back each beat (being_join, "ask, do not offer"),
+    and its WANT survives until a raising session. Measured 2026-09-26 on cbp-being: WANT
+    "the held-out test results from cbp-claude", with no run pending and none running. The
+    act_first explore then opened the 08:11 beat with peer_ask for those results, before it
+    had read a thing. The want is the being's own, and it stays verbatim. What changes is that
+    the measurement now sits beside it."""
+    if not account or not facts:
+        return ""
+    want = next((l.split(":", 1)[1].strip() for l in account.splitlines()
+                 if l.strip().upper().startswith("WANT:")), "")
+    if not want or not _WANTS_RESULTS.search(want):
+        return ""
+    if facts.get("running"):
+        return ""
+    named = [n for n in facts.get("scripts", {}) if n in want]
+    if any(n in facts.get("pending", {}) for n in named) or (not named and facts.get("pending")):
+        return ""
+    stamp = facts.get("stamp", "")
+    if named:
+        n = named[0]
+        r = facts.get("last", {}).get(n)
+        was = (f"its last run was seq {r['seq']}, {r['verdict']}" if r and r.get("ran")
+               else "it has never been run")
+        return (f"_Measured at {stamp}, beside your WANT: {n} is not running and no request of "
+                f"yours for it is waiting; {was}. Results for it can only come from a new run "
+                f"you request._")
+    return (f"_Measured at {stamp}, beside your WANT: nothing of yours is running and no request "
+            f"of yours is waiting to be run, so no results are on their way. They can only come "
+            f"from a run you request._")
+
+
+def _own_running_claims(instance: Path, member: str, stamp: str, most: int = 3) -> list:
+    """The being's OWN sentences that say something is running or that results are pending,
+    quoted beside the measurement that nothing is. Same move as service_contradictions: one
+    measured line loses to a dozen of the being's own sentences unless the sentence is quoted
+    next to it."""
+    from sage.gateway.being_join import carried_account, last_session_number
+    sources = [("your todo.md", _read(instance / "todo.md", 1500)),
+               ("your journal.md", _read(instance / "journal.md", 1200))]
+    try:
+        acc = carried_account(instance, last_session_number(instance)) or ""
+        sources.append(("your own account", acc))
+    except Exception:
+        pass
+    out, seen = [], set()
+    for where, text in sources:
+        for sent in re.split(r"(?<=[.!?])\s+|\n", text or ""):
+            s = sent.strip(" -*[]x")
+            if len(s) < 12 or not _RUNNING_CLAIM.search(s) or s.lower() in seen:
+                continue
+            seen.add(s.lower())
+            out.append(f"- **Your own record disagrees with this measurement.** In {where} you "
+                       f"wrote: \"{s[:200]}\". Measured at {stamp}: nothing of yours is running.")
+            break           # one quote per source: enough to be seen, not a wall
+        if len(out) >= most:
+            break
+    return out
+
+
 def own_state(instance: Path, member: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
@@ -819,6 +1058,14 @@ def own_state(instance: Path, member: str = "",
         own_state.last_body = _cur
     except Exception as _e:
         own_state.last_body = {"error": f"{type(_e).__name__}: {_e}"}
+    # Its files and runs, measured: also NOW, so beside the body and before every record that
+    # narrates them (see files_and_runs). Fail-open: a measurement that errors adds nothing.
+    try:
+        files_block, files_refuted, files_facts = files_and_runs(instance, member)
+    except Exception:
+        files_block, files_refuted, files_facts = "", [], {}
+    if files_block:
+        parts.append(files_block)
     # Conversations first among the channels: a turn addressed to the being and unanswered
     # is the one thing in its state that is waiting on IT, and it should never have to infer
     # that from a wall of notes. Both directions live in one ordered record.
@@ -833,7 +1080,7 @@ def own_state(instance: Path, member: str = "",
         # fixed ceiling this supersedes — cbp's stopgap on SAGE#81, now the rung it starts from).
         convs = _conv.render_for_being(instance, member, per_conv=per_conv,
                                        turn_chars=turn_chars, mark=mark_conversations,
-                                       refuted=refuted_claims(services))
+                                       refuted=refuted_claims(services) + files_refuted)
         if convs.strip():
             parts.append(conversation_header(instance, member) + "\n" + convs.strip())
     if services.strip():
@@ -856,7 +1103,8 @@ def own_state(instance: Path, member: str = "",
                      "not relayed by a seat. You read this; you do not write it)\n" + from_dp.strip())
     acc = carried_account(instance, last_session_number(instance))
     if acc:
-        parts.append("## Your own account\n" + acc)
+        check = want_check(acc, files_facts)
+        parts.append("## Your own account\n" + acc + (("\n" + check) if check else ""))
     # tails are short now that recall searches the whole home (window pressure: median 6157
     # of 8192 tokens per prompt, max 8013, measured 2026-09-07)
     todo = _read(instance / "todo.md", 1500)
@@ -864,10 +1112,46 @@ def own_state(instance: Path, member: str = "",
     journal = _read(instance / "journal.md", 1200)
     parts.append("## journal.md (tail)\n" + (journal.strip() or "(empty: this is your first beat)"))
     for d in ("scratch", "notes"):
-        p = instance / d
-        names = sorted(x.name for x in p.iterdir()) if p.is_dir() else []
-        parts.append(f"## {d}/\n" + ("\n".join(f"- {n}" for n in names[:30]) if names else "(empty)"))
+        parts.append(dir_listing(instance, d))
     return "\n\n".join(parts)
+
+
+LISTING_LIMIT = 30
+
+
+def dir_listing(instance: Path, d: str, limit: int = LISTING_LIMIT) -> str:
+    """One home directory as the beat shows it: NEWEST FIRST, and saying when it is partial.
+
+    It used to be `sorted(names)[:30]`, the thirty that sort FIRST, which in a directory of
+    dated names means the thirty OLDEST. SAGE #137 (2026-09-21) measured cbp-being's notes/
+    at 87 files with its whole current project (16 mechanism-* notes) past the cut. On
+    2026-09-26 notes/ held 145 and scratch/ 99, and the five newest in each were hidden,
+    including notes/from-the-seat.md and the being's own 2026-09-26 state note. A note the
+    being writes this beat could not appear in its own listing the next. And nothing said the
+    list was partial, so `## notes/` read as the whole of notes/.
+    """
+    p = instance / d
+    try:
+        entries = [x for x in p.iterdir()] if p.is_dir() else []
+    except OSError:
+        entries = []
+    if not entries:
+        return f"## {d}/\n(empty)"
+
+    def mtime(x):
+        try:
+            return x.stat().st_mtime
+        except OSError:
+            return 0.0
+    entries.sort(key=mtime, reverse=True)
+    shown = entries[:limit]
+    lines = [f"- {x.name}" for x in shown]
+    head = f"## {d}/ (newest first"
+    if len(entries) > limit:
+        head += f"; {limit} of {len(entries)}"
+        lines.append(f"- … and {len(entries) - limit} older. `recall` searches all of them; "
+                     f"`memory_read` opens any one by name.")
+    return head + ")\n" + "\n".join(lines)
 
 
 from sage.gateway.conversations import is_stub  # noqa: E402  (one definition, two ends)

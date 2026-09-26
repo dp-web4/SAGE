@@ -28,6 +28,7 @@ Env: SAGE_INSTANCE (the being's home), SAGE_SEAT_CONV (default cbp-claude),
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -318,8 +319,12 @@ def cmd_run(args) -> None:
     verdict = (f"timed out after {args.timeout}s — no exit code, so this is not a pass or a fail"
                if timed else f"exit code {rc}")
     print(f"ran {rel}: {verdict}")
+    # The receipt names its input: WHICH version of the file ran. The being's heartbeat compares
+    # this sha with the file now ("unchanged since that run" / "CHANGED since"), which is the
+    # measured answer to "the fix has been applied" (heartbeat.files_and_runs, 2026-09-26).
+    ran_sha = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
     _say("\n".join([
-        f"[request_run] I ran {rel} {WHERE_GPU if args.gpu else WHERE_HIDDEN}. {verdict}.",
+        f"[request_run] I ran {rel} (sha {ran_sha}) {WHERE_GPU if args.gpu else WHERE_HIDDEN}. {verdict}.",
         "",
         block("stdout", out),
         "",
