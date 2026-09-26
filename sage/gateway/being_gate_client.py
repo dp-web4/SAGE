@@ -360,6 +360,138 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
 # ATTRIBUTED to the being in trailers — §6 says signatures come at M3; this is the
 # legibility form, honestly labelled as such in every PR body.
 
+GAME_ACTIONS = ("RESET", "ACTION1", "ACTION2", "ACTION3", "ACTION4", "ACTION5", "ACTION6", "ACTION7", "LOOK")
+
+LOOK_MAX_EDGE = 16      # cells per side of a LOOK window: what this reader can hold per-cell (measured 2026-09-14)
+
+GAME_BATCH_CAP = 8      # dp, 2026-09-15: "build the game verb, batch with cap 8"
+
+_GAME_ID = r"[a-z0-9]{4}"
+
+# THE HOLDOUTS ARE THE TEST. dev-SAGE non-negotiable 3: cn04 / dc22 / lf52 / re86 are never
+# played, read or tuned on — "excluded by code", and until 2026-09-19 this verb was not part of
+# that code: `game` took any four-character id. Refused HERE, where the law's string is composed,
+# and again in the stepper that would run it.
+GAME_HOLDOUTS = ("cn04", "dc22", "lf52", "re86")
+
+# What it may pick. Listed so the choice is real: a selector whose options are not shown is a
+# default with extra steps (the being asked dp for "a new game instance" on 2026-09-19 because
+# nothing told it that it already had one).
+GAME_PLAYABLE = ("ar25", "bp35", "cd82", "ft09", "g50t", "ka59", "lp85", "ls20", "m0r0", "r11l",
+                 "s5i5", "sb26", "sc25", "sk48", "sp80", "su15", "tn36", "tr87", "tu93", "vc33", "wa30")
+
+
+def game_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a game intent: up to GAME_BATCH_CAP probes
+    against the offline ARC-AGI-3 engine, in order, each delta reported in the SAME beat.
+
+    dp, 2026-09-15, on the seat's proposal (shared-context forum, legion-proposal-game-verb):
+    "yes, build the game verb, batch with cap 8". Before this the being paid one beat
+    (~30 min) per probe — it proposed, a seat re-typed the proposal on the next beat. Now
+    the probe is the being's own act in the chain, and a batch of them is one turn.
+
+    Composed like search: the being names the game and a list of probes, the SEAT builds
+    the exact line, the law judges THAT string. The stepper's path is a per-being fact in
+    instance.json (`game_stepper`), carried in ctx by BOTH composition sites; a being with
+    none configured gets a refusal that says so rather than a dead verb.
+
+    THE PROBE LIST IS NOT JSON ON THE COMMAND LINE. The first cut interpolated compact
+    JSON; shlex.split strips its double quotes, so the argv that ran was not the string
+    the law judged (measured in the suite before it shipped). The grammar below has no
+    whitespace and no shell-significant character: `ACTION6:39:47+ACTION1+ACTION6:0:63` —
+    probes joined by `+`, a click's x and y after colons. One token, judged and run alike."""
+    import json
+    import re
+    import sys
+    stepper = (ctx or {}).get("game_stepper")
+    if not stepper:
+        raise ValueError("game: no game is set up on this seat (instance.json has no "
+                         "'game_stepper'); ask the seat, not the law")
+    if any(ch.isspace() for ch in stepper) or not os.path.isabs(stepper):
+        raise ValueError(f"game: the seat's game_stepper must be an absolute path without whitespace, got {stepper!r}")
+    memory_root = (ctx or {}).get("memory_root")
+    if not memory_root or any(ch.isspace() for ch in memory_root):
+        raise ValueError("game requires a memory_root context without whitespace")
+    game = str(args.get("game") or "ft09").strip()     # null / "" from a model means the default
+    if not re.fullmatch(_GAME_ID, game):
+        raise ValueError(f"game 'game' must be a four-character id like 'ft09', got {game!r}")
+    if game in GAME_HOLDOUTS:
+        raise ValueError(f"game: {game!r} is a HOLDOUT — it is the test, and nobody in the fleet "
+                         f"plays, reads or tunes on it. The games you may pick: {', '.join(GAME_PLAYABLE)}")
+    if game not in GAME_PLAYABLE:
+        raise ValueError(f"game: no game {game!r} on this seat. The games you may pick: "
+                         f"{', '.join(GAME_PLAYABLE)}")
+    probes = args.get("probes")
+    if probes is None:
+        # single-probe form: action (+ x,y)
+        # only the coordinates actually given: one of two is a length error the being can read,
+        # not a KeyError (sprout on #218)
+        probes = [[args.get("action", "ACTION6")] + [args[k] for k in ("x", "y") if k in args]]
+    if isinstance(probes, str):
+        try:
+            probes = json.loads(probes)
+        except ValueError:
+            raise ValueError("game 'probes' must be a JSON list like [[\"ACTION6\",36,36],[\"ACTION1\"]]")
+    if not isinstance(probes, list) or not probes:
+        raise ValueError("game 'probes' must be a non-empty list of [action, x, y] (x,y only for ACTION6)")
+    if len(probes) > GAME_BATCH_CAP:
+        raise ValueError(f"game: at most {GAME_BATCH_CAP} probes per call (you gave {len(probes)}); "
+                         f"the cap is the operator's, so split the rest into the next call after reading these")
+    norm = []
+    for i, pr in enumerate(probes):
+        if isinstance(pr, dict):
+            pr = [pr.get("action", "ACTION6")] + [pr[k] for k in ("x", "y") if k in pr]
+        if not isinstance(pr, (list, tuple)) or not pr:
+            raise ValueError(f"game probe {i}: must be [action] or [action, x, y], got {pr!r}")
+        if any(isinstance(v, bool) for v in pr[1:]):
+            # True is an int to Python and would compose as 1 — a coordinate nobody chose
+            raise ValueError(f"game probe {i}: coordinates must be whole numbers 0-63, not true/false")
+        act = str(pr[0]).strip().upper()
+        if act not in GAME_ACTIONS:
+            raise ValueError(f"game probe {i}: action must be one of {list(GAME_ACTIONS)}, got {pr[0]!r}")
+        if act == "LOOK":
+            # LOOK:x0:y0:x1:y1 — a window of the CURRENT board's cell values with coordinates.
+            # Not a move: nothing steps, nothing is recorded, no fire. The being asked for
+            # per-cell values around the sprites it had mapped (2026-09-16 17:08Z); the
+            # objects table is exact but coarse and the frame cannot be counted past ~16 cells.
+            if len(pr) != 5:
+                raise ValueError(f"game probe {i}: LOOK needs [\"LOOK\", x0, y0, x1, y1] (a window, x=col, y=row, 0-63, at most {LOOK_MAX_EDGE} cells per side)")
+            try:
+                x0, y0, x1, y1 = (int(v) for v in pr[1:5])
+            except (TypeError, ValueError):
+                raise ValueError(f"game probe {i}: LOOK bounds must be whole numbers 0-63")
+            if not all(0 <= v <= 63 for v in (x0, y0, x1, y1)) or x1 < x0 or y1 < y0:
+                raise ValueError(f"game probe {i}: LOOK window must satisfy 0 <= x0 <= x1 <= 63 and 0 <= y0 <= y1 <= 63, got {x0},{y0},{x1},{y1}")
+            w, h = x1 - x0 + 1, y1 - y0 + 1
+            if w > LOOK_MAX_EDGE or h > LOOK_MAX_EDGE:
+                # SAY THE SIZE IT ASKED FOR. "at most 16x16" alone read as "0..16 is fine" twice
+                # (2026-09-17): the bounds are inclusive, so 0,0,16,16 is 17x17. A refusal that
+                # names the computed size teaches the arithmetic; one that names only the cap does not.
+                raise ValueError(f"game probe {i}: LOOK bounds are INCLUSIVE, so x0={x0},y0={y0},x1={x1},y1={y1} "
+                                 f"is {w}x{h} cells — at most {LOOK_MAX_EDGE}x{LOOK_MAX_EDGE}. For a "
+                                 f"{LOOK_MAX_EDGE}-wide window from x0, use x1=x0+{LOOK_MAX_EDGE - 1}; "
+                                 f"split a larger region into several LOOKs")
+            norm.append([act, x0, y0, x1, y1])
+            continue
+        if act == "ACTION6":
+            if len(pr) != 3:
+                raise ValueError(f"game probe {i}: ACTION6 is a click and needs exactly [\"ACTION6\", x, y] (x=col, y=row, 0-63)")
+            try:
+                x, y = int(pr[1]), int(pr[2])
+            except (TypeError, ValueError):
+                raise ValueError(f"game probe {i}: x and y must be whole numbers 0-63, got {pr[1]!r},{pr[2]!r}")
+            if not (0 <= x <= 63 and 0 <= y <= 63):
+                raise ValueError(f"game probe {i}: x and y must be within 0-63, got {x},{y}")
+            norm.append([act, x, y])
+        else:
+            if len(pr) != 1:
+                raise ValueError(f"game probe {i}: {act} takes no coordinates; only ACTION6 is a click")
+            norm.append([act])
+    spec = "+".join(":".join(str(v) for v in pr) for pr in norm)
+    return f"{sys.executable} {stepper} --batch {game} {spec} --instance {memory_root}"
+
+
+
 SEARCH_MAX_N = 60        # matches returned at most; a search is a pointer, not a read
 
 
@@ -683,6 +815,10 @@ def _unbounded_reason(effector: str) -> str:
 _REGISTRY = {
     "peer_ask":       dict(tool="peer_ask",     path_args=(),       cmd_arg=None),
     "witness":        dict(tool="witness",      path_args=(),       cmd_arg=None),
+    # game: probes against the offline ARC-AGI-3 engine, the being's own act, batched.
+    # Composed like search (see game_command); the stepper is a per-being fact.
+    "game":           dict(tool="game",        path_args=(),       cmd_arg=None,
+                           compose=game_command),
     "camera":         dict(tool="camera",      path_args=(),        cmd_arg=None,
                            compose=camera_command),
     "memory_read":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
@@ -793,7 +929,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run", "memory_edit", "camera",
+                            "retire_note", "request_run", "memory_edit", "camera", "game",
                             "gaze",    # moves the body's own eyes (2026-09-23)
                             "speak"})  # makes sound in the room (2026-09-26)
 
@@ -915,6 +1051,19 @@ _TOOL_SCHEMAS = {
                     {"path": "the file to run, inside your own home, e.g. notes/my-script.py",
                      "why": "optional: what you expect to learn. Saying it helps the seat decide"},
                     ["path"]),
+    "game": ("Play an ARC-AGI-3 game: up to 8 probes per call, in order, each delta back in this "
+             "turn. ACTION6 is a click at (x=col,y=row) 0-63; ACTION1-5,7 take no coordinates; "
+             "[\"RESET\"] starts the game over from level 0 (use it after GAME_OVER, or any time; "
+             "it is yours to call); [\"LOOK\",x0,y0,x1,y1] is NOT a move — it returns that "
+             "window's cell values (max 16x16). You SEE the result in this same turn: the window "
+             "you looked at and the region your last move changed come back as images with every "
+             "cell's value drawn in it. This is the GAME's synthetic feed, not your camera. "
+             "Full boards ride your next beat; current.md and board.txt are rewritten. "
+             "Predict before you read.",
+             {"probes": "list of probes, at most 8, e.g. [[\"ACTION6\",36,36],[\"LOOK\",30,30,45,45],[\"RESET\"]]",
+              "game": ("optional: which game (default ft09). Yours to choose: " + ", ".join(GAME_PLAYABLE)
+                       + ". Each keeps its own move log; switching loses nothing.")},
+             ["probes"]),
     "camera": ("Capture ONE frame from this machine's camera into your own scratch — no "
               "stream, nothing persists across beats. The seat runs ffmpeg against /dev/"
               "video0 (or a plain device node you name) and writes one JPEG to the path "
@@ -1149,8 +1298,11 @@ class BeingGateClient:
     def __init__(self, member_id: str, identity_path: str, workspace: str,
                  dispatcher: "Optional[Dispatcher]" = None,
                  host_session_id: Optional[str] = None,
-                 worktree: Optional[str] = None):
+                 worktree: Optional[str] = None,
+                 game_stepper: Optional[str] = None):
         self.member_id = member_id
+        # the seat-side ARC stepper `game` composes with; a per-being fact (instance.json)
+        self.game_stepper = game_stepper
         self.workspace = workspace
         # THE BEING'S OWN WORKTREE, and the gate needs it as much as the dispatcher does.
         #
@@ -1268,7 +1420,9 @@ class BeingGateClient:
         # that breaks them -- it would turn every such test into a KeyError three frames away
         # from the cause (measured while landing this fix).
         return {"worktree": getattr(self, "worktree", None),
-                "memory_root": getattr(self, "memory_root", None)}
+                "memory_root": getattr(self, "memory_root", None),
+                # the seat's ARC stepper: `game` composes the line the law judges from it
+                "game_stepper": getattr(self, "game_stepper", None)}
 
     # -- gate one intent (intent -> verdict), fail-closed --------------------
     def gate(self, intent: BeingIntent) -> GatewayVerdict:
