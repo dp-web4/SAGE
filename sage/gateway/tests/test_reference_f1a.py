@@ -510,12 +510,132 @@ def test_a_py_receipt_says_whether_python_can_parse_the_file_now():
     home = Path(root)
     r = disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "def main():\n    pass\n"}), _ALLOW)
     assert r.ok and "Python can parse s.py now. That is not the same as running it." in r.result
-    # the being's real 20:18 write: a bracketed description appended where an edit was meant
-    r = disp(BeingIntent("memory_write", {"path": "notes/s.py",
-                                          "content": "            noise=0.1,\n        )"}), _ALLOW)
-    assert r.ok and "Python cannot parse s.py now: IndentationError at line 3" in r.result, r.result
-    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3, "end_line": 4, "new": ""}), _ALLOW)
-    assert r.ok and "Python can parse s.py now" in r.result, r.result
+    # a new file is not gated: its receipt carries the parse error
+    r = disp(BeingIntent("memory_write", {"path": "notes/t.py",
+                                          "content": "def main():\n            noise=0.1,\n        )"}), _ALLOW)
+    assert r.ok and "Python cannot parse t.py now: IndentationError at line 3" in r.result, r.result
+    r = disp(BeingIntent("memory_edit", {"path": "notes/t.py", "start_line": 2, "end_line": 3, "new": "    pass"}), _ALLOW)
+    assert r.ok and "Python can parse t.py now" in r.result, r.result
+
+
+LABELS = [  # cbp-being's real appends to mechanism-training-script-clean.py
+    "[Fix #1: Removed extra closing parenthesis on line 1685 in argparse.ArgumentParser call]\n",
+    "[BEAT 2026-09-23 05:18 UTC] Applying fix #1: removing extra closing parenthesis on line 1685.\n"
+    "Line 1685 currently reads:\n    parser = argparse.ArgumentParser(description=\"x\"))\n",
+    "[Remove lines 344-347, which are a broken duplicate of the for loop at lines 340-343]",
+    "Remove lines 180-184 (orphaned docstring tail and return statement) and insert new label generation code",
+]
+
+
+def test_a_description_of_an_edit_is_refused_before_it_lands_in_a_py_file():
+    """2026-09-21..23: 15 memory_write calls appended prose ("[Fix #1: Removed ...]") to the
+    being's script where an edit was meant; every receipt said "only adds" and named
+    memory_edit, and the being still reported the fixes applied. Refuse before writing."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text("def main():\n    pass\n")
+    for text in LABELS:
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert not r.ok and "nothing was written to s.py" in r.error, r.error
+        assert "memory_edit" in r.error and "journal.md" in r.error and "Python cannot read line 1 of your text as code" in r.error
+        assert "Python can parse s.py now" in r.error
+        assert f.read_text() == "def main():\n    pass\n"
+    # also refused when the file is already broken -- that is where the labels landed
+    f.write_text("x = f(1))\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": LABELS[0]}), _ALLOW)
+    assert not r.ok and "Python cannot parse s.py now" in r.error and f.read_text() == "x = f(1))\n"
+
+
+def test_code_appended_to_a_py_file_still_lands():
+    """What must stay open on a healthy file: a whole function, a real comment, and the last part
+    of a program written in parts (it makes the file parse). Indented fragments used to be here
+    ("dedented it parses"). Appended to a working file they make it INVALID, and the monotonic
+    rule refuses that (test_a_healthy_file_is_never_made_invalid_by_an_append)."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    for text in ("def g():\n    return 1\n",
+                 "# TODO: tune lr\n"):
+        f.write_text("import os\n")
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert r.ok, (text, r.error)
+    f.write_text("def h(\n    a,\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    b,\n):\n    return a + b\n"}), _ALLOW)
+    assert r.ok and "Python can parse s.py now" in r.result, r.error
+    # not .py, and not an existing file: ungated
+    for path in ("journal.md", "notes/new.py"):
+        r = disp(BeingIntent("memory_write", {"path": path, "content": LABELS[0]}), _ALLOW)
+        assert r.ok, (path, r.error)
+
+
+BROKEN_MID = "import os\nx = f(1))\ndef g():\n    return 1\n"     # stops at line 2, not at the end
+
+
+def test_an_append_to_a_broken_file_that_leaves_the_error_in_place_is_refused():
+    """GPT's review of #186: an append below the first error cannot repair it. The two measured
+    forms that the grammar check alone let through, both refused, with the file unchanged:
+    - seq 3405 (2026-09-23 07:15): a label written as `#` comments. Comments are Python.
+    - 2026-09-24 10:31: VALID Python appended to a file stopped mid-way. The stop did not move."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    for text in ("# Remove stray ']' at line 1736 ...\n# OLD (line 1736): ]\n",
+                 "def train(model, X, y):\n    for epoch in range(10):\n        model.step(X, y)\n"):
+        f.write_text(BROKEN_MID)
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert not r.ok, (text, r.result)
+        assert "stops at line 2" in r.error and "Appending below it cannot fix that" in r.error
+        assert "memory_edit" in r.error
+        assert f.read_text() == BROKEN_MID, "nothing written"
+
+
+def test_an_append_that_repairs_or_grows_an_unfinished_program_still_lands():
+    """What the invariant must keep open on a broken file: the append that makes it parse (the
+    last part of a program written in parts), and code that moves an end-of-file stop later
+    (an unfinished program still growing). A label that 'moves' that stop is not code, so it is
+    still refused."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text("def h(\n    a,\n")                                   # stops at the end
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    b,\n):\n    return a + b\n"}), _ALLOW)
+    assert r.ok and "Python can parse s.py now" in r.result, r.error
+    f.write_text("def h(\n    a,\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    b,\n    c,\n"}), _ALLOW)
+    assert r.ok, r.error                                                 # still open, but grew
+    f.write_text("def h(\n    a,\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "[Fix: closed the call on line 1]\n"}), _ALLOW)
+    assert not r.ok and f.read_text() == "def h(\n    a,\n"
+
+
+def test_a_healthy_file_is_never_made_invalid_by_an_append():
+    """GPT's ruling on #186 (2026-09-26): healthy -> healthy. The original rule admitted these
+    because each parses on its own once dedented (or as a function body), but appended to a
+    working file each makes it INVALID ("unexpected indent", "'return' outside function"). The
+    file is left exactly as it was."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    # Ends at module level: a trailing def would make an indented fragment a legitimate
+    # continuation of its body (it parses), which the rule correctly allows.
+    healthy = "import os\n\nx = 1\n"
+    for text in ("        X = np.load(data_path)\n        y = X[:, 0]\n",
+                 "    y = X.sum()\n    return X, y\n"):
+        f.write_text(healthy)
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert not r.ok, (text, r.result)
+        assert "this text would break it" in r.error and "Python would stop at line" in r.error
+        assert f.read_text() == healthy, "nothing written"
+    # the same fragment continuing a trailing function body keeps the file healthy, and lands
+    f.write_text("def g(X):\n    X = X * 2\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    y = X.sum()\n    return X, y\n"}), _ALLOW)
+    assert r.ok and "Python can parse s.py now" in r.result, r.error
+
+
+def test_a_comment_on_a_healthy_file_is_still_a_comment():
+    """The control GPT asked for: a real source comment on a file that parses is not a label
+    that masks a broken stop, and it lands."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text("import os\n\ndef g():\n    return 1\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "# returns the batch size\n"}), _ALLOW)
+    assert r.ok, r.error
 
 
 def test_a_non_python_receipt_says_nothing_about_parsing():
