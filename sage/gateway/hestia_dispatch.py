@@ -693,6 +693,331 @@ class HestiaF1aDispatcher:
                                                "evicted": out.get("evicted", 0)})
 
     # -- pr_review: the seat posts the being's review, as the gated command -------
+    def _git_ctx(self) -> dict:
+        """The compose context for the verbs that name the being's branches — the SAME facts
+        the gate composes from (BeingGateClient._compose_ctx), so the string the law judged is
+        the string that runs."""
+        return {"worktree": self.worktree, "memory_root": getattr(self, "memory_root", None),
+                "member": getattr(self, "plugin_id", None)}
+
+    def _do_git_restore(self, intent: BeingIntent) -> ResultEnvelope:
+        """Put one file back to a committed state. Same composed shape as check/git_read:
+        the being names a rev and a path, the SEAT builds the command, the law judges that
+        string, and the being never holds a flag.
+
+        The result reports the file's size before and after, because "it worked" and "it
+        changed nothing" are different answers and only one of them is progress."""
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import git_restore_command
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="git_restore needs a worktree of your own; none is configured")
+        try:
+            cmd = git_restore_command(intent.args, self._git_ctx())
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        target = os.path.realpath(os.path.join(self.worktree, str(intent.args["path"])))
+        # ONE FILE, asked of git rather than of the working tree: a path that is a directory
+        # at <rev> (or does not exist there) would restore many files or none, and the answer
+        # below speaks of exactly one.
+        rel = os.path.relpath(target, os.path.realpath(self.worktree))
+        kind = subprocess.run(["git", "cat-file", "-t", f"{intent.args['rev']}:{rel}"],
+                              cwd=self.worktree, env=_worktree_env(), text=True,
+                              capture_output=True, timeout=30)
+        if kind.stdout.strip() != "blob":
+            what = kind.stdout.strip() or "nothing"
+            return ResultEnvelope(ok=False, error=(
+                f"git_restore puts back ONE file, and at {intent.args['rev']} {rel!r} is "
+                f"{'a directory' if what == 'tree' else what}. Name a file that exists there"))
+        before = os.path.getsize(target) if os.path.exists(target) else 0
+        try:
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(), text=True,
+                                  capture_output=True, timeout=120)
+        except Exception as e:
+            return ResultEnvelope(ok=False, error=f"git_restore could not run: {type(e).__name__}: {e}")
+        if proc.returncode != 0:
+            return ResultEnvelope(ok=False,
+                                  error=f"git_restore failed: {(proc.stderr or proc.stdout).strip()[:300]}")
+        after = os.path.getsize(target) if os.path.exists(target) else 0
+        rev = str(intent.args["rev"])
+        return ResultEnvelope(
+            ok=True,
+            result=(f"RESTORED {os.path.basename(target)} to its content at {rev}. "
+                    f"It was {before} bytes and is now {after} bytes. Any uncommitted edits you "
+                    f"had made to this one file are gone; nothing else was touched."),
+            witness_id=self._local._witness(f"git_restore {os.path.basename(target)} @ {rev}"))
+
+    def _do_pr_amend(self, intent: BeingIntent) -> ResultEnvelope:
+        """Revise a proposal already open: commit onto the same branch, push, optionally
+        replace the PR body. Same witnessed shape as pr_open.
+
+        WHY IT EXISTS: pr_open claims a slug once and refuses it thereafter, so a being whose
+        PR got "changes requested" could not deliver them — measured on SAGE#63, where the
+        review asked for a corrected body and a green suite and the author had no verb that
+        could reach either. A review loop whose author cannot answer the review is not a loop.
+
+        The being names neither branch nor PR number; both are read from the worktree, so this
+        can only ever revise its own open proposal. It still cannot merge."""
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import pr_amend_command, pr_attribution
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="pr_amend needs a worktree of your own; none is configured")
+        try:
+            cmd = pr_amend_command(intent.args, self._git_ctx())
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        title = " ".join(str(intent.args["title"]).split())
+        message = str(intent.args["message"]).rstrip()
+        new_body = str(intent.args.get("body", "") or "").rstrip()
+
+        def git(*a, inp=None):
+            return subprocess.run(["git", *a], cwd=self.worktree, env=_worktree_env(), text=True, input=inp,
+                                  capture_output=True, timeout=120)
+
+        # Checked HERE too, before anything is witnessed or pushed: the composer's check is
+        # what the law saw, and this is what acts. Neither may rely on the other (#217).
+        from sage.gateway.being_gate_client import own_proposal_branch
+        try:
+            branch = own_proposal_branch(self.worktree, self._git_ctx())
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        st = git("status", "--porcelain")
+        if st.returncode != 0:
+            return ResultEnvelope(ok=False, error=f"git status failed: {st.stderr[:200]}")
+        if not st.stdout.strip() and not new_body:
+            return ResultEnvelope(ok=False,
+                                  error="pr_amend: nothing to revise — the worktree is clean and "
+                                        "you supplied no new body. Change the code or the body first")
+
+        begin = self._call("hestia_begin_action", {"tool_name": "pr_amend", "target": branch})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        steps = []
+
+        def fail(stage, proc):
+            detail = (getattr(proc, "stderr", "") or getattr(proc, "stdout", "") or "").strip()[:400]
+            try:
+                self._call("hestia_record_outcome", {"action_id": action_id, "success": False,
+                                                     "magnitude": 0.0, "error": f"{stage}: {detail[:200]}"})
+            except Exception:
+                pass
+            return ResultEnvelope(ok=False, witness_id=action_id,
+                                  error=f"pr_amend failed at {stage}: {detail}",
+                                  result={"steps": steps, "branch": branch})
+
+        sha = git("rev-parse", "--short=9", "HEAD").stdout.strip()
+        if st.stdout.strip():
+            r = git("add", "-A")
+            if r.returncode != 0:
+                return fail("add", r)
+            steps.append("add")
+            trailers = pr_attribution(self.plugin_id, action_id, self.being_lct)
+            r = git("commit", "-q", "-F", "-", inp=f"{title}\n\n{message}\n\n{trailers}\n")
+            if r.returncode != 0:
+                return fail("commit", r)
+            sha = git("rev-parse", "--short=9", "HEAD").stdout.strip()
+            steps.append(f"commit {sha}")
+            r = git("push", "-q", "origin", branch)
+            if r.returncode != 0:
+                return fail("push", r)
+            steps.append("push")
+
+        edited = False
+        if new_body:
+            body_out = (new_body + "\n\n---\n"
+                        f"Revised by **{self.plugin_id}** via pr_amend; commit `{sha}` carries the "
+                        f"`Being` / `Being-LCT` / `Witness` / `Seat` trailers. Still attribution "
+                        f"rather than a signature (PRD r3 §6), and the being still cannot merge.\n"
+                        f"hestia witness action: `{action_id}`\n")
+            try:
+                proc = subprocess.run(shlex.split(cmd), input=body_out, text=True,
+                                      cwd=self.worktree, env=_worktree_env(), capture_output=True, timeout=120)
+            except Exception as e:
+                proc = subprocess.CompletedProcess(cmd, 1, "", f"{type(e).__name__}: {e}")
+            if proc.returncode != 0:
+                return fail("gh pr edit", proc)
+            steps.append("body")
+            edited = True
+        try:
+            self._call("hestia_record_outcome", {"action_id": action_id, "success": True, "magnitude": 0.0})
+        except Exception:
+            pass
+        return ResultEnvelope(ok=True, witness_id=action_id,
+                              result={"branch": branch, "commit": sha, "body_replaced": edited,
+                                      "steps": steps, "action_id": action_id,
+                                      "note": "the reviewer sees the revision; they decide. "
+                                              "You still cannot merge it."})
+
+    def _do_pr_open(self, intent: BeingIntent) -> ResultEnvelope:
+        """The being's worktree changes become a pull request, attributed to it.
+
+        Order: begin_action -> branch -> add -> commit (message over stdin, trailers the
+        being cannot alter) -> push -> `gh pr create` (the command the gate judged) ->
+        record_outcome. Every failure short of the push leaves the worktree on its new
+        branch with the commit intact, so nothing the being wrote is lost by a failed act.
+
+        The seat's git identity authors the commit; the trailers attribute it (PRD r3 §7.2).
+        That is the legibility form — §6 says a being-signed tree hash comes at M3 — and the
+        PR body says so rather than letting a trailer pass for a signature."""
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import pr_open_command, pr_attribution
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="pr_open needs a worktree of your own; none is configured")
+        try:
+            cmd = pr_open_command(intent.args, self._git_ctx())
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        slug = str(intent.args["slug"]).strip()
+        title = " ".join(str(intent.args["title"]).split())
+        body = str(intent.args["body"]).rstrip()
+        from sage.gateway.being_gate_client import being_branch_prefix
+        branch = f"{being_branch_prefix(self._git_ctx())}/{slug}"   # the composer checked it resolves
+
+        def git(*a, inp=None):
+            return subprocess.run(["git", *a], cwd=self.worktree, env=_worktree_env(), text=True, input=inp,
+                                  capture_output=True, timeout=120)
+
+        # nothing to propose is a refusal with a reason, not an empty PR
+        st = git("status", "--porcelain")
+        if st.returncode != 0:
+            return ResultEnvelope(ok=False, error=f"git status failed: {st.stderr[:200]}")
+        if not st.stdout.strip():
+            return ResultEnvelope(ok=False, error="pr_open: your worktree has no changes to "
+                                                  "propose. Write the change first, then open the PR")
+        if git("rev-parse", "--verify", "--quiet", branch).returncode == 0:
+            return ResultEnvelope(ok=False, error=f"pr_open: branch {branch} already exists; "
+                                                  "pick another slug")
+
+        begin = self._call("hestia_begin_action", {"tool_name": "pr_open", "target": branch})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+
+        steps = []
+        def fail(stage, proc):
+            detail = (proc.stderr or proc.stdout or "").strip()[:400]
+            try:
+                self._call("hestia_record_outcome", {"action_id": action_id, "success": False,
+                                                     "magnitude": 0.0, "error": f"{stage}: {detail[:200]}"})
+            except Exception:
+                pass
+            return ResultEnvelope(ok=False, witness_id=action_id,
+                                  error=f"pr_open failed at {stage}: {detail}",
+                                  result={"steps": steps, "branch": branch})
+
+        r = git("checkout", "-b", branch)
+        if r.returncode != 0:
+            return fail("branch", r)
+        steps.append(f"branch {branch}")
+        r = git("add", "-A")
+        if r.returncode != 0:
+            return fail("add", r)
+        # A BEING'S PROPOSAL MUST NOT CARRY THE BEING'S RECORD. The worktree holds a tracked
+        # copy of the instance dir, so `add -A` can stage journal/notes/conversations into a
+        # PR to a PUBLIC repo — which is exactly what dp's 2026-09-20 ruling took out. Measured
+        # on #157: the PR carried 141 `sage/instances/` files, none of them the being's change,
+        # and nothing in the verb's answer said so. The being cannot check what it is not told.
+        staged = git("diff", "--cached", "--name-only")
+        private = [f for f in (staged.stdout or "").split() if f.startswith("sage/instances/")]
+        if private:
+            git("reset", "-q")
+            git("checkout", "-q", "-")
+            git("branch", "-q", "-D", branch)
+            try:
+                self._call("hestia_record_outcome", {"action_id": action_id, "success": False,
+                                                     "magnitude": 0.0, "error": "pr_open: instance state staged"})
+            except Exception:
+                pass
+            return ResultEnvelope(
+                ok=False, witness_id=action_id,
+                error=("pr_open refused and nothing was pushed: this would have put "
+                       f"{len(private)} file(s) under sage/instances/ into a public pull request "
+                       f"— your own record, not your change (e.g. {private[0]}). That is not a "
+                       "rule you broke; the verb should never have been able to. Commit or move "
+                       "those out of the worktree first, or ask the seat to carry the change."))
+        steps.append("add")
+        trailers = pr_attribution(self.plugin_id, action_id, self.being_lct)
+        message = f"{title}\n\n{body}\n\n{trailers}\n"
+        r = git("commit", "-q", "-F", "-", inp=message)
+        if r.returncode != 0:
+            return fail("commit", r)
+        # WHAT THIS PROPOSAL ACTUALLY CARRIES. The branch is cut from the worktree's HEAD, and
+        # that base may be a long way from main — on 2026-09-21 it was 442 commits behind, so a
+        # 41-line change arrived as 198 files and 31,456 insertions. The being verified its own
+        # diff and could not have known: the verb answered with a URL and nothing else. A
+        # reviewer read it as the being's proposal. Say it, in the answer AND in the PR body.
+        carry = _carry_vs_main(git)
+        sha = git("rev-parse", "--short=9", "HEAD").stdout.strip()
+        steps.append(f"commit {sha}")
+        r = git("push", "-q", "-u", "origin", branch)
+        if r.returncode != 0:
+            return fail("push", r)
+        steps.append("push")
+
+        if carry.get("known") and not carry.get("mine_only"):
+            carry_line = (
+                f"\n\n> **What this branch carries:** {carry['commits']} commits / "
+                f"{carry['files']} files against `origin/main` ({carry['shortstat']}), because it "
+                f"was cut from the being's worktree, which is {carry['behind_main']} commits behind "
+                f"main. Only the newest commit is the being's change; the rest is that base's "
+                f"unmerged lineage. Read the last commit, not the PR diff.\n")
+        elif carry.get("known"):
+            carry_line = f"\n\n> **What this branch carries:** one commit, {carry['files']} files against `origin/main`.\n"
+        else:
+            carry_line = "\n\n> **What this branch carries:** could not be measured (no `origin/main` reachable).\n"
+        pr_body = (body + carry_line + "\n---\n"
+                   f"Authored by **{self.plugin_id}**, a SAGE being, from its own worktree; "
+                   f"the seat composed the outward act. Commit `{sha}` carries `Being` / "
+                   f"`Being-LCT` / `Witness` / `Seat` trailers — attribution, not yet a "
+                   f"signature (PRD r3 §6). The being cannot merge this; a NOT-SAME reviewer "
+                   f"decides.\n"
+                   + (f"LCT: `{self.being_lct}`\n" if self.being_lct else "")
+                   + f"hestia witness action: `{action_id}`\n")
+        try:
+            proc = subprocess.run(shlex.split(cmd), input=pr_body, text=True,
+                                  cwd=self.worktree, env=_worktree_env(), capture_output=True, timeout=120)
+        except Exception as e:
+            proc = subprocess.CompletedProcess(cmd, 1, "", f"{type(e).__name__}: {e}")
+        if proc.returncode != 0:
+            return fail("gh pr create", proc)
+        url = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else ""
+        steps.append("pr")
+        try:
+            self._call("hestia_record_outcome", {"action_id": action_id, "success": True, "magnitude": 0.0})
+        except Exception:
+            pass
+        # THE REVIEW TRIGGER. dp, 2026-09-09: "we don't want being's prs sitting unreviewed."
+        # A being's PR is opened by a governed act that no human watched, so nothing else
+        # would announce it. The queue file is the durable half of the trigger — a seat is a
+        # session and may not be running — and the sweep timer reads it. Failure to queue
+        # never fails the PR: the PR is real either way, and a lost queue entry is caught by
+        # the sweep, which lists open PRs directly.
+        queued = None
+        try:
+            queued = _queue_for_review(self.memory_root, member=self.member, url=url,
+                                       branch=branch, commit=sha, action_id=action_id)
+        except Exception as e:
+            queued = f"not queued ({type(e).__name__}: {e}) — the sweep will still find it"
+        return ResultEnvelope(ok=True, witness_id=action_id,
+                              result={"pr": url, "branch": branch, "commit": sha,
+                                      "steps": steps, "action_id": action_id,
+                                      "review_queued": queued, "carries": carry,
+                                      "note": "your worktree is now on this branch; a reviewer "
+                                              "who is not you decides. You cannot merge it."
+                                              + ("" if carry.get("mine_only") or not carry.get("known") else
+                                                 f" NOTE: the diff a reviewer sees is {carry['commits']} commits / "
+                                                 f"{carry['files']} files, because your worktree is "
+                                                 f"{carry['behind_main']} commits behind main — only your newest "
+                                                 f"commit is yours, and the PR body says so.")})
+
     def _do_pr_review(self, intent: BeingIntent) -> ResultEnvelope:
         """Only ever reached on an intent the gate ALLOWED as the exact `gh pr review`
         command below. Order: begin_action (chain) -> post -> record_outcome. The
@@ -2183,6 +2508,60 @@ def forum_publisher(shared_context_root: str, from_name: str,
             subprocess.run(["git", "-C", root, "push", "-q"], check=True)
         return f"shared-context/{rel}"
     return publish
+
+
+REVIEW_QUEUE = "review_queue.jsonl"
+
+
+def _queue_for_review(memory_root, *, member: str, url: str, branch: str,
+                      commit: str, action_id) -> str:
+    """Record that a being opened a PR and it is waiting on a reviewer.
+
+    Append-only beside the being's own records, because that is what survives a seat
+    session ending. The sweep (scripts/being_pr_sweep.sh) reads GitHub directly and does
+    not depend on this file — the queue exists so the wait is visible from the being's own
+    directory too, and so a review can be tied back to the witnessed act that opened it."""
+    import json as _json
+    from datetime import datetime, timezone
+    from pathlib import Path as _P
+    q = _P(memory_root) / REVIEW_QUEUE
+    row = {"ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+           "member": member, "pr": url, "branch": branch, "commit": commit,
+           "action_id": action_id, "state": "awaiting_review"}
+    with open(q, "a", encoding="utf-8") as f:
+        f.write(_json.dumps(row) + "\n")
+    return f"queued in {q.name} at {row['ts']}"
+
+
+def _carry_vs_main(git) -> dict:
+    """What a proposal branch carries relative to `origin/main`, measured, never guessed.
+
+    `pr_open` cuts the branch from the worktree's HEAD. When that base is current main the
+    answer is the being's change and nothing else; when it is not, the PR's diff is the whole
+    unmerged lineage. Measured 2026-09-21 on SAGE #157: a 2-file, 41-line change opened as
+    198 files and 31,456 insertions across 320 commits, because the worktree sat on a branch
+    442 commits behind main. Nothing in the verb's answer said so, so the being could not have
+    checked and the reviewer read the whole thing as the being's proposal.
+
+    Best effort: a fetch that fails, or no origin/main, yields `{"known": False}` and the
+    caller says it does not know — which is a different sentence from a small number."""
+    out = {"known": False}
+    try:
+        git("fetch", "-q", "origin", "main")
+        base = git("merge-base", "HEAD", "origin/main").stdout.strip()
+        if not base:
+            return out
+        stat = git("diff", "--shortstat", f"{base}..HEAD").stdout.strip()
+        files = [f for f in git("diff", "--name-only", f"{base}..HEAD").stdout.split() if f]
+        commits = git("rev-list", "--count", f"{base}..HEAD").stdout.strip()
+        behind = git("rev-list", "--count", f"HEAD..origin/main").stdout.strip()
+        out = {"known": True, "files": len(files), "commits": int(commits or 0),
+               "behind_main": int(behind or 0), "shortstat": stat,
+               "mine_only": int(commits or 0) == 1}
+    except Exception:
+        pass
+    return out
+
 
 
 if __name__ == "__main__":  # live smoke against the local daemon: mesh -> member_notify

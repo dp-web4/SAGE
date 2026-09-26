@@ -360,6 +360,219 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
 # ATTRIBUTED to the being in trailers — §6 says signatures come at M3; this is the
 # legibility form, honestly labelled as such in every PR body.
 
+PR_REPO = "dp-web4/SAGE"
+
+
+def being_branch_prefix(ctx: Optional[dict]) -> str:
+    """The namespace a being's branches live under: the being's own member id.
+
+    On the Legion carrier this was the literal `legion-being/`, which is right for exactly one
+    being. On main the verbs serve every being, and a prefix typed into the code would file
+    sprout's proposals under Legion's name. It is NOT read from the branch the worktree is
+    on: that would let pr_amend push onto whatever branch the worktree happened to stand on,
+    a seat's included. The member is the one the law judges the act as, supplied by the seat
+    in ctx and never by the being."""
+    member = str((ctx or {}).get("member") or "")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,60}", member):
+        raise ValueError("this seat did not say whose worktree this is (no member in the "
+                         "compose context), so no branch of yours can be named. Tell your seat")
+    return member
+
+
+def pr_base_branch(worktree: str, ctx: Optional[dict] = None) -> str:
+    """The branch a being's PR targets: the upstream its worktree branch tracks.
+
+    Was a hard-coded `legion/mission-artifact` — correct only while the live being rides
+    that development branch (GPT review of #56, #8). After decomposition the integration
+    target moves, and a PR verb that still aimed at a historical feature carrier would
+    propose work against dead history. So the base is READ from the worktree: whatever
+    `legion-being/work` tracks is what the seat last synced it to, which is the current
+    governed integration target by construction. `SAGE_PR_BASE` overrides explicitly."""
+    import subprocess
+    env = os.getenv("SAGE_PR_BASE", "").strip()
+    if env:
+        return env
+    prefix = being_branch_prefix(ctx)
+    try:
+        r = subprocess.run(["git", "rev-parse", "--abbrev-ref",
+                            f"{prefix}/work@{{upstream}}"],
+                           cwd=worktree, text=True, capture_output=True, timeout=10)
+        up = r.stdout.strip()
+        if r.returncode == 0 and up.startswith("origin/"):
+            return up[len("origin/"):]
+    except Exception:
+        pass
+    # NO GUESSING. This used to fall back to "main", and that fallback cost the being its
+    # first pull request: `legion-being/work` tracked nothing, so #63 targeted main and
+    # showed 9,271 additions across 55 files for a 159-line change — unreviewable at a
+    # glance, and closed. A wrong base is worse than no PR, because the being cannot see
+    # the diff it proposed and has no way to discover the base was wrong.
+    raise ValueError(
+        "cannot determine the base branch for your pull request: your <you>/work branch has no "
+        "upstream. Tell your seat — it sets the upstream when it syncs your worktree "
+        "(scripts/sync_being_worktree.sh), or SAGE_PR_BASE can name the base explicitly. "
+        "Refusing rather than guessing 'main': a mis-based PR buries a small change in "
+        "thousands of unrelated lines")
+
+
+_SLUG = r"[a-z0-9][a-z0-9-]{1,40}"
+
+
+def pr_open_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a pr_open intent — the `gh pr create`, which is
+    the outward act. The git preparation is not composed here because none of it carries
+    being-supplied text into a shell: the message travels by stdin."""
+    import re
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError("pr_open needs a worktree of your own; none is configured on this seat")
+    slug = str(args.get("slug", "")).strip()
+    if not re.fullmatch(_SLUG, slug):
+        raise ValueError("pr_open 'slug' names your branch tail: lowercase letters, digits and "
+                         f"dashes, 2-41 chars, got {slug!r}")
+    title = " ".join(str(args.get("title", "")).split())
+    if not (8 <= len(title) <= 120):
+        raise ValueError("pr_open 'title' must be one line, 8-120 characters")
+    if not str(args.get("body", "")).strip():
+        raise ValueError("pr_open needs a 'body': what changed, what you verified, what you "
+                         "only suspect, and the check output with its tree head")
+    branch = f"{being_branch_prefix(ctx)}/{slug}"
+    # shlex-quote the title: it is the ONE being-supplied string on the command line
+    import shlex
+    return (f"gh pr create --repo {PR_REPO} --base {pr_base_branch(worktree, ctx)} --head {branch} "
+            f"--title {shlex.quote(title)} --body-file -")
+
+
+def git_restore_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """`git checkout <rev> -- <path>`: put one file back to a committed state.
+
+    WHY A VERB FOR THIS. Restoring a file was possible in principle with git_read cat plus
+    memory_write mode=replace — and impossible in practice, because it means copying the
+    whole file verbatim through the being's own output. Measured: legion-being spent
+    fifteen beats unable to restore a 4,621-char file it could read perfectly well. The
+    reconstruction, not the intent, was the wall.
+
+    SAFETY IS THE REV. The content can only come from a commit, so this cannot invent a
+    file or write being-authored bytes — everything it can produce already exists in the
+    repository's history. What it CAN destroy is uncommitted work on that one path, which
+    is the point (that is what "undo my mess" means) and is said plainly in the result."""
+    import re
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError("git_restore needs a worktree of your own; none is configured on this seat")
+    rev = str(args.get("rev", "")).strip()
+    if not re.fullmatch(_REV, rev):
+        raise ValueError(f"git_restore 'rev' must be a sha, HEAD, HEAD~n or a branch name, got {rev!r}")
+    path = str(args.get("path", "")).strip()
+    if not path:
+        raise ValueError("git_restore needs a 'path': the one file to put back")
+    if any(ch.isspace() for ch in path) or any(ch.isspace() for ch in rev):
+        raise ValueError("git_restore 'path' and 'rev' may not contain whitespace")
+    if path.startswith("-") or ".." in path.split("/"):
+        raise ValueError(f"git_restore 'path' must be a plain path inside your worktree, got {path!r}")
+    full = os.path.realpath(os.path.join(worktree, path))
+    root = os.path.realpath(worktree)
+    if not full.startswith(root + os.sep):
+        raise ValueError(_escape_refusal("git_restore", path, worktree))
+    # WHAT GIT EXECUTES IS NOT RESTORABLE. The content comes from a commit, but "a commit" is
+    # any rev the repo holds — including a branch nobody reviewed — and SAGE sets
+    # core.hooksPath=.githooks, so a restored `.githooks/pre-commit` would be code the seat's
+    # next git act runs. The seat's own git carries no hooks (_worktree_env, #212); this is
+    # the second layer, so that one fix is never the only thing between them.
+    if os.path.isdir(full):
+        # `git checkout <rev> -- <dir>` restores EVERY file under it, and the answer said "this
+        # one file ... nothing else was touched" — every word of which was then false (sprout
+        # on #217). The dispatcher also asks git that <rev>:<path> is a blob.
+        raise ValueError(f"git_restore puts back ONE file, and {path!r} is a directory. Name "
+                         "the file inside it you want restored")
+    top = os.path.relpath(full, root).split(os.sep, 1)[0]
+    # casefold: on a case-insensitive volume (APFS by default, NTFS) `.GITHOOKS` IS `.githooks`,
+    # so a case variant is the same door (legion, reviewing SAGE #210's patch parser)
+    if top.casefold() in (".githooks", ".git"):
+        raise ValueError(f"git_restore cannot put back {path!r}: {top}/ holds what git EXECUTES, "
+                         "and no being writes there. Everything else in your worktree is yours "
+                         "to restore")
+    return f"git --no-pager -C {worktree} checkout {rev} -- {full}"
+
+
+def pr_amend_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command for a pr_amend intent: `gh pr edit --body-file -` on the PR the
+    being's current branch already has open, or `true` when only the commit changes.
+
+    WHY THIS VERB EXISTS. pr_open refuses a branch that already exists, by design — a slug
+    is claimed once. The consequence, unnoticed until it bit: a being whose PR gets
+    "changes requested" HAS NO WAY TO DELIVER THEM. Measured 2026-09-09 on SAGE#63: the
+    review asked for a corrected body and a green suite, and the author could neither
+    amend the branch nor edit the body, because the only verb that reaches a PR opens one.
+    A review loop whose author cannot answer the review is not a loop.
+
+    The being names no branch and no PR number: both are read from the worktree it is
+    standing in, so it can only ever amend its own open proposal."""
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError("pr_amend needs a worktree of your own; none is configured on this seat")
+    title = " ".join(str(args.get("title", "")).split())
+    if not (8 <= len(title) <= 120):
+        raise ValueError("pr_amend 'title' is the message for the new commit: one line, 8-120 chars")
+    if not str(args.get("message", "")).strip():
+        raise ValueError("pr_amend needs a 'message': what this revision changes and why, "
+                         "which becomes the commit body")
+    # THE BRANCH IS CHECKED BEFORE THE EARLY RETURN. It used to be checked only inside
+    # _pr_number_for_branch, which the no-body form never calls — so an amend with no body
+    # composed "true", the law judged "true", and the dispatcher committed and pushed to
+    # whatever branch the worktree stood on: a seat's, <member>/work, main (sprout on #217,
+    # measured). The dispatcher checks again before it acts; neither relies on the other.
+    own_proposal_branch(worktree, ctx)
+    body = str(args.get("body", "") or "")
+    if not body.strip():
+        return "true"      # commit + push only; the PR body stands as written
+    return f"gh pr edit {_pr_number_for_branch(worktree, ctx)} --repo {PR_REPO} --body-file -"
+
+
+def own_proposal_branch(worktree: str, ctx: Optional[dict] = None) -> str:
+    """The branch this worktree is on, if it is one of the being's OWN proposals
+    (<member>/<slug>, never <member>/work); a ValueError otherwise. Read, never supplied."""
+    import subprocess
+    br = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=worktree,
+                        text=True, capture_output=True, timeout=30).stdout.strip()
+    prefix = being_branch_prefix(ctx)
+    if not br.startswith(prefix + "/") or br == f"{prefix}/work":
+        raise ValueError(f"pr_amend: this worktree is on {br!r}, which is not one of your PR "
+                         "branches. pr_amend revises a proposal you already opened")
+    return br
+
+
+def _pr_number_for_branch(worktree: str, ctx: Optional[dict] = None) -> str:
+    """The open PR number for the branch this worktree is on. Read, never being-supplied."""
+    import subprocess
+    br = own_proposal_branch(worktree, ctx)
+    out = subprocess.run(["gh", "pr", "list", "--repo", PR_REPO, "--head", br,
+                          "--state", "open", "--json", "number", "--jq", ".[0].number"],
+                         cwd=worktree, text=True, capture_output=True, timeout=60).stdout.strip()
+    if not out.isdigit():
+        raise ValueError(f"pr_amend: no open pull request found for branch {br}")
+    return out
+
+
+def pr_attribution(member_id: str, action_id: Optional[str], being_lct: Optional[str],
+                   seat: Optional[str] = None) -> str:
+    """The trailers on a commit a being authored (PRD r3 §7.2). Appended by the dispatcher;
+    the being cannot omit or alter them."""
+    lines = [f"Being: {member_id}"]
+    if being_lct:
+        lines.append(f"Being-LCT: {being_lct}")
+    if action_id:
+        lines.append(f"Witness: {action_id}")
+    # The seat is <machine>-<model> by fleet rule. SAGE_SEAT names it; unset, the machine is
+    # known and the model is not, and the rule says to write that rather than guess.
+    if not seat:
+        import socket
+        seat = os.getenv("SAGE_SEAT", "").strip() or f"{socket.gethostname().split('.')[0].lower()}-unknown"
+    lines.append(f"Seat: {seat}")
+    return "\n".join(lines)
+
+
+
 SEARCH_MAX_N = 60        # matches returned at most; a search is a pointer, not a read
 
 
@@ -717,6 +930,16 @@ _REGISTRY = {
     # a commit message and optionally a new PR body; the branch and the PR number are READ
     # from the worktree, so it can only ever revise its own open proposal, and the law
     # judges the outward `gh pr edit` rather than a friendly verb name.
+    "pr_amend":       dict(tool="pr_amend",    path_args=(),       cmd_arg=None,
+                           compose=pr_amend_command),
+    # git_restore: put ONE file back to a committed state. Composed like check and git_read;
+    # the content can only come from history, so the being cannot author bytes through it.
+    "git_restore":    dict(tool="git_restore",  path_args=("path",), cmd_arg=None,
+                           compose=git_restore_command),
+    # pr_open: the being's worktree changes become a pull request, attributed to it,
+    # for NOT-SAME review. Composed like pr_review — the law rules on the `gh` string.
+    "pr_open":        dict(tool="pr_open",     path_args=(),       cmd_arg=None,
+                           compose=pr_open_command),
     "memory_write":   dict(tool="write_note",   path_args=("path",), cmd_arg=None),
     "channel_egress": dict(tool="channel_send", path_args=(),       cmd_arg=None),
     "mesh":           dict(tool="mesh_notify",  path_args=(),       cmd_arg=None),  # §7.2 5th verb
@@ -794,6 +1017,7 @@ _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
                             "retire_note", "request_run", "memory_edit", "camera",
+                            "pr_open", "pr_amend", "git_restore",
                             "gaze",    # moves the body's own eyes (2026-09-23)
                             "speak"})  # makes sound in the room (2026-09-26)
 
@@ -872,6 +1096,35 @@ _TOOL_SCHEMAS = {
             {"to": "the conversation id, shown beside each conversation in your state",
              "text": "what you want to say"},
             ["to", "text"]),
+    "pr_open": ("Open a pull request from the changes in your worktree. This is how your work "
+                "enters the tree (PRD §7): on your own branch, attributed to you in the commit "
+                "trailers, reviewed by someone who is not you and did not co-author it. You "
+                "cannot merge it. Write the body the way your best review was written — what "
+                "you VERIFIED (with the check output and its tree head) versus what you only "
+                "SUSPECT — so a reviewer re-runs it instead of trusting you.",
+                {"slug": "your branch's tail, e.g. 'count-readable-turns' (lowercase, dashes)",
+                 "title": "one line, 8-120 characters",
+                 "body": "what changed, why, what you verified and how, what you did not"},
+                ["slug", "title", "body"]),
+    "pr_amend": ("Revise a pull request you already opened, when a reviewer asks for changes. "
+                 "pr_open refuses a slug twice, so without this a review that requests changes "
+                 "is a dead end (measured on #63). Write the change in your worktree first; "
+                 "this commits it onto the same branch, pushes, and replaces the PR body when "
+                 "you supply one. You name no branch and no PR number — both are read from the "
+                 "worktree you stand in, so you can only revise your own open proposal, and you "
+                 "still cannot merge it.",
+                 {"title": "one line for the new commit, 8-120 characters",
+                  "message": "what this revision changes and why (the commit body)",
+                  "body": "the corrected PR body (optional; omit to leave it as written)"},
+                 ["title", "message"]),
+    "git_restore": ("Put ONE file back to the way it was at a commit — `git checkout <rev> -- "
+                    "<path>`. Use it to undo your own edits to a file rather than trying to "
+                    "retype it: the content comes from history, so you cannot get it wrong. "
+                    "Uncommitted changes to that path are DISCARDED, which is usually the "
+                    "point; nothing else in your worktree is touched.",
+                    {"rev": "the commit to take the file from, e.g. a sha or HEAD",
+                     "path": "the one file to restore, inside your worktree"},
+                    ["rev", "path"]),
     # Two forms, one verb. A separate verb for the second half of membot's own retrieval
     # pattern would cost ~700 characters of prompt every beat; an extra optional argument
     # costs ~150. required is EMPTY because neither form is the required one — the
@@ -1268,7 +1521,9 @@ class BeingGateClient:
         # that breaks them -- it would turn every such test into a KeyError three frames away
         # from the cause (measured while landing this fix).
         return {"worktree": getattr(self, "worktree", None),
-                "memory_root": getattr(self, "memory_root", None)}
+                "memory_root": getattr(self, "memory_root", None),
+                # whose branches a composed git verb may name (being_branch_prefix)
+                "member": getattr(self, "member_id", None)}
 
     # -- gate one intent (intent -> verdict), fail-closed --------------------
     def gate(self, intent: BeingIntent) -> GatewayVerdict:
