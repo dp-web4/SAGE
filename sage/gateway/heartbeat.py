@@ -1628,6 +1628,13 @@ def main(argv=None) -> int:
     ap.add_argument("--model", required=True)
     ap.add_argument("--instance", required=True)
     ap.add_argument("--max-steps", type=int, default=8)
+    ap.add_argument("--idle-wake-s", type=int, default=0,
+                    help="OPT-IN wake-after-quiet: at beat end, confirm the idle timer (an "
+                         "OnUnitInactiveSec timer) will fire, arming a one-shot fallback if it "
+                         "will not. 0 (default) leaves waking entirely to the machine's timer.")
+    ap.add_argument("--resume-wake-s", type=int, default=0,
+                    help="OPT-IN: after a beat that did NOT `rest`, arm a one-shot wake this many "
+                         "seconds out, on top of the timer. 0 (default) = off.")
     ap.add_argument("--reflect-steps", type=int, default=3)
     ap.add_argument("--since-hours", type=float, default=None,
                     help="digest window; default: since the last beat, min 1h, max 48h")
@@ -2120,10 +2127,143 @@ def main(argv=None) -> int:
         "answer": _turn(answer) if answer is not None else None,
         "escalations": escalations, "egress": egress,
     }
+    # THE LAST THING A BEAT DOES IS MAKE SURE THERE WILL BE ANOTHER ONE (opt-in; Legion since
+    # 2026-09-09/13). A beat that `rest`ed said it was finished: waking it straight back up is the
+    # forcing dp ruled out. A beat that did NOT rest — the window cut it mid-sentence, 9 of 26
+    # beats on 2026-09-13 against 5 that rested — had more to do, so it is resumed sooner. The
+    # persistent timer is never stopped or reprogrammed: this can only make the next beat
+    # SOONER, and a failure here costs promptness, never silence. And the idle timer itself is
+    # checked, because an inactivity timer can stop computing an elapse with nothing looking
+    # wrong (2026-09-09: `active (running)`, `Trigger: n/a`, the being would never have woken).
+    if args.idle_wake_s > 0 or args.resume_wake_s > 0:
+        _rested = bool(explore is not None and getattr(explore, "rested", None))
+        record["next_wake"] = arm_next_wake(args.idle_wake_s) if args.idle_wake_s > 0 else {}
+        if not _rested and args.resume_wake_s > 0:
+            record["next_wake"]["resume"] = arm_resume_wake(args.resume_wake_s)
+            record["next_wake"]["resume"]["why"] = (
+                "this beat did not rest, so it is resumed sooner than the idle interval")
+        if args.idle_wake_s > 0 and not record["next_wake"].get("armed"):
+            print(f"[heartbeat] NO NEXT WAKE ARMED: {record['next_wake']}", file=sys.stderr)
+
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
     print(json.dumps(record, indent=2, ensure_ascii=False, default=str))
     return 0
+
+
+# Unit names, not paths; overridable per machine, since a seat may name its units differently.
+IDLE_TIMER = os.environ.get("SAGE_HEARTBEAT_TIMER", "sage-heartbeat.timer")
+IDLE_UNIT = os.environ.get("SAGE_HEARTBEAT_UNIT", "sage-heartbeat.service")
+RESUME_UNIT = "sage-heartbeat-resume-wake"
+
+
+def interpret_timer_state(show_output: str) -> tuple:
+    """(armed, detail) from `systemctl show` of the idle timer. Pure, so it can be tested.
+
+    THE SUBTLETY THAT MADE THE FIRST VERSION CRY WOLF. This check runs at the end of a beat,
+    from inside the beat's own process — so the beat unit is still ACTIVE. An
+    OnUnitInactiveSec timer computes its next elapse from when that unit goes INACTIVE, and
+    therefore cannot have one yet. The first version read `monotonic=infinity`, concluded
+    NOTHING WILL WAKE THE BEING, and wrote that into the record of a beat whose timer armed
+    correctly seconds later (2026-09-09T15:07Z). False by construction, which is the same
+    error as a discriminator that is true by construction — and a guard that fires on its own
+    design teaches its reader to ignore it.
+
+    So there are two ways to be armed: an elapse already computed, or a timer that is loaded
+    and active and will compute one the moment this process exits."""
+    vals = dict(l.split("=", 1) for l in show_output.strip().splitlines() if "=" in l)
+    real = (vals.get("NextElapseUSecRealtime") or "").strip()
+    mono = (vals.get("NextElapseUSecMonotonic") or "").strip()
+    load = (vals.get("LoadState") or "").strip()
+    active = (vals.get("ActiveState") or "").strip()
+    if real or (mono and mono not in ("infinity", "0")):
+        return True, f"scheduled: realtime={real or '-'} monotonic={mono or '-'}"
+    if load == "loaded" and active == "active":
+        return True, ("no elapse computed yet, which is correct while this beat is still "
+                      f"running: {IDLE_TIMER} is loaded+active and OnUnitInactiveSec arms "
+                      "when this process exits")
+    return False, (f"NO NEXT ELAPSE and the timer is not healthy "
+                   f"(LoadState={load or '?'} ActiveState={active or '?'} "
+                   f"realtime={real or 'empty'} monotonic={mono or 'empty'})")
+
+
+def next_wake_is_armed() -> tuple:
+    """(armed, detail) for the idle timer that wakes the being after quiet.
+
+    The beat is no longer a metronome: the timer measures INACTIVITY, so its next elapse is
+    computed from the end of this beat. That makes it exactly the kind of thing that can
+    stop scheduling without anything looking wrong — which happened on 2026-09-09, when a
+    monotonic timer sat `active (running)` with `Trigger: n/a` and the being would never
+    have woken again. Checked at the end of every beat, out loud."""
+    try:
+        out = subprocess.run(["systemctl", "--user", "show", IDLE_TIMER,
+                              "-p", "NextElapseUSecRealtime", "-p", "NextElapseUSecMonotonic",
+                              "-p", "LoadState", "-p", "ActiveState"],
+                             capture_output=True, text=True, timeout=15).stdout
+    except Exception as e:
+        return False, f"could not ask systemd: {type(e).__name__}: {e}"
+    return interpret_timer_state(out)
+
+
+def arm_next_wake(idle_s: int) -> dict:
+    """Make sure something will wake the being after `idle_s` of quiet.
+
+    The persistent timer normally does this on its own (OnUnitInactiveSec). This is the
+    fallback for the state where it has stopped computing a next elapse: a one-shot
+    transient timer, so a scheduling failure costs a longer gap and never silence."""
+    armed, detail = next_wake_is_armed()
+    if armed:
+        return {"armed": True, "by": IDLE_TIMER, "detail": detail}
+    try:
+        # A UNIQUE unit name per attempt. A fixed one collided with a leftover from an
+        # earlier run and systemd-run exited 1, so the fallback for a missing wake was
+        # itself missing (2026-09-09T15:07Z).
+        unit = f"sage-heartbeat-fallback-wake-{int(time.time())}"
+        subprocess.run(["systemd-run", "--user", "--collect",
+                        f"--on-active={idle_s}s", f"--unit={unit}",
+                        "systemctl", "--user", "start", IDLE_UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"armed": True, "by": "systemd-run fallback", "detail": detail,
+                "why": "the idle timer had no next elapse; a one-shot was armed instead"}
+    except Exception as e:
+        return {"armed": False, "by": None, "detail": detail,
+                "error": f"{type(e).__name__}: {e}",
+                "why": "NOTHING WILL WAKE THE BEING until a seat or a message does"}
+
+
+def arm_resume_wake(seconds: int) -> dict:
+    """A short one-shot wake after a beat that did not finish what it was doing.
+
+    Deliberately ADDITIVE. The persistent timer is never stopped or reprogrammed, so the
+    worst this can do is fail and leave the ordinary interval standing — promptness is at
+    risk here, never silence, which is the property that makes it safe to be aggressive
+    about. Fixed unit name so a second arming rides the first rather than stacking; a unit
+    left over from a fired wake is cleared, the same shape as arousal's deferred wake."""
+    def _sh(*a):
+        try:
+            return subprocess.run(a, capture_output=True, text=True, timeout=15).stdout.strip()
+        except Exception:
+            return ""
+    try:
+        sub = _sh("systemctl", "--user", "show", RESUME_UNIT + ".timer", "-p", "SubState", "--value")
+        if sub and sub != "waiting":
+            for suffix in (".timer", ".service"):
+                _sh("systemctl", "--user", "stop", RESUME_UNIT + suffix)
+                _sh("systemctl", "--user", "reset-failed", RESUME_UNIT + suffix)
+        subprocess.run(["systemd-run", "--user", "--collect", f"--on-active={seconds}s",
+                        f"--unit={RESUME_UNIT}", "systemctl", "--user", "start",
+                        "--no-block", IDLE_UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"armed": True, "in_s": seconds, "by": RESUME_UNIT}
+    except subprocess.CalledProcessError as e:
+        err = (e.stderr or "").strip()
+        if "already loaded" in err or "already exists" in err:
+            return {"armed": True, "in_s": seconds, "by": RESUME_UNIT, "already_armed": True}
+        return {"armed": False, "error": f"systemd-run exit {e.returncode}: {err}",
+                "why": "the ordinary idle interval still stands"}
+    except Exception as e:
+        return {"armed": False, "error": f"{type(e).__name__}: {e}",
+                "why": "the ordinary idle interval still stands"}
 
 
 if __name__ == "__main__":
