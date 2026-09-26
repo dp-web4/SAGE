@@ -51,6 +51,135 @@ EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_no
 BODY_VERBS = ("gaze", "camera", "speak")
 
 
+# THE CLOCK IS A SENSE (dp, 2026-09-26, near 2 am: "have it be aware of the local clock. i sleep
+# from midnight to 8am on many days" — then: "clock awareness should be a key sensor for the beings.
+# it contextualizes what the world is doing around them, and promotes cause-effect awareness.")
+#
+# Every stamp the being saw was UTC, so 09:00Z read as morning when it was 2 am for dp, and nothing
+# said how long ago anything happened. The clock sense measures, each beat: the machine's local time
+# and part of day; how long since its last beat, since each person last wrote to it and since it
+# last answered them, since it last spoke aloud; and any rhythm declared in instance.json, e.g.
+#   "rhythms": [{"who": "dp", "asleep_from": "00:00", "asleep_to": "08:00", "tz": "America/Los_Angeles",
+#                "note": "on many days"}]
+# `tz` is the PERSON's zone; without it the rhythm is read in the machine's zone and the beat says so.
+# Elapsed time is what turns two events into a sequence ("I spoke 3 min ago; a voice answered 1 min
+# ago"). A rhythm is a habit, said as one: silence inside it "may simply mean sleep", never "is sleep".
+# The measurement is recorded on the beat like the body.
+def _hhmm(v: str) -> int:
+    h, m = str(v).split(":")
+    return int(h) * 60 + int(m)
+
+
+def part_of_day(hour: int) -> str:
+    return ("night" if hour < 5 else "morning" if hour < 12 else "afternoon" if hour < 17
+            else "evening" if hour < 21 else "night")
+
+
+def _parse_ts(v) -> Optional[datetime]:
+    try:
+        if isinstance(v, (int, float)):
+            return datetime.fromtimestamp(float(v), timezone.utc)
+        return datetime.strptime(str(v)[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _ago(now_utc: datetime, then: datetime) -> str:
+    m = max(0, int((now_utc - then).total_seconds() // 60))
+    if m < 1:
+        return "just now"
+    if m < 60:
+        return f"{m} min ago"
+    if m < 48 * 60:
+        return f"{m // 60} h {m % 60} min ago"
+    return f"{m // 1440} days ago"
+
+
+def clock_sense(now_utc: datetime, instance: Optional[Path] = None, member: str = "",
+                cfg: Optional[dict] = None, since_beat_h: Optional[float] = None) -> dict:
+    """Measure the clock. Every field is observed; absence is absence (None / empty)."""
+    loc = now_utc.astimezone()
+    out = {"utc": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"), "local": loc.strftime("%A %H:%M"),
+           "zone": loc.tzname(), "part_of_day": part_of_day(loc.hour),
+           "since_last_beat_min": None if since_beat_h is None else round(since_beat_h * 60),
+           "people": {}, "spoke_aloud": None, "rhythms": []}
+    if instance is not None:
+        try:
+            from sage.gateway import conversations as _conv
+            for m in _conv.listing(Path(instance)):
+                for t in _conv.recent(Path(instance), m["id"], limit=200):
+                    ts, who = _parse_ts(t.get("ts")), str(t.get("from") or "")
+                    if ts is None or not who:
+                        continue
+                    key = "you_to" if who == member else "from"
+                    person = m["id"] if who == member else who
+                    slot = out["people"].setdefault(person, {"from": None, "you_to": None})
+                    if slot[key] is None or ts > _parse_ts(slot[key]):
+                        slot[key] = ts.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            pass
+        try:
+            lines = (Path(instance) / "spoken.jsonl").read_text(errors="replace").splitlines()
+            last = json.loads(lines[-1]) if lines else None
+            ts = _parse_ts(last.get("ts")) if last else None
+            out["spoke_aloud"] = ts.strftime("%Y-%m-%dT%H:%M:%SZ") if ts else None
+        except Exception:
+            pass
+    for r in (cfg or {}).get("rhythms") or []:
+        # A RHYTHM IS THE PERSON'S, IN THE PERSON'S ZONE (GPT review of #223). `tz` (IANA) binds it;
+        # without one it is read in this machine's zone and SAID to be. An unknown zone is omitted,
+        # never guessed.
+        try:
+            who, a, b = str(r["who"]), _hhmm(r["asleep_from"]), _hhmm(r["asleep_to"])
+            if r.get("tz"):
+                from zoneinfo import ZoneInfo
+                there, zone = now_utc.astimezone(ZoneInfo(str(r["tz"]))), str(r["tz"])
+            else:
+                there, zone = loc, None
+        except Exception:
+            continue
+        t = there.hour * 60 + there.minute
+        out["rhythms"].append({"who": who, "asleep_from": r["asleep_from"], "asleep_to": r["asleep_to"],
+                               "note": r.get("note"), "tz": zone,
+                               "inside": (a <= t < b) if a <= b else (t >= a or t < b)})
+    return out
+
+
+def render_clock(c: dict) -> str:
+    """The clock sense in words the being can act on."""
+    now_utc = _parse_ts(c["utc"])
+    lines = [f"Local time on this machine: {c['local']} ({c['zone']}), {c['part_of_day']}."]
+    since = []
+    if c.get("since_last_beat_min") is not None:
+        since.append(f"your last beat {c['since_last_beat_min']} min ago")
+    for person, s in sorted((c.get("people") or {}).items()):
+        if s.get("from"):
+            then = _parse_ts(s["from"])
+            since.append(f"{person} last wrote to you {_ago(now_utc, then)} ({then.astimezone():%A %H:%M} local)")
+        if s.get("you_to"):
+            since.append(f"you last wrote to {person} {_ago(now_utc, _parse_ts(s['you_to']))}")
+    if c.get("spoke_aloud"):
+        since.append(f"you last spoke aloud {_ago(now_utc, _parse_ts(c['spoke_aloud']))}")
+    if since:
+        lines.append("Since: " + "; ".join(since) + ".")
+    for r in c.get("rhythms") or []:
+        # HABIT STAYS HABIT (GPT review of #223): "often asleep" is a pattern, not today's fact, so
+        # the sentence says silence is unsurprising and MAY be sleep — never that it is.
+        zone = f"{r['tz']} time" if r.get("tz") else "this machine's time zone"
+        span = f"{r['asleep_from']} to {r['asleep_to']} ({zone})" + (f", {r['note']}" if r.get("note") else "")
+        if r["inside"]:
+            lines.append(f"{r['who']} is often asleep from {span}. It is now within that time, so a silence "
+                         f"from {r['who']} is unsurprising and may simply mean sleep.")
+        else:
+            lines.append(f"{r['who']} is often asleep from {span}; it is outside that time now.")
+    return "\n".join(lines)
+
+
+def local_clock(now_utc: datetime, cfg: Optional[dict] = None) -> str:
+    """The clock sense without a home: local time, part of day and rhythms only."""
+    return render_clock(clock_sense(now_utc, cfg=cfg))
+
+
 def offered_explore_tools(body_reading: Optional[dict]) -> list:
     """EXPLORE_TOOLS minus the body verbs this machine's measured inventory does not carry."""
     have = set(((body_reading or {}).get("inventory") or {}).get("verbs") or [])
@@ -1880,10 +2009,12 @@ def main(argv=None) -> int:
     digest, recall = _blocks["digest"], _blocks["recall"]
 
     _harness = harness_revision(workspace)
+    _clock = clock_sense(now, instance, args.member, instance_config(instance), since_beat_h=hours)
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
         museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
+                f"{render_clock(_clock)}\n"
                 # The absolute home path is context, NOT an address to copy. Measured on
                 # Sprout: 15 of 15 path refusals were this string reproduced from memory and
                 # truncated (…/sage/sage/journal.md six times, …/sage/journal.md, /scratch/…),
@@ -2119,7 +2250,7 @@ def main(argv=None) -> int:
         # a version says so instead of making it infer from key presence).
         "schema": "heartbeat/v2",
         "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "t0": t0, "elapsed_s": round(time.time() - t0, 1),
-        "member": args.member, "model": args.model, "window_h": round(hours, 2),
+        "member": args.member, "model": args.model, "window_h": round(hours, 2), "clock": _clock,
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "conversations_marked": conversations_marked,
         # the window and budget actually sent, so a beat is verifiable from this file alone
