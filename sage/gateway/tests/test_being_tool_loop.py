@@ -114,7 +114,7 @@ def test_run_ollama_tool_turn_with_fake_llm():
     # because no verb could close it. dp to the being: "renaming and deleting aren't verbs you
     # have yet — we're looking at that." Bounded to its own notes/ and scratch/; the note is
     # renamed and kept, never deleted.
-    assert len(ollama_tools()) == 23   # + pr_open, pr_amend, git_restore (#56 slice 5)   # + gaze (the body's own eyes, 2026-09-23)   # + appeal (S4), + say, + git_read/search (#83), + check, + retire_note, + request_run, + memory_edit, + camera
+    assert len(ollama_tools()) == 25   # + pr_open, pr_amend, git_restore (#56 slice 5)   # + speak (a voice in the room, 2026-09-26)   # + rest (a verb for stopping, 2026-09-25)   # + gaze (the body's own eyes, 2026-09-23)   # + appeal (S4), + say, + git_read/search (#83), + check, + retire_note, + request_run, + memory_edit, + camera
 
     calls = {"n": 0}
 
@@ -781,3 +781,79 @@ def test_an_empty_stop_with_no_thinking_is_left_alone():
     llm = FakeLLM()
     run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
     assert len(seen) == 1, f"an empty stop with no thinking must not be retried, got {len(seen)}"
+
+
+# ---- #56 slice 2: a turn can stop, a loop is named, dedup is for writes only ----
+
+class _RecClient:
+    def __init__(self):
+        self.calls = []
+
+    def dispatch(self, i):
+        from sage.gateway.being_gate_client import ResultEnvelope
+        self.calls.append((i.effector, dict(i.args or {})))
+        return ResultEnvelope(ok=True, result=f"ok {len(self.calls)}")
+
+
+def test_a_being_can_end_its_own_turn_with_rest():
+    """dp: "it should be able to continue as long as it wishes" — the other half is stopping when
+    it wishes. `rest` is never dispatched: the gate rules on acts that touch the world, and stopping
+    touches nothing. Its reason is its closing words."""
+    from sage.gateway.being_tool_loop import run_tool_turn
+    from sage.gateway.being_gate_client import BeingIntent
+    c = _RecClient()
+    outs = iter([
+        {"content": "", "intents": [BeingIntent("witness", {"event": "did a thing"})]},
+        {"content": "", "intents": [BeingIntent("rest", {"reason": "todo is clear; nothing needs me"})]},
+        {"content": "", "intents": [BeingIntent("witness", {"event": "SHOULD NOT RUN"})]},
+    ])
+    r = run_tool_turn(c, lambda convo: next(outs), [], max_steps=8)
+    assert r.rested == "todo is clear; nothing needs me"
+    assert r.reply == "todo is clear; nothing needs me"
+    assert [e for e, _ in c.calls] == ["witness"], "rest must never reach the gate"
+    assert r.steps == 1 and not r.capped
+
+
+def test_rest_is_offered_to_the_being():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.heartbeat import EXPLORE_TOOLS
+    assert "rest" in EXPLORE_TOOLS, "a verb not offered is a verb the being does not have"
+    assert [t["function"]["name"] for t in ollama_tools(["rest"])] == ["rest"]
+
+
+def test_an_identical_call_repeated_is_named_then_ends_the_phase():
+    """Measured 2026-09-13T10:19Z: legion-being witnessed 'beat closed' 52 times in 78 minutes
+    because the only way to stop was to emit no tool call. Named once, then stopped."""
+    from sage.gateway.being_tool_loop import run_tool_turn, REPEAT_NUDGE_AT, REPEAT_BREAK_AT
+    from sage.gateway.being_gate_client import BeingIntent
+    seen = []
+
+    def gen(convo):
+        seen.append([m.get("content") for m in convo if m.get("role") == "user"])
+        return {"content": "", "intents": [BeingIntent("witness", {"event": "beat closed"})]}
+
+    r = run_tool_turn(_RecClient(), gen, [], max_steps=50)
+    assert r.looped == {"effector": "witness", "times": REPEAT_BREAK_AT + 1}
+    assert r.steps == REPEAT_BREAK_AT + 1, "not 50, and not 52"
+    named = [u for u in seen[-1] if u and "same call" in u and "`rest`" in u]
+    assert len(named) == 1, "told once, before being stopped, and told that rest exists"
+
+    n = iter(range(100))
+    varied = run_tool_turn(_RecClient(),
+                           lambda c: {"content": "", "intents": [BeingIntent("witness", {"event": f"e{next(n)}"})]},
+                           [], max_steps=10)
+    assert varied.looped is None and varied.capped, "changing arguments is work, not a loop"
+
+
+def test_a_read_or_check_repeated_in_a_turn_is_executed_again():
+    """Dedup is for writes. `check` after an edit, or `memory_read` of a file it just changed,
+    returns a DIFFERENT answer to the same arguments; answering it 'already done' hands the being
+    a stale result and calls it an intervention."""
+    from sage.gateway.being_tool_loop import run_tool_turn
+    from sage.gateway.being_gate_client import BeingIntent
+    c = _RecClient()
+    chk = BeingIntent("check", {"target": "gateway"})
+    outs = iter([{"content": "", "intents": [chk]}, {"content": "", "intents": [chk]},
+                 {"content": "done", "intents": []}])
+    r = run_tool_turn(c, lambda convo: next(outs), [], max_steps=5)
+    assert [e for e, _ in c.calls] == ["check", "check"] and r.duplicates == []

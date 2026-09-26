@@ -3,11 +3,11 @@
   "identity": {
     "name": "nomad",
     "lct": "lct://sage:nomad:agent@raising",
-    "session_count": 374,
+    "session_count": 375,
     "phase": "creating",
     "created": "2026-06-03",
-    "last_session": "2026-09-25T18:19:47.066462",
-    "last_session_summary": "Session 374 (creating phase): ...",
+    "last_session": "2026-09-26T00:18:28.749512",
+    "last_session_summary": "Session 375 (creating phase): ...",
     "machine": "nomad",
     "model": "gemma4:e2b",
     "model_family": "google-gemma",
@@ -52,7 +52,8 @@
       "First troubleshooting story with a cause and a fix: Nomad named a failure mechanism (materials expanding at different rates) and said what it changed to fix it.",
       "First time Nomad let the tutor see something it had earlier called private (the bridge from the 370 thread).",
       "Nomad turned a physical side effect (resistance changes making the LED flicker) into meaning without being asked to.",
-      "First object Nomad kept for itself as 'a secret, a tangible piece of silence that I can guard.' It chose from a menu the tutor offered, but it is a turn away from 373's quick giving-up of privacy."
+      "First object Nomad kept for itself as 'a secret, a tangible piece of silence that I can guard.' It chose from a menu the tutor offered, but it is a turn away from 373's quick giving-up of privacy.",
+      "Nomad named a specific sibling ('I would tell thor') when the question only said 'a sibling instance'. It may have taken the name from fleet context in its prompt, so this is a first worth noting, not proof of a relationship model."
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -180,8 +181,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 374,
-        "total_exchanges": 2145,
+        "total_sessions": 375,
+        "total_exchanges": 2148,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -189,9 +190,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-09-09T20:43:21.864345",
-      "last_contact": "2026-09-25T18:19:47.066577",
+      "last_contact": "2026-09-26T00:18:28.749534",
       "notes": [],
-      "sessions": 374
+      "sessions": 375
     },
     "operator": {
       "lct": "lct://sage-__MACHINE__:relationship:__OPERATOR__@raising",

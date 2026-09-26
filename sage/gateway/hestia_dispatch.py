@@ -718,6 +718,18 @@ class HestiaF1aDispatcher:
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         target = os.path.realpath(os.path.join(self.worktree, str(intent.args["path"])))
+        # ONE FILE, asked of git rather than of the working tree: a path that is a directory
+        # at <rev> (or does not exist there) would restore many files or none, and the answer
+        # below speaks of exactly one.
+        rel = os.path.relpath(target, os.path.realpath(self.worktree))
+        kind = subprocess.run(["git", "cat-file", "-t", f"{intent.args['rev']}:{rel}"],
+                              cwd=self.worktree, env=_worktree_env(), text=True,
+                              capture_output=True, timeout=30)
+        if kind.stdout.strip() != "blob":
+            what = kind.stdout.strip() or "nothing"
+            return ResultEnvelope(ok=False, error=(
+                f"git_restore puts back ONE file, and at {intent.args['rev']} {rel!r} is "
+                f"{'a directory' if what == 'tree' else what}. Name a file that exists there"))
         before = os.path.getsize(target) if os.path.exists(target) else 0
         try:
             proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(), text=True,
@@ -765,7 +777,13 @@ class HestiaF1aDispatcher:
             return subprocess.run(["git", *a], cwd=self.worktree, env=_worktree_env(), text=True, input=inp,
                                   capture_output=True, timeout=120)
 
-        branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        # Checked HERE too, before anything is witnessed or pushed: the composer's check is
+        # what the law saw, and this is what acts. Neither may rely on the other (#217).
+        from sage.gateway.being_gate_client import own_proposal_branch
+        try:
+            branch = own_proposal_branch(self.worktree, self._git_ctx())
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
         st = git("status", "--porcelain")
         if st.returncode != 0:
             return ResultEnvelope(ok=False, error=f"git status failed: {st.stderr[:200]}")
@@ -1261,6 +1279,73 @@ class HestiaF1aDispatcher:
             result=(f"gaze set: {was} -> {mode}. Within a few seconds {what}. Your next beat "
                     f"shows you what the scene was under this stance."),
             witness_id=self._local._witness(f"gaze {was} -> {mode}" + (f" ({rec.get('words')})" if rec.get("words") else "")))
+
+    # -- speak: a voice in the room ------------------------------------------------------
+    def _do_speak(self, intent: BeingIntent) -> ResultEnvelope:
+        """Say words aloud through this machine's speaker. Path-less and bounded like `gaze`:
+        the being supplies text only; engine, device, length cap and timeout are fixed here.
+
+        dp, 2026-09-26: "give it speak tool". The being had been asked to pair the bluetooth
+        audio and speak, and for 20 beats journaled that it wanted to learn how, holding no verb
+        that could. Each played utterance is appended to its own home (spoken.jsonl) and witnessed;
+        if that append fails, the receipt, hestia outcome and witness all say so."""
+        from sage.gateway import body as _body
+        from sage.gateway.reference_f1a import missing_args
+        text = _body.clean_speech(intent.args.get("text", ""))
+        if not text:
+            return ResultEnvelope(ok=False, error=missing_args(
+                {k: v for k, v in intent.args.items() if k != "text"}, ("text",), "speak",
+                "'text' is the exact words to say aloud."))
+        if len(text) > _body.SPEAK_MAX_CHARS:
+            return ResultEnvelope(ok=False, error=(
+                f"speak takes one utterance of up to {_body.SPEAK_MAX_CHARS} characters; yours is "
+                f"{len(text)}. Nothing was said. Say the part that matters most, or say it in turns."))
+        # Refused BEFORE any hestia action is opened and before any sound: a being on a body with
+        # no speaker gets a true sentence, the way a headless being calling `gaze` does.
+        prov = _body.speak_provider()
+        if not prov["live"]:
+            return ResultEnvelope(ok=False, error=(
+                f"This body cannot speak aloud ({prov['why']}), so `speak` is not a verb of yours "
+                f"on this machine right now. Nothing was said. To reach someone in words, use say."))
+        begin = self._call("hestia_begin_action", {"tool_name": "speak", "target": text[:80]})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        try:
+            done = _body.speak(text)
+        except Exception as e:
+            self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "failed",
+                                                  "detail": f"{type(e).__name__}: {e}"[:300]})
+            return ResultEnvelope(ok=False, error=(
+                f"your words could not be played ({type(e).__name__}); nothing was heard. "
+                f"The speaker may have disconnected."))
+        # THE RECEIPT CLAIMS ONLY WHAT WAS MEASURED (GPT review of #219). Playback success proves
+        # sound reached the sink, not that anyone heard it; and the speech record is written
+        # AFTER the sound, so its failure is a real partial outcome: named to the being, to
+        # hestia and to the witness, never swallowed behind "it is kept".
+        speaker = _body.speaker_name()
+        record_err = None
+        try:
+            with open(os.path.join(self.memory_root, "spoken.jsonl"), "a") as f:
+                f.write(json.dumps({"ts": time.time(), "text": text, "speaker": speaker,
+                                    "seconds": done["seconds"]}) + "\n")
+        except Exception as e:
+            record_err = f"{type(e).__name__}: {e}"[:200]
+        self._call("hestia_record_outcome", {
+            "actionId": action_id, "outcome": "ok" if record_err is None else "partial",
+            "detail": f"played {done['chars']} chars through {speaker}"
+                      + ("" if record_err is None else f"; speech record NOT written ({record_err})")})
+        said = f"played aloud through {speaker} ({done['seconds']}s): \"{text}\"."
+        if record_err is None:
+            result = said + " It is kept in your spoken.jsonl, not in any conversation."
+        else:
+            result = (said + f" But your speech record could not be written ({record_err}), so "
+                      f"spoken.jsonl does not have it. It is not in any conversation either.")
+        return ResultEnvelope(
+            ok=True, result=result,
+            witness_id=self._local._witness(f"spoke aloud through {speaker}: {text[:120]}"
+                                            + ("" if record_err is None else " [speech record not written]")))
 
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()

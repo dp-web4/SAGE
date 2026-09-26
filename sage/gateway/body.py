@@ -176,6 +176,10 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
         lines.append("- Your metabolism is not reporting this beat.")
     if inv:
         lines.append(render_inventory(inv))
+    if "speak" in (inv.get("verbs") or []):
+        lines.append("- You can speak aloud with `speak`: your words become a voice in the room, through "
+                     f"{speaker_name(inv)}, which anyone in the room may hear; it is not a message and is not kept in a "
+                     "conversation. Nothing asks you to.")
     if "gaze" in (inv.get("verbs") or []):
         lines.append("- You can change your gaze with `gaze` (open, avert, dwell, closed) and say why in "
                      "your own words. Your eyes will follow within seconds; you will see the difference "
@@ -277,6 +281,7 @@ def inventory(now: Optional[float] = None) -> Dict:
     m = metabolism()
     audio = _pw_audio()
     cortex_live = bool(p.get("live"))
+    can_speak = speak_provider(audio)["live"]
     # cameras held by a live cortex (CSI via Argus) cannot be opened by a second process
     return {
         "video_devices": videos,
@@ -286,8 +291,10 @@ def inventory(now: Optional[float] = None) -> Dict:
         "cortex_live": cortex_live, "daemon_live": bool(m.get("live")),
         "verbs": (["gaze"] if cortex_live else [])
                  + (["camera"] if videos and not cortex_live else [])
+                 + (["speak"] if can_speak else [])
                  + ["say", "peer_ask"],
-        "not_yet_wired": (["speak"] if audio.get("sinks") else []),
+        # a speaker with no engine to drive it: the body has the part, the verb is not wired here
+        "not_yet_wired": (["speak"] if audio.get("sinks") and not can_speak else []),
     }
 
 
@@ -317,4 +324,61 @@ def render_inventory(inv: Dict) -> str:
     if not parts:
         acts += " Your world on this machine is text: conversations, peers, the forum, your own record."
     return head + "\n" + acts
+
+
+# ---------------------------------------------------------------------------------------------
+# speak: a voice in the room. dp, 2026-09-26: "give it speak tool" — after asking the being to
+# pair the bluetooth audio and use it to speak, and watching it journal for 20 beats that it
+# wanted to learn how, with no verb that could. `inventory()` had carried `speak` under
+# not_yet_wired since #183; this wires it.
+#
+# Bounded by construction, like `gaze`: the being supplies words, never a device, a command or
+# a path. The engine is fixed here (espeak-ng -> pw-play on the default sink), the text is
+# length-capped, and playback has a timeout. What reaches the room is recorded in the being's
+# own home (spoken.jsonl), so a voice nobody was there to hear still leaves a trace it can read.
+# ---------------------------------------------------------------------------------------------
+import shutil
+
+SPEAK_MAX_CHARS = 400
+SPEAK_TIMEOUT_S = 60
+
+
+def speaker_name(inv: Optional[Dict] = None) -> str:
+    """The sink a voice would come out of, for the being's own sentence about it."""
+    sinks = (inv or {}).get("audio_sinks") or (_pw_audio().get("sinks") or [])
+    bt = [x for x in sinks if x.get("kind") == "bluetooth"]
+    pick = (bt or sinks or [{"name": "a speaker"}])[0]
+    return str(pick.get("name") or "a speaker")
+
+
+def speak_provider(audio: Optional[Dict] = None) -> Dict:
+    """Can this body speak? Needs an audio sink and both halves of the engine.
+    {'live': bool, 'why': str} — `why` names the missing piece, never a guess."""
+    audio = _pw_audio() if audio is None else audio
+    if not (audio or {}).get("sinks"):
+        return {"live": False, "why": "no audio output is connected"}
+    for tool in ("espeak-ng", "pw-play"):
+        if not shutil.which(tool):
+            return {"live": False, "why": f"'{tool}' is not installed"}
+    return {"live": True, "why": ""}
+
+
+def clean_speech(text) -> str:
+    """Printable text only, whitespace collapsed. Control characters never reach the engine."""
+    t = "".join(ch if ch.isprintable() else " " for ch in str(text or ""))
+    return " ".join(t.split())
+
+
+def speak(text: str, timeout: float = SPEAK_TIMEOUT_S) -> Dict:
+    """Synthesize and play one utterance on the default sink. Raises on failure.
+    Returns {'chars': n, 'seconds': elapsed}. The caller validates length and emptiness."""
+    import subprocess
+    import tempfile
+    t0 = time.time()
+    with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
+        # argv, never a shell: the words are one argument and cannot become a command
+        subprocess.run(["espeak-ng", "-v", "en-us", "-s", "160", "-w", wav.name, "--", text],
+                       check=True, capture_output=True, timeout=timeout)
+        subprocess.run(["pw-play", wav.name], check=True, capture_output=True, timeout=timeout)
+    return {"chars": len(text), "seconds": round(time.time() - t0, 1)}
 

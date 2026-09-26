@@ -206,15 +206,41 @@ def test_pr_open_says_what_the_branch_carries_when_its_base_is_behind_main(tmp_p
 
 # -- pr_amend ----------------------------------------------------------------------------
 
-def test_pr_amend_validates_before_any_lookup_and_amends_only_its_own(tmp_path):
-    ctx = {"worktree": str(tmp_path), **CTX}
+def test_pr_amend_validates_and_names_only_its_own_proposal(tmp_path):
+    """The old version of this test ran from a tmp dir that was not a repo and asserted "true"
+    — it passed by construction and covered exactly the case that was broken (sprout on #217)."""
+    _, wt, g = _repo(tmp_path)
+    ctx = {"worktree": str(wt), **CTX}
     with pytest.raises(ValueError, match="8-120"):
         pr_amend_command({"title": "a" * 200, "message": "m"}, ctx)
     with pytest.raises(ValueError, match="needs a 'message'"):
         pr_amend_command({"title": "a proper title here", "message": "  "}, ctx)
     with pytest.raises(ValueError, match="needs a worktree"):
         pr_amend_command({"title": "a proper title here", "message": "m"}, {})
+    g("checkout", "-q", "-b", "legion-being/a-proposal")
     assert pr_amend_command({"title": "a proper title here", "message": "why"}, ctx) == "true"
+
+
+@pytest.mark.parametrize("branch", ["seat-branch", "legion/seat-work", "legion-being/work", "main"])
+def test_a_bodyless_amend_on_a_branch_not_its_own_is_refused_and_pushes_nothing(tmp_path, branch):
+    """sprout's probe on #217: worktree on `seat-branch`, a dirty README, no body -> the composer
+    returned "true" before any branch check, and the dispatcher committed and PUSHED the being's
+    change onto the seat's branch. Both halves now refuse, each on its own."""
+    origin, wt, g = _repo(tmp_path)
+    g("checkout", "-q", "-B", branch)
+    (wt / "README").write_text("the being's change\n")
+    args = {"title": "a title long enough", "message": "why"}
+    with pytest.raises(ValueError, match="not one of your PR branches"):
+        pr_amend_command(args, {"worktree": str(wt), **CTX})
+    d = _disp(tmp_path, wt)
+    calls = []
+    d._call = lambda name, a: calls.append(name) or {"actionId": "x"}
+    env = d._do_pr_amend(BeingIntent("pr_amend", args))
+    assert not env.ok and "not one of your PR branches" in env.error, env.result
+    assert not calls, "nothing witnessed"
+    remote = subprocess.run(["git", "-C", str(origin), "branch"], capture_output=True, text=True).stdout
+    assert branch not in remote.split(), "nothing pushed"
+    assert (wt / "README").read_text() == "the being's change\n", "and nothing lost"
 
 
 def test_pr_amend_refuses_a_noop_before_spending_a_witnessed_act(tmp_path):
@@ -268,3 +294,44 @@ def test_git_restore_restores_and_reports_the_size_change(tmp_path):
     assert env.ok, env.error
     assert (wt / "README").read_text() == "base\n"
     assert "RESTORED README" in env.result and "is now 5 bytes" in env.result
+
+
+def test_git_restore_puts_back_one_file_never_a_directory(tmp_path):
+    """sprout on #217: `path: "d"` reverted d/a and d/b, and the answer said "this one file ...
+    nothing else was touched". Refused at composition (a directory in the tree) and at dispatch
+    (git says <rev>:<path> is not a blob — a tree, or nothing)."""
+    _, wt, g = _repo(tmp_path)
+    (wt / "d").mkdir(); (wt / "d" / "a").write_text("a\n"); (wt / "d" / "b").write_text("b\n")
+    g("add", "-A"); g("commit", "-q", "-m", "d")
+    (wt / "d" / "a").write_text("edited a\n"); (wt / "d" / "b").write_text("edited b\n")
+    with pytest.raises(ValueError, match="is a directory"):
+        git_restore_command({"rev": "HEAD", "path": "d"}, {"worktree": str(wt), **CTX})
+    d = _disp(tmp_path, wt)
+    env = d._do_git_restore(BeingIntent("git_restore", {"rev": "HEAD", "path": "d"}))
+    assert not env.ok and "ONE file" in env.error
+    assert (wt / "d" / "a").read_text() == "edited a\n" and (wt / "d" / "b").read_text() == "edited b\n"
+    # the dispatcher's own check, for a path that is a directory only AT THE REV
+    g("rm", "-q", "-r", "--cached", "d"); import shutil; shutil.rmtree(wt / "d")
+    env = d._do_git_restore(BeingIntent("git_restore", {"rev": "HEAD", "path": "d"}))
+    assert not env.ok and "a directory" in env.error, env.error
+    env = d._do_git_restore(BeingIntent("git_restore", {"rev": "HEAD", "path": "never.py"}))
+    assert not env.ok and "ONE file" in env.error
+    # and a real file still restores
+    env = d._do_git_restore(BeingIntent("git_restore", {"rev": "HEAD", "path": "README"}))
+    assert env.ok, env.error
+
+
+def test_the_dispatcher_refuses_a_foreign_branch_even_if_the_composer_regresses(tmp_path, monkeypatch):
+    """Defense in depth has to be tested alone, or it is one check wearing two names: the
+    dispatcher runs the composer first, so the composer's refusal masks the dispatcher's. Here
+    the composer is made to answer "true" unconditionally (the pre-#217-review defect)."""
+    import sage.gateway.being_gate_client as bgc
+    origin, wt, g = _repo(tmp_path)
+    g("checkout", "-q", "-b", "seat-branch")
+    (wt / "README").write_text("the being's change\n")
+    monkeypatch.setattr(bgc, "pr_amend_command", lambda args, ctx=None: "true")
+    d = _disp(tmp_path, wt)
+    env = d._do_pr_amend(BeingIntent("pr_amend", {"title": "a title long enough", "message": "why"}))
+    assert not env.ok and "not one of your PR branches" in env.error, env.result
+    remote = subprocess.run(["git", "-C", str(origin), "branch"], capture_output=True, text=True).stdout
+    assert "seat-branch" not in remote.split()

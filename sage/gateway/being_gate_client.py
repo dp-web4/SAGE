@@ -479,6 +479,12 @@ def git_restore_command(args: dict, ctx: Optional[dict] = None) -> str:
     # core.hooksPath=.githooks, so a restored `.githooks/pre-commit` would be code the seat's
     # next git act runs. The seat's own git carries no hooks (_worktree_env, #212); this is
     # the second layer, so that one fix is never the only thing between them.
+    if os.path.isdir(full):
+        # `git checkout <rev> -- <dir>` restores EVERY file under it, and the answer said "this
+        # one file ... nothing else was touched" — every word of which was then false (sprout
+        # on #217). The dispatcher also asks git that <rev>:<path> is a blob.
+        raise ValueError(f"git_restore puts back ONE file, and {path!r} is a directory. Name "
+                         "the file inside it you want restored")
     top = os.path.relpath(full, root).split(os.sep, 1)[0]
     if top in (".githooks", ".git"):
         raise ValueError(f"git_restore cannot put back {path!r}: {top}/ holds what git EXECUTES, "
@@ -509,14 +515,21 @@ def pr_amend_command(args: dict, ctx: Optional[dict] = None) -> str:
     if not str(args.get("message", "")).strip():
         raise ValueError("pr_amend needs a 'message': what this revision changes and why, "
                          "which becomes the commit body")
+    # THE BRANCH IS CHECKED BEFORE THE EARLY RETURN. It used to be checked only inside
+    # _pr_number_for_branch, which the no-body form never calls — so an amend with no body
+    # composed "true", the law judged "true", and the dispatcher committed and pushed to
+    # whatever branch the worktree stood on: a seat's, <member>/work, main (sprout on #217,
+    # measured). The dispatcher checks again before it acts; neither relies on the other.
+    own_proposal_branch(worktree, ctx)
     body = str(args.get("body", "") or "")
     if not body.strip():
         return "true"      # commit + push only; the PR body stands as written
     return f"gh pr edit {_pr_number_for_branch(worktree, ctx)} --repo {PR_REPO} --body-file -"
 
 
-def _pr_number_for_branch(worktree: str, ctx: Optional[dict] = None) -> str:
-    """The open PR number for the branch this worktree is on. Read, never being-supplied."""
+def own_proposal_branch(worktree: str, ctx: Optional[dict] = None) -> str:
+    """The branch this worktree is on, if it is one of the being's OWN proposals
+    (<member>/<slug>, never <member>/work); a ValueError otherwise. Read, never supplied."""
     import subprocess
     br = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=worktree,
                         text=True, capture_output=True, timeout=30).stdout.strip()
@@ -524,6 +537,13 @@ def _pr_number_for_branch(worktree: str, ctx: Optional[dict] = None) -> str:
     if not br.startswith(prefix + "/") or br == f"{prefix}/work":
         raise ValueError(f"pr_amend: this worktree is on {br!r}, which is not one of your PR "
                          "branches. pr_amend revises a proposal you already opened")
+    return br
+
+
+def _pr_number_for_branch(worktree: str, ctx: Optional[dict] = None) -> str:
+    """The open PR number for the branch this worktree is on. Read, never being-supplied."""
+    import subprocess
+    br = own_proposal_branch(worktree, ctx)
     out = subprocess.run(["gh", "pr", "list", "--repo", PR_REPO, "--head", br,
                           "--state", "open", "--json", "number", "--jq", ".[0].number"],
                          cwd=worktree, text=True, capture_output=True, timeout=60).stdout.strip()
@@ -955,6 +975,10 @@ _REGISTRY = {
     # dispatcher writes the ONE file the cortex reads (~/.sprout/gaze.json), never a path the
     # being names — so its reach is fixed the way `say`'s and `remember`'s are.
     "gaze":           dict(tool="gaze",         path_args=(),       cmd_arg=None),
+    # speak: words become a voice in the room (2026-09-26). Path-less like gaze: the being
+    # supplies only text; the engine, the device and the length cap are fixed by the dispatcher,
+    # so its reach is the machine's own speaker and nothing else.
+    "speak":          dict(tool="speak",        path_args=(),       cmd_arg=None),
     "request_scope":  dict(tool="request_scope", path_args=(),      cmd_arg=None),
     # request_run: ASK THE SEAT TO RUN A FILE. It does not run anything — that is the whole
     # design. Measured 2026-09-20/21: the being asked dp in prose to run a file for it six
@@ -992,7 +1016,8 @@ _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh"
                             "remember", "request_scope", "git_read", "search", "check", "say",
                             "retire_note", "request_run", "memory_edit", "camera",
                             "pr_open", "pr_amend", "git_restore",
-                            "gaze"})   # moves the body's own eyes (2026-09-23)
+                            "gaze",    # moves the body's own eyes (2026-09-23)
+                            "speak"})  # makes sound in the room (2026-09-26)
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -1056,6 +1081,12 @@ _TOOL_SCHEMAS = {
               "target": "for dwell or avert: what, in your own words (optional)",
               "words": "why, in your own words (optional; kept with the choice)"},
              ["mode"]),
+    "speak": ("Speak aloud. Your words become a voice through this machine's speaker, which "
+              "anyone in the room may hear. This is sound, not a message: it is not added to "
+              "any conversation, so to answer someone in writing use say. One short utterance, up "
+              "to 400 characters. Write the words themselves, not a description of them.",
+              {"text": "the exact words to say aloud"},
+              ["text"]),
     "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "
             "rather than writing about them in your journal. The turn is attributed to you "
             "and kept forever; nobody can edit it afterwards, including you. Saying nothing "
@@ -1146,6 +1177,12 @@ _TOOL_SCHEMAS = {
                {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
                 "device": "optional: a plain device node to read from (default /dev/video0)"},
                []),
+    "rest": ("End this beat deliberately, when you judge you are done. You are NOT required "
+             "to keep acting until something runs out — a beat you end early is not a beat "
+             "wasted, and the time returns to the machine. Your reason becomes your closing "
+             "words. This touches nothing in the world, so it is not gated and not witnessed; "
+             "it is simply you saying you are finished.",
+             {"reason": "one line: what you finished, or why you are stopping here"}, ["reason"]),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
                  "a fact, a lesson, a question, what you were doing and why.",
                  {"content": "the memory, in your own words", "tags": "comma-separated tags (optional)"},
