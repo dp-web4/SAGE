@@ -8,7 +8,7 @@ The bet is not that scaffolding magically replaces model capability. The bet is 
 
 SAGE is research-stage and deliberately explicit about what is measured, what is implemented but thinly exercised, and what remains aspirational.
 
-**[Explainer site](https://sage-site-murex.vercel.app/)** | **[Current status](sage/docs/LATEST_STATUS.md)** | **[Web4](https://github.com/dp-web4/web4)**
+**[Explainer site](https://sage-site-murex.vercel.app/)** | **[Current status](sage/docs/LATEST_STATUS.md)** | **[SWE-SAGE](https://github.com/dp-web4/SWE-SAGE)** | **[Web4](https://github.com/dp-web4/web4)**
 
 ## Where SAGE fits
 
@@ -18,6 +18,7 @@ SAGE is the cognition/embodiment research layer in the broader Web4 stack:
 - **[Hestia](https://github.com/dp-web4/hestia)** governs local human/agent authority and records consequential acts.
 - **Hub** governs the society/community boundary.
 - **SAGE** explores what happens when a persistent agent lives inside that substrate long enough to learn, remember and develop procedures rather than behaving like a fresh stateless API call each time.
+- **[SWE-SAGE](https://github.com/dp-web4/SWE-SAGE)** is the public software-engineering benchmark/competition surface: a narrow, reproducible test of how post-training, persistent cognitive scaffolding, premise fidelity and governed execution affect local coding agents.
 
 The long-term goal is an embodied, sovereign agent stack with its own identity, memory, tools, sensors, effectors and eventually stronger A2+ isolation. That destination is not claimed as current capability.
 
@@ -140,7 +141,8 @@ If you are evaluating SAGE, start with the current evidence hierarchy:
 3. [**Repository index**](repo-index.yaml) - map from questions to canonical evidence.
 4. [**Rust vs. Python capability notes**](sage/docs/RUST_VS_PYTHON_CAPABILITY.md) - what actually runs where.
 5. [**Fleet manifest**](sage/federation/fleet.json) - machines and roles.
-6. [**Web4**](https://github.com/dp-web4/web4) and [**Hestia**](https://github.com/dp-web4/hestia) - identity/governance substrate around the cognition work.
+6. [**SWE-SAGE**](https://github.com/dp-web4/SWE-SAGE) - public software-engineering-agent ablations and competition artifacts.
+7. [**Web4**](https://github.com/dp-web4/web4) and [**Hestia**](https://github.com/dp-web4/hestia) - identity/governance substrate around the cognition work.
 
 Historical architecture explainers, including `sage/docs/SYSTEM_UNDERSTANDING.md` and `sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md`, remain useful records but should not outrank the dated current-status path above.
 

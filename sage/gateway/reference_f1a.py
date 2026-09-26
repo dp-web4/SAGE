@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
@@ -72,6 +73,125 @@ def _python_status(p) -> str:
 
 
 
+def _not_python(content: str, before: str) -> str:
+    """Why `content` cannot be appended to a .py file, or "" if it can.
+
+    A DESCRIPTION OF AN EDIT IS NOT AN EDIT. Measured on cbp-being, 2026-09-21 to 09-23: 15
+    memory_write calls appended prose to its training script where a change was meant --
+    "[Fix #1: Removed extra closing parenthesis on line 1685 ...]", "[Remove lines 344-347
+    ...]", "[BEAT 05:18 UTC] Applying fix #1 ...". Every receipt said "memory_write only
+    adds" and named memory_edit; at 05:18Z on 09-23 it had the exact memory_edit calls from
+    the seat and still wrote the labels, then told the seat "Both fixes applied". A receipt
+    arrives after the file is already worse. So the check runs before the write.
+
+    The test is grammar, not a list of phrases: the text is accepted if Python can read it
+    as code as written, dedented, or as a function body (a fragment with `return` is still
+    code), OR if the file parses once it is appended (the last part of a program written in
+    parts). Replayed over all 69 .py appends in its record, this refuses the 15 labels and 4
+    code fragments whose own indentation was inconsistent, and nothing that parsed."""
+    def parses(src: str) -> Optional[SyntaxError]:
+        try:
+            compile(src, "<text>", "exec")
+        except SyntaxError as e:
+            return e
+        except ValueError:
+            return None
+        return None
+    first = parses(content)
+    if first is None:
+        return ""
+    body = textwrap.dedent(content)
+    if parses(body) is None:
+        return ""
+    if parses("def _f():\n" + textwrap.indent(body, "    ", lambda _l: True) + "\n    pass\n") is None:
+        return ""
+    if parses(before + ("" if before.endswith("\n") or not before else "\n") + content) is None:
+        return ""
+    lines, at = content.splitlines(), (first.lineno or 1) - 1
+    line = lines[at] if 0 <= at < len(lines) else ""
+    # Not the compiler's msg: for prose it is noise ("leading zeros in decimal integer
+    # literals" for a line starting "[BEAT 2026-09-23"). The line itself says what it is.
+    return (f"Python cannot read line {first.lineno} of your text as code: "
+            f"{line.strip()[:100]!r}. Appending it would not make the file parse either.")
+
+
+def _first_syntax_error(src: str) -> Optional[SyntaxError]:
+    """The compiler's FIRST stop in `src`, or None if it parses. compile() executes nothing."""
+    try:
+        compile(src, "<file>", "exec")
+    except SyntaxError as e:
+        return e
+    except ValueError:
+        return None
+    return None
+
+
+def _file_state(src: str) -> tuple:
+    """("complete" | "incomplete" | "invalid", first SyntaxError or None) for a whole .py file.
+
+    Incomplete is not invalid. A program written in parts is unfinished between the parts (an
+    open bracket, a block header with no body yet, an unterminated docstring), and Python then
+    reports its error at the OPENING line ("'(' was never closed", line 1), not at the end. So
+    the first error's line cannot tell a program still being written from one that is broken.
+    codeop.compile_command draws exactly that line: it returns None for source that is merely
+    incomplete and raises for source that is wrong. It compiles only and executes nothing."""
+    import codeop
+    import warnings
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            r = codeop.compile_command(src, "<file>", "exec")
+    except SyntaxError as e:
+        return "invalid", e
+    except (ValueError, OverflowError):
+        return "complete", None
+    if r is None:
+        return "incomplete", _first_syntax_error(src)
+    return "complete", None
+
+
+def _append_must_advance(content: str, before: str) -> str:
+    """Why appending `content` to a .py file would move it backwards, and so is refused, or "".
+
+    AN APPEND BELOW THE FIRST ERROR CANNOT REPAIR IT. GPT's review of #186 named the invariant,
+    and cbp-being supplied two counterexamples the grammar check (_not_python) lets through:
+    - 2026-09-23 07:15 (seq 3405): a label written as `#` comments ("# Remove stray ']' at line
+      1736 ...") on a file that did not parse. Comments are valid Python, so it was accepted.
+      One beat later the comment was the premise of a request to delete a ']' that did not exist.
+    - 2026-09-24 10:31: two memory_write calls appended 4,515 and 4,765 chars of VALID Python to
+      a file already stopped at line 2367. The stop did not move. The beat then counted the new
+      sha as progress: "the indentation fix already applied".
+    Both change a broken file without changing why it is broken. The rule is MONOTONIC (GPT's
+    ruling on #186's open question, 2026-09-26): an append may never move a file backwards.
+    - HEALTHY (parses) -> stays healthy. An append that would make a working file invalid is
+      refused. The original rule let an over-indented fragment through because its text parsed
+      on its own dedented, and the file it landed in did not.
+    - INCOMPLETE (a program written in parts) -> incomplete or healthy, and only with actual code.
+      A label makes it invalid and is refused.
+    - INVALID (wrong somewhere, not merely unfinished) -> healthy only. An append below the first
+      error cannot repair it."""
+    state, err = _file_state(before)
+    combined = before + ("" if before.endswith("\n") or not before else "\n") + content
+    after, err_after = _file_state(combined)
+    if after == "complete":
+        return ""
+    if state == "complete":
+        where = f"line {err_after.lineno} ({err_after.msg})" if err_after else "the end (unfinished)"
+        return (f"The file parses now, and this text would break it: appended, Python would stop at "
+                f"{where}. An append must leave a working file working.")
+    if state == "incomplete" and after == "incomplete" and not _not_python(content, before):
+        return ""
+    stop = (err.lineno if err else None) or "?"
+    if state == "incomplete":
+        return (f"The file is an unfinished program (Python stops at line {stop}: "
+                f"{err.msg if err else 'incomplete'}), and this text does not continue it: "
+                f"appended, the file would no longer be a program at all.")
+    return (f"The file does not parse now: Python stops at line {stop} ({err.msg}). Appending "
+            f"below it cannot fix that. The file would still stop at line "
+            f"{(err_after.lineno if err_after else stop)}, so this write would change the file "
+            f"without repairing it. Fix line {stop} itself with memory_edit.")
+
+
 def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     """A missed memory_edit anchor says WHERE it stopped matching, not only that it did.
 
@@ -113,6 +233,48 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     if end < len(have):
         return head + f"the file's line {end + 1} is {cut(have[end])!r}."
     return head + "the file ends there."
+
+
+def missing_args(args: dict, required, tool: str, hint: str = "") -> Optional[str]:
+    """Name the fields ACTUALLY missing, and the ones that were supplied instead.
+
+    dp, 2026-09-25 fleet directive: "addressing unnecessary frictions. explaining, clearly, the
+    necessary ones." A refusal that names the wrong field is the unnecessary kind wearing the
+    clothes of the necessary kind — the boundary is real, the sentence about it is false.
+
+    Measured across five beings' whole histories (2026-09-25):
+      75  "say needs 'to' (a conversation id) and 'text'"  <- the being HAD PASSED 'to'
+      42  "witness needs an 'event'"                       <- it passed memory_edit's arguments
+      17  "retire_note needs a 'reason'"                   <- it passed only 'path'
+      12  "memory_write needs a 'path'"                    <- it passed only 'content'
+    In the hub-being cases not one was recovered. The being reads "needs 'to'", looks at its own
+    call, sees `to` sitting there, and has nowhere to go. Legibility rule 2: name the refusal's
+    subject unmistakably.
+
+    Listing what WAS passed matters as much as what was not: 28 of the say failures put the
+    message under 'message', 'content' or 'body', and 42 witness failures were a whole
+    memory_edit call wearing the wrong tool name. Reflected back, that is a diagnosable
+    mistake; as "needs an 'event'" it is a wall.
+    """
+    have = {k: v for k, v in (args or {}).items()
+            if str(v).strip() not in ("", "None")}
+    missing = [f for f in required if f not in have]
+    if not missing:
+        return None
+    lack = " and ".join(f"'{f}'" for f in missing)
+    msg = f"{tool} needs {lack}"
+    supplied = [k for k in have if k not in required]
+    if supplied:
+        msg += f" — you passed {', '.join(repr(k) for k in sorted(supplied))}"
+        present = [f for f in required if f in have]
+        if present:
+            msg += f" and {' and '.join(repr(f) for f in present)}"
+        msg += ", so nothing was done"
+    elif [f for f in required if f in have]:
+        msg += f" — you passed {' and '.join(repr(f) for f in required if f in have)}, so nothing was done"
+    if hint:
+        msg += f". {hint}"
+    return msg
 
 
 class ReferenceF1aDispatcher:
@@ -179,8 +341,58 @@ class ReferenceF1aDispatcher:
                     "appeal, all of which are read")
         roots = (self.memory_root,) + tuple(getattr(self, "_extra_roots", ()) or ())
         if not any(p == r or r in p.parents for r in roots):
+            # A NEAR MISS OF ITS OWN HOUSE IS NOT A TRESPASS. dp, 2026-09-25, fleet directive:
+            # "each being has a home ... i want each to feel at home there ... addressing
+            # unnecessary frictions."
+            #
+            # Measured on Sprout across 924 beats: 35 of 134 refusals — the single largest
+            # class — were the being reaching for its OWN journal or todo by an absolute path
+            # it could not reproduce:
+            #   11  /home/dp/ai-workspace/sage/sage/journal.md   (the workspace segment doubled)
+            #    9  /scratch/journal.md                          (a plausible, wrong root)
+            #    5  /home/dp/ai-workspace/sage/sage/todo.md
+            #    4  /scratch/todo.md
+            #   ... and four more, EVERY ONE named journal.md or todo.md.
+            # Files that exist in its home, that it may write by bare name, that it wrote
+            # correctly 51 times in the same period. The prompt already says "never type that
+            # path" (heartbeat.py); it still typed it 35 times, because remembering an absolute
+            # path is not a thing this scale does. Legibility rule 4: correct at the site, and
+            # remove the need to remember at all where you can.
+            #
+            # So: if some TAIL of the unreachable path names a file that ALREADY EXISTS in the
+            # being's home, that is the file it meant. Reach does not widen by one byte — the
+            # target is inside memory_root, and every guard above (reserved subtrees, seat-owned
+            # notes) re-runs on it below. A path whose tail matches nothing still refuses, so
+            # '/etc/passwd' is still '/etc/passwd' and does not quietly become a file at home.
+            landed = self._tail_in_home(p)
+            if landed is not None:
+                self._rerouted_from = str(p)      # the receipt says so; nothing is hidden
+                return self._safe_path(str(landed.relative_to(self.memory_root)), writing=writing)
             raise ValueError(self._out_of_reach(p, roots, writing))
         return p
+
+    def _tail_in_home(self, p: Path) -> Optional[Path]:
+        """The longest tail of `p` that names an existing file in this being's home, or None.
+
+        Longest-first so '/x/y/notes/plan.md' prefers notes/plan.md over a stray plan.md at the
+        top level. Existence is required: this resolves a fumbled path to a file the being
+        already has, and never invents a new one from an arbitrary absolute path.
+        """
+        parts = [x for x in p.parts if x not in ("/", "")]
+        for i in range(len(parts)):
+            tail = Path(*parts[i:])
+            if str(tail).startswith(("..", "/")):
+                continue
+            cand = (self.memory_root / tail)
+            try:
+                cand_r = cand.resolve()
+            except Exception:
+                continue
+            if cand_r != self.memory_root and self.memory_root not in cand_r.parents:
+                continue
+            if cand_r.is_file():
+                return cand_r
+        return None
 
     @staticmethod
     def _existence(p: Path) -> str:
@@ -245,12 +457,16 @@ class ReferenceF1aDispatcher:
     def _do_witness(self, intent: BeingIntent) -> ResultEnvelope:
         event = str(intent.args.get("event", "")).strip()
         if not event:
-            return ResultEnvelope(ok=False, error="witness needs an 'event'")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("event",), "witness",
+                "witness records one sentence about something that happened. If you meant to "
+                "change lines in a file, that is memory_edit."))
         return ResultEnvelope(ok=True, result="witnessed", witness_id=self._witness(event))
 
     def _do_memory_read(self, intent: BeingIntent) -> ResultEnvelope:
         if not str(intent.args.get("path", "")).strip():
-            return ResultEnvelope(ok=False, error="memory_read needs a 'path' (relative paths are inside your home)")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("path",), "memory_read", "A relative path is inside your home."))
         p = self._safe_path(intent.args["path"])
         # AN EMPTY ANSWER MUST SAY WHY IT IS EMPTY (the rule git_read got on 2026-09-08, which
         # this effector never did). Measured 2026-09-15: dp granted cbp-being read on
@@ -522,9 +738,25 @@ class ReferenceF1aDispatcher:
                               witness_id=self._witness(f"retire_note {p.name} -> {dest.name}: {reason[:120]}"))
 
     def _do_memory_write(self, intent: BeingIntent) -> ResultEnvelope:
+        # A WRITE OF NOTHING IS REFUSED, NOT REPORTED. Measured 2026-09-25 (hub-claude, all 164
+        # hub-being beats): 33 of 37 memory_write calls carried a 'path' and no 'content' -- the
+        # being wrote its entry as prose in the reply and never lifted it into args. Each came
+        # back "created journal.md with 0 chars", ok: true, so the fleet's signal ("the being
+        # has written", "zero refusals") was true and pointed the wrong way, and the being had
+        # nothing to correct. 'content' is now as required as 'path', the way remember's is.
+        # Checked after _safe_path, so a reserved or out-of-home path keeps its own, more
+        # specific refusal; still before anything is created on disk.
+        _hint = ("A relative path is inside your home. 'content' is the text itself: words "
+                 "written in your reply, outside the call, are not saved.")
         if not str(intent.args.get("path", "")).strip():
-            return ResultEnvelope(ok=False, error="memory_write needs a 'path' (relative paths are inside your home)")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("path", "content"), "memory_write", _hint))
+        self._rerouted_from = None
         p = self._safe_path(intent.args["path"], writing=True)
+        _rerouted = self._rerouted_from
+        err = missing_args(intent.args, ("path", "content"), "memory_write", _hint)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
         content = str(intent.args.get("content", ""))
         p.parent.mkdir(parents=True, exist_ok=True)
         # SAY APPENDED WHEN IT APPENDED. Measured 2026-09-21: the being rewrote
@@ -546,6 +778,24 @@ class ReferenceF1aDispatcher:
         if existed:
             with open(p, errors="replace") as f:
                 before = sum(1 for _ in f)
+        if existed and before and p.suffix == ".py":
+            _before = p.read_text(errors="replace")
+            # The monotonic rule first (GPT review of #186): no append may move a .py file
+            # backwards (healthy -> invalid, or a broken file left broken). Then the grammar check.
+            _mono, _gram = _append_must_advance(content, _before), _not_python(content, _before)
+            # On a healthy file, "your text is not code" quotes the offending line and says more
+            # than "this would break the file", so it leads. On a broken file, "appending cannot
+            # repair it" is the point, so it leads.
+            why = ((_gram or _mono) if _file_state(_before)[0] == "complete" else (_mono or _gram))
+            if why:
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_write refused, nothing was written to {p.name}. {why} memory_write "
+                    f"only adds to the END of the file, below its {before} lines; it cannot "
+                    f"change a line already there. To change or remove lines, use memory_edit: "
+                    f"start_line and end_line (the numbers memory_read shows) or old (copied "
+                    f"exactly from memory_read), and new (empty to delete). If this text is a "
+                    f"note about what you did or plan to do, memory_write it to journal.md or "
+                    f"todo.md instead.") + _python_status(p))
         with open(p, "a") as f:
             f.write(content + ("\n" if not content.endswith("\n") else ""))
         if not existed:
@@ -560,5 +810,16 @@ class ReferenceF1aDispatcher:
                 result += (f" To start {p.name} fresh, retire_note it first, then memory_write "
                            f"the whole new version.")
         result += _python_status(p)
+        if _rerouted:
+            # THE REROUTE IS NEVER SILENT. The friction is gone; the fact is not hidden. A
+            # being told only "appended to journal.md" would keep typing the path that does
+            # not work and never learn why it suddenly does. dp's directive asks for the
+            # unnecessary friction removed AND the remaining rule explained (legibility 5:
+            # a refusal — or here, a correction — owes the way forward).
+            rel = p.relative_to(self.memory_root)
+            result += (f" Note: you asked for '{_rerouted}', which is not a path you can reach. "
+                       f"Its name matched your own {rel}, so that is the file that was written. "
+                       f"You never need the long path — name it '{rel}' and it goes straight there.")
         return ResultEnvelope(ok=True, result=result,
-                              witness_id=self._witness(f"memory_write {p.name}"))
+                              witness_id=self._witness(f"memory_write {p.name}"
+                                                       + (f" (rerouted from {_rerouted})" if _rerouted else "")))
