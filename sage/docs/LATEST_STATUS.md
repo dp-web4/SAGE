@@ -84,7 +84,7 @@ See `forum/insights/mrh-relevance-contract.md`.
 | What law governed an action? | installed Hestia law plus witness/decision record |
 | What does the Rust daemon actually implement? | `RUST_VS_PYTHON_CAPABILITY.md` |
 | How does endogenous/metabolic state affect longitudinal agency? | `STATE_CONDITIONED_AGENCY.md` |
-| What is the public SWE-agent benchmark experiment? | `SWE-SAGE` and `SWE_SAGE.md` |
+| What is the SWE-agent competition experiment? | `SWE-SAGE` and `SWE_SAGE.md` |
 | What was historical architecture/status? | dated docs, `docs/history/`, `archive/`, git history |
 
 ## Documentation rule
