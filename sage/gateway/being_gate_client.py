@@ -1214,7 +1214,18 @@ _TOOL_SCHEMAS = {
                     "start_line that reads on.",
                     {"path": "path to your note",
                      "start_line": "optional: the line number to start from (default 1)"}, ["path"]),
-    "memory_write": ("Write a note into your own memory.",
+    # SAY IT APPENDS, AT THE MOMENT OF CHOICE (2026-09-26). This description was "Write a note
+    # into your own memory." Only memory_edit's description said memory_write appends, and a model
+    # choosing memory_write never reads that one. cbp-being meant to rewrite
+    # latent-weights-holdout-test.py whole: it sent 5,251 chars to memory_write, got "appended
+    # to the END", and the file now held two programs, with the fixes in the one that never runs.
+    # The old 1,846-line file with ten main()s was built the same way. The receipt (#141) tells it
+    # afterwards, and this tells it before.
+    "memory_write": ("Add text to a file in your home. It APPENDS to the end: if the file exists, "
+                     "what is already there stays and your text goes below it. It never replaces. "
+                     "To change or replace lines in an existing file, including rewriting a whole "
+                     "script, use memory_edit (start_line 1 to the last line replaces all of it). "
+                     "To start fresh, write to a new file name.",
                      {"path": "path to your note", "content": "what to write"}, ["path", "content"]),
     "channel_egress": ("Send a message out through a sealed channel.",
                        {"to": "recipient", "body": "your message"}, ["to", "body"]),

@@ -31,6 +31,7 @@ import json
 import os
 import re
 import base64
+import difflib
 import hashlib
 import signal
 import subprocess
@@ -1066,7 +1067,7 @@ def _own_running_claims(instance: Path, member: str, stamp: str, most: int = 3) 
     measured line loses to a dozen of the being's own sentences unless the sentence is quoted
     next to it."""
     from sage.gateway.being_join import carried_account, last_session_number
-    sources = [("your todo.md", _read(instance / "todo.md", 1500)),
+    sources = [("your todo.md", todo_view(instance)),
                ("your journal.md", _read(instance / "journal.md", 1200))]
     try:
         acc = carried_account(instance, last_session_number(instance)) or ""
@@ -1087,6 +1088,118 @@ def _own_running_claims(instance: Path, member: str, stamp: str, most: int = 3) 
         if len(out) >= most:
             break
     return out
+
+
+# ---------------------------------------------------------------------------------------------
+# THE TODO, AS WHAT IS STILL OPEN (dp, 2026-09-26: "yes the todo should show still-open").
+#
+# todo.md is an append-only log: each reflect writes a dated delta (added / done / still open),
+# and memory_write only appends. The window used to show the last 1500 chars of that log. On
+# cbp-being that meant stale "still running / awaiting results" lines, contradictory [ ] and
+# [x] copies of one item, and whatever a truncated block happened to hold (the file is
+# 299 KB, with 1,246 open checkboxes and 778 done). Now the whole log is read in order: an
+# item opens when it is added, and closes when a later line marks it done (a light rewording
+# still matches). The being's own "still open: none" clears the list. Items opened in the
+# last TODO_WINDOW_H hours are shown, newest first. Older unresolved ones are counted, not
+# listed, and the log itself is never changed.
+TODO_WINDOW_H = 48
+TODO_SHOWN = 15
+_BLOCK = re.compile(r"^\s*(20\d\d-\d\d-\d\d)[ T](\d\d:\d\d)")
+_SECTION = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open|added|done|completed)\s*\]?\s*:?\s*$", re.I)
+_NONE = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open)\s*\]?\s*:?\s*(none|nothing)\b", re.I)
+_ITEM = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
+_BOX = re.compile(r"^\[([ xX])\]\s*(.*)$")
+_TAG = re.compile(r"^\[(done|still open|open|added|completed)\]\s*:?\s*(.*)$", re.I)
+_OPEN_WORDS = {"still open", "open", "added"}
+
+
+def _norm(s):
+    s = re.sub(r"[`*_]", "", s.lower())
+    s = re.sub(r"\s+", " ", s).strip(" .:;-")
+    return s
+
+
+def todo_open(text, now=None, window_h=48):
+    """[(item, since)] still open, newest first, and the count of older open items."""
+    now = now or datetime.now(timezone.utc)
+    items = {}          # norm -> (text, since_dt)
+    since = None
+    section = None
+    for line in (text or "").splitlines():
+        m = _BLOCK.match(line)
+        if m:
+            try:
+                since = datetime.strptime(f"{m.group(1)} {m.group(2)}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+            except ValueError:
+                pass
+            section = None
+            continue
+        if _NONE.match(line):
+            items.clear()
+            continue
+        sm = _SECTION.match(line)
+        if sm:
+            section = sm.group(1).lower()
+            continue
+        im = _ITEM.match(line)
+        if not im:
+            continue
+        body = im.group(1)
+        status = None
+        b = _BOX.match(body)
+        if b:
+            status = "done" if b.group(1) in "xX" else "open"
+            body = b.group(2)
+        else:
+            t = _TAG.match(body)
+            if t:
+                status = "done" if t.group(1).lower() in ("done", "completed") else "open"
+                body = t.group(2)
+            elif section:
+                status = "done" if section in ("done", "completed") else "open"
+        if not status or len(body) < 4:
+            continue
+        n = _norm(body)
+        if status == "open":
+            if n not in items:
+                items[n] = (body.strip(), since)
+        else:
+            if n in items:
+                del items[n]
+            else:
+                for k in list(items):
+                    if difflib.SequenceMatcher(None, k, n).ratio() >= 0.85:
+                        del items[k]
+                        break
+    cutoff = now - timedelta(hours=window_h)
+    # An item with no dated block above it is undated, not old: it is shown, after the dated ones.
+    recent = [(t, s) for t, s in items.values() if s is None or s >= cutoff]
+    older = sum(1 for t, s in items.values() if s is not None and s < cutoff)
+    recent.sort(key=lambda x: (x[1] is not None, x[1] or cutoff), reverse=True)
+    return recent, older
+
+
+def todo_view(instance: Path, now=None) -> str:
+    """The todo section of the window: what is still open, from the whole log."""
+    try:
+        text = (instance / "todo.md").read_text(errors="replace")
+    except OSError:
+        text = ""
+    if not text.strip():
+        return "## todo.md\n(empty: you have no todo list yet)"
+    rec, older = todo_open(text, now=now, window_h=TODO_WINDOW_H)
+    lines = [f"## todo.md: still open ({len(rec)})"]
+    lines += [f"- [ ] {t}" + (f" (since {s:%Y-%m-%d %H:%M} UTC)" if s else "") for t, s in rec[:TODO_SHOWN]]
+    if len(rec) > TODO_SHOWN:
+        lines.append(f"- … and {len(rec) - TODO_SHOWN} more opened in the last {TODO_WINDOW_H} h.")
+    if not rec:
+        lines.append("(nothing open)")
+    if older:
+        lines.append(f"({older} older item(s) opened more than {TODO_WINDOW_H} h ago were never marked "
+                     f"done; they are in todo.md.)")
+    lines.append("Built from your whole todo.md: an item stays open until a later line marks it done. "
+                 "To close one, write it under done:. The whole log: memory_read todo.md.")
+    return "\n".join(lines)
 
 
 def own_state(instance: Path, member: str = "",
@@ -1164,8 +1277,7 @@ def own_state(instance: Path, member: str = "",
         parts.append("## Your own account\n" + acc + (("\n" + check) if check else ""))
     # tails are short now that recall searches the whole home (window pressure: median 6157
     # of 8192 tokens per prompt, max 8013, measured 2026-09-07)
-    todo = _read(instance / "todo.md", 1500)
-    parts.append("## todo.md\n" + (todo.strip() or "(empty: you have no todo list yet)"))
+    parts.append(todo_view(instance))
     journal = _read(instance / "journal.md", 1200)
     parts.append("## journal.md (tail)\n" + (journal.strip() or "(empty: this is your first beat)"))
     for d in ("scratch", "notes"):

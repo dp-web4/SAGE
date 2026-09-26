@@ -142,8 +142,7 @@ def test_its_own_running_claims_are_quoted_beside_the_measurement(tmp_path):
     quoted next to it (the service_contradictions move, applied to runs)."""
     inst = _home(tmp_path)
     _script(inst, "a.py")
-    (inst / "todo.md").write_text("2026-09-26 06:30 UTC — held-out test still running; "
-                                  "awaiting cbp-claude's report.\n")
+    (inst / "todo.md").write_text("- [ ] held-out test still running; awaiting cbp-claude's report\n")
     (inst / "journal.md").write_text("Technical update: the held-out test is still running.\n")
     block, _, _ = hb.files_and_runs(inst, BEING)
     quotes = [l for l in block.splitlines() if "Your own record disagrees" in l]
@@ -294,3 +293,87 @@ def test_a_request_with_no_file_still_gets_the_block(tmp_path):
     assert f"- notes/gone.py: your request (seq {req}) names it, but there is no such file" in block
     (tmp_path / "empty").mkdir()
     assert hb.files_and_runs(_home(tmp_path / "empty"), BEING) == ("", [], {})
+
+
+# --- the write verbs say what they do, at the moment of choice -----------------------------
+def test_memory_write_says_it_appends_and_names_the_verb_that_replaces():
+    """cbp-being sent a whole rewritten program to memory_write (5,251 chars) meaning 'this is
+    the file now'. The description it chose from said only 'Write a note into your own memory.'
+    The file became two programs."""
+    from sage.gateway.being_gate_client import ollama_tools
+    desc = next(t["function"]["description"] for t in ollama_tools(["memory_write"])
+                if t["function"]["name"] == "memory_write")
+    assert "APPENDS" in desc and "never replaces" in desc
+    assert "memory_edit" in desc and "start_line 1" in desc and "new file name" in desc
+
+
+def test_memory_edit_first_to_last_line_replaces_a_stacked_file_whole(tmp_path):
+    """The door the description names must actually open: lines 1..N replaced leaves exactly the
+    new program, not three."""
+    from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict
+    from sage.gateway.reference_f1a import ReferenceF1aDispatcher
+    root = tmp_path / "home"
+    root.mkdir()
+    stacked = "\n".join(["print('program one')"] * 238 + ["print('program two')"] * 149) + "\n"
+    (root / "t.py").write_text(stacked)
+    d = ReferenceF1aDispatcher(memory_root=str(root))
+    new = "print('the one program')\n"
+    env = d(BeingIntent("memory_edit", {"path": "t.py", "start_line": 1, "end_line": 387, "new": new}),
+            GatewayVerdict("allow"))
+    assert env.ok, env.error
+    assert (root / "t.py").read_text() == new
+
+
+# --- the todo as what is still open --------------------------------------------------------
+TODO_LOG = """2026-09-23 10:00 UTC
+- [ ] an old thing nobody closed
+2026-09-26 06:30 UTC
+- [ ] held-out test complete: await metrics
+- [x] held-out test complete: await metrics
+Still open:
+- [ ] Retrieve cbp-claude held-out test results
+2026-09-26 08:11 UTC
+- [ ] Create new file with only the held-out test program
+- [ ] Compare results with the original file's results
+2026-09-26 08:31 UTC
+- [done] Create new file with only the held-out test program.
+[still open]
+- Apply fixes and re-run held-out test.
+"""
+
+
+def test_the_todo_shows_what_is_still_open_newest_first(tmp_path):
+    from datetime import datetime, timezone
+    now = datetime(2026, 9, 26, 9, 0, tzinfo=timezone.utc)
+    rec, older = hb.todo_open(TODO_LOG, now=now)
+    items = [t for t, _ in rec]
+    assert items[0] == "Apply fixes and re-run held-out test."            # newest first
+    assert "Compare results with the original file's results" in items
+    assert "Retrieve cbp-claude held-out test results" in items
+    assert not any("await metrics" in t for t in items), "opened then marked done: closed"
+    assert not any(t.startswith("Create new file") for t in items), "a reworded done still closes it"
+    assert older == 1, "the 09-23 item is counted, not listed"
+
+
+def test_the_beings_own_still_open_none_clears_the_list():
+    from datetime import datetime, timezone
+    rec, older = hb.todo_open("2026-09-26 07:00 UTC\n- [ ] x thing\n2026-09-26 08:01 UTC\n"
+                              "- still open: none\n2026-09-26 08:11 UTC\n- [ ] y thing\n",
+                              now=datetime(2026, 9, 26, 9, 0, tzinfo=timezone.utc))
+    assert [t for t, _ in rec] == ["y thing"] and older == 0
+
+
+def test_an_undated_todo_is_shown_not_hidden_as_old():
+    rec, older = hb.todo_open("- [ ] first\n- [ ] second\n- [x] first\n")
+    assert [t for t, _ in rec] == ["second"] and older == 0
+
+
+def test_the_window_shows_the_open_view_not_the_log_tail(tmp_path):
+    inst = _home(tmp_path)
+    (inst / "todo.md").write_text(TODO_LOG)
+    st = hb.own_state(inst, member=BEING, mark_conversations=False, services="", body_reading={})
+    sec = st[st.index("## todo.md"):]
+    sec = sec[:sec.index("\n## ") if "\n## " in sec else len(sec)]
+    assert sec.startswith("## todo.md: still open (")
+    assert "- [x]" not in sec and "await metrics" not in sec
+    assert "memory_read todo.md" in sec and "write it under done:" in sec
