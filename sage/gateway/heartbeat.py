@@ -41,7 +41,7 @@ from pathlib import Path
 HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_note", "witness",
-                 "request_scope", "appeal", "peer_ask", "mesh", "say", "gaze"]
+                 "request_scope", "appeal", "peer_ask", "mesh", "say", "gaze", "rest"]
 # Verbs in EXPLORE_TOOLS that act on a BODY are offered only where the beat has measured that
 # body (body.inventory()["verbs"]). GPT on #183: offering `gaze` to a headless being is a
 # false affordance — it would call it, and be told its eyes will follow, on a machine with no
@@ -2072,7 +2072,9 @@ def main(argv=None) -> int:
     def _turn(res):
         return None if res is None else {"reply": res.reply, "steps": res.steps, "capped": res.capped,
                                          "trace": _trace(res), "thinking": [t[:4000] for t in res.thinking],
-                                         "salvaged": list(res.salvaged), "generates": list(res.generates)}
+                                         "salvaged": list(res.salvaged), "generates": list(res.generates),
+                                         "rested": getattr(res, "rested", None),
+                                         "looped": getattr(res, "looped", None)}
     record = {
         # schema: what fields a reader may expect (Legion's amendment 4, 2026-09-05: the
         # consolidation organ counts how many records carry join/account/wake/interventions;

@@ -915,6 +915,12 @@ _TOOL_SCHEMAS = {
                {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
                 "device": "optional: a plain device node to read from (default /dev/video0)"},
                []),
+    "rest": ("End this beat deliberately, when you judge you are done. You are NOT required "
+             "to keep acting until something runs out — a beat you end early is not a beat "
+             "wasted, and the time returns to the machine. Your reason becomes your closing "
+             "words. This touches nothing in the world, so it is not gated and not witnessed; "
+             "it is simply you saying you are finished.",
+             {"reason": "one line: what you finished, or why you are stopping here"}, ["reason"]),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
                  "a fact, a lesson, a question, what you were doing and why.",
                  {"content": "the memory, in your own words", "tags": "comma-separated tags (optional)"},
