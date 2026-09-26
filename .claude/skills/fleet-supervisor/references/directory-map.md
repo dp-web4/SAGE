@@ -8,9 +8,9 @@ Repositories have explicit roles and visibility boundaries. Artifacts land in ex
 
 **What goes here**:
 - Competition agent runtime and adapters
-- Public post-training recipes that are legal/reproducible
+- Competition post-training recipes that are legal/reproducible
 - SWE-specific persistent-state and premise-fidelity implementations
-- Public ablation configs, traces, metrics, and results
+- Competition ablation configs, traces, metrics, and results
 - Kaggle submission packaging
 - Paper-track manuscript/assets
 - SWE-specific findings and failure analyses
@@ -155,7 +155,7 @@ Repositories have explicit roles and visibility boundaries. Artifacts land in ex
 | Game mechanics analysis | shared-context |
 | Fleet ping | shared-context |
 | Operational runbook | private-context |
-| Public SWE competition documentation | SWE-SAGE |
+| Private SWE competition documentation | SWE-SAGE |
 | Public ARC-AGI-3 historical solver documentation | ARC-SAGE |
 | Insight on consciousness framing | shared-context (forum/) or SAGE (forum/) |
 | Membot cartridge | shared-context (fleet-learning) |
@@ -173,4 +173,4 @@ Ask: "who needs to read this?"
 - ARC-AGI-3 researchers → ARC-SAGE
 - Operators (humans or supervisor scripts) → private-context
 
-If multiple, pick the most public one and cross-reference from the others.
+If multiple, pick the canonical home for the artifact's current visibility and cross-reference from the others.
