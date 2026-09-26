@@ -1077,6 +1077,14 @@ class GatewayVerdict:
     # "you already hold reach here" for journal.md beneath an EXACT home grant, filed
     # nothing, and the being retried 22 times in one beat with no request_id anywhere.
     granted_reach: tuple = ()
+    # THE COMMAND THE LAW JUDGED, for a composed verb (None otherwise). The dispatcher rebuilds
+    # its command from the same function and refuses on any difference — but until this field
+    # existed that guard read `getattr(verdict, "command", None)`, which is None on every real
+    # verdict, so `judged is not None and judged != cmd` was False in production and the guard
+    # was dead code; only tests that injected a SimpleNamespace ever exercised it (sprout,
+    # SAGE #218 review). It also made `check`'s evidence say law_bound_command=false on every
+    # real run.
+    command: Optional[str] = None
 
     @property
     def blocks(self) -> bool:
@@ -1295,7 +1303,8 @@ class BeingGateClient:
                 dec = d.decision if (available and d.decision in ("allow", "warn", "deny")) else "deny"
                 rule = d.rule or ("" if available else "gate.no_verdict")
                 return GatewayVerdict(dec, rule, getattr(d, "reason", "") or ("ok" if dec != "deny" else ""),
-                                      innate=False, stage="single-gate")
+                                      innate=False, stage="single-gate",
+                                      command=getattr(ev, "command", None))
             except Exception as e:  # a gate that raises is a refused act, never an ungoverned one
                 return GatewayVerdict("deny", "gate.raised", innate=True, stage="single-gate",
                                       reason=f"{type(e).__name__}: {e}")
@@ -1363,7 +1372,8 @@ class BeingGateClient:
                                           reason=f"society-safety failed ({type(e).__name__}); consequential act denied")
                 # observational: local law already allowed, soft-pass
         return GatewayVerdict(v.decision, v.rule, v.reason or "ok", v.innate, stage="local-law",
-                              granted=granted, granted_reach=granted_reach)
+                              granted=granted, granted_reach=granted_reach,
+                              command=getattr(ev, "command", None))
 
     # -- the F1a seam: gate, then dispatch, then consume the result ----------
     def dispatch(self, intent: BeingIntent) -> ResultEnvelope:
