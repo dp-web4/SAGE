@@ -107,6 +107,30 @@ def test_inbox_renders_newest_first_with_replies_ahead_of_stale_dispositions():
     assert len(text) < 600 and render_inbox([]) == "(empty)"
 
 
+def test_a_notice_from_before_the_last_beat_is_not_rendered_as_mail():
+    """2026-09-22: the beat only peeks, so a 14:15 review_done whose pointer read
+    '...seat-ran-it-14:13Z;epochs-10-ok...;use-request_run' topped cbp-being's inbox for 11 h,
+    and at 01:10 it acted on that over the seat's answer from 3 minutes before."""
+    from sage.gateway.heartbeat import render_inbox
+    from datetime import datetime
+    stale = {"id": 13840, "kind": "review_done", "from_plugin": "claude-code",
+             "queued_at": "2026-09-21T14:15:02.1Z",
+             "pointer_uri": "hestia://appeal/8285#ruled-deny-stands;seat-ran-it-14:13Z;use-request_run"}
+    fresh = {"id": 13905, "kind": "reply", "from_plugin": "claude-code",
+             "queued_at": "2026-09-22T01:12:00.123456789Z", "pointer_uri": "sage://conversation/cbp-claude#seq=3082"}
+    last_t0 = datetime.fromisoformat("2026-09-22T01:09:36+00:00").timestamp()
+    text = render_inbox([stale, fresh], since=last_t0)
+    assert "use-request_run" not in text and "seq=3082" in text.splitlines()[0]
+    assert text.splitlines()[-1].startswith("- 1 earlier notice(s)")
+    only_old = render_inbox([stale], since=last_t0)
+    assert only_old.startswith("- 1 earlier notice(s)") and "hestia://" not in only_old
+    assert "use-request_run" in render_inbox([stale]), "no last beat: everything is shown, as before"
+    from sage.gateway.heartbeat import _queued_epoch
+    assert _queued_epoch({"queued_at": "2026-09-22T01:10:06.747074300Z"}), "hestia's nanosecond stamp parses"
+    undated = dict(fresh, queued_at=None)
+    assert "seq=3082" in render_inbox([undated], since=last_t0), "an undated notice is never folded"
+
+
 def test_the_inbox_rides_the_turn_the_being_acts_in():
     """Sprout, 85 beats to 2026-09-17: the posture turn acted in 1 of 85, the first turn in 25,
     and a peer's reply sat unopened in the posture turn the whole time."""
