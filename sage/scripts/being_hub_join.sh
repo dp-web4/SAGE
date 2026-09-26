@@ -227,5 +227,6 @@ cat <<TXT
        (sage/docs/DESIGN_BEING_INBOX_DRAIN.md section 3, in this checkout).
     3. the heartbeat unit: python3 -m sage.gateway.heartbeat --member $BEING --model <model> --instance <dir>,
        with HESTIA_HOME and HESTIA_SHARED_DIR SET IN THE UNIT (measured on two seats: without them the gate client
-       resolves the law from a source checkout, not the installed copy) -- and on macOS, SAGE #130 merged first.
+       resolves the law from a source checkout, not the installed copy). On launchd that means
+       EnvironmentVariables in the plist. (macOS seats: SAGE #130, the PATH-independent seal anchor, is merged.)
 TXT
