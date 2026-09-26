@@ -188,3 +188,8 @@ def test_extra_can_never_supply_a_field_the_store_owns():
     assert conv.count(h, "room") == 0
     t = conv.append(h, "room", speaker=ME, text="hi", extra={"heard_id": "x"})
     assert t["heard_id"] == "x" and "witness" not in t and "beat" not in t
+    # legion on #232: a refused append must not spend a seq in the witness, or this first real
+    # turn would be seq 8 and the witness would carry a truncation scar per refusal.
+    assert t["seq"] == 1
+    w = json.loads(conv.witness_path(h, "room").read_text())
+    assert w["high_water_seq"] == 1 and "truncations" not in w

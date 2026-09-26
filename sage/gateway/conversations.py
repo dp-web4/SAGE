@@ -276,6 +276,14 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
         raise ValueError(
             f"{speaker} may read '{conv_id}' and may not speak in it "
             f"(writable_by: {m.get('writable_by')})")
+    # `extra` adds annotations (room.py: heard_id, mic). It can never supply a key the store
+    # itself owns, even one this turn happens not to carry: an absent witness or beat must stay
+    # absent, not be asserted by a caller (GPT on #228). Refused HERE, before the lock, because
+    # `next_seq` writes the witness: a refusal after it spends a seq on disk and the next real
+    # turn records a truncation scar for a turn that never existed (legion on #232).
+    reserved = RESERVED_TURN_KEYS.intersection(extra or {})
+    if reserved:
+        raise ValueError(f"extra may not set {sorted(reserved)}; the store owns those fields")
     log, _ = _paths(instance, conv_id)
     log.parent.mkdir(parents=True, exist_ok=True)
     # TWO PROCESSES WRITE THIS FILE: the Python heartbeat (the being's `say`) and the Rust
@@ -296,6 +304,7 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
             # `next_seq`: line count is wrong after any gap, and the witness lives outside
             # Git's rewrite domain so a rollback of every tracked file is still detected.
             f.seek(0)
+            # Everything that can refuse, refuses ABOVE the lock: next_seq spends the number.
             seq = next_seq(instance, conv_id, f.read().splitlines())
             # `ts` is when it was SAID, for a turn recorded after the fact (a heard voice is
             # carried into the room at the next beat, minutes later). Default: now.
@@ -306,13 +315,7 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
                 turn["witness"] = witness
             if beat:
                 turn["beat"] = beat
-            # `extra` adds annotations (room.py: heard_id, mic). It can never supply a key the
-            # store itself owns, even one this turn happens not to carry: an absent witness or
-            # beat must stay absent, not be asserted by a caller (GPT on #228).
-            for k, v in (extra or {}).items():
-                if k in RESERVED_TURN_KEYS:
-                    raise ValueError(f"extra may not set {k!r}; it is the store's own field")
-                turn[k] = v
+            turn.update(extra or {})       # reserved keys were refused above
             f.write(json.dumps(turn, ensure_ascii=False) + "\n")
             f.flush()
             os.fsync(f.fileno())
