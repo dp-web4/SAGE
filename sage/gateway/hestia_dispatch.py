@@ -96,6 +96,29 @@ def _stale_transport(e: Exception) -> bool:
     return "HTTP 404" in msg and "Session not found" in msg
 
 
+def _worktree_env() -> dict:
+    """The environment for EVERY process the seat runs inside the being's worktree: git hooks OFF.
+
+    THE HOOK IS THE DOOR. SAGE sets `core.hooksPath=.githooks`, a TRACKED directory, and that
+    setting is shared by every worktree of the repository — including the being's. The being can
+    write its own worktree (M1, wherever `check` gets its sandbox), so it can write
+    `.githooks/pre-commit`; and `pr_open` / `pr_amend` then run `git commit` in that worktree AS
+    THE SEAT, outside bubblewrap, with the vault passphrase and every key on this box in reach.
+    A gated write plus a seat-run commit is ungated arbitrary code — the composition the sandbox
+    exists to prevent, arriving through git instead of pytest. Measured on Legion 2026-09-25: gate
+    ALLOWED and harness ALLOWED a write to `.githooks/pre-commit`; nothing had exploited it.
+
+    Set through GIT_CONFIG_* rather than `-c` so it reaches git without changing any command
+    string the law judged (judged argv == executed argv is kept exactly), and so it covers every
+    git the process spawns, not only the ones this file names."""
+    env = dict(os.environ)
+    n = int(env.get("GIT_CONFIG_COUNT", "0") or 0)
+    env.update({"GIT_CONFIG_COUNT": str(n + 1),
+                f"GIT_CONFIG_KEY_{n}": "core.hooksPath",
+                f"GIT_CONFIG_VALUE_{n}": "/dev/null"})
+    return env
+
+
 class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
     live daemon. Wraps ReferenceF1aDispatcher for the local verbs (witness / memory)."""
@@ -1176,7 +1199,7 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=err)
         action_id = begin.get("actionId")
         try:
-            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(), text=True,
                                   capture_output=True, timeout=60)
             out = ((proc.stdout or "") + (proc.stderr or "")).strip()
             ran, rc = True, proc.returncode
@@ -1255,7 +1278,7 @@ class HestiaF1aDispatcher:
                                                   f"is unreachable ({str(err)[:160]})")
         action_id = begin.get("actionId")
         try:
-            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(), text=True,
                                   capture_output=True, timeout=60)
             ran = True
         except Exception as e:
@@ -1325,7 +1348,7 @@ class HestiaF1aDispatcher:
                         probe = subprocess.run(
                             ["git", "-C", self.worktree, "ls-files", "--error-unmatch",
                              "--", spec],
-                            cwd=self.worktree, text=True, capture_output=True, timeout=15)
+                            cwd=self.worktree, env=_worktree_env(), text=True, capture_output=True, timeout=15)
                         missing = probe.returncode != 0
                     except Exception:
                         missing = None
@@ -1369,7 +1392,7 @@ class HestiaF1aDispatcher:
 
         def _git(*args):
             try:
-                r = subprocess.run(("git", *args), cwd=self.worktree, text=True,
+                r = subprocess.run(("git", *args), cwd=self.worktree, env=_worktree_env(), text=True,
                                    capture_output=True, timeout=15)
                 return r.stdout.strip() if r.returncode == 0 else None
             except Exception:
@@ -1445,7 +1468,7 @@ class HestiaF1aDispatcher:
                         "tree": self._worktree_revision(), "worktree": self.worktree})
         action_id = begin.get("actionId")
         try:
-            proc = subprocess.run(argv, cwd=self.worktree, text=True,
+            proc = subprocess.run(argv, cwd=self.worktree, env=_worktree_env(), text=True,
                                   capture_output=True, timeout=600)
             passed = proc.returncode == 0
             raw_out = (proc.stdout or "") + (proc.stderr or "")
