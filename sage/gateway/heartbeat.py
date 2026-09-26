@@ -31,6 +31,7 @@ import json
 import os
 import re
 import base64
+import signal
 import subprocess
 import sys
 import time
@@ -308,11 +309,17 @@ CONV_LADDER = ((12, None), (12, 1500), (6, 1200), (3, 900), (2, 700))
 LOOP_GROWTH_CHARS = 10_000
 
 
-class BeatKilled(Exception):
+class BeatKilled(BaseException):
     """SIGTERM arrived mid-beat (the unit's TimeoutStartSec, or a stop). Raised from the
     signal handler so the beat unwinds to its record instead of vanishing: 04:30Z
     2026-09-09 a 51-minute beat left nothing in heartbeats.jsonl and the monitor never
-    knew it had happened. systemd allows TimeoutStopSec (90 s) after SIGTERM — enough."""
+    knew it had happened. systemd allows TimeoutStopSec (90 s) after SIGTERM — enough.
+
+    BaseException, for the reason KeyboardInterrupt is one. Almost all of a beat is spent
+    blocked in OllamaIRP.get_chat_response, which ends in `except Exception` and returns the
+    error AS MODEL TEXT — so an Exception subclass raised there became "[OllamaIRP: Error:
+    signal 15 (SIGTERM)]", the beat carried on, and systemd SIGKILLed it 90 s later with
+    nothing written. Measured by McNugget on #213 against a socket that never answers."""
 
 
 # What a verb's schema costs, and what to assume when it cannot be measured. Measured on
@@ -1643,6 +1650,7 @@ def main(argv=None) -> int:
     ap.add_argument("--no-escalate", action="store_true",
                     help="do not route refusals to the seat's auto session (default: route, as governed_turn does)")
     args = ap.parse_args(argv)
+    install_kill_handler()
 
     instance = Path(args.instance).resolve()
     if not (instance / "identity.json").exists():
@@ -1911,117 +1919,134 @@ def main(argv=None) -> int:
                 f.write(json.dumps(line, default=str) + "\n")
         return cb
 
-    explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
-                                   tools=ollama_tools(_explore_tools), on_generate=_on_generate("explore"))
-    convo = _carry(seed, explore)
-    after = None
-    if posture_turn is not None:
-        convo.append({"role": "user", "content": posture_turn})
-        after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
-                                     tools=ollama_tools(_explore_tools), on_generate=_on_generate("posture"))
-        convo = _carry(convo, after)
-    # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
-    # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
-    # carries the whole explore(+posture) conversation and is usually the beat's largest
-    # prompt, and until 2026-09-13 it was invisible to the window census (CBP, 09-12).
+    # EVERYTHING BELOW RUNS UNDER THE KILL HANDLER. A SIGTERM (the unit's TimeoutStartSec, or a
+    # stop) raises BeatKilled here, so the beat unwinds to its record with the phases that
+    # completed instead of vanishing. Measured on Legion 04:30Z 2026-09-09: a 51-minute beat left
+    # nothing in heartbeats.jsonl and no monitor knew it had happened. BeatKilled was defined
+    # on main with no producer; install_kill_handler() is that producer.
+    explore = after = reflect = answer = None
     account = {"present": False, "sha256": None, "reply": "", "generates": []}
+    killed = None
     try:
-        ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
-                   [{"role": "user", "content": ACCOUNT_ASK}]
-        aresp = llm.get_chat_response(ask_msgs)
-        _raw = aresp.get("raw") or {}
-        _gen = {"done_reason": _raw.get("done_reason"), "prompt_eval_count": _raw.get("prompt_eval_count"),
-                "eval_count": _raw.get("eval_count"), "retried": 0, "num_predict": _sent_budget(llm)}
-        account["generates"].append(_gen)
+        explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
+                                       tools=ollama_tools(_explore_tools), on_generate=_on_generate("explore"))
+        convo = _carry(seed, explore)
+        after = None
+        if posture_turn is not None:
+            convo.append({"role": "user", "content": posture_turn})
+            after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
+                                         tools=ollama_tools(_explore_tools), on_generate=_on_generate("posture"))
+            convo = _carry(convo, after)
+        # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
+        # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
+        # carries the whole explore(+posture) conversation and is usually the beat's largest
+        # prompt, and until 2026-09-13 it was invisible to the window census (CBP, 09-12).
         try:
-            _on_generate("account")(dict(_gen))   # the partial trace, same as the tool turns
-        except Exception as _e:
-            print(f"[heartbeat] on_generate(account) failed: {type(_e).__name__}: {_e}", file=sys.stderr)
-        areply = (aresp.get("content") or "").strip()
-        parsed = parse_account(areply)
-        account["reply"] = areply[:1200]
-        if parsed:
-            rec = save_account(instance, parsed, host_session_id)
-            account.update({"present": True, "sha256": rec["sha256"], "session_at_write": rec["session_at_write"]})
-        convo.append({"role": "user", "content": ACCOUNT_ASK})
-        convo.append({"role": "assistant", "content": areply or "(no answer)"})
-    except Exception as e:
-        account["error"] = f"{type(e).__name__}: {e}"
-    # Reflect gets its OWN compact context, not the whole beat. Carrying the seed (posture,
-    # fleet digest, inbox, scope, recall) into the reflect turn pushed the prompt to 8171 of
-    # 8192 tokens with 21 left to answer in: 5 `length` stops in 54 beats, every one of them a
-    # reflect turn (measured 2026-09-09). What reflection needs is what it just did and what it
-    # said about it, and those are short.
-    reflect_convo = [
-        {"role": "system", "content": REFLECT_SYSTEM.format(name=name, machine=machine, member=args.member)},
-        {"role": "user", "content": (f"Your beat at {now:%Y-%m-%d %H:%M} UTC is ending.\n\n"
-                                     + _beat_record_text(explore, after)
-                                     + "\n\nYour own words this beat:\n"
-                                     + ((explore.reply or "").strip()[:600] or "(you acted without closing words)"))},
-    ]
-    convo = reflect_convo
-    # Ask it to answer someone ONLY when there is someone to answer. Measured 2026-09-17: in no
-    # conversation at all it filled the id slot three beats running with "speaker",
-    # "conversation_id_placeholder" and "1234567890" — the same shape as a mis-rooted home path
-    # or an echoed example filename. An ask with no valid target invents one.
-    #
-    # And when there IS someone, show the being WHAT IT IS ANSWERING. The reflect turn's
-    # context is deliberately compact — the record of its acts plus 600 chars of its own
-    # closing words — so a turn addressed to it lived only in the explore state block, one
-    # turn earlier. The instruction to answer and the words to answer had never been in the
-    # same context. Measured on Sprout 2026-09-17: 596 beats, 31 `say` attempts, ZERO
-    # successes, every one naming an invented id, and four beats after a real channel finally
-    # existed the being wrote its journal three times and never answered. The only bridge was
-    # the 600-char echo: a model that happened to discuss the turn in explore carried enough
-    # forward to reply (cbp-being, 4B, 83 successful says); one that free-associated carried
-    # nothing. That made answering a person contingent on what the being happened to muse
-    # about, which is not a property anyone chose.
-    # ONE selection for the whole beat (see SelectedTurn): the reflect prompt and the answer
-    # phase must act on the same turn, and nothing arriving mid-beat may re-address it.
-    say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member)
-    # Immediately before the instruction, so the smallest model does not have to hold it
-    # across a turn boundary to use it.
-    if pending_block:
-        convo.append({"role": "user", "content": pending_block})
-    convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
-                                                            say_line=say_line, say_first=say_first)})
-    # One extra step when someone is waiting, because the routine three fill the budget exactly.
-    # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
-    # asked: reflect spent all three steps on journal, todo and remember, and there was no
-    # fourth for `say`. Showing it the question and then giving it no way to answer is worse
-    # than not showing it.
-    _reflect_steps = args.reflect_steps + (1 if say_first else 0)
-    reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
-                                   tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
+            ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
+                       [{"role": "user", "content": ACCOUNT_ASK}]
+            aresp = llm.get_chat_response(ask_msgs)
+            _raw = aresp.get("raw") or {}
+            _gen = {"done_reason": _raw.get("done_reason"), "prompt_eval_count": _raw.get("prompt_eval_count"),
+                    "eval_count": _raw.get("eval_count"), "retried": 0, "num_predict": _sent_budget(llm)}
+            account["generates"].append(_gen)
+            try:
+                _on_generate("account")(dict(_gen))   # the partial trace, same as the tool turns
+            except Exception as _e:
+                print(f"[heartbeat] on_generate(account) failed: {type(_e).__name__}: {_e}", file=sys.stderr)
+            areply = (aresp.get("content") or "").strip()
+            parsed = parse_account(areply)
+            account["reply"] = areply[:1200]
+            if parsed:
+                rec = save_account(instance, parsed, host_session_id)
+                account.update({"present": True, "sha256": rec["sha256"], "session_at_write": rec["session_at_write"]})
+            convo.append({"role": "user", "content": ACCOUNT_ASK})
+            convo.append({"role": "assistant", "content": areply or "(no answer)"})
+        except Exception as e:
+            account["error"] = f"{type(e).__name__}: {e}"
+        # Reflect gets its OWN compact context, not the whole beat. Carrying the seed (posture,
+        # fleet digest, inbox, scope, recall) into the reflect turn pushed the prompt to 8171 of
+        # 8192 tokens with 21 left to answer in: 5 `length` stops in 54 beats, every one of them a
+        # reflect turn (measured 2026-09-09). What reflection needs is what it just did and what it
+        # said about it, and those are short.
+        reflect_convo = [
+            {"role": "system", "content": REFLECT_SYSTEM.format(name=name, machine=machine, member=args.member)},
+            {"role": "user", "content": (f"Your beat at {now:%Y-%m-%d %H:%M} UTC is ending.\n\n"
+                                         + _beat_record_text(explore, after)
+                                         + "\n\nYour own words this beat:\n"
+                                         + ((explore.reply or "").strip()[:600] or "(you acted without closing words)"))},
+        ]
+        convo = reflect_convo
+        # Ask it to answer someone ONLY when there is someone to answer. Measured 2026-09-17: in no
+        # conversation at all it filled the id slot three beats running with "speaker",
+        # "conversation_id_placeholder" and "1234567890" — the same shape as a mis-rooted home path
+        # or an echoed example filename. An ask with no valid target invents one.
+        #
+        # And when there IS someone, show the being WHAT IT IS ANSWERING. The reflect turn's
+        # context is deliberately compact — the record of its acts plus 600 chars of its own
+        # closing words — so a turn addressed to it lived only in the explore state block, one
+        # turn earlier. The instruction to answer and the words to answer had never been in the
+        # same context. Measured on Sprout 2026-09-17: 596 beats, 31 `say` attempts, ZERO
+        # successes, every one naming an invented id, and four beats after a real channel finally
+        # existed the being wrote its journal three times and never answered. The only bridge was
+        # the 600-char echo: a model that happened to discuss the turn in explore carried enough
+        # forward to reply (cbp-being, 4B, 83 successful says); one that free-associated carried
+        # nothing. That made answering a person contingent on what the being happened to muse
+        # about, which is not a property anyone chose.
+        # ONE selection for the whole beat (see SelectedTurn): the reflect prompt and the answer
+        # phase must act on the same turn, and nothing arriving mid-beat may re-address it.
+        say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member)
+        # Immediately before the instruction, so the smallest model does not have to hold it
+        # across a turn boundary to use it.
+        if pending_block:
+            convo.append({"role": "user", "content": pending_block})
+        convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
+                                                                say_line=say_line, say_first=say_first)})
+        # One extra step when someone is waiting, because the routine three fill the budget exactly.
+        # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
+        # asked: reflect spent all three steps on journal, todo and remember, and there was no
+        # fourth for `say`. Showing it the question and then giving it no way to answer is worse
+        # than not showing it.
+        _reflect_steps = args.reflect_steps + (1 if say_first else 0)
+        reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
+                                       tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
 
-    # The answer turn: only when someone is still waiting, the being has not already spoken, AND
-    # the waiting turn actually asked something. Without the last condition, a statement that
-    # asked nothing ("keep going!") still opened an answer turn and handed the being its own
-    # unrelated words to send — see `_prior_words` and `SelectedTurn`, 2026-09-21 06:31Z. The
-    # expectation is read from the selection made BEFORE reflection, never re-scanned.
-    answer = None
-    if selected is not None and selected.expects_reply and not _said_in(reflect):
-        answer = run_ollama_tool_turn(
-            client, llm,
-            [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
-                                                                member=args.member)},
-             # The acts go FIRST, ahead of what it is answering. Measured 2026-09-21, beat
-             # heartbeat-85303f70bf67: this turn saw only the seat's pre-edit "nothing was
-             # applied" and the reflect words that echoed it, and told the seat "the edit never
-             # actually happened" (seq 2961) about an edit that had succeeded 50 s earlier.
-             # Then ONLY the selected turn (#147): never the whole multi-conversation block.
-             {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
-                 pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
-            max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
-        # NO RE-ASK HERE. Two were tried and both are reverted; the reasons are recorded as
-        # SMALL_MODEL_LEGIBILITY 1.14, and the short form is: a prompt written in the harness's
-        # voice, about the harness's mechanics, becomes the being's MESSAGE at this scale.
-        # Measured on Sprout 2026-09-24/25 across 9 firings — 0 delivered the answer, and the
-        # one that reached dp said "I'm sorry I didn't call a tool", which is this file's own
-        # subject matter arriving in dp's inbox under the being's name. An answer turn that
-        # produced no call is left as it is: the turn stays unanswered, the conversation stays
-        # unmarked, and the NEXT beat sees it still owed. That is the honest record, and it is
-        # what the reflect phase — where `say` actually works — gets to act on.
+        # The answer turn: only when someone is still waiting, the being has not already spoken, AND
+        # the waiting turn actually asked something. Without the last condition, a statement that
+        # asked nothing ("keep going!") still opened an answer turn and handed the being its own
+        # unrelated words to send — see `_prior_words` and `SelectedTurn`, 2026-09-21 06:31Z. The
+        # expectation is read from the selection made BEFORE reflection, never re-scanned.
+        answer = None
+        if selected is not None and selected.expects_reply and not _said_in(reflect):
+            answer = run_ollama_tool_turn(
+                client, llm,
+                [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
+                                                                    member=args.member)},
+                 # The acts go FIRST, ahead of what it is answering. Measured 2026-09-21, beat
+                 # heartbeat-85303f70bf67: this turn saw only the seat's pre-edit "nothing was
+                 # applied" and the reflect words that echoed it, and told the seat "the edit never
+                 # actually happened" (seq 2961) about an edit that had succeeded 50 s earlier.
+                 # Then ONLY the selected turn (#147): never the whole multi-conversation block.
+                 {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
+                     pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
+                max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
+            # NO RE-ASK HERE. Two were tried and both are reverted; the reasons are recorded as
+            # SMALL_MODEL_LEGIBILITY 1.14, and the short form is: a prompt written in the harness's
+            # voice, about the harness's mechanics, becomes the being's MESSAGE at this scale.
+            # Measured on Sprout 2026-09-24/25 across 9 firings — 0 delivered the answer, and the
+            # one that reached dp said "I'm sorry I didn't call a tool", which is this file's own
+            # subject matter arriving in dp's inbox under the being's name. An answer turn that
+            # produced no call is left as it is: the turn stays unanswered, the conversation stays
+            # unmarked, and the NEXT beat sees it still owed. That is the honest record, and it is
+            # what the reflect phase — where `say` actually works — gets to act on.
+
+    except BeatKilled as _k:
+        killed = str(_k)
+        print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed",
+              file=sys.stderr)
+    # THE PHASES ARE OVER; WHAT REMAINS IS WRITING THEM DOWN. A SIGTERM from here on would
+    # raise BeatKilled outside the try above and lose the record it exists to keep. Ignore it:
+    # the record takes seconds, and systemd's SIGKILL at TimeoutStopSec is still the backstop.
+    _term_before_record = signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
     interventions = []
     if act_first:
@@ -2050,7 +2075,9 @@ def main(argv=None) -> int:
         try:
             from sage.gateway import escalate as _esc
             woken = set()
-            for it, env in list(explore.trace) + (list(after.trace) if after is not None else []) + list(reflect.trace):
+            # a killed beat may have completed any prefix of its phases; escalate what ran
+            _ran = [r for r in (explore, after, reflect) if r is not None]
+            for it, env in [pair for r in _ran for pair in r.trace]:
                 if not env.refused:
                     continue
                 kind = _esc.classify(env)
@@ -2131,13 +2158,24 @@ def main(argv=None) -> int:
         "posture": _turn(after),
         "harness": _harness,
         "reflect": _turn(reflect),
+        # present only when the beat was killed: a record that says which phases it has
+        **({"killed": killed} if killed else {}),
         "answer": _turn(answer) if answer is not None else None,
         "escalations": escalations, "egress": egress,
     }
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
     print(json.dumps(record, indent=2, ensure_ascii=False, default=str))
+    signal.signal(signal.SIGTERM, _term_before_record)   # the record is written; the beat is done
     return 0
+
+
+def install_kill_handler() -> None:
+    """SIGTERM becomes BeatKilled inside the beat, so main() writes the record before exiting.
+    systemd allows TimeoutStopSec (90 s) after SIGTERM — enough to write one JSON line."""
+    def _on_term(signum, frame):
+        raise BeatKilled(f"signal {signum} ({signal.Signals(signum).name})")
+    signal.signal(signal.SIGTERM, _on_term)
 
 
 def body_line(model: str, instance, num_ctx=None, former_homes=None) -> str:
