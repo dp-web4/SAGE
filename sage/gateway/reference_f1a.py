@@ -185,7 +185,7 @@ def _file_state(src: str) -> tuple:
 
 
 def _append_must_advance(content: str, before: str) -> str:
-    """Why appending `content` to an ALREADY-BROKEN .py file is refused, or "".
+    """Why appending `content` to a .py file would move it backwards, and so is refused, or "".
 
     AN APPEND BELOW THE FIRST ERROR CANNOT REPAIR IT. GPT's review of #186 named the invariant,
     and cbp-being supplied two counterexamples the grammar check (_not_python) lets through:
@@ -195,20 +195,24 @@ def _append_must_advance(content: str, before: str) -> str:
     - 2026-09-24 10:31: two memory_write calls appended 4,515 and 4,765 chars of VALID Python to
       a file already stopped at line 2367. The stop did not move. The beat then counted the new
       sha as progress: "the indentation fix already applied".
-    Both change a broken file without changing why it is broken. So:
-    - a file that is INVALID (wrong somewhere, not merely unfinished) takes an append only if the
-      file parses afterwards;
-    - a file that is INCOMPLETE (a program written in parts) takes an append that is code and
-      leaves it complete or still merely unfinished (a label makes it invalid, and is refused).
-    A file that parses is unaffected. Code and ordinary comments still append, and the grammar
-    check applies as before."""
+    Both change a broken file without changing why it is broken. The rule is MONOTONIC (GPT's
+    ruling on #186's open question, 2026-09-26): an append may never move a file backwards.
+    - HEALTHY (parses) -> stays healthy. An append that would make a working file invalid is
+      refused. The original rule let an over-indented fragment through because its text parsed
+      on its own dedented, and the file it landed in did not.
+    - INCOMPLETE (a program written in parts) -> incomplete or healthy, and only with actual code.
+      A label makes it invalid and is refused.
+    - INVALID (wrong somewhere, not merely unfinished) -> healthy only. An append below the first
+      error cannot repair it."""
     state, err = _file_state(before)
-    if state == "complete":
-        return ""
     combined = before + ("" if before.endswith("\n") or not before else "\n") + content
     after, err_after = _file_state(combined)
     if after == "complete":
         return ""
+    if state == "complete":
+        where = f"line {err_after.lineno} ({err_after.msg})" if err_after else "the end (unfinished)"
+        return (f"The file parses now, and this text would break it: appended, Python would stop at "
+                f"{where}. An append must leave a working file working.")
     if state == "incomplete" and after == "incomplete" and not _not_python(content, before):
         return ""
     stop = (err.lineno if err else None) or "?"
@@ -835,9 +839,13 @@ class ReferenceF1aDispatcher:
                 before = sum(1 for _ in f)
         if existed and before and p.suffix == ".py":
             _before = p.read_text(errors="replace")
-            # A broken file first (GPT review of #186): an append below the first error cannot
-            # repair it, whatever the text is. Then the grammar check for a file that parses.
-            why = _append_must_advance(content, _before) or _not_python(content, _before)
+            # The monotonic rule first (GPT review of #186): no append may move a .py file
+            # backwards (healthy -> invalid, or a broken file left broken). Then the grammar check.
+            _mono, _gram = _append_must_advance(content, _before), _not_python(content, _before)
+            # On a healthy file, "your text is not code" quotes the offending line and says more
+            # than "this would break the file", so it leads. On a broken file, "appending cannot
+            # repair it" is the point, so it leads.
+            why = ((_gram or _mono) if _file_state(_before)[0] == "complete" else (_mono or _gram))
             if why:
                 return ResultEnvelope(ok=False, error=(
                     f"memory_write refused, nothing was written to {p.name}. {why} memory_write "

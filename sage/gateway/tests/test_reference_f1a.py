@@ -547,16 +547,13 @@ def test_a_description_of_an_edit_is_refused_before_it_lands_in_a_py_file():
 
 
 def test_code_appended_to_a_py_file_still_lands():
-    """What must stay open: a whole function, an indented fragment (dedented it parses),
-    a fragment with `return` (parses as a function body), a comment, and the last part of a
-    program written in parts (it makes the file parse)."""
+    """What must stay open on a healthy file: a whole function, a real comment, and the last part
+    of a program written in parts (it makes the file parse). Indented fragments used to be here
+    ("dedented it parses"). Appended to a working file they make it INVALID, and the monotonic
+    rule refuses that (test_a_healthy_file_is_never_made_invalid_by_an_append)."""
     disp, root = _disp()
     f = Path(root) / "s.py"
-    # Each kind of text against a HEALTHY file: in sequence, the indented fragment leaves the
-    # file invalid ("unexpected indent"), and every later append then meets the broken-file rule.
     for text in ("def g():\n    return 1\n",
-                 "        X = np.load(data_path)\n        y = X[:, 0]\n",
-                 "    y = X.sum()\n    return X, y\n",
                  "# TODO: tune lr\n"):
         f.write_text("import os\n")
         r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
@@ -606,6 +603,29 @@ def test_an_append_that_repairs_or_grows_an_unfinished_program_still_lands():
     f.write_text("def h(\n    a,\n")
     r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "[Fix: closed the call on line 1]\n"}), _ALLOW)
     assert not r.ok and f.read_text() == "def h(\n    a,\n"
+
+
+def test_a_healthy_file_is_never_made_invalid_by_an_append():
+    """GPT's ruling on #186 (2026-09-26): healthy -> healthy. The original rule admitted these
+    because each parses on its own once dedented (or as a function body), but appended to a
+    working file each makes it INVALID ("unexpected indent", "'return' outside function"). The
+    file is left exactly as it was."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    # Ends at module level: a trailing def would make an indented fragment a legitimate
+    # continuation of its body (it parses), which the rule correctly allows.
+    healthy = "import os\n\nx = 1\n"
+    for text in ("        X = np.load(data_path)\n        y = X[:, 0]\n",
+                 "    y = X.sum()\n    return X, y\n"):
+        f.write_text(healthy)
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert not r.ok, (text, r.result)
+        assert "this text would break it" in r.error and "Python would stop at line" in r.error
+        assert f.read_text() == healthy, "nothing written"
+    # the same fragment continuing a trailing function body keeps the file healthy, and lands
+    f.write_text("def g(X):\n    X = X * 2\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    y = X.sum()\n    return X, y\n"}), _ALLOW)
+    assert r.ok and "Python can parse s.py now" in r.result, r.error
 
 
 def test_a_comment_on_a_healthy_file_is_still_a_comment():
