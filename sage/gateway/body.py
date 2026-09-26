@@ -388,19 +388,27 @@ def speak(text: str, timeout: float = SPEAK_TIMEOUT_S) -> Dict:
         _listening().mark(speaking_until=t0 + timeout)
     except Exception:
         pass
-    with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
-        # argv, never a shell: the words are one argument and cannot become a command
-        subprocess.run(["espeak-ng", "-v", "en-us", "-s", "160", "-w", wav.name, "--", text],
-                       check=True, capture_output=True, timeout=timeout)
-        try:
+    # THE WINDOW OPENS ONLY ON A SOUND THAT PLAYED (GPT review of #220). The ear is a reply channel
+    # opened after the being speaks; a failed synthesis or playback said nothing, so it opens
+    # nothing. Either way the self-mute is lifted at once.
+    played = False
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
+            # argv, never a shell: the words are one argument and cannot become a command
+            subprocess.run(["espeak-ng", "-v", "en-us", "-s", "160", "-w", wav.name, "--", text],
+                           check=True, capture_output=True, timeout=timeout)
             subprocess.run(["pw-play", wav.name], check=True, capture_output=True, timeout=timeout)
-        finally:
-            end = time.time()
-            try:
+            played = True
+    finally:
+        end = time.time()
+        try:
+            if played:
                 _listening().mark(speaking_until=end + SELF_ECHO_TAIL_S,
                                   listen_until=end + LISTEN_WINDOW_S)
-            except Exception:
-                pass
+            else:
+                _listening().mark(speaking_until=end)
+        except Exception:
+            pass
     return {"chars": len(text), "seconds": round(time.time() - t0, 1)}
 
 

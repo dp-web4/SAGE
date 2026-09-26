@@ -184,13 +184,21 @@ class Presence:
         from sage.gateway.being_join import write_wake_marker
         ts, text = self.heard_pending
         write_wake_marker(f'heard a voice: "{text}"', 1.0)
-        r = subprocess.run(["systemctl", "--user", "start", "--no-block", "sage-heartbeat.service"],
-                           capture_output=True, text=True, timeout=10)
-        self.last_heard_wake = now
-        self.heard_pending = None
+        self.last_heard_wake = now              # spaces retries as well as wakes
+        try:
+            r = subprocess.run(["systemctl", "--user", "start", "--no-block", "sage-heartbeat.service"],
+                               capture_output=True, text=True, timeout=10)
+            ok, err = r.returncode == 0, (r.stderr or "")[:120]
+        except Exception as e:
+            ok, err = False, f"{type(e).__name__}: {e}"[:120]
+        # THE WORDS STAY PENDING UNTIL A BEAT ACTUALLY STARTS (GPT review of #220). A failed start
+        # used to clear them, so the voice was never delivered; now the next loop past the gap
+        # tries again.
+        if ok:
+            self.heard_pending = None
         self._log({"ts": round(now, 2), "kind": "beat_wake", "by": "heard", "heard_ts": ts,
-                   "text": text, "started": r.returncode == 0, "err": (r.stderr or "")[:120]})
-        print(f"[presence] heard a voice -> beat {'started' if r.returncode == 0 else 'NOT started'}", flush=True)
+                   "text": text, "started": ok, "err": err})
+        print(f"[presence] heard a voice -> beat {'started' if ok else 'NOT started, will retry: ' + err}", flush=True)
 
     def _log(self, ev: dict):
         os.makedirs(os.path.dirname(PRESENCE_LOG), exist_ok=True)

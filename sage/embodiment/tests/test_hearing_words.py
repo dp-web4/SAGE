@@ -189,3 +189,48 @@ def test_a_voice_wakes_a_beat_held_while_one_is_running(monkeypatch, tmp_path):
     assert started and started[0][-1] == "sage-heartbeat.service" and p.heard_pending is None
     p._check_heard(time.time() + 5)
     assert len(started) == 1, "no new words, no new beat"
+
+
+def test_a_failed_playback_or_synthesis_opens_no_window(monkeypatch, tmp_path):
+    """GPT review of #220: the window used to open from a `finally`, so a sound that never
+    played still started a 2-minute transcription. Nothing said, nothing opened."""
+    from sage.gateway import body
+    import subprocess
+    import pytest
+    monkeypatch.setattr(listening, "LISTEN_PATH", str(tmp_path / "listen.json"))
+    for fails in ("pw-play", "espeak-ng"):
+        def run(argv, **k):
+            if argv[0] == fails:
+                raise subprocess.CalledProcessError(1, argv)
+        monkeypatch.setattr(subprocess, "run", run)
+        with pytest.raises(subprocess.CalledProcessError):
+            body.speak("hello")
+        assert listening.window(time.time() + 1) == {"listening": False, "speaking": False}, fails
+
+
+def test_a_failed_beat_start_keeps_the_words_and_retries(monkeypatch, tmp_path):
+    """GPT review of #220: a failed `systemctl start` cleared the pending words, so the voice
+    was never delivered. They stay pending until a beat actually starts."""
+    from sage.embodiment import presence
+    from sage.gateway import being_join
+    heard = tmp_path / "heard.jsonl"
+    monkeypatch.setattr(presence, "HEARD", str(heard))
+    monkeypatch.setattr(being_join, "write_wake_marker", lambda d, s: None)
+    monkeypatch.setattr(presence.Presence, "_beat_running", staticmethod(lambda: False))
+    rc = [1]
+    started = []
+    import subprocess
+    monkeypatch.setattr(subprocess, "run", lambda argv, **k: started.append(argv)
+                        or type("R", (), {"returncode": rc[0], "stderr": "Failed to start"})())
+    p = presence.Presence.__new__(presence.Presence)
+    p.heard_seen, p.heard_pending, p.last_heard_wake = 0, None, 0.0
+    p._log = lambda ev: None
+    heard.write_text(json.dumps({"ts": time.time(), "text": "hello Sprout"}) + "\n")
+    t = time.time()
+    p._check_heard(t)
+    assert len(started) == 1 and p.heard_pending, "failed start: words kept"
+    p._check_heard(t + 5)
+    assert len(started) == 1, "retry waits out the gap"
+    rc[0] = 0
+    p._check_heard(t + presence.HEARD_BEAT_GAP_S + 1)
+    assert len(started) == 2 and p.heard_pending is None, "retried and delivered"
