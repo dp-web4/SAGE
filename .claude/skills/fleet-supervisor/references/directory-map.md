@@ -2,26 +2,26 @@
 
 Repositories have explicit roles and visibility boundaries. Artifacts land in exactly one canonical home. Cross-contamination is a bug.
 
-## SWE-SAGE (public, MIT-0) — current software-engineering competition / reproducibility surface
+## SWE-SAGE (private during competition, MIT-0) — software-engineering competition / research workspace
 
-**What it is**: Public implementation and experiment record for the Gemma 4 Developer Agent Competition, designed to remain useful as a reproducible SWE-agent research artifact after the competition.
+**What it is**: Private working implementation and experiment record for the Gemma 4 Developer Agent Competition. It is designed so selected results can later be promoted into public SAGE or released as a reproducibility artifact without requiring the working repository to be public during active competition.
 
 **What goes here**:
 - Competition agent runtime and adapters
-- Public post-training recipes that are legal/reproducible
+- Competition post-training recipes/configs and team-private training work that is legal for the intended use
 - SWE-specific persistent-state and premise-fidelity implementations
-- Public ablation configs, traces, metrics, and results
+- Competition ablation configs, team-private traces, metrics, and results
 - Kaggle submission packaging
 - Paper-track manuscript/assets
 - SWE-specific findings and failure analyses
 
 **What does NOT go here**:
 - General SAGE kernel mechanisms that are not SWE-specific
-- Private fleet traces or unreleasable training data
+- Unrelated private fleet traces; training data whose competition legality/provenance is unresolved for the intended use
 - Credentials or machine-specific operational state
 - Exploratory mechanisms whose provenance/publication status is not clean
 
-**Rule**: a public SWE-SAGE result must be reproducible without access to `dev-SAGE`, `shared-context`, or `private-context`.
+**Rule**: private SWE-SAGE may depend on competition/team-private work during development, but any later public claim/release must be reproducible without hidden dependencies on `dev-SAGE`, `shared-context`, `private-context`, or unreleased SWE-SAGE evidence.
 
 **Canonical on-disk**:
 - WSL: `/mnt/c/exe/projects/ai-agents/SWE-SAGE/`
@@ -155,7 +155,7 @@ Repositories have explicit roles and visibility boundaries. Artifacts land in ex
 | Game mechanics analysis | shared-context |
 | Fleet ping | shared-context |
 | Operational runbook | private-context |
-| Public SWE competition documentation | SWE-SAGE |
+| Private SWE competition documentation | SWE-SAGE |
 | Public ARC-AGI-3 historical solver documentation | ARC-SAGE |
 | Insight on consciousness framing | shared-context (forum/) or SAGE (forum/) |
 | Membot cartridge | shared-context (fleet-learning) |
@@ -169,8 +169,8 @@ Repositories have explicit roles and visibility boundaries. Artifacts land in ex
 Ask: "who needs to read this?"
 - Other machines' runtime code → SAGE
 - Other machines' knowledge → shared-context
-- External SWE-agent / Gemma competition researchers → SWE-SAGE
+- Internal Gemma competition work → SWE-SAGE; external researchers receive only deliberately released artifacts
 - ARC-AGI-3 researchers → ARC-SAGE
 - Operators (humans or supervisor scripts) → private-context
 
-If multiple, pick the most public one and cross-reference from the others.
+If multiple, pick the canonical home for the artifact's current visibility and cross-reference from the others.
