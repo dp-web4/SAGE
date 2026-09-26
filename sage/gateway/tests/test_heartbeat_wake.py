@@ -72,3 +72,26 @@ def test_the_wake_machinery_is_opt_in_and_off_by_default():
     main = [n for n in ast.parse(src).body if getattr(n, "name", "") == "main"][0]
     seg = ast.get_source_segment(src, main)
     assert "if args.idle_wake_s > 0 or args.resume_wake_s > 0:" in seg, "a machine that did not ask gets no change"
+
+
+def test_a_rest_with_no_reason_is_still_a_rest():
+    """sprout on #216: `rested` is Optional[str] and a reasonless rest is "". bool("") is False,
+    so the being that rested without explaining itself was handed the resume wake it declined."""
+    from types import SimpleNamespace as NS
+    from sage.gateway.heartbeat import beat_rested
+    assert beat_rested(NS(rested=""), None), "a rest with no reason is a rest"
+    assert beat_rested(NS(rested="done for now"), None)
+    assert not beat_rested(NS(rested=None), None)
+    assert not beat_rested(None, None), "a beat killed before any turn did not rest"
+    assert beat_rested(NS(rested=None), NS(rested="")), "the posture turn's rest counts too"
+
+
+def test_the_resume_wake_is_not_armed_after_a_reasonless_rest():
+    """The decision as main() makes it: the arm call is guarded by beat_rested, not bool()."""
+    import ast
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "heartbeat.py").read_text()
+    main = [n for n in ast.parse(src).body if getattr(n, "name", "") == "main"][0]
+    body = ast.unparse(main)
+    assert "_rested = beat_rested(explore, after)" in body
+    assert "if not _rested and args.resume_wake_s > 0" in body

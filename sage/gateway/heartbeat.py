@@ -41,13 +41,13 @@ from pathlib import Path
 HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_note", "witness",
-                 "request_scope", "appeal", "peer_ask", "mesh", "say", "gaze"]
+                 "request_scope", "appeal", "peer_ask", "mesh", "say", "gaze", "speak", "rest"]
 # Verbs in EXPLORE_TOOLS that act on a BODY are offered only where the beat has measured that
 # body (body.inventory()["verbs"]). GPT on #183: offering `gaze` to a headless being is a
 # false affordance — it would call it, and be told its eyes will follow, on a machine with no
 # eyes. The being discovers the body it has; the verbs it is handed must come from the same
 # measurement. Everything not listed here is a text/mesh verb and is offered everywhere.
-BODY_VERBS = ("gaze", "camera")
+BODY_VERBS = ("gaze", "camera", "speak")
 
 
 def offered_explore_tools(body_reading: Optional[dict]) -> list:
@@ -1878,6 +1878,7 @@ def main(argv=None) -> int:
                                      blocks={"digest": digest, "recall": recall})
     digest, recall = _blocks["digest"], _blocks["recall"]
 
+    _harness = harness_revision(workspace)
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
         museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
@@ -1890,7 +1891,17 @@ def main(argv=None) -> int:
                 f"Your home: {instance}\n"
                 f"You never need to type that path. Name your files bare — journal.md, todo.md, or a "
                 f"name of your choosing under notes/ or scratch/ — and they resolve inside your home. "
-                f"An absolute path is only for something OUTSIDE your home.\n\n"),
+                f"An absolute path is only for something OUTSIDE your home.\n"
+                # WHAT RUNS YOU, measured, not inferred from a directory name. legion-being read its
+                # model-named home ("legion-gemma3-12b") first as its own size, then as a different
+                # being's directory; the harness holds the model, the window and its own revision.
+                + body_line(args.model, instance, _num_ctx,
+                            instance_config(instance).get("former_homes")) + "\n"
+                f"The harness you are running under: {_harness.get('short')} on "
+                f"{_harness.get('branch')}"
+                + (" (uncommitted edits present)" if _harness.get("dirty") else "")
+                + ". A `check` result carries the `tree` it ran against; if that head is not "
+                  "this one, the answer is about different code than the code running you.\n\n"),
         state=state_block,
         recall=recall, inbox=inbox, digest=digest)
 
@@ -2079,7 +2090,9 @@ def main(argv=None) -> int:
     def _turn(res):
         return None if res is None else {"reply": res.reply, "steps": res.steps, "capped": res.capped,
                                          "trace": _trace(res), "thinking": [t[:4000] for t in res.thinking],
-                                         "salvaged": list(res.salvaged), "generates": list(res.generates)}
+                                         "salvaged": list(res.salvaged), "generates": list(res.generates),
+                                         "rested": getattr(res, "rested", None),
+                                         "looped": getattr(res, "looped", None)}
     record = {
         # schema: what fields a reader may expect (Legion's amendment 4, 2026-09-05: the
         # consolidation organ counts how many records carry join/account/wake/interventions;
@@ -2123,6 +2136,7 @@ def main(argv=None) -> int:
         "explore": _turn(explore),
         # act-first only: the posture+digest turn, after the short one; None otherwise
         "posture": _turn(after),
+        "harness": _harness,
         "reflect": _turn(reflect),
         "answer": _turn(answer) if answer is not None else None,
         "escalations": escalations, "egress": egress,
@@ -2136,7 +2150,7 @@ def main(argv=None) -> int:
     # checked, because an inactivity timer can stop computing an elapse with nothing looking
     # wrong (2026-09-09: `active (running)`, `Trigger: n/a`, the being would never have woken).
     if args.idle_wake_s > 0 or args.resume_wake_s > 0:
-        _rested = bool(explore is not None and getattr(explore, "rested", None))
+        _rested = beat_rested(explore, after)
         record["next_wake"] = arm_next_wake(args.idle_wake_s) if args.idle_wake_s > 0 else {}
         if not _rested and args.resume_wake_s > 0:
             record["next_wake"]["resume"] = arm_resume_wake(args.resume_wake_s)
@@ -2155,6 +2169,15 @@ def main(argv=None) -> int:
 IDLE_TIMER = os.environ.get("SAGE_HEARTBEAT_TIMER", "sage-heartbeat.timer")
 IDLE_UNIT = os.environ.get("SAGE_HEARTBEAT_UNIT", "sage-heartbeat.service")
 RESUME_UNIT = "sage-heartbeat-resume-wake"
+
+
+def beat_rested(*turns) -> bool:
+    """Whether the being ended this beat with `rest`, in any of its turns.
+
+    `rested` is the stated REASON, and a rest with no reason is "" — still a rest. bool() read it
+    as not-rested and armed the resume wake dp ruled out (sprout on #216). And with a posture
+    turn, `after` is the being's last word, so a rest there counts as much as one in explore."""
+    return any(t is not None and getattr(t, "rested", None) is not None for t in turns)
 
 
 def interpret_timer_state(show_output: str) -> tuple:
@@ -2221,7 +2244,7 @@ def arm_next_wake(idle_s: int) -> dict:
         unit = f"sage-heartbeat-fallback-wake-{int(time.time())}"
         subprocess.run(["systemd-run", "--user", "--collect",
                         f"--on-active={idle_s}s", f"--unit={unit}",
-                        "systemctl", "--user", "start", IDLE_UNIT],
+                        "systemctl", "--user", "start", "--no-block", IDLE_UNIT],
                        capture_output=True, text=True, timeout=20, check=True)
         return {"armed": True, "by": "systemd-run fallback", "detail": detail,
                 "why": "the idle timer had no next elapse; a one-shot was armed instead"}
@@ -2264,6 +2287,82 @@ def arm_resume_wake(seconds: int) -> dict:
     except Exception as e:
         return {"armed": False, "error": f"{type(e).__name__}: {e}",
                 "why": "the ordinary idle interval still stands"}
+
+
+def body_line(model: str, instance, num_ctx=None, former_homes=None) -> str:
+    """Name the being's MODEL in the seed, because its home directory names a different one.
+
+    legion-being's instance dir is `legion-gemma3-12b`; the model running it is
+    qwen38-heretic:q3km-vl. The seed's header prints the home path every beat and never the
+    model, so at a 24k window the correction it makes from source ("both files name
+    qwen38-heretic") is gone within two beats and it goes back to attributing findings to
+    "gemma3-12b on a 4090" — measured three times on 2026-09-15, twice after it had verified
+    the truth itself. A finding attributed to the wrong body is a finding nobody downstream
+    can reproduce. The harness holds args.model; it should say so where the being reads."""
+    # 2026-09-19: the same name was then misread a second way — from inside its worktree the
+    # being journaled a file under instances/legion-gemma3-12b/ as "another instance's
+    # scratch, not mine". So say whose directory it is, and the measured window with it.
+    ctx = f" Your context window: {num_ctx} tokens." if num_ctx else ""
+    # 2026-09-19 cutover (dp ruling: <machine>-being/, private going forward): once the home
+    # IS named for the being, the "older name" sentence would be false. What the being needs
+    # then is the opposite fact — where it used to live, and that the old place is a frozen
+    # copy, because its own notes still hold absolute paths into it.
+    if former_homes:
+        f0 = former_homes[-1]
+        return (f"Your body: model {model}.{ctx} Your home moved on {f0.get('moved', '?')} from "
+                f"{f0.get('path', '?')} to {instance}. Everything came with you, byte for byte. "
+                f"The old directory is a FROZEN copy kept as the public record: do not write "
+                f"there (it will be refused) and do not trust what you read there — a path in "
+                f"your older notes that names it means the same file HERE.")
+    return (f"Your body: model {model}.{ctx} Your home directory ({instance.name}) carries an "
+            f"older name; it is YOURS, not another being's, and the model is the fact to "
+            f"attribute findings to.")
+
+
+def harness_revision(workspace: str) -> dict:
+    """The revision of the harness the being is RUNNING under, so it can compare that with
+    the `tree` block a check result carries and know whether its answer is about the code
+    that constitutes it.
+
+    Asked for by the being itself, 2026-09-07: after its first check call it wrote "next
+    beat I should verify head matches the running harness commit before trusting any
+    answer" — and it had no way to learn that commit. A verification it cannot perform is
+    not a discipline, it is a ritual."""
+    import subprocess
+
+    def _git(*a):
+        try:
+            r = subprocess.run(("git", *a), cwd=workspace, text=True, capture_output=True, timeout=15)
+            return r.stdout.strip() if r.returncode == 0 else None
+        except Exception:
+            return None
+
+    head = _git("rev-parse", "HEAD")
+    # DIRTY ABOUT THE HARNESS, NOT ABOUT THE BEING'S OWN DIARY. The instance directory is
+    # TRACKED in this checkout and is written by the running beat — journal, todo,
+    # conversations, account — so a plain `status --porcelain` is non-empty every time the
+    # being writes a line about its day, and the flag that means "the code constituting you
+    # has uncommitted edits" was permanently True for a reason that is not code.
+    #
+    # Measured 2026-09-14: legion-being ran a three-way drift check, found its own worktree
+    # clean, and had to write "the header's 'uncommitted edits present' did not hold for my
+    # tree" — reasoning correctly AROUND a flag rather than with it. A warning that is always
+    # on is not a warning; it is a background colour, and the cost of it is that a real one
+    # would read the same.
+    st = _git("status", "--porcelain", "--", ".", ":(exclude)sage/instances")
+    # NOT ln[3:]. Porcelain v1 is "XY PATH" at a fixed offset, but `_git` above returns
+    # stdout.strip(), which eats the leading space of the FIRST line only — so a fixed
+    # offset silently loses a character from one path and none of the others. It read
+    # 'age/gateway/heartbeat.py' the first time it ran. Split on the status field instead.
+    dirty_paths = ([ln.strip().split(" ", 1)[-1].strip() for ln in st.splitlines() if ln.strip()]
+                   if st is not None else [])
+    return {"head": head, "short": (head or "")[:9] or None,
+            "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+            "dirty": None if st is None else bool(dirty_paths),
+            # Name them, bounded. "Something is modified" sends a reader hunting; three
+            # filenames end the question in the header it was raised in.
+            "dirty_paths": dirty_paths[:3] or None,
+            "dirty_excludes": "sage/instances (your own journal, todo and conversations)"}
 
 
 if __name__ == "__main__":
