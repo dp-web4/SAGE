@@ -234,3 +234,18 @@ def test_a_failed_beat_start_keeps_the_words_and_retries(monkeypatch, tmp_path):
     rc[0] = 0
     p._check_heard(t + presence.HEARD_BEAT_GAP_S + 1)
     assert len(started) == 2 and p.heard_pending is None, "retried and delivered"
+
+
+def test_the_beat_names_the_mic_that_heard_not_the_first_one_listed():
+    """2026-09-26 13:57Z: dp's words came through the Airhug and the beat said "Through Built-in
+    Audio Analog Stereo". Name the source the words came from; if that can't be told, say "your mic"."""
+    from sage.gateway import body
+    now = time.time()
+    inv = {"audio_sources": [{"name": "Built-in Audio Analog Stereo", "kind": "wired"},
+                             {"name": "AIRHUG 01", "kind": "bluetooth"}]}
+    cur = {"heard": [{"ts": now - 5, "text": "Can you hear me?", "source": "bluez_input.41_42.0"}]}
+    assert "Through AIRHUG 01 you heard" in body.render_heard(cur, {"heard_until": 0}, inv)[0]
+    cur["heard"][0]["source"] = "alsa_input.analog"
+    assert "Through your mic you heard" in body.render_heard(cur, {"heard_until": 0}, inv)[0]
+    one = {"audio_sources": [{"name": "USB Mic", "kind": "wired"}]}
+    assert "Through USB Mic you heard" in body.render_heard(cur, {"heard_until": 0}, one)[0]
