@@ -1,7 +1,7 @@
 # SAGE Repository Index
 # Machine-readable metadata for AI-agent discovery.
 # Schema version: 2.0
-# Refreshed: 2026-09-21
+# Refreshed: 2026-09-24
 #
 # IMPORTANT: this file is intentionally conservative. Volatile fleet counts,
 # model assignments, session totals, and interpretive "discoveries" are not
@@ -14,7 +14,7 @@ metadata:
   type: research
   production_ready: false
   active_development: true
-  last_updated: "2026-09-21"
+  last_updated: "2026-09-24"
 
 current_thesis:
   summary: "Persistent identity, memory, evidence, learned behavioral state, and governed action should live around a model substrate rather than be rebuilt every prompt."
@@ -31,7 +31,7 @@ canonical_entry_points:
   status: "sage/docs/LATEST_STATUS.md"
   deployed_runtime_reality: "sage/docs/RUST_VS_PYTHON_CAPABILITY.md"
   python_reference_loop: "sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md"
-  governance_boundary: "sage/gateway/being_gate_client.py"
+  governance_boundary: "sage/gateway/being_gate_client.py"\n  state_conditioned_agency: "sage/docs/STATE_CONDITIONED_AGENCY.md"
   documentation_hub: "docs/README.md"
 
 historical_entry_points:
@@ -66,8 +66,7 @@ core_concepts:
     purpose: "Web4 identity anchor"
   T3_V3:
     purpose: "Contextual relationship trust/value state"
-  Hestia:
-    purpose: "Action-governance and witnessed dispatch boundary"
+  Hestia:\n    purpose: "Action-governance and witnessed dispatch boundary"\n  state_conditioned_agency:\n    purpose: "Substrate-symmetric study of endogenous/metabolic state, phenomenology, persistence, and action-policy effects"
 
 current_architecture_shape:
   - "observation / salience / evidence / memory"
@@ -102,7 +101,7 @@ evidence_rules:
   - "A mechanism in source is not automatically a demonstrated capability"
   - "Experiment findings remain scoped to model, scaffold, data, and run"
   - "Prefer causal controls, ablations, and trivial baselines where applicable"
-  - "Identify whether improvement came from weights, learned controller state, memory, source code, or human/fleet intervention"
+  - "Identify whether improvement came from weights, learned controller state, memory, source code, or human/fleet intervention"\n  - "Treat first-person phenomenology as evidence, not taboo and not automatic mechanistic proof; apply the same evidentiary standard across substrates"
 
 related_repos:
   web4:
@@ -111,8 +110,10 @@ related_repos:
     relationship: "Local authority/action governance"
   snarc:
     relationship: "Standalone salience-gated memory project"
+  SWE-SAGE:
+    relationship: "Public Gemma 4 software-engineering-agent competition/reproducibility surface; benchmark-specific ablations of post-training, persistence, premise fidelity, and governed execution"
   dev-SAGE:
-    relationship: "Active/private capability research; not equivalent to public-main capability"
+    relationship: "Active/private capability research and incubation; not equivalent to public-main capability"
   Synchronism:
     relationship: "Separate theoretical physics/modeling project; some concepts cross-pollinate"
 

@@ -33,8 +33,15 @@ def test_a_beings_home_is_ignored_on_every_machine(machine):
 
 def test_the_public_historical_record_is_not_swallowed_by_the_rule():
     """CONTROL. The ruling retains what is already public. A rule broad enough to hide the
-    model-named directories would make `git status` silent about them, which is not retention."""
-    for kept in ("sage/instances/cbp-qwen3.8-distill-4b/conversations/dp.jsonl",
+    model-named directories would make `git status` silent about them, which is not retention.
+
+    The first example here was cbp-qwen3.8-distill-4b's conversations/dp.jsonl. dp later ruled
+    cbp-being's conversations private too (cc9a93016, 2026-09-24): untracked, mirrored to
+    private-context, ignored. That made this check fail on main, and it did so correctly, because
+    the example was no longer retained. The property it guards has not changed. sprout's
+    conversations/dp.jsonl is deliberately still TRACKED (cc9a93016: a stub with no counterpart
+    in the mirror), so it is now the retained record this control checks."""
+    for kept in ("sage/instances/sprout-qwen3.8-distill-2b/conversations/dp.jsonl",
                  "sage/instances/_seed/identity.json"):
         assert _git("check-ignore", "-q", kept).returncode != 0, kept
 
