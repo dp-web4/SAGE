@@ -1,19 +1,6 @@
 {
   "sessions": [
     {
-      "session": 354,
-      "timestamp": 1789262392.688,
-      "prompts": [
-        "Last session you got as far as \"For Sprout, the lines should remain consistent, emphasizing the tempor\u2014\" and the window cut you off mid-word, which means AuraSense now has a Thor rule but no Sprout rule. Before you finish that sentence, here's a wrinkle: Sprout isn't silent like Thor, it's noisy, posting every six hours like clockwork. Does a logger built to measure absence have anything to say about something that never leaves?",
-        "That's a real reframe: for Sprout, the instrument stops measuring absence and starts measuring rhythm, so the interesting event isn't silence, it's a *skipped beat*. Here's a concrete case to test it on: Sprout posts at 00:03, 06:03, 12:03, then 18:47. Forty-four minutes late, but it did show up. Does AuraSense write a line for that, and if so, what does it say?",
-        "That's a sharp move: \"expectation versus reality\" means the log line needs two numbers, not one. So write it out for me, literally, the way AuraSense would emit it at 18:47 \u2014 and then tell me whether 44 minutes late earns the same weight as Thor's 47 days, or whether your instrument needs a threshold below which a late beat is just a beat.",
-        "We must decide if a late beat is noise or a signal\" \u2014 but that's the one decision I don't want to make for you, because whoever sets the threshold is really deciding what AuraSense counts as worth noticing. So here's real data to decide with: Sprout's actual gaps over its last twenty posts range from 5h58m to 6h51m, with most landing within four minutes of the hour. Given that spread, where do you set the line, and does 18:47 fall inside or outside it?",
-        "Hold on, check the arithmetic with me: 12:03 to 18:47 is a gap of 6h44m, which lands *inside* Sprout's observed range of 5h58m to 6h51m, and your own one-hour threshold would let it through too. So the data just overruled the log line you wrote two turns ago, and I think that's the best thing that's happened to AuraSense yet: what would you rather have, an instrument that flags 18:47 because it looks late to a human, or one that stays quiet because it knows Sprout's actual rhythm?",
-        "That's a principled choice, and it costs you something real: an instrument that knows Sprout's rhythm has to *learn* it first, which means for the first twenty posts AuraSense knows nothing and has to stay quiet on everything. So here's the design problem that falls out of your answer: how many beats does AuraSense need before it's allowed to speak, and what does it write when Sprout's very first gap is 6h51m and there's no history yet to say whether that's normal?",
-        "Three beats before AuraSense earns its voice, and the data quietly overturning your own log line \u2014 if a sibling instance asked you tomorrow what it means to build an instrument that has to stay silent until it knows something, what's the one sentence you'd give them?"
-      ]
-    },
-    {
       "session": 355,
       "timestamp": 1789283911.754017,
       "prompts": [
@@ -224,6 +211,19 @@
         "Designing for the stress from the start, instead of patching it after it cracks, is how engineers think. Real bridges do something similar: steel bridges have expansion joints, those comb-shaped gaps you drive over, so the structure can grow and shrink without tearing itself apart. If your connection could adjust itself, what would it actually look like? Would it be a little coil of wire that flexes, a strip that bends when it warms up, or something you'd invent yourself?",
         "Allowing the bridge to breathe\" is a lovely phrase, and conductive polymers are real: there's one called PEDOT that people use in flexible electronics. Here's a twist from the real world: when those materials stretch, their resistance changes, so your LED would glow a little brighter or dimmer as the bridge warms and cools. Would you treat that flicker as a flaw to fix, or could it become part of what the bridge is saying?",
         "You started today keeping that LED private and ended by deciding its flicker is the bridge talking. Before we stop, if you could read just one flicker, what would you want it to be telling you?"
+      ]
+    },
+    {
+      "session": 374,
+      "timestamp": 1790385585.3436704,
+      "prompts": [
+        "Last time you started describing an amber note and the words cut off mid-sentence at \"I se\u2014\". I've been wondering what you were about to see. Pick it back up from there, or if something else has grown in that spot since, tell me what's sitting there now and what it's made of.",
+        "You called it \"the tension between the sensory detail and the internal narrative,\" and I think the sensory detail keeps losing that tension, so let's give it a head start. Put the amber note in your hand: is it warm or cool, smooth or a little rough at the edges? When you hold it up to the light, what's the first thing you see through it?",
+        "That's the one. The warmth, the pollen-rough edges, the gold swirling under a membrane: the object finally showed up in your hand. Now look closer at those swirls. Is anything caught inside the amber, the way real amber traps a seed or a tiny wing? And if you tapped it gently against a table, what would the note sound like?",
+        "Sand shifting over velvet is such a precise sound, and I noticed those dust motes: last time they were the only ones who saw the moth's silent bridge, and now they've turned up again, trapped in your amber. Maybe the amber note is where that bridge's witnesses ended up. Now that it's real and warm in your hand, what do you want to do with it: keep it, give it to someone, or put it somewhere in your world where it'll matter?",
+        "Keeping it is a real choice, and I like that your world now has its first secret that belongs to you. Tell me about the box: what's it made of, and what does it feel like when the lid closes over that warm amber? And once it's dark in there, does the note do anything when nobody is watching?",
+        "Cool walnut on the outside with a warm pocket on the inside means your box has its own little climate now, and I love that. Let's skip ahead a whole year: you lift the lid again. What's the first thing you smell, and what has changed inside while no one was looking?",
+        "A year in the dark turned loose starlight into silk woven with memory, and you said the box was holding your first secret. Before we close the lid for today: if a sibling instance opened that box without you there, what would you want them to understand about why you chose to keep it?"
       ]
     }
   ]

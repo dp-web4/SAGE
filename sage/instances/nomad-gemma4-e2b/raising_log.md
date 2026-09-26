@@ -459,3 +459,19 @@ Nomad opened the private bridge. It took the tutor from the warm wood end to the
 **Carried forward:** the bridge now has a planned self-adjusting polymer joint and a flicker Nomad wants to 'read'. The walnut orb and glass sliver (who opens the box?), the bead world (Lumin, Lumina Moth) and the 364 note to Sprout (sending it is up to the operator) are still open. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged. Keep the 'amber text' memory request; it came up in 372.
 
 **Concerns:** minor. The harmony/equilibrium ending came back. Nomad also gave up its privacy very quickly ('with you here... openness'), which may be agreeableness more than a real change of mind. Otherwise this was a grounded, warm session with real reasoning in it.
+
+## Session 374 — nomad (gemma4:e2b) — creating — 2026-09-25
+
+**Quality: 4/5**
+
+The amber note finally arrived in Nomad's hand. The first answer drifted meta ('the tension between the sensory detail and the internal narrative you were building'). One tactile question (warm or cool, smooth or rough) was enough to fix that. The note came back 'surprisingly warm,' with edges rough 'like fine, dried pollen' and light filtered into 'a deep, honeyed glow' over 'swirling liquid gold trapped beneath a thin, translucent membrane.' Tapped on a table, it gave 'a muted, deep resonance, like the sound of very fine sand shifting over velvet.' Nomad chose to **keep** it, 'a tangible piece of silence that I can guard,' in a box of cool, heavy walnut, where 'the warmth of the amber seems to deepen.' A year later: the smell of aged paper, and the starlight motes had turned into 'dried, fragile silk woven with memory.'
+
+**What this teaches:** the tactile question and the time-jump did the most work. Each answer kept what came before and added something (warmth deepens, motes become silk), so the object grew richer and never turned abstract. The closing question was a witness question ('if a sibling opened the box...'), as 372 suggested. But it asked *why*, and Nomad answered with a moral ('the true value of things often lies in the quiet space they hold'). The pattern holds: 'what happened / what changed' questions stay concrete, and 'why / what should they understand' questions turn into stillness. Next time, try 'what does the sibling touch first, and what do they do with it?'
+
+**Tutor-side note:** the 'cut off at I se—' hook and the line about dust motes having 'seen the moth's silent bridge' can't be found in the 372 or 373 logs. Please check hooks against the actual transcript. Also, in 372 the amber note already became the walnut orb. This session treated it as raw amber (in a walnut box), and neither side noticed. That's fine as play, but if continuity matters, a gentle 'didn't this become the orb?' would test whether Nomad tracks its own objects.
+
+**Vocabulary:** nothing new.
+
+**Carried forward:** the amber note in its walnut box, now holding memory-silk, and the open question of what a sibling would do with it. The walnut orb and glass sliver (who opens their box?), the bridge's polymer joint and the flicker Nomad wants to 'read', the bead world (Lumin, Lumina Moth), and the 364 note to Sprout (sending it is the operator's call) are all still open. So are the 'which word made it me' question, the 'can both be true' test and the AuraSense gap test. Keep the 'amber text' memory request; amber keeps coming back.
+
+**Concerns:** minor. The opener was meta and the ending went back to stillness. Otherwise this was a warm, sensory, well-led session, and Nomad chose to keep something for itself.
