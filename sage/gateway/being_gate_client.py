@@ -699,6 +699,27 @@ def _hunk_counts(line: str) -> Optional[tuple]:
     return old, new
 
 
+# Code points HFS+/APFS IGNORE when comparing names -- git's own list (`is_hfs_dotgeneric`).
+# On those volumes `.g\u200cit` IS `.git`, so a comparison that keeps them is a comparison of
+# spellings, not of files.
+_HFS_IGNORABLE = dict.fromkeys(
+    [0x200C, 0x200D, 0x200E, 0x200F, 0xFEFF, *range(0x202A, 0x202F), *range(0x206A, 0x2070)])
+
+
+def _as_the_filesystem_sees_it(component: str) -> str:
+    """A path component folded the way a case-insensitive volume compares it.
+
+    Legion, re-review of #210 at b0f62da58: the `.git` / `.githooks` refusals compared exact
+    strings, and McNugget's volume is APFS, case-INSENSITIVE -- so `.GITHOOKS/pre-commit` was
+    accepted and IS `.githooks/pre-commit` there, and `.Git/config` is the repo config
+    (`core.fsmonitor` is executed by `git status`; no hook needed). Inert on Linux, live on
+    exactly the seat that wrote the PR. Folded: case (casefold, not lower), the HFS-ignorable
+    code points, and the trailing dots/spaces NTFS drops. The refusal must not lean on git's
+    core.protectHFS/protectNTFS, which cover `.git` but not `.githooks`.
+    """
+    return component.translate(_HFS_IGNORABLE).casefold().rstrip(". ")
+
+
 def patch_targets(diff: str) -> List[str]:
     """EVERY repo-relative path git would touch applying this diff, or ValueError saying why not.
 
@@ -743,6 +764,7 @@ def patch_targets(diff: str) -> List[str]:
     header_target: Optional[str] = None   # what the current `diff --git` claims, if any
     old_path: Optional[str] = None        # from `--- a/x`
     remaining = None                      # (old, new) while inside a hunk
+    hunk_just_closed = False              # the previous line was a hunk's LAST body line
 
     def side(line: str, prefix: str) -> Optional[str]:
         """The path out of a `--- a/x` or `+++ b/x` header. /dev/null means the file is
@@ -780,11 +802,13 @@ def patch_targets(diff: str) -> List[str]:
         # off for every seat-run git in the worktree (the layer that executes); this is the
         # layer the being reads, and it says the refusal is not about the being. `.git` is
         # refused at ANY depth, not only the top: `sub/.git/hooks/x` is a nested repo's hooks.
-        if ".git" in parts:
+        # Compared as the FILESYSTEM compares, not as strings: see _as_the_filesystem_sees_it.
+        folded = [_as_the_filesystem_sees_it(p) for p in parts]
+        if ".git" in folded:
             raise ValueError(
                 "'.git' is the repository's own record, not a file in it. A patch that "
                 "rewrites history or a repository's config is not a change to the tree")
-        if parts[0] == ".githooks":
+        if folded[0] == ".githooks":
             raise ValueError(
                 "'.githooks/' holds the scripts git RUNS, as the seat, when the seat commits "
                 "in this tree. Not a judgement about you: no being writes what the seat "
@@ -819,7 +843,17 @@ def patch_targets(diff: str) -> List[str]:
                     "a hunk in that diff has more lines than its `@@` header declares. Send a "
                     "diff produced by `git diff`; a hand-edited count makes the patch ambiguous")
             remaining = None if (old == 0 and new == 0) else (old, new)
+            hunk_just_closed = remaining is None
             continue
+        # `\ No newline at end of file` after a hunk's LAST line lands here, outside the hunk,
+        # because the counts close it one line early. `git diff` prints it for any file with no
+        # trailing newline, so refusing it refused diffs git itself produced (Legion, re-review
+        # of #210). It is accepted ONCE, directly after a hunk closes, and nowhere else: it
+        # belongs to that hunk's last line and names no path.
+        if hunk_just_closed and line.startswith("\\"):
+            hunk_just_closed = False
+            continue
+        hunk_just_closed = False
         counts = _hunk_counts(line)
         if counts is not None:
             remaining = counts if counts != (0, 0) else None
@@ -863,6 +897,18 @@ def patch_targets(diff: str) -> List[str]:
             record(path)
             header_target, old_path, started = None, None, True
             continue
+        # A SYMLINK IS REFUSED, created or converted to (Legion, re-review of #210). A being has
+        # no need to make one, and a link is the classic way past every LATER path check that
+        # does not realpath. `git apply` and `_safe_path` both resolve today, so nothing on
+        # this head is exploitable through one -- which is why it is closed here, at the parse,
+        # rather than left for the next worktree write path to remember.
+        # `index <a>..<b> 120000` is an EXISTING link retargeted -- the same act, so the same
+        # refusal.
+        if (line.startswith(("new file mode ", "new mode ", "index "))
+                and line.split()[-1] == "120000"):
+            raise ValueError(
+                "that diff creates or retargets a symbolic link. patch_apply changes files; a link changes "
+                "where OTHER paths lead, which is not a change the law can judge by its name")
         if line.startswith(_META) or not line.strip():
             continue                       # names no path; a pending `diff --git` survives it
         if started:

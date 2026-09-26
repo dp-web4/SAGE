@@ -370,6 +370,36 @@ def test_the_parser_refuses_what_it_cannot_represent_exactly():
     # run as the seat, outside bwrap, at the seat's next commit in this tree.
     refuses("a git hook, which the seat would EXECUTE",
             {"diff": _diff(".githooks/pre-commit"), "why": "w"}, CTX, "scripts git RUNS")
+    # Legion's re-review at b0f62da58: those refusals compared exact strings, and McNugget's
+    # volume is APFS, case-INSENSITIVE -- `.GITHOOKS/pre-commit` IS the hook there, and
+    # `.Git/config` is the repo config (core.fsmonitor runs on `git status`, no hook needed).
+    for spelled in (".GITHOOKS/pre-commit", ".GitHooks/pre-commit", ".githooks./pre-commit"):
+        refuses(f"a git hook spelled {spelled!r}, which the volume folds to the hook",
+                {"diff": _diff(spelled), "why": "w"}, CTX, "scripts git RUNS")
+    for spelled in (".Git/config", "sub/.GIT/hooks/pre-commit", ".g\u200cit/config", ".git /config"):
+        refuses(f"the repository's record spelled {spelled!r}",
+                {"diff": _diff(spelled), "why": "w"}, CTX, "repository's own record")
+    # A symlink is refused however it arrives: made new, a file turned into one, or an existing
+    # one pointed somewhere else. Each is a change to where OTHER paths lead.
+    for how, meta in (("a new symlink", "new file mode 120000\n"),
+                      ("a file turned into a symlink", "old mode 100644\nnew mode 120000\n"),
+                      ("an existing symlink retargeted", "index 1111111..2222222 120000\n")):
+        refuses(how, {"diff": "diff --git a/hk b/hk\n" + meta +
+                      "--- a/hk\n+++ b/hk\n@@ -1 +1 @@\n-x\n+.githooks\n", "why": "w"},
+                CTX, "symbolic link")
+    # ...while an ordinary executable file is still just a file.
+    check("a new executable file is not a symlink",
+          B.patch_targets("diff --git a/run.sh b/run.sh\nnew file mode 100755\n--- /dev/null\n"
+                          "+++ b/run.sh\n@@ -0,0 +1 @@\n+echo hi\n"), ["run.sh"])
+    # The no-newline marker is accepted ONCE, directly after a hunk closes -- and not as a
+    # licence for any backslash line anywhere in the structured part of the diff.
+    refuses("a no-newline marker that does not follow a hunk",
+            {"diff": "diff --git a/x.py b/x.py\n\\ No newline at end of file\n--- a/x.py\n"
+                     "+++ b/x.py\n@@ -1 +1 @@\n-a\n+b\n", "why": "w"}, CTX, "could not read")
+    refuses("a second marker after the one a hunk may carry",
+            {"diff": _diff("x.py", body="@@ -1 +1 @@\n-a\n+b\n\\ No newline at end of file\n"
+                                        "\\ No newline at end of file\n"), "why": "w"},
+            CTX, "could not read")
     # ...and only the hooks directory: an ordinary file NAMED like it elsewhere is a file.
     check("a non-hook path that merely contains the word is still allowed",
           B.patch_targets(_diff("docs/githooks.md")), ["docs/githooks.md"])
@@ -386,6 +416,37 @@ def test_the_parser_refuses_what_it_cannot_represent_exactly():
     # A worktree change with no account of itself is not reviewable, and this one is witnessed.
     refuses("no why", {"diff": _diff("x.py")}, CTX, "needs a 'why'")
     refuses("a blank why", {"diff": _diff("x.py"), "why": "   "}, CTX, "needs a 'why'")
+
+
+def test_a_file_without_a_trailing_newline_can_be_patched():
+    """Legion, re-review of #210: `git diff` prints `\\ No newline at end of file` for any file
+    that lacks one, and the parser refused that line -- so a being editing such a file was told
+    "could not read" about a diff git itself produced. Measured against real git both ways: the
+    diff is PRODUCED by git, parsed here, and APPLIED by git."""
+    with tempfile.TemporaryDirectory() as d:
+        def g(*a, **kw):
+            return subprocess.run(["git", "-C", d, *a], capture_output=True, text=True, **kw)
+        g("init", "-q")
+        for name, text in (("tail.txt", "a\nb"), ("both.txt", "x")):
+            with open(os.path.join(d, name), "w") as f:
+                f.write(text)
+        g("add", "."); g("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base")
+        with open(os.path.join(d, "tail.txt"), "w") as f:
+            f.write("a\nB")                           # old AND new lack the newline
+        with open(os.path.join(d, "both.txt"), "w") as f:
+            f.write("y\n")                            # the marker lands mid-hunk
+        diff = g("diff").stdout
+        check("git really printed the marker (else this test proves nothing)",
+              diff.count("No newline at end of file"), 3)
+        try:
+            got = B.patch_targets(diff)
+        except ValueError as e:
+            got = f"REFUSED: {e}"
+        check("a git-produced diff of a file with no trailing newline is read", got,
+              ["both.txt", "tail.txt"])
+        g("checkout", "-q", "--", ".")
+        r = g("apply", "-", input=diff)
+        check("...and git applies the same diff", r.returncode, 0)
 
 
 def test_the_boundary_is_stated_rather_than_implied():
