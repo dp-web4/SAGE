@@ -24,6 +24,7 @@ def _dispatcher(monkeypatch, played, live=True):
     home = tempfile.mkdtemp(prefix="speak-")
     d = hd.HestiaF1aDispatcher.__new__(hd.HestiaF1aDispatcher)
     d.memory_root = home
+    d.member, d.host_session_id = "sprout-being", None
     d._call = lambda name, args: (calls.append((name, args)) or {"actionId": "a1"})
     d._local = type("L", (), {"_witness": staticmethod(lambda e: "w-1")})()
     monkeypatch.setattr(body, "speak_provider",
@@ -42,7 +43,7 @@ def test_it_speaks_the_words_and_keeps_them_in_its_own_home(monkeypatch):
     assert [c[0] for c in calls] == ["hestia_begin_action", "hestia_record_outcome"]
     rec = [json.loads(l) for l in open(os.path.join(home, "spoken.jsonl"))]
     assert rec[0]["text"] == "Hello, dp. I can hear you now."
-    assert "not in any conversation" in env.result, "sound is not a message; say is the written answer"
+    assert "your turn in the room conversation" in env.result, "voice is a conversation: the room"
     assert "played aloud through AIRHUG 01" in env.result
     assert "heard it" not in env.result, "playback proves the sink got sound, not that anyone listened"
     assert calls[-1][1]["outcome"] == "ok"
