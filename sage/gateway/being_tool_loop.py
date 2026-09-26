@@ -415,8 +415,62 @@ COMPACT_MIN_BODY = 500        # a body at or under this is never elided
 # beat rather than racing the window on this one. Bare path, because that is what
 # memory_read takes. A spill that fails is silent — the elision still has to happen.
 COMPACT_SPILL_DIR = "scratch/elided"
-COMPACT_SPILL_KEEP = 40       # a spill, not an archive
+# RETENTION IS BY AGE, NOT BY COUNT. This was `COMPACT_SPILL_KEEP = 40` files. Measured on
+# legion-being 2026-09-21..23: one compaction pass wrote 33 spills in one second, beats elide
+# up to 954 results, and 68 of 80 beats elided 20 or more — so a spill named in a marker was
+# pruned before the next STEP, and 26 reads followed the marker to a file that was gone.
+# "It outlives the beat" was false under any real load. A spill is ~2 KB (mean 2,193, max
+# 5,979 bytes), so keeping a day of them costs a few MB; the byte cap is the backstop for a
+# pathological beat, and even then the OLDEST go first, by name, which is creation order.
+COMPACT_SPILL_KEEP_S = 24 * 3600            # nothing younger than this is pruned, whatever the count
+COMPACT_SPILL_MAX_BYTES = 64 * 1024 * 1024  # backstop: over this, oldest first
 _ELIDED_SIGIL = "characters elided from the middle"
+
+
+def _spill_age_s(name: str, now: float) -> Optional[float]:
+    """Seconds since the spill named `name` was written, read from the NAME (the retention
+    clock this directory was designed around), or None when the name does not carry one."""
+    import calendar
+    import time as _t
+    try:
+        return now - calendar.timegm(_t.strptime(name[:15], "%Y%m%d-%H%M%S"))
+    except (ValueError, TypeError):
+        return None
+
+
+def _prune_spills(d: str) -> None:
+    """Keep every spill younger than COMPACT_SPILL_KEEP_S; then, only if the directory is over
+    COMPACT_SPILL_MAX_BYTES, remove the oldest (by name = creation order) until it is not.
+    Never raises: pruning is housekeeping, and the spill that was just written must stand."""
+    import time as _t
+    try:
+        now = _t.time()
+        names = sorted(os.listdir(d))
+        sizes = {}
+        for f in names:
+            try:
+                sizes[f] = os.path.getsize(os.path.join(d, f))
+            except OSError:
+                sizes[f] = 0
+        for f in names:
+            age = _spill_age_s(f, now)
+            if age is not None and age > COMPACT_SPILL_KEEP_S:
+                try:
+                    os.remove(os.path.join(d, f))
+                    sizes.pop(f, None)
+                except OSError:
+                    pass
+        total = sum(sizes.values())
+        for f in sorted(sizes):                      # oldest first
+            if total <= COMPACT_SPILL_MAX_BYTES:
+                break
+            try:
+                os.remove(os.path.join(d, f))
+                total -= sizes[f]
+            except OSError:
+                pass
+    except Exception:
+        pass
 
 
 def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
@@ -450,11 +504,7 @@ def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
             fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
                      f"result the harness elided from your window, {len(body)} characters]\n\n")
             fh.write(body)
-        for f in sorted(os.listdir(d))[:-COMPACT_SPILL_KEEP]:
-            try:
-                os.remove(os.path.join(d, f))
-            except OSError:
-                pass
+        _prune_spills(d)
         return f"{COMPACT_SPILL_DIR}/{name}"
     except Exception:
         return None
