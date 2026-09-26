@@ -96,6 +96,29 @@ def _stale_transport(e: Exception) -> bool:
     return "HTTP 404" in msg and "Session not found" in msg
 
 
+def _worktree_env() -> dict:
+    """The environment for EVERY process the seat runs inside the being's worktree: git hooks OFF.
+
+    THE HOOK IS THE DOOR. SAGE sets `core.hooksPath=.githooks`, a TRACKED directory, and that
+    setting is shared by every worktree of the repository — including the being's. The being can
+    write its own worktree (M1, wherever `check` gets its sandbox), so it can write
+    `.githooks/pre-commit`; and `pr_open` / `pr_amend` then run `git commit` in that worktree AS
+    THE SEAT, outside bubblewrap, with the vault passphrase and every key on this box in reach.
+    A gated write plus a seat-run commit is ungated arbitrary code — the composition the sandbox
+    exists to prevent, arriving through git instead of pytest. Measured on Legion 2026-09-25: gate
+    ALLOWED and harness ALLOWED a write to `.githooks/pre-commit`; nothing had exploited it.
+
+    Set through GIT_CONFIG_* rather than `-c` so it reaches git without changing any command
+    string the law judged (judged argv == executed argv is kept exactly), and so it covers every
+    git the process spawns, not only the ones this file names."""
+    env = dict(os.environ)
+    n = int(env.get("GIT_CONFIG_COUNT", "0") or 0)
+    env.update({"GIT_CONFIG_COUNT": str(n + 1),
+                f"GIT_CONFIG_KEY_{n}": "core.hooksPath",
+                f"GIT_CONFIG_VALUE_{n}": "/dev/null"})
+    return env
+
+
 class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
     live daemon. Wraps ReferenceF1aDispatcher for the local verbs (witness / memory)."""
@@ -630,7 +653,9 @@ class HestiaF1aDispatcher:
         to = str(intent.args.get("to", "")).strip()
         body = str(intent.args.get("body", "")).strip()
         if not to or not body:
-            return ResultEnvelope(ok=False, error="peer_ask needs 'to' and 'body'")
+            from sage.gateway.reference_f1a import missing_args
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("to", "body"), "peer_ask"))
         if self._publish is None:
             return ResultEnvelope(ok=False, pending=True,
                                   note="peer_ask needs a publisher: the question must live at a pointer "
@@ -930,10 +955,79 @@ class HestiaF1aDispatcher:
                     f"shows you what the scene was under this stance."),
             witness_id=self._local._witness(f"gaze {was} -> {mode}" + (f" ({rec.get('words')})" if rec.get("words") else "")))
 
+    # -- speak: a voice in the room ------------------------------------------------------
+    def _do_speak(self, intent: BeingIntent) -> ResultEnvelope:
+        """Say words aloud through this machine's speaker. Path-less and bounded like `gaze`:
+        the being supplies text only; engine, device, length cap and timeout are fixed here.
+
+        dp, 2026-09-26: "give it speak tool". The being had been asked to pair the bluetooth
+        audio and speak, and for 20 beats journaled that it wanted to learn how, holding no verb
+        that could. Each played utterance is appended to its own home (spoken.jsonl) and witnessed;
+        if that append fails, the receipt, hestia outcome and witness all say so."""
+        from sage.gateway import body as _body
+        from sage.gateway.reference_f1a import missing_args
+        text = _body.clean_speech(intent.args.get("text", ""))
+        if not text:
+            return ResultEnvelope(ok=False, error=missing_args(
+                {k: v for k, v in intent.args.items() if k != "text"}, ("text",), "speak",
+                "'text' is the exact words to say aloud."))
+        if len(text) > _body.SPEAK_MAX_CHARS:
+            return ResultEnvelope(ok=False, error=(
+                f"speak takes one utterance of up to {_body.SPEAK_MAX_CHARS} characters; yours is "
+                f"{len(text)}. Nothing was said. Say the part that matters most, or say it in turns."))
+        # Refused BEFORE any hestia action is opened and before any sound: a being on a body with
+        # no speaker gets a true sentence, the way a headless being calling `gaze` does.
+        prov = _body.speak_provider()
+        if not prov["live"]:
+            return ResultEnvelope(ok=False, error=(
+                f"This body cannot speak aloud ({prov['why']}), so `speak` is not a verb of yours "
+                f"on this machine right now. Nothing was said. To reach someone in words, use say."))
+        begin = self._call("hestia_begin_action", {"tool_name": "speak", "target": text[:80]})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        try:
+            done = _body.speak(text)
+        except Exception as e:
+            self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "failed",
+                                                  "detail": f"{type(e).__name__}: {e}"[:300]})
+            return ResultEnvelope(ok=False, error=(
+                f"your words could not be played ({type(e).__name__}); nothing was heard. "
+                f"The speaker may have disconnected."))
+        # THE RECEIPT CLAIMS ONLY WHAT WAS MEASURED (GPT review of #219). Playback success proves
+        # sound reached the sink, not that anyone heard it; and the speech record is written
+        # AFTER the sound, so its failure is a real partial outcome: named to the being, to
+        # hestia and to the witness, never swallowed behind "it is kept".
+        speaker = _body.speaker_name()
+        record_err = None
+        try:
+            with open(os.path.join(self.memory_root, "spoken.jsonl"), "a") as f:
+                f.write(json.dumps({"ts": time.time(), "text": text, "speaker": speaker,
+                                    "seconds": done["seconds"]}) + "\n")
+        except Exception as e:
+            record_err = f"{type(e).__name__}: {e}"[:200]
+        self._call("hestia_record_outcome", {
+            "actionId": action_id, "outcome": "ok" if record_err is None else "partial",
+            "detail": f"played {done['chars']} chars through {speaker}"
+                      + ("" if record_err is None else f"; speech record NOT written ({record_err})")})
+        said = f"played aloud through {speaker} ({done['seconds']}s): \"{text}\"."
+        if record_err is None:
+            result = said + " It is kept in your spoken.jsonl, not in any conversation."
+        else:
+            result = (said + f" But your speech record could not be written ({record_err}), so "
+                      f"spoken.jsonl does not have it. It is not in any conversation either.")
+        return ResultEnvelope(
+            ok=True, result=result,
+            witness_id=self._local._witness(f"spoke aloud through {speaker}: {text[:120]}"
+                                            + ("" if record_err is None else " [speech record not written]")))
+
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
         if not content:
-            return ResultEnvelope(ok=False, error="remember needs 'content'")
+            from sage.gateway.reference_f1a import missing_args
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("content",), "remember"))
         tags = str(intent.args.get("tags", "") or "")
         try:
             stored = self._membot_call("memory_store", {"content": content, "tags": tags})
@@ -1172,7 +1266,7 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=err)
         action_id = begin.get("actionId")
         try:
-            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(), text=True,
                                   capture_output=True, timeout=60)
             out = ((proc.stdout or "") + (proc.stderr or "")).strip()
             ran, rc = True, proc.returncode
@@ -1251,7 +1345,7 @@ class HestiaF1aDispatcher:
                                                   f"is unreachable ({str(err)[:160]})")
         action_id = begin.get("actionId")
         try:
-            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, text=True,
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(), text=True,
                                   capture_output=True, timeout=60)
             ran = True
         except Exception as e:
@@ -1321,7 +1415,7 @@ class HestiaF1aDispatcher:
                         probe = subprocess.run(
                             ["git", "-C", self.worktree, "ls-files", "--error-unmatch",
                              "--", spec],
-                            cwd=self.worktree, text=True, capture_output=True, timeout=15)
+                            cwd=self.worktree, env=_worktree_env(), text=True, capture_output=True, timeout=15)
                         missing = probe.returncode != 0
                     except Exception:
                         missing = None
@@ -1365,7 +1459,7 @@ class HestiaF1aDispatcher:
 
         def _git(*args):
             try:
-                r = subprocess.run(("git", *args), cwd=self.worktree, text=True,
+                r = subprocess.run(("git", *args), cwd=self.worktree, env=_worktree_env(), text=True,
                                    capture_output=True, timeout=15)
                 return r.stdout.strip() if r.returncode == 0 else None
             except Exception:
@@ -1441,7 +1535,7 @@ class HestiaF1aDispatcher:
                         "tree": self._worktree_revision(), "worktree": self.worktree})
         action_id = begin.get("actionId")
         try:
-            proc = subprocess.run(argv, cwd=self.worktree, text=True,
+            proc = subprocess.run(argv, cwd=self.worktree, env=_worktree_env(), text=True,
                                   capture_output=True, timeout=600)
             passed = proc.returncode == 0
             raw_out = (proc.stdout or "") + (proc.stderr or "")
@@ -1654,7 +1748,9 @@ class HestiaF1aDispatcher:
         action_id = begin.get("actionId")
         tree_before = self._worktree_revision()
         try:
-            proc = subprocess.run(argv, cwd=self.worktree, text=True,
+            # Hooks off, as for every seat-run process in the being's tree (#212). `git apply`
+            # runs no hook itself; the env is here because the rule is per SITE, not per verb.
+            proc = subprocess.run(argv, cwd=self.worktree, env=_worktree_env(), text=True,
                                   capture_output=True, timeout=120)
         except Exception as e:
             return ResultEnvelope(ok=False, witness_id=action_id,
@@ -1802,7 +1898,10 @@ class HestiaF1aDispatcher:
         to = str(intent.args.get("to", "")).strip()
         text = str(intent.args.get("text", "")).strip()
         if not to or not text:
-            return ResultEnvelope(ok=False, error="say needs 'to' (a conversation id) and 'text'")
+            from sage.gateway.reference_f1a import missing_args
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("to", "text"), "say",
+                "'to' is a conversation id and 'text' is the words that reach them."))
         if conv.is_stub(text):
             # A `say` carries its text to a PERSON, verbatim. On 2026-09-18 21:04Z this being
             # sent dp "[Your brief, final word-only summary of your response]" — the template

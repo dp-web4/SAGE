@@ -364,6 +364,15 @@ def test_the_parser_refuses_what_it_cannot_represent_exactly():
     refuses("a path that walks out", {"diff": _diff("../../.ssh/authorized_keys"), "why": "w"},
             CTX, "walks the tree")
     refuses("a path into .git", {"diff": _diff(".git/config"), "why": "w"}, CTX, "repository's own record")
+    refuses("a .git directory at depth -- a nested repo's hooks",
+            {"diff": _diff("sub/.git/hooks/pre-commit"), "why": "w"}, CTX, "repository's own record")
+    # Legion's hold on #210: SAGE's hooksPath is a TRACKED `.githooks/`, so a patched hook would
+    # run as the seat, outside bwrap, at the seat's next commit in this tree.
+    refuses("a git hook, which the seat would EXECUTE",
+            {"diff": _diff(".githooks/pre-commit"), "why": "w"}, CTX, "scripts git RUNS")
+    # ...and only the hooks directory: an ordinary file NAMED like it elsewhere is a file.
+    check("a non-hook path that merely contains the word is still allowed",
+          B.patch_targets(_diff("docs/githooks.md")), ["docs/githooks.md"])
     refuses("a glob character, which --include would match as a pattern",
             {"diff": _diff("sage/*.py"), "why": "w"}, CTX, "glob")
     refuses("a bracket glob", {"diff": _diff("sage/x[12].py"), "why": "w"}, CTX, "glob")
