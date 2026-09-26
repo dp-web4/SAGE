@@ -315,11 +315,17 @@ CONV_LADDER = ((12, None), (12, 1500), (6, 1200), (3, 900), (2, 700))
 LOOP_GROWTH_CHARS = 10_000
 
 
-class BeatKilled(Exception):
+class BeatKilled(BaseException):
     """SIGTERM arrived mid-beat (the unit's TimeoutStartSec, or a stop). Raised from the
     signal handler so the beat unwinds to its record instead of vanishing: 04:30Z
     2026-09-09 a 51-minute beat left nothing in heartbeats.jsonl and the monitor never
-    knew it had happened. systemd allows TimeoutStopSec (90 s) after SIGTERM — enough."""
+    knew it had happened. systemd allows TimeoutStopSec (90 s) after SIGTERM — enough.
+
+    BaseException, for the reason KeyboardInterrupt is one: OllamaIRP.get_chat_response ends in
+    `except Exception` and returns the error AS MODEL TEXT, so an Exception subclass raised while
+    the beat was blocked in a generate — nearly all of its wall-clock — became
+    "[OllamaIRP: Error: signal 15 (SIGTERM)]" and the beat carried on until SIGKILL
+    (McNugget, SAGE #213 review, measured)."""
 
 
 # What a verb's schema costs, and what to assume when it cannot be measured. Measured on
@@ -2097,6 +2103,8 @@ def main(argv=None) -> int:
     except BeatKilled as _k:
         killed = str(_k)
         print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed", file=sys.stderr)
+    # the phases are over; a SIGTERM from here would escape main() and lose the record (#213)
+    _term_before_record = signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
     interventions = list(fit_interventions)
     for ph, res in (("explore", explore), ("posture", after)):
@@ -2256,7 +2264,8 @@ def main(argv=None) -> int:
     # timer is untouched and remains the floor, so a failure here costs promptness, never
     # silence. `rest` now has a consequence beyond ending the turn, which is the first rung
     # of the requested-rest ladder dp wants to grow.
-    rested = bool((explore or {}) and getattr(explore, "rested", None))
+    # a rest with no reason is "" — still a rest; and the posture turn's rest counts (#216 review)
+    rested = beat_rested(explore, after)
     # WHAT CPT SHOULD HAVE BEEN, from the server's own count on this beat's first generate.
     # A constant that silently rots is how 3.4 survived five days past the measurement its
     # own comment cites, sitting above the true ratio and over-admitting the whole time.
@@ -2281,6 +2290,7 @@ def main(argv=None) -> int:
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
     print(json.dumps(record, indent=2, ensure_ascii=False, default=str))
+    signal.signal(signal.SIGTERM, _term_before_record)   # the record is written
     return 0
 
 
@@ -2534,6 +2544,13 @@ def install_kill_handler() -> None:
     def _on_term(signum, frame):
         raise BeatKilled(f"signal {signum} ({signal.Signals(signum).name})")
     signal.signal(signal.SIGTERM, _on_term)
+
+
+def beat_rested(*turns) -> bool:
+    """Whether the being ended this beat with `rest`, in any turn. `rested` is the stated
+    reason, and "" (a rest with no reason) is still a rest: bool() armed the resume wake after
+    it, which dp ruled out (sprout on SAGE #216)."""
+    return any(t is not None and getattr(t, "rested", None) is not None for t in turns)
 
 
 def interpret_timer_state(show_output: str) -> tuple:

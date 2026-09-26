@@ -2330,6 +2330,16 @@ class HestiaF1aDispatcher:
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         target = os.path.realpath(os.path.join(self.worktree, str(intent.args["path"])))
+        # ONE FILE, asked of git: a directory at <rev>, or nothing there, is refused (#217)
+        rel = os.path.relpath(target, os.path.realpath(self.worktree))
+        kind = subprocess.run(["git", "cat-file", "-t", f"{intent.args['rev']}:{rel}"],
+                              cwd=self.worktree, env=_worktree_env(), text=True,
+                              capture_output=True, timeout=30)
+        if kind.stdout.strip() != "blob":
+            what = kind.stdout.strip() or "nothing"
+            return ResultEnvelope(ok=False, error=(
+                f"git_restore puts back ONE file, and at {intent.args['rev']} {rel!r} is "
+                f"{'a directory' if what == 'tree' else what}. Name a file that exists there"))
         before = os.path.getsize(target) if os.path.exists(target) else 0
         try:
             proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(), text=True,
@@ -2377,7 +2387,12 @@ class HestiaF1aDispatcher:
             return subprocess.run(["git", *a], cwd=self.worktree, env=_worktree_env(), text=True, input=inp,
                                   capture_output=True, timeout=120)
 
-        branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        # checked HERE too, before anything is witnessed or pushed (SAGE #217 review)
+        from sage.gateway.being_gate_client import own_proposal_branch
+        try:
+            branch = own_proposal_branch(self.worktree)
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
         st = git("status", "--porcelain")
         if st.returncode != 0:
             return ResultEnvelope(ok=False, error=f"git status failed: {st.stderr[:200]}")
@@ -2762,17 +2777,23 @@ class HestiaF1aDispatcher:
         imgs, caps = [], []
         try:
             root = os.path.realpath(os.path.join(self.memory_root, "scratch", "game", "windows"))
-            for w in (payload.get("windows") or [])[: self.GAME_WINDOW_MAX]:
+            windows = list((payload.get("windows") or [])[: self.GAME_WINDOW_MAX])
+        except Exception:
+            return (), ()
+        # one bad window costs one picture, not every picture in the call (SAGE #218 review)
+        for w in windows:
+            try:
                 full = os.path.realpath(os.path.join(self.memory_root, str(w.get("file", ""))))
                 if not full.startswith(root + os.sep) or not os.path.isfile(full):
                     continue
                 if os.path.getsize(full) > self.GAME_WINDOW_MAX_BYTES:
                     continue
+                cap = f"x {w['x'][0]}-{w['x'][1]}, y {w['y'][0]}-{w['y'][1]}: {w.get('what', 'a window of the board')}"
                 with open(full, "rb") as fh:
-                    imgs.append(base64.b64encode(fh.read()).decode("ascii"))
-                caps.append(f"x {w['x'][0]}-{w['x'][1]}, y {w['y'][0]}-{w['y'][1]}: {w.get('what', 'a window of the board')}")
-        except Exception:
-            return (), ()
+                    img = base64.b64encode(fh.read()).decode("ascii")
+            except Exception:
+                continue
+            imgs.append(img); caps.append(cap)
         return tuple(imgs), tuple(caps)
 
     @classmethod

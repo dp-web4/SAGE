@@ -835,7 +835,7 @@ def game_command(args: dict, ctx: Optional[dict] = None) -> str:
     memory_root = (ctx or {}).get("memory_root")
     if not memory_root or any(ch.isspace() for ch in memory_root):
         raise ValueError("game requires a memory_root context without whitespace")
-    game = str(args.get("game", "ft09")).strip()
+    game = str(args.get("game") or "ft09").strip()     # null / "" from a model means the default
     if not re.fullmatch(_GAME_ID, game):
         raise ValueError(f"game 'game' must be a four-character id like 'ft09', got {game!r}")
     if game in GAME_HOLDOUTS:
@@ -847,7 +847,7 @@ def game_command(args: dict, ctx: Optional[dict] = None) -> str:
     probes = args.get("probes")
     if probes is None:
         # single-probe form: action (+ x,y)
-        probes = [[args.get("action", "ACTION6")] + ([args["x"], args["y"]] if "x" in args or "y" in args else [])]
+        probes = [[args.get("action", "ACTION6")] + [args[k] for k in ("x", "y") if k in args]]
     if isinstance(probes, str):
         try:
             probes = json.loads(probes)
@@ -861,9 +861,11 @@ def game_command(args: dict, ctx: Optional[dict] = None) -> str:
     norm = []
     for i, pr in enumerate(probes):
         if isinstance(pr, dict):
-            pr = [pr.get("action", "ACTION6")] + ([pr["x"], pr["y"]] if "x" in pr or "y" in pr else [])
+            pr = [pr.get("action", "ACTION6")] + [pr[k] for k in ("x", "y") if k in pr]
         if not isinstance(pr, (list, tuple)) or not pr:
             raise ValueError(f"game probe {i}: must be [action] or [action, x, y], got {pr!r}")
+        if any(isinstance(v, bool) for v in pr[1:]):
+            raise ValueError(f"game probe {i}: coordinates must be whole numbers 0-63, not true/false")
         act = str(pr[0]).strip().upper()
         if act not in GAME_ACTIONS:
             raise ValueError(f"game probe {i}: action must be one of {list(GAME_ACTIONS)}, got {pr[0]!r}")
@@ -1149,6 +1151,16 @@ def git_restore_command(args: dict, ctx: Optional[dict] = None) -> str:
     root = os.path.realpath(worktree)
     if not full.startswith(root + os.sep):
         raise ValueError(_escape_refusal("git_restore", path, worktree))
+    if os.path.isdir(full):
+        # checkout -- <dir> restores every file under it, and the answer says "this one file"
+        raise ValueError(f"git_restore puts back ONE file, and {path!r} is a directory. Name "
+                         "the file inside it you want restored")
+    # what git EXECUTES is not restorable: a rev is any commit the repo holds, reviewed or not,
+    # and SAGE's core.hooksPath=.githooks makes a restored hook seat-run code (SAGE #217)
+    if os.path.relpath(full, root).split(os.sep, 1)[0] in (".githooks", ".git"):
+        raise ValueError(f"git_restore cannot put back {path!r}: it holds what git EXECUTES, "
+                         "and no being writes there. Everything else in your worktree is yours "
+                         "to restore")
     return f"git --no-pager -C {worktree} checkout {rev} -- {full}"
 
 
@@ -1175,20 +1187,31 @@ def pr_amend_command(args: dict, ctx: Optional[dict] = None) -> str:
     if not str(args.get("message", "")).strip():
         raise ValueError("pr_amend needs a 'message': what this revision changes and why, "
                          "which becomes the commit body")
+    own_proposal_branch(worktree)      # before the early return: "true" must not skip it (#217)
     body = str(args.get("body", "") or "")
     if not body.strip():
         return "true"      # commit + push only; the PR body stands as written
     return f"gh pr edit {_pr_number_for_branch(worktree)} --repo {PR_REPO} --body-file -"
 
 
-def _pr_number_for_branch(worktree: str) -> str:
-    """The open PR number for the branch this worktree is on. Read, never being-supplied."""
+def own_proposal_branch(worktree: str) -> str:
+    """The branch this worktree is on, if it is one of the being's OWN proposals; a ValueError
+    otherwise. Read, never being-supplied. Called by the composer BEFORE its no-body early
+    return and again by the dispatcher before it acts (SAGE #217 review, sprout: a bodyless
+    amend composed "true" and pushed to whatever branch the worktree stood on)."""
     import subprocess
     br = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=worktree,
                         text=True, capture_output=True, timeout=30).stdout.strip()
     if not br.startswith("legion-being/") or br == "legion-being/work":
         raise ValueError(f"pr_amend: this worktree is on {br!r}, which is not one of your PR "
                          "branches. pr_amend revises a proposal you already opened")
+    return br
+
+
+def _pr_number_for_branch(worktree: str) -> str:
+    """The open PR number for the branch this worktree is on. Read, never being-supplied."""
+    import subprocess
+    br = own_proposal_branch(worktree)
     out = subprocess.run(["gh", "pr", "list", "--repo", PR_REPO, "--head", br,
                           "--state", "open", "--json", "number", "--jq", ".[0].number"],
                          cwd=worktree, text=True, capture_output=True, timeout=60).stdout.strip()

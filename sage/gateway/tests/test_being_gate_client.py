@@ -958,7 +958,13 @@ def test_pr_amend_reads_the_branch_from_the_worktree_and_refuses_a_non_pr_branch
     with pytest.raises(ValueError, match="needs a worktree"):
         pr_amend_command({"title": "a proper title here", "message": "m"}, {})
 
-    # no new body -> commit and push only; nothing outward is composed
+    # no new body on a branch that is NOT its own: refused, before the "true" early return.
+    # This assertion used to expect "true" here, from `some/other` — the hole sprout found on
+    # SAGE #217 (the dispatcher then committed and pushed to that branch).
+    with pytest.raises(ValueError, match="not one of your PR branches"):
+        pr_amend_command({"title": "a proper title here", "message": "why"}, {"worktree": wt})
+    # ...and on one of its own proposals: commit and push only; nothing outward is composed
+    git("checkout", "-qb", "legion-being/a-proposal")
     assert pr_amend_command({"title": "a proper title here", "message": "why"},
                             {"worktree": wt}) == "true"
 
@@ -1080,6 +1086,13 @@ def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
     monkeypatch.setenv("SAGE_PR_BASE", "legion/mission-artifact")
 
     home, wt = tempfile.mkdtemp(), tempfile.mkdtemp()
+    # A REAL repo on one of the being's own proposal branches: pr_amend now checks the branch
+    # before composing anything (SAGE #217 review). The old empty tmp dir composed "true" and
+    # was exactly the unchecked case.
+    import subprocess
+    for a in (["init", "-q"], ["config", "user.email", "t@t"], ["config", "user.name", "t"],
+              ["commit", "-q", "--allow-empty", "-m", "c"], ["checkout", "-qb", "legion-being/gate-walk"]):
+        subprocess.run(["git", *a], cwd=wt, check=True, capture_output=True)
     c = BeingGateClient.__new__(BeingGateClient)
     c.worktree, c.memory_root, c.workspace = wt, home, wt
     c.game_stepper = "/opt/arc/being_board_step.py"        # `game` composes only with one
