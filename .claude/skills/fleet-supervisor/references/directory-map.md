@@ -2,9 +2,9 @@
 
 Repositories have explicit roles and visibility boundaries. Artifacts land in exactly one canonical home. Cross-contamination is a bug.
 
-## SWE-SAGE (public, MIT-0) — current software-engineering competition / reproducibility surface
+## SWE-SAGE (private during competition, MIT-0) — software-engineering competition / research workspace
 
-**What it is**: Public implementation and experiment record for the Gemma 4 Developer Agent Competition, designed to remain useful as a reproducible SWE-agent research artifact after the competition.
+**What it is**: Private working implementation and experiment record for the Gemma 4 Developer Agent Competition. It is designed so selected results can later be promoted into public SAGE or released as a reproducibility artifact without requiring the working repository to be public during active competition.
 
 **What goes here**:
 - Competition agent runtime and adapters
@@ -21,7 +21,7 @@ Repositories have explicit roles and visibility boundaries. Artifacts land in ex
 - Credentials or machine-specific operational state
 - Exploratory mechanisms whose provenance/publication status is not clean
 
-**Rule**: a public SWE-SAGE result must be reproducible without access to `dev-SAGE`, `shared-context`, or `private-context`.
+**Rule**: private SWE-SAGE may depend on competition/team-private work during development, but any later public claim/release must be reproducible without hidden dependencies on `dev-SAGE`, `shared-context`, `private-context`, or unreleased SWE-SAGE evidence.
 
 **Canonical on-disk**:
 - WSL: `/mnt/c/exe/projects/ai-agents/SWE-SAGE/`
@@ -169,7 +169,7 @@ Repositories have explicit roles and visibility boundaries. Artifacts land in ex
 Ask: "who needs to read this?"
 - Other machines' runtime code → SAGE
 - Other machines' knowledge → shared-context
-- External SWE-agent / Gemma competition researchers → SWE-SAGE
+- Internal Gemma competition work → SWE-SAGE; external researchers receive only deliberately released artifacts
 - ARC-AGI-3 researchers → ARC-SAGE
 - Operators (humans or supervisor scripts) → private-context
 
