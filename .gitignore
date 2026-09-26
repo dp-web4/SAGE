@@ -326,3 +326,7 @@ sage-rs/daemon.log
 # record), so untracking it would leave those bytes in no repository at all.
 sage/instances/*/conversations/
 sage/instances/*/journal.md
+# A being's journal DIRECTORY is its record as much as journal.md (fleet policy 2026-09-20,
+# being records are private). This line lived only as an uncommitted edit in the live tree until
+# 2026-09-26, when the tree was cleaned back to main; landed here so it is not lost.
+sage/instances/*/journal/
