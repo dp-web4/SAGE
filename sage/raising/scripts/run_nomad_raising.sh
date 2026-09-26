@@ -123,32 +123,26 @@ with open('$SAGE_DIR/$IDENTITY_FILE') as f:
 echo "[Nomad-Raising] Updating SESSION_FOCUS.md..."
 python3 -m sage.scripts.generate_primer 2>/dev/null || true
 
-# --- Step 6: Commit and push ---
-CHANGED=0
-if [ -d "$INSTANCE_DIR" ]; then
-    if ! git diff --quiet "$INSTANCE_DIR/" 2>/dev/null; then
-        CHANGED=1
-    fi
-    if [ -n "$(git ls-files --others --exclude-standard "$INSTANCE_DIR/" 2>/dev/null)" ]; then
-        CHANGED=1
-    fi
+# --- Step 6: Mirror the being's record PRIVATELY. Nothing is published. ---
+# Until 2026-09-26 this step ran `git add "$INSTANCE_DIR/"`, committed and pushed to PUBLIC SAGE
+# every 6 h. dp, 2026-09-19/20: existing public records are retained; being records are private
+# going forward (shared-context/FLEET_BROADCAST_being_records_private.md). Nomad had not applied
+# it; it became urgent when the being went onto the heartbeat runtime, whose files (account, asks,
+# partial beat records with a fleet digest of private forum titles) would have been staged here.
+# Same shape as CBP's step 7 (sage/scripts/cbp_raising.sh).
+#
+# KNOWN RESIDUE until the being moves to sage/instances/nomad-being/ (ignored): the already-tracked
+# files under $INSTANCE_DIR show as modified in `git status`. Do not `git add -A` in this tree.
+PRIVATE_CONTEXT_DIR="$(cd "$SAGE_DIR/.." && pwd)/private-context"
+if SAGE_INSTANCE="$SAGE_DIR/$INSTANCE_DIR" PRIVATE_CONTEXT="$PRIVATE_CONTEXT_DIR" \
+   SAGE_BEING="nomad-being" SEAT_ID="nomad-claude" \
+   SAGE_INSTANCE_LEGACY_NAME="$(basename "$INSTANCE_DIR")" \
+   "$SAGE_DIR/scripts/mirror_being_private.sh"; then
+    echo "[Nomad-Raising] Session $SESSION_NUM ($PHASE) mirrored privately."
+else
+    # Loud and non-fatal: a failed mirror must not look like a finished session, and must not
+    # tempt anyone back to the public push as a fallback.
+    echo "[Nomad-Raising] ERROR: private mirror FAILED; the record exists only on this machine until it succeeds." >&2
 fi
-
-if [ "$CHANGED" -eq 0 ]; then
-    echo "[Nomad-Raising] No new raising data to commit."
-    exit 0
-fi
-
-# Stage instance dir + focus
-git add "$INSTANCE_DIR/" SESSION_FOCUS.md SESSION_MAP.yaml 2>/dev/null || true
-
-git commit -m "[Nomad-Raising] Session $SESSION_NUM ($PHASE) — $(date -u +'%Y-%m-%d %H:%M UTC')
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
-
-# Push via SSH (PAT is deprecated)
-git push origin main 2>&1 || {
-    echo "[Nomad-Raising] WARNING: push failed, will retry next session"
-}
 
 echo "[Nomad-Raising] $(date -u +'%Y-%m-%d %H:%M UTC') — Done."
