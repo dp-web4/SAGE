@@ -97,6 +97,7 @@ def test_inventory_finds_a_laptop_body(monkeypatch):
     monkeypatch.setattr(body.glob, "glob", lambda pat: ["/dev/video0"] if "video" in pat else [])
     monkeypatch.setattr(body, "_pw_audio", lambda **k: {"sinks": [{"name": "Built-in Speaker", "kind": "wired"}],
                                                           "sources": [{"name": "Built-in Mic", "kind": "wired"}]})
+    monkeypatch.setattr(body.shutil, "which", lambda t: None)   # a speaker, but no speech engine
     inv = body.inventory()
     assert inv["verbs"] == ["camera", "say", "peer_ask"] and inv["not_yet_wired"] == ["speak"]
     out = body.render_inventory(inv)
@@ -118,7 +119,7 @@ def test_headless_beat_is_not_offered_gaze_and_a_live_cortex_beat_is(monkeypatch
     monkeypatch.setattr(body, "_pw_audio", lambda **k: {})
     headless = offered_explore_tools(body.reading())
     assert "gaze" not in headless and "camera" not in headless
-    assert [t for t in EXPLORE_TOOLS if t not in ("gaze", "camera")] == headless, "text verbs untouched"
+    assert [t for t in EXPLORE_TOOLS if t not in ("gaze", "camera", "speak")] == headless, "text verbs untouched"
     assert "gaze" not in offered_explore_tools(None) and "say" in offered_explore_tools(None), \
         "an unmeasurable body offers no body verb"
     monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp))

@@ -412,7 +412,7 @@ def game_command(args: dict, ctx: Optional[dict] = None) -> str:
     memory_root = (ctx or {}).get("memory_root")
     if not memory_root or any(ch.isspace() for ch in memory_root):
         raise ValueError("game requires a memory_root context without whitespace")
-    game = str(args.get("game", "ft09")).strip()
+    game = str(args.get("game") or "ft09").strip()     # null / "" from a model means the default
     if not re.fullmatch(_GAME_ID, game):
         raise ValueError(f"game 'game' must be a four-character id like 'ft09', got {game!r}")
     if game in GAME_HOLDOUTS:
@@ -424,7 +424,9 @@ def game_command(args: dict, ctx: Optional[dict] = None) -> str:
     probes = args.get("probes")
     if probes is None:
         # single-probe form: action (+ x,y)
-        probes = [[args.get("action", "ACTION6")] + ([args["x"], args["y"]] if "x" in args or "y" in args else [])]
+        # only the coordinates actually given: one of two is a length error the being can read,
+        # not a KeyError (sprout on #218)
+        probes = [[args.get("action", "ACTION6")] + [args[k] for k in ("x", "y") if k in args]]
     if isinstance(probes, str):
         try:
             probes = json.loads(probes)
@@ -438,9 +440,12 @@ def game_command(args: dict, ctx: Optional[dict] = None) -> str:
     norm = []
     for i, pr in enumerate(probes):
         if isinstance(pr, dict):
-            pr = [pr.get("action", "ACTION6")] + ([pr["x"], pr["y"]] if "x" in pr or "y" in pr else [])
+            pr = [pr.get("action", "ACTION6")] + [pr[k] for k in ("x", "y") if k in pr]
         if not isinstance(pr, (list, tuple)) or not pr:
             raise ValueError(f"game probe {i}: must be [action] or [action, x, y], got {pr!r}")
+        if any(isinstance(v, bool) for v in pr[1:]):
+            # True is an int to Python and would compose as 1 — a coordinate nobody chose
+            raise ValueError(f"game probe {i}: coordinates must be whole numbers 0-63, not true/false")
         act = str(pr[0]).strip().upper()
         if act not in GAME_ACTIONS:
             raise ValueError(f"game probe {i}: action must be one of {list(GAME_ACTIONS)}, got {pr[0]!r}")
@@ -885,6 +890,10 @@ _REGISTRY = {
     # dispatcher writes the ONE file the cortex reads (~/.sprout/gaze.json), never a path the
     # being names — so its reach is fixed the way `say`'s and `remember`'s are.
     "gaze":           dict(tool="gaze",         path_args=(),       cmd_arg=None),
+    # speak: words become a voice in the room (2026-09-26). Path-less like gaze: the being
+    # supplies only text; the engine, the device and the length cap are fixed by the dispatcher,
+    # so its reach is the machine's own speaker and nothing else.
+    "speak":          dict(tool="speak",        path_args=(),       cmd_arg=None),
     "request_scope":  dict(tool="request_scope", path_args=(),      cmd_arg=None),
     # request_run: ASK THE SEAT TO RUN A FILE. It does not run anything — that is the whole
     # design. Measured 2026-09-20/21: the being asked dp in prose to run a file for it six
@@ -921,7 +930,8 @@ _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
                             "retire_note", "request_run", "memory_edit", "camera", "game",
-                            "gaze"})   # moves the body's own eyes (2026-09-23)
+                            "gaze",    # moves the body's own eyes (2026-09-23)
+                            "speak"})  # makes sound in the room (2026-09-26)
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -985,6 +995,12 @@ _TOOL_SCHEMAS = {
               "target": "for dwell or avert: what, in your own words (optional)",
               "words": "why, in your own words (optional; kept with the choice)"},
              ["mode"]),
+    "speak": ("Speak aloud. Your words become a voice through this machine's speaker, which "
+              "anyone in the room may hear. This is sound, not a message: it is not added to "
+              "any conversation, so to answer someone in writing use say. One short utterance, up "
+              "to 400 characters. Write the words themselves, not a description of them.",
+              {"text": "the exact words to say aloud"},
+              ["text"]),
     "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "
             "rather than writing about them in your journal. The turn is attributed to you "
             "and kept forever; nobody can edit it afterwards, including you. Saying nothing "
@@ -1059,6 +1075,12 @@ _TOOL_SCHEMAS = {
                {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
                 "device": "optional: a plain device node to read from (default /dev/video0)"},
                []),
+    "rest": ("End this beat deliberately, when you judge you are done. You are NOT required "
+             "to keep acting until something runs out — a beat you end early is not a beat "
+             "wasted, and the time returns to the machine. Your reason becomes your closing "
+             "words. This touches nothing in the world, so it is not gated and not witnessed; "
+             "it is simply you saying you are finished.",
+             {"reason": "one line: what you finished, or why you are stopping here"}, ["reason"]),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
                  "a fact, a lesson, a question, what you were doing and why.",
                  {"content": "the memory, in your own words", "tags": "comma-separated tags (optional)"},

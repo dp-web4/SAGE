@@ -210,3 +210,39 @@ def test_build_client_hands_the_stepper_to_both_halves(tmp_path, monkeypatch):
     gt.build_client("m", inst, "model", str(tmp_path), None, "s", 0.3, 100)
     assert seen["BeingGateClient"]["game_stepper"] == "/seat/stepper.py"
     assert seen["HestiaF1aDispatcher"]["game_stepper"] == "/seat/stepper.py"
+
+
+def test_the_grammar_says_what_is_wrong_rather_than_raising_something_else():
+    """sprout on #218: one coordinate raised KeyError: 'y'; booleans composed as 1/0; a null
+    game got the four-character-id refusal instead of the default."""
+    for bad in ({"action": "ACTION6", "x": 1}, {"probes": [{"action": "ACTION6", "x": 1}]}):
+        with pytest.raises(ValueError, match="needs exactly"):
+            game_command(bad, _CTX)
+    with pytest.raises(ValueError, match="not true/false"):
+        game_command({"probes": [["ACTION6", True, False]]}, _CTX)
+    for g in (None, ""):
+        assert " --batch ft09 " in game_command({"game": g, "probes": [["ACTION1"]]}, _CTX)
+
+
+def test_one_malformed_window_costs_one_picture_not_all():
+    home = tempfile.mkdtemp(prefix="gw-")
+    wdir = os.path.join(home, "scratch", "game", "windows"); os.makedirs(wdir)
+    for n in ("a.jpg", "b.jpg"):
+        open(os.path.join(wdir, n), "wb").write(b"IMG" + n.encode())
+    d = _dispatcher(home)
+    good = {"file": "scratch/game/windows/b.jpg", "x": [0, 3], "y": [0, 3]}
+    broken = {"file": "scratch/game/windows/a.jpg"}          # no x / y
+    imgs, caps = d._game_windows({"windows": [broken, good]})
+    assert imgs == (base64.b64encode(b"IMGb.jpg").decode(),) and len(caps) == 1
+
+
+def test_a_seat_without_a_stepper_is_not_offered_the_game(tmp_path):
+    import json
+    from sage.gateway.governed_turn import offered_tools
+    inst = tmp_path / "i"; inst.mkdir()
+    names = lambda ts: [t["function"]["name"] for t in ts]  # noqa: E731
+    assert "game" not in names(offered_tools(None, inst))
+    assert "pr_review" in names(offered_tools(None, inst)), "only the game is dropped"
+    assert set(names(offered_tools("game,witness", inst))) == {"game", "witness"}, "an explicit cut is honoured"
+    (inst / "instance.json").write_text(json.dumps({"game_stepper": "/seat/stepper.py"}))
+    assert offered_tools(None, inst) is None, "with a stepper: the whole registry, as before"
