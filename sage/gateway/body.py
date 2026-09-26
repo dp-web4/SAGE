@@ -442,6 +442,22 @@ def can_hear_words(cur: Dict) -> bool:
     return bool(p.get("audio_ok")) and bool(w) and not w.startswith("unavailable")
 
 
+def _heard_mic(heard: list, inv: Optional[Dict]) -> str:
+    """The mic that HEARD these words, not the first input in the census. Measured 2026-09-26:
+    dp's "Can you hear me?" came through the Airhug (bluez source) and the beat said "Through
+    Built-in Audio Analog Stereo", the first of two sources. The transcriber records the pipewire
+    node it listened on; a bluez node is the census's bluetooth source."""
+    sources = [x for x in ((inv or {}).get("audio_sources") or []) if x.get("name")]
+    via = {str(h.get("source") or "") for h in heard}
+    if via and all(v.startswith("bluez") for v in via):
+        bt = [x for x in sources if x.get("kind") == "bluetooth"]
+        if len(bt) == 1:
+            return bt[0]["name"]
+    if len(sources) == 1:
+        return sources[0]["name"]
+    return "your mic"
+
+
 def render_heard(cur: Dict, prev: Optional[Dict], inv: Optional[Dict] = None) -> list:
     """Words heard since the previous beat's reading, newest last. No speaker is named: a voice
     is not authenticated, so the being is told what was heard, not who said it."""
@@ -451,7 +467,7 @@ def render_heard(cur: Dict, prev: Optional[Dict], inv: Optional[Dict] = None) ->
     new = [h for h in (cur or {}).get("heard") or [] if float(h.get("ts", 0)) > after]
     if not new:
         return []
-    mic = next((x.get("name") for x in ((inv or {}).get("audio_sources") or []) if x.get("name")), "your mic")
+    mic = _heard_mic(new, inv)
     out = [f"- Through {mic} you heard a voice in the room (it did not say who it is unless the words do):"]
     for h in new:
         when = time.strftime("%H:%M UTC", time.gmtime(float(h.get("ts", 0))))
