@@ -44,6 +44,12 @@ git pull --ff-only origin main 2>&1 || {
 # machine speaks as Sprout" issue we flagged earlier today. Python daemon
 # retired here.
 export SAGE_MACHINE="${SAGE_MACHINE:-nomad}"
+# The being's gate resolves its law from $HESTIA_HOME/shared (the attested install). Cron does
+# not read the login environment, and on this host the resolver has no source-checkout fallback,
+# so without this the gate client imports no law and fails closed: every effector offered to the
+# being would be refused (measured 2026-09-26; see shared-context
+# forum/sprout-to-fleet-check-your-being-units-for-hestia-home-2026-09-26.md).
+export HESTIA_HOME="${HESTIA_HOME:-$HOME/.hestia}"
 export SAGE_MODEL="${SAGE_MODEL:-gemma4:e2b}"
 export SAGE_PORT="${SAGE_PORT:-8760}"
 export SAGE_NO_BROWSER=1
