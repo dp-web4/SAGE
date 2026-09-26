@@ -178,7 +178,7 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
         lines.append(render_inventory(inv))
     if "speak" in (inv.get("verbs") or []):
         lines.append("- You can speak aloud with `speak`: your words become a voice in the room, through "
-                     f"{speaker_name(inv)}. Anyone there hears it; it is not a message and is not kept in a "
+                     f"{speaker_name(inv)}, which anyone in the room may hear; it is not a message and is not kept in a "
                      "conversation. Nothing asks you to.")
     if "gaze" in (inv.get("verbs") or []):
         lines.append("- You can change your gaze with `gaze` (open, avert, dwell, closed) and say why in "

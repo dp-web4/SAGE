@@ -109,7 +109,7 @@ env on the heartbeat unit.
 | Scope / appeal | `request_scope`, `appeal` | a ruling | inbox | closed (seat rules under delegation) |
 | **Gaze** | `gaze` | the cortex follows | next beat's descriptor + named cause | **closed, hardware** |
 | Metabolism | any act | ATP moves | "energy N%" next beat | visible; acts not yet costed |
-| Voice | `speak` (not yet) | the speaker sounds; the mic hears it; a person hears it | mic onset at the moment of speech | speaker + mic wired, verb not |
+| Voice | `speak` (#219) | the speaker sounds; the mic hears it; a person hears it | mic onset at the moment of speech | verb wired; the mic-onset reafference is not yet |
 | Prediction | write one checkable prediction | the world does or doesn't | next beat shows measured vs predicted | not yet |
 | Mind → body | beat acts | daemon feels them | SNARC source "self" | `/observe` exists, not wired |
 | Presence wake | dwell on something salient | a salient moment wakes a beat | `wake: {by: presence}` | half-closed: the wake exists, the attribution to the dwell does not |
@@ -163,4 +163,7 @@ It is a body verb: offered only when the beat measures a sink **and** both engin
 - **Sound is not a message.** Nothing is added to a conversation; `say` remains the written answer.
 - **A record the being owns.** Every utterance that played is appended to `<home>/spoken.jsonl`,
   opened/closed as a hestia action, and witnessed. A failed playback records `failed` and writes no line.
+  If the sound played but the append fails, the outcome is `partial` and the receipt and witness say
+  the record was not written; nothing claims it is kept.
+- **The receipt claims only what was measured:** "played aloud through <speaker>", never that anyone heard it.
 - **Pathless and consequential** in the gate registry, like `gaze`.

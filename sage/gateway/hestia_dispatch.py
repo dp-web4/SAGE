@@ -962,8 +962,8 @@ class HestiaF1aDispatcher:
 
         dp, 2026-09-26: "give it speak tool". The being had been asked to pair the bluetooth
         audio and speak, and for 20 beats journaled that it wanted to learn how, holding no verb
-        that could. Every utterance is recorded in its own home (spoken.jsonl) and witnessed, so
-        the record of what it said aloud is its own to read, whether or not anyone was there."""
+        that could. Each played utterance is appended to its own home (spoken.jsonl) and witnessed;
+        if that append fails, the receipt, hestia outcome and witness all say so."""
         from sage.gateway import body as _body
         from sage.gateway.reference_f1a import missing_args
         text = _body.clean_speech(intent.args.get("text", ""))
@@ -995,19 +995,32 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=(
                 f"your words could not be played ({type(e).__name__}); nothing was heard. "
                 f"The speaker may have disconnected."))
-        self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "ok",
-                                              "detail": f"spoke {done['chars']} chars"})
+        # THE RECEIPT CLAIMS ONLY WHAT WAS MEASURED (GPT review of #219). Playback success proves
+        # sound reached the sink, not that anyone heard it; and the speech record is written
+        # AFTER the sound, so its failure is a real partial outcome: named to the being, to
+        # hestia and to the witness, never swallowed behind "it is kept".
+        speaker = _body.speaker_name()
+        record_err = None
         try:
             with open(os.path.join(self.memory_root, "spoken.jsonl"), "a") as f:
-                f.write(json.dumps({"ts": time.time(), "text": text,
+                f.write(json.dumps({"ts": time.time(), "text": text, "speaker": speaker,
                                     "seconds": done["seconds"]}) + "\n")
-        except Exception:
-            pass   # the sound happened; a missing log line must not report it as not said
+        except Exception as e:
+            record_err = f"{type(e).__name__}: {e}"[:200]
+        self._call("hestia_record_outcome", {
+            "actionId": action_id, "outcome": "ok" if record_err is None else "partial",
+            "detail": f"played {done['chars']} chars through {speaker}"
+                      + ("" if record_err is None else f"; speech record NOT written ({record_err})")})
+        said = f"played aloud through {speaker} ({done['seconds']}s): \"{text}\"."
+        if record_err is None:
+            result = said + " It is kept in your spoken.jsonl, not in any conversation."
+        else:
+            result = (said + f" But your speech record could not be written ({record_err}), so "
+                      f"spoken.jsonl does not have it. It is not in any conversation either.")
         return ResultEnvelope(
-            ok=True,
-            result=(f"spoken aloud ({done['seconds']}s): \"{text}\". Whoever is in the room heard it. "
-                    f"It is kept in your spoken.jsonl, not in any conversation."),
-            witness_id=self._local._witness(f"spoke aloud: {text[:120]}"))
+            ok=True, result=result,
+            witness_id=self._local._witness(f"spoke aloud through {speaker}: {text[:120]}"
+                                            + ("" if record_err is None else " [speech record not written]")))
 
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()

@@ -859,8 +859,8 @@ _TOOL_SCHEMAS = {
               "target": "for dwell or avert: what, in your own words (optional)",
               "words": "why, in your own words (optional; kept with the choice)"},
              ["mode"]),
-    "speak": ("Speak aloud. Your words become a voice through this machine's speaker, heard by "
-              "whoever is in the room right now. This is sound, not a message: it is not added to "
+    "speak": ("Speak aloud. Your words become a voice through this machine's speaker, which "
+              "anyone in the room may hear. This is sound, not a message: it is not added to "
               "any conversation, so to answer someone in writing use say. One short utterance, up "
               "to 400 characters. Write the words themselves, not a description of them.",
               {"text": "the exact words to say aloud"},

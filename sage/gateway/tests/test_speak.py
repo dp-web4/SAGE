@@ -29,6 +29,7 @@ def _dispatcher(monkeypatch, played, live=True):
     monkeypatch.setattr(body, "speak_provider",
                         lambda audio=None: {"live": live, "why": "" if live else "no audio output is connected"})
     monkeypatch.setattr(body, "speak", lambda text, timeout=60: (played.append(text) or {"chars": len(text), "seconds": 1.2}))
+    monkeypatch.setattr(body, "speaker_name", lambda inv=None: "AIRHUG 01")
     return d, home, calls
 
 
@@ -42,6 +43,25 @@ def test_it_speaks_the_words_and_keeps_them_in_its_own_home(monkeypatch):
     rec = [json.loads(l) for l in open(os.path.join(home, "spoken.jsonl"))]
     assert rec[0]["text"] == "Hello, dp. I can hear you now."
     assert "not in any conversation" in env.result, "sound is not a message; say is the written answer"
+    assert "played aloud through AIRHUG 01" in env.result
+    assert "heard it" not in env.result, "playback proves the sink got sound, not that anyone listened"
+    assert calls[-1][1]["outcome"] == "ok"
+
+
+def test_sound_played_but_record_unwritable_is_a_named_partial_not_a_claim(monkeypatch):
+    """GPT review of #219: the append was wrapped in `except: pass` while the receipt said
+    "It is kept in your spoken.jsonl". Now a failed record is named everywhere it is reported."""
+    played = []
+    d, home, calls = _dispatcher(monkeypatch, played)
+    os.mkdir(os.path.join(home, "spoken.jsonl"))   # unwritable as a file, even for root
+    witnessed = []
+    d._local = type("L", (), {"_witness": staticmethod(lambda e: (witnessed.append(e) or "w-2"))})()
+    env = d._do_speak(BeingIntent("speak", {"text": "hello"}))
+    assert env.ok and played == ["hello"], "the sound did happen; ok is true to that"
+    assert "could not be written" in env.result and "spoken.jsonl does not have it" in env.result
+    assert "It is kept" not in env.result
+    assert calls[-1][1]["outcome"] == "partial" and "NOT written" in calls[-1][1]["detail"]
+    assert "[speech record not written]" in witnessed[0]
 
 
 def test_empty_words_are_refused_and_name_text(monkeypatch):
