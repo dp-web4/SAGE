@@ -119,6 +119,9 @@ pub struct ConsciousnessLoop {
 /// enough that the detector maps cannot be grown without limit by whoever reaches a route.
 const MAX_SENSOR_IDS: usize = 24;
 
+/// Rotate the shadow-metabolism log past this size; one prior generation is kept.
+const SHADOW_LOG_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
 /// Normalise a speaker into a SNARC sensor id: lowercase, `[a-z0-9_-]`, bounded length.
 /// Anything else collapses to `other`, which is a real stream too — it just does not get a
 /// private habituation curve.
@@ -243,6 +246,16 @@ impl ConsciousnessLoop {
             coh, valence_delta, self.shadow_atp, self.shadow_atp - real_atp,
         );
         use std::io::Write;
+        // Bounded. This log is an INSTRUMENT (observation only, never read back by the loop or
+        // by anything in the Python tree) and it grew one row per noticing — 92k rows / 14 MB in
+        // five days on Sprout, 1 GB/year, in every being's home, and over private-context's
+        // 9 MB mirror guard on the first run (2026-09-22). One rotation keeps the recent
+        // trajectory legible offline, which is all it was ever for.
+        if let Ok(md) = std::fs::metadata(path) {
+            if md.len() > SHADOW_LOG_MAX_BYTES {
+                let _ = std::fs::rename(path, path.with_extension("jsonl.1"));
+            }
+        }
         if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
             let _ = writeln!(f, "{}", line);
         }

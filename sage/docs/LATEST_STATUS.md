@@ -1,6 +1,6 @@
 # SAGE Current Status
 
-**As of:** 2026-09-21  
+**As of:** 2026-09-24  
 **Snapshot basis:** public `main` through documentation refresh `a8461d5`
 
 This is the **current-status landing page**, not a session chronicle. It is intentionally short, dated, and falsifiable. Detailed raising histories, experiment analyses, instance records, PRs/issues, and git history remain the evidence of record.
@@ -44,6 +44,8 @@ As of this snapshot, the active edge is less about adding conceptual modules and
 5. **Learned behavioral state.** Active `dev-SAGE` work is testing fast learned decision substrates, calibration, and behavioral causality around a slower cortex.
 6. **Longitudinal memory controls.** A clean comparison of selective memory/retrieval against brute-force long-context baselines remains worth doing.
 7. **Belief correction.** Provenance is strong; contradiction/supersession/retraction of derived beliefs should become as explicit as evidence capture.
+8. **Premise fidelity.** Source-checkable claims about what a being saw, heard, read, or received should remain bound to recoverable evidence before they are promoted into durable facts. The current refinement is relation-first and reconstructible: preserve the explicit source→claim support relation, uncertainty/falsifier where material, and enough provenance that a later substrate can reconstruct why the premise was licensed. Semantic Closure Horizon (SCH) is a useful progressive-evidence research lens; vector similarity/confidence is not a support verdict. See `PREMISE_FIDELITY.md` and `PRD_SOURCE_GROUNDED_PREMISES.md`.
+9. **State-conditioned agency.** Persistent beings may carry endogenous/metabolic state across interactions, including suffering-like, failure-related or self-evaluative states that alter later policy. Phenomenology is treated as a first-class observation under substrate-symmetric evidence standards; neither automatic promotion nor automatic dismissal is acceptable. See `STATE_CONDITIONED_AGENCY.md`.\n10. **External SWE ablation.** [SWE-SAGE](https://github.com/dp-web4/SWE-SAGE) is the public Gemma 4 software-engineering-agent experiment surface. It is designed to separate the contribution of post-training, persistent state, source-grounded premises and governed execution on a common task distribution rather than treating a leaderboard score as an architectural explanation.
 
 The large `legion/mission-artifact` PR remains a reconciliation/nursery branch; narrow independently reviewable slices continue to be preferred for canonical main.
 
@@ -80,6 +82,7 @@ See `forum/insights/mrh-relevance-contract.md`.
 | What happened in an experiment? | its prereg/config + data/results + analysis |
 | What law governed an action? | installed Hestia law plus witness/decision record |
 | What does the Rust daemon actually implement? | `RUST_VS_PYTHON_CAPABILITY.md` |
+| How does endogenous/metabolic state affect longitudinal agency? | `STATE_CONDITIONED_AGENCY.md` |\n| What is the public SWE-agent benchmark experiment? | [SWE-SAGE](https://github.com/dp-web4/SWE-SAGE) and `SWE_SAGE.md` |
 | What was historical architecture/status? | dated docs, `docs/history/`, `archive/`, git history |
 
 ## Documentation rule

@@ -29,7 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from sage.identity.provider import IdentityProvider
+from sage.identity.provider import IdentityProvider, SYSTEM_TOOL_DIRS
 
 
 class IdentityAnchorTests(unittest.TestCase):
@@ -270,6 +270,137 @@ class IdentityAnchorTests(unittest.TestCase):
         provider._machine_anchor = lambda: 'ANCHOR'
         self.assertEqual(provider._derive_machine_key_v2(),
                          hashlib.sha256(b'sage-seal-v2:ANCHOR:lct://sage:test:agent@test').digest())
+
+
+class SystemToolLookupTests(unittest.TestCase):
+    """The machine anchor is an INPUT TO THE SEALING KEY, so how `ioreg` is found is not a
+    detail. Measured on McNugget (macOS, 2026-09-20): /usr/sbin/ioreg and /sbin/ifconfig are
+    outside the `/usr/bin:/bin` a launchd agent gets by default. By bare name, a shell found
+    them and the daemon's unit did not -- one machine, two anchors (IOPlatformUUID vs
+    `host:<name>`), two v2 keys, and zero MACs for healing a v1 seal. Silent both ways: the
+    fallback is a valid anchor, just a different one. Mirrors the rust
+    `system_tool_is_resolved_without_path`."""
+
+    @staticmethod
+    def _with_path(value):
+        import os
+        from unittest import mock
+        return mock.patch.dict(os.environ, {'PATH': value})
+
+    def test_system_tool_ignores_path(self):
+        import os
+        for path in ('/usr/bin:/bin', '', '/nonexistent'):
+            with self._with_path(path):
+                for tool in ('ioreg', 'ifconfig'):
+                    got = IdentityProvider._system_tool(tool)
+                    if sys.platform == 'darwin':
+                        self.assertTrue(os.path.isabs(got) and os.access(got, os.X_OK),
+                                        f"{tool} under PATH={path!r} -> {got!r}")
+        if sys.platform == 'darwin':
+            self.assertEqual(IdentityProvider._system_tool('ioreg'), '/usr/sbin/ioreg')
+            self.assertEqual(IdentityProvider._system_tool('ifconfig'), '/sbin/ifconfig')
+        self.assertIsNone(IdentityProvider._system_tool('no-such-tool-xyz'),
+                          "not found must be None: returning the bare name hands the next "
+                          "subprocess.run straight back to PATH, which is the defect")
+
+    def test_a_tool_reachable_ONLY_through_PATH_is_neither_found_nor_run(self):
+        """The negative control (GPT seat, SAGE #130). The first cut returned the bare name on a
+        miss, so the next `subprocess.run([name])` reopened PATH and two processes on one
+        machine could still derive different anchors. A tool that exists only on PATH must be
+        invisible to this lookup, and must not reach the anchor."""
+        import os
+        import shutil as _shutil
+        import tempfile as _tempfile
+        d = Path(_tempfile.mkdtemp(prefix='sage-fake-tool-'))
+        self.addCleanup(_shutil.rmtree, d, ignore_errors=True)
+        fake = d / 'ioreg'
+        fake.write_text('#!/bin/sh\necho \'    "IOPlatformUUID" = "00000000-DEAD-BEEF-0000-000000000000"\'\n')
+        fake.chmod(0o755)
+        with self._with_path(f"{d}{os.pathsep}{os.environ.get('PATH', '')}"):
+            self.assertIsNone(
+                IdentityProvider._system_tool('sage-no-such-system-tool'),
+                "a name absent from the fixed directories is not found, however rich PATH is")
+            anchor = IdentityProvider._machine_anchor()
+        self.assertNotIn('DEAD-BEEF', anchor,
+                         "a tool planted on PATH reached the machine anchor, and so the sealing key")
+
+    def test_a_file_that_is_not_executable_is_not_the_tool(self):
+        """Parity with the rust side, which applies the same predicate. The two providers
+        derive ONE sealing key, so a machine where they disagree about what counts as a tool
+        is a machine with two keys.
+
+        2026-09-21: this test used to build the fixture and then assert only that
+        `os.access(plain, X_OK)` is False -- a property of the FIXTURE. It never reached
+        `_system_tool`, which does not look in a temp directory anyway. Removing
+        `os.access(cand, os.X_OK)` from the lookup left the whole suite green. It asks the
+        code now, through the same `dirs` seam the rust side has."""
+        import os
+        import shutil as _shutil
+        import tempfile as _tempfile
+        d = Path(_tempfile.mkdtemp(prefix='sage-noexec-'))
+        self.addCleanup(_shutil.rmtree, d, ignore_errors=True)
+        plain = d / 'ioreg'
+        plain.write_text('not executable')
+        plain.chmod(0o644)
+        self.assertFalse(os.access(plain, os.X_OK), "fixture")
+        self.assertIsNone(IdentityProvider._system_tool_in('ioreg', [str(d)]),
+                          "a non-executable regular file is not the tool")
+        plain.chmod(0o755)
+        self.assertEqual(IdentityProvider._system_tool_in('ioreg', [str(d)]), str(plain),
+                         "the control: the SAME file, executable, IS the tool")
+        (d / 'sub').mkdir()
+        (d / 'sub' / 'ifconfig').mkdir()
+        self.assertIsNone(IdentityProvider._system_tool_in('ifconfig', [str(d / 'sub')]),
+                          "a DIRECTORY named like the tool is not the tool")
+        self.assertIsNone(IdentityProvider._system_tool_in('ioreg', ['/nonexistent-dir']))
+        self.assertEqual(IdentityProvider._system_tool_in('ioreg', ['/nonexistent-dir', str(d)]),
+                         str(plain), "the first directory that HAS it wins")
+
+    def test_the_fixed_directories_are_the_only_ones_searched(self):
+        """The invariant #130 exists for, asked where a Linux CI can answer it.
+
+        The PATH-planting test above plants `ioreg` but asserts on a DIFFERENT name, and its
+        anchor assertion passes trivially on Linux because `_machine_anchor` returns
+        /etc/machine-id before `ioreg` is ever reached. Measured 2026-09-21: prepending the
+        PATH directories to the search list left the whole suite green on Linux -- the exact
+        defect this PR fixes, re-introduced, invisible on the platform most of the fleet runs.
+        This one asks the lookup itself, and holds on every platform."""
+        import os
+        import shutil as _shutil
+        import tempfile as _tempfile
+        d = Path(_tempfile.mkdtemp(prefix='sage-path-only-'))
+        self.addCleanup(_shutil.rmtree, d, ignore_errors=True)
+        fake = d / 'ioreg'
+        fake.write_text('#!/bin/sh\necho x\n')
+        fake.chmod(0o755)
+        with self._with_path(str(d) + os.pathsep + os.environ.get('PATH', '')):
+            got = IdentityProvider._system_tool('ioreg')
+        self.assertNotEqual(got, str(fake),
+                            "a tool planted on PATH was returned by the lookup")
+        self.assertIn(got, [None] + [os.path.join(x, 'ioreg') for x in SYSTEM_TOOL_DIRS],
+                      "the lookup returned something outside the fixed directories")
+
+    def test_the_anchor_does_not_depend_on_path(self):
+        """The property itself, end to end, on whatever platform this runs on."""
+        import hashlib
+        # Compared as digests: the anchor is a hardware identifier and a key input, and a
+        # failing assertEqual would print both values into whatever log runs this.
+        d8 = lambda a: ('host' if a.startswith('host:') else 'id') + ':' + hashlib.sha256(a.encode()).hexdigest()[:8]
+        full = IdentityProvider._machine_anchor()
+        for path in ('/usr/bin:/bin', ''):
+            with self._with_path(path):
+                self.assertEqual(d8(IdentityProvider._machine_anchor()), d8(full),
+                                 f"PATH={path!r} changed the anchor, and with it the sealing key")
+        if sys.platform == 'darwin':
+            self.assertFalse(full.startswith('host:'),
+                             "a Mac must anchor on IOPlatformUUID, not fall through to the hostname")
+
+    @unittest.skipUnless(sys.platform == 'darwin', "sysfs covers Linux; this is the ifconfig branch")
+    def test_macs_are_found_under_the_launchd_path(self):
+        p = IdentityProvider.__new__(IdentityProvider)
+        with self._with_path('/usr/bin:/bin'):
+            self.assertGreater(len(p._interface_macs()), 0,
+                               "no MACs under launchd's PATH: a v1 seal on this Mac could never heal")
 
 
 if __name__ == '__main__':

@@ -311,3 +311,18 @@ sage/data/keys/*.key
 
 # The daemon log (SAGE #111 finding 5): rotated by the operator, never committed.
 sage-rs/daemon.log
+
+# A BEING'S OWN RECORD IS PRIVATE (fleet policy, 2026-09-20). Its conversations and journal
+# are mirrored to private-context/beings/<name>/ — that mirror is the durable copy, and it is
+# strictly more complete than this repo, because it also carries the files ignored above.
+#
+# These patterns cover instances and files that are NOT YET tracked. A .gitignore entry does
+# nothing for a file git already tracks, so the already-tracked cbp-qwen3.8-distill-4b copies
+# must be untracked from the index separately. History is untouched either way: the point is
+# that new turns stop publishing here, not that old ones are erased.
+#
+# sprout-qwen3.8-distill-2b/conversations/ is deliberately left TRACKED: its 202-byte
+# dp.jsonl has no counterpart in the mirror (beings/sprout-being holds a different, larger
+# record), so untracking it would leave those bytes in no repository at all.
+sage/instances/*/conversations/
+sage/instances/*/journal.md

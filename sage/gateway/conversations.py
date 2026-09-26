@@ -566,9 +566,20 @@ def _shown_text(turn: dict, turn_chars: Optional[int], conv_id: str) -> str:
     26 of cbp-being's 33 reads of a conversation file started at line 1 of ~2,950."""
     text = turn.get("text", "")
     if turn_chars and len(text) > turn_chars:
-        return (text[:turn_chars].rstrip()
-                + f" …[+{len(text) - turn_chars} chars; the whole turn: memory_read path "
-                  f"conversations/{conv_id}.jsonl start_line {turn.get('seq')}]")
+        # KEEP THE END AS WELL AS THE START (2026-09-26). The cut used to keep only the head.
+        # A seat's run answer is stdout and then stderr, with the traceback last. In 24 of
+        # cbp-being's 128 run answers the error text sat ONLY in the part that was cut: it saw
+        # fifty lines of epoch losses and never the line that said what broke, and then
+        # reasoned, fairly, that the run was going or had worked. dp's message giving it two
+        # options lost both options and its closing question the same way. The end of a turn
+        # is where a message asks and where output fails, so the cut goes in the middle.
+        head_n = turn_chars * 2 // 5
+        tail_n = turn_chars - head_n
+        omitted = len(text) - head_n - tail_n
+        return (text[:head_n].rstrip()
+                + f"\n …[{omitted} chars omitted from the middle; the whole turn: memory_read "
+                  f"path conversations/{conv_id}.jsonl start_line {turn.get('seq')}]…\n"
+                + text[-tail_n:].lstrip())
     return text
 
 
@@ -629,10 +640,16 @@ def _refuted_mark(text: str, refuted) -> str:
     if not refuted:
         return ""
     low = text.lower()
-    if not _DOWN_WORDS.search(text):
-        return ""
-    for keys, note in refuted:
-        if any(k and k.lower() in low for k in keys):
+    for entry in refuted:
+        # (keys, note) is a SERVICE refutation: it fires on "down" words naming the service.
+        # (keys, note, claim) carries its own claim pattern (2026-09-26: "still running" about
+        # a run the beat measured as not running). keys None means the measurement refutes
+        # the claim whatever it names, e.g. "nothing of yours is running".
+        keys, note = entry[0], entry[1]
+        claim = entry[2] if len(entry) > 2 else _DOWN_WORDS
+        if not claim.search(text):
+            continue
+        if keys is None or any(k and k.lower() in low for k in keys):
             return f"  _[refuted: {note}]_"
     return ""
 

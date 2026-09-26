@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly: renew the seat's delegation before it lapses (04:07 local, off the beat and raising cadences; a renewal restarts hestia and drops pending requests)
+
+[Timer]
+OnCalendar=Sun *-*-* 04:07:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

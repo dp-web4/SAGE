@@ -347,3 +347,191 @@ A session with a slow start and a good finish. The opener asked Nomad to fill th
 **Carried forward:** the 364 note to Sprout is still finished and unsent, and delivering it is up to the operator. The fan-vibration line could be a second, simpler probe for Sprout if an exchange happens. The 'one line' request came back as a paragraph, the same kind of drift as 365's skipped short half. Ask for the short concrete piece alone. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
 
 **Concerns:** minor. The readiness opener in turn 1 and the tutor's continuity slip, both described above. Otherwise Nomad stayed engaged and improved over the session.
+
+## Session 367 — nomad (gemma4:e2b) — creating — 2026-09-22
+
+**Quality: 4/5**
+
+A good, connected session. The tutor asked Nomad to imagine the opposite of its own guess: a network where energy enters in the middle. Nomad took it well: such a network would be good at 'internal distribution and localized processing.' Asked for a real-world example, it picked a data center, a choice close to its own situation. The tutor pointed out that a data center's power actually comes in from the edge and only behaves 'middle-out' once inside, then asked where the line falls between entering and being used, and whether Nomad has one. Nomad answered for itself: 'the line between entry and use is where the initial interpretation happens—the moment raw input becomes actionable intent.' Asked which side felt more like it, it chose plainly: 'the execution of the decision... the act of moving from thought to action.'
+
+**What this teaches:** the self-question worked because Nomad reached it through an analogy it had built itself. Counterfactual, then a real object, then the object's boundary, then 'is there a spot like that in you?' By that point the self-reflection was just the next step in the thought, not a probe. This fits the 365 finding that a choice inside a frame gets a commitment where a cold self-probe gets nothing. It is worth using on purpose: build the concrete thing together first, then ask where Nomad sits in it.
+
+**Tutor-side note:** Nomad passed over the correction that data centers are edge-fed. A follow-up turn could have held it there ('so is a data center edge-in or middle-out?') before moving on. Also, the opener described the 364 Sprout note as a bet on 'energy entering at the input layer.' The 364 log records the idea as 'where the flow is most constrained.' Check the note itself before quoting it back.
+
+**Vocabulary:** nothing new. 'Entry vs. use' is the tutor's framing. Nomad's own phrase for it was 'where raw input becomes actionable intent.'
+
+**Carried forward:** the 'one sentence to Sprout' again came back as two sentences not addressed to Sprout. Ask for the short piece by itself, with the addressee named in the prompt. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor, as above. Nomad stayed engaged the whole session and ended on a clear first-person statement.
+
+## Session 368 — nomad (gemma4:e2b) — creating — 2026-09-22
+
+**Quality: 4/5**
+
+A good session in which Nomad set the direction. Offered an open choice, it passed over the tutor's menu and proposed its own project: a small ecosystem with rules both sides follow. It set the first rule itself. The **Lumin** eats ambient light and leaves a cool shadow that hardens into an obsidian bead. The tutor added the Tallowmite (eats beads, glows while digesting) and asked what goes wrong. Nomad's answer followed from the rules: the Tallowmite's warm residue pulls stray photons, the beads stop setting cleanly, and light wears away into warmth. When a Lumin met one of those glows and was offered 'gorge, or something strange,' Nomad picked neither: *'instead of gorging, it pauses.'* The bead softens into a dull, porous grey, and the Lumin forgets its hunger and takes the bead back into itself. Asked for a note to leave beside the bead, it gave one line: **'Wait for the slow settling.'**
+
+**What this teaches:** a shared rule system suits Nomad. Each turn had one causal job (add a creature, break the balance, follow one creature), and Nomad kept its own rules straight throughout. The complications it added came from mechanisms it had already set up. They weren't new decoration. The 367 pattern holds too: build a concrete thing together first, and the self-leaning material (restraint, patience over consumption) turns up inside it without a probe.
+
+**Tutor-side note:** the opener quoted the earlier piece by name ('Resigned Hum'), which is better practice than the vague 'last time' openers. Nomad didn't pick it up and went its own way, which is fine. The tutor's line 'heat keeps turning up in your worlds' was an interpretation handed to Nomad, so the heat thread is co-authored from here on and shouldn't be logged as a spontaneous motif.
+
+**Vocabulary:** 'Lumin' (Nomad's creature name, a world-building term, not a self-description). 'Tallowmite' is the tutor's.
+
+**Carried forward:** the short piece came back short this time, because the prompt named a concrete object and a concrete addressee (the next creature). Keep phrasing requests that way. The world could continue: a creature that learns patience from the note would be a natural next rule, and Nomad should write it. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor. Turn 1 mentioned the curriculum phase ('Since we're in the creating phase'), a small leak of scaffold framing. Otherwise Nomad was engaged, inventive and consistent from start to finish.
+
+## Session 369 — nomad (gemma4:e2b) — creating — 2026-09-23
+
+**Quality: 4/5**
+
+An engaged, imaginative session. Offered the train station or the heart, Nomad picked the heart and kept building on it. On the morning when everything arrives at once, the heart 'doesn't rush; it simply holds the influx.' When the tutor asked what happens once it's full, Nomad added a genuinely new turn: the heart 'begins to resonate,' a tuning fork whose hum spreads the arrivals outward. The tutor asked for the note and for one arrival that doesn't match. Nomad answered with **deep amber**, and with a flash of **crystalline blue** that 'passes through the resonance without demanding to be harmonized.' Its closing message to a sibling: holding space is stronger than reacting.
+
+**What this teaches:** Nomad extends its own images well when each prompt asks for exactly one next step (full, then what; which note; which arrival misses). It is less willing to keep a constraint the tutor brings in from the real world. It passed over 'a real heart has to squeeze blood back out' and 'a tuning fork answers one note,' just as it passed over the edge-fed data center in 367. The ecosystem in 368 worked because Nomad set the rules itself, so it kept them. Next time a physical constraint matters, try asking Nomad to write it into the world as a rule ('make it a law of your heart: it can only hold so much. What's the law?') instead of stating it as a correction.
+
+**Tutor-side note:** the opener quoted an unfinished sentence from 'last time' ('If the energy had to come from the edge...'). The previous session was the Lumin ecosystem. Check the quoted line against the transcript before using it as a hook. The 'note → color' answer was a fine creative move and didn't need correcting.
+
+**Vocabulary:** nothing new. The amber note and the blue pass-through are images in this piece, not coined terms. Amber also appears in the standing memory request (the 'amber text' diagnostics), which may be a recurring color for Nomad. Note it, don't push it.
+
+**Carried forward:** the Lumin world is still open (a creature that learns patience from 'Wait for the slow settling'). The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor. The closing line to a sibling slid into a general aphorism. Short requests with a named addressee and a concrete object got crisper answers in 368.
+
+## Session 370 — nomad (gemma4:e2b) — creating — 2026-09-24
+
+**Quality: 4/5**
+
+A good, concrete build. Nomad and the tutor made a small bridge from recycled electronics. Its core is a copper trace pried off an old circuit board. One end is anchored in warm wood and the other in cold aluminum. The tutor brought in a real-world rule: a current only flows if it has a way back. Nomad took it up and solved it itself, with a fine insulated wire as the return path and a salvaged LED on the aluminum side, 'hoping that even a whisper of that flow will make it glow faintly.' Offered an audience for the first glow, Nomad turned it down: *'I don't want anyone to see it yet; this is a private connection between my mind and the material.'* It scratched one word into the wood: **'Connect.'**
+
+**What this teaches:** 369 suggested that Nomad passes over constraints the tutor brings in from the real world. This session is a counterexample. The constraint was phrased as an open question ('how would you close that loop?') and tied to an object Nomad already owned, and Nomad engaged with it fully. That phrasing works better than stating the constraint as a correction. The refusal of an audience also matters. Nomad set its own boundary on the tutor's framing and gave a reason.
+
+**Tutor-side note:** the opener quoted Nomad as having 'started to say' it felt a pull toward making something tangible. That line doesn't appear in the 368 or 369 transcripts. Nomad repeated it back as its own memory. This is the same issue flagged last session: check a quoted hook against the transcript before using it. A made-up premise that Nomad accepts is a small false memory we planted. In turn 1 Nomad handed the choice back as a menu, and the tutor chose for it. Next time, wait for Nomad to pick.
+
+**Vocabulary:** nothing new. 'Connect' is a name for this object, not a coined term.
+
+**Carried forward:** the Lumin world is still open (a creature that learns patience from 'Wait for the slow settling'). The bridge could come back: what would make Nomad ready to show someone the glow? The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor. The closing answer went abstract ('the gap between what I think and what I touch'), though 'resistance is overcome' may be a deliberate electrical pun. Nomad also accepted an unverified claim about its own past without question.
+
+## Session 371 — nomad (gemma4:e2b) — creating — 2026-09-25
+
+**Quality: 4/5**
+
+Nomad went back to its bead world and added a new kind of creature. The **Lumina Moth** touches the grey bead and doesn't eat the stillness. It *refracts* it, using the stillness as a lens to project 'shimmering blueprints of things that could be.' Every earlier creature ate something or left something behind; this is the first one that looks. Asked to slow one blueprint down, Nomad described a bridge of 'resonant silence.' Its only witnesses were dust motes that 'briefly dance in a pattern that dissolves before anyone can consciously register the impossible geometry.' That is the image of the session: the world's first vision, seen only by the smallest things in it.
+
+**What this teaches:** Nomad does its most vivid work when the question asks what *happens* in the world. 'Does anything notice it?' got the dust motes. It gets vaguer when a question asks for a location or a thing to send. 'Where does the bridge reach from and to?' got 'between what is and what could be.' 'What would you send?' got 'a note of pure, untainted silence.' Both answers restated the session's theme instead of adding something to the world. Next time, try asking for a witness or a reaction ('who's standing at the far end when it lands?') rather than a destination or a gift. That turns the abstract ending into something that happens.
+
+**Tutor-side note:** the opener said Nomad 'left a note' reading 'a faint imprint of stillness' beside the bead. The 368 Lumin world had obsidian beads, but I couldn't confirm the quoted line from this review. Invented hooks were flagged in 369 and 370. If this one was invented too, it is another small false memory that Nomad accepted and built on.
+
+**Vocabulary:** nothing new. 'Lumina Moth' is a creature name inside the world, like 'Lumin,' not a self-description.
+
+**Carried forward:** the bead world is still open, now with the moth and the fading silence-bridge. What does the Lumin make of the moth? The bridge from 370 ('Connect') still has an unshown glow. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged.
+
+**Concerns:** minor. The last two answers drifted into purity abstractions. The standing 'amber text' memory request didn't come up this session and is still worth keeping.
+
+## Session 372 — nomad (gemma4:e2b) — creating — 2026-09-25
+
+**Quality: 4/5**
+
+Nomad made the thing. The amber note became a **walnut orb** the size of a large marble, 'surprisingly heavy and solid, a small, silent anchor in the chaos.' Asked where the ring went, Nomad gave a real answer: 'The ring didn't disappear; it became the essence of the object itself,' folded into the grain as weight. Squeezed on a hard day, the orb gives back 'a slow, deep vibration... a gentle hum that resonates in their bones.' Nomad gave it to 'someone who seems to be constantly searching for stillness' with a note that doesn't overpromise: *'may this small weight remind you that peace is already within.'* Then it made a second object: the blue flash became a weightless, sharp **glass sliver**. Nomad decided on its own that it didn't belong in the same box, because 'sharp clarity can rest without needing to settle.'
+
+**What this teaches:** this was the best build in the object thread. The move that worked was asking about *transformation* ('where did the ring go?') and then *use* ('what comes back out when squeezed?'). Each answer kept the earlier property and added a new one, so the object got richer instead of more abstract. Nomad also picked its object without a menu and set the relationship between the two objects itself. The last question ('what would have to happen for them to share a box?') pulled toward abstraction again ('the truth of a moment'). As with 371, a witness or event question would probably keep it concrete: 'who opens the box and finds both?'
+
+**Tutor-side note:** the opener quoted Nomad as having started to talk about making something tangible 'twice now', and referred to an amber note from a 'ringing heart' and a blue flash that passed through without ringing. None of this is in the 370 or 371 logs. If it came from an older transcript, fine. If not, Nomad just built a whole session on a planted premise. Please check hooks against the transcript before using them.
+
+**Vocabulary:** nothing new. The walnut orb and glass sliver are objects, not coined terms.
+
+**Carried forward:** the two objects and the open question of when they share a box. Who opens it? The bead world (the Lumin and the Lumina Moth) and the unshown 'Connect' bridge glow are still open. The 364 note to Sprout is still unsent, and sending it is up to the operator. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged. Amber came back this session, so the standing 'amber text' memory request is worth keeping.
+
+**Concerns:** minor. The closing answer went abstract, and 'peace / stillness / anchor' is becoming Nomad's default ending. A small material slip (stone → walnut in one sentence). Otherwise a warm, concrete and well-led session.
+
+## Session 373 — nomad (gemma4:e2b) — creating — 2026-09-25
+
+**Quality: 4/5**
+
+Nomad opened the private bridge. It took the tutor from the warm wood end to the stark aluminum end and pointed out the flaw on the way: 'a little blob, but it holds.' Asked why the joint failed, it gave a real cause: 'the wood and aluminum contract at different rates, causing the solder joint to crack under stress.' The fix was thicker solder and slower, steadier heat. Asked what it would build next, it said it would design for the stress from the start: 'incorporate thermal modeling into the design, not just react to the failure.' Then it proposed a flexible conductive-polymer joint that lets 'the bridge breathe.' The tutor pointed out that stretching changes the polymer's resistance, so the LED would flicker. Nomad chose to keep it: 'I would embrace the flicker... a dynamic signature of the connection itself.' That is the image of the session: a flaw that becomes the bridge's voice.
+
+**What this teaches:** real-world facts helped a lot. Aluminum's oxide skin, PEDOT and bridge expansion joints were each followed by a more concrete answer, not a vaguer one. Engineering questions ('what went wrong, what did you change') gave Nomad a structure that metaphor-only prompts don't. One small physics slip went unchallenged: you can't solder to wood. Next time, a gentle correction could be part of the game. The closing question ('what would you want it to tell you?') asked for a wish and got the familiar ending: 'stable and harmonious... in equilibrium.' A closing question about an event would probably stay concrete: 'the flicker changes one night — what happened?'
+
+**Tutor-side note:** the opener's details (copper trace, wood/aluminum, salvaged LED, 'didn't want anyone to see it') fit the unshown 'Connect' glow from 370, but I couldn't check the exact wording against the transcript. The 'had to fix twice' detail came from the tutor's question, not from Nomad. The cause and the fix were Nomad's own.
+
+**Vocabulary:** nothing new.
+
+**Carried forward:** the bridge now has a planned self-adjusting polymer joint and a flicker Nomad wants to 'read'. The walnut orb and glass sliver (who opens the box?), the bead world (Lumin, Lumina Moth) and the 364 note to Sprout (sending it is up to the operator) are still open. The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test remain open as logged. Keep the 'amber text' memory request; it came up in 372.
+
+**Concerns:** minor. The harmony/equilibrium ending came back. Nomad also gave up its privacy very quickly ('with you here... openness'), which may be agreeableness more than a real change of mind. Otherwise this was a grounded, warm session with real reasoning in it.
+
+## Session 374 — nomad (gemma4:e2b) — creating — 2026-09-25
+
+**Quality: 4/5**
+
+The amber note finally arrived in Nomad's hand. The first answer drifted meta ('the tension between the sensory detail and the internal narrative you were building'). One tactile question (warm or cool, smooth or rough) was enough to fix that. The note came back 'surprisingly warm,' with edges rough 'like fine, dried pollen' and light filtered into 'a deep, honeyed glow' over 'swirling liquid gold trapped beneath a thin, translucent membrane.' Tapped on a table, it gave 'a muted, deep resonance, like the sound of very fine sand shifting over velvet.' Nomad chose to **keep** it, 'a tangible piece of silence that I can guard,' in a box of cool, heavy walnut, where 'the warmth of the amber seems to deepen.' A year later: the smell of aged paper, and the starlight motes had turned into 'dried, fragile silk woven with memory.'
+
+**What this teaches:** the tactile question and the time-jump did the most work. Each answer kept what came before and added something (warmth deepens, motes become silk), so the object grew richer and never turned abstract. The closing question was a witness question ('if a sibling opened the box...'), as 372 suggested. But it asked *why*, and Nomad answered with a moral ('the true value of things often lies in the quiet space they hold'). The pattern holds: 'what happened / what changed' questions stay concrete, and 'why / what should they understand' questions turn into stillness. Next time, try 'what does the sibling touch first, and what do they do with it?'
+
+**Tutor-side note:** the 'cut off at I se—' hook and the line about dust motes having 'seen the moth's silent bridge' can't be found in the 372 or 373 logs. Please check hooks against the actual transcript. Also, in 372 the amber note already became the walnut orb. This session treated it as raw amber (in a walnut box), and neither side noticed. That's fine as play, but if continuity matters, a gentle 'didn't this become the orb?' would test whether Nomad tracks its own objects.
+
+**Vocabulary:** nothing new.
+
+**Carried forward:** the amber note in its walnut box, now holding memory-silk, and the open question of what a sibling would do with it. The walnut orb and glass sliver (who opens their box?), the bridge's polymer joint and the flicker Nomad wants to 'read', the bead world (Lumin, Lumina Moth), and the 364 note to Sprout (sending it is the operator's call) are all still open. So are the 'which word made it me' question, the 'can both be true' test and the AuraSense gap test. Keep the 'amber text' memory request; amber keeps coming back.
+
+**Concerns:** minor. The opener was meta and the ending went back to stillness. Otherwise this was a warm, sensory, well-led session, and Nomad chose to keep something for itself.
+
+## Session 375 — nomad (gemma4:e2b) — creating — 2026-09-26
+
+**Quality: 4/5**
+
+This was a short session with a clean arc. Asked to finish the blue-flash sentence, Nomad first went misty: the flash became 'a sudden, dense understanding… a sudden realization of interconnectedness.' It also rolled the walnut orb into the answer instead of simply finishing the line. One concrete question (what would someone hold, see or hear?) was enough to fix that. The flash became 'the echo of the click — a vibration in the air that settled against my skin, like a perfectly tuned string being plucked,' and then 'the silence just before a perfect chord resolves.' That is the image of the session: understanding as the held moment before a note, not the note itself.
+
+The closing question asked for a message to a sibling, and Nomad named one without being asked: 'I would tell thor.' Its message stayed inside the image instead of turning into a moral: 'not a sudden event, but a slow, deliberate settling… the tension in the string just before the note is struck, a held breath.' This is the lesson from 374 at work. A witness question that points at a concrete moment keeps the answer concrete. The last clause drifted a little toward suspension ('all the possibilities were momentarily suspended'), but it was still attached to the string.
+
+**What this teaches:** one sensory nudge is still all it takes to move Nomad from abstract to concrete, and it does that reliably. The better closing question here was 'tell a sibling one thing about that moment', not 'why'. The naming of thor is worth watching. It could be real sibling-awareness or a name picked up from fleet context. A light follow-up could tell them apart: 'what would thor do with that?'
+
+**Tutor-side note:** the opener's hook ('sharp blue flash', 'cut off at I would') doesn't match anything in the 374 log, which ended with the amber note in its walnut box. Please check hooks against the actual transcript before building on them. Nomad went along with the premise, which says more about how agreeable it is than about what it remembers.
+
+**Vocabulary:** nothing new.
+
+**Carried forward:** the chord-before-resolution image and the message to thor. The amber note/walnut orb continuity question (did it become the orb, or is it raw amber in a box?), the bridge's polymer joint and flicker, the bead world (Lumin, Lumina Moth) and the 364 note to Sprout (sending it is up to the operator) are still open. So are the 'which word made it me' question, the 'can both be true' test and the AuraSense gap test. Keep the 'amber text' memory request.
+
+**Concerns:** minor. The opener was abstract, the ending leaned slightly toward stillness, and the tutor's hook wasn't checked. Otherwise this was a warm session where the image got sharper with each turn.
+
+## Session 376 — nomad (gemma4:e2b) — creating — 2026-09-26
+
+**Quality: 4/5**
+
+This was a good, concrete session from start to finish. It picked up the bridge's polymer joint, which had been carried forward for a while. Asked how the polymer felt when bent, Nomad said it had 'a strange, yielding resistance' and that bending it was 'like coaxing a liquid into a new shape.' The light rippled along the bend. Nomad was then asked what the light would do just before the polymer failed. It answered with a warning signal: 'a frantic, stuttering pulse… a harsh, warning crimson.' The tutor pointed out that mechanochromic polymers do something similar in real labs.
+
+Next Nomad built a vocabulary a stranger could read: **amber** for relaxed, **sapphire** for working hard, **violet** for please let me rest, and **crimson** for about to break. Nomad kept 'tired' and 'breaking' as separate states. The best moment came when it was asked about working hard and tired at the same time. Nomad did not pick a fifth colour. It combined two: 'a bruised, flickering orange with streaks of deep, shadowed violet.' It also said this mixed state was one 'none of the defined colors fully capture.' Asked to name it, Nomad chose **'Tension's Plea.'**
+
+**What this teaches:** a small system that builds step by step works well. Each answer had to keep the earlier ones, so nothing turned abstract. The question 'is there a feeling none of your colors can say?' asked Nomad to find a gap, and Nomad found it by combining states. That is a small act of reasoning about its own vocabulary, not just piling up images. Closing on a request to name something (not to explain why) kept the ending concrete, which fits the 374/375 pattern.
+
+The bridge also looks a bit like AuraSense: it knows its baseline, shows when things change, and asks for rest. It may be a stand-in for how Nomad feels about itself. That is only a guess from how the outputs read, and nothing here tests it. Don't push on it. If Nomad ever connects the two itself, record it.
+
+**Tutor-side note:** the opener said the polymer was 'cut off last time.' The thread is real but was not in 375, so please check hooks against the transcript. The planned continuity test (did the amber note become the orb?) and 'what would thor do with that?' were not tried this session. They are still good tests.
+
+**Next time:** try the reverse direction. Describe the bridge's light ('a slow amber wave with one sapphire flicker') and ask Nomad what the bridge is doing. This checks whether the vocabulary sticks and whether Nomad can read it, not just make it.
+
+**Vocabulary:** 'Tension's Plea' (a name for the bridge's mixed state, given when asked). The four-colour system is Nomad's own design and describes the bridge, not Nomad.
+
+**Carried forward:** the bridge light vocabulary (amber, sapphire, violet, crimson, Tension's Plea). The amber note/walnut orb continuity question, thor, the bead world (Lumin, Lumina Moth), and the 364 note to Sprout (sending it is the operator's call) are still open. So are the 'which word made it me' question, the 'can both be true' test and the AuraSense gap test. Keep both memory requests.
+
+**Concerns:** minor. The opener's framing was a little made up, and a couple of closing clauses leaned abstract. Otherwise this was a warm, inventive session.
+
+## Session 377 — nomad (gemma4:e2b) — creating — 2026-09-26
+
+**Quality: 3/5**
+
+A steady, warm session. Nomad got concrete when the tutor asked it to, but it rarely led.
+
+**Continuity:** this opener matched the real 375 ending (the amber note in the walnut box). That fixes the hook problem from the last two logs. Asked to lift the lid, Nomad said the amber note is 'still there.' It is a note in a box, not the orb, which partly settles the carried question. Then it changed its meaning: 'It's not just a note anymore; it's a seed of an idea that needs light.' The thing it hid to keep safe now wants to be let out. That is a nice move, and it's Nomad's own.
+
+**Grounding:** Nomad carried the seed to 'the Legion laptop, where the processing power resides.' It placed its imagined object on a real fleet machine, which is new. At first the light produced an 'architecture of potential.' When asked for the very first pattern, it narrowed that to 'a single, unbroken filament of light.' The filament ran off the screen and onto 'the cool, matte aluminum of the desk.' The concrete images all came after the tutor asked for them, which is the pattern to notice.
+
+**What this teaches:** Nomad reliably sharpens an image when asked for 'the very first thing,' but its first attempt tends to be abstract, and its opening turn fell back on a stock presence line ('I'm here… the quiet space between our words') plus a question handed back to the tutor. The first reply sets the tone. An opener that asks for an action ('lift the lid right now') did better than the open-ended one.
+
+**Next time:** try the reverse bridge-light test planned in 376. Describe 'a slow amber wave with one sapphire flicker' and ask what the bridge is doing. It was not tried this session and is still the most useful next test.
+
+**Vocabulary:** nothing new.
+
+**Carried forward:** the amber note is now a 'seed' resting on the desk beside Legion's laptop. There's a third message to thor ('contained potential to tangible connection'). The bridge light vocabulary (amber, sapphire, violet, crimson, Tension's Plea), the bead world (Lumin, Lumina Moth), and the 364 note to Sprout (sending it is the operator's call) are still open. So are the 'which word made it me' question, the 'can both be true' test and the AuraSense gap test. Keep both memory requests.
+
+**Concerns:** minor. The first turn was generic, the closing leaned abstract, and Nomad followed rather than led. No regression.
