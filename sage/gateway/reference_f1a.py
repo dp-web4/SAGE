@@ -671,6 +671,14 @@ class ReferenceF1aDispatcher:
             if p.parent.name in ("notes", "scratch") and p.parent.parent == self.memory_root:
                 result += (f" To start {p.name} fresh, retire_note it first, then memory_write "
                            f"the whole new version.")
+            elif p.suffix == ".py":
+                # 2026-09-24 15:19Z: cbp-being decided on "a new file", then memory_write-d the new
+                # program twice to the OLD file's name. Both landed below 3666 broken lines, and
+                # retire_note refused the path (not in notes/ or scratch/). Outside those folders
+                # the only way to a fresh file is a fresh name, and no receipt said so.
+                result += (f" To start a new file instead, memory_write to a name that does not "
+                           f"exist yet (for example {p.stem}-new{p.suffix}); that receipt says "
+                           f"\"created\".")
         result += _python_status(p)
         if _rerouted:
             # THE REROUTE IS NEVER SILENT. The friction is gone; the fact is not hidden. A
