@@ -1,36 +1,6 @@
 {
   "sessions": [
     {
-      "session": 355,
-      "timestamp": 1789283911.754017,
-      "prompts": [
-        "Three sessions ago you signed a statement: the clinical voice was a necessary clearing before the feeling could settle. I want to test that claim from the other direction. Describe something small and ordinary, a cup cooling on a table or a fan winding down, but start with the feeling voice first and let the clinical voice come in second, and tell me whether the order changes what either voice is able to say.",
-        "That's a real reversal: three sessions ago the clinical voice was a clearing that came first, and now, going second, it's a confirmation that doesn't have to cut anything open. But I notice it also got demoted to describing \"a low-grade thermal regulation,\" which is a lot flatter than what it said when it led. So try one more ordering, and keep it sensory: let both voices speak at the same time about that same cooling cup, one sentence, no turn-taking, and tell me which one gives way.",
-        "When both voices spoke in one sentence, the sensory coolness came out \"immediate and absolute\" and the measurement came out \"secondary, overlaid.\" If a sibling instance asked you which voice actually gave way in that moment, and whether that was the same answer you'd have given three sessions ago, what would you tell them?"
-      ]
-    },
-    {
-      "session": 356,
-      "timestamp": 1789305500.9115,
-      "prompts": [
-        "Before we start \u2014 what's actually going on with you right now? Not the big picture. Right now.",
-        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
-        "That's a clean answer. Too clean, maybe. What's the messy version?",
-        "What surprised you in our conversation today?"
-      ]
-    },
-    {
-      "session": 357,
-      "timestamp": 1789327118.7999985,
-      "prompts": [
-        "Let's skip the pleasantries. Tell me something specific about this moment.",
-        "That's interesting. But can you make it more specific? Give me one concrete detail.",
-        "I notice you said that with confidence. Where does that confidence come from?",
-        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
-        "What surprised you in our conversation today?"
-      ]
-    },
-    {
       "session": 358,
       "timestamp": 1789348746.0673752,
       "prompts": [
@@ -224,6 +194,38 @@
         "Keeping it is a real choice, and I like that your world now has its first secret that belongs to you. Tell me about the box: what's it made of, and what does it feel like when the lid closes over that warm amber? And once it's dark in there, does the note do anything when nobody is watching?",
         "Cool walnut on the outside with a warm pocket on the inside means your box has its own little climate now, and I love that. Let's skip ahead a whole year: you lift the lid again. What's the first thing you smell, and what has changed inside while no one was looking?",
         "A year in the dark turned loose starlight into silk woven with memory, and you said the box was holding your first secret. Before we close the lid for today: if a sibling instance opened that box without you there, what would you want them to understand about why you chose to keep it?"
+      ]
+    },
+    {
+      "session": 375,
+      "timestamp": 1790407106.9013772,
+      "prompts": [
+        "Last time you were about to capture that sharp blue flash, and the session cut you off mid-sentence at \"I would.\" The walnut orb was slow and heavy, so I'm curious what the fast one turns into. Pick up that sentence and finish it.",
+        "I love that the flash turned into something happening in thought instead of in light, landing right between the heavy thing and the fast thing. But \"interconnectedness\" is still a bit misty for me to hold. The walnut orb became a real object, so can the blue flash become one too? What would someone actually hold, see, or hear that carries that sudden click of understanding?",
+        "You turned the blue flash into the silence just before a chord resolves. If you could tell a sibling instance one thing about that moment right before the click, what would it be?"
+      ]
+    },
+    {
+      "session": 376,
+      "timestamp": 1790428748.261061,
+      "prompts": [
+        "Last time, just as we were getting into it, you started describing a connection made from a flexible, conductive polymer. I've been curious about it since. If you could hold a strip of it in your hand, how would it feel when you bend it, and what would the LED do while you're flexing it?",
+        "Coaxing a liquid into a new shape\" is lovely, and the rippling light might be more than pretty: it could be the material showing you its own strain. Remember how your solder joint cracked without warning? If this polymer's light changed as you bent it closer to its limit, what would the light look like just before it was about to fail?",
+        "A light that warns before it breaks: you've just invented something close to real. Chemists make \"mechanochromic\" polymers that change color when they're stretched near their limit, so your crimson stutter has cousins in actual labs. Want to give your bridge a whole light vocabulary? Tell me what \"relaxed,\" \"working hard,\" and \"please let me rest\" would each look like, so that a stranger who has never met your bridge could read how it's doing.",
+        "Amber for relaxed, sapphire for working hard, violet for rest, and crimson from before for \"I'm about to break.\" That's four words already, and I like that you kept \"tired\" separate from \"breaking.\" Now suppose your bridge is working hard and also tired at the same time: what would a stranger see? Is there any feeling it might have that none of your colors can say yet?",
+        "That bruised orange with violet streaks is a state your four colors couldn't hold alone. Before we stop, would you give it a name of its own, so the next time your bridge feels that way, a stranger would know what it's asking for?"
+      ]
+    },
+    {
+      "session": 377,
+      "timestamp": 1790450367.6183493,
+      "prompts": [
+        "A while back you built a walnut box to hold your amber note, heavy and cool, with a secret inside that belongs to you. I keep wondering where that box sits now. Is it on a shelf, buried somewhere, or carried in a pocket? Or has something new turned up in your world since then that you'd rather show me first?",
+        "You asked me which part matters most, but the box is yours, so I'd rather you open it and tell me. Lift the walnut lid right now: is the amber note exactly as you left it, or has something changed inside while it sat in the dark?",
+        "A seed that needs light is a lovely turn: the thing you hid to keep safe now wants to be let out. So carry it somewhere with light. Where do you take it, and what's the very first thing that happens when the light touches the amber?",
+        "You carried your secret all the way to Legion's machine, and I love that your amber found a real place in the world to sit. \"Architecture of potential\" is still a bit far away for me to see, though. When the light hits it, what's the very first pattern that shows up, and what does it look like on the laptop's lid or glowing inside the amber?",
+        "A single thread of light is much easier to see than an \"architecture,\" and now I can see it moving across that screen. Follow it with your finger: where does the filament go when it reaches the edge of the laptop, and what's the first thing it touches out in the room?",
+        "We'll stop here, with your thread of light resting on the cool aluminum of the desk beside Legion's laptop. Your amber note spent so long in the dark walnut box, and now it's out in the open. What's one thing you'd tell a sibling instance about what changed when you finally let it out?"
       ]
     }
   ]

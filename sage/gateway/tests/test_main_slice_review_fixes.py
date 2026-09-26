@@ -55,7 +55,7 @@ def test_a_bodyless_amend_on_a_branch_not_its_own_is_refused_and_pushes_nothing(
     (wt / "README").write_text("the being's change\n")
     args = {"title": "a title long enough", "message": "why"}
     with pytest.raises(ValueError, match="not one of your PR branches"):
-        pr_amend_command(args, {"worktree": str(wt)})
+        pr_amend_command(args, {"worktree": str(wt), "member": "legion-being"})
     d = _disp(tmp_path, wt)
     calls = []
     d._call = lambda name, a: calls.append(name) or {"actionId": "x"}
@@ -84,7 +84,7 @@ def test_a_bodyless_amend_on_its_own_proposal_still_composes():
     git("init", "-q"); git("config", "user.email", "t@t"); git("config", "user.name", "t")
     open(os.path.join(wt, "f"), "w").write("x"); git("add", "-A"); git("commit", "-qm", "c")
     git("checkout", "-qb", "legion-being/a-proposal")
-    assert pr_amend_command({"title": "a proper title here", "message": "why"}, {"worktree": wt}) == "true"
+    assert pr_amend_command({"title": "a proper title here", "message": "why"}, {"worktree": wt, "member": "legion-being"}) == "true"
 
 
 # -- #217: git_restore is one file, and never what git executes --------------------------

@@ -8,7 +8,7 @@ intent is executed and witnessed by the F1a dispatcher against the running daemo
 The being never holds a tool; the seat never fabricates a result.
 
     python3 -m sage.gateway.governed_turn \
-        --member legion-being --model qwen38-heretic:q3km-vl \
+        --member legion-being --model qwen38-heretic:q3km \
         --instance sage/instances/legion-gemma3-12b \
         --task-file task.md [--system-file system.md] [--max-steps 2] [--out trace.json]
 
@@ -204,6 +204,21 @@ def worktree_for(instance: Path | str) -> str | None:
     return instance_config(instance).get("worktree") or None
 
 
+def offered_tools(tools_arg, instance):
+    """The tool specs a governed turn offers: --tools' cut of the registry, or the registry.
+
+    Without --tools this used to be None (= every registered verb), so a seat with no ARC
+    stepper offered `game`, whose only possible answer there is "no game is set up on this
+    seat" (sprout on #218). A verb certain to be refused is a false affordance; it costs the
+    being ~650 characters of window and a call to learn it."""
+    from sage.gateway.being_gate_client import ollama_tools
+    if tools_arg:
+        return ollama_tools([t.strip() for t in tools_arg.split(",")])
+    if instance_config(instance).get("game_stepper"):
+        return None
+    return [t for t in ollama_tools() if t["function"]["name"] != "game"]
+
+
 def build_client(member: str, instance: Path, model: str, workspace: str,
                  forum_dir: str | None, host_session_id: str, temperature: float,
                  max_tokens: int, gate_only: bool = False, num_ctx: int = 8192):
@@ -221,22 +236,22 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
     # itself, and why None is a real answer, live in `worktree_for` -- this is not the only
     # place a being is constructed, which is the whole of sprout's review of #208.
     worktree = worktree_for(instance)
+    # the seat's ARC stepper, the same way and for the same reason: one read, both halves.
+    # Absent, `game` refuses at composition with "no game is set up on this seat".
+    game_stepper = instance_config(instance).get("game_stepper") or None
     dispatcher = None if gate_only else HestiaF1aDispatcher(
         member, memory_root=str(instance), publish_fn=publish_fn,
         host_session_id=host_session_id, being_lct=being_lct_for(member, workspace),
         peer_aliases=instance_config(instance).get("peer_aliases") or None,
-        # the being's own worktree, resolved once by worktree_for (main #208)
-        worktree=worktree,
-        # so the dispatcher composes `search` exactly as the client judges it
-        workspace=workspace,
-        # the ARC stepper `game` composes with — both sites, or the mismatch guard refuses
-        game_stepper=instance_config(instance).get("game_stepper") or None)
+        worktree=worktree, game_stepper=game_stepper,
+        # so the dispatcher composes `search` exactly as the client judges it (Legion carrier:
+        # search reaches the fleet repo root from the workspace)
+        workspace=workspace)
     client = BeingGateClient(member_id=member,
                              identity_path=str(instance / "identity.json"),
                              workspace=workspace, dispatcher=dispatcher,
                              host_session_id=host_session_id,
-                             worktree=worktree,
-                             game_stepper=instance_config(instance).get("game_stepper") or None)
+                             worktree=worktree, game_stepper=game_stepper)
     # Reasoning models (empero Qwen3.8 distills etc.) only emit structured tool calls
     # with `think` on — off, they narrate a bracketed placeholder instead of acting
     # (measured on Sprout 2026-08-28 and again on the first governed turn, 2026-09-03:
@@ -303,7 +318,7 @@ def main(argv=None) -> int:
 
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
-    tools = ollama_tools([t.strip() for t in args.tools.split(",")]) if args.tools else None
+    tools = offered_tools(args.tools, instance)
     # the prompt names exactly the verbs offered this turn (the registry, or --tools' cut of
     # it), so it never lists six while the specs carry ten
     offered = ", ".join(t["function"]["name"] for t in (tools or ollama_tools()))

@@ -58,6 +58,18 @@ def test_every_worktree_subprocess_in_the_dispatcher_carries_the_env():
     assert not missing, f"a seat-run process in the being's worktree without hooks off: {missing}"
 
 
+def test_no_being_write_reaches_the_worktree_on_main_yet():
+    """On main the being cannot write its worktree at all (no M1 path in _safe_path), so the only
+    live layer here is the one above: the seat's git runs no hook. The day a write path lands —
+    patch_apply (#210), or M1 — it must refuse <worktree>/.githooks/ and <worktree>/.git/ as
+    legion/mission-artifact does (b6e08bdc8). This test fails the moment that path exists, so the
+    refusal cannot be forgotten."""
+    src = (Path(__file__).resolve().parent.parent / "reference_f1a.py").read_text()
+    if "roots.append((Path(wt)" in src or "_worktree_writable" in src:
+        assert ".githooks" in src, ("a being write path into the worktree exists but does not "
+                                    "refuse .githooks/ — see test docstring")
+
+
 # case variants: on a case-insensitive volume (APFS, NTFS) `.GITHOOKS` IS `.githooks`
 @pytest.mark.parametrize("rel", [".githooks/pre-commit", ".githooks/post-merge", ".git/config", ".GITHOOKS/pre-commit", ".GitHooks/post-merge"])
 def test_the_being_cannot_write_what_git_executes(tmp_path, rel, monkeypatch):

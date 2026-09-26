@@ -1001,6 +1001,51 @@ def test_a_being_can_end_its_own_turn_with_rest():
     assert dispatched == ["witness"]                          # rest never reached the gate
     assert r.steps == 1 and not r.capped and not r.deadline_hit
 
+
+def test_rest_is_offered_to_the_being():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.heartbeat import EXPLORE_TOOLS
+    assert "rest" in EXPLORE_TOOLS, "a verb not offered is a verb the being does not have"
+    assert [t["function"]["name"] for t in ollama_tools(["rest"])] == ["rest"]
+
+
+def test_an_identical_call_repeated_is_named_then_ends_the_phase():
+    """Measured 2026-09-13T10:19Z: legion-being witnessed 'beat closed' 52 times in 78 minutes
+    because the only way to stop was to emit no tool call. Named once, then stopped."""
+    from sage.gateway.being_tool_loop import run_tool_turn, REPEAT_NUDGE_AT, REPEAT_BREAK_AT
+    from sage.gateway.being_gate_client import BeingIntent
+    seen = []
+
+    def gen(convo):
+        seen.append([m.get("content") for m in convo if m.get("role") == "user"])
+        return {"content": "", "intents": [BeingIntent("witness", {"event": "beat closed"})]}
+
+    r = run_tool_turn(_RecClient(), gen, [], max_steps=50)
+    assert r.looped == {"effector": "witness", "times": REPEAT_BREAK_AT + 1}
+    assert r.steps == REPEAT_BREAK_AT + 1, "not 50, and not 52"
+    named = [u for u in seen[-1] if u and "same call" in u and "`rest`" in u]
+    assert len(named) == 1, "told once, before being stopped, and told that rest exists"
+
+    n = iter(range(100))
+    varied = run_tool_turn(_RecClient(),
+                           lambda c: {"content": "", "intents": [BeingIntent("witness", {"event": f"e{next(n)}"})]},
+                           [], max_steps=10)
+    assert varied.looped is None and varied.capped, "changing arguments is work, not a loop"
+
+
+def test_a_read_or_check_repeated_in_a_turn_is_executed_again():
+    """Dedup is for writes. `check` after an edit, or `memory_read` of a file it just changed,
+    returns a DIFFERENT answer to the same arguments; answering it 'already done' hands the being
+    a stale result and calls it an intervention."""
+    from sage.gateway.being_tool_loop import run_tool_turn
+    from sage.gateway.being_gate_client import BeingIntent
+    c = _RecClient()
+    chk = BeingIntent("check", {"target": "gateway"})
+    outs = iter([{"content": "", "intents": [chk]}, {"content": "", "intents": [chk]},
+                 {"content": "done", "intents": []}])
+    r = run_tool_turn(c, lambda convo: next(outs), [], max_steps=5)
+    assert [e for e, _ in c.calls] == ["check", "check"] and r.duplicates == []
+
 def test_an_identical_call_repeated_is_named_as_a_loop_and_ends_the_phase():
     """Measured 2026-09-13T10:19Z: the being finished, then witnessed 'beat closed' 52 times
     (78 minutes, 18 byte-identical) because the only way to stop was to stop calling tools.
@@ -1402,3 +1447,13 @@ def test_an_empty_stop_with_no_thinking_is_left_alone():
     llm = FakeLLM()
     run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
     assert len(seen) == 1, f"an empty stop with no thinking must not be retried, got {len(seen)}"
+
+
+class _RecClient:
+    def __init__(self):
+        self.calls = []
+
+    def dispatch(self, i):
+        from sage.gateway.being_gate_client import ResultEnvelope
+        self.calls.append((i.effector, dict(i.args or {})))
+        return ResultEnvelope(ok=True, result=f"ok {len(self.calls)}")

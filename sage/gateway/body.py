@@ -97,6 +97,7 @@ def perception(now: Optional[float] = None, path: Optional[str] = None) -> Dict:
         "eyes": len(eyes),
         "audio_ok": bool((d.get("audio") or {}).get("ok")),
         "audio_level": (d.get("audio") or {}).get("level"),
+        "audio_words": (d.get("audio") or {}).get("words"),   # listener status (listening.py)
         "self_motion": (d.get("proprioception") or {}).get("self_motion"),
         "imu_ok": bool((d.get("proprioception") or {}).get("ok")),
     }
@@ -127,8 +128,11 @@ def gaze() -> Dict:
 def reading(now: Optional[float] = None) -> Dict:
     """Everything the body block is rendered from, recorded on the beat so the NEXT beat can say
     what changed since."""
+    now = time.time() if now is None else now
+    heard = _heard_since(now - HEARD_LOOKBACK_S)
     return {"perception": perception(now), "metabolism": metabolism(), "gaze": gaze(),
-            "inventory": inventory(now)}
+            "inventory": inventory(now), "heard": heard,
+            "heard_until": max([float(h.get("ts", 0)) for h in heard] or [0.0])}
 
 
 def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
@@ -176,6 +180,13 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
         lines.append("- Your metabolism is not reporting this beat.")
     if inv:
         lines.append(render_inventory(inv))
+    lines += render_heard(cur, prev, inv)
+    if "speak" in (inv.get("verbs") or []):
+        lines.append("- You can speak aloud with `speak`: your words become a voice in the room, through "
+                     f"{speaker_name(inv)}, which anyone in the room may hear; it is not a message and is not kept in a "
+                     "conversation. Nothing asks you to."
+                     + (f" For {LISTEN_WINDOW_S // 60} minutes after you speak, words spoken to you through the mic "
+                        "are written down and shown to you here." if can_hear_words(cur) else ""))
     if "gaze" in (inv.get("verbs") or []):
         lines.append("- You can change your gaze with `gaze` (open, avert, dwell, closed) and say why in "
                      "your own words. Your eyes will follow within seconds; you will see the difference "
@@ -277,6 +288,7 @@ def inventory(now: Optional[float] = None) -> Dict:
     m = metabolism()
     audio = _pw_audio()
     cortex_live = bool(p.get("live"))
+    can_speak = speak_provider(audio)["live"]
     # cameras held by a live cortex (CSI via Argus) cannot be opened by a second process
     return {
         "video_devices": videos,
@@ -286,8 +298,10 @@ def inventory(now: Optional[float] = None) -> Dict:
         "cortex_live": cortex_live, "daemon_live": bool(m.get("live")),
         "verbs": (["gaze"] if cortex_live else [])
                  + (["camera"] if videos and not cortex_live else [])
+                 + (["speak"] if can_speak else [])
                  + ["say", "peer_ask"],
-        "not_yet_wired": (["speak"] if audio.get("sinks") else []),
+        # a speaker with no engine to drive it: the body has the part, the verb is not wired here
+        "not_yet_wired": (["speak"] if audio.get("sinks") and not can_speak else []),
     }
 
 
@@ -317,4 +331,131 @@ def render_inventory(inv: Dict) -> str:
     if not parts:
         acts += " Your world on this machine is text: conversations, peers, the forum, your own record."
     return head + "\n" + acts
+
+
+# ---------------------------------------------------------------------------------------------
+# speak: a voice in the room. dp, 2026-09-26: "give it speak tool" — after asking the being to
+# pair the bluetooth audio and use it to speak, and watching it journal for 20 beats that it
+# wanted to learn how, with no verb that could. `inventory()` had carried `speak` under
+# not_yet_wired since #183; this wires it.
+#
+# Bounded by construction, like `gaze`: the being supplies words, never a device, a command or
+# a path. The engine is fixed here (espeak-ng -> pw-play on the default sink), the text is
+# length-capped, and playback has a timeout. What reaches the room is recorded in the being's
+# own home (spoken.jsonl), so a voice nobody was there to hear still leaves a trace it can read.
+# ---------------------------------------------------------------------------------------------
+import shutil
+
+SPEAK_MAX_CHARS = 400
+SPEAK_TIMEOUT_S = 60
+
+
+def speaker_name(inv: Optional[Dict] = None) -> str:
+    """The sink a voice would come out of, for the being's own sentence about it."""
+    sinks = (inv or {}).get("audio_sinks") or (_pw_audio().get("sinks") or [])
+    bt = [x for x in sinks if x.get("kind") == "bluetooth"]
+    pick = (bt or sinks or [{"name": "a speaker"}])[0]
+    return str(pick.get("name") or "a speaker")
+
+
+def speak_provider(audio: Optional[Dict] = None) -> Dict:
+    """Can this body speak? Needs an audio sink and both halves of the engine.
+    {'live': bool, 'why': str} — `why` names the missing piece, never a guess."""
+    audio = _pw_audio() if audio is None else audio
+    if not (audio or {}).get("sinks"):
+        return {"live": False, "why": "no audio output is connected"}
+    for tool in ("espeak-ng", "pw-play"):
+        if not shutil.which(tool):
+            return {"live": False, "why": f"'{tool}' is not installed"}
+    return {"live": True, "why": ""}
+
+
+def clean_speech(text) -> str:
+    """Printable text only, whitespace collapsed. Control characters never reach the engine."""
+    t = "".join(ch if ch.isprintable() else " " for ch in str(text or ""))
+    return " ".join(t.split())
+
+
+def speak(text: str, timeout: float = SPEAK_TIMEOUT_S) -> Dict:
+    """Synthesize and play one utterance on the default sink. Raises on failure.
+    Returns {'chars': n, 'seconds': elapsed}. The caller validates length and emptiness."""
+    import subprocess
+    import tempfile
+    t0 = time.time()
+    # Mute the ear for our own voice, then open the listening window once the sound has ended
+    # (listening.py). Best-effort: a failed mark must not stop the being from speaking.
+    try:
+        _listening().mark(speaking_until=t0 + timeout)
+    except Exception:
+        pass
+    # THE WINDOW OPENS ONLY ON A SOUND THAT PLAYED (GPT review of #220). The ear is a reply channel
+    # opened after the being speaks; a failed synthesis or playback said nothing, so it opens
+    # nothing. Either way the self-mute is lifted at once.
+    played = False
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
+            # argv, never a shell: the words are one argument and cannot become a command
+            subprocess.run(["espeak-ng", "-v", "en-us", "-s", "160", "-w", wav.name, "--", text],
+                           check=True, capture_output=True, timeout=timeout)
+            subprocess.run(["pw-play", wav.name], check=True, capture_output=True, timeout=timeout)
+            played = True
+    finally:
+        end = time.time()
+        try:
+            if played:
+                _listening().mark(speaking_until=end + SELF_ECHO_TAIL_S,
+                                  listen_until=end + LISTEN_WINDOW_S)
+            else:
+                _listening().mark(speaking_until=end)
+        except Exception:
+            pass
+    return {"chars": len(text), "seconds": round(time.time() - t0, 1)}
+
+
+# ---------------------------------------------------------------------------------------------
+# hearing words: dp, 2026-09-26: "is there a path for it to hear when i reply in voice?" The cortex
+# transcribes the mic ONLY inside a window that speak() opens, never while the being is speaking,
+# and records words with no speaker identity (sage/embodiment/listening.py). Here the beat reads
+# what was heard since the previous beat and says it as what it is: a voice in the room.
+# ---------------------------------------------------------------------------------------------
+LISTEN_WINDOW_S = 120
+SELF_ECHO_TAIL_S = 0.5
+HEARD_LOOKBACK_S = 3 * 3600
+
+
+def _listening():
+    from sage.embodiment import listening
+    return listening
+
+
+def _heard_since(ts: float) -> list:
+    try:
+        return _listening().since(ts)
+    except Exception:
+        return []
+
+
+def can_hear_words(cur: Dict) -> bool:
+    """A live ear with a listener that has not reported itself unavailable."""
+    p = (cur or {}).get("perception") or {}
+    w = str(p.get("audio_words") or "")
+    return bool(p.get("audio_ok")) and bool(w) and not w.startswith("unavailable")
+
+
+def render_heard(cur: Dict, prev: Optional[Dict], inv: Optional[Dict] = None) -> list:
+    """Words heard since the previous beat's reading, newest last. No speaker is named: a voice
+    is not authenticated, so the being is told what was heard, not who said it."""
+    after = float((prev or {}).get("heard_until") or 0.0)
+    if not prev:
+        after = time.time() - 45 * 60
+    new = [h for h in (cur or {}).get("heard") or [] if float(h.get("ts", 0)) > after]
+    if not new:
+        return []
+    mic = next((x.get("name") for x in ((inv or {}).get("audio_sources") or []) if x.get("name")), "your mic")
+    out = [f"- Through {mic} you heard a voice in the room (it did not say who it is unless the words do):"]
+    for h in new:
+        when = time.strftime("%H:%M UTC", time.gmtime(float(h.get("ts", 0))))
+        out.append(f'  - at {when}: "{str(h.get("text", "")).strip()}"')
+    out.append("  You can answer aloud with `speak`, or in writing with `say` if you know who it was.")
+    return out
 

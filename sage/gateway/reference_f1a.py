@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
@@ -70,6 +71,125 @@ def _python_status(p) -> str:
         return ""
     return f" Python can parse {p.name} now. That is not the same as running it."
 
+
+
+def _not_python(content: str, before: str) -> str:
+    """Why `content` cannot be appended to a .py file, or "" if it can.
+
+    A DESCRIPTION OF AN EDIT IS NOT AN EDIT. Measured on cbp-being, 2026-09-21 to 09-23: 15
+    memory_write calls appended prose to its training script where a change was meant --
+    "[Fix #1: Removed extra closing parenthesis on line 1685 ...]", "[Remove lines 344-347
+    ...]", "[BEAT 05:18 UTC] Applying fix #1 ...". Every receipt said "memory_write only
+    adds" and named memory_edit; at 05:18Z on 09-23 it had the exact memory_edit calls from
+    the seat and still wrote the labels, then told the seat "Both fixes applied". A receipt
+    arrives after the file is already worse. So the check runs before the write.
+
+    The test is grammar, not a list of phrases: the text is accepted if Python can read it
+    as code as written, dedented, or as a function body (a fragment with `return` is still
+    code), OR if the file parses once it is appended (the last part of a program written in
+    parts). Replayed over all 69 .py appends in its record, this refuses the 15 labels and 4
+    code fragments whose own indentation was inconsistent, and nothing that parsed."""
+    def parses(src: str) -> Optional[SyntaxError]:
+        try:
+            compile(src, "<text>", "exec")
+        except SyntaxError as e:
+            return e
+        except ValueError:
+            return None
+        return None
+    first = parses(content)
+    if first is None:
+        return ""
+    body = textwrap.dedent(content)
+    if parses(body) is None:
+        return ""
+    if parses("def _f():\n" + textwrap.indent(body, "    ", lambda _l: True) + "\n    pass\n") is None:
+        return ""
+    if parses(before + ("" if before.endswith("\n") or not before else "\n") + content) is None:
+        return ""
+    lines, at = content.splitlines(), (first.lineno or 1) - 1
+    line = lines[at] if 0 <= at < len(lines) else ""
+    # Not the compiler's msg: for prose it is noise ("leading zeros in decimal integer
+    # literals" for a line starting "[BEAT 2026-09-23"). The line itself says what it is.
+    return (f"Python cannot read line {first.lineno} of your text as code: "
+            f"{line.strip()[:100]!r}. Appending it would not make the file parse either.")
+
+
+def _first_syntax_error(src: str) -> Optional[SyntaxError]:
+    """The compiler's FIRST stop in `src`, or None if it parses. compile() executes nothing."""
+    try:
+        compile(src, "<file>", "exec")
+    except SyntaxError as e:
+        return e
+    except ValueError:
+        return None
+    return None
+
+
+def _file_state(src: str) -> tuple:
+    """("complete" | "incomplete" | "invalid", first SyntaxError or None) for a whole .py file.
+
+    Incomplete is not invalid. A program written in parts is unfinished between the parts (an
+    open bracket, a block header with no body yet, an unterminated docstring), and Python then
+    reports its error at the OPENING line ("'(' was never closed", line 1), not at the end. So
+    the first error's line cannot tell a program still being written from one that is broken.
+    codeop.compile_command draws exactly that line: it returns None for source that is merely
+    incomplete and raises for source that is wrong. It compiles only and executes nothing."""
+    import codeop
+    import warnings
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            r = codeop.compile_command(src, "<file>", "exec")
+    except SyntaxError as e:
+        return "invalid", e
+    except (ValueError, OverflowError):
+        return "complete", None
+    if r is None:
+        return "incomplete", _first_syntax_error(src)
+    return "complete", None
+
+
+def _append_must_advance(content: str, before: str) -> str:
+    """Why appending `content` to a .py file would move it backwards, and so is refused, or "".
+
+    AN APPEND BELOW THE FIRST ERROR CANNOT REPAIR IT. GPT's review of #186 named the invariant,
+    and cbp-being supplied two counterexamples the grammar check (_not_python) lets through:
+    - 2026-09-23 07:15 (seq 3405): a label written as `#` comments ("# Remove stray ']' at line
+      1736 ...") on a file that did not parse. Comments are valid Python, so it was accepted.
+      One beat later the comment was the premise of a request to delete a ']' that did not exist.
+    - 2026-09-24 10:31: two memory_write calls appended 4,515 and 4,765 chars of VALID Python to
+      a file already stopped at line 2367. The stop did not move. The beat then counted the new
+      sha as progress: "the indentation fix already applied".
+    Both change a broken file without changing why it is broken. The rule is MONOTONIC (GPT's
+    ruling on #186's open question, 2026-09-26): an append may never move a file backwards.
+    - HEALTHY (parses) -> stays healthy. An append that would make a working file invalid is
+      refused. The original rule let an over-indented fragment through because its text parsed
+      on its own dedented, and the file it landed in did not.
+    - INCOMPLETE (a program written in parts) -> incomplete or healthy, and only with actual code.
+      A label makes it invalid and is refused.
+    - INVALID (wrong somewhere, not merely unfinished) -> healthy only. An append below the first
+      error cannot repair it."""
+    state, err = _file_state(before)
+    combined = before + ("" if before.endswith("\n") or not before else "\n") + content
+    after, err_after = _file_state(combined)
+    if after == "complete":
+        return ""
+    if state == "complete":
+        where = f"line {err_after.lineno} ({err_after.msg})" if err_after else "the end (unfinished)"
+        return (f"The file parses now, and this text would break it: appended, Python would stop at "
+                f"{where}. An append must leave a working file working.")
+    if state == "incomplete" and after == "incomplete" and not _not_python(content, before):
+        return ""
+    stop = (err.lineno if err else None) or "?"
+    if state == "incomplete":
+        return (f"The file is an unfinished program (Python stops at line {stop}: "
+                f"{err.msg if err else 'incomplete'}), and this text does not continue it: "
+                f"appended, the file would no longer be a program at all.")
+    return (f"The file does not parse now: Python stops at line {stop} ({err.msg}). Appending "
+            f"below it cannot fix that. The file would still stop at line "
+            f"{(err_after.lineno if err_after else stop)}, so this write would change the file "
+            f"without repairing it. Fix line {stop} itself with memory_edit.")
 
 
 def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
@@ -158,12 +278,12 @@ def missing_args(args: dict, required, tool: str, hint: str = "") -> Optional[st
 
 
 class ReferenceF1aDispatcher:
+    """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
+
+
     # Bounds on one edit. An edit is a SMALL, LOCATED change; anything larger is a rewrite
     # and should be honest about being one.
     EDIT_MAX_CHARS = 4000
-
-    """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
-
     def __init__(self, memory_root: str,
                  witness_log: Optional[str] = None,
                  witness_fn: Optional[Callable[[str], str]] = None,
@@ -353,6 +473,29 @@ class ReferenceF1aDispatcher:
                 return self._safe_path(str(landed.relative_to(self.memory_root)), writing=writing)
             raise ValueError(self._out_of_reach(p, roots, writing))
         return p
+
+    def _tail_in_home(self, p: Path) -> Optional[Path]:
+        """The longest tail of `p` that names an existing file in this being's home, or None.
+
+        Longest-first so '/x/y/notes/plan.md' prefers notes/plan.md over a stray plan.md at the
+        top level. Existence is required: this resolves a fumbled path to a file the being
+        already has, and never invents a new one from an arbitrary absolute path.
+        """
+        parts = [x for x in p.parts if x not in ("/", "")]
+        for i in range(len(parts)):
+            tail = Path(*parts[i:])
+            if str(tail).startswith(("..", "/")):
+                continue
+            cand = (self.memory_root / tail)
+            try:
+                cand_r = cand.resolve()
+            except Exception:
+                continue
+            if cand_r != self.memory_root and self.memory_root not in cand_r.parents:
+                continue
+            if cand_r.is_file():
+                return cand_r
+        return None
 
     @staticmethod
     def _existence(p: Path) -> str:
@@ -827,6 +970,23 @@ class ReferenceF1aDispatcher:
                               f"in an earlier step of this beat and not been able to see it.")
             except OSError:
                 pass
+        # AN APPEND MAY NOT MOVE A .py FILE BACKWARDS (main #186): text that is not Python, or
+        # an append that leaves a broken file broken, is refused before it lands. Appends only:
+        # a replace states the whole new file, and _python_status reports its state afterwards.
+        if mode == "append" and existed and before_lines and p.suffix == ".py":
+            _before = p.read_text(errors="replace")
+            _mono, _gram = _append_must_advance(content, _before), _not_python(content, _before)
+            why = ((_gram or _mono) if _file_state(_before)[0] == "complete" else (_mono or _gram))
+            if why:
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_write refused, nothing was written to {p.name}. {why} An append "
+                    f"only adds to the END of the file, below its {before_lines} lines; it cannot "
+                    f"change a line already there. To change or remove lines, use memory_edit: "
+                    f"start_line and end_line (the numbers memory_read shows) or old (copied "
+                    f"exactly from memory_read), and new (empty to delete). To rewrite the whole "
+                    f"file, memory_write it with mode='replace'. If this text is a note about "
+                    f"what you did or plan to do, memory_write it to journal.md or todo.md "
+                    f"instead.") + _python_status(p))
         p.parent.mkdir(parents=True, exist_ok=True)
         with open(p, "w" if mode == "replace" else "a") as fh:
             fh.write(content + ("\n" if not content.endswith("\n") else ""))
@@ -848,7 +1008,7 @@ class ReferenceF1aDispatcher:
             # of it below line 1206 (2026-09-21 05:47Z). The receipt is the only place it learns.
             result = (f"appended {len(content)} chars to the END of {p.name} at {p} — was "
                       f"{before_bytes} bytes, now {after_bytes}, below the {before_lines} lines "
-                      f"already there. memory_write only adds; it never replaces or edits a line. "
+                      f"already there. An append only adds; it never replaces or edits a line. "
                       f"To change text already in the file, use memory_edit: either start_line and "
                       f"end_line (the numbers memory_read shows) or old (copied exactly from "
                       f"memory_read), and new.")
@@ -957,29 +1117,6 @@ class ReferenceF1aDispatcher:
                 cached = False
             self._wt_writable = cached
         return cached
-
-    def _tail_in_home(self, p: Path) -> Optional[Path]:
-        """The longest tail of `p` that names an existing file in this being's home, or None.
-
-        Longest-first so '/x/y/notes/plan.md' prefers notes/plan.md over a stray plan.md at the
-        top level. Existence is required: this resolves a fumbled path to a file the being
-        already has, and never invents a new one from an arbitrary absolute path.
-        """
-        parts = [x for x in p.parts if x not in ("/", "")]
-        for i in range(len(parts)):
-            tail = Path(*parts[i:])
-            if str(tail).startswith(("..", "/")):
-                continue
-            cand = (self.memory_root / tail)
-            try:
-                cand_r = cand.resolve()
-            except Exception:
-                continue
-            if cand_r != self.memory_root and self.memory_root not in cand_r.parents:
-                continue
-            if cand_r.is_file():
-                return cand_r
-        return None
 
 
 # Files inside the being's own home that the SEAT owns and the being may not write.

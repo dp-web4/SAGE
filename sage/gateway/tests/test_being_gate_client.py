@@ -24,7 +24,7 @@ def _client(mech):
     c._profile = object()
     c._mech = mech
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -115,7 +115,7 @@ def test_relative_memory_path_is_judged_at_the_being_memory_root():
     c = _client(_allows)
     c.memory_root = "/tmp/being-home"
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -132,7 +132,7 @@ def test_pr_review_is_judged_as_the_gh_command_the_seat_runs():
     seen = {}
     c = _client(_allows)
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -230,7 +230,7 @@ def test_request_scope_path_is_not_judged_under_mrh_path():
     seen = {}
     c = _client(_allows)
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -802,12 +802,12 @@ def test_pr_open_base_is_the_worktrees_upstream_not_a_hard_coded_branch(tmp_path
     g("push", "-q", "origin", "HEAD:legion/some-integration-target")
     g("checkout", "-q", "-b", "legion-being/work", "--track", "origin/legion/some-integration-target")
     monkeypatch.delenv("SAGE_PR_BASE", raising=False)
-    assert pr_base_branch(str(wt)) == "legion/some-integration-target"
+    assert pr_base_branch(str(wt), {"member": "legion-being"}) == "legion/some-integration-target"
     assert "--base legion/some-integration-target" in pr_open_command(
-        {"slug": "s-1", "title": "a title long enough", "body": "b"}, {"worktree": str(wt)})
+        {"slug": "s-1", "title": "a title long enough", "body": "b"}, {"worktree": str(wt), "member": "legion-being"})
     monkeypatch.setenv("SAGE_PR_BASE", "main")
-    assert pr_base_branch(str(wt)) == "main", "explicit override wins"
-    assert pr_base_branch(str(tmp_path)) == "main", "no upstream: main, never a stale carrier"
+    assert pr_base_branch(str(wt), {"member": "legion-being"}) == "main", "explicit override wins"
+    assert pr_base_branch(str(tmp_path), {"member": "legion-being"}) == "main", "no upstream: main, never a stale carrier"
 
 
 def test_check_sandbox_measured_from_inside_with_a_real_conftest():
@@ -942,10 +942,10 @@ def test_pr_amend_reads_the_branch_from_the_worktree_and_refuses_a_non_pr_branch
 
     git("checkout", "-qb", "legion-being/work")
     with pytest.raises(ValueError, match="not one of your PR branches"):
-        _pr_number_for_branch(wt)          # the work branch is not a proposal
+        _pr_number_for_branch(wt, {"member": "legion-being"})          # the work branch is not a proposal
     git("checkout", "-qb", "some/other")
     with pytest.raises(ValueError, match="not one of your PR branches"):
-        _pr_number_for_branch(wt)
+        _pr_number_for_branch(wt, {"member": "legion-being"})
 
     # arg validation happens before any lookup, so a bad call never reaches the network
     for bad, msg in ((({"title": "too short", "message": "m"}), None),
@@ -954,7 +954,7 @@ def test_pr_amend_reads_the_branch_from_the_worktree_and_refuses_a_non_pr_branch
         if msg is None:
             continue
         with pytest.raises(ValueError, match=msg):
-            pr_amend_command(bad, {"worktree": wt})
+            pr_amend_command(bad, {"worktree": wt, "member": "legion-being"})
     with pytest.raises(ValueError, match="needs a worktree"):
         pr_amend_command({"title": "a proper title here", "message": "m"}, {})
 
@@ -962,11 +962,11 @@ def test_pr_amend_reads_the_branch_from_the_worktree_and_refuses_a_non_pr_branch
     # This assertion used to expect "true" here, from `some/other` — the hole sprout found on
     # SAGE #217 (the dispatcher then committed and pushed to that branch).
     with pytest.raises(ValueError, match="not one of your PR branches"):
-        pr_amend_command({"title": "a proper title here", "message": "why"}, {"worktree": wt})
+        pr_amend_command({"title": "a proper title here", "message": "why"}, {"worktree": wt, "member": "legion-being"})
     # ...and on one of its own proposals: commit and push only; nothing outward is composed
     git("checkout", "-qb", "legion-being/a-proposal")
     assert pr_amend_command({"title": "a proper title here", "message": "why"},
-                            {"worktree": wt}) == "true"
+                            {"worktree": wt, "member": "legion-being"}) == "true"
 
 
 def test_pr_amend_is_offered_to_the_being():
@@ -998,12 +998,12 @@ def test_pr_base_refuses_to_guess_when_the_upstream_is_unset():
     git("branch", "legion-being/work")
 
     with pytest.raises(ValueError, match="cannot determine the base branch"):
-        pr_base_branch(wt)                       # no upstream: refuse, never "main"
+        pr_base_branch(wt, {"member": "legion-being"})                       # no upstream: refuse, never "main"
 
     # an explicit override is still honoured
     environ["SAGE_PR_BASE"] = "legion/some-integration"
     try:
-        assert pr_base_branch(wt) == "legion/some-integration"
+        assert pr_base_branch(wt, {"member": "legion-being"}) == "legion/some-integration"
     finally:
         del environ["SAGE_PR_BASE"]
 
@@ -1108,6 +1108,8 @@ def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
         "pr_open": {"slug": "camera-verb", "title": "add the camera verb", "body": "body text"},
         "pr_amend": {"title": "amend the camera verb", "message": "a one line commit message"},
         "pr_review": {"repo": "dp-web4/SAGE", "number": 1, "body": "b"},
+        "patch_apply": {"diff": "--- a/f.py\n+++ b/f.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n",
+                        "why": "the gate walk composes patch_apply too"},
     }
 
     composed = [v for v, spec in _REGISTRY.items() if spec.get("compose")]

@@ -89,6 +89,29 @@ def _hestia_error(env: dict) -> Optional[str]:
 SEARCH_LINES_SHOWN = 40
 
 
+# How much of the seat's last answer an unchanged-file receipt carries back verbatim.
+# Enough for a traceback's last frames and its exception line; not the whole transcript.
+RUN_ANSWER_CARRIED = 900
+
+
+# ...and how much of its FIRST line is kept ahead of that tail. The seat puts its verdict
+# there ("I ran x.py ..." / "I did not run x.py."). Measured 2026-09-23 seq 3506: a tail-only
+# cut of a 1,100-char decline dropped "I did not run" and kept "...the same error as my
+# run at seq 3499"; the being journaled "the seat ran it and it passed" the same beat.
+RUN_ANSWER_HEAD = 240
+
+
+def _carry_head_and_tail(text: str) -> str:
+    """The seat's verdict is its first line and the exception is its last; a cut keeps both
+    and says, in words, where and how much it cut. A bare "..." reads as a quote's start."""
+    if len(text) <= RUN_ANSWER_HEAD + RUN_ANSWER_CARRIED:
+        return text
+    first = text.split("\n", 1)[0][:RUN_ANSWER_HEAD]
+    tail = text[-RUN_ANSWER_CARRIED:]
+    cut = len(text) - len(first) - len(tail)
+    return f"{first}\n[... {cut} characters of the seat's answer cut here ...]\n{tail}"
+
+
 def _stale_transport(e: Exception) -> bool:
     """The daemon refused the MCP transport session itself (not the hestia session): the
     request never reached a tool, so reconnecting and sending it again is safe."""
@@ -1061,6 +1084,73 @@ class HestiaF1aDispatcher:
                     f"shows you what the scene was under this stance."),
             witness_id=self._local._witness(f"gaze {was} -> {mode}" + (f" ({rec.get('words')})" if rec.get("words") else "")))
 
+    # -- speak: a voice in the room ------------------------------------------------------
+    def _do_speak(self, intent: BeingIntent) -> ResultEnvelope:
+        """Say words aloud through this machine's speaker. Path-less and bounded like `gaze`:
+        the being supplies text only; engine, device, length cap and timeout are fixed here.
+
+        dp, 2026-09-26: "give it speak tool". The being had been asked to pair the bluetooth
+        audio and speak, and for 20 beats journaled that it wanted to learn how, holding no verb
+        that could. Each played utterance is appended to its own home (spoken.jsonl) and witnessed;
+        if that append fails, the receipt, hestia outcome and witness all say so."""
+        from sage.gateway import body as _body
+        from sage.gateway.reference_f1a import missing_args
+        text = _body.clean_speech(intent.args.get("text", ""))
+        if not text:
+            return ResultEnvelope(ok=False, error=missing_args(
+                {k: v for k, v in intent.args.items() if k != "text"}, ("text",), "speak",
+                "'text' is the exact words to say aloud."))
+        if len(text) > _body.SPEAK_MAX_CHARS:
+            return ResultEnvelope(ok=False, error=(
+                f"speak takes one utterance of up to {_body.SPEAK_MAX_CHARS} characters; yours is "
+                f"{len(text)}. Nothing was said. Say the part that matters most, or say it in turns."))
+        # Refused BEFORE any hestia action is opened and before any sound: a being on a body with
+        # no speaker gets a true sentence, the way a headless being calling `gaze` does.
+        prov = _body.speak_provider()
+        if not prov["live"]:
+            return ResultEnvelope(ok=False, error=(
+                f"This body cannot speak aloud ({prov['why']}), so `speak` is not a verb of yours "
+                f"on this machine right now. Nothing was said. To reach someone in words, use say."))
+        begin = self._call("hestia_begin_action", {"tool_name": "speak", "target": text[:80]})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        try:
+            done = _body.speak(text)
+        except Exception as e:
+            self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "failed",
+                                                  "detail": f"{type(e).__name__}: {e}"[:300]})
+            return ResultEnvelope(ok=False, error=(
+                f"your words could not be played ({type(e).__name__}); nothing was heard. "
+                f"The speaker may have disconnected."))
+        # THE RECEIPT CLAIMS ONLY WHAT WAS MEASURED (GPT review of #219). Playback success proves
+        # sound reached the sink, not that anyone heard it; and the speech record is written
+        # AFTER the sound, so its failure is a real partial outcome: named to the being, to
+        # hestia and to the witness, never swallowed behind "it is kept".
+        speaker = _body.speaker_name()
+        record_err = None
+        try:
+            with open(os.path.join(self.memory_root, "spoken.jsonl"), "a") as f:
+                f.write(json.dumps({"ts": time.time(), "text": text, "speaker": speaker,
+                                    "seconds": done["seconds"]}) + "\n")
+        except Exception as e:
+            record_err = f"{type(e).__name__}: {e}"[:200]
+        self._call("hestia_record_outcome", {
+            "actionId": action_id, "outcome": "ok" if record_err is None else "partial",
+            "detail": f"played {done['chars']} chars through {speaker}"
+                      + ("" if record_err is None else f"; speech record NOT written ({record_err})")})
+        said = f"played aloud through {speaker} ({done['seconds']}s): \"{text}\"."
+        if record_err is None:
+            result = said + " It is kept in your spoken.jsonl, not in any conversation."
+        else:
+            result = (said + f" But your speech record could not be written ({record_err}), so "
+                      f"spoken.jsonl does not have it. It is not in any conversation either.")
+        return ResultEnvelope(
+            ok=True, result=result,
+            witness_id=self._local._witness(f"spoke aloud through {speaker}: {text[:120]}"
+                                            + ("" if record_err is None else " [speech record not written]")))
+
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
         if not content:
@@ -1725,6 +1815,117 @@ class HestiaF1aDispatcher:
                                       },
                                       "action_id": action_id})
 
+    # -- patch_apply: the being changes the tree it reasons about (dp: "governed") ------
+    def _do_patch_apply(self, intent: BeingIntent) -> ResultEnvelope:
+        """Apply the being's diff to its OWN worktree, exactly as the law bound it.
+
+        Only ever reached on an intent the gate ALLOWED as the exact `git apply` below, with
+        every target path judged under mrh.path. What this method adds is the last link of
+        judged==executed, the one the command string alone cannot carry: the patch file is
+        named for the sha256 of the diff, so before running anything the seat re-reads the
+        file it just wrote and re-hashes it. If the name and the content have come apart --
+        a stale file from a crashed run, a collision, a hand-edited /tmp -- the act is
+        refused rather than applied, because at that point the law ruled on a digest that is
+        not the bytes git would read.
+
+        A PATCH THAT DOES NOT APPLY IS ok=False WITH A REASON, NOT AN ERROR ABOUT THE BEING.
+        The overwhelmingly common cause is a stale read: the being diffed against a file that
+        has since moved. `check` treats a red suite as a real answer for the same reason --
+        an organ whose refusals read as the being's own fault teaches it not to use the organ.
+        """
+        import hashlib
+        import subprocess
+        from sage.gateway.being_gate_client import (diff_arg, patch_apply_argv, patch_apply_command,
+                                                    patch_digest, patch_file_path, patch_targets)
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="patch_apply needs a worktree of your own; none is "
+                                       "configured on this seat (PRD M1)")
+        # Rebuild the SAME command the gate judged -- same function, same context.
+        try:
+            cmd = patch_apply_command(intent.args, {"worktree": self.worktree})
+            argv = patch_apply_argv(intent.args, {"worktree": self.worktree})
+            targets = patch_targets(diff_arg(intent.args))
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        # A verdict that bound no command is not an authority to run one (check's contract).
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "patch_apply refused: the command the law judged is not the command this "
+                "dispatcher would execute. The law is the authority for what runs."))
+        diff = diff_arg(intent.args)
+        digest = patch_digest(diff)
+        staged = patch_file_path(diff)
+        try:
+            with open(staged, "w", encoding="utf-8", errors="surrogatepass") as fh:
+                fh.write(diff)
+            # THE INTEGRITY LINK. Read back what is on disk -- not what we think we wrote --
+            # and confirm the file git is about to open is the one the law's digest names.
+            with open(staged, "r", encoding="utf-8", errors="surrogatepass") as fh:
+                on_disk = fh.read()
+        except OSError as e:
+            return ResultEnvelope(ok=False, error=f"could not stage the patch: {e}")
+        if patch_digest(on_disk) != digest:
+            return ResultEnvelope(ok=False, error=(
+                "patch_apply refused: the staged patch does not hash to the digest the law "
+                "judged. The command names the diff by its content, so a file that no longer "
+                "matches it is a different patch."))
+        # WITNESSED BEFORE IT LANDS, like check. An unwitnessed change to the tree the being
+        # reasons about is exactly the thing there would be no way to appeal or reconstruct.
+        try:
+            begin = self._call("hestia_begin_action",
+                               {"tool_name": "patch_apply", "target": ", ".join(targets)})
+            err = _hestia_error(begin)
+        except Exception as e:
+            begin, err = {}, f"{type(e).__name__}: {e}"
+        if err:
+            return ResultEnvelope(
+                ok=False, error=f"patch_apply UNWITNESSED: the witness substrate is unreachable "
+                                f"({str(err)[:160]}); nothing was changed",
+                result={"targets": targets, "applied": False,
+                        "reason": "hestia_begin_action failed; an unwitnessed change to your "
+                                  "worktree is not a change you could later account for",
+                        "tree": self._worktree_revision(), "worktree": self.worktree})
+        action_id = begin.get("actionId")
+        tree_before = self._worktree_revision()
+        try:
+            # Hooks off, as for every seat-run process in the being's tree (#212). `git apply`
+            # runs no hook itself; the env is here because the rule is per SITE, not per verb.
+            proc = subprocess.run(argv, cwd=self.worktree, env=_worktree_env(), text=True,
+                                  capture_output=True, timeout=120)
+        except Exception as e:
+            return ResultEnvelope(ok=False, witness_id=action_id,
+                                  error=f"patch_apply could not run: {type(e).__name__}: {e}")
+        applied = proc.returncode == 0
+        out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        tree_after = self._worktree_revision()
+        evidence = {"command": cmd, "argv": argv, "law_bound_command": judged is not None,
+                    "patch_sha256": digest, "patch_bytes": len(diff.encode("utf-8", "surrogatepass")),
+                    "staged_at": staged, "exit_status": proc.returncode,
+                    "tree_before": tree_before, "tree_after": tree_after,
+                    "embodiment": self._embodiment(), "action_id": action_id}
+        if not applied:
+            # git's own words, which name the file and the hunk. Paraphrasing them would cost
+            # the being the one detail it needs to send a correct diff next time.
+            return ResultEnvelope(
+                ok=False, witness_id=action_id,
+                error=("that patch did not apply, so nothing in your worktree changed. Usually "
+                       "this means the file moved on since you read it: read it again and send "
+                       "a fresh diff. git said:\n" + (out[:1500] or "(no output)")),
+                result={"applied": False, "targets": targets, "worktree": self.worktree,
+                        "git_output": out[:1500], "evidence": evidence})
+        return ResultEnvelope(
+            ok=True, witness_id=action_id,
+            result={"headline": f"applied to {len(targets)} file(s): {', '.join(targets)}",
+                    "applied": True, "targets": targets, "why": str(intent.args.get("why", "")),
+                    "worktree": self.worktree,
+                    # SAY WHAT THIS IS NOT. Applying is not verifying, and the measured habit
+                    # this verb exists to break is asserting an outcome never observed.
+                    "next": "the patch landed; it has NOT been verified. Run check to find out "
+                            "whether it does what you meant.",
+                    "git_output": out[:1500], "evidence": evidence})
+
 
     def _test_source_identity(self, target: str, head: Optional[str]) -> Optional[dict]:
         """WHICH TEST FILE the verdict is about, by content hash at the tree that ran.
@@ -2114,13 +2315,22 @@ class HestiaF1aDispatcher:
         rel = str(p.relative_to(self.memory_root))
         digest = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
         unchanged = None  # (seq it asked at, seq the seat answered at)
+        answer_text = ""   # what that answer SAID, to hand back rather than point at
         asked_at = None
         for t in conv.recent(self.memory_root, seat_conv, limit=80):
             text = str(t.get("text", ""))
             if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
                 asked_at = t.get("seq") if f"sha256:{digest}" in text else None
             elif asked_at is not None and t.get("from") != self.member:
+                # The seat's ANSWER carries the marker (seat_run_requests.py writes it for
+                # both a run and a decline). A later remark about that answer does not, and
+                # must not displace it: on 2026-09-22 this pointed at seq 3300, a seat aside,
+                # while the run it was about was seq 3299.
+                if unchanged and answer_text.startswith(_RUN_MARKER) \
+                        and not text.startswith(_RUN_MARKER):
+                    continue
                 unchanged = (asked_at, t.get("seq"))
+                answer_text = text
         lines = [f"[request_run] {rel}",
                  f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
                  f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it and answers here)"]
@@ -2132,11 +2342,21 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=f"could not hand the request to the seat: {said.error}")
         result = {}
         if unchanged:
+            # CARRY THE ANSWER, DO NOT POINT AT IT. Measured 2026-09-22 over cbp-being's 556
+            # beats: an edit receipt that names the defect in its own return value ("Python
+            # cannot parse ... now: IndentationError at line N") is followed by another edit
+            # 39/46 = 0.85 of the time, against a 0.49 base rate; the SAME defect delivered
+            # as the seat's traceback in the conversation is followed by an edit 20/45 = 0.44
+            # — no lift at all (Fisher p=7e-5). A seq number is a pointer to a channel that
+            # does not move it. So the receipt says what the run said.
+            carried = _carry_head_and_tail(answer_text.strip())
             result["unchanged"] = (
                 f"This file is byte-for-byte the one you asked about at seq {unchanged[0]}, and "
                 f"the seat answered that at seq {unchanged[1]}. Nothing in it has changed since, "
-                f"so running it again will give the same result. To change what runs: "
-                f"memory_edit the lines, or retire_note the file and then memory_write it anew.")
+                f"so running it again will give the same result — which was:\n"
+                f"--- seq {unchanged[1]} ---\n{carried}\n--- end ---\n"
+                f"To change what runs: memory_edit the lines, or retire_note the file and then "
+                f"memory_write it anew.")
         return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
             **result,
             "requested": rel,
@@ -2326,11 +2546,13 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, pending=True,
                                   note="git_restore needs a worktree of your own; none is configured")
         try:
-            cmd = git_restore_command(intent.args, {"worktree": self.worktree})
+            cmd = git_restore_command(intent.args, self._git_ctx())
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         target = os.path.realpath(os.path.join(self.worktree, str(intent.args["path"])))
-        # ONE FILE, asked of git: a directory at <rev>, or nothing there, is refused (#217)
+        # ONE FILE, asked of git rather than of the working tree: a path that is a directory
+        # at <rev> (or does not exist there) would restore many files or none, and the answer
+        # below speaks of exactly one.
         rel = os.path.relpath(target, os.path.realpath(self.worktree))
         kind = subprocess.run(["git", "cat-file", "-t", f"{intent.args['rev']}:{rel}"],
                               cwd=self.worktree, env=_worktree_env(), text=True,
@@ -2376,7 +2598,7 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, pending=True,
                                   note="pr_amend needs a worktree of your own; none is configured")
         try:
-            cmd = pr_amend_command(intent.args, {"worktree": self.worktree})
+            cmd = pr_amend_command(intent.args, self._git_ctx())
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         title = " ".join(str(intent.args["title"]).split())
@@ -2387,10 +2609,11 @@ class HestiaF1aDispatcher:
             return subprocess.run(["git", *a], cwd=self.worktree, env=_worktree_env(), text=True, input=inp,
                                   capture_output=True, timeout=120)
 
-        # checked HERE too, before anything is witnessed or pushed (SAGE #217 review)
+        # Checked HERE too, before anything is witnessed or pushed: the composer's check is
+        # what the law saw, and this is what acts. Neither may rely on the other (#217).
         from sage.gateway.being_gate_client import own_proposal_branch
         try:
-            branch = own_proposal_branch(self.worktree)
+            branch = own_proposal_branch(self.worktree, self._git_ctx())
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         st = git("status", "--porcelain")
@@ -2480,13 +2703,14 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, pending=True,
                                   note="pr_open needs a worktree of your own; none is configured")
         try:
-            cmd = pr_open_command(intent.args, {"worktree": self.worktree})
+            cmd = pr_open_command(intent.args, self._git_ctx())
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         slug = str(intent.args["slug"]).strip()
         title = " ".join(str(intent.args["title"]).split())
         body = str(intent.args["body"]).rstrip()
-        branch = f"legion-being/{slug}"
+        from sage.gateway.being_gate_client import being_branch_prefix
+        branch = f"{being_branch_prefix(self._git_ctx())}/{slug}"   # the composer checked it resolves
 
         def git(*a, inp=None):
             return subprocess.run(["git", *a], cwd=self.worktree, env=_worktree_env(), text=True, input=inp,
@@ -2780,7 +3004,8 @@ class HestiaF1aDispatcher:
             windows = list((payload.get("windows") or [])[: self.GAME_WINDOW_MAX])
         except Exception:
             return (), ()
-        # one bad window costs one picture, not every picture in the call (SAGE #218 review)
+        # ONE BAD WINDOW COSTS ONE PICTURE. The try used to wrap the loop, so a caption missing
+        # its x/y dropped every image in the call (sprout on #218).
         for w in windows:
             try:
                 full = os.path.realpath(os.path.join(self.memory_root, str(w.get("file", ""))))
@@ -2795,6 +3020,15 @@ class HestiaF1aDispatcher:
                 continue
             imgs.append(img); caps.append(cap)
         return tuple(imgs), tuple(caps)
+
+    def _git_ctx(self) -> dict:
+        """The compose context for the verbs that name the being's branches — the SAME facts
+        the gate composes from (BeingGateClient._compose_ctx), so the string the law judged is
+        the string that runs."""
+        return {"worktree": self.worktree, "memory_root": getattr(self, "memory_root", None),
+                "member": getattr(self, "plugin_id", None),
+                "game_stepper": getattr(self, "game_stepper", None),
+                "workspace": getattr(self, "workspace", None)}
 
     @classmethod
     def _is_session_loss(cls, text: str) -> bool:
