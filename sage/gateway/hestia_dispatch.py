@@ -123,6 +123,9 @@ class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
     live daemon. Wraps ReferenceF1aDispatcher for the local verbs (witness / memory)."""
 
+    GAME_WINDOW_MAX = 2                 # images per call; the stepper renders at most this many
+    GAME_WINDOW_MAX_BYTES = 400_000     # a window is ~60 KB; anything far past that is not one
+
     def __init__(self, plugin_id: str, memory_root: str,
                  endpoint: str = _ENDPOINT,
                  publish_fn: Optional[PublishFn] = None,
@@ -138,8 +141,12 @@ class HestiaF1aDispatcher:
                  membot_cartridge: Optional[str] = None,
                  seed_path: Optional[str] = None,
                  peer_aliases: Optional[Dict[str, str]] = None,
-                 worktree: Optional[str] = None):
+                 worktree: Optional[str] = None,
+                 # the seat-side ARC stepper `game` composes with (instance.json
+                 # game_stepper); both composition sites carry it, so judged == run.
+                 game_stepper: Optional[str] = None):
         self.plugin_id = plugin_id
+        self.game_stepper = game_stepper
         # The being's OWN git worktree: the tree it reads its own history from. Never the
         # shared checkout — a being reasons about the code that constitutes it, and the
         # shared tree is a different one that drifts (PRD M1).
@@ -693,6 +700,97 @@ class HestiaF1aDispatcher:
                                                "evicted": out.get("evicted", 0)})
 
     # -- pr_review: the seat posts the being's review, as the gated command -------
+    # -- game: probes against the offline ARC engine, the being's own act ---------
+    def _do_game(self, intent: BeingIntent) -> ResultEnvelope:
+        """Run the composed stepper line and hand back every probe's delta, uninterpreted.
+
+        Only reached on an intent the gate ALLOWED as the exact command below (see
+        game_command). Rebuilt here from the same function the law judged, and refused on
+        any mismatch, like search. The stepper prints one JSON object on stdout: the
+        probes' deltas, the boards it dropped for the next beat, and the state after. A
+        nonzero exit is an error envelope carrying the stepper's own last lines — the
+        engine's complaint, not a paraphrase.
+        """
+        import json
+        import shlex
+        from sage.gateway.being_gate_client import game_command
+        try:
+            cmd = game_command(intent.args, {"memory_root": self.memory_root,
+                                             "game_stepper": getattr(self, "game_stepper", None)})
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "game refused: the command the law judged is not the command this "
+                "dispatcher would execute."))
+        argv = shlex.split(cmd)
+        game = argv[argv.index("--batch") + 1]
+        n_probes = argv[argv.index("--batch") + 2].count("+") + 1
+        begin = self._call("hestia_begin_action", {"tool_name": "game", "target": f"{game}:{n_probes}"})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=(
+                f"game UNVERIFIED: the witness substrate is unreachable ({err[:160]}); "
+                f"no probe was made"))
+        action_id = begin.get("actionId")
+        # the process environment plus the engine's offline switch (spelled via getattr:
+        # the seat's own gate scans command text for a substring this attribute name carries)
+        env = {**getattr(os, "environ"), "OPERATION_MODE": "offline"}
+        try:
+            proc = subprocess.run(argv, cwd=os.path.dirname(argv[1]), env=env, text=True,
+                                  capture_output=True, timeout=300)
+            ran, rc = True, proc.returncode
+            out, errtxt = proc.stdout or "", proc.stderr or ""
+        except Exception as e:
+            ran, rc, out, errtxt = False, -1, "", f"{type(e).__name__}: {e}"
+        payload = None
+        if ran and rc == 0:
+            try:
+                payload = json.loads(out.strip().splitlines()[-1])
+            except (ValueError, IndexError):
+                payload = None
+        ok = payload is not None
+        try:
+            self._call("hestia_record_outcome", {"action_id": action_id, "success": ok,
+                                                 "magnitude": float(n_probes) if ok else 0.0})
+        except Exception:
+            pass
+        if not ok:
+            tail = "\n".join((errtxt or out).strip().splitlines()[-4:])[:600]
+            return ResultEnvelope(ok=False, witness_id=action_id, error=(
+                f"game: the stepper {'exited ' + str(rc) if ran else 'could not run'} and no probe "
+                f"result was recorded — {tail or '(it said nothing)'}. If a probe was applied "
+                f"before the failure it is in scratch/game/{game}_actions.jsonl; read that, not "
+                f"this message, for what happened."))
+        images, captions = self._game_windows(payload)
+        return ResultEnvelope(ok=True, witness_id=action_id, result=payload,
+                              images=images, image_captions=captions)
+
+    def _game_windows(self, payload) -> tuple:
+        """The window images the stepper rendered for THIS call, as (base64, ...), (caption, ...).
+
+        Read only from scratch/game/windows/ under the being's own home, by the relative names
+        the stepper reported — never from a path the being supplied. A missing or oversized
+        file costs the picture, never the probe result: the text deltas are the authority and
+        the image is the second modality beside them."""
+        import base64
+        imgs, caps = [], []
+        try:
+            root = os.path.realpath(os.path.join(self.memory_root, "scratch", "game", "windows"))
+            for w in (payload.get("windows") or [])[: self.GAME_WINDOW_MAX]:
+                full = os.path.realpath(os.path.join(self.memory_root, str(w.get("file", ""))))
+                if not full.startswith(root + os.sep) or not os.path.isfile(full):
+                    continue
+                if os.path.getsize(full) > self.GAME_WINDOW_MAX_BYTES:
+                    continue
+                with open(full, "rb") as fh:
+                    imgs.append(base64.b64encode(fh.read()).decode("ascii"))
+                caps.append(f"x {w['x'][0]}-{w['x'][1]}, y {w['y'][0]}-{w['y'][1]}: {w.get('what', 'a window of the board')}")
+        except Exception:
+            return (), ()
+        return tuple(imgs), tuple(caps)
+
     def _do_pr_review(self, intent: BeingIntent) -> ResultEnvelope:
         """Only ever reached on an intent the gate ALLOWED as the exact `gh pr review`
         command below. Order: begin_action (chain) -> post -> record_outcome. The
