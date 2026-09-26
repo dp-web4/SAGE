@@ -105,7 +105,7 @@ def test_git_restore_puts_back_one_file_never_a_directory(tmp_path):
     assert env.ok, env.error
 
 
-@pytest.mark.parametrize("path", [".githooks/pre-commit", ".git/config", "./.githooks/post-merge"])
+@pytest.mark.parametrize("path", [".githooks/pre-commit", ".git/config", "./.githooks/post-merge", ".GITHOOKS/pre-commit", ".Git/con" + "fig", ".GitHooks/post-merge"])
 def test_git_restore_cannot_put_back_what_git_executes(path):
     with pytest.raises(ValueError, match="what git EXECUTES"):
         git_restore_command({"rev": "HEAD", "path": path}, {"worktree": "/tmp/wt"})

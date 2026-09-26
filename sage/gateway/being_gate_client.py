@@ -1157,7 +1157,8 @@ def git_restore_command(args: dict, ctx: Optional[dict] = None) -> str:
                          "the file inside it you want restored")
     # what git EXECUTES is not restorable: a rev is any commit the repo holds, reviewed or not,
     # and SAGE's core.hooksPath=.githooks makes a restored hook seat-run code (SAGE #217)
-    if os.path.relpath(full, root).split(os.sep, 1)[0] in (".githooks", ".git"):
+    # casefold: on a case-insensitive volume `.GITHOOKS` is `.githooks` (SAGE #210 review)
+    if os.path.relpath(full, root).split(os.sep, 1)[0].casefold() in (".githooks", ".git"):
         raise ValueError(f"git_restore cannot put back {path!r}: it holds what git EXECUTES, "
                          "and no being writes there. Everything else in your worktree is yours "
                          "to restore")

@@ -58,7 +58,8 @@ def test_every_worktree_subprocess_in_the_dispatcher_carries_the_env():
     assert not missing, f"a seat-run process in the being's worktree without hooks off: {missing}"
 
 
-@pytest.mark.parametrize("rel", [".githooks/pre-commit", ".githooks/post-merge", ".git/config"])
+# case variants: on a case-insensitive volume (APFS, NTFS) `.GITHOOKS` IS `.githooks`
+@pytest.mark.parametrize("rel", [".githooks/pre-commit", ".githooks/post-merge", ".git/config", ".GITHOOKS/pre-commit", ".GitHooks/post-merge"])
 def test_the_being_cannot_write_what_git_executes(tmp_path, rel, monkeypatch):
     home = tmp_path / "home"; home.mkdir()
     wt = tmp_path / "wt"; (wt / ".githooks").mkdir(parents=True); (wt / "sage").mkdir()

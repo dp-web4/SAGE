@@ -284,7 +284,9 @@ class ReferenceF1aDispatcher:
             _wr = Path(_wt).resolve()
             if p == _wr or _wr in p.parents:
                 _first = p.relative_to(_wr).parts[:1]
-                if _first and _first[0] in (".githooks", ".git"):
+                # casefold: on a case-insensitive volume (APFS by default, NTFS) `.GITHOOKS` IS
+                # `.githooks` (legion, reviewing SAGE #210's patch parser)
+                if _first and _first[0].casefold() in (".githooks", ".git"):
                     raise ValueError(
                         f"{_first[0]}/ in your worktree is not writable: it holds what git "
                         f"EXECUTES (hooks) or git's own machinery, and the seat runs git in this "
