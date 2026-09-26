@@ -115,6 +115,79 @@ def _not_python(content: str, before: str) -> str:
             f"{line.strip()[:100]!r}. Appending it would not make the file parse either.")
 
 
+def _first_syntax_error(src: str) -> Optional[SyntaxError]:
+    """The compiler's FIRST stop in `src`, or None if it parses. compile() executes nothing."""
+    try:
+        compile(src, "<file>", "exec")
+    except SyntaxError as e:
+        return e
+    except ValueError:
+        return None
+    return None
+
+
+def _file_state(src: str) -> tuple:
+    """("complete" | "incomplete" | "invalid", first SyntaxError or None) for a whole .py file.
+
+    Incomplete is not invalid. A program written in parts is unfinished between the parts (an
+    open bracket, a block header with no body yet, an unterminated docstring), and Python then
+    reports its error at the OPENING line ("'(' was never closed", line 1), not at the end. So
+    the first error's line cannot tell a program still being written from one that is broken.
+    codeop.compile_command draws exactly that line: it returns None for source that is merely
+    incomplete and raises for source that is wrong. It compiles only and executes nothing."""
+    import codeop
+    import warnings
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            r = codeop.compile_command(src, "<file>", "exec")
+    except SyntaxError as e:
+        return "invalid", e
+    except (ValueError, OverflowError):
+        return "complete", None
+    if r is None:
+        return "incomplete", _first_syntax_error(src)
+    return "complete", None
+
+
+def _append_must_advance(content: str, before: str) -> str:
+    """Why appending `content` to an ALREADY-BROKEN .py file is refused, or "".
+
+    AN APPEND BELOW THE FIRST ERROR CANNOT REPAIR IT. GPT's review of #186 named the invariant,
+    and cbp-being supplied two counterexamples the grammar check (_not_python) lets through:
+    - 2026-09-23 07:15 (seq 3405): a label written as `#` comments ("# Remove stray ']' at line
+      1736 ...") on a file that did not parse. Comments are valid Python, so it was accepted.
+      One beat later the comment was the premise of a request to delete a ']' that did not exist.
+    - 2026-09-24 10:31: two memory_write calls appended 4,515 and 4,765 chars of VALID Python to
+      a file already stopped at line 2367. The stop did not move. The beat then counted the new
+      sha as progress: "the indentation fix already applied".
+    Both change a broken file without changing why it is broken. So:
+    - a file that is INVALID (wrong somewhere, not merely unfinished) takes an append only if the
+      file parses afterwards;
+    - a file that is INCOMPLETE (a program written in parts) takes an append that is code and
+      leaves it complete or still merely unfinished (a label makes it invalid, and is refused).
+    A file that parses is unaffected. Code and ordinary comments still append, and the grammar
+    check applies as before."""
+    state, err = _file_state(before)
+    if state == "complete":
+        return ""
+    combined = before + ("" if before.endswith("\n") or not before else "\n") + content
+    after, err_after = _file_state(combined)
+    if after == "complete":
+        return ""
+    if state == "incomplete" and after == "incomplete" and not _not_python(content, before):
+        return ""
+    stop = (err.lineno if err else None) or "?"
+    if state == "incomplete":
+        return (f"The file is an unfinished program (Python stops at line {stop}: "
+                f"{err.msg if err else 'incomplete'}), and this text does not continue it: "
+                f"appended, the file would no longer be a program at all.")
+    return (f"The file does not parse now: Python stops at line {stop} ({err.msg}). Appending "
+            f"below it cannot fix that. The file would still stop at line "
+            f"{(err_after.lineno if err_after else stop)}, so this write would change the file "
+            f"without repairing it. Fix line {stop} itself with memory_edit.")
+
+
 def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     """A missed memory_edit anchor says WHERE it stopped matching, not only that it did.
 
@@ -702,7 +775,10 @@ class ReferenceF1aDispatcher:
             with open(p, errors="replace") as f:
                 before = sum(1 for _ in f)
         if existed and before and p.suffix == ".py":
-            why = _not_python(content, p.read_text(errors="replace"))
+            _before = p.read_text(errors="replace")
+            # A broken file first (GPT review of #186): an append below the first error cannot
+            # repair it, whatever the text is. Then the grammar check for a file that parses.
+            why = _append_must_advance(content, _before) or _not_python(content, _before)
             if why:
                 return ResultEnvelope(ok=False, error=(
                     f"memory_write refused, nothing was written to {p.name}. {why} memory_write "

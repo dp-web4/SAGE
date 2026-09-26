@@ -552,11 +552,13 @@ def test_code_appended_to_a_py_file_still_lands():
     program written in parts (it makes the file parse)."""
     disp, root = _disp()
     f = Path(root) / "s.py"
-    f.write_text("import os\n")
+    # Each kind of text against a HEALTHY file: in sequence, the indented fragment leaves the
+    # file invalid ("unexpected indent"), and every later append then meets the broken-file rule.
     for text in ("def g():\n    return 1\n",
                  "        X = np.load(data_path)\n        y = X[:, 0]\n",
                  "    y = X.sum()\n    return X, y\n",
                  "# TODO: tune lr\n"):
+        f.write_text("import os\n")
         r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
         assert r.ok, (text, r.error)
     f.write_text("def h(\n    a,\n")
@@ -566,6 +568,54 @@ def test_code_appended_to_a_py_file_still_lands():
     for path in ("journal.md", "notes/new.py"):
         r = disp(BeingIntent("memory_write", {"path": path, "content": LABELS[0]}), _ALLOW)
         assert r.ok, (path, r.error)
+
+
+BROKEN_MID = "import os\nx = f(1))\ndef g():\n    return 1\n"     # stops at line 2, not at the end
+
+
+def test_an_append_to_a_broken_file_that_leaves_the_error_in_place_is_refused():
+    """GPT's review of #186: an append below the first error cannot repair it. The two measured
+    forms that the grammar check alone let through, both refused, with the file unchanged:
+    - seq 3405 (2026-09-23 07:15): a label written as `#` comments. Comments are Python.
+    - 2026-09-24 10:31: VALID Python appended to a file stopped mid-way. The stop did not move."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    for text in ("# Remove stray ']' at line 1736 ...\n# OLD (line 1736): ]\n",
+                 "def train(model, X, y):\n    for epoch in range(10):\n        model.step(X, y)\n"):
+        f.write_text(BROKEN_MID)
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert not r.ok, (text, r.result)
+        assert "stops at line 2" in r.error and "Appending below it cannot fix that" in r.error
+        assert "memory_edit" in r.error
+        assert f.read_text() == BROKEN_MID, "nothing written"
+
+
+def test_an_append_that_repairs_or_grows_an_unfinished_program_still_lands():
+    """What the invariant must keep open on a broken file: the append that makes it parse (the
+    last part of a program written in parts), and code that moves an end-of-file stop later
+    (an unfinished program still growing). A label that 'moves' that stop is not code, so it is
+    still refused."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text("def h(\n    a,\n")                                   # stops at the end
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    b,\n):\n    return a + b\n"}), _ALLOW)
+    assert r.ok and "Python can parse s.py now" in r.result, r.error
+    f.write_text("def h(\n    a,\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    b,\n    c,\n"}), _ALLOW)
+    assert r.ok, r.error                                                 # still open, but grew
+    f.write_text("def h(\n    a,\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "[Fix: closed the call on line 1]\n"}), _ALLOW)
+    assert not r.ok and f.read_text() == "def h(\n    a,\n"
+
+
+def test_a_comment_on_a_healthy_file_is_still_a_comment():
+    """The control GPT asked for: a real source comment on a file that parses is not a label
+    that masks a broken stop, and it lands."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text("import os\n\ndef g():\n    return 1\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "# returns the batch size\n"}), _ALLOW)
+    assert r.ok, r.error
 
 
 def test_a_non_python_receipt_says_nothing_about_parsing():
