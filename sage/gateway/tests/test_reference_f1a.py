@@ -535,3 +535,30 @@ def test_the_edit_receipt_counts_lines_the_way_memory_read_does():
     assert r.ok and "went from 3 to 2 lines" in r.result, r.result
     rd = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
     assert rd.ok and (home / "notes" / "s.py").read_text().count("\n") == 2
+
+
+def test_memory_edit_reads_a_line_count_as_the_range():
+    """2026-09-24 05:57Z: cbp-being sent start_line 180, delete_lines 5, new "". Nothing read
+    the 5, end_line defaulted to 180, and one line was deleted while the being journaled five."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("a\nb\nc\nd\ne\nf\ng\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": "2", "delete_lines": "5", "new": ""}), _ALLOW)
+    assert r.ok, r.error
+    assert f.read_text() == "a\ng\n"
+    assert "replaced lines 2-6 (5 lines)" in r.result
+
+
+def test_memory_edit_refuses_a_count_that_disagrees_with_end_line():
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("a\nb\nc\nd\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 2, "delete_lines": 3, "new": ""}), _ALLOW)
+    assert not r.ok and "name different ranges" in r.error, r.error
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "delete_lines": 0, "new": ""}), _ALLOW)
+    assert not r.ok and "Nothing was" in r.error, r.error
+    assert f.read_text() == "a\nb\nc\nd\n"

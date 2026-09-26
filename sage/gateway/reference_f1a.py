@@ -71,6 +71,9 @@ def _python_status(p) -> str:
     return f" Python can parse {p.name} now. That is not the same as running it."
 
 
+# Names a being has used (or will reach for) to say HOW MANY lines from start_line.
+_EDIT_COUNT_KEYS = ("delete_lines", "num_lines", "line_count", "count", "n_lines")
+
 
 def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     """A missed memory_edit anchor says WHERE it stopped matching, not only that it did.
@@ -475,10 +478,27 @@ class ReferenceF1aDispatcher:
             try:
                 s0 = int(str(a.get("start_line", a.get("line", a.get("old_line", "")))).strip())
                 s1 = int(str(a.get("end_line", s0)).strip())
+                # A COUNT IS A RANGE TOO. Measured 2026-09-24 05:57Z: cbp-being sent
+                # `start_line: 180, delete_lines: 5, new: ""` to cut five lines. No key read
+                # the 5, end_line defaulted to start_line, and ONE line went — the receipt
+                # said "replaced lines 180-180" honestly, and the being journaled "removed
+                # lines 180-184 (5 lines)". A dropped number deletes the wrong amount.
+                count_key = next((k for k in _EDIT_COUNT_KEYS if k in a), None)
+                if count_key is not None:
+                    n = int(str(a[count_key]).strip())
+                    if n < 1:
+                        raise ValueError
+                    if "end_line" in a and s1 != s0 + n - 1:
+                        return ResultEnvelope(ok=False, error=(
+                            f"end_line {s1} and {count_key} {n} name different ranges "
+                            f"({s0}-{s1} vs {s0}-{s0 + n - 1}), so nothing was changed. "
+                            f"Send one of them."))
+                    s1 = s0 + n - 1
             except ValueError:
                 return ResultEnvelope(ok=False, error=(
                     "start_line and end_line must be line numbers, like start_line 1610 and "
-                    "end_line 1616. Nothing was changed."))
+                    "end_line 1616 (or a count of lines, like delete_lines 7). Nothing was "
+                    "changed."))
             rng = (s0, s1)
         if not path or (not old and rng is None):
             got = ", ".join(sorted(a)) or "nothing"
