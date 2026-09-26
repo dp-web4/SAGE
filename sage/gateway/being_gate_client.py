@@ -754,6 +754,10 @@ _REGISTRY = {
     # dispatcher writes the ONE file the cortex reads (~/.sprout/gaze.json), never a path the
     # being names — so its reach is fixed the way `say`'s and `remember`'s are.
     "gaze":           dict(tool="gaze",         path_args=(),       cmd_arg=None),
+    # speak: words become a voice in the room (2026-09-26). Path-less like gaze: the being
+    # supplies only text; the engine, the device and the length cap are fixed by the dispatcher,
+    # so its reach is the machine's own speaker and nothing else.
+    "speak":          dict(tool="speak",        path_args=(),       cmd_arg=None),
     "request_scope":  dict(tool="request_scope", path_args=(),      cmd_arg=None),
     # request_run: ASK THE SEAT TO RUN A FILE. It does not run anything — that is the whole
     # design. Measured 2026-09-20/21: the being asked dp in prose to run a file for it six
@@ -790,7 +794,8 @@ _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
                             "retire_note", "request_run", "memory_edit", "camera",
-                            "gaze"})   # moves the body's own eyes (2026-09-23)
+                            "gaze",    # moves the body's own eyes (2026-09-23)
+                            "speak"})  # makes sound in the room (2026-09-26)
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -854,6 +859,12 @@ _TOOL_SCHEMAS = {
               "target": "for dwell or avert: what, in your own words (optional)",
               "words": "why, in your own words (optional; kept with the choice)"},
              ["mode"]),
+    "speak": ("Speak aloud. Your words become a voice through this machine's speaker, heard by "
+              "whoever is in the room right now. This is sound, not a message: it is not added to "
+              "any conversation, so to answer someone in writing use say. One short utterance, up "
+              "to 400 characters. Write the words themselves, not a description of them.",
+              {"text": "the exact words to say aloud"},
+              ["text"]),
     "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "
             "rather than writing about them in your journal. The turn is attributed to you "
             "and kept forever; nobody can edit it afterwards, including you. Saying nothing "

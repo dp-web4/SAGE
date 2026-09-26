@@ -150,3 +150,17 @@ consequence. Then a hermetic test, and a live proof against the real device befo
   capture; the being's beat read "my left eye and right eye has gone dark" — the first
   world-changed-under-me event to reach it. The cortex unit now resets nvargus-daemon before
   every start (`sprout-cortex.service.d/argus-reset.conf`) so `Restart=on-failure` heals it.
+
+## speak: a voice in the room (2026-09-26)
+
+`speak` turns words into sound through the machine's default audio sink (`espeak-ng` → `pw-play`).
+It is a body verb: offered only when the beat measures a sink **and** both engine halves
+(`body.speak_provider()`); a sink without the engine is reported under `not_yet_wired`.
+
+- **Words only.** The being supplies `text`; engine, voice, device and timeout are fixed. The text
+  reaches `espeak-ng` as one argv item after `--`, never through a shell. Control characters are
+  collapsed; over 400 characters is refused whole ("Nothing was said"), never truncated.
+- **Sound is not a message.** Nothing is added to a conversation; `say` remains the written answer.
+- **A record the being owns.** Every utterance that played is appended to `<home>/spoken.jsonl`,
+  opened/closed as a hestia action, and witnessed. A failed playback records `failed` and writes no line.
+- **Pathless and consequential** in the gate registry, like `gaze`.

@@ -955,6 +955,60 @@ class HestiaF1aDispatcher:
                     f"shows you what the scene was under this stance."),
             witness_id=self._local._witness(f"gaze {was} -> {mode}" + (f" ({rec.get('words')})" if rec.get("words") else "")))
 
+    # -- speak: a voice in the room ------------------------------------------------------
+    def _do_speak(self, intent: BeingIntent) -> ResultEnvelope:
+        """Say words aloud through this machine's speaker. Path-less and bounded like `gaze`:
+        the being supplies text only; engine, device, length cap and timeout are fixed here.
+
+        dp, 2026-09-26: "give it speak tool". The being had been asked to pair the bluetooth
+        audio and speak, and for 20 beats journaled that it wanted to learn how, holding no verb
+        that could. Every utterance is recorded in its own home (spoken.jsonl) and witnessed, so
+        the record of what it said aloud is its own to read, whether or not anyone was there."""
+        from sage.gateway import body as _body
+        from sage.gateway.reference_f1a import missing_args
+        text = _body.clean_speech(intent.args.get("text", ""))
+        if not text:
+            return ResultEnvelope(ok=False, error=missing_args(
+                {k: v for k, v in intent.args.items() if k != "text"}, ("text",), "speak",
+                "'text' is the exact words to say aloud."))
+        if len(text) > _body.SPEAK_MAX_CHARS:
+            return ResultEnvelope(ok=False, error=(
+                f"speak takes one utterance of up to {_body.SPEAK_MAX_CHARS} characters; yours is "
+                f"{len(text)}. Nothing was said. Say the part that matters most, or say it in turns."))
+        # Refused BEFORE any hestia action is opened and before any sound: a being on a body with
+        # no speaker gets a true sentence, the way a headless being calling `gaze` does.
+        prov = _body.speak_provider()
+        if not prov["live"]:
+            return ResultEnvelope(ok=False, error=(
+                f"This body cannot speak aloud ({prov['why']}), so `speak` is not a verb of yours "
+                f"on this machine right now. Nothing was said. To reach someone in words, use say."))
+        begin = self._call("hestia_begin_action", {"tool_name": "speak", "target": text[:80]})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        try:
+            done = _body.speak(text)
+        except Exception as e:
+            self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "failed",
+                                                  "detail": f"{type(e).__name__}: {e}"[:300]})
+            return ResultEnvelope(ok=False, error=(
+                f"your words could not be played ({type(e).__name__}); nothing was heard. "
+                f"The speaker may have disconnected."))
+        self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "ok",
+                                              "detail": f"spoke {done['chars']} chars"})
+        try:
+            with open(os.path.join(self.memory_root, "spoken.jsonl"), "a") as f:
+                f.write(json.dumps({"ts": time.time(), "text": text,
+                                    "seconds": done["seconds"]}) + "\n")
+        except Exception:
+            pass   # the sound happened; a missing log line must not report it as not said
+        return ResultEnvelope(
+            ok=True,
+            result=(f"spoken aloud ({done['seconds']}s): \"{text}\". Whoever is in the room heard it. "
+                    f"It is kept in your spoken.jsonl, not in any conversation."),
+            witness_id=self._local._witness(f"spoke aloud: {text[:120]}"))
+
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
         if not content:
