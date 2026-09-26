@@ -902,7 +902,8 @@ _TOOL_SCHEMAS = {
                     "person in a message: a person may be asleep, and this reaches whoever is "
                     "on duty.",
                     {"path": "the file to run, inside your own home, e.g. notes/my-script.py",
-                     "why": "optional: what you expect to learn. Saying it helps the seat decide"},
+                     "why": "optional: what you expect to learn. Saying it helps the seat decide",
+                     "rerun": "optional: true to ask again for a file the seat already answered and you have not changed since"},
                     ["path"]),
     "camera": ("Capture ONE frame from this machine's camera into your own scratch — no "
               "stream, nothing persists across beats. The seat runs ffmpeg against /dev/"

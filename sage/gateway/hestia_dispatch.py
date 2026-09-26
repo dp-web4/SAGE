@@ -1944,17 +1944,40 @@ class HestiaF1aDispatcher:
         # byte-identical to the one the seat had run and answered 28 minutes earlier. Its
         # why claimed "the fixes". The seat's reply could only be the same traceback, a
         # whole wake later. The digest makes the no-op visible NOW, in this beat, where the
-        # being can still act on it. It does not block: a being may want a rerun.
+        # being can still act on it.
+        #
+        # AND VISIBLE WAS NOT ENOUGH. Measured 2026-09-21 08:15-12:24Z: 8 requests went out
+        # flagged UNCHANGED, each waking the seat. The being read the flag and, in the same
+        # beat, wrote "the fix is applied" (seq 2991, file last modified 04:43 local); twice
+        # the seat's whole answer was "I did not run it" (2976, 2982). The answer to an
+        # unchanged file is already in the conversation, so it is handed back here, in-beat,
+        # and the seat is not woken. rerun=true still sends it: a being may want a rerun.
         rel = str(p.relative_to(self.memory_root))
         digest = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
         unchanged = None  # (seq it asked at, seq the seat answered at)
+        answer = ""
         asked_at = None
         for t in conv.recent(self.memory_root, seat_conv, limit=80):
             text = str(t.get("text", ""))
             if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
                 asked_at = t.get("seq") if f"sha256:{digest}" in text else None
             elif asked_at is not None and t.get("from") != self.member:
-                unchanged = (asked_at, t.get("seq"))
+                unchanged, answer = (asked_at, t.get("seq")), text
+        rerun = str(intent.args.get("rerun", "")).strip().lower() in ("true", "1", "yes")
+        if unchanged and not rerun:
+            cap = 1500
+            shown = answer if len(answer) <= cap else (
+                answer[:cap] + f"\n[... the seat's answer continues for {len(answer) - cap} "
+                               f"more characters; memory_read conversations to see all of it]")
+            return ResultEnvelope(ok=False, error=(
+                f"not sent, and the seat was not woken: {rel} is byte-for-byte the file you "
+                f"asked about at seq {unchanged[0]}, and the seat already answered at seq "
+                f"{unchanged[1]}. Nothing in the file has changed since, so that answer is "
+                f"still the answer. Here it is, in the seat's own words:\n{shown}\n"
+                f"To get a different result, change the file first: memory_edit the lines "
+                f"(then memory_read them to see the edit is there), or retire_note it and "
+                f"memory_write it anew. If you really do want the same file run again, call "
+                f"request_run with rerun=true."))
         lines = [f"[request_run] {rel}",
                  f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
                  f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it and answers here)"]
@@ -1969,8 +1992,9 @@ class HestiaF1aDispatcher:
             result["unchanged"] = (
                 f"This file is byte-for-byte the one you asked about at seq {unchanged[0]}, and "
                 f"the seat answered that at seq {unchanged[1]}. Nothing in it has changed since, "
-                f"so running it again will give the same result. To change what runs: "
-                f"memory_edit the lines, or retire_note the file and then memory_write it anew.")
+                f"so it will most likely give the same result; you asked for a rerun, so it "
+                f"was sent. To change what runs: memory_edit the lines, or retire_note the "
+                f"file and then memory_write it anew.")
         return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
             **result,
             "requested": rel,

@@ -1613,11 +1613,30 @@ def test_request_run_says_when_the_file_is_unchanged_since_the_seat_answered():
     conv.append(home, "seat", speaker="seat", text="Ran it: prints a.", via="seat")
     asked = [t["seq"] for t in conv.recent(home, "seat", limit=10)]
 
+    # Measured 08:15-12:24Z: 8 flagged requests still woke the seat. Not sent now; the
+    # seat's answer comes back in-beat instead.
+    before = len(conv.recent(home, "seat", limit=80))
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "verify my fix"}), _ALLOW)
-    assert r.ok and r.result["ran"] is False, "flagged, never refused"
+    assert not r.ok and not r.refused, r
+    assert len(conv.recent(home, "seat", limit=80)) == before, "an unchanged request woke the seat"
+    assert "Ran it: prints a." in r.error, "the seat's answer must come back in-beat"
+    assert f"seq {asked[-1]}" in r.error and "memory_edit" in r.error and "rerun=true" in r.error
+
+    # a say that asks for the run is routed the same way, and is not delivered either
+    r = d(BeingIntent("say", {"to": "seat", "text": "Please run notes/train.py again"}), _ALLOW)
+    assert not r.ok and "Ran it: prints a." in (r.error or ""), r
+    assert len(conv.recent(home, "seat", limit=80)) == before
+
+    # the clearing condition works
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "rerun": "true"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False
     assert "memory_edit" in r.result["unchanged"], r.result
-    assert f"seq {asked[-1]}" in r.result["unchanged"], (asked, r.result)
     assert "UNCHANGED since" in conv.recent(home, "seat", limit=1)[-1]["text"]
+
+    # a long answer is cut with a label, not silently
+    conv.append(home, "seat", speaker="seat", text="x" * 4000, via="seat")
+    r = d(BeingIntent("request_run", {"path": "notes/train.py"}), _ALLOW)
+    assert not r.ok and "continues for 2500 more characters" in r.error, r.error[-300:]
 
     # an edit clears it
     conv.append(home, "seat", speaker="seat", text="Same again.", via="seat")
