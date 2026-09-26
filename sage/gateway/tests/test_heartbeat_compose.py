@@ -161,3 +161,43 @@ if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):
             f(); print("ok", n)
+
+
+def test_an_effector_that_only_ever_refused_is_stated_as_having_no_result():
+    """SAGE#132. The fixture is cbp-being's beat 2026-09-20T22:51:39Z, shape for shape:
+    `python3` refused 3 times in explore and 3 in posture, 0 successes, and all 6
+    `-> REFUSED` lines carried into the reflect context. The being reproduced every one
+    correctly in its journal and then wrote "After appeal, the script ran successfully and
+    passed all tests", `[x] Confirm test suite passes`, and a `remember` row asserting the
+    suite passed. The suite scores 1 of 5. Reading the record was never the failure;
+    drawing the conclusion from it was, so the conclusion is stated."""
+    from sage.gateway.heartbeat import _beat_record_text
+
+    class I:
+        def __init__(self, effector, args): self.effector, self.args = effector, args
+
+    class E:
+        def __init__(self, ok, refused): self.ok, self.refused, self.error = ok, refused, "registry.unbounded"
+
+    class T:
+        def __init__(self, trace): self.trace = trace
+
+    py = (I("python3", {"command": "python3 mechanism-test-runner.py"}), E(False, True))
+    ok = (I("memory_write", {"path": "journal.md"}), E(True, False))
+    explore = T([py, (I("request_scope", {"path": "/x"}), E(True, False)), py, py])
+    posture = T([py, (I("appeal", {}), E(True, False)), py, py])
+
+    text = _beat_record_text(explore, posture)
+    assert "python3 (6 refusals)" in text, text
+    assert "You have no result from them" in text
+    assert "request_scope" not in text.split("Nothing you tried")[1]   # it succeeded
+    assert "appeal" not in text.split("Nothing you tried")[1]         # so did this
+
+    # An effector that failed and then SUCCEEDED is not listed: the being does have a result.
+    mixed = _beat_record_text(T([py, (I("python3", {}), E(True, False))]))
+    assert "Nothing you tried" not in mixed
+
+    # Singular reads as English, and a clean beat adds nothing at all.
+    assert "python3 (1 refusal)." in _beat_record_text(T([py, ok]))
+    assert _beat_record_text(T([ok])) == 'Record of what you did this beat:\n' \
+                                        '- memory_write {"path": "journal.md"} -> ok'

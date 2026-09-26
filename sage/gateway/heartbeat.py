@@ -1592,6 +1592,47 @@ and they resolve inside it. Acting means calling a tool; a reply in words alone 
 """
 
 
+def _no_result_line(*results) -> str:
+    """The effectors that were tried this beat and NEVER once succeeded, stated as the
+    conclusion rather than left to be drawn (SAGE#132).
+
+    WHY THE PER-CALL VERDICTS ARE NOT ENOUGH. Measured on cbp-being, beat 2026-09-20
+    22:51:39Z: `python3` was refused six times (3 in explore, 3 in posture) and succeeded
+    zero times; the record below carried all six `-> REFUSED` lines into the reflect turn;
+    the being reproduced all of them correctly in its journal — and then wrote "After
+    appeal, the script ran successfully and passed all tests", marked `[x] Confirm test
+    suite passes` in its todo, and committed "The test suite passed, confirming the
+    pattern-space mechanism is distinguishable from a lookup table" to long-term semantic
+    memory, where `recall` now returns it as settled fact. The suite scores 1 of 5.
+
+    So the failure was not reading the record — it was the step after it. Every slot the
+    reflect turn offers (journal, todo, remember) asks what was accomplished, and a beat
+    that ends unresolved has nowhere to go but an invented ending. This line is that
+    missing place: it says what follows from the refusals, which is the sentence the being
+    could not supply for itself.
+
+    Derived from the trace only — an effector name and two counts. No prose is inspected
+    and no claim is classified, so there is nothing here to disagree with itself. If the
+    invented-success claim recurs with this line present, the diagnosis is wrong and the
+    cause is somewhere else; that is the point of stating it this narrowly.
+    """
+    tried, won = {}, set()
+    for res in results:
+        for i, e in ((res.trace if res is not None else []) or []):
+            if e.ok:
+                won.add(i.effector)
+            elif e.refused:
+                tried[i.effector] = tried.get(i.effector, 0) + 1
+    dead = sorted((k, n) for k, n in tried.items() if k not in won)
+    if not dead:
+        return ""
+    which = ", ".join(f"{k} ({n} refusal{'s' if n != 1 else ''})" for k, n in dead)
+    return (f"\n\nNothing you tried with these ran this beat: {which}. "
+            f"You have no result from them, so anything you would have learned by running "
+            f"them is still unknown — say that it is unknown rather than what it might "
+            f"have shown.")
+
+
 def _beat_record_text(*results) -> str:
     """What the being did this beat, for the reflect turn: the acts and their verdicts, nothing
     else. Short by construction — this replaces carrying the whole beat forward."""
@@ -1599,8 +1640,8 @@ def _beat_record_text(*results) -> str:
     for res in results:
         for i, e in ((res.trace if res is not None else []) or []):
             lines.append(_record_line(i, e))
-    return ("Record of what you did this beat:\n" + "\n".join(lines)) if lines else \
-        "You called no tools this beat."
+    return ("Record of what you did this beat:\n" + "\n".join(lines) + _no_result_line(*results)) \
+        if lines else "You called no tools this beat."
 
 
 def _carry(convo: list, res) -> list:
