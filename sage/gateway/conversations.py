@@ -246,6 +246,9 @@ def recent(instance: Path, conv_id: str, limit: int = DEFAULT_LIMIT) -> list[dic
     return out
 
 
+RESERVED_TURN_KEYS = frozenset({"ts", "seq", "from", "text", "via", "witness", "beat"})
+
+
 def append(instance: Path, conv_id: str, *, speaker: str, text: str,
            witness: Optional[str] = None, beat: Optional[str] = None,
            enforce_write: bool = True, via: Optional[str] = None,
@@ -303,8 +306,13 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
                 turn["witness"] = witness
             if beat:
                 turn["beat"] = beat
+            # `extra` adds annotations (room.py: heard_id, mic). It can never supply a key the
+            # store itself owns, even one this turn happens not to carry: an absent witness or
+            # beat must stay absent, not be asserted by a caller (GPT on #228).
             for k, v in (extra or {}).items():
-                turn.setdefault(k, v)        # never overrides ts/seq/from/text/via
+                if k in RESERVED_TURN_KEYS:
+                    raise ValueError(f"extra may not set {k!r}; it is the store's own field")
+                turn[k] = v
             f.write(json.dumps(turn, ensure_ascii=False) + "\n")
             f.flush()
             os.fsync(f.fileno())
