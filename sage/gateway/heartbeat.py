@@ -59,9 +59,12 @@ BODY_VERBS = ("gaze", "camera", "speak")
 # said how long ago anything happened. The clock sense measures, each beat: the machine's local time
 # and part of day; how long since its last beat, since each person last wrote to it and since it
 # last answered them, since it last spoke aloud; and any rhythm declared in instance.json, e.g.
-#   "rhythms": [{"who": "dp", "asleep_from": "00:00", "asleep_to": "08:00", "note": "on many days"}]
+#   "rhythms": [{"who": "dp", "asleep_from": "00:00", "asleep_to": "08:00", "tz": "America/Los_Angeles",
+#                "note": "on many days"}]
+# `tz` is the PERSON's zone; without it the rhythm is read in the machine's zone and the beat says so.
 # Elapsed time is what turns two events into a sequence ("I spoke 3 min ago; a voice answered 1 min
-# ago"). Rhythms are said as usual, never as certain. It is recorded on the beat like the body.
+# ago"). A rhythm is a habit, said as one: silence inside it "may simply mean sleep", never "is sleep".
+# The measurement is recorded on the beat like the body.
 def _hhmm(v: str) -> int:
     h, m = str(v).split(":")
     return int(h) * 60 + int(m)
@@ -122,14 +125,22 @@ def clock_sense(now_utc: datetime, instance: Optional[Path] = None, member: str 
             out["spoke_aloud"] = ts.strftime("%Y-%m-%dT%H:%M:%SZ") if ts else None
         except Exception:
             pass
-    t = loc.hour * 60 + loc.minute
     for r in (cfg or {}).get("rhythms") or []:
+        # A RHYTHM IS THE PERSON'S, IN THE PERSON'S ZONE (GPT review of #223). `tz` (IANA) binds it;
+        # without one it is read in this machine's zone and SAID to be. An unknown zone is omitted,
+        # never guessed.
         try:
             who, a, b = str(r["who"]), _hhmm(r["asleep_from"]), _hhmm(r["asleep_to"])
+            if r.get("tz"):
+                from zoneinfo import ZoneInfo
+                there, zone = now_utc.astimezone(ZoneInfo(str(r["tz"]))), str(r["tz"])
+            else:
+                there, zone = loc, None
         except Exception:
             continue
+        t = there.hour * 60 + there.minute
         out["rhythms"].append({"who": who, "asleep_from": r["asleep_from"], "asleep_to": r["asleep_to"],
-                               "note": r.get("note"),
+                               "note": r.get("note"), "tz": zone,
                                "inside": (a <= t < b) if a <= b else (t >= a or t < b)})
     return out
 
@@ -152,10 +163,13 @@ def render_clock(c: dict) -> str:
     if since:
         lines.append("Since: " + "; ".join(since) + ".")
     for r in c.get("rhythms") or []:
-        span = f"{r['asleep_from']} to {r['asleep_to']} local" + (f", {r['note']}" if r.get("note") else "")
+        # HABIT STAYS HABIT (GPT review of #223): "often asleep" is a pattern, not today's fact, so
+        # the sentence says silence is unsurprising and MAY be sleep — never that it is.
+        zone = f"{r['tz']} time" if r.get("tz") else "this machine's time zone"
+        span = f"{r['asleep_from']} to {r['asleep_to']} ({zone})" + (f", {r['note']}" if r.get("note") else "")
         if r["inside"]:
-            lines.append(f"{r['who']} is often asleep from {span}. It is inside that time now, so a reply "
-                         f"from {r['who']} may not come until later; a silence now is sleep, not a judgement.")
+            lines.append(f"{r['who']} is often asleep from {span}. It is now within that time, so a silence "
+                         f"from {r['who']} is unsurprising and may simply mean sleep.")
         else:
             lines.append(f"{r['who']} is often asleep from {span}; it is outside that time now.")
     return "\n".join(lines)
