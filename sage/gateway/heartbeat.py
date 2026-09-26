@@ -51,6 +51,38 @@ EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_no
 BODY_VERBS = ("gaze", "camera", "speak")
 
 
+# THE LOCAL CLOCK, AND THE PEOPLE'S DAYS (dp, 2026-09-26, near 2 am: "have it be aware of the local
+# clock. i sleep from midnight to 8am on many days."). Every stamp the being saw was UTC, so 09:00Z
+# read as morning when it was 2 am where dp is. The beat now says the machine's local time, and any
+# rhythm declared in instance.json, e.g.
+#   "rhythms": [{"who": "dp", "asleep_from": "00:00", "asleep_to": "08:00", "note": "on many days"}]
+# A rhythm is stated as usual, never as certain: "often asleep", and a silence inside it is sleep.
+def _hhmm(v: str) -> int:
+    h, m = str(v).split(":")
+    return int(h) * 60 + int(m)
+
+
+def local_clock(now_utc: datetime, cfg: Optional[dict] = None) -> str:
+    """One or two lines: the machine's local time, then each declared rhythm that applies now."""
+    loc = now_utc.astimezone()
+    line = f"Local time on this machine: {loc:%A %H:%M} ({loc.tzname()})."
+    notes = []
+    for r in (cfg or {}).get("rhythms") or []:
+        try:
+            who, a, b = str(r["who"]), _hhmm(r["asleep_from"]), _hhmm(r["asleep_to"])
+        except Exception:
+            continue
+        t = loc.hour * 60 + loc.minute
+        inside = (a <= t < b) if a <= b else (t >= a or t < b)
+        span = f"{r['asleep_from']} to {r['asleep_to']} local" + (f", {r['note']}" if r.get("note") else "")
+        if inside:
+            notes.append(f"{who} is often asleep from {span}. It is inside that time now, so a reply "
+                         f"from {who} may not come until later; a silence now is sleep, not a judgement.")
+        else:
+            notes.append(f"{who} is often asleep from {span}; it is outside that time now.")
+    return line + ("\n" + "\n".join(notes) if notes else "")
+
+
 def offered_explore_tools(body_reading: Optional[dict]) -> list:
     """EXPLORE_TOOLS minus the body verbs this machine's measured inventory does not carry."""
     have = set(((body_reading or {}).get("inventory") or {}).get("verbs") or [])
@@ -1884,6 +1916,7 @@ def main(argv=None) -> int:
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
         museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
+                f"{local_clock(now, instance_config(instance))}\n"
                 # The absolute home path is context, NOT an address to copy. Measured on
                 # Sprout: 15 of 15 path refusals were this string reproduced from memory and
                 # truncated (…/sage/sage/journal.md six times, …/sage/journal.md, /scratch/…),
