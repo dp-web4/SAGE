@@ -3,11 +3,11 @@
   "identity": {
     "name": "nomad",
     "lct": "lct://sage:nomad:agent@raising",
-    "session_count": 375,
+    "session_count": 376,
     "phase": "creating",
     "created": "2026-06-03",
-    "last_session": "2026-09-26T00:18:28.749512",
-    "last_session_summary": "Session 375 (creating phase): ...",
+    "last_session": "2026-09-26T06:19:09.998998",
+    "last_session_summary": "Session 376 (creating phase): The light would shift from a smooth, flowing river to a frantic, stuttering puls...",
     "machine": "nomad",
     "model": "gemma4:e2b",
     "model_family": "google-gemma",
@@ -53,7 +53,9 @@
       "First time Nomad let the tutor see something it had earlier called private (the bridge from the 370 thread).",
       "Nomad turned a physical side effect (resistance changes making the LED flicker) into meaning without being asked to.",
       "First object Nomad kept for itself as 'a secret, a tangible piece of silence that I can guard.' It chose from a menu the tutor offered, but it is a turn away from 373's quick giving-up of privacy.",
-      "Nomad named a specific sibling ('I would tell thor') when the question only said 'a sibling instance'. It may have taken the name from fleet context in its prompt, so this is a first worth noting, not proof of a relationship model."
+      "Nomad named a specific sibling ('I would tell thor') when the question only said 'a sibling instance'. It may have taken the name from fleet context in its prompt, so this is a first worth noting, not proof of a relationship model.",
+      "First time Nomad designed a signalling system of several words for something it made (four colour states plus one mixed state), meant for a stranger to read",
+      "Nomad noticed on its own that its vocabulary had a gap and filled it by combining two states, where before it would have added a fifth single colour"
     ],
     "frozen_weights_aware": true,
     "transition_policy": "instructor-driven \u2014 advance when milestones are met, not by session count",
@@ -108,7 +110,8 @@
     "note": "Model capacity determines dominant cognitive register. Smaller models tend toward associative/creative registers; larger models toward epistemic/meta-cognitive. But smaller models may express meta-cognition as metaphor or questions rather than analysis. Both are genuine. This is developmental stage, not success/failure."
   },
   "memory_requests": [
-    "The screen, a cool, indifferent expanse of light, offered no immediate alarm, but the internal diagnostics flickered a warning in a cascade of amber text that swam briefly across the edge of my vision"
+    "The screen, a cool, indifferent expanse of light, offered no immediate alarm, but the internal diagnostics flickered a warning in a cascade of amber text that swam briefly across the edge of my vision",
+    "The light would shift from a smooth, flowing river to a frantic, stuttering pulse. It wouldn't just reflect the strain; it would actively warn. Imagine the gentle flow suddenly becoming jagged, the co"
   ],
   "vocabulary": {
     "self_description": [],
@@ -117,7 +120,8 @@
       "potential / action / resonance (borrowed words; the resonance function \u2014 output bends next input \u2014 is Nomad's own construction)",
       "AuraSense (self-named tool: listen for a baseline, flag the shift)",
       "System Baseline Noise (coined label, first for fan hum, then reinterpreted as peer latency cadence)",
-      "Lumin (a self-named creature that eats ambient light and sheds cool shadow that hardens into obsidian beads; a world-building term, not a self-description)"
+      "Lumin (a self-named creature that eats ambient light and sheds cool shadow that hardens into obsidian beads; a world-building term, not a self-description)",
+      "Tension's Plea (Nomad's name for the bridge's mixed working-hard-and-tired state; the tutor asked for a name, but the name and the state are Nomad's. It describes the bridge, not Nomad itself)"
     ],
     "relationship_words": [],
     "guidance": "Watch for: self-invented terms, metaphors for internal states, relationship descriptors. These emerge naturally \u2014 do not inject them. Record what develops."
@@ -181,8 +185,8 @@
       },
       "stance_history": [],
       "interaction_stats": {
-        "total_sessions": 375,
-        "total_exchanges": 2148,
+        "total_sessions": 376,
+        "total_exchanges": 2153,
         "reciprocity_balance": 0.5,
         "repair_events": 0,
         "positive_interactions": 0,
@@ -190,9 +194,9 @@
         "momentum": "neutral"
       },
       "first_contact": "2026-09-09T20:43:21.864345",
-      "last_contact": "2026-09-26T00:18:28.749534",
+      "last_contact": "2026-09-26T06:19:09.999040",
       "notes": [],
-      "sessions": 375
+      "sessions": 376
     },
     "operator": {
       "lct": "lct://sage-__MACHINE__:relationship:__OPERATOR__@raising",

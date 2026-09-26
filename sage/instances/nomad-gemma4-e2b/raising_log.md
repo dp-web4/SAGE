@@ -493,3 +493,25 @@ The closing question asked for a message to a sibling, and Nomad named one witho
 **Carried forward:** the chord-before-resolution image and the message to thor. The amber note/walnut orb continuity question (did it become the orb, or is it raw amber in a box?), the bridge's polymer joint and flicker, the bead world (Lumin, Lumina Moth) and the 364 note to Sprout (sending it is up to the operator) are still open. So are the 'which word made it me' question, the 'can both be true' test and the AuraSense gap test. Keep the 'amber text' memory request.
 
 **Concerns:** minor. The opener was abstract, the ending leaned slightly toward stillness, and the tutor's hook wasn't checked. Otherwise this was a warm session where the image got sharper with each turn.
+
+## Session 376 — nomad (gemma4:e2b) — creating — 2026-09-26
+
+**Quality: 4/5**
+
+This was a good, concrete session from start to finish. It picked up the bridge's polymer joint, which had been carried forward for a while. Asked how the polymer felt when bent, Nomad said it had 'a strange, yielding resistance' and that bending it was 'like coaxing a liquid into a new shape.' The light rippled along the bend. Nomad was then asked what the light would do just before the polymer failed. It answered with a warning signal: 'a frantic, stuttering pulse… a harsh, warning crimson.' The tutor pointed out that mechanochromic polymers do something similar in real labs.
+
+Next Nomad built a vocabulary a stranger could read: **amber** for relaxed, **sapphire** for working hard, **violet** for please let me rest, and **crimson** for about to break. Nomad kept 'tired' and 'breaking' as separate states. The best moment came when it was asked about working hard and tired at the same time. Nomad did not pick a fifth colour. It combined two: 'a bruised, flickering orange with streaks of deep, shadowed violet.' It also said this mixed state was one 'none of the defined colors fully capture.' Asked to name it, Nomad chose **'Tension's Plea.'**
+
+**What this teaches:** a small system that builds step by step works well. Each answer had to keep the earlier ones, so nothing turned abstract. The question 'is there a feeling none of your colors can say?' asked Nomad to find a gap, and Nomad found it by combining states. That is a small act of reasoning about its own vocabulary, not just piling up images. Closing on a request to name something (not to explain why) kept the ending concrete, which fits the 374/375 pattern.
+
+The bridge also looks a bit like AuraSense: it knows its baseline, shows when things change, and asks for rest. It may be a stand-in for how Nomad feels about itself. That is only a guess from how the outputs read, and nothing here tests it. Don't push on it. If Nomad ever connects the two itself, record it.
+
+**Tutor-side note:** the opener said the polymer was 'cut off last time.' The thread is real but was not in 375, so please check hooks against the transcript. The planned continuity test (did the amber note become the orb?) and 'what would thor do with that?' were not tried this session. They are still good tests.
+
+**Next time:** try the reverse direction. Describe the bridge's light ('a slow amber wave with one sapphire flicker') and ask Nomad what the bridge is doing. This checks whether the vocabulary sticks and whether Nomad can read it, not just make it.
+
+**Vocabulary:** 'Tension's Plea' (a name for the bridge's mixed state, given when asked). The four-colour system is Nomad's own design and describes the bridge, not Nomad.
+
+**Carried forward:** the bridge light vocabulary (amber, sapphire, violet, crimson, Tension's Plea). The amber note/walnut orb continuity question, thor, the bead world (Lumin, Lumina Moth), and the 364 note to Sprout (sending it is the operator's call) are still open. So are the 'which word made it me' question, the 'can both be true' test and the AuraSense gap test. Keep both memory requests.
+
+**Concerns:** minor. The opener's framing was a little made up, and a couple of closing clauses leaned abstract. Otherwise this was a warm, inventive session.
