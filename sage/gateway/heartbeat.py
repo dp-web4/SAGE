@@ -3056,12 +3056,12 @@ def harness_revision(workspace: str) -> dict:
 
 
 MAIN_REF = "origin/main"
-UNTRACKED_HASH_CAP = 1 << 20  # an untracked file over 1 MiB is named by path and size, not bytes
+HASH_CHUNK = 1 << 20  # untracked files are hashed whole, read 1 MiB at a time
 
 
 def _dirty_digest(workspace: str):
     """sha256 over what differs from HEAD outside sage/instances: the binary diff of tracked
-    files, then each untracked (non-ignored) file's path and bytes, in sorted order. None when
+    files, then each untracked (non-ignored) file's path, length and content hash, in sorted order. None when
     git cannot be read. Deterministic for the same edits on the same head."""
     import hashlib
     import subprocess
@@ -3081,9 +3081,17 @@ def _dirty_digest(workspace: str):
         if rel.endswith("/") and (f / ".git").exists():
             continue  # a nested checkout, not this tree's code (see harness_revision)
         h.update(b"\0untracked\0" + rel.encode(errors="surrogateescape") + b"\0")
+        # EVERY BYTE, AT ANY SIZE. A first version named files over 1 MiB by path and size, so
+        # two different same-size files on one head shared a digest (GPT review of #235) — the
+        # one thing the digest exists to rule out. Streamed so a large file costs time, not
+        # memory; each file enters as its own length + sha256, so no content can be mistaken
+        # for the separator of the next.
         try:
-            size = f.stat().st_size
-            h.update(f.read_bytes() if size <= UNTRACKED_HASH_CAP else f"size={size}".encode())
+            fh, n = hashlib.sha256(), 0
+            with f.open("rb") as fp:
+                for chunk in iter(lambda: fp.read(HASH_CHUNK), b""):
+                    fh.update(chunk); n += len(chunk)
+            h.update(f"{n}:".encode() + fh.digest())
         except OSError:
             h.update(b"unreadable")
     return h.hexdigest()

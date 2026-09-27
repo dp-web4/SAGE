@@ -52,6 +52,19 @@ def test_dirty_digest_identifies_the_edit_set(tmp_path):
     assert S.main(["--workspace", str(ws)]) == 1
 
 
+def test_large_same_size_untracked_files_are_told_apart(tmp_path):
+    """Two different untracked files of the same size above 1 MiB must not share a digest."""
+    ws, g = _repo(tmp_path)
+    big = ws / "weights.bin"
+    big.write_bytes(b"a" * (3 << 20))
+    a = H.harness_revision(str(ws))["dirty_digest"]
+    big.write_bytes(b"a" * ((3 << 20) - 1) + b"b")
+    b = H.harness_revision(str(ws))["dirty_digest"]
+    assert a and b and a != b, "same path, same size, different bytes is different code"
+    big.write_bytes(b"a" * (3 << 20))
+    assert H.harness_revision(str(ws))["dirty_digest"] == a
+
+
 def test_untracked_files_under_instances_do_not_count(tmp_path):
     ws, g = _repo(tmp_path)
     (ws / "sage" / "instances" / "b" / "scratch.py").write_text("print(1)\n")
