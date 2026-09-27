@@ -1114,36 +1114,111 @@ def _rel(instance: Path, raw: str) -> str:
     return "" if rel.startswith("..") else rel
 
 
-def _running_files(instance: Path, rels: list) -> set:
-    """Which of `rels` (paths relative to the home) a live process has on its command line.
-    Read from /proc, so it is what IS running, not what anyone says is. Each argument is
-    resolved against the process's own cwd and compared as a WHOLE path, so a sibling home
-    (…/cbp-being-old/x.py) can never match this one (sprout's review of #224)."""
+def _process_table():
+    """[(argv, cwd)] for every process this user can see, or None when this machine cannot be read.
+
+    Linux reads /proc. macOS has no /proc, and the first cut returned an empty set there -- so on
+    every Mac the window told the being "Nothing of yours is running right now" as a MEASUREMENT,
+    and the refuter then quoted the being's own true sentences back to it as contradicted
+    (McNugget, 2026-09-26). "Could not look" is not "nothing there". So: `ps` for argv, `lsof` for
+    the cwd of only the processes that could matter, and None when neither can be run.
+    """
+    if os.path.isdir("/proc"):
+        table = []
+        try:
+            pids = [d for d in os.listdir("/proc") if d.isdigit()]
+        except OSError:
+            return None
+        for pid in pids:
+            try:
+                argv = open(f"/proc/{pid}/cmdline", "rb").read().split(b"\0")
+                args = [x.decode(errors="replace") for x in argv if x]
+                try:
+                    cwd = os.readlink(f"/proc/{pid}/cwd")
+                except OSError:
+                    cwd = ""
+                table.append((args, cwd))
+            except OSError:
+                continue
+        return table
+    import subprocess
+    try:
+        out = subprocess.run(["ps", "-axww", "-o", "pid=", "-o", "command="], capture_output=True,
+                             text=True, timeout=10)
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    rows = []
+    for line in out.stdout.splitlines():
+        pid, _, cmd = line.strip().partition(" ")
+        if pid.isdigit() and cmd.strip():
+            # `ps` gives one string, not argv. Whitespace-split is exact for the paths this probes
+            # (files in a being's home). A path WITH A SPACE is missed -- and a miss renders as
+            # "not running", a measured absence, not as unmeasured (Legion). Rare in a being's
+            # filenames; stated so nobody reads "never mis-matched" as "never wrong".
+            rows.append((pid, cmd.split()))
+    return rows
+
+
+def _cwd_of(pid: str) -> str:
+    """A macOS process's cwd, by lsof. Empty when it cannot be read (not ours, or no lsof)."""
+    import subprocess
+    try:
+        out = subprocess.run(["lsof", "-a", "-p", pid, "-d", "cwd", "-Fn"], capture_output=True,
+                             text=True, timeout=5).stdout
+    except Exception:
+        return ""
+    return next((l[1:] for l in out.splitlines() if l.startswith("n")), "")
+
+
+def _running_files(instance: Path, rels: list):
+    """Which of `rels` (paths relative to the home) a live process has on its command line --
+    or None when this machine's processes cannot be read, which the caller must render as
+    UNMEASURED, never as "nothing running". Each argument is resolved against the process's
+    own cwd and compared as a WHOLE path, so a sibling home (…/cbp-being-old/x.py) can never
+    match this one (sprout's review of #224)."""
     found = set()
     home = instance.resolve()
-    wanted = {str(home / r): r for r in rels if r}
+    # BOTH SPELLINGS of every wanted file (Legion, review of #227): the home's own, and the
+    # resolved one. Keyed on the home's spelling alone, the realpath below lost a run on EVERY OS
+    # when the file is a symlink (`run.py -> scratch/real.py`): the argument resolved to the
+    # target and matched nothing, and the window said "nothing running" while it ran. Keyed on
+    # both, a symlinked file matches under its own name or its target's, and macOS's
+    # /var-vs-/private/var still matches.
+    wanted = {}
+    for r in rels:
+        if r:
+            wanted[str(home / r)] = r
+            wanted[os.path.realpath(home / r)] = r
     if not wanted:
         return found
-    try:
-        pids = [d for d in os.listdir("/proc") if d.isdigit()]
-    except OSError:
-        return found
-    for pid in pids:
-        try:
-            argv = open(f"/proc/{pid}/cmdline", "rb").read().split(b"\0")
-            args = [a.decode(errors="replace") for a in argv if a]
-            if len(args) < 2:
-                continue
-            try:
-                cwd = os.readlink(f"/proc/{pid}/cwd")
-            except OSError:
-                cwd = ""
-            for a in args[1:]:
-                full = os.path.normpath(a if os.path.isabs(a) else os.path.join(cwd, a)) if (cwd or os.path.isabs(a)) else ""
-                if full in wanted:
-                    found.add(wanted[full])
-        except OSError:
+    table = _process_table()
+    if table is None:
+        return None
+    if os.path.isdir("/proc"):
+        entries = table
+    else:
+        # Only processes naming a wanted file's BASENAME can match, so only those pay for lsof.
+        names = {Path(w).name for w in wanted}
+        entries = []
+        for pid, args in table:
+            if len(args) >= 2 and any(Path(x).name in names for x in args[1:]):
+                need_cwd = any(not os.path.isabs(x) for x in args[1:])
+                entries.append((args, _cwd_of(pid) if need_cwd else ""))
+    for args, cwd in entries:
+        if len(args) < 2:
             continue
+        for x in args[1:]:
+            full = (os.path.normpath(x if os.path.isabs(x) else os.path.join(cwd, x))
+                    if (cwd or os.path.isabs(x)) else "")
+            if not full:
+                continue
+            # The argument as written AND resolved, against both spellings of every wanted file.
+            for spelling in (full, os.path.realpath(full)):
+                if spelling in wanted:
+                    found.add(wanted[spelling])
+                    break
     return found
 
 
@@ -1264,7 +1339,7 @@ def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
             row += " Never run."
         if rel in pending:
             row += f" Your request (seq {', '.join(map(str, pending[rel]))}) is waiting to be run."
-        row += " Running now." if rel in running else ""
+        row += " Running now." if running and rel in running else ""
         lines.append(row)
     for rel in missing:
         lines.append(f"- {rel}: your request (seq {', '.join(map(str, pending[rel]))}) names it, "
@@ -1272,7 +1347,12 @@ def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
     if len(ordered) > len([r for r in top if r in ordered]):
         lines.append(f"- … and {len(ordered) - len(top)} older runnable file(s) in your home.")
     refuted = []
-    if running:
+    if running is None:
+        # UNMEASURED. Nothing is refuted and nothing is claimed: a probe that could not look has
+        # no standing to tell the being its own sentences are false.
+        lines.append("Whether anything of yours is running could not be measured on this machine, "
+                     "so this window says nothing about it either way.")
+    elif running:
         lines.append(f"Running right now: {', '.join(sorted(running))}.")
     else:
         lines.append("Nothing of yours is running right now. No run is in progress, so no results "
@@ -1304,7 +1384,10 @@ def want_check(account: str, facts: dict) -> str:
                  if l.strip().upper().startswith("WANT:")), "")
     if not want or not _WANTS_RESULTS.search(want):
         return ""
-    if facts.get("running"):
+    # None is UNMEASURED: no claim that nothing is running may be built on it. (Also None when
+    # `facts == {}` -- files_and_runs failed as a whole -- which is a different cause with the
+    # same right answer: no note.)
+    if facts.get("running") is None or facts.get("running"):
         return ""
     named = [r for r in facts.get("scripts", {}) if r in want or Path(r).name in want]
     if any(r in facts.get("pending", {}) for r in named) or (not named and facts.get("pending")):
