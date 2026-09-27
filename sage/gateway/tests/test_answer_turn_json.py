@@ -14,13 +14,19 @@ TURN = {"ts": "2026-09-27T04:25:13Z", "seq": 67, "from": "dp",
 
 
 class LLM:
-    def __init__(self, content):
-        self.content, self.calls = content, []
+    """Replies in order; the last one repeats. A (content, done_reason) pair sets the reason."""
+    def __init__(self, *contents):
+        self.contents, self.calls = list(contents), []
+
+    def resolve_num_predict(self):
+        return 6000
 
     def get_chat_response(self, messages, tools=None, fmt=None):
         self.calls.append({"messages": messages, "tools": tools, "fmt": fmt})
-        return {"content": self.content, "tool_calls": [],
-                "raw": {"message": {"thinking": "dp asked if I heard"}, "done_reason": "stop",
+        c = self.contents[min(len(self.calls), len(self.contents)) - 1]
+        content, reason = c if isinstance(c, tuple) else (c, "stop")
+        return {"content": content, "tool_calls": [],
+                "raw": {"message": {"thinking": "dp asked if I heard"}, "done_reason": reason,
                         "prompt_eval_count": 300, "eval_count": 60}}
 
 
@@ -33,33 +39,37 @@ class Client:
         return ResultEnvelope(ok=self.ok, error=self.error, result={"seq": 68} if self.ok else None)
 
 
-def _run(content, client=None):
+def _run(*contents, client=None, acts=""):
     sel = hb.SelectedTurn("dp", TURN)
-    llm, client = LLM(content), client or Client()
-    res = hb.answer_turn_json(client, llm, sel, name="sprout", machine="sprout", member="sprout-being")
+    llm, client = LLM(*contents), client or Client()
+    res = hb.answer_turn_json(client, llm, sel, name="sprout", machine="sprout", member="sprout-being",
+                              acts=acts)
     return res, llm, client
 
 
 def test_an_answer_is_dispatched_as_the_beings_own_say():
     res, llm, client = _run(json.dumps({"answer": True, "message": "Yes, I heard you. Thank you."}))
     assert [(i.effector, i.args) for i in client.sent] == [("say", {"to": "dp", "text": "Yes, I heard you. Thank you."})]
-    assert res.answer_form == {"parsed": True, "answer": True, "sent": True}
+    f = res.answer_form
+    assert (f["parsed"], f["answer"], f["sent"], f["retried"]) == (True, True, True, 0)
+    assert res.generates[0]["num_predict"] == 6000
     assert res.reply == "Yes, I heard you. Thank you." and res.thinking == ["dp asked if I heard"]
 
 
 def test_silence_is_a_choice_and_sends_nothing():
     res, _, client = _run(json.dumps({"answer": False, "message": ""}))
-    assert client.sent == [] and res.answer_form == {"parsed": True, "answer": False, "sent": False}
+    assert client.sent == [] and res.answer_form["answer"] is False and res.answer_form["why"] == "chose silence"
 
 
 def test_an_unparsed_reply_sends_nothing_and_is_counted():
     res, _, client = _run("Yes I heard you")
     assert client.sent == [] and res.answer_form["parsed"] is False
+    assert res.answer_form["why"] == "reply was not the JSON asked for"
 
 
 def test_a_refused_say_is_recorded_as_refused_not_sent():
     res, _, client = _run(json.dumps({"answer": True, "message": "[Your reply to dp]"}),
-                          Client(ok=False, error="that text reads as a placeholder"))
+                          client=Client(ok=False, error="that text reads as a placeholder"))
     assert len(client.sent) == 1, "the gate decides, not the turn"
     assert res.answer_form["sent"] is False and "placeholder" in res.answer_form["refused"]
 
@@ -80,3 +90,35 @@ def test_the_heartbeat_uses_it_and_counts_every_firing():
     src = open(os.path.join(os.path.dirname(__file__), "..", "heartbeat.py")).read()
     assert "answer = answer_turn_json(client, llm, selected" in src
     assert '"kind": "answer_json"' in src
+
+
+def test_one_retry_on_an_empty_or_cut_reply_like_the_tool_loop():
+    ok = json.dumps({"answer": True, "message": "Yes."})
+    for first in ("", ("{\"answer\": tr", "length"), "[OllamaIRP: Connection error: x]"):
+        res, llm, client = _run(first, ok)
+        assert len(llm.calls) == 2 and res.answer_form["retried"] == 1 and res.answer_form["sent"], first
+    res, llm, _ = _run("", "")
+    assert len(llm.calls) == 2 and res.answer_form["why"] == "empty reply", "one retry, not a loop"
+
+
+def test_acts_are_shown_only_when_passed():
+    _, llm, _ = _run(json.dumps({"answer": False, "message": ""}), acts="Record of what you did this beat:\n- memory_write ok")
+    assert llm.calls[0]["messages"][-1]["content"].startswith("Record of what you did this beat")
+    _, llm, _ = _run(json.dumps({"answer": False, "message": ""}))
+    assert "Record of what you did" not in llm.calls[0]["messages"][-1]["content"]
+
+
+def test_it_is_opt_in_per_instance(tmp_path):
+    assert hb.answer_turn_mode(tmp_path) == "tool", "no instance.json: today's path"
+    (tmp_path / "instance.json").write_text(json.dumps({"answer_turn": "json"}))
+    assert hb.answer_turn_mode(tmp_path) == "json"
+    (tmp_path / "instance.json").write_text(json.dumps({"answer_turn": "something"}))
+    assert hb.answer_turn_mode(tmp_path) == "tool"
+
+
+def test_the_heartbeat_gates_it_and_keeps_the_tool_path():
+    src = open(os.path.join(os.path.dirname(__file__), "..", "heartbeat.py")).read()
+    i = src.index('if answer_turn_mode(instance) == "json":')
+    assert src.index("answer = answer_turn_json(client, llm, selected", i) > i
+    assert src.index("answer = run_ollama_tool_turn(", i) > i, "the tool path stays the default"
+    assert 'endswith("-claude")' in src[i:i + 900], "acts only for a seat's question"
