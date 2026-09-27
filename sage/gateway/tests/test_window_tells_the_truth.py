@@ -377,3 +377,24 @@ def test_the_window_shows_the_open_view_not_the_log_tail(tmp_path):
     assert sec.startswith("## todo.md: still open (")
     assert "- [x]" not in sec and "await metrics" not in sec
     assert "memory_read todo.md" in sec and "write it under done:" in sec
+
+
+def test_todo_open_parses_each_text_once_and_answers_as_before():
+    """cbp-being's todo.md reached 3,267 items and one todo_open took 47.7 s; fit_state calls it
+    several times per beat. Same text -> one parse; the cheap difflib bounds change no answer."""
+    from datetime import datetime, timezone
+    now = datetime(2026, 9, 27, 22, 30, tzinfo=timezone.utc)
+    text = ("2026-09-27 20:00 UTC\n- [ ] train the linear model on held-out data\n"
+            "- [ ] report the correlation with W_TRUE\n"
+            "2026-09-27 21:00 UTC\n- [x] train the linear model on the held-out data\n")
+    calls = []
+    orig = hb._parse_todo
+    hb._TODO_PARSE.clear()
+    try:
+        hb._parse_todo = lambda t: calls.append(1) or orig(t)
+        a = hb.todo_open(text, now=now); b = hb.todo_open(text, now=now, window_h=1)
+    finally:
+        hb._parse_todo = orig
+    assert len(calls) == 1, "the parse does not depend on now/window, so it runs once per text"
+    assert [t for t, _ in a[0]] == ["report the correlation with W_TRUE"], "the near-duplicate done item closed its open twin"
+    assert b[0] == [] and b[1] == 1

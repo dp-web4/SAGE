@@ -1384,6 +1384,36 @@ def _norm(s):
 def todo_open(text, now=None, window_h=48):
     """[(item, since)] still open, newest first, and the count of older open items."""
     now = now or datetime.now(timezone.utc)
+    items = _todo_items(text or "")
+    cutoff = now - timedelta(hours=window_h)
+    # An item with no dated block above it is undated, not old: it is shown, after the dated ones.
+    recent = [(t, s) for t, s in items.values() if s is None or s >= cutoff]
+    older = sum(1 for t, s in items.values() if s is not None and s < cutoff)
+    recent.sort(key=lambda x: (x[1] is not None, x[1] or cutoff), reverse=True)
+    return recent, older
+
+
+# ONE PARSE PER TEXT, AND THE CHEAP BOUNDS FIRST. Measured 2026-09-27 on cbp-being: todo.md had
+# grown to 5,178 lines (3,267 items), one todo_open took 47.7 s, and fit_state builds the state
+# several times per beat — a beat sat 5+ minutes at 97% CPU in difflib before its first model
+# call. The parse does not depend on `now`, so it is computed once per distinct text; and
+# real_quick_ratio() >= quick_ratio() >= ratio() are upper bounds, so testing them first skips
+# almost every full comparison without changing a single answer.
+_TODO_PARSE: dict = {}
+
+
+def _todo_items(text: str) -> dict:
+    key = hashlib.sha256(text.encode("utf-8", "surrogateescape")).hexdigest()
+    hit = _TODO_PARSE.get(key)
+    if hit is None:
+        hit = _parse_todo(text)
+        _TODO_PARSE.clear()
+        _TODO_PARSE[key] = hit
+    return hit
+
+
+def _parse_todo(text: str) -> dict:
+    """norm -> (item text, since) for every item still open at the end of the log."""
     items = {}          # norm -> (text, since_dt)
     since = None
     section = None
@@ -1429,16 +1459,14 @@ def todo_open(text, now=None, window_h=48):
             if n in items:
                 del items[n]
             else:
+                sm_ = difflib.SequenceMatcher(None, "", n)   # n is seq2: its index is built once
                 for k in list(items):
-                    if difflib.SequenceMatcher(None, k, n).ratio() >= 0.85:
+                    sm_.set_seq1(k)
+                    if (sm_.real_quick_ratio() >= 0.85 and sm_.quick_ratio() >= 0.85
+                            and sm_.ratio() >= 0.85):
                         del items[k]
                         break
-    cutoff = now - timedelta(hours=window_h)
-    # An item with no dated block above it is undated, not old: it is shown, after the dated ones.
-    recent = [(t, s) for t, s in items.values() if s is None or s >= cutoff]
-    older = sum(1 for t, s in items.values() if s is not None and s < cutoff)
-    recent.sort(key=lambda x: (x[1] is not None, x[1] or cutoff), reverse=True)
-    return recent, older
+    return items
 
 
 def todo_view(instance: Path, now=None) -> str:
