@@ -1219,11 +1219,21 @@ class HestiaF1aDispatcher:
     _STORE_CONFIRMED = _STORED_NEW + _STORED_DUPLICATE
     _NOT_MOUNTED = "No cartridge mounted"
 
+    # MEMBOT GETS ITS OWN TIMEOUT. It shared hestia's 4 s, sized for a local daemon that answers in
+    # milliseconds. Measured on Sprout 2026-09-27: 205 successful remember/recall calls, median
+    # 223 ms but p90 2.9 s and max 3.9 s, and 4 `membot (TimeoutError): timed out` in a day. The
+    # host is at ~90% RAM with 3.7 GB in swap and membot's resident set was 23 MB: a paged-out
+    # server that is slow, not down. The being lost those memories to a limit set for another
+    # service. SAGE_MEMBOT_TIMEOUT_S overrides.
+    MEMBOT_TIMEOUT_S = float(os.environ.get("SAGE_MEMBOT_TIMEOUT_S", "12"))
+
     def _membot(self):
         """One MCP session to the membot server (fastmcp streamable HTTP). Lazy; a
         server that is down surfaces as an error envelope on the act, never a crash."""
         if getattr(self, "_mb", None) is None:
             c = self._mcp_factory(self.membot_endpoint, self.plugin_id)
+            if hasattr(c, "timeout"):
+                c.timeout = self.MEMBOT_TIMEOUT_S
             c.init()
             # Mounts are per MCP session: without this, memory_store answers "No cartridge
             # mounted" and save_cartridge writes an EMPTY cartridge over the real one
