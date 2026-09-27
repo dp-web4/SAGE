@@ -34,6 +34,7 @@ event. A caller says what happened; this decides what it is worth.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -65,9 +66,8 @@ SALIENCE = {
 ENGAGE_AT = 0.6          # at or above this, spend a beat now
 REFRACTORY_S = 8 * 60    # after engaging, do not engage again this soon
 IMMINENT_S = 4 * 60      # a beat already this close: let it arrive rather than racing it
-
-UNIT = "sage-heartbeat.service"
-TIMER = "sage-heartbeat.timer"
+UNIT = os.environ.get("SAGE_HEARTBEAT_UNIT", "sage-heartbeat.service")
+TIMER = os.environ.get("SAGE_HEARTBEAT_TIMER", "sage-heartbeat.timer")
 
 
 def _sh(*args: str) -> str:
@@ -125,6 +125,14 @@ def last_beat_end(instance: Path) -> Optional[float]:
         return None
 
 
+def _parse_iso(v) -> Optional[float]:
+    from datetime import datetime, timezone
+    try:
+        return datetime.strptime(str(v)[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+    except Exception:
+        return None
+
+
 def decide(instance: Path, kind: str, *, now: Optional[float] = None) -> dict:
     """Should this event spend a beat? Returns the decision AND its reasoning, because a
     wake policy that cannot say why it declined is indistinguishable from one that is
@@ -154,11 +162,13 @@ def decide(instance: Path, kind: str, *, now: Optional[float] = None) -> dict:
     end = last_beat_end(instance)
     if end is not None:
         since = now - end
-        if since < REFRACTORY_S:
+        refr, why = refractory_s(instance, now)
+        d["refractory"] = why
+        if since < refr:
             d["reason"] = (f"refractory: only {int(since)}s since the last beat ended "
-                           f"({REFRACTORY_S}s). Engaging again this soon shreds attention "
+                           f"({refr}s; {why}). Engaging again this soon shreds attention "
                            f"across fragments of the same exchange")
-            d["refractory_s_left"] = int(REFRACTORY_S - since)
+            d["refractory_s_left"] = int(refr - since)
             # DEFER, do not drop. This used to return here and the input waited for the
             # idle timer — up to 30 minutes for a turn that had earned a beat, because it
             # arrived 3 minutes too early. Measured 2026-09-13T07:45Z: two seat turns
@@ -254,6 +264,159 @@ def _deferred_timer_waiting() -> bool:
     except Exception:
         return False
     return out == "waiting"
+
+
+# THE HELD WAKE AND CONVERSATION MODE (dp, 2026-09-27: "should we speed up the beat cadence?" ->
+# not the timer). Both are OPT-IN per instance (cbp-claude's pre-review of #239: fleet-wide they
+# would lower CBP's refractory to 60 s on 77% of beats, because its being `say`s to its seat
+# nearly every beat, on a shared GPU that has crashed from VRAM starvation). instance.json:
+#   "arousal": {"held_wake": true, "conversation_mode": true, "people": ["dp"]}
+CONVERSING_WINDOW_S = 15 * 60
+CONVERSING_REFRACTORY_S = 60
+MAX_BEATS_PER_HOUR = 8          # conversation mode's brake: past this, the ordinary pause returns
+PEOPLE = ("dp",)                # operators; instance.json "people" adds to them
+
+
+def _parse_iso(v) -> Optional[float]:
+    from datetime import datetime, timezone
+    try:
+        return datetime.strptime(str(v)[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+    except Exception:
+        return None
+
+
+def flags(instance: Path) -> dict:
+    """The instance's arousal opt-ins. Absent -> all off, which is today's behaviour."""
+    try:
+        d = json.loads((Path(instance) / "instance.json").read_text()).get("arousal") or {}
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def people(instance: Path) -> set:
+    return set(PEOPLE) | {str(p) for p in (flags(instance).get("people") or [])}
+
+
+def sender_kind(instance: Path, sender: str) -> Optional[str]:
+    """What a turn from `sender` is worth, as a SALIENCE kind. None: not this path's to wake
+    (a heard voice: presence holds that wake itself, with the heard words)."""
+    if sender == "voice":
+        return None
+    if sender in people(instance):
+        return "dp_turn"
+    if sender.endswith("-claude"):
+        return "seat_turn"
+    return "peer_turn"
+
+
+def _recent_turns(instance: Path, since: float, until: Optional[float] = None):
+    from sage.gateway import conversations as conv
+    for m in conv.listing(Path(instance)):
+        for t in conv.recent(Path(instance), m["id"], limit=200):
+            ts = _parse_iso(t.get("ts"))
+            if ts is not None and ts >= since and (until is None or ts <= until):
+                yield m, t, ts
+
+
+def beats_last_hour(instance: Path, now: float) -> int:
+    n = 0
+    try:
+        for line in (Path(instance) / "heartbeats.jsonl").read_text(errors="replace").splitlines()[-40:]:
+            try:
+                if now - float(json.loads(line).get("t0") or 0) <= 3600:
+                    n += 1
+            except Exception:
+                continue
+    except Exception:
+        return 0
+    return n
+
+
+def conversing(instance: Path, now: Optional[float] = None) -> tuple:
+    """(bool, why). A live exchange with a PERSON: within CONVERSING_WINDOW_S a person wrote to
+    the being AND the being spoke (say/speak). The being talking to its seat is not this."""
+    now = now if now is not None else time.time()
+    if not flags(instance).get("conversation_mode"):
+        return False, "conversation mode is off for this instance"
+    ppl = people(instance)
+    heard_person = spoke = False
+    try:
+        for m, t, ts in _recent_turns(instance, now - CONVERSING_WINDOW_S, now):
+            if t.get("from") in ppl:
+                heard_person = True
+            if t.get("via") in ("say", "speak") and not str(m["id"]).endswith("-claude"):
+                spoke = True          # the being's own turn, anywhere but a seat's channel
+    except Exception:
+        return False, "conversations unreadable"
+    if heard_person and spoke:
+        return True, f"a person wrote and the being spoke within {CONVERSING_WINDOW_S // 60} min"
+    return False, "no live exchange with a person"
+
+
+def refractory_s(instance: Path, now: Optional[float] = None) -> tuple:
+    """(seconds, why): short in a live exchange with a person, unless the beat cap is reached."""
+    now = now if now is not None else time.time()
+    live, why = conversing(instance, now)
+    if live:
+        n = beats_last_hour(instance, now)
+        if n >= MAX_BEATS_PER_HOUR:
+            return REFRACTORY_S, f"{why}, but {n} beats in the last hour (cap {MAX_BEATS_PER_HOUR})"
+        return CONVERSING_REFRACTORY_S, f"conversing: {why}"
+    return REFRACTORY_S, why
+
+
+def late_turns(instance: Path, member: str, since: float) -> list:
+    """Turns from someone else that arrived after `since` (the beat's start) and that the beat
+    never showed the being. [(conversation id, turn)]. Bounded by `since` on purpose: an older
+    unseen turn (one the context-fit ladder trimmed, say) must not re-arm a wake every beat.
+    Heard voice is left to presence, which holds that wake with the words."""
+    from sage.gateway import conversations as conv
+    out = []
+    try:
+        for m in conv.listing(Path(instance)):
+            if member not in (m.get("participants") or []) or m["id"] == "room":
+                continue
+            for t in conv.awaiting(Path(instance), m["id"], member):
+                ts = _parse_iso(t.get("ts"))
+                if t.get("from") not in (member, "voice") and ts is not None and ts >= since:
+                    out.append((m["id"], t))
+    except Exception:
+        return []
+    return out
+
+
+def wake_for_late_turns(instance: Path, member: str, since: float, now: Optional[float] = None) -> dict:
+    """THE HELD WAKE. A turn that arrives while a beat runs is declined by decide() ("a beat is
+    already running ... read at the next beat") and nothing re-arms it: measured on Sprout, 2 of
+    13 dp turns since 09-25 waited ~31 min for the idle timer. The beat that just ran knows which
+    turns it never showed; it arms the deferred wake for them, held to the same salience bar as
+    decide() and after the refractory pause. Opt-in (instance.json arousal.held_wake).
+    Not a complete close: a turn landing after this runs but before the unit exits, or a beat
+    killed before it gets here, still falls back to the idle timer."""
+    late = late_turns(instance, member, since)
+    if not late:
+        return {"late": 0}
+    if not flags(instance).get("held_wake"):
+        return {"late": len(late), "armed": False, "why": "held_wake is off for this instance"}
+    now = now if now is not None else time.time()
+    kinds = {k for k in (sender_kind(instance, str(t.get("from"))) for _, t in late) if k}
+    sal = max((SALIENCE.get(k, 0.2) for k in kinds), default=0.0)
+    who = sorted({str(t.get("from")) for _, t in late})
+    d = {"late": len(late), "from": who, "kinds": sorted(kinds), "salience": sal}
+    if sal < ENGAGE_AT:
+        d.update(armed=False, why=f"salience {sal} is below {ENGAGE_AT}; read at the next beat")
+        return d
+    refr, why = refractory_s(instance, now)
+    d["refractory"] = why
+    d.update(_arm_deferred_wake(max(1, int(refr))))
+    if d.get("deferred"):
+        try:
+            from sage.gateway.being_join import write_wake_marker
+            write_wake_marker(f"{', '.join(who)} wrote while your last beat was running", sal)
+        except Exception:
+            pass
+    return d
 
 
 def main(argv=None) -> int:
