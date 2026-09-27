@@ -188,10 +188,28 @@ def local_clock(now_utc: datetime, cfg: Optional[dict] = None) -> str:
     return render_clock(clock_sense(now_utc, cfg=cfg))
 
 
-def offered_explore_tools(body_reading: Optional[dict]) -> list:
-    """EXPLORE_TOOLS minus the body verbs this machine's measured inventory does not carry."""
+# Verbs that act on the being's OWN worktree (instance.json `worktree`, SAGE #208). They are in
+# the registry and gated on main (git_read/search/check since #208, patch_apply #210,
+# git_restore #217), but EXPLORE_TOOLS never offered them, so on main a declared worktree was
+# invisible: measured on nomad-being 2026-09-27, the first beat after its worktree was declared
+# offered only the home and mesh verbs, and the being rested as it had for 40 beats. Offered
+# only where a worktree is declared, the same rule as BODY_VERBS: a verb for a tree the being
+# does not hold is a false affordance. pr_open / pr_amend are deliberately not here: they need a
+# remote and the PR machinery, which a standalone worktree does not have; a seat that has both
+# adds them with its own slice.
+WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore")
+
+
+def offered_explore_tools(body_reading: Optional[dict], worktree: Optional[str] = None) -> list:
+    """EXPLORE_TOOLS minus the body verbs this machine's measured inventory does not carry, plus
+    the worktree verbs when the being has a worktree of its own (inserted before `rest`)."""
     have = set(((body_reading or {}).get("inventory") or {}).get("verbs") or [])
-    return [t for t in EXPLORE_TOOLS if t not in BODY_VERBS or t in have]
+    offered = [t for t in EXPLORE_TOOLS if t not in BODY_VERBS or t in have]
+    if worktree:
+        extra = [v for v in WORKTREE_VERBS if v not in offered]
+        at = offered.index("rest") if "rest" in offered else len(offered)
+        offered[at:at] = extra
+    return offered
 # `say` is offered at REFLECTION too, and that is not redundancy. Measured on Legion
 # 2026-09-07: the being was shown dp's first turn, its state marked it unanswered, and it
 # spent every explore step reading its own source, then closed the beat. A verb in the
@@ -2548,7 +2566,7 @@ def main(argv=None) -> int:
             _room.ingest_heard(instance, args.member, (_body_cur or {}).get("inventory"))
         except Exception as _e:
             print(f"[heartbeat] room ingest failed ({type(_e).__name__}: {_e})", file=sys.stderr)
-    _explore_tools = offered_explore_tools(_body_cur)
+    _explore_tools = offered_explore_tools(_body_cur, _wt)
     _schema_measured = _schema_chars_for(_explore_tools)
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
