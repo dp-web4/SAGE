@@ -315,12 +315,62 @@ def _attr_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
     return out
 
 
+_GEMMA_STR = '<|"|>'
+
+
+def _gemma_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
+    """Gemma 4's own call syntax, `name{key:<|"|>text<|"|>,n:3}`, optionally prefixed `call:`.
+
+    Measured 2026-09-26 on nomad-being (gemma4:e2b, Ollama 0.20.0), raising sessions 376 and
+    377: offered the tools, the being answered `rest{reason:<|"|>I have finished.<|"|>}` in the
+    TEXT channel. Ollama did not lift it into tool_calls and none of the forms above reads it,
+    so the turn recorded 0 intents: the first tool choice this being made in 29+ offers,
+    recorded as no choice. String values are delimited by the `<|"|>` token; bare values are
+    read as JSON (numbers, true/false) and fall back to the raw text. Only an offered name
+    immediately followed by `{` and a well-formed body up to its closing `}` counts."""
+    out: List[dict] = []
+    for name, params in names.items():
+        for m in re.finditer(r"(?<![\w.])(?:call:)?" + re.escape(name) + r"\{", text):
+            args: Dict[str, Any] = {}
+            pos, closed = m.end(), False
+            while pos < len(text):
+                pos += re.match(r"[\s,]*", text[pos:]).end()
+                if text.startswith("}", pos):
+                    closed = True
+                    break
+                km = re.match(r"([A-Za-z_]\w*)\s*:\s*", text[pos:])
+                if not km:
+                    break
+                key, pos = km.group(1), pos + km.end()
+                if text.startswith(_GEMMA_STR, pos):
+                    end = text.find(_GEMMA_STR, pos + len(_GEMMA_STR))
+                    if end < 0:
+                        break
+                    val: Any = text[pos + len(_GEMMA_STR):end]
+                    pos = end + len(_GEMMA_STR)
+                else:
+                    raw = re.match(r"[^,}]*", text[pos:]).group(0)
+                    pos += len(raw)
+                    try:
+                        val = json.loads(raw.strip())
+                    except ValueError:
+                        val = raw.strip()
+                args[key] = val
+            if not closed:
+                continue
+            if params:
+                args = {k: v for k, v in args.items() if k in params}
+            out.append({"function": {"name": name, "arguments": args}, "_salvaged": "gemma"})
+    return out
+
+
 def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
     """Lift well-formed tool calls that a model put in the TEXT channel, in Ollama's
     tool_calls shape (plus `_salvaged`: "json" | "python" | "attr"). Accepted: a JSON object or
     array of {"name", "arguments"} (fenced or bare), fenced Python `name(k="v", ...)`
-    with literal or locally-assigned arguments, positional ones mapped in schema order, or
-    the attribute form `name k="v" ...` (see `_attr_calls`), tried last.
+    with literal or locally-assigned arguments, positional ones mapped in schema order,
+    Gemma 4's native `name{k:<|"|>v<|"|>}` (see `_gemma_calls`), or the attribute form
+    `name k="v" ...` (see `_attr_calls`), tried last.
     `tools` is what was offered this turn (Ollama tool specs); only those names count,
     so prose that mentions a tool is never a call.
 
@@ -340,6 +390,8 @@ def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
         found.extend(_python_calls(text, params))
     if blocks and not found:                    # fenced prose, bare call outside the fence
         found.extend(_json_calls(content, params))
+    if not found:
+        found.extend(_gemma_calls(content, params))
     if not found:
         found.extend(_attr_calls(content, params))
     return found

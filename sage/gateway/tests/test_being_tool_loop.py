@@ -864,3 +864,30 @@ def test_a_read_or_check_repeated_in_a_turn_is_executed_again():
                  {"content": "done", "intents": []}])
     r = run_tool_turn(c, lambda convo: next(outs), [], max_steps=5)
     assert [e for e, _ in c.calls] == ["check", "check"] and r.duplicates == []
+
+
+def test_salvage_reads_gemma4_native_call_syntax():
+    """nomad-being, gemma4:e2b, raising session 376 (2026-09-26): the reply was exactly this,
+    and it was recorded as 0 intents."""
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    names = ollama_tools(["rest", "search", "witness"])
+    r = salvage_tool_calls('rest{reason:<|"|>I have finished.<|"|>}', names)
+    assert [(c["function"]["name"], c["_salvaged"]) for c in r] == [("rest", "gemma")]
+    assert r[0]["function"]["arguments"] == {"reason": "I have finished."}
+    # the call: prefix, bare JSON values, a string holding the delimiters' neighbours
+    r = salvage_tool_calls('call:search{pattern:<|"|>def _tokens<|"|>,n:5}', names)
+    assert r[0]["function"]["arguments"] == {"pattern": "def _tokens", "n": 5}
+    # a parameter the schema does not have is dropped, like the other forms
+    r = salvage_tool_calls('witness{event:<|"|>x<|"|>,mood:<|"|>calm<|"|>}', names)
+    assert r[0]["function"]["arguments"] == {"event": "x"}
+
+
+def test_gemma4_salvage_never_reads_prose_or_unclosed_bodies():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    names = ollama_tools(["rest", "search"])
+    assert salvage_tool_calls("I will rest now and search later.", names) == []
+    assert salvage_tool_calls("rest", names) == []                       # no body, no call
+    assert salvage_tool_calls('rest{reason:<|"|>never closed', names) == []
+    assert salvage_tool_calls('unoffered{reason:<|"|>x<|"|>}', names) == []
