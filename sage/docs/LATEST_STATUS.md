@@ -57,6 +57,7 @@ The large `legion/mission-artifact` PR remains a reconciliation/nursery branch; 
 - **Branches are not deployed truth.** A machine may temporarily run branch code; that must be named in its instance/session evidence.
 - **A commit proves repository state, not machine state.** "Deployed," "healthy," "restarted," or "ran successfully" require runtime evidence.
 - **Research findings are contextual.** Preserve model, prompt/scaffold, commit, hardware, and experiment window. Do not promote one raising observation into a fleet-wide property.
+- **Local evidence is local by default.** A behavior change measured on one being ships per-instance/opt-in unless cross-instance evidence supports a broader default. See `RESEARCH_GENERALIZATION_RULE.md`.
 - **Mechanism is not capability.** A module present in source counts only when it participates in the live decision path and the claimed effect survives appropriate controls.
 - **Public main is not the whole research program.** Active private work may be ahead of public main; private experiments are not thereby public capability.
 
