@@ -1462,16 +1462,27 @@ class HestiaF1aDispatcher:
             "actionId": action_id, "outcome": "ok" if record_err is None else "partial",
             "detail": f"played {done['chars']} chars through {speaker}"
                       + ("" if record_err is None else f"; speech record NOT written ({record_err})")})
+        wid = self._local._witness(f"spoke aloud through {speaker}: {text[:120]}"
+                                   + ("" if record_err is None else " [speech record not written]"))
+        # THE ROOM IS WHERE VOICE IS A CONVERSATION (room.py). What was said aloud becomes the
+        # being's own turn there, so what it hears back sits in the same thread, in order.
+        room_err = None
+        try:
+            from sage.gateway import room as _room
+            _room.record_spoken(self.memory_root, self.member, text, witness=wid,
+                                beat=self.host_session_id)
+        except Exception as e:
+            room_err = f"{type(e).__name__}: {e}"[:160]
         said = f"played aloud through {speaker} ({done['seconds']}s): \"{text}\"."
+        where = ("It is your turn in the room conversation; what you hear back in the next two "
+                 "minutes is added there." if room_err is None
+                 else f"It could not be added to the room conversation ({room_err}).")
         if record_err is None:
-            result = said + " It is kept in your spoken.jsonl, not in any conversation."
+            result = f"{said} {where}"
         else:
-            result = (said + f" But your speech record could not be written ({record_err}), so "
-                      f"spoken.jsonl does not have it. It is not in any conversation either.")
-        return ResultEnvelope(
-            ok=True, result=result,
-            witness_id=self._local._witness(f"spoke aloud through {speaker}: {text[:120]}"
-                                            + ("" if record_err is None else " [speech record not written]")))
+            result = (f"{said} {where} Your speech record could not be written ({record_err}), "
+                      f"so spoken.jsonl does not have it.")
+        return ResultEnvelope(ok=True, result=result, witness_id=wid)
 
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
@@ -2407,6 +2418,20 @@ class HestiaF1aDispatcher:
                 f"to reply, and silence is not held against you. If you have something of "
                 f"your own to add — a follow-up question, or what you will do now — call say "
                 f"with that instead."))
+        # SAY TO THE ROOM IS SPOKEN (room.py). Everything above still applies: a placeholder, a
+        # punctuation-only line or an echo of what was heard is refused before any sound. What
+        # passes goes through speak, which checks the body can speak, plays it, and records it
+        # as the being's turn in the room.
+        from sage.gateway import room as _room
+        if to == _room.ROOM:
+            # Spoken lines are short, below echo_of's 5-gram floor, so the room adds the exact
+            # case: saying back, word for word, what the voice just said is not an answer.
+            heard = _room.repeats_heard(self.memory_root, text)
+            if heard is not None:
+                return ResultEnvelope(ok=False, error=(
+                    f"that is what the voice in the room just said ({heard!r}), word for word, so "
+                    f"nothing was spoken. If you want to answer it, say your own words to room."))
+            return self._do_speak(BeingIntent("speak", {"text": text}))
         # A RUN ASK IS A RUN REQUEST, WHICHEVER DOOR IT CAME THROUGH. Measured 2026-09-21
         # 00:00-03:52Z: 123 effector calls, 24 `say`, 0 `request_run` — after the seat named
         # request_run in four turns and in the peer_ask refusal. `say` to the seat got the

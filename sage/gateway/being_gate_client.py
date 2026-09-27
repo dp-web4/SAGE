@@ -685,6 +685,15 @@ def _pr_number_for_branch(worktree: str, ctx: Optional[dict] = None) -> str:
     return out
 
 
+def seat_name() -> str:
+    """This seat's name by fleet rule, <machine>-<model>. SAGE_SEAT names it; unset, the machine is
+    known and the model is not, and the rule says to write that rather than guess. ONE spelling
+    for every place a being is told who its seat is (the Seat trailer, the seat-channel header),
+    so an unset machine shows one name for the missing value, not two (sprout on #231)."""
+    import socket
+    return os.getenv("SAGE_SEAT", "").strip() or f"{socket.gethostname().split('.')[0].lower()}-unknown"
+
+
 def pr_attribution(member_id: str, action_id: Optional[str], being_lct: Optional[str],
                    seat: Optional[str] = None) -> str:
     """The trailers on a commit a being authored (PRD r3 §7.2). Appended by the dispatcher;
@@ -697,8 +706,7 @@ def pr_attribution(member_id: str, action_id: Optional[str], being_lct: Optional
     # The seat is <machine>-<model> by fleet rule. SAGE_SEAT names it; unset, the machine is
     # known and the model is not, and the rule says to write that rather than guess.
     if not seat:
-        import socket
-        seat = os.getenv("SAGE_SEAT", "").strip() or f"{socket.gethostname().split('.')[0].lower()}-unknown"
+        seat = seat_name()
     lines.append(f"Seat: {seat}")
     return "\n".join(lines)
 
@@ -1657,9 +1665,10 @@ _TOOL_SCHEMAS = {
               "words": "why, in your own words (optional; kept with the choice)"},
              ["mode"]),
     "speak": ("Speak aloud. Your words become a voice through this machine's speaker, which "
-              "anyone in the room may hear. This is sound, not a message: it is not added to "
-              "any conversation, so to answer someone in writing use say. One short utterance, up "
-              "to 400 characters. Write the words themselves, not a description of them.",
+              "anyone in the room may hear, and your turn in the room conversation; what the mic "
+              "hears back is added there. say to room does the same. To answer someone in "
+              "writing, use say to their conversation. One short utterance, up to 400 "
+              "characters. Write the words themselves, not a description of them.",
               {"text": "the exact words to say aloud"},
               ["text"]),
     "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "

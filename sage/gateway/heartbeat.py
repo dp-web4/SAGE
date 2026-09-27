@@ -155,11 +155,17 @@ def render_clock(c: dict) -> str:
     if c.get("since_last_beat_min") is not None:
         since.append(f"your last beat {c['since_last_beat_min']} min ago")
     for person, s in sorted((c.get("people") or {}).items()):
+        if person in ("voice", "room"):
+            continue            # the room is said below, in spoken words, not "wrote"
         if s.get("from"):
             then = _parse_ts(s["from"])
             since.append(f"{person} last wrote to you {_ago(now_utc, then)} ({then.astimezone():%A %H:%M} local)")
         if s.get("you_to"):
             since.append(f"you last wrote to {person} {_ago(now_utc, _parse_ts(s['you_to']))}")
+    heard = ((c.get("people") or {}).get("voice") or {}).get("from")
+    if heard:
+        then = _parse_ts(heard)
+        since.append(f"a voice in the room last spoke to you {_ago(now_utc, then)} ({then.astimezone():%A %H:%M} local)")
     if c.get("spoke_aloud"):
         since.append(f"you last spoke aloud {_ago(now_utc, _parse_ts(c['spoke_aloud']))}")
     if since:
@@ -1462,7 +1468,14 @@ def own_state(instance: Path, member: str = "",
         parts.append("## Your recent asks to peers\n" + asks)
     from_seat = _read(instance / SEAT_CHANNEL, 3000)
     if from_seat.strip():
-        parts.append("## From the seat (cbp-claude), directly (notes/from-the-seat.md: what the "
+        # WHICH seat. This was the literal "cbp-claude" on every being since #100 (2026-09-15), so
+        # legion-being, sprout-being and nomad's being were each told, every beat, that CBP's seat
+        # writes their from-the-seat.md. SAGE_SEAT names the seat (<machine>-<model>, the same
+        # variable the PR verbs' Seat trailer reads), through the same helper, so an unset machine
+        # shows the one fleet-rule spelling, <machine>-unknown, in both places.
+        from sage.gateway.being_gate_client import seat_name
+        _seat = seat_name()
+        parts.append(f"## From the seat ({_seat}), directly (notes/from-the-seat.md: what the "
                      "seat measured for you. You read this; you do not write it)\n" + from_seat.strip())
     from_dp = _read(instance / DP_CHANNEL, 4000)
     if from_dp.strip():
@@ -2484,6 +2497,16 @@ def main(argv=None) -> int:
         _body_cur = _bodymod.reading()
     except Exception as _e:
         _body_cur = {"error": f"{type(_e).__name__}: {_e}"}
+    # THE ROOM (room.py): on a body that can speak, heard words become turns in the `room`
+    # conversation BEFORE the state and the waiting-turn selection are built, so a voice that
+    # answered the being is a turn waiting on it, like any other.
+    if "speak" in (((_body_cur or {}).get("inventory") or {}).get("verbs") or []):
+        try:
+            from sage.gateway import room as _room
+            _room.ensure(instance, args.member)
+            _room.ingest_heard(instance, args.member, (_body_cur or {}).get("inventory"))
+        except Exception as _e:
+            print(f"[heartbeat] room ingest failed ({type(_e).__name__}: {_e})", file=sys.stderr)
     _explore_tools = offered_explore_tools(_body_cur)
     _schema_measured = _schema_chars_for(_explore_tools)
     _schema_chars = (_schema_measured if _schema_measured is not None
@@ -2537,6 +2560,10 @@ def main(argv=None) -> int:
     digest, recall = _blocks["digest"], _blocks["recall"]
 
     _harness = harness_revision(workspace)
+    # An experiment is only as reproducible as the code it ran on. Unreviewed live code has
+    # twice cost a day of archaeology; say it every beat it is true, where the operator looks.
+    if (_alarm := harness_alarm(_harness)):
+        print(f"[heartbeat] {_alarm}", file=sys.stderr)
     _clock = clock_sense(now, instance, args.member, instance_config(instance), since_beat_h=hours)
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
@@ -2560,6 +2587,7 @@ def main(argv=None) -> int:
                 f"The harness you are running under: {_harness.get('short')} on "
                 f"{_harness.get('branch')}"
                 + (" (uncommitted edits present)" if _harness.get("dirty") else "")
+                + (" (commits not yet merged to main)" if _harness.get("on_main") is False else "")
                 + ". A `check` result carries the `tree` it ran against; if that head is not "
                   "this one, the answer is about different code than the code running you.\n\n"),
         state=state_block,
@@ -3039,20 +3067,120 @@ def harness_revision(workspace: str) -> dict:
     # tree" — reasoning correctly AROUND a flag rather than with it. A warning that is always
     # on is not a warning; it is a background colour, and the cost of it is that a real one
     # would read the same.
-    st = _git("status", "--porcelain", "--", ".", ":(exclude)sage/instances")
+    # -uall so a directory holding only nested checkouts is listed per checkout, not folded
+    # into one "scratchpad/" entry that no filter below can tell from loose source.
+    st = _git("status", "--porcelain", "--untracked-files=all", "--", ".", ":(exclude)sage/instances")
     # NOT ln[3:]. Porcelain v1 is "XY PATH" at a fixed offset, but `_git` above returns
     # stdout.strip(), which eats the leading space of the FIRST line only — so a fixed
     # offset silently loses a character from one path and none of the others. It read
     # 'age/gateway/heartbeat.py' the first time it ran. Split on the status field instead.
     dirty_paths = ([ln.strip().split(" ", 1)[-1].strip() for ln in st.splitlines() if ln.strip()]
                    if st is not None else [])
-    return {"head": head, "short": (head or "")[:9] or None,
+    # ANOTHER CHECKOUT IS NOT THIS ONE'S CODE. git reports a nested repository or worktree as a
+    # single untracked directory; nothing the beat imports resolves through it. Measured on the
+    # first run of this check (2026-09-26): the live tree read "dirty" solely because three
+    # seat worktrees sat under SAGE/scratchpad/ — an always-on alarm again. They are named, not
+    # counted.
+    nested = [d for d in dirty_paths if d.endswith("/") and (Path(workspace) / d / ".git").exists()]
+    dirty_paths = [d for d in dirty_paths if d not in nested]
+    dirty = None if st is None else bool(dirty_paths)
+    # A COMMIT DOES NOT NAME DIRTY CODE. Two beats on the same head with different uncommitted
+    # edits ran different programs, and on 2026-09-25/26 a live tree carried an uncommitted
+    # guard for ~12 h that no record could tell apart from main — reconstructing what ran took
+    # archaeology across stash lists and backups. The digest is over exactly the bytes that
+    # differ from HEAD (tracked diff plus untracked source), so head+digest identifies the
+    # running code, and equal digests on two beats mean the same edits.
+    digest = _dirty_digest(workspace) if dirty else None
+    # REVIEWED MEANS REACHABLE FROM MAIN. A clean tree on a local or feature commit is still
+    # code nobody merged. Read against the LOCAL origin/main ref — the beat does not fetch;
+    # a live-tree update is a fetch + ff pull, which moves this ref with it.
+    on_main = None
+    if head:
+        try:
+            r = subprocess.run(("git", "merge-base", "--is-ancestor", head, MAIN_REF), cwd=workspace,
+                               capture_output=True, timeout=15)
+            on_main = {0: True, 1: False}.get(r.returncode)
+        except Exception:
+            pass
+    ahead = _git("rev-list", "--count", f"{MAIN_REF}..HEAD") if on_main is False else None
+    state = ("unknown" if dirty is None or on_main is None else
+             "dirty" if dirty else "unmerged" if not on_main else "clean")
+    short = (head or "")[:9] or None
+    return {"head": head, "short": short,
             "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
-            "dirty": None if st is None else bool(dirty_paths),
+            "dirty": dirty,
             # Name them, bounded. "Something is modified" sends a reader hunting; three
             # filenames end the question in the header it was raised in.
             "dirty_paths": dirty_paths[:3] or None,
-            "dirty_excludes": "sage/instances (your own journal, todo and conversations)"}
+            "dirty_count": len(dirty_paths) if st is not None else None,
+            "dirty_digest": digest,
+            "dirty_excludes": "sage/instances (your own journal, todo and conversations)",
+            "nested_checkouts": nested[:5] or None,
+            "main_ref": MAIN_REF, "on_main": on_main,
+            "ahead_of_main": int(ahead) if ahead and ahead.isdigit() else None,
+            "state": state,
+            # One string that names what ran: the commit, plus the edit set when there is one.
+            "identity": (f"{short}+{digest[:12]}" if digest else short)}
+
+
+MAIN_REF = "origin/main"
+HASH_CHUNK = 1 << 20  # untracked files are hashed whole, read 1 MiB at a time
+
+
+def _dirty_digest(workspace: str):
+    """sha256 over what differs from HEAD outside sage/instances: the binary diff of tracked
+    files, then each untracked (non-ignored) file's path, length and content hash, in sorted order. None when
+    git cannot be read. Deterministic for the same edits on the same head."""
+    import hashlib
+    import subprocess
+    spec = ("--", ".", ":(exclude)sage/instances")
+    try:
+        d = subprocess.run(("git", "diff", "HEAD", "--binary", "--no-color", "--no-ext-diff", *spec),
+                           cwd=workspace, capture_output=True, timeout=30)
+        u = subprocess.run(("git", "ls-files", "--others", "--exclude-standard", "-z", *spec),
+                           cwd=workspace, capture_output=True, timeout=30)
+    except Exception:
+        return None
+    if d.returncode or u.returncode:
+        return None
+    h = hashlib.sha256(d.stdout)
+    for rel in sorted(x for x in u.stdout.decode(errors="surrogateescape").split("\0") if x):
+        f = Path(workspace) / rel
+        if rel.endswith("/") and (f / ".git").exists():
+            continue  # a nested checkout, not this tree's code (see harness_revision)
+        h.update(b"\0untracked\0" + rel.encode(errors="surrogateescape") + b"\0")
+        # EVERY BYTE, AT ANY SIZE. A first version named files over 1 MiB by path and size, so
+        # two different same-size files on one head shared a digest (GPT review of #235) — the
+        # one thing the digest exists to rule out. Streamed so a large file costs time, not
+        # memory; each file enters as its own length + sha256, so no content can be mistaken
+        # for the separator of the next.
+        try:
+            fh, n = hashlib.sha256(), 0
+            with f.open("rb") as fp:
+                for chunk in iter(lambda: fp.read(HASH_CHUNK), b""):
+                    fh.update(chunk); n += len(chunk)
+            h.update(f"{n}:".encode() + fh.digest())
+        except OSError:
+            h.update(b"unreadable")
+    return h.hexdigest()
+
+
+def harness_alarm(rev: dict):
+    """The one line an operator sees when the being is running code that is not reviewed main,
+    or None when it is. Loud by design: printed to stderr every beat it stays true."""
+    st = rev.get("state")
+    if st == "clean":
+        return None
+    if st == "dirty":
+        paths = ", ".join(rev.get("dirty_paths") or [])
+        more = (rev.get("dirty_count") or 0) - len(rev.get("dirty_paths") or [])
+        return (f"LIVE TREE DIRTY: running {rev.get('identity')} on {rev.get('branch')} — "
+                f"{rev.get('dirty_count')} uncommitted path(s): {paths}" + (f" (+{more} more)" if more > 0 else "")
+                + ("" if rev.get("on_main") else f"; head is also NOT on {rev.get('main_ref')}"))
+    if st == "unmerged":
+        return (f"LIVE TREE UNMERGED: running {rev.get('identity')} on {rev.get('branch')} — "
+                f"{rev.get('ahead_of_main')} commit(s) not on {rev.get('main_ref')}")
+    return f"LIVE TREE UNKNOWN: could not read git state (head={rev.get('short')}, dirty={rev.get('dirty')}, on_main={rev.get('on_main')})"
 
 
 if __name__ == "__main__":

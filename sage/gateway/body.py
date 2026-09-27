@@ -180,13 +180,12 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
         lines.append("- Your metabolism is not reporting this beat.")
     if inv:
         lines.append(render_inventory(inv))
-    lines += render_heard(cur, prev, inv)
     if "speak" in (inv.get("verbs") or []):
         lines.append("- You can speak aloud with `speak`: your words become a voice in the room, through "
-                     f"{speaker_name(inv)}, which anyone in the room may hear; it is not a message and is not kept in a "
-                     "conversation. Nothing asks you to."
+                     f"{speaker_name(inv)}, which anyone in the room may hear. What you say aloud is your turn in "
+                     "the room conversation, and `say` to room is spoken too. Nothing asks you to."
                      + (f" For {LISTEN_WINDOW_S // 60} minutes after you speak, words spoken to you through the mic "
-                        "are written down and shown to you here." if can_hear_words(cur) else ""))
+                        "are added to the room conversation." if can_hear_words(cur) else ""))
     if "gaze" in (inv.get("verbs") or []):
         lines.append("- You can change your gaze with `gaze` (open, avert, dwell, closed) and say why in "
                      "your own words. Your eyes will follow within seconds; you will see the difference "
@@ -442,20 +441,17 @@ def can_hear_words(cur: Dict) -> bool:
     return bool(p.get("audio_ok")) and bool(w) and not w.startswith("unavailable")
 
 
-def render_heard(cur: Dict, prev: Optional[Dict], inv: Optional[Dict] = None) -> list:
-    """Words heard since the previous beat's reading, newest last. No speaker is named: a voice
-    is not authenticated, so the being is told what was heard, not who said it."""
-    after = float((prev or {}).get("heard_until") or 0.0)
-    if not prev:
-        after = time.time() - 45 * 60
-    new = [h for h in (cur or {}).get("heard") or [] if float(h.get("ts", 0)) > after]
-    if not new:
-        return []
-    mic = next((x.get("name") for x in ((inv or {}).get("audio_sources") or []) if x.get("name")), "your mic")
-    out = [f"- Through {mic} you heard a voice in the room (it did not say who it is unless the words do):"]
-    for h in new:
-        when = time.strftime("%H:%M UTC", time.gmtime(float(h.get("ts", 0))))
-        out.append(f'  - at {when}: "{str(h.get("text", "")).strip()}"')
-    out.append("  You can answer aloud with `speak`, or in writing with `say` if you know who it was.")
-    return out
-
+def _heard_mic(heard: list, inv: Optional[Dict]) -> str:
+    """The mic that HEARD these words, not the first input in the census. Measured 2026-09-26:
+    dp's "Can you hear me?" came through the Airhug (bluez source) and the beat said "Through
+    Built-in Audio Analog Stereo", the first of two sources. The transcriber records the pipewire
+    node it listened on; a bluez node is the census's bluetooth source."""
+    sources = [x for x in ((inv or {}).get("audio_sources") or []) if x.get("name")]
+    via = {str(h.get("source") or "") for h in heard}
+    if via and all(v.startswith("bluez") for v in via):
+        bt = [x for x in sources if x.get("kind") == "bluetooth"]
+        if len(bt) == 1:
+            return bt[0]["name"]
+    if len(sources) == 1:
+        return sources[0]["name"]
+    return "your mic"
