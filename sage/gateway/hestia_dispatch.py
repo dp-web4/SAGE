@@ -1484,6 +1484,44 @@ class HestiaF1aDispatcher:
                       f"so spoken.jsonl does not have it.")
         return ResultEnvelope(ok=True, result=result, witness_id=wid)
 
+    # -- pair_audio: reconnect the body's own headset -----------------------------------
+    def _do_pair_audio(self, intent: BeingIntent) -> ResultEnvelope:
+        """Try to connect the configured headset and say what happened (body.pair_audio).
+        dp, 2026-09-27: "a tool to try pairing, with status report - pairing won't always
+        succeed". Failure is an ordinary, informative outcome, not an error: ok=True means the
+        attempt ran and reported; `connected` says whether the headset is there now."""
+        from sage.gateway import body as _body
+        if _body.audio_device() is None:
+            return ResultEnvelope(ok=False, error=(
+                "no headset is configured on this machine, so there is nothing for pair_audio to "
+                "connect. Nothing was changed."))
+        begin = self._call("hestia_begin_action", {"tool_name": "pair_audio", "target": _body.AUDIO_BT})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        try:
+            r = _body.pair_audio()
+        except Exception as e:
+            r = {"ok": False, "outcome": "the attempt itself failed", "error": f"{type(e).__name__}: {e}"}
+        self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "ok" if r.get("ok") else "failed",
+                                              "detail": r.get("outcome", "")[:120]})
+        name = ((r.get("device") or {}).get("name")) or "your headset"
+        said = {
+            "already connected": f"{name} is already connected. speak is available.",
+            "connected": (f"{name} is connected now. Your speaker and your ear for words should be ready "
+                          f"within a few seconds; your next beat will show speak as available."),
+            "not seen": (f"{name} was not seen while looking for it, so it is probably switched off or out "
+                         f"of range. It is still not connected, and speak is not available. A person can "
+                         f"switch it on; trying again later may work."),
+            "seen but the connection failed": (
+                f"{name} was seen nearby but the connection failed ({r.get('error') or 'no reason given'}). "
+                f"It is still not connected, and speak is not available. Trying again later may work."),
+        }.get(r.get("outcome"), f"pair_audio did not complete: {r.get('outcome')} {r.get('error', '')}".strip())
+        return ResultEnvelope(ok=True, result={"connected": bool(r.get("ok")), "outcome": r.get("outcome"),
+                                               "report": said},
+                              witness_id=self._local._witness(f"pair_audio: {r.get('outcome')}"))
+
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
         if not content:

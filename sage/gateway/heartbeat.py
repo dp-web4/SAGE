@@ -44,13 +44,13 @@ from pathlib import Path
 HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_note", "witness",
-                 "request_scope", "appeal", "peer_ask", "mesh", "say", "gaze", "speak", "rest"]
+                 "request_scope", "appeal", "peer_ask", "mesh", "say", "gaze", "speak", "pair_audio", "rest"]
 # Verbs in EXPLORE_TOOLS that act on a BODY are offered only where the beat has measured that
 # body (body.inventory()["verbs"]). GPT on #183: offering `gaze` to a headless being is a
 # false affordance — it would call it, and be told its eyes will follow, on a machine with no
 # eyes. The being discovers the body it has; the verbs it is handed must come from the same
 # measurement. Everything not listed here is a text/mesh verb and is offered everywhere.
-BODY_VERBS = ("gaze", "camera", "speak")
+BODY_VERBS = ("gaze", "camera", "speak", "pair_audio")
 
 
 # THE CLOCK IS A SENSE (dp, 2026-09-26, near 2 am: "have it be aware of the local clock. i sleep
