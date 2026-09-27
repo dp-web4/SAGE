@@ -2795,6 +2795,14 @@ def main(argv=None) -> int:
         if args.idle_wake_s > 0 and not record["next_wake"].get("armed"):
             print(f"[heartbeat] NO NEXT WAKE ARMED: {record['next_wake']}", file=sys.stderr)
 
+    # THE HELD WAKE: turns that arrived while this beat ran, which it never showed the being,
+    # get a wake of their own instead of waiting for the idle timer (arousal.wake_for_late_turns).
+    try:
+        from sage.gateway import arousal as _arousal
+        record["late_turns"] = _arousal.wake_for_late_turns(instance, args.member, since=t0)
+    except Exception as _e:
+        record["late_turns"] = {"error": f"{type(_e).__name__}: {_e}"}
+
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
     print(json.dumps(record, indent=2, ensure_ascii=False, default=str))
