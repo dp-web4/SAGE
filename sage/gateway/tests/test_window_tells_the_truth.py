@@ -165,6 +165,30 @@ def test_a_process_that_is_really_running_is_reported_and_nothing_is_refuted(tmp
         proc.wait()
 
 
+def test_a_symlinked_file_in_the_home_is_found_running_under_its_own_name(tmp_path):
+    """Legion's regression, review of #227: the realpath added for macOS resolved a symlinked
+    argument to its target, which matched nothing keyed on the home's own spelling -- so a
+    running `run.py -> scratch/real.py` read as "nothing running", on every OS. Runs on Linux
+    too, so it also pins the two-spelling rule where the /var alias test skips."""
+    inst = _home(tmp_path)
+    (inst / "scratch").mkdir(exist_ok=True)
+    real = inst / "scratch" / "real.py"
+    real.write_text("import time\ntime.sleep(30)\n")
+    (inst / "run.py").symlink_to(real)
+    proc = subprocess.Popen([sys.executable, str(inst / "run.py")])
+    try:
+        seen = set()
+        for _ in range(50):
+            seen = hb._running_files(inst, ["run.py"]) or set()
+            if "run.py" in seen:
+                break
+            time.sleep(0.1)
+        assert "run.py" in seen, "a symlinked file that is running was reported as not running"
+    finally:
+        proc.kill()
+        proc.wait()
+
+
 def test_a_process_naming_the_file_by_another_spelling_of_the_same_path_is_found(tmp_path):
     """macOS: /var is a symlink to /private/var, so a process launched as `python3 /var/…/a.py`
     names the same file as the being's resolved home `/private/var/…/a.py`. Compared as strings

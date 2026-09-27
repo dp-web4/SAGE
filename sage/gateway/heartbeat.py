@@ -1027,7 +1027,9 @@ def _process_table():
         pid, _, cmd = line.strip().partition(" ")
         if pid.isdigit() and cmd.strip():
             # `ps` gives one string, not argv. Whitespace-split is exact for the paths this probes
-            # (files in a being's home); a path with a space in it is missed, never mis-matched.
+            # (files in a being's home). A path WITH A SPACE is missed -- and a miss renders as
+            # "not running", a measured absence, not as unmeasured (Legion). Rare in a being's
+            # filenames; stated so nobody reads "never mis-matched" as "never wrong".
             rows.append((pid, cmd.split()))
     return rows
 
@@ -1051,7 +1053,17 @@ def _running_files(instance: Path, rels: list):
     match this one (sprout's review of #224)."""
     found = set()
     home = instance.resolve()
-    wanted = {str(home / r): r for r in rels if r}
+    # BOTH SPELLINGS of every wanted file (Legion, review of #227): the home's own, and the
+    # resolved one. Keyed on the home's spelling alone, the realpath below lost a run on EVERY OS
+    # when the file is a symlink (`run.py -> scratch/real.py`): the argument resolved to the
+    # target and matched nothing, and the window said "nothing running" while it ran. Keyed on
+    # both, a symlinked file matches under its own name or its target's, and macOS's
+    # /var-vs-/private/var still matches.
+    wanted = {}
+    for r in rels:
+        if r:
+            wanted[str(home / r)] = r
+            wanted[os.path.realpath(home / r)] = r
     if not wanted:
         return found
     table = _process_table()
@@ -1073,12 +1085,13 @@ def _running_files(instance: Path, rels: list):
         for x in args[1:]:
             full = (os.path.normpath(x if os.path.isabs(x) else os.path.join(cwd, x))
                     if (cwd or os.path.isabs(x)) else "")
-            if full:
-                # macOS: /var is /private/var, so a process's resolved cwd and the home's
-                # resolved path must be compared on one spelling.
-                full = os.path.realpath(full)
-            if full in wanted:
-                found.add(wanted[full])
+            if not full:
+                continue
+            # The argument as written AND resolved, against both spellings of every wanted file.
+            for spelling in (full, os.path.realpath(full)):
+                if spelling in wanted:
+                    found.add(wanted[spelling])
+                    break
     return found
 
 
@@ -1244,7 +1257,9 @@ def want_check(account: str, facts: dict) -> str:
                  if l.strip().upper().startswith("WANT:")), "")
     if not want or not _WANTS_RESULTS.search(want):
         return ""
-    # None is UNMEASURED: no claim that nothing is running may be built on it.
+    # None is UNMEASURED: no claim that nothing is running may be built on it. (Also None when
+    # `facts == {}` -- files_and_runs failed as a whole -- which is a different cause with the
+    # same right answer: no note.)
     if facts.get("running") is None or facts.get("running"):
         return ""
     named = [r for r in facts.get("scripts", {}) if r in want or Path(r).name in want]
