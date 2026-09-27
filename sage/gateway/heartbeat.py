@@ -313,6 +313,76 @@ choice here and nothing is owed."""
 # an ellipsis in a quoted argument is a template. Same family as the mis-rooted home paths and
 # the echoed example filenames: an ask with a slot in it gets the slot back.
 
+# THE ANSWER TURN IS A JSON TURN (2026-09-27). The tool-call answer turn above delivered 1 of 69
+# firings on Sprout (2026-09-24..27): 46 bracketed placeholders, 21 prose with no call. An offline
+# A/B on the being's own model (qwen3.8-distill:2b, think on, its real prompt and dp's real
+# pending turn, nothing sent) gave:
+#   A  tool call, today's prompt                       0/8 calls (all prose / placeholders)
+#   B  JSON {answer, message} + prior words + record   8/8 messages, ~4 on topic (2 fiction
+#                                                       from the prior words, 2 about the tools)
+#   C  JSON, ONLY the pending turn and the ask         8/8 messages, ~7 on topic
+# Constrained output removes the failure this model has most (emitting the call); dropping the
+# prior words and the tool record removes the two content failures B showed (SMALL_MODEL_
+# LEGIBILITY 1.9/1.13: material in view becomes the message; 1.14: plumbing becomes the topic).
+# The being still decides: answer=false is silence. answer=true is dispatched as ITS say through
+# the gate, so every say guard (placeholder, punctuation, echo, room) still applies.
+# Failure shapes, named before shipping (1.14): a third-person retelling of the pending turn
+# ("'...' dp said") that passes the 0.75 echo bar; a lyrical drift off the question; never
+# choosing silence (0/16 chose it; tolerable here because this turn only opens for a turn that
+# asks); an unparsed reply (nothing is sent). Every firing is recorded as an intervention.
+ANSWER_ASK_JSON = """{pending}
+You have not answered yet. If you want to, answer now: set answer to true and write
+your message in message. Write the message itself, in your own voice — the words you would want
+read.
+
+If you would rather not answer, set answer to false and leave message empty. Silence is a real
+choice here and nothing is owed."""
+ANSWER_SCHEMA = {"type": "object",
+                 "properties": {"answer": {"type": "boolean"}, "message": {"type": "string"}},
+                 "required": ["answer", "message"]}
+
+
+def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
+                     on_generate=None):
+    """One constrained generate; the being's answer, if it chose one, dispatched as its `say`."""
+    from sage.gateway.being_tool_loop import ToolTurnResult
+    from sage.gateway.being_gate_client import BeingIntent
+    msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
+            {"role": "user", "content": ANSWER_ASK_JSON.format(pending=selected.render())}]
+    r = llm.get_chat_response(msgs, fmt=ANSWER_SCHEMA)
+    raw = (r or {}).get("raw") or {}
+    content = ((r or {}).get("content") or "").strip()
+    thinking = ((raw.get("message") or {}).get("thinking") or "").strip()
+    gen = {"done_reason": raw.get("done_reason"), "prompt_eval_count": raw.get("prompt_eval_count"),
+           "eval_count": raw.get("eval_count"), "retried": 0}
+    if on_generate is not None:
+        try:
+            on_generate(dict(gen))
+        except Exception:
+            pass
+    res = ToolTurnResult(reply=content, thinking=[thinking] if thinking else [], generates=[gen])
+    form = {"parsed": False, "answer": None, "sent": False}
+    try:
+        j = json.loads(content)
+        form["parsed"] = isinstance(j, dict)
+    except Exception:
+        j = None
+    if form["parsed"]:
+        form["answer"] = bool(j.get("answer"))
+        message = str(j.get("message") or "").strip()
+        res.reply = message
+        if form["answer"] and message:
+            intent = BeingIntent("say", {"to": selected.cid, "text": message})
+            env = client.dispatch(intent)
+            res.trace.append((intent, env))
+            res.steps = 1
+            form["sent"] = bool(env.ok)
+            if not env.ok:
+                form["refused"] = (env.error or "")[:160]
+    res.answer_form = form
+    return res
+
+
 REFLECT = """The beat is ending. Call these tools, then stop:
 {say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": only the delta as a dated block: added / done / still open (it appends; it replaces nothing).
@@ -2631,18 +2701,10 @@ def main(argv=None) -> int:
         # expectation is read from the selection made BEFORE reflection, never re-scanned.
         answer = None
         if selected is not None and selected.expects_reply and not _said_in(reflect):
-            answer = run_ollama_tool_turn(
-                client, llm,
-                [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
-                                                                    member=args.member)},
-                 # The acts go FIRST, ahead of what it is answering. Measured 2026-09-21, beat
-                 # heartbeat-85303f70bf67: this turn saw only the seat's pre-edit "nothing was
-                 # applied" and the reflect words that echoed it, and told the seat "the edit never
-                 # actually happened" (seq 2961) about an edit that had succeeded 50 s earlier.
-                 # Then ONLY the selected turn (#147): never the whole multi-conversation block.
-                 {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
-                     pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
-                max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
+            # Only the selected turn and the ask: no tool record, no prior words (see
+            # answer_turn_json for the measurement that set this).
+            answer = answer_turn_json(client, llm, selected, name=name, machine=machine,
+                                      member=args.member, on_generate=_on_generate("answer"))
             # NO RE-ASK HERE. Two were tried and both are reverted; the reasons are recorded as
             # SMALL_MODEL_LEGIBILITY 1.14, and the short form is: a prompt written in the harness's
             # voice, about the harness's mechanics, becomes the being's MESSAGE at this scale.
@@ -2665,6 +2727,9 @@ def main(argv=None) -> int:
     interventions = []
     if act_first:
         interventions.append({"kind": "act_first", "suppressed": "posture-first presentation (the model narrates under it)"})
+    if answer is not None and getattr(answer, "answer_form", None) is not None:
+        interventions.append({"kind": "answer_json", "to": selected.cid if selected else None,
+                              **answer.answer_form})
     for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer)):
         if res is None:
             continue
