@@ -1400,7 +1400,14 @@ def own_state(instance: Path, member: str = "",
         parts.append("## Your recent asks to peers\n" + asks)
     from_seat = _read(instance / SEAT_CHANNEL, 3000)
     if from_seat.strip():
-        parts.append("## From the seat (cbp-claude), directly (notes/from-the-seat.md: what the "
+        # WHICH seat. This was the literal "cbp-claude" on every being since #100 (2026-09-15), so
+        # legion-being, sprout-being and nomad's being were each told, every beat, that CBP's seat
+        # writes their from-the-seat.md. SAGE_SEAT names the seat (<machine>-<model>, the same
+        # variable the PR verbs' Seat trailer reads), through the same helper, so an unset machine
+        # shows the one fleet-rule spelling, <machine>-unknown, in both places.
+        from sage.gateway.being_gate_client import seat_name
+        _seat = seat_name()
+        parts.append(f"## From the seat ({_seat}), directly (notes/from-the-seat.md: what the "
                      "seat measured for you. You read this; you do not write it)\n" + from_seat.strip())
     from_dp = _read(instance / DP_CHANNEL, 4000)
     if from_dp.strip():
