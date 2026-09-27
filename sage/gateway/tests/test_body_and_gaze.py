@@ -119,7 +119,7 @@ def test_headless_beat_is_not_offered_gaze_and_a_live_cortex_beat_is(monkeypatch
     monkeypatch.setattr(body, "_pw_audio", lambda **k: {})
     headless = offered_explore_tools(body.reading())
     assert "gaze" not in headless and "camera" not in headless
-    assert [t for t in EXPLORE_TOOLS if t not in ("gaze", "camera", "speak")] == headless, "text verbs untouched"
+    assert [t for t in EXPLORE_TOOLS if t not in ("gaze", "camera", "speak", "pair_audio")] == headless, "text verbs untouched"
     assert "gaze" not in offered_explore_tools(None) and "say" in offered_explore_tools(None), \
         "an unmeasurable body offers no body verb"
     monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp))

@@ -1521,6 +1521,10 @@ _REGISTRY = {
     # supplies only text; the engine, the device and the length cap are fixed by the dispatcher,
     # so its reach is the machine's own speaker and nothing else.
     "speak":          dict(tool="speak",        path_args=(),       cmd_arg=None),
+    # pair_audio: try to connect this body's configured headset (2026-09-27). No arguments at
+    # all: the device and the procedure are fixed by the machine (body.AUDIO_BT), so its reach
+    # is one Bluetooth address and nothing the being names.
+    "pair_audio":     dict(tool="pair_audio",   path_args=(),       cmd_arg=None),
     "request_scope":  dict(tool="request_scope", path_args=(),      cmd_arg=None),
     # request_run: ASK THE SEAT TO RUN A FILE. It does not run anything — that is the whole
     # design. Measured 2026-09-20/21: the being asked dp in prose to run a file for it six
@@ -1571,6 +1575,7 @@ _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh"
                             "pr_open", "pr_amend", "git_restore",
                             "gaze",    # moves the body's own eyes (2026-09-23)
                             "speak",   # makes sound in the room (2026-09-26)
+                            "pair_audio",  # moves the body's own hardware link (2026-09-27)
                             "patch_apply"})   # writes the tree it reasons about (2026-09-25)
 
 # Native-tool schema for the bounded registry — what the being is offered.
@@ -1664,6 +1669,11 @@ _TOOL_SCHEMAS = {
               "target": "for dwell or avert: what, in your own words (optional)",
               "words": "why, in your own words (optional; kept with the choice)"},
              ["mode"]),
+    "pair_audio": ("Try to connect your headset (your speaker and your ear for words) when it is not "
+                   "connected. It looks for the headset, tries to connect, and tells you what happened: "
+                   "connected, not seen (probably switched off or out of range), or seen but the "
+                   "connection failed. It will not always succeed. Takes about half a minute.",
+                   {}, []),
     "speak": ("Speak aloud. Your words become a voice through this machine's speaker, which "
               "anyone in the room may hear, and your turn in the room conversation; what the mic "
               "hears back is added there. say to room does the same. To answer someone in "
