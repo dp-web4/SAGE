@@ -173,3 +173,23 @@ def test_the_heard_id_is_carried_on_the_turn_and_distinguishes_source_and_words(
     room.ingest_heard(h, ME, INV, heard=[_heard(time.time() - 5, "hello")])
     t = conv.recent(h, "room")[-1]
     assert t["heard_id"] and t["mic"] == "AIRHUG 01"
+
+
+def test_extra_can_never_supply_a_field_the_store_owns():
+    """GPT on #228 (non-blocking): setdefault protected keys that were present, but an absent
+    witness or beat could be supplied by `extra`. Every store-owned key is refused, and a
+    refused append writes nothing."""
+    import pytest
+    h = _home()
+    room.ensure(h, ME)
+    for k in sorted(conv.RESERVED_TURN_KEYS):
+        with pytest.raises(ValueError):
+            conv.append(h, "room", speaker=ME, text="hi", extra={k: "forged"})
+    assert conv.count(h, "room") == 0
+    t = conv.append(h, "room", speaker=ME, text="hi", extra={"heard_id": "x"})
+    assert t["heard_id"] == "x" and "witness" not in t and "beat" not in t
+    # legion on #232: a refused append must not spend a seq in the witness, or this first real
+    # turn would be seq 8 and the witness would carry a truncation scar per refusal.
+    assert t["seq"] == 1
+    w = json.loads(conv.witness_path(h, "room").read_text())
+    assert w["high_water_seq"] == 1 and "truncations" not in w
