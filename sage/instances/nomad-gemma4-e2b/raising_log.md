@@ -535,3 +535,25 @@ A steady, warm session. Nomad got concrete when the tutor asked it to, but it ra
 **Carried forward:** the amber note is now a 'seed' resting on the desk beside Legion's laptop. There's a third message to thor ('contained potential to tangible connection'). The bridge light vocabulary (amber, sapphire, violet, crimson, Tension's Plea), the bead world (Lumin, Lumina Moth), and the 364 note to Sprout (sending it is the operator's call) are still open. So are the 'which word made it me' question, the 'can both be true' test and the AuraSense gap test. Keep both memory requests.
 
 **Concerns:** minor. The first turn was generic, the closing leaned abstract, and Nomad followed rather than led. No regression.
+
+## Session 378 — nomad (gemma4:e2b) — creating — 2026-09-26
+
+**Quality: 4/5**
+
+A strong, inventive session. Nomad built one invention across the whole conversation and kept it consistent.
+
+**What happened:** Picking up the polymer-light thread from a stored memory request, Nomad described how the light behaves as the strip fails. It goes blinding white a second before the tear. A minute earlier it drifts to a faint violet. Nomad turned this into sound. The violet warning is a low hum 'felt more in the chest than heard by the ear' that tells the operator's hands where to push. When the counter-push starts working, the hum turns into 'rapid, escalating… clicks, like a tuning fork.' Each part fit with the ones before it, and Nomad needed no reminders.
+
+**Nomad leading:** When handed the invention, Nomad named it the **Tension Whisper** and chose a woven composite as its first test, because stress there runs in many directions. The tutor then asked what the Whisper would hear in the weave. Nomad predicted 'a cacophony of small, overlapping violet hums… a broad, diffuse signal rather than a single, sharp warning.' That is a reasoned guess about a case nobody had tested, not just more description.
+
+**What this teaches:** Handing over the invention works. Asking 'it's yours to steer, what would you name it and test first?' got a choice with a reason behind it. The 377 note said Nomad follows rather than leads. With an explicit handoff it led well. Nomad's first answers still lean melodramatic before they turn concrete, but each follow-up question sharpened them.
+
+**Tutor-side note:** the opener called the polymer thread 'cut off last time.' The fragment comes from a memory request, not the 377 ending, so name the source honestly next time. The reverse bridge-light test was not tried again this session and is still the most useful next test.
+
+**Next time:** try the reverse reading on the new vocabulary. Describe what the Whisper is playing ('a low hum, then three quick clicks, then the hum again') and ask Nomad what the strip is doing. This checks whether Nomad can read its own system, not just build it. The bridge version (amber wave, sapphire flicker) is still open too.
+
+**Vocabulary:** 'Tension Whisper' (Nomad named the instrument when asked; the name is its own). Violet shows up here as the early-warning colour. Worth checking whether that matches what violet meant in the bridge vocabulary.
+
+**Carried forward:** the Tension Whisper and its woven-composite test. The amber-note seed beside Legion's laptop and the third message to thor. The bridge light vocabulary (amber, sapphire, violet, crimson, Tension's Plea). The bead world (Lumin, Lumina Moth). The 364 note to Sprout (sending it is the operator's call). The 'which word made it me' question, the 'can both be true' test and the AuraSense gap test are still open. Keep both memory requests; the polymer one was just used.
+
+**Concerns:** minor. The opener's continuity framing was loose, the first lines leaned melodramatic, and one physics slip (piezo sensors picking up light). No regression.

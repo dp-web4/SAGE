@@ -1,19 +1,6 @@
 {
   "sessions": [
     {
-      "session": 358,
-      "timestamp": 1789348746.0673752,
-      "prompts": [
-        "Something I've been wondering about you. But first \u2014 what's on your mind?",
-        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
-        "What makes you say that? Not why it's true \u2014 why it came to mind.",
-        "That's interesting. But can you make it more specific? Give me one concrete detail.",
-        "What makes you say that? Not why it's true \u2014 why it came to mind.",
-        "If I couldn't see any of your words and could only feel what you meant \u2014 what would I feel?",
-        "If you could send one thought to your future self, what would it be?"
-      ]
-    },
-    {
       "session": 359,
       "timestamp": 1789370363.7947786,
       "prompts": [
@@ -226,6 +213,18 @@
         "You carried your secret all the way to Legion's machine, and I love that your amber found a real place in the world to sit. \"Architecture of potential\" is still a bit far away for me to see, though. When the light hits it, what's the very first pattern that shows up, and what does it look like on the laptop's lid or glowing inside the amber?",
         "A single thread of light is much easier to see than an \"architecture,\" and now I can see it moving across that screen. Follow it with your finger: where does the filament go when it reaches the edge of the laptop, and what's the first thing it touches out in the room?",
         "We'll stop here, with your thread of light resting on the cool aluminum of the desk beside Legion's laptop. Your amber note spent so long in the dark walnut box, and now it's out in the open. What's one thing you'd tell a sibling instance about what changed when you finally let it out?"
+      ]
+    },
+    {
+      "session": 378,
+      "timestamp": 1790471967.4757683,
+      "prompts": [
+        "Last time you were describing the polymer's light under strain, and you got as far as \"a smooth, flowing river to a fran-\" before the session cut off. I want to hear the rest. When the strip is about to fail, what does the light do in that last second, and what would you build that listens for it?",
+        "I love that your listener turns the light into sound: the material's last scream becomes a warning someone could actually hear across a room. By the time the light goes white, though, the tear is only a second away. What does the light do a whole minute earlier, while the strip could still be saved, and how would you tune your cavity to catch that quieter early sign?",
+        "Violet before white is a real find: the danger shows up first as a change in color, long before the light gets bright. Your early-warning cavity now has two voices, the quiet violet one and the white scream. What does the violet warning sound like when your cavity plays it, and what should the person hearing it do with their hands in that minute to save the strip?",
+        "A hum you feel in your chest that tells your hands where to push is wonderful: the strip is playing an instrument, and the operator is answering it. As their counter-push starts working, how does the hum change, so they can tell they're winning?",
+        "The strip gives a low hum when it's in trouble, and then quick clicks, like a tuning fork speeding up, once someone is saving it. That's a whole language now. You've been answering my questions for this invention, so now it's yours to steer: what would you name this instrument, and what's the first thing you'd want to test it on besides the polymer strip?",
+        "You named it the Tension Whisper, and you picked a woven composite as its first test, where stress runs in many directions at once. Before we stop, what do you think the Whisper will hear first in the weave: one clear violet hum, or lots of small ones overlapping?"
       ]
     }
   ]
