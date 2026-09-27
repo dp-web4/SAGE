@@ -73,6 +73,28 @@ def _python_status(p) -> str:
 
 
 
+def _indent_changed(removed: str, new: str, first_line: int) -> str:
+    """A range edit whose first line lost or gained leading spaces says so, in counts.
+
+    Measured on cbp-being, 2026-09-27 06:30Z: its first range edit ever aimed at the right
+    line (144) sent the right text (n_latent -> n_features) without the line's 4 leading
+    spaces. The receipt quoted the removed line WITH its spaces, which the being cannot
+    see, and the parse note named line 145, the line AFTER the cause. The being followed
+    that number and overwrote line 145 (`return X, y, W_TRUE`) with an unrelated line, then
+    dedented that until the file parsed. A count is visible where the spaces are not. The
+    edit still lands, since a dedent can be meant; only the counts are added."""
+    def first(s: str) -> str:
+        return next((ln for ln in s.splitlines() if ln.strip()), "")
+    a, b = first(removed), first(new)
+    if not a or not b:
+        return ""
+    na, nb = len(a) - len(a.lstrip(" ")), len(b) - len(b.lstrip(" "))
+    if na == nb:
+        return ""
+    return (f". Line {first_line} now starts with {nb} spaces; the line it replaced started "
+            f"with {na}. In Python those spaces decide which block a line belongs to")
+
+
 def _not_python(content: str, before: str) -> str:
     """Why `content` cannot be appended to a .py file, or "" if it can.
 
@@ -638,7 +660,7 @@ class ReferenceF1aDispatcher:
             if repl and not repl.endswith("\n") and removed.endswith("\n"):
                 repl += "\n"
             new_text = "".join(lines[:s0 - 1]) + repl + "".join(lines[s1:])
-            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)"
+            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)" + _indent_changed(removed, new, s0)
             shown = removed if len(removed) <= 400 else removed[:400] + "..."
             gone = f" The lines removed were:\n{shown}"
             return self._commit_edit(p, path, text, new_text, what, gone)
