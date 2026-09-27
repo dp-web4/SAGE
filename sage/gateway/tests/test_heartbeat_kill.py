@@ -11,8 +11,10 @@ def test_sigterm_becomes_beat_killed_inside_the_beat():
         "import time, sys\n"
         "from sage.gateway.heartbeat import install_kill_handler, BeatKilled\n"
         "install_kill_handler()\n"
-        "print('ready', flush=True)\n"
+        # 'ready' INSIDE the try: printed before it, a SIGTERM landing in the gap raised
+        # BeatKilled outside the handler and the child exited 1 (flaky on sprout, 2026-09-26)
         "try:\n"
+        "    print('ready', flush=True)\n"
         "    time.sleep(30)\n"
         "except BeatKilled as k:\n"
         "    print('record written after', k, flush=True)\n"
@@ -61,15 +63,29 @@ def test_a_sigterm_during_a_model_call_is_not_turned_into_model_text():
         "srv = socket.socket(); srv.bind(('127.0.0.1', 0)); srv.listen(1)\n"
         "port = srv.getsockname()[1]\n"
         "held = []\n"
-        "threading.Thread(target=lambda: held.append(srv.accept()), daemon=True).start()\n"
+        # the server says 'connected' only once it has READ the request, so the client is
+        # certainly blocked waiting for a reply when the parent signals (was: sleep 1.0, a guess
+        # that a slow seat could lose, and then the kill landed before the model call)
+        # OllamaIRP's constructor probes /api/tags on this same server, so a bare accept would
+        # report the PROBE (before the handler exists). Answer every probe; hold the chat.
+        "def serve():\n"
+        "    while True:\n"
+        "        c, _ = srv.accept(); req = c.recv(65536)\n"
+        "        if b'/api/tags' in req.split(b'\\r\\n', 1)[0]:\n"
+        "            body = b'{\"models\": [{\"name\": \"m\"}]}'\n"
+        "            c.sendall(b'HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\n'\n"
+        "                      b'Content-Length: %d\\r\\nConnection: close\\r\\n\\r\\n' % len(body) + body)\n"
+        "            c.close(); continue\n"
+        "        held.append(c); print('connected', flush=True)\n"
+        "threading.Thread(target=serve, daemon=True).start()\n"
         "from sage.irp.plugins.ollama_irp import OllamaIRP\n"
         "from sage.gateway.heartbeat import install_kill_handler, BeatKilled\n"
         "llm = OllamaIRP({'model_name': 'm', 'ollama_host': f'http://127.0.0.1:{port}',\n"
         "                 'timeout_seconds': 60})\n"
         "llm._ollama_available = True\n"
         "install_kill_handler()\n"
-        "print('ready', flush=True)\n"
         "try:\n"
+        "    print('ready', flush=True)\n"
         "    r = llm.get_chat_response([{'role': 'user', 'content': 'hi'}])\n"
         "    print('SWALLOWED', repr((r or {}).get('content'))[:120], flush=True)\n"
         "except BeatKilled as k:\n"
@@ -77,10 +93,10 @@ def test_a_sigterm_during_a_model_call_is_not_turned_into_model_text():
     )
     p = subprocess.Popen([sys.executable, "-c", prog], stdout=subprocess.PIPE, text=True,
                          cwd=os.getcwd())
-    while (line := p.stdout.readline()) and line.strip() != "ready":
-        pass                              # OllamaIRP prints its adapter banner first
-    assert line.strip() == "ready"
-    time.sleep(1.0)                       # let it block inside the request
+    # OllamaIRP prints its adapter banner first; wait until the SERVER has the request
+    while (line := p.stdout.readline()) and line.strip() != "connected":
+        pass
+    assert line.strip() == "connected", "the request never reached the server"
     p.send_signal(signal.SIGTERM)
     out = p.stdout.read()
     p.wait(timeout=20)

@@ -59,7 +59,12 @@ def _instance() -> Path:
 
 
 def _conv_id() -> str:
-    return os.environ.get("SAGE_SEAT_CONV", "cbp-claude")
+    # The being's conversation with ITS seat is named for the seat (legion-being's is
+    # `legion-claude`). The default was the literal "cbp-claude" on every machine, so a seat that
+    # set neither variable read CBP's conversation id and found none of its own requests. SAGE_SEAT
+    # is the fleet's name for the seat; the literal stays last only so CBP, which may set
+    # neither yet, keeps working.
+    return (os.environ.get("SAGE_SEAT_CONV") or os.environ.get("SAGE_SEAT") or "cbp-claude").strip()
 
 
 def request_path(turn: dict) -> str:
