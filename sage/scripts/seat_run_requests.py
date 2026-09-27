@@ -112,8 +112,8 @@ def pending(inst: Path, cid: str) -> list[dict]:
 
     A request is closed by a later seat turn that NAMES it (`Answers your request seq N`, or
     the hand-written "answering your seq N" form), or by a later run/decline result for the
-    same file — a result about a file answers every request for that file made before it.
-    Nothing else closes one."""
+    same file — a result about a file answers every request for that file made before it,
+    except one newer than every seq the result names. Nothing else closes one."""
     turns = conv.recent(inst, cid, limit=400)
     seat = os.environ.get("SEAT_ID", "cbp-claude")
     out = []
@@ -126,10 +126,17 @@ def pending(inst: Path, cid: str) -> list[dict]:
             if x.get("from") != seat:
                 continue
             text = x.get("text") or ""
-            if seq in _named_seqs(text):
+            named = _named_seqs(text)
+            if seq in named:
                 closed = True
                 break
-            if text.startswith(MARKER):
+            # A result never closes a request NEWER than every seq it names. Measured 2026-09-27
+            # on cbp-being: the seat declined seq 4068 (an old sha) as superseded by seq 4069
+            # (the file edited since); the same-file rule below closed 4069 too, and the answer
+            # the decline promised could no longer be posted through this script. Older
+            # same-file requests still close: answers naming only the latest re-ask have always
+            # relied on that (replayed: 50+ historical requests reopen without it).
+            if text.startswith(MARKER) and not (named and seq > max(named)):
                 first = text.splitlines()[0]
                 m = re.match(re.escape(MARKER) + r" I (?:ran|did not run) (\S+)", first)
                 # "I did not run x.py. <reason>": the sentence's period is not the path's.
