@@ -587,6 +587,26 @@ def test_an_append_to_a_broken_file_that_leaves_the_error_in_place_is_refused():
         assert f.read_text() == BROKEN_MID, "nothing written"
 
 
+def test_a_whole_program_refused_on_a_broken_file_names_a_new_name_that_creates_it():
+    """2026-09-27 18:52Z: cbp-being wrote one whole clean program three times to a broken file's
+    name; each refusal named only memory_edit. A text that is a program by itself is a fresh
+    start, so the refusal names a name that does not exist yet, and that door must create it.
+    A fragment or a label (not a program alone) gets no such door."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text(BROKEN_MID)
+    (Path(root) / "s-new.py").write_text("taken = 1\n")
+    prog = "import os\n\ndef main():\n    print(os.sep)\n\nif __name__ == '__main__':\n    main()\n"
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": prog}), _ALLOW)
+    assert not r.ok and "whole program by itself" in r.error and "s-new2.py" in r.error, r.error
+    assert f.read_text() == BROKEN_MID
+    new = disp(BeingIntent("memory_write", {"path": "s-new2.py", "content": prog}), _ALLOW)
+    assert new.ok and new.result.startswith("created s-new2.py"), new.result
+    for frag in ("# fixed line 2\n", "    return 2\n"):
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": frag}), _ALLOW)
+        assert not r.ok and "whole program" not in r.error, r.error
+
+
 def test_an_append_that_repairs_or_grows_an_unfinished_program_still_lands():
     """What the invariant must keep open on a broken file: the append that makes it parse (the
     last part of a program written in parts), and code that moves an end-of-file stop later

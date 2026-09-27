@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
@@ -788,6 +789,20 @@ class ReferenceF1aDispatcher:
             # repair it" is the point, so it leads.
             why = ((_gram or _mono) if _file_state(_before)[0] == "complete" else (_mono or _gram))
             if why:
+                # 2026-09-27 18:52Z: cbp-being memory_write-d one whole clean program three times
+                # to a broken file's name, and each refusal named only "fix line 17 with
+                # memory_edit". Its next beat edited line 209 of the broken file instead. A text
+                # that is a complete program by itself is a fresh start, and the only door to one
+                # outside notes/ and scratch/ is a name that does not exist yet (#197 names it in
+                # the append receipt; this refusal fires first on a broken file).
+                if (_file_state(content)[0] == "complete"
+                        and re.search(r"^(def|class|import|from) ", content, re.M)):
+                    fresh, n = p.with_name(f"{p.stem}-new{p.suffix}"), 2
+                    while fresh.exists():
+                        fresh, n = p.with_name(f"{p.stem}-new{n}{p.suffix}"), n + 1
+                    why += (f" Your text is a whole program by itself: to start fresh with it, "
+                            f"memory_write it to a name that does not exist yet (for example "
+                            f"{fresh.name}), and that file will hold only your text.")
                 return ResultEnvelope(ok=False, error=(
                     f"memory_write refused, nothing was written to {p.name}. {why} memory_write "
                     f"only adds to the END of the file, below its {before} lines; it cannot "
