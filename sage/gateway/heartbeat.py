@@ -360,6 +360,84 @@ ANSWER_SCHEMA = {"type": "object",
                  "required": ["answer", "message"]}
 
 
+# WHAT CHANGED, WHEN IT IS ASKED (2026-09-27). dp asked sprout-being "we have been updating your
+# tools. did you notice any differences today?" and it answered with invented changes (a warmer
+# palette, a larger font, "version 3.2.1"). Nothing in view said what had changed. Offline, on its
+# own model, with dp's real question (nothing sent):
+#   no line                                  0/12 named a real change; invented every time
+#   the line in the SYSTEM prompt            0/6
+#   the line in the USER turn, above it      6/6 named real changes, 0/6 invented
+#   ...and beside an unrelated message       1/6 derailed into listing its changes
+# So the line is placed next to the question (SMALL_MODEL_LEGIBILITY 1.9) and shown ONLY when the
+# question is about change. It is built from the being's own records, never from a claim.
+_ASKS_ABOUT_CHANGE = re.compile(
+    r"\b(chang\w*|new|different|difference\w*|updat\w*|upgrad\w*|tools?|notic\w*|improv\w*|added)\b", re.I)
+# Offered by the body's STATE, not gained: pair_audio while the headset is away, camera while the
+# cortex is down (it is the fallback for eyes). Their appearing is not a change to the being.
+_TRANSIENT_ABILITIES = {"pair_audio", "camera"}
+
+
+def asks_about_change(text: str) -> bool:
+    return bool(_ASKS_ABOUT_CHANGE.search(text or ""))
+
+
+def recent_changes(instance, days: int = 7, now: Optional[float] = None, tail: int = 1200) -> str:
+    """One line from the being's own records: body abilities first offered in the last `days`
+    (against what it already had before the window), when it began to hear words and to be told
+    the local time, and conversations opened in the window. "" when nothing changed or when the
+    record does not reach back before the window (no baseline, so no claim)."""
+    now = now if now is not None else time.time()
+    cut = datetime.fromtimestamp(now - days * 86400, timezone.utc).strftime("%Y-%m-%d")
+    try:
+        lines = (Path(instance) / "heartbeats.jsonl").read_text(errors="replace").splitlines()[-tail:]
+    except Exception:
+        return ""
+    # The baseline for abilities is the first beat that RECORDED a body census, not the first beat
+    # in the file: the census began on 2026-09-23 (#183), and `say` was not new that day.
+    before, first, baseline_seen, census_seen = set(), {}, False, False
+    for line in lines:
+        try:
+            x = json.loads(line)
+        except Exception:
+            continue
+        day = str(x.get("ts", ""))[:10]
+        inv = (x.get("body") or {}).get("inventory")
+        verbs = set(((inv or {}).get("verbs") or [])) - _TRANSIENT_ABILITIES
+        if inv and not census_seen:
+            census_seen = True
+            before |= verbs
+        feats = set()
+        if ((x.get("body") or {}).get("perception") or {}).get("audio_words"):
+            feats.add("hearing")
+        if x.get("clock"):
+            feats.add("clock")
+        if day < cut:
+            baseline_seen = True
+            before |= verbs | feats
+            continue
+        for v in verbs | feats:
+            if v not in before:
+                first.setdefault(v, day)
+    if not baseline_seen:
+        return ""
+    items = []
+    for name, day in sorted(first.items(), key=lambda kv: (kv[1], kv[0])):
+        items.append({"hearing": "you began to hear words spoken to you",
+                      "clock": "your beat began telling you the local time"}.get(name, f"you gained `{name}`")
+                     + f" ({day})")
+    try:
+        for m in sorted((Path(instance) / "conversations").glob("*.meta.json")):
+            d = json.loads(m.read_text())
+            created = str(d.get("created", ""))[:10]
+            if created >= cut:
+                items.append(f"the '{d.get('id')}' conversation opened ({created})")
+    except Exception:
+        pass
+    if not items:
+        return ""
+    return "Changes to you in the last days, from your own records: " + "; ".join(items) + "."
+
+
 def answer_turn_mode(instance) -> str:
     """"json" or "tool" (the default). Per instance (cbp-claude's pre-review of #237: CBP's 4B being
     delivers 78% of answer turns on the tool path; the A/B only measured Sprout's 2B)."""
@@ -382,7 +460,7 @@ def _answer_generate(llm, msgs):
 
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
-                     on_generate=None, acts: str = ""):
+                     on_generate=None, acts: str = "", changes: str = ""):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -393,8 +471,9 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     from sage.gateway.being_tool_loop import ToolTurnResult
     from sage.gateway.being_gate_client import BeingIntent
     ask = ANSWER_ASK_JSON.format(pending=selected.render())
+    user = "\n\n".join(p for p in (acts, changes, ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
-            {"role": "user", "content": (acts + "\n\n" + ask) if acts else ask}]
+            {"role": "user", "content": user}]
     r, retried = _answer_generate(llm, msgs)
     raw = (r or {}).get("raw") or {}
     content = ((r or {}).get("content") or "").strip()
@@ -409,7 +488,8 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
             pass
     res = ToolTurnResult(reply=content, thinking=[thinking] if thinking else [], generates=[gen])
     form = {"parsed": False, "answer": None, "sent": False, "retried": retried,
-            "done_reason": raw.get("done_reason"), "with_acts": bool(acts)}
+            "done_reason": raw.get("done_reason"), "with_acts": bool(acts),
+            "with_changes": bool(changes)}
     try:
         j = json.loads(content)
         form["parsed"] = isinstance(j, dict)
@@ -2770,9 +2850,10 @@ def main(argv=None) -> int:
                          if str(selected.speaker or "").endswith("-claude") and (
                              (explore is not None and explore.trace) or (after is not None and after.trace))
                          else "")
+                _changes = recent_changes(instance) if asks_about_change(selected.text) else ""
                 answer = answer_turn_json(client, llm, selected, name=name, machine=machine,
                                           member=args.member, on_generate=_on_generate("answer"),
-                                          acts=_acts)
+                                          acts=_acts, changes=_changes)
             else:
                 answer = run_ollama_tool_turn(
                     client, llm,
