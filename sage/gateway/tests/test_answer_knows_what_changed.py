@@ -92,7 +92,10 @@ def test_the_gate_asks_what_changed_not_what_exists():
            "my beat never ends. and neither does yours", "how are you feeling?", "can you change the subject?",
            "which tools do you like best?", "notice how quiet it is", "what do you see out the window?",
            "tell me about the new story you're writing", "i updated my own laptop today",
-           "what's new in the garden story?", "what's different between a beat and a session?"]
+           "what's new in the garden story?", "what's different between a beat and a session?",
+           "what's different in this file?", "what's different about these two models?",
+           "what is different about qwen and gemma?", "what's changed in the forum?",
+           "what's different from gemma?"]                  # GPT on #255
     assert [q for q in on if not hb.asks_about_change(q)] == []
     assert [q for q in off if hb.asks_about_change(q)] == []
 

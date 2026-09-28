@@ -382,10 +382,12 @@ ANSWER_SCHEMA = {"type": "object",
 # gate had not matched the wording (the "what's new" shape had to end at "new"), so the record of
 # what changed was simply not on offer. That shape now takes new/different, joined by and/or, still
 # ending there. Offering the line does not oblige the being to use it; it only makes the facts
-# available when the question is about change. ("different between" is excluded: that compares two
-# other things.)
+# available when the question is about change. The generic "what's changed/different" shape counts
+# only when it ends there, is about you/your, or is anchored in time ("since", "today", "from
+# yesterday"): "what's different in this file?" or "about these two models?" is not about the being
+# (GPT on #255).
 _ASKS_ABOUT_CHANGE = re.compile(r"""(?ix)
-      \bwhat(?:'s|\s+is|\s+has)?\s+(?:been\s+)?(?:changed|updated|different(?!\s+between\b))\b
+      \bwhat(?:'s|\s+is|\s+has)?\s+(?:been\s+)?(?:changed|updated|different)(?:\s+(?:for|about|in|with|to)\s+(?:you|your)\b|\s+(?:since|today|lately|recently|overnight|this\s+(?:week|morning|evening))\b|\s+from\s+(?:yesterday|before|earlier|last)\b|\s*[?.!]?\s*$)
     | \bwhat(?:'s|\s+is)\s+(?:new|different)(?:\s+(?:and|or)\s+(?:new|different))?(?:\s+(?:with|about|for)\s+you)?\s*\??\s*$
     | \bany(?:thing)?\s+(?:new|different|changed)\b
     | \b(?:notic|see|feel|spot)\w*\b[^?.!]{0,30}\b(?:differen\w*|chang\w*|added|new)\b
