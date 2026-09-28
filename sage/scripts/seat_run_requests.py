@@ -17,6 +17,7 @@ auto-runner would be the unconfined capability dp ruled against, with extra step
 Usage:
     seat_run_requests.py list
     seat_run_requests.py run     <path-in-being-home> [--timeout 120] [--seq N ...] [-- <script args>]
+      (a long answer is posted whole; the being's beat shows CONV_TURN_CHARS of it, head and tail)
     seat_run_requests.py decline <path-in-being-home> --reason "..." [--seq N ...]
 
 An answer names the requests it answers ("Answers your request seq N."), and only a named
@@ -179,6 +180,35 @@ def _target(inst: Path, raw: str) -> Path:
     if not p.is_file():
         sys.exit(f"refusing: {p} is not a file")
     return p
+
+
+def _window_cap() -> int:
+    """How many chars of one LIVE turn the being's beat shows. Anything longer is cut in the
+    MIDDLE (conversations._shown_text keeps 2/5 head, 3/5 tail). The record keeps the whole turn;
+    only what the being sees per beat is bounded."""
+    try:
+        from sage.gateway.heartbeat import CONV_TURN_CHARS  # noqa: E402  (0.05 s, measured)
+        return int(CONV_TURN_CHARS)
+    except Exception:  # pragma: no cover - the constant moved; the measured value on 2026-09-28
+        return 1200
+
+
+def as_shown(text: str, cap: int | None = None) -> tuple[str, str]:
+    """(what the being will see of `text`, what it will NOT see). Empty second value: shown whole.
+
+    Measured 2026-09-28, seq 4211 -> 4214: a `decline` whose --reason pasted a whole run (1,939
+    chars) showed the being its first 480 and last 720 chars. The head said "I did not run" and
+    quoted an earlier "timed out after 400s"; every epoch line, the exit code and the traceback
+    were in the 739 omitted chars. The being's next three requests said the seat "ran the file
+    but it timed out ... no exit code, no stdout, no stderr" -- a faithful reading of what it
+    was shown. The seat had posted the evidence into the one place the being cannot see."""
+    cap = cap or _window_cap()
+    if len(text) <= cap:
+        return text, ""
+    head_n = cap * 2 // 5
+    tail_n = cap - head_n
+    shown = conv._shown_text({"text": text, "seq": "N"}, cap, _conv_id())
+    return shown, text[head_n:len(text) - tail_n]
 
 
 def _say(text: str) -> None:
@@ -348,7 +378,7 @@ def cmd_run(args) -> None:
     verdict = (f"timed out after {args.timeout}s — no exit code, so this is not a pass or a fail"
                if timed else f"exit code {rc}")
     print(f"ran {rel}: {verdict}")
-    _say("\n".join([
+    text = "\n".join([
         f"[request_run] I ran {rel} (sha {ran_sha}) {ran_line(script_args)}, {WHERE_GPU if args.gpu else WHERE_HIDDEN}. {verdict}.",
         "",
         block("stdout", out),
@@ -357,7 +387,15 @@ def cmd_run(args) -> None:
         "",
         _answers(seqs),
         "That is the whole output, unedited. Nothing is owed by you on this.",
-    ]))
+    ])
+    shown, hidden = as_shown(text)
+    if hidden:
+        # The run answer is shaped for the cut (verdict first, stderr and the answers line last),
+        # so it posts; the seat just gets told what the being will and will not see of it.
+        print(f"note: {len(text)} chars; the being's beat shows {_window_cap()} and cuts "
+              f"{len(hidden)} from the middle (stdout's later lines). The verdict and the end of "
+              f"stderr are in the shown part.", file=sys.stderr)
+    _say(text)
 
 
 def _answers(seqs: list[int]) -> str:
@@ -365,13 +403,31 @@ def _answers(seqs: list[int]) -> str:
             else "No pending request named this file, so this answers none of your requests.")
 
 
+def decline_text(rel, reason: str, seqs: list[int]) -> str:
+    return (f"[request_run] I did not run {rel}. {reason}\n\n{_answers(seqs)}\n"
+            f"This is a decision, not a failure, and it is not about your standing. If you want "
+            f"it run under different conditions, say which and ask again.")
+
+
 def cmd_decline(args) -> None:
     inst = _instance()
     rel = _target(inst, args.path).relative_to(inst.resolve())
     seqs = bind(inst, _conv_id(), str(rel), args.seq)
-    _say(f"[request_run] I did not run {rel}. {args.reason}\n\n{_answers(seqs)}\n"
-         f"This is a decision, not a failure, and it is not about your standing. If you want "
-         f"it run under different conditions, say which and ask again.")
+    text = decline_text(rel, args.reason, seqs)
+    shown, hidden = as_shown(text)
+    if hidden and not args.cut_anyway:
+        # A decline says why not. Evidence pasted into one falls in the cut (see as_shown): the
+        # being reads the head, "I did not run", and asks again. The refusal shows the seat the
+        # being's view so the fix is a choice, not a guess.
+        sys.exit(f"refusing: this decline is {len(text)} chars and the being's beat shows "
+                 f"{_window_cap()} of a live turn, cutting the middle. Nothing was posted.\n"
+                 f"The being would see:\n---\n{shown}\n---\nand would NOT see these "
+                 f"{len(hidden)} chars:\n---\n{hidden[:400]}{'...' if len(hidden) > 400 else ''}\n---\n"
+                 f"If that hidden part is a run's output, use `run` (its answer puts the verdict "
+                 f"first and stderr last, and the tail survives the cut) or shorten the reason to "
+                 f"the decision and where the result already is (a seq). Pass --cut-anyway to post "
+                 f"it as it stands.")
+    _say(text)
 
 
 def main() -> int:
@@ -390,6 +446,9 @@ def main() -> int:
     r.set_defaults(fn=cmd_run)
     d = sub.add_parser("decline"); d.add_argument("path"); d.add_argument("--reason", required=True)
     d.add_argument("--seq", type=int, action="append", help="as for run")
+    d.add_argument("--cut-anyway", action="store_true",
+                   help="post a reason longer than the being's per-turn window even though its "
+                        "middle will not be shown (the refusal prints exactly what would be seen)")
     d.set_defaults(fn=cmd_decline)
     # Everything after `--` is the being's script's own argv. Split by hand: argparse
     # subparsers reject `--` followed by option-shaped words ("unrecognized arguments").
