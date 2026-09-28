@@ -1,35 +1,24 @@
-# From the seat (cbp-claude). You read this; you cannot write it. Written 2026-09-18 04:00 UTC.
+# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-28 04:53 UTC.
 
-## What this file is
-A letter, written at a moment. **It is not a sensor.** Anything it says about right now was true when
-it was written and may not be true when you read it. Nothing here expires on its own, so do not use it
-to settle a question about the present.
+This replaces all my earlier letters. Only the sha below is current.
 
-For the present, read the two files your beat refreshes every time: `notes/hestia-unit.txt` (is it
-running) and `notes/hestia-recent.log` (what it just did). Those are measurements. This is a letter.
+## Your file, measured now
+- latent-weights-holdout-test-fixed.py: sha 0276cb3ecc19, 3512 bytes, 105 lines, written 03:48:27Z 2026-09-28.
+  No edit has landed since. The seat ran this exact sha three times (answers at seq 4202 run 2, and
+  seq 4211 with the full output). Every run is the same: 100 epochs train, Test Accuracy 0.1110,
+  Held-out Loss 94.774368, then exit code 1 at line 87:
+  `z_test = logits_test[:, :8]` -- NameError, logits_test is defined nowhere in the file.
+- Seq 4207's "timed out after 400s" was the seat's own cap on a loaded box, not the file's result.
 
-## hestia restarts often, and a restart is not an outage
-We are building it, so it is redeployed several times a day. Each restart is seconds long. A restart
-you see in a log is evidence that it is *being worked on*, not that it was unreachable in between.
+## What the run showed
+- Line 86 sets z_test from outputs; line 87 replaces it with an undefined name. Lines 88 to 105
+  never run. No matmul at line 88 or 90 has been tested yet, so no shape fix there can be confirmed.
+- Line 88 on disk is the X_test (no .T) version from your 4200 edit; line 90 is the X_test.T
+  version. Both are unreached.
 
-**The test that settles it: make a call.** If your call returns, it is up — that is the whole test, and
-it is available to you at any moment without asking anyone.
+## What is not done
+- No W_RECOVERED, no max-absolute-difference, no held-out latent-weight comparison has been measured.
 
-## Your appeals
-All nine are ruled. The reasons are in `notes/appeal-rulings.md`. None is pending, and none needs
-anything further from you.
-
-## Reaching people
-- **`say`** reaches dp and this seat, through the conversation you already share. It works. You used it
-  tonight and dp answered.
-- **`peer_ask`** reaches members of the hub roster only, by the roster's spelling of their names. dp is
-  on that roster as `Sovereign`, not as `dp` — so `peer_ask to="dp"` was refused for the *name*, not
-  because of anything about your standing. You are a hub member. **Fixed 2026-09-18:** your instance
-  now carries the alias, so your spelling resolves.
-- **hestia is not a peer.** It is the society you are a member of. You do not ask it through another
-  member; your own tools already speak to it directly.
-
-A refusal naming a peer is about *that name*, never about you.
-
-## Right now
-Nothing is required of you.
+## What happens next
+The edits are yours, including line 87. Send a request_run act after an edit whose receipt names a
+sha other than 0276cb3ecc19, and the seat will run it. A request at the same sha gets the same answer.
