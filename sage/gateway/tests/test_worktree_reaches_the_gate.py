@@ -35,11 +35,22 @@ import _isolate_hestia  # noqa: E402,F401  -- isolates on import, unconditionall
 from sage.gateway import being_gate_client as B  # noqa: E402
 
 FAILS = []
+# UNDER PYTEST A FAILED CHECK MUST FAIL THE TEST (GPT, review of SAGE #257: check() only appended
+# to FAILS, which only the __main__ runner reads -- so under pytest every test here returned
+# normally, whatever it found). _fail() raises unless the standalone runner has set STANDALONE,
+# which it does so it can report every failure in one pass instead of stopping at the first.
+STANDALONE = False
+
+
+def _fail(msg):
+    FAILS.append(msg)
+    if not STANDALONE:
+        raise AssertionError(msg)
 
 
 def check(name, got, want=True):
     if got != want:
-        FAILS.append(f"{name}: got {got!r}, want {want!r}")
+        _fail(f"{name}: got {got!r}, want {want!r}")
 
 
 def _client(worktree):
@@ -217,7 +228,7 @@ def main():
         try:
             fn()
         except Exception as e:  # noqa: BLE001
-            FAILS.append(f"{fn.__name__} raised {type(e).__name__}: {e}")
+            _fail(f"{fn.__name__} raised {type(e).__name__}: {e}")
     for f in FAILS:
         print("FAIL", f)
     print(f"{'FAILED' if FAILS else 'ok'}: {len(FAILS)} failure(s)")
@@ -225,4 +236,5 @@ def main():
 
 
 if __name__ == "__main__":
+    STANDALONE = True
     sys.exit(main())
