@@ -45,14 +45,29 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+# Run as a plain script, conftest does not load -- so this file isolates itself the same way:
+# never reach the seat's LIVE hestia daemon, which would mint `test-being` as a real member.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _isolate_hestia  # noqa: E402,F401  -- isolates on import, unconditionally
 from sage.gateway import being_gate_client as B  # noqa: E402
 
 FAILS = []
+# UNDER PYTEST A FAILED CHECK MUST FAIL THE TEST (GPT, review of SAGE #257: check() only appended
+# to FAILS, which only the __main__ runner reads -- so under pytest every test here returned
+# normally, whatever it found). _fail() raises unless the standalone runner has set STANDALONE,
+# which it does so it can report every failure in one pass instead of stopping at the first.
+STANDALONE = False
+
+
+def _fail(msg):
+    FAILS.append(msg)
+    if not STANDALONE:
+        raise AssertionError(msg)
 
 
 def check(name, got, want=True):
     if got != want:
-        FAILS.append(f"{name}: got {got!r}, want {want!r}")
+        _fail(f"{name}: got {got!r}, want {want!r}")
 
 
 def refuses(name, args, ctx, must_say):
@@ -64,12 +79,12 @@ def refuses(name, args, ctx, must_say):
         B.patch_apply_command(args, ctx)
     except ValueError as e:
         if must_say.lower() not in str(e).lower():
-            FAILS.append(f"{name}: refused, but the reason did not say {must_say!r}: {e}")
+            _fail(f"{name}: refused, but the reason did not say {must_say!r}: {e}")
         return
     except Exception as e:  # noqa: BLE001
-        FAILS.append(f"{name}: raised {type(e).__name__}, not a named ValueError: {e}")
+        _fail(f"{name}: raised {type(e).__name__}, not a named ValueError: {e}")
         return
-    FAILS.append(f"{name}: was ACCEPTED, and must not be")
+    _fail(f"{name}: was ACCEPTED, and must not be")
 
 
 def _diff(*paths, body="@@ -1 +1 @@\n-old\n+new\n"):
@@ -664,7 +679,7 @@ def main():
         try:
             fn()
         except Exception as e:  # noqa: BLE001
-            FAILS.append(f"{fn.__name__} raised {type(e).__name__}: {e}")
+            _fail(f"{fn.__name__} raised {type(e).__name__}: {e}")
     for f in FAILS:
         print("FAIL", f)
     if SKIPPED:
@@ -678,4 +693,5 @@ def main():
 
 
 if __name__ == "__main__":
+    STANDALONE = True
     sys.exit(main())
