@@ -313,6 +313,12 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         if op == "status":
             raise ValueError("git_read op='status' reports your own worktree and takes no path")
         base += f" -C {shlex.quote(full if os.path.isdir(full) else os.path.dirname(full))}"
+    elif worktree:
+        # NAME THE TREE. Without -C the command ran in the dispatcher's cwd (the worktree), so it
+        # executed in the right place, but the string the LAW judged named no repository at all:
+        # `git log` about which tree? main #208's invariant, pinned by
+        # test_worktree_reaches_the_gate; the carrier's reach-widening had dropped it.
+        base += f" -C {shlex.quote(os.path.realpath(worktree))}"
     if op == "status":
         return f"{base} status --porcelain=v1 --branch"
     if op == "log":

@@ -1328,7 +1328,10 @@ def test_git_read_reaches_the_granted_tree_and_stops_at_the_machine(tmp_path):
     assert f.startswith(f"git --no-pager -C {inst} show "), "a FILE resolves -C to its directory"
 
     # relative paths are unchanged: worktree-bound, no -C
-    assert git_read_command({"op": "log", "path": "sage"}, ctx).startswith("git --no-pager log ")
+    # inside the worktree the command NAMES the worktree (main #208's invariant: the law judges
+    # which tree), not a bare `git log` resolved against the dispatcher's cwd
+    assert git_read_command({"op": "log", "path": "sage"}, ctx).startswith(
+        f"git --no-pager -C {os.path.realpath(ctx['worktree'])} log ")
     # the bound: outside the fleet root is a no, not a scope question
     for bad in ("/etc", str(tmp_path / "elsewhere")):
         with pytest.raises(ValueError, match="outside anything you can reach"):

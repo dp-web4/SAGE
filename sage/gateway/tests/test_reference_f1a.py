@@ -1118,3 +1118,27 @@ def test_a_missed_read_names_where_the_file_actually_is(tmp_path):
     # and the real path still reads
     ok = d._do_memory_read(BeingIntent("memory_read", {"path": "scratch/game/moves.md"}))
     assert ok.ok and "ACTION6" in ok.result
+def test_an_identical_replacement_says_nothing_changed():
+    """2026-09-24 10:42 cbp-being replaced line 2686 with the text already on it; the receipt
+    said "This changed the file on disk", and its closing note listed 2686 as fixed. Again
+    2026-09-28 10:08Z at line 113 of latent-weights-holdout-test-fixed.py, followed by a
+    request_run at the unchanged sha (seq 4301)."""
+    disp, root = _disp()
+    p = Path(root) / "s.py"
+    p.write_text("def f():\n    print(1)\n")
+    before = os.stat(p).st_mtime_ns
+    for args in ({"start_line": "2", "end_line": "2", "new": "    print(1)"},
+                 {"old": "    print(1)", "new": "    print(1)"}):
+        r = disp(BeingIntent("memory_edit", {"path": "s.py", **args}), _ALLOW)
+        assert not r.ok and "changed nothing" in r.error and "not in this edit" in r.error, r
+    assert os.stat(p).st_mtime_ns == before
+
+
+def test_an_edit_aimed_at_a_conversation_is_told_to_name_its_file():
+    """Same beat: memory_edit lines 2367-2377 of conversations/cbp-claude.jsonl (the fix was
+    for a .py). The refusal named only `say`; the being then said the fix was done."""
+    disp, root = _disp()
+    os.makedirs(os.path.join(root, "conversations"))
+    r = disp(BeingIntent("memory_edit", {"path": "conversations/cbp-claude.jsonl",
+                                         "old": "x", "new": "y"}), _ALLOW)
+    assert not r.ok and "give that file's path" in r.error and "does not change any file" in r.error, r
