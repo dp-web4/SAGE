@@ -28,6 +28,9 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+# Run as a plain script, conftest does not load -- so this file isolates itself the same way:
+# never reach the seat's LIVE hestia daemon, which would mint `test-being` as a real member.
+os.environ.setdefault("HESTIA_ENDPOINT", "http://127.0.0.1:9/mcp")
 from sage.gateway import being_gate_client as B  # noqa: E402
 
 FAILS = []
@@ -71,8 +74,12 @@ def test_the_gate_composes_with_the_worktree():
         check("the ctx carries the worktree", ctx.get("worktree"), c.worktree)
         check("...and the memory root, the other fact a composer may know",
               ctx.get("memory_root"), c.memory_root)
-        check("the ctx carries nothing else -- a composer must not reach past the act",
-              sorted(ctx), ["memory_root", "worktree"])
+        # An ENUMERATION, and it grows only with a reason: #218 (the ARC game verb) added
+        # `game_stepper`, which `game` composes the judged line from, and `member`, which a
+        # composed git verb needs to name only the being's own branches (being_branch_prefix).
+        # A key not listed here is a composer reaching past the law's view of the act.
+        check("the ctx carries nothing unlisted -- a composer must not reach past the act",
+              sorted(ctx), ["game_stepper", "member", "memory_root", "worktree"])
         for eff, args in (("search", {"pattern": "def compose("}), ("git_read", {"op": "log"})):
             ev = c._normalize(B.BeingIntent(effector=eff, args=args))
             check(f"{eff}: the gate composed a command at all", bool(ev.command))
@@ -145,7 +152,10 @@ def test_the_construction_sites_give_both_halves_the_same_tree():
     body = gt[gt.index("def build_client("):gt.index("\ndef ", gt.index("def build_client(") + 10)]
     check("build_client: resolved through the one resolver",
           "worktree = worktree_for(instance)" in body)
-    check("build_client: handed to the dispatcher", "worktree=worktree)" in body)
+    # The PROPERTY, not the spelling: the first cut pinned `worktree=worktree)` and went red when
+    # #218 appended an argument after it, with the dispatcher still receiving the worktree.
+    disp = body[body.index("HestiaF1aDispatcher("):body.index("client = BeingGateClient(")]
+    check("build_client: handed to the dispatcher", "worktree=worktree" in disp)
     check("build_client: ...and to the gate client", body.count("worktree=worktree") >= 2)
     # One variable, not two lookups: two would be one edit away from disagreeing.
     check("build_client: not looked up twice", body.count("worktree_for("), 1)

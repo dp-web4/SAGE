@@ -45,6 +45,9 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+# Run as a plain script, conftest does not load -- so this file isolates itself the same way:
+# never reach the seat's LIVE hestia daemon, which would mint `test-being` as a real member.
+os.environ.setdefault("HESTIA_ENDPOINT", "http://127.0.0.1:9/mcp")
 from sage.gateway import being_gate_client as B  # noqa: E402
 
 FAILS = []
