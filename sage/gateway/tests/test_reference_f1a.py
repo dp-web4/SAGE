@@ -449,6 +449,27 @@ def test_memory_edit_one_line_by_number_keeps_the_line_break():
     assert (home / "notes" / "s.py").read_text() == "a = 1\ny = np.load(data_path.replace('.npy', '_labels.npy'))\nb = 2\n"
 
 
+def test_a_range_edit_that_drops_the_indent_names_both_space_counts():
+    """cbp-being 2026-09-27 06:30Z: start_line 144, the right fix, 4 leading spaces missing.
+    The parse note named line 145 and the being overwrote `return X, y, W_TRUE` there.
+    The receipt must name the dropped spaces as counts, ahead of the parse note."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("def g(n):\n    y = n + 1\n    return y\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": "2", "end_line": "2",
+                                          "content": "y = n + 2"}), _ALLOW)
+    assert r.ok, r.error
+    assert "Line 2 now starts with 0 spaces; the line it replaced started with 4" in r.result, r.result
+    assert r.result.index("started with 4") < r.result.index("IndentationError"), \
+        "the count must come before the parse note that names the next line"
+    # Same indent: no note.
+    f.write_text("def g(n):\n    y = n + 1\n    return y\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "new": "    y = n + 2"}), _ALLOW)
+    assert r.ok and "spaces" not in r.result, r.result
+
+
 def test_memory_edit_by_line_refuses_lines_that_do_not_exist_and_changes_nothing():
     disp, root = _disp()
     home = Path(root)
@@ -587,6 +608,27 @@ def test_an_append_to_a_broken_file_that_leaves_the_error_in_place_is_refused():
         assert "stops at line 2" in r.error and "Appending below it cannot fix that" in r.error
         assert "memory_edit" in r.error
         assert f.read_text() == BROKEN_MID, "nothing written"
+
+
+def test_a_whole_program_refused_on_a_broken_file_names_a_new_name_that_creates_it():
+    """2026-09-27 18:52Z: cbp-being wrote one whole clean program three times to a broken file's
+    name; each refusal named only memory_edit. A text that is a program by itself is a fresh
+    start, so the refusal names a name that does not exist yet, and that door must create it.
+    A fragment or a label (not a program alone) gets no such door."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text(BROKEN_MID)
+    (Path(root) / "s-new.py").write_text("taken = 1\n")
+    prog = "import os\n\ndef main():\n    print(os.sep)\n\nif __name__ == '__main__':\n    main()\n"
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": prog}), _ALLOW)
+    assert not r.ok and "whole program by itself" in r.error and "s-new2.py" in r.error, r.error
+    assert "s.py itself stays exactly as it is" in r.error and "keep failing" in r.error, r.error
+    assert f.read_text() == BROKEN_MID
+    new = disp(BeingIntent("memory_write", {"path": "s-new2.py", "content": prog}), _ALLOW)
+    assert new.ok and new.result.startswith("created s-new2.py"), new.result
+    for frag in ("# fixed line 2\n", "    return 2\n"):
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": frag}), _ALLOW)
+        assert not r.ok and "whole program" not in r.error, r.error
 
 
 def test_an_append_that_repairs_or_grows_an_unfinished_program_still_lands():

@@ -457,6 +457,7 @@ async function loadChatHistory() {
 // and answered at the next beat. Saying so on screen is the whole difference between
 // "it is thinking" and "you have been ignored".
 let convs = [];
+let convRefused = false;   // /conversations answered 403 (not loopback): unknown, not empty
 let convId = null;
 const convSelect = document.getElementById('conv-select');
 const convState = document.getElementById('conv-state');
@@ -470,10 +471,24 @@ function kindOf(from) {
   return 'seat';
 }
 
+// A REFUSAL IS NOT AN ABSENCE (dp, 2026-09-27: "i still don't see separate conversations in the
+// sage console"). /conversations answers only over loopback, and this function never checked
+// r.ok: viewed from another device, the 403's JSON had no `conversations` field, so the panel
+// said "No conversations on this machine yet." on a machine that had them, and fell back to the
+// raw-model chat. The daemon's own words -- why it refused, and where to read instead -- are
+// shown now, and the panel does not pretend the machine is empty.
 async function loadConversations() {
   try {
     const r = await fetch(BASE + '/conversations');
-    const d = await r.json();
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      convs = []; convId = null; convSelect.innerHTML = '';
+      convNote.textContent = 'Conversations are not shown from here: ' + (d.error || ('HTTP ' + r.status)) +
+        (d.hint ? ' ' + d.hint + '.' : '') + ' This is not "none" -- the machine did not say.';
+      convRefused = true;
+      return;
+    }
+    convRefused = false;
     convs = d.conversations || [];
     const keep = convId;
     convSelect.innerHTML = '';
@@ -486,7 +501,13 @@ async function loadConversations() {
     convId = (keep && convs.some(c => c.id === keep)) ? keep
            : (convs.find(convWritable) || convs[0] || {}).id || null;
     if (convId) { convSelect.value = convId; await loadConversation(convId); }
-    else { convNote.textContent = 'No conversations on this machine yet.'; }
+    else {
+      // Empty really is empty here (the daemon answered). Say whose move that is: nothing in the
+      // fleet creates a being's conversations automatically -- the seat does, once.
+      convNote.textContent = 'No conversations exist for ' + (d.being || 'this being') + ' on this machine. ' +
+        'The seat creates them (sage.gateway.conversations.create: a "dp" one, and one named for the seat). ' +
+        'Until then the box below talks to the raw model, not the being.';
+    }
   } catch (e) {
     convNote.textContent = 'Could not load conversations: ' + e.message;
   }
@@ -584,7 +605,9 @@ async function init() {
   // chat_history.jsonl — the record of prompts sent to the WEIGHTS — and is kept only
   // as a fallback for a machine with no conversations yet, so the panel is never blank.
   await loadConversations();
-  if (!convId) loadChatHistory();
+  // The raw-model history is a fallback for a machine that HAS no conversations -- never for one
+  // that refused to say, where showing it would dress the model up as the being.
+  if (!convId && !convRefused) loadChatHistory();
   refreshHealth();
   refreshStatus();
   setInterval(refreshHealth, 5000);

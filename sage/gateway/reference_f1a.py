@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
@@ -71,6 +72,28 @@ def _python_status(p) -> str:
         return ""
     return f" Python can parse {p.name} now. That is not the same as running it."
 
+
+
+def _indent_changed(removed: str, new: str, first_line: int) -> str:
+    """A range edit whose first line lost or gained leading spaces says so, in counts.
+
+    Measured on cbp-being, 2026-09-27 06:30Z: its first range edit ever aimed at the right
+    line (144) sent the right text (n_latent -> n_features) without the line's 4 leading
+    spaces. The receipt quoted the removed line WITH its spaces, which the being cannot
+    see, and the parse note named line 145, the line AFTER the cause. The being followed
+    that number and overwrote line 145 (`return X, y, W_TRUE`) with an unrelated line, then
+    dedented that until the file parsed. A count is visible where the spaces are not. The
+    edit still lands, since a dedent can be meant; only the counts are added."""
+    def first(s: str) -> str:
+        return next((ln for ln in s.splitlines() if ln.strip()), "")
+    a, b = first(removed), first(new)
+    if not a or not b:
+        return ""
+    na, nb = len(a) - len(a.lstrip(" ")), len(b) - len(b.lstrip(" "))
+    if na == nb:
+        return ""
+    return (f". Line {first_line} now starts with {nb} spaces; the line it replaced started "
+            f"with {na}. In Python those spaces decide which block a line belongs to")
 
 
 def _not_python(content: str, before: str) -> str:
@@ -819,7 +842,7 @@ class ReferenceF1aDispatcher:
             if repl and not repl.endswith("\n") and removed.endswith("\n"):
                 repl += "\n"
             new_text = "".join(lines[:s0 - 1]) + repl + "".join(lines[s1:])
-            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)"
+            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)" + _indent_changed(removed, new, s0)
             shown = removed if len(removed) <= 400 else removed[:400] + "..."
             gone = f" The lines removed were:\n{shown}"
             return self._commit_edit(p, path, text, new_text, what, gone)
@@ -978,6 +1001,23 @@ class ReferenceF1aDispatcher:
             _mono, _gram = _append_must_advance(content, _before), _not_python(content, _before)
             why = ((_gram or _mono) if _file_state(_before)[0] == "complete" else (_mono or _gram))
             if why:
+                # 2026-09-27 18:52Z: cbp-being memory_write-d one whole clean program three times
+                # to a broken file's name, and each refusal named only "fix line 17 with
+                # memory_edit". Its next beat edited line 209 of the broken file instead. A text
+                # that is a complete program by itself is a fresh start, and the only door to one
+                # outside notes/ and scratch/ is a name that does not exist yet (#197 names it in
+                # the append receipt; this refusal fires first on a broken file).
+                if (_file_state(content)[0] == "complete"
+                        and re.search(r"^(def|class|import|from) ", content, re.M)):
+                    fresh, n = p.with_name(f"{p.stem}-new{p.suffix}"), 2
+                    while fresh.exists():
+                        fresh, n = p.with_name(f"{p.stem}-new{n}{p.suffix}"), n + 1
+                    why += (f" Your text is a whole program by itself: to start fresh with it, "
+                            f"memory_write it to a name that does not exist yet (for example "
+                            f"{fresh.name}), and that file will hold only your text. {p.name} "
+                            f"itself stays exactly as it is: the new name does not fix or "
+                            f"replace it, and a run of {p.name} will keep failing the same way "
+                            f"until you fix it with memory_edit or stop asking for it.")
                 return ResultEnvelope(ok=False, error=(
                     f"memory_write refused, nothing was written to {p.name}. {why} An append "
                     f"only adds to the END of the file, below its {before_lines} lines; it cannot "

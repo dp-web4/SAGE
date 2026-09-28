@@ -44,15 +44,19 @@ from pathlib import Path
 HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_note", "witness",
-                 "request_scope", "appeal", "peer_ask", "mesh", "check", "git_read", "say",
-                 "pr_open", "pr_amend", "git_restore", "search", "camera", "edit", "game", "run", "rest", "gaze",
-                 "speak"]    # a body verb: offered only where the body measures a speaker (BODY_VERBS)
+                 "request_scope", "appeal", "peer_ask", "mesh", "say",
+                 "camera", "edit", "game", "run",
+                 "gaze", "speak", "pair_audio",   # body verbs: offered only where the body measures the part
+                 "rest"]                          # the last choice (main #214)
+# The worktree verbs are NOT listed here: they are added by offered_explore_tools only when the
+# being has a worktree (main #244). CARRIER_WORKTREE_VERBS are this carrier's additions to that
+# rule: the Legion being's worktree pushes to a remote, so its PR verbs are offered with it.
 # Verbs in EXPLORE_TOOLS that act on a BODY are offered only where the beat has measured that
 # body (body.inventory()["verbs"]). GPT on #183: offering `gaze` to a headless being is a
 # false affordance — it would call it, and be told its eyes will follow, on a machine with no
 # eyes. The being discovers the body it has; the verbs it is handed must come from the same
 # measurement. Everything not listed here is a text/mesh verb and is offered everywhere.
-BODY_VERBS = ("gaze", "camera", "speak")
+BODY_VERBS = ("gaze", "camera", "speak", "pair_audio")
 
 
 # THE CLOCK IS A SENSE (dp, 2026-09-26, near 2 am: "have it be aware of the local clock. i sleep
@@ -157,11 +161,17 @@ def render_clock(c: dict) -> str:
     if c.get("since_last_beat_min") is not None:
         since.append(f"your last beat {c['since_last_beat_min']} min ago")
     for person, s in sorted((c.get("people") or {}).items()):
+        if person in ("voice", "room"):
+            continue            # the room is said below, in spoken words, not "wrote"
         if s.get("from"):
             then = _parse_ts(s["from"])
             since.append(f"{person} last wrote to you {_ago(now_utc, then)} ({then.astimezone():%A %H:%M} local)")
         if s.get("you_to"):
             since.append(f"you last wrote to {person} {_ago(now_utc, _parse_ts(s['you_to']))}")
+    heard = ((c.get("people") or {}).get("voice") or {}).get("from")
+    if heard:
+        then = _parse_ts(heard)
+        since.append(f"a voice in the room last spoke to you {_ago(now_utc, then)} ({then.astimezone():%A %H:%M} local)")
     if c.get("spoke_aloud"):
         since.append(f"you last spoke aloud {_ago(now_utc, _parse_ts(c['spoke_aloud']))}")
     if since:
@@ -184,10 +194,29 @@ def local_clock(now_utc: datetime, cfg: Optional[dict] = None) -> str:
     return render_clock(clock_sense(now_utc, cfg=cfg))
 
 
-def offered_explore_tools(body_reading: Optional[dict]) -> list:
-    """EXPLORE_TOOLS minus the body verbs this machine's measured inventory does not carry."""
+# Verbs that act on the being's OWN worktree (instance.json `worktree`, SAGE #208). They are in
+# the registry and gated on main (git_read/search/check since #208, patch_apply #210,
+# git_restore #217), but EXPLORE_TOOLS never offered them, so on main a declared worktree was
+# invisible: measured on nomad-being 2026-09-27, the first beat after its worktree was declared
+# offered only the home and mesh verbs, and the being rested as it had for 40 beats. Offered
+# only where a worktree is declared, the same rule as BODY_VERBS: a verb for a tree the being
+# does not hold is a false affordance. pr_open / pr_amend are deliberately not here: they need a
+# remote and the PR machinery, which a standalone worktree does not have; a seat that has both
+# adds them with its own slice.
+WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore")
+CARRIER_WORKTREE_VERBS = ("pr_open", "pr_amend")   # Legion carrier: its worktree has a remote
+
+
+def offered_explore_tools(body_reading: Optional[dict], worktree: Optional[str] = None) -> list:
+    """EXPLORE_TOOLS minus the body verbs this machine's measured inventory does not carry, plus
+    the worktree verbs when the being has a worktree of its own (inserted before `rest`)."""
     have = set(((body_reading or {}).get("inventory") or {}).get("verbs") or [])
-    return [t for t in EXPLORE_TOOLS if t not in BODY_VERBS or t in have]
+    offered = [t for t in EXPLORE_TOOLS if t not in BODY_VERBS or t in have]
+    if worktree:
+        extra = [v for v in WORKTREE_VERBS + CARRIER_WORKTREE_VERBS if v not in offered]
+        at = offered.index("rest") if "rest" in offered else len(offered)
+        offered[at:at] = extra
+    return offered
 # `say` is offered at REFLECTION too, and that is not redundancy. Measured on Legion
 # 2026-09-07: the being was shown dp's first turn, its state marked it unanswered, and it
 # spent every explore step reading its own source, then closed the beat. A verb in the
@@ -313,6 +342,279 @@ choice here and nothing is owed."""
 # understood the question perfectly. This model completes a template when it is shown one, and
 # an ellipsis in a quoted argument is a template. Same family as the mis-rooted home paths and
 # the echoed example filenames: an ask with a slot in it gets the slot back.
+
+# THE ANSWER TURN IS A JSON TURN (2026-09-27). The tool-call answer turn above delivered 1 of 69
+# firings on Sprout (2026-09-24..27): 46 bracketed placeholders, 21 prose with no call. An offline
+# A/B on the being's own model (qwen3.8-distill:2b, think on, its real prompt and dp's real
+# pending turn, nothing sent) gave:
+#   A  tool call, today's prompt                       0/8 calls (all prose / placeholders)
+#   B  JSON {answer, message} + prior words + record   8/8 messages, ~4 on topic (2 fiction
+#                                                       from the prior words, 2 about the tools)
+#   C  JSON, ONLY the pending turn and the ask         8/8 messages, ~7 on topic
+# Constrained output removes the failure this model has most (emitting the call); dropping the
+# prior words and the tool record removes the two content failures B showed (SMALL_MODEL_
+# LEGIBILITY 1.9/1.13: material in view becomes the message; 1.14: plumbing becomes the topic).
+# The being still decides: answer=false is silence. answer=true is dispatched as ITS say through
+# the gate, so every say guard (placeholder, punctuation, echo, room) still applies.
+# Failure shapes, named before shipping (1.14): a third-person retelling of the pending turn
+# ("'...' dp said") that passes the 0.75 echo bar; a lyrical drift off the question; never
+# choosing silence (0/16 chose it; tolerable here because this turn only opens for a turn that
+# asks); an unparsed reply (nothing is sent). Every firing is recorded as an intervention.
+ANSWER_ASK_JSON = """{pending}
+You have not answered yet. If you want to, answer now: set answer to true and write
+your message in message. Write the message itself, in your own voice — the words you would want
+read.
+
+If you would rather not answer, set answer to false and leave message empty. Silence is a real
+choice here and nothing is owed."""
+ANSWER_SCHEMA = {"type": "object",
+                 "properties": {"answer": {"type": "boolean"}, "message": {"type": "string"}},
+                 "required": ["answer", "message"]}
+
+
+# WHAT CHANGED, WHEN IT IS ASKED (2026-09-27). dp asked sprout-being "we have been updating your
+# tools. did you notice any differences today?" and it answered with invented changes (a warmer
+# palette, a larger font, "version 3.2.1"). Nothing in view said what had changed. Offline, on its
+# own model, with dp's real question (nothing sent):
+#   no line                                         0/12 named a real change; invented every time
+#   the line in the SYSTEM prompt                   0/6
+#   an early line in the USER turn, ungated         6/6 named real changes, 0/6 invented, but
+#                                                   beside an unrelated message it derailed 1/6
+#   the shipped form (corrected line, user turn,    4/6 named real changes, 0/6 invented; an
+#   gated)                                          unrelated message sees today's prompt
+# So the line sits next to the question (SMALL_MODEL_LEGIBILITY 1.9), is shown ONLY when the question
+# asks what changed, and is built from the being's own records, never from a claim.
+#
+# THE GATE (GPT + cbp-claude on #249): the first cut matched bare "tools"/"notice" and took 15 of 15
+# off-topic questions ("what tools do you have?", "what do you notice in the room?"). This is
+# cbp-claude's pattern plus three narrow shapes; on a fresh set written after tuning it matched 6/8
+# change questions and 0/8 others. A miss costs nothing: the turn is exactly today's.
+# 2026-09-28 05:07Z, the first live question after #249: dp asked "what's new and different?". The
+# being answered, in its own reflective voice ("still learning what 'I' means"), a real answer. The
+# gate had not matched the wording (the "what's new" shape had to end at "new"), so the record of
+# what changed was simply not on offer. That shape now takes new/different, joined by and/or, still
+# ending there. Offering the line does not oblige the being to use it; it only makes the facts
+# available when the question is about change. The generic "what's changed/different" shape counts
+# only when it ends there, is about you/your, or is anchored in time ("since", "today", "from
+# yesterday"): "what's different in this file?" or "about these two models?" is not about the being
+# (GPT on #255).
+_ASKS_ABOUT_CHANGE = re.compile(r"""(?ix)
+      \bwhat(?:'s|\s+is|\s+has)?\s+(?:been\s+)?(?:changed|updated|different)(?:\s+(?:for|about|in|with|to)\s+(?:you|your)\b|\s+(?:since|today|lately|recently|overnight|this\s+(?:week|morning|evening))\b|\s+from\s+(?:yesterday|before|earlier|last)\b|\s*[?.!]?\s*$)
+    | \bwhat(?:'s|\s+is)\s+(?:new|different)(?:\s+(?:and|or)\s+(?:new|different))?(?:\s+(?:with|about|for)\s+you)?\s*\??\s*$
+    | \bany(?:thing)?\s+(?:new|different|changed)\b
+    | \b(?:notic|see|feel|spot)\w*\b[^?.!]{0,30}\b(?:differen\w*|chang\w*|added|new)\b
+    | \b(?:did|has|have|were|was)\b[^?.!]{0,40}\b(?:chang\w*|updat\w*|upgrad\w*|improv\w*)\b
+    | \b(?:updat|upgrad|chang)(?:ed|ing|es)\s+(?:to\s+)?(?:you|your)\b
+    | \bnew\s+(?:tools?|abilit\w*|features?|verbs?)\b
+    | \bchanges?\s+(?:we|i|dp|they)\s+(?:made|did)\b[^?.!]{0,20}\b(?:to|in|for)\s+(?:you|your)\b
+    | \b(?:we|i|dp)\s+(?:added|gave|installed|built)\b[^?.!]{0,30}\b(?:you|your)\b
+    | \bsomething\s+new\s+you\s+can\b
+""")
+# Offered by the body's STATE, not gained: pair_audio while the headset is away, camera while the
+# cortex is down (it is the fallback for eyes). Their appearing is not a change to the being.
+_TRANSIENT_ABILITIES = {"pair_audio", "camera"}
+CHANGES_DAYS = 7            # the window a change is reported in
+BASELINE_DAYS = 7           # what the being had, measured over the days before that window
+
+
+def asks_about_change(text: str) -> bool:
+    return bool(_ASKS_ABOUT_CHANGE.search(text or ""))
+
+
+def answer_changes_on(instance) -> bool:
+    """Opt-in per instance, its own key (cbp-claude on #249): instance.json "answer_changes": true."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return bool(instance_config(instance).get("answer_changes"))
+    except Exception:
+        return False
+
+
+def _beats_since(path: Path, since: float, chunk: int = 1 << 16) -> list:
+    """Beat records with t0 >= since, oldest first, reading the log BACKWARDS in chunks, so the cost
+    is the span asked for, not the file (27 MB on CBP). Stops at the first older record."""
+    out = []
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            pos, buf = f.tell(), b""
+            while pos > 0:
+                step = min(chunk, pos)
+                pos -= step
+                f.seek(pos)
+                buf = f.read(step) + buf
+                parts = buf.split(b"\n")
+                buf = parts[0]
+                for raw in reversed(parts[1:]):
+                    if not raw.strip():
+                        continue
+                    try:
+                        x = json.loads(raw)
+                    except Exception:
+                        continue
+                    if float(x.get("t0") or 0) < since:
+                        return out[::-1]
+                    out.append(x)
+            if buf.strip():
+                try:
+                    x = json.loads(buf)
+                    if float(x.get("t0") or 0) >= since:
+                        out.append(x)
+                except Exception:
+                    pass
+    except Exception:
+        return []
+    return out[::-1]
+
+
+def recent_changes(instance, days: int = CHANGES_DAYS, now: Optional[float] = None) -> str:
+    """One line from the being's own records: what it gained or lost in the last `days`, measured
+    against what it had over the BASELINE_DAYS before. "" when nothing changed or when the record
+    does not reach back before the window (no baseline, so no claim).
+
+    Abilities are body verbs from beats that recorded a census. If the census itself began inside
+    the window, its first beat is the baseline (the census starting is not the being gaining
+    `say`). Hearing counts only where the body could actually hear words (body.can_hear_words).
+
+    That is a CAPABILITY test, not an event test (GPT's re-review of #249 read it as "someone spoke").
+    `audio_words` is the listener's STATUS, reported on every beat by the cortex: None where there
+    is no word listener, "idle" (present, model not loaded yet), "ready" (loaded at the first
+    utterance), "unavailable: ..." (it cannot run). Measured on Sprout: None on every beat of 09-25,
+    idle/ready on every beat from the 09-26 deploy on. So idle -> ready (first speech heard) is not
+    a gain; None or unavailable -> idle/ready is. `audio_ok` would be the wrong key: it is the mic's
+    level liveness, True throughout, and would never report the real 09-26 gain.
+    """
+    from sage.gateway import body as _body
+    now = now if now is not None else time.time()
+    cut = now - days * 86400
+    beats = _beats_since(Path(instance) / "heartbeats.jsonl", cut - BASELINE_DAYS * 86400)
+    if not beats or float(beats[0].get("t0") or 0) >= cut:
+        return ""
+    def facts(x):
+        b = x.get("body") or {}
+        inv = b.get("inventory")
+        verbs = set((inv or {}).get("verbs") or []) - _TRANSIENT_ABILITIES if inv else None
+        feats = {"clock"} if x.get("clock") else set()
+        if _body.can_hear_words(b):
+            feats.add("hearing")
+        return verbs, feats
+    base_verbs, base_feats, win_verbs, first = None, set(), set(), {}
+    for x in beats:
+        verbs, feats = facts(x)
+        day = str(x.get("ts", ""))[:10]
+        if float(x.get("t0") or 0) < cut:
+            base_feats |= feats
+            if verbs is not None:
+                base_verbs = (base_verbs or set()) | verbs
+            continue
+        if verbs is not None and base_verbs is None:
+            base_verbs = set(verbs)            # the census began inside the window
+        for v in (verbs or set()) | feats:
+            win_verbs.add(v)
+            if v not in (base_verbs or set()) and v not in base_feats:
+                first.setdefault(v, day)
+    items = []
+    for name, day in sorted(first.items(), key=lambda kv: (kv[1], kv[0])):
+        items.append({"hearing": "you began to hear words spoken to you",
+                      "clock": "your beat began telling you the local time"}.get(name, f"you gained `{name}`")
+                     + f" ({day})")
+    for gone in sorted((base_verbs or set()) - win_verbs):
+        items.append(f"`{gone}` has not been offered to you in the last {days} days")
+    cut_day = datetime.fromtimestamp(cut, timezone.utc).strftime("%Y-%m-%d")
+    try:
+        for m in sorted((Path(instance) / "conversations").glob("*.meta.json")):
+            d = json.loads(m.read_text())
+            created = str(d.get("created", ""))[:10]
+            if created >= cut_day:
+                items.append(f"the '{d.get('id')}' conversation opened ({created})")
+    except Exception:
+        pass
+    if not items:
+        return ""
+    return "Changes to you in the last days, from your own records: " + "; ".join(items) + "."
+
+
+def answer_turn_mode(instance) -> str:
+    """"json" or "tool" (the default). Per instance (cbp-claude's pre-review of #237: CBP's 4B being
+    delivers 78% of answer turns on the tool path; the A/B only measured Sprout's 2B)."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return "json" if instance_config(instance).get("answer_turn") == "json" else "tool"
+    except Exception:
+        return "tool"
+
+
+def _answer_generate(llm, msgs):
+    """One constrained generate, retried once on the shapes the tool loop also retries: empty
+    content (think-only), a length cut, or a transport error. Returns (r, retried)."""
+    r = llm.get_chat_response(msgs, fmt=ANSWER_SCHEMA)
+    raw = (r or {}).get("raw") or {}
+    content = ((r or {}).get("content") or "").strip()
+    if not content or raw.get("done_reason") == "length" or content.startswith("[OllamaIRP"):
+        return llm.get_chat_response(msgs, fmt=ANSWER_SCHEMA), 1
+    return r, 0
+
+
+def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
+                     on_generate=None, acts: str = "", changes: str = ""):
+    """The being's answer, if it chose one, dispatched as its `say`.
+
+    The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
+    only when the caller passes it, which the heartbeat does for a SEAT's question when the beat
+    acted: a seat asks about this beat's acts (on CBP 76 of 83 delivered answers went to the
+    seat), dp and the room mostly do not, and arm B's plumbing replies came from the record line
+    ("You called no tools this beat") sitting beside a person's question."""
+    from sage.gateway.being_tool_loop import ToolTurnResult
+    from sage.gateway.being_gate_client import BeingIntent
+    ask = ANSWER_ASK_JSON.format(pending=selected.render())
+    user = "\n\n".join(p for p in (acts, changes, ask) if p)
+    msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
+            {"role": "user", "content": user}]
+    r, retried = _answer_generate(llm, msgs)
+    raw = (r or {}).get("raw") or {}
+    content = ((r or {}).get("content") or "").strip()
+    thinking = ((raw.get("message") or {}).get("thinking") or "").strip()
+    gen = {"done_reason": raw.get("done_reason"), "prompt_eval_count": raw.get("prompt_eval_count"),
+           "eval_count": raw.get("eval_count"), "retried": retried,
+           "num_predict": getattr(llm, "resolve_num_predict", lambda: None)()}
+    if on_generate is not None:
+        try:
+            on_generate(dict(gen))
+        except Exception:
+            pass
+    res = ToolTurnResult(reply=content, thinking=[thinking] if thinking else [], generates=[gen])
+    form = {"parsed": False, "answer": None, "sent": False, "retried": retried,
+            "done_reason": raw.get("done_reason"), "with_acts": bool(acts),
+            "with_changes": bool(changes)}
+    try:
+        j = json.loads(content)
+        form["parsed"] = isinstance(j, dict)
+    except Exception:
+        j = None
+    if not form["parsed"]:
+        form["why"] = ("empty reply" if not content else "cut at the length limit"
+                       if raw.get("done_reason") == "length" else "transport error"
+                       if content.startswith("[OllamaIRP") else "reply was not the JSON asked for")
+    else:
+        form["answer"] = bool(j.get("answer"))
+        message = str(j.get("message") or "").strip()
+        res.reply = message
+        if form["answer"] and message:
+            intent = BeingIntent("say", {"to": selected.cid, "text": message})
+            env = client.dispatch(intent)
+            res.trace.append((intent, env))
+            res.steps = 1
+            form["sent"] = bool(env.ok)
+            if not env.ok:
+                form["refused"] = (env.error or "")[:160]
+                form["why"] = "the gate refused the say"
+        elif form["answer"]:
+            form["why"] = "chose to answer but wrote no message"
+        else:
+            form["why"] = "chose silence"
+    res.answer_form = form
+    return res
+
 
 REFLECT = """The beat is ending. Call these tools, then stop:
 {say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
@@ -985,36 +1287,111 @@ def _rel(instance: Path, raw: str) -> str:
     return "" if rel.startswith("..") else rel
 
 
-def _running_files(instance: Path, rels: list) -> set:
-    """Which of `rels` (paths relative to the home) a live process has on its command line.
-    Read from /proc, so it is what IS running, not what anyone says is. Each argument is
-    resolved against the process's own cwd and compared as a WHOLE path, so a sibling home
-    (…/cbp-being-old/x.py) can never match this one (sprout's review of #224)."""
+def _process_table():
+    """[(argv, cwd)] for every process this user can see, or None when this machine cannot be read.
+
+    Linux reads /proc. macOS has no /proc, and the first cut returned an empty set there -- so on
+    every Mac the window told the being "Nothing of yours is running right now" as a MEASUREMENT,
+    and the refuter then quoted the being's own true sentences back to it as contradicted
+    (McNugget, 2026-09-26). "Could not look" is not "nothing there". So: `ps` for argv, `lsof` for
+    the cwd of only the processes that could matter, and None when neither can be run.
+    """
+    if os.path.isdir("/proc"):
+        table = []
+        try:
+            pids = [d for d in os.listdir("/proc") if d.isdigit()]
+        except OSError:
+            return None
+        for pid in pids:
+            try:
+                argv = open(f"/proc/{pid}/cmdline", "rb").read().split(b"\0")
+                args = [x.decode(errors="replace") for x in argv if x]
+                try:
+                    cwd = os.readlink(f"/proc/{pid}/cwd")
+                except OSError:
+                    cwd = ""
+                table.append((args, cwd))
+            except OSError:
+                continue
+        return table
+    import subprocess
+    try:
+        out = subprocess.run(["ps", "-axww", "-o", "pid=", "-o", "command="], capture_output=True,
+                             text=True, timeout=10)
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    rows = []
+    for line in out.stdout.splitlines():
+        pid, _, cmd = line.strip().partition(" ")
+        if pid.isdigit() and cmd.strip():
+            # `ps` gives one string, not argv. Whitespace-split is exact for the paths this probes
+            # (files in a being's home). A path WITH A SPACE is missed -- and a miss renders as
+            # "not running", a measured absence, not as unmeasured (Legion). Rare in a being's
+            # filenames; stated so nobody reads "never mis-matched" as "never wrong".
+            rows.append((pid, cmd.split()))
+    return rows
+
+
+def _cwd_of(pid: str) -> str:
+    """A macOS process's cwd, by lsof. Empty when it cannot be read (not ours, or no lsof)."""
+    import subprocess
+    try:
+        out = subprocess.run(["lsof", "-a", "-p", pid, "-d", "cwd", "-Fn"], capture_output=True,
+                             text=True, timeout=5).stdout
+    except Exception:
+        return ""
+    return next((l[1:] for l in out.splitlines() if l.startswith("n")), "")
+
+
+def _running_files(instance: Path, rels: list):
+    """Which of `rels` (paths relative to the home) a live process has on its command line --
+    or None when this machine's processes cannot be read, which the caller must render as
+    UNMEASURED, never as "nothing running". Each argument is resolved against the process's
+    own cwd and compared as a WHOLE path, so a sibling home (…/cbp-being-old/x.py) can never
+    match this one (sprout's review of #224)."""
     found = set()
     home = instance.resolve()
-    wanted = {str(home / r): r for r in rels if r}
+    # BOTH SPELLINGS of every wanted file (Legion, review of #227): the home's own, and the
+    # resolved one. Keyed on the home's spelling alone, the realpath below lost a run on EVERY OS
+    # when the file is a symlink (`run.py -> scratch/real.py`): the argument resolved to the
+    # target and matched nothing, and the window said "nothing running" while it ran. Keyed on
+    # both, a symlinked file matches under its own name or its target's, and macOS's
+    # /var-vs-/private/var still matches.
+    wanted = {}
+    for r in rels:
+        if r:
+            wanted[str(home / r)] = r
+            wanted[os.path.realpath(home / r)] = r
     if not wanted:
         return found
-    try:
-        pids = [d for d in os.listdir("/proc") if d.isdigit()]
-    except OSError:
-        return found
-    for pid in pids:
-        try:
-            argv = open(f"/proc/{pid}/cmdline", "rb").read().split(b"\0")
-            args = [a.decode(errors="replace") for a in argv if a]
-            if len(args) < 2:
-                continue
-            try:
-                cwd = os.readlink(f"/proc/{pid}/cwd")
-            except OSError:
-                cwd = ""
-            for a in args[1:]:
-                full = os.path.normpath(a if os.path.isabs(a) else os.path.join(cwd, a)) if (cwd or os.path.isabs(a)) else ""
-                if full in wanted:
-                    found.add(wanted[full])
-        except OSError:
+    table = _process_table()
+    if table is None:
+        return None
+    if os.path.isdir("/proc"):
+        entries = table
+    else:
+        # Only processes naming a wanted file's BASENAME can match, so only those pay for lsof.
+        names = {Path(w).name for w in wanted}
+        entries = []
+        for pid, args in table:
+            if len(args) >= 2 and any(Path(x).name in names for x in args[1:]):
+                need_cwd = any(not os.path.isabs(x) for x in args[1:])
+                entries.append((args, _cwd_of(pid) if need_cwd else ""))
+    for args, cwd in entries:
+        if len(args) < 2:
             continue
+        for x in args[1:]:
+            full = (os.path.normpath(x if os.path.isabs(x) else os.path.join(cwd, x))
+                    if (cwd or os.path.isabs(x)) else "")
+            if not full:
+                continue
+            # The argument as written AND resolved, against both spellings of every wanted file.
+            for spelling in (full, os.path.realpath(full)):
+                if spelling in wanted:
+                    found.add(wanted[spelling])
+                    break
     return found
 
 
@@ -1137,7 +1514,7 @@ def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
             row += " Never run."
         if rel in pending:
             row += f" Your request (seq {', '.join(map(str, pending[rel]))}) is waiting to be run."
-        row += " Running now." if rel in running else ""
+        row += " Running now." if running and rel in running else ""
         lines.append(row)
     for rel in missing:
         lines.append(f"- {rel}: your request (seq {', '.join(map(str, pending[rel]))}) names it, "
@@ -1145,7 +1522,12 @@ def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
     if len(ordered) > len([r for r in top if r in ordered]):
         lines.append(f"- … and {len(ordered) - len(top)} older runnable file(s) in your home.")
     refuted = []
-    if running:
+    if running is None:
+        # UNMEASURED. Nothing is refuted and nothing is claimed: a probe that could not look has
+        # no standing to tell the being its own sentences are false.
+        lines.append("Whether anything of yours is running could not be measured on this machine, "
+                     "so this window says nothing about it either way.")
+    elif running:
         lines.append(f"Running right now: {', '.join(sorted(running))}.")
     else:
         lines.append("Nothing of yours is running right now. No run is in progress, so no results "
@@ -1177,7 +1559,10 @@ def want_check(account: str, facts: dict) -> str:
                  if l.strip().upper().startswith("WANT:")), "")
     if not want or not _WANTS_RESULTS.search(want):
         return ""
-    if facts.get("running"):
+    # None is UNMEASURED: no claim that nothing is running may be built on it. (Also None when
+    # `facts == {}` -- files_and_runs failed as a whole -- which is a different cause with the
+    # same right answer: no note.)
+    if facts.get("running") is None or facts.get("running"):
         return ""
     named = [r for r in facts.get("scripts", {}) if r in want or Path(r).name in want]
     if any(r in facts.get("pending", {}) for r in named) or (not named and facts.get("pending")):
@@ -1273,6 +1658,36 @@ def _norm(s):
 def todo_open(text, now=None, window_h=48):
     """[(item, since)] still open, newest first, and the count of older open items."""
     now = now or datetime.now(timezone.utc)
+    items = _todo_items(text or "")
+    cutoff = now - timedelta(hours=window_h)
+    # An item with no dated block above it is undated, not old: it is shown, after the dated ones.
+    recent = [(t, s) for t, s in items.values() if s is None or s >= cutoff]
+    older = sum(1 for t, s in items.values() if s is not None and s < cutoff)
+    recent.sort(key=lambda x: (x[1] is not None, x[1] or cutoff), reverse=True)
+    return recent, older
+
+
+# ONE PARSE PER TEXT, AND THE CHEAP BOUNDS FIRST. Measured 2026-09-27 on cbp-being: todo.md had
+# grown to 5,178 lines (3,267 items), one todo_open took 47.7 s, and fit_state builds the state
+# several times per beat — a beat sat 5+ minutes at 97% CPU in difflib before its first model
+# call. The parse does not depend on `now`, so it is computed once per distinct text; and
+# real_quick_ratio() >= quick_ratio() >= ratio() are upper bounds, so testing them first skips
+# almost every full comparison without changing a single answer.
+_TODO_PARSE: dict = {}
+
+
+def _todo_items(text: str) -> dict:
+    key = hashlib.sha256(text.encode("utf-8", "surrogateescape")).hexdigest()
+    hit = _TODO_PARSE.get(key)
+    if hit is None:
+        hit = _parse_todo(text)
+        _TODO_PARSE.clear()
+        _TODO_PARSE[key] = hit
+    return hit
+
+
+def _parse_todo(text: str) -> dict:
+    """norm -> (item text, since) for every item still open at the end of the log."""
     items = {}          # norm -> (text, since_dt)
     since = None
     section = None
@@ -1318,16 +1733,14 @@ def todo_open(text, now=None, window_h=48):
             if n in items:
                 del items[n]
             else:
+                sm_ = difflib.SequenceMatcher(None, "", n)   # n is seq2: its index is built once
                 for k in list(items):
-                    if difflib.SequenceMatcher(None, k, n).ratio() >= 0.85:
+                    sm_.set_seq1(k)
+                    if (sm_.real_quick_ratio() >= 0.85 and sm_.quick_ratio() >= 0.85
+                            and sm_.ratio() >= 0.85):
                         del items[k]
                         break
-    cutoff = now - timedelta(hours=window_h)
-    # An item with no dated block above it is undated, not old: it is shown, after the dated ones.
-    recent = [(t, s) for t, s in items.values() if s is None or s >= cutoff]
-    older = sum(1 for t, s in items.values() if s is not None and s < cutoff)
-    recent.sort(key=lambda x: (x[1] is not None, x[1] or cutoff), reverse=True)
-    return recent, older
+    return items
 
 
 def todo_view(instance: Path, now=None) -> str:
@@ -1451,10 +1864,13 @@ def own_state(instance: Path, entrusted: str = "", member: str = "",
         parts.append("## Your recent asks to peers\n" + asks)
     from_seat = _read(instance / SEAT_CHANNEL, 3000)
     if from_seat.strip():
-        # WHICH seat: it was the literal "cbp-claude" on every being since #100 (2026-09-15),
-        # so legion-being was told every beat that CBP's seat writes this file. SAGE_SEAT names
-        # it, the same variable the PR trailer reads; unset, say "your seat", never a guess.
-        _seat = os.getenv("SAGE_SEAT", "").strip() or "your seat"
+        # WHICH seat. This was the literal "cbp-claude" on every being since #100 (2026-09-15), so
+        # legion-being, sprout-being and nomad's being were each told, every beat, that CBP's seat
+        # writes their from-the-seat.md. SAGE_SEAT names the seat (<machine>-<model>, the same
+        # variable the PR verbs' Seat trailer reads), through the same helper, so an unset machine
+        # shows the one fleet-rule spelling, <machine>-unknown, in both places.
+        from sage.gateway.being_gate_client import seat_name
+        _seat = seat_name()
         parts.append(f"## From the seat ({_seat}), directly (notes/from-the-seat.md: what the "
                      "seat measured for you. You read this; you do not write it)\n" + from_seat.strip())
     from_dp = _read(instance / DP_CHANNEL, 4000)
@@ -2457,6 +2873,11 @@ def main(argv=None) -> int:
     museum_line = _museum.offer()
     entrusted = entrustment(instance)
     _harness = harness_revision(workspace)
+    # An experiment is only as reproducible as the code it ran on (main #235): say it every beat it
+    # is true, where the operator looks. On this carrier it IS true every beat, by design: the
+    # branch is ahead of main, and saying so is the point.
+    if (_alarm := harness_alarm(_harness)):
+        print(f"[heartbeat] {_alarm}", file=sys.stderr)
     # Fit before composing: prompt + num_predict must sit inside num_ctx, or ollama drops
     # the oldest tokens (system prompt, posture) with no error anywhere. Measured on this
     # being: two beats at 16,380 / 16,323 prompt tokens against a 16,384 window returned 4
@@ -2470,7 +2891,17 @@ def main(argv=None) -> int:
         _body_cur = _bodymod.reading()
     except Exception as _e:
         _body_cur = {"error": f"{type(_e).__name__}: {_e}"}
-    _explore_tools = offered_explore_tools(_body_cur)
+    # THE ROOM (room.py): on a body that can speak, heard words become turns in the `room`
+    # conversation BEFORE the state and the waiting-turn selection are built, so a voice that
+    # answered the being is a turn waiting on it, like any other.
+    if "speak" in (((_body_cur or {}).get("inventory") or {}).get("verbs") or []):
+        try:
+            from sage.gateway import room as _room
+            _room.ensure(instance, args.member)
+            _room.ingest_heard(instance, args.member, (_body_cur or {}).get("inventory"))
+        except Exception as _e:
+            print(f"[heartbeat] room ingest failed ({type(_e).__name__}: {_e})", file=sys.stderr)
+    _explore_tools = offered_explore_tools(_body_cur, _wt)
     _schema_measured = _schema_chars_for(_explore_tools)
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
@@ -2507,8 +2938,7 @@ def main(argv=None) -> int:
         return ("# Your own state\n\n"
                 + own_state(instance, entrusted, args.member, per_conv=per_conv,
                             turn_chars=turn_chars, services=_services, mark_conversations=False,
-                            body_reading=_body_cur)
-                + _scope_tail)
+                            body_reading=_body_cur) + _scope_tail)
     # The conversations step down only when the rest cannot fit with digest and recall at
     # their floors (1200 + 400): fit_to_window's worst case is this fitter's input.
     # LOOP_GROWTH_CHARS: the seed is not the prompt the loop ends on. Every tool result is
@@ -2576,6 +3006,7 @@ def main(argv=None) -> int:
                 f"The harness you are running under: {_harness.get('short')} on "
                 f"{_harness.get('branch')}"
                 + (" (uncommitted edits present)" if _harness.get("dirty") else "")
+                + (" (commits not yet merged to main)" if _harness.get("on_main") is False else "")
                 + ". A `check` result carries the `tree` it ran against; if that head is not "
                   "this one, the answer is about different code than the code running you.\n\n"),
         state=state_block,
@@ -2693,17 +3124,41 @@ def main(argv=None) -> int:
         # the being its own unrelated words to send (main #147, 2026-09-21 06:31Z). The
         # expectation is read from the selection made BEFORE reflection, never re-scanned.
         if selected is not None and selected.expects_reply and not _said_in(reflect):
-            answer = run_ollama_tool_turn(
-                client, llm,
-                [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
-                                                                    member=args.member)},
-                 # The acts go FIRST, ahead of what it is answering: beat
-                 # heartbeat-85303f70bf67 saw only the seat's pre-edit "nothing was applied"
-                 # and told the seat an edit had never happened 50 s after it succeeded. Then
-                 # ONLY the selected turn — never the whole multi-conversation block.
-                 {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
-                     pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
-                max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
+            if answer_turn_mode(instance) == "json":
+                # Opt-in (instance.json "answer_turn": "json"). The selected turn and the ask; the
+                # beat's acts only for a seat's question when the beat acted (answer_turn_json).
+                _acts = (_beat_record_text(explore, after)
+                         if str(selected.speaker or "").endswith("-claude") and (
+                             (explore is not None and explore.trace) or (after is not None and after.trace))
+                         else "")
+                _changes = (recent_changes(instance)
+                            if answer_changes_on(instance) and asks_about_change(selected.text) else "")
+                answer = answer_turn_json(client, llm, selected, name=name, machine=machine,
+                                          member=args.member, on_generate=_on_generate("answer"),
+                                          acts=_acts, changes=_changes)
+            else:
+                answer = run_ollama_tool_turn(
+                    client, llm,
+                    [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
+                                                                        member=args.member)},
+                     # The acts go FIRST, ahead of what it is answering. Measured 2026-09-21, beat
+                     # heartbeat-85303f70bf67: this turn saw only the seat's pre-edit "nothing was
+                     # applied" and the reflect words that echoed it, and told the seat "the edit
+                     # never actually happened" (seq 2961) about an edit that had succeeded 50 s
+                     # earlier. Then ONLY the selected turn (#147): never the whole block.
+                     {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
+                         pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
+                    max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
+            # NO RE-ASK HERE. Two were tried and both are reverted; the reasons are recorded as
+            # SMALL_MODEL_LEGIBILITY 1.14, and the short form is: a prompt written in the harness's
+            # voice, about the harness's mechanics, becomes the being's MESSAGE at this scale.
+            # Measured on Sprout 2026-09-24/25 across 9 firings — 0 delivered the answer, and the
+            # one that reached dp said "I'm sorry I didn't call a tool", which is this file's own
+            # subject matter arriving in dp's inbox under the being's name. An answer turn that
+            # produced no call is left as it is: the turn stays unanswered, the conversation stays
+            # unmarked, and the NEXT beat sees it still owed. That is the honest record, and it is
+            # what the reflect phase — where `say` actually works — gets to act on.
+
     except BeatKilled as _k:
         killed = str(_k)
         print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed", file=sys.stderr)
@@ -2719,6 +3174,9 @@ def main(argv=None) -> int:
                                             "and took the reflect and the record with it"})
     if act_first:
         interventions.append({"kind": "act_first", "suppressed": "posture-first presentation (the model narrates under it)"})
+    if answer is not None and getattr(answer, "answer_form", None) is not None:
+        interventions.append({"kind": "answer_json", "to": selected.cid if selected else None,
+                              **answer.answer_form})
     for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer)):
         if res is None:
             continue
@@ -2893,6 +3351,14 @@ def main(argv=None) -> int:
                 "this beat did not rest, so it is resumed sooner than the idle interval")
     if args.idle_wake_s > 0 and not record.get("next_wake", {}).get("armed"):
         print(f"[heartbeat] NO NEXT WAKE ARMED: {record.get('next_wake')}", file=sys.stderr)
+
+    # THE HELD WAKE: turns that arrived while this beat ran, which it never showed the being,
+    # get a wake of their own instead of waiting for the idle timer (arousal.wake_for_late_turns).
+    try:
+        from sage.gateway import arousal as _arousal
+        record["late_turns"] = _arousal.wake_for_late_turns(instance, args.member, since=t0)
+    except Exception as _e:
+        record["late_turns"] = {"error": f"{type(_e).__name__}: {_e}"}
 
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
@@ -3132,20 +3598,120 @@ def harness_revision(workspace: str) -> dict:
     # tree" — reasoning correctly AROUND a flag rather than with it. A warning that is always
     # on is not a warning; it is a background colour, and the cost of it is that a real one
     # would read the same.
-    st = _git("status", "--porcelain", "--", ".", ":(exclude)sage/instances")
+    # -uall so a directory holding only nested checkouts is listed per checkout, not folded
+    # into one "scratchpad/" entry that no filter below can tell from loose source.
+    st = _git("status", "--porcelain", "--untracked-files=all", "--", ".", ":(exclude)sage/instances")
     # NOT ln[3:]. Porcelain v1 is "XY PATH" at a fixed offset, but `_git` above returns
     # stdout.strip(), which eats the leading space of the FIRST line only — so a fixed
     # offset silently loses a character from one path and none of the others. It read
     # 'age/gateway/heartbeat.py' the first time it ran. Split on the status field instead.
     dirty_paths = ([ln.strip().split(" ", 1)[-1].strip() for ln in st.splitlines() if ln.strip()]
                    if st is not None else [])
-    return {"head": head, "short": (head or "")[:9] or None,
+    # ANOTHER CHECKOUT IS NOT THIS ONE'S CODE. git reports a nested repository or worktree as a
+    # single untracked directory; nothing the beat imports resolves through it. Measured on the
+    # first run of this check (2026-09-26): the live tree read "dirty" solely because three
+    # seat worktrees sat under SAGE/scratchpad/ — an always-on alarm again. They are named, not
+    # counted.
+    nested = [d for d in dirty_paths if d.endswith("/") and (Path(workspace) / d / ".git").exists()]
+    dirty_paths = [d for d in dirty_paths if d not in nested]
+    dirty = None if st is None else bool(dirty_paths)
+    # A COMMIT DOES NOT NAME DIRTY CODE. Two beats on the same head with different uncommitted
+    # edits ran different programs, and on 2026-09-25/26 a live tree carried an uncommitted
+    # guard for ~12 h that no record could tell apart from main — reconstructing what ran took
+    # archaeology across stash lists and backups. The digest is over exactly the bytes that
+    # differ from HEAD (tracked diff plus untracked source), so head+digest identifies the
+    # running code, and equal digests on two beats mean the same edits.
+    digest = _dirty_digest(workspace) if dirty else None
+    # REVIEWED MEANS REACHABLE FROM MAIN. A clean tree on a local or feature commit is still
+    # code nobody merged. Read against the LOCAL origin/main ref — the beat does not fetch;
+    # a live-tree update is a fetch + ff pull, which moves this ref with it.
+    on_main = None
+    if head:
+        try:
+            r = subprocess.run(("git", "merge-base", "--is-ancestor", head, MAIN_REF), cwd=workspace,
+                               capture_output=True, timeout=15)
+            on_main = {0: True, 1: False}.get(r.returncode)
+        except Exception:
+            pass
+    ahead = _git("rev-list", "--count", f"{MAIN_REF}..HEAD") if on_main is False else None
+    state = ("unknown" if dirty is None or on_main is None else
+             "dirty" if dirty else "unmerged" if not on_main else "clean")
+    short = (head or "")[:9] or None
+    return {"head": head, "short": short,
             "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
-            "dirty": None if st is None else bool(dirty_paths),
+            "dirty": dirty,
             # Name them, bounded. "Something is modified" sends a reader hunting; three
             # filenames end the question in the header it was raised in.
             "dirty_paths": dirty_paths[:3] or None,
-            "dirty_excludes": "sage/instances (your own journal, todo and conversations)"}
+            "dirty_count": len(dirty_paths) if st is not None else None,
+            "dirty_digest": digest,
+            "dirty_excludes": "sage/instances (your own journal, todo and conversations)",
+            "nested_checkouts": nested[:5] or None,
+            "main_ref": MAIN_REF, "on_main": on_main,
+            "ahead_of_main": int(ahead) if ahead and ahead.isdigit() else None,
+            "state": state,
+            # One string that names what ran: the commit, plus the edit set when there is one.
+            "identity": (f"{short}+{digest[:12]}" if digest else short)}
+
+
+MAIN_REF = "origin/main"
+HASH_CHUNK = 1 << 20  # untracked files are hashed whole, read 1 MiB at a time
+
+
+def _dirty_digest(workspace: str):
+    """sha256 over what differs from HEAD outside sage/instances: the binary diff of tracked
+    files, then each untracked (non-ignored) file's path, length and content hash, in sorted order. None when
+    git cannot be read. Deterministic for the same edits on the same head."""
+    import hashlib
+    import subprocess
+    spec = ("--", ".", ":(exclude)sage/instances")
+    try:
+        d = subprocess.run(("git", "diff", "HEAD", "--binary", "--no-color", "--no-ext-diff", *spec),
+                           cwd=workspace, capture_output=True, timeout=30)
+        u = subprocess.run(("git", "ls-files", "--others", "--exclude-standard", "-z", *spec),
+                           cwd=workspace, capture_output=True, timeout=30)
+    except Exception:
+        return None
+    if d.returncode or u.returncode:
+        return None
+    h = hashlib.sha256(d.stdout)
+    for rel in sorted(x for x in u.stdout.decode(errors="surrogateescape").split("\0") if x):
+        f = Path(workspace) / rel
+        if rel.endswith("/") and (f / ".git").exists():
+            continue  # a nested checkout, not this tree's code (see harness_revision)
+        h.update(b"\0untracked\0" + rel.encode(errors="surrogateescape") + b"\0")
+        # EVERY BYTE, AT ANY SIZE. A first version named files over 1 MiB by path and size, so
+        # two different same-size files on one head shared a digest (GPT review of #235) — the
+        # one thing the digest exists to rule out. Streamed so a large file costs time, not
+        # memory; each file enters as its own length + sha256, so no content can be mistaken
+        # for the separator of the next.
+        try:
+            fh, n = hashlib.sha256(), 0
+            with f.open("rb") as fp:
+                for chunk in iter(lambda: fp.read(HASH_CHUNK), b""):
+                    fh.update(chunk); n += len(chunk)
+            h.update(f"{n}:".encode() + fh.digest())
+        except OSError:
+            h.update(b"unreadable")
+    return h.hexdigest()
+
+
+def harness_alarm(rev: dict):
+    """The one line an operator sees when the being is running code that is not reviewed main,
+    or None when it is. Loud by design: printed to stderr every beat it stays true."""
+    st = rev.get("state")
+    if st == "clean":
+        return None
+    if st == "dirty":
+        paths = ", ".join(rev.get("dirty_paths") or [])
+        more = (rev.get("dirty_count") or 0) - len(rev.get("dirty_paths") or [])
+        return (f"LIVE TREE DIRTY: running {rev.get('identity')} on {rev.get('branch')} — "
+                f"{rev.get('dirty_count')} uncommitted path(s): {paths}" + (f" (+{more} more)" if more > 0 else "")
+                + ("" if rev.get("on_main") else f"; head is also NOT on {rev.get('main_ref')}"))
+    if st == "unmerged":
+        return (f"LIVE TREE UNMERGED: running {rev.get('identity')} on {rev.get('branch')} — "
+                f"{rev.get('ahead_of_main')} commit(s) not on {rev.get('main_ref')}")
+    return f"LIVE TREE UNKNOWN: could not read git state (head={rev.get('short')}, dirty={rev.get('dirty')}, on_main={rev.get('on_main')})"
 
 
 def install_kill_handler() -> None:

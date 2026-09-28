@@ -227,6 +227,7 @@ class OllamaIRP(IRPPlugin):
         self,
         messages: List[Dict[str, str]],
         tools: Optional[List[Dict[str, Any]]] = None,
+        fmt: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Generate a response using Ollama /api/chat endpoint.
@@ -269,6 +270,10 @@ class OllamaIRP(IRPPlugin):
 
         if tools:
             payload['tools'] = tools
+        if fmt is not None:
+            # Ollama structured output: "json" or a JSON schema. The reply's content is then
+            # constrained to that shape (the answer turn uses it, heartbeat.answer_turn_json).
+            payload['format'] = fmt
 
         try:
             data = json.dumps(payload).encode('utf-8')

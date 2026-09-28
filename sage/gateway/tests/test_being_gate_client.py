@@ -974,7 +974,10 @@ def test_pr_amend_is_offered_to_the_being():
     from sage.gateway.being_gate_client import _REGISTRY
     from sage.gateway.heartbeat import EXPLORE_TOOLS
     assert "pr_amend" in _REGISTRY
-    assert "pr_amend" in EXPLORE_TOOLS
+    # offered WITH the worktree (main #244 + CARRIER_WORKTREE_VERBS), not in the base list
+    from sage.gateway.heartbeat import offered_explore_tools
+    assert "pr_amend" in offered_explore_tools(None, "/some/worktree")
+    assert "pr_amend" not in offered_explore_tools(None), "no worktree, no pr_amend"
     assert _REGISTRY["pr_amend"]["tool"] == "pr_amend"      # the law sees the outward act
 
 
@@ -1055,7 +1058,10 @@ def test_git_restore_takes_its_content_from_history_and_no_flags():
         git_restore_command({"rev": "HEAD", "path": "a.py"}, {})
 
     assert "git_restore" in _REGISTRY and "git_restore" in _CONSEQUENTIAL
-    assert "git_restore" in EXPLORE_TOOLS
+    # offered WITH the worktree (main #244 + CARRIER_WORKTREE_VERBS), not in the base list
+    from sage.gateway.heartbeat import offered_explore_tools
+    assert "git_restore" in offered_explore_tools(None, "/some/worktree")
+    assert "git_restore" not in offered_explore_tools(None), "no worktree, no git_restore"
 
 
 def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
