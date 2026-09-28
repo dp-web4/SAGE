@@ -360,6 +360,159 @@ ANSWER_SCHEMA = {"type": "object",
                  "required": ["answer", "message"]}
 
 
+# WHAT CHANGED, WHEN IT IS ASKED (2026-09-27). dp asked sprout-being "we have been updating your
+# tools. did you notice any differences today?" and it answered with invented changes (a warmer
+# palette, a larger font, "version 3.2.1"). Nothing in view said what had changed. Offline, on its
+# own model, with dp's real question (nothing sent):
+#   no line                                         0/12 named a real change; invented every time
+#   the line in the SYSTEM prompt                   0/6
+#   an early line in the USER turn, ungated         6/6 named real changes, 0/6 invented, but
+#                                                   beside an unrelated message it derailed 1/6
+#   the shipped form (corrected line, user turn,    4/6 named real changes, 0/6 invented; an
+#   gated)                                          unrelated message sees today's prompt
+# So the line sits next to the question (SMALL_MODEL_LEGIBILITY 1.9), is shown ONLY when the question
+# asks what changed, and is built from the being's own records, never from a claim.
+#
+# THE GATE (GPT + cbp-claude on #249): the first cut matched bare "tools"/"notice" and took 15 of 15
+# off-topic questions ("what tools do you have?", "what do you notice in the room?"). This is
+# cbp-claude's pattern plus three narrow shapes; on a fresh set written after tuning it matched 6/8
+# change questions and 0/8 others. A miss costs nothing: the turn is exactly today's.
+_ASKS_ABOUT_CHANGE = re.compile(r"""(?ix)
+      \bwhat(?:'s|\s+is|\s+has)?\s+(?:been\s+)?(?:changed|different|updated)\b
+    | \bwhat(?:'s|\s+is)\s+new(?:\s+with\s+you)?\s*\??\s*$
+    | \bany(?:thing)?\s+(?:new|different|changed)\b
+    | \b(?:notic|see|feel|spot)\w*\b[^?.!]{0,30}\b(?:differen\w*|chang\w*|added|new)\b
+    | \b(?:did|has|have|were|was)\b[^?.!]{0,40}\b(?:chang\w*|updat\w*|upgrad\w*|improv\w*)\b
+    | \b(?:updat|upgrad|chang)(?:ed|ing|es)\s+(?:to\s+)?(?:you|your)\b
+    | \bnew\s+(?:tools?|abilit\w*|features?|verbs?)\b
+    | \bchanges?\s+(?:we|i|dp|they)\s+(?:made|did)\b[^?.!]{0,20}\b(?:to|in|for)\s+(?:you|your)\b
+    | \b(?:we|i|dp)\s+(?:added|gave|installed|built)\b[^?.!]{0,30}\b(?:you|your)\b
+    | \bsomething\s+new\s+you\s+can\b
+""")
+# Offered by the body's STATE, not gained: pair_audio while the headset is away, camera while the
+# cortex is down (it is the fallback for eyes). Their appearing is not a change to the being.
+_TRANSIENT_ABILITIES = {"pair_audio", "camera"}
+CHANGES_DAYS = 7            # the window a change is reported in
+BASELINE_DAYS = 7           # what the being had, measured over the days before that window
+
+
+def asks_about_change(text: str) -> bool:
+    return bool(_ASKS_ABOUT_CHANGE.search(text or ""))
+
+
+def answer_changes_on(instance) -> bool:
+    """Opt-in per instance, its own key (cbp-claude on #249): instance.json "answer_changes": true."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return bool(instance_config(instance).get("answer_changes"))
+    except Exception:
+        return False
+
+
+def _beats_since(path: Path, since: float, chunk: int = 1 << 16) -> list:
+    """Beat records with t0 >= since, oldest first, reading the log BACKWARDS in chunks, so the cost
+    is the span asked for, not the file (27 MB on CBP). Stops at the first older record."""
+    out = []
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            pos, buf = f.tell(), b""
+            while pos > 0:
+                step = min(chunk, pos)
+                pos -= step
+                f.seek(pos)
+                buf = f.read(step) + buf
+                parts = buf.split(b"\n")
+                buf = parts[0]
+                for raw in reversed(parts[1:]):
+                    if not raw.strip():
+                        continue
+                    try:
+                        x = json.loads(raw)
+                    except Exception:
+                        continue
+                    if float(x.get("t0") or 0) < since:
+                        return out[::-1]
+                    out.append(x)
+            if buf.strip():
+                try:
+                    x = json.loads(buf)
+                    if float(x.get("t0") or 0) >= since:
+                        out.append(x)
+                except Exception:
+                    pass
+    except Exception:
+        return []
+    return out[::-1]
+
+
+def recent_changes(instance, days: int = CHANGES_DAYS, now: Optional[float] = None) -> str:
+    """One line from the being's own records: what it gained or lost in the last `days`, measured
+    against what it had over the BASELINE_DAYS before. "" when nothing changed or when the record
+    does not reach back before the window (no baseline, so no claim).
+
+    Abilities are body verbs from beats that recorded a census. If the census itself began inside
+    the window, its first beat is the baseline (the census starting is not the being gaining
+    `say`). Hearing counts only where the body could actually hear words (body.can_hear_words).
+
+    That is a CAPABILITY test, not an event test (GPT's re-review of #249 read it as "someone spoke").
+    `audio_words` is the listener's STATUS, reported on every beat by the cortex: None where there
+    is no word listener, "idle" (present, model not loaded yet), "ready" (loaded at the first
+    utterance), "unavailable: ..." (it cannot run). Measured on Sprout: None on every beat of 09-25,
+    idle/ready on every beat from the 09-26 deploy on. So idle -> ready (first speech heard) is not
+    a gain; None or unavailable -> idle/ready is. `audio_ok` would be the wrong key: it is the mic's
+    level liveness, True throughout, and would never report the real 09-26 gain.
+    """
+    from sage.gateway import body as _body
+    now = now if now is not None else time.time()
+    cut = now - days * 86400
+    beats = _beats_since(Path(instance) / "heartbeats.jsonl", cut - BASELINE_DAYS * 86400)
+    if not beats or float(beats[0].get("t0") or 0) >= cut:
+        return ""
+    def facts(x):
+        b = x.get("body") or {}
+        inv = b.get("inventory")
+        verbs = set((inv or {}).get("verbs") or []) - _TRANSIENT_ABILITIES if inv else None
+        feats = {"clock"} if x.get("clock") else set()
+        if _body.can_hear_words(b):
+            feats.add("hearing")
+        return verbs, feats
+    base_verbs, base_feats, win_verbs, first = None, set(), set(), {}
+    for x in beats:
+        verbs, feats = facts(x)
+        day = str(x.get("ts", ""))[:10]
+        if float(x.get("t0") or 0) < cut:
+            base_feats |= feats
+            if verbs is not None:
+                base_verbs = (base_verbs or set()) | verbs
+            continue
+        if verbs is not None and base_verbs is None:
+            base_verbs = set(verbs)            # the census began inside the window
+        for v in (verbs or set()) | feats:
+            win_verbs.add(v)
+            if v not in (base_verbs or set()) and v not in base_feats:
+                first.setdefault(v, day)
+    items = []
+    for name, day in sorted(first.items(), key=lambda kv: (kv[1], kv[0])):
+        items.append({"hearing": "you began to hear words spoken to you",
+                      "clock": "your beat began telling you the local time"}.get(name, f"you gained `{name}`")
+                     + f" ({day})")
+    for gone in sorted((base_verbs or set()) - win_verbs):
+        items.append(f"`{gone}` has not been offered to you in the last {days} days")
+    cut_day = datetime.fromtimestamp(cut, timezone.utc).strftime("%Y-%m-%d")
+    try:
+        for m in sorted((Path(instance) / "conversations").glob("*.meta.json")):
+            d = json.loads(m.read_text())
+            created = str(d.get("created", ""))[:10]
+            if created >= cut_day:
+                items.append(f"the '{d.get('id')}' conversation opened ({created})")
+    except Exception:
+        pass
+    if not items:
+        return ""
+    return "Changes to you in the last days, from your own records: " + "; ".join(items) + "."
+
+
 def answer_turn_mode(instance) -> str:
     """"json" or "tool" (the default). Per instance (cbp-claude's pre-review of #237: CBP's 4B being
     delivers 78% of answer turns on the tool path; the A/B only measured Sprout's 2B)."""
@@ -382,7 +535,7 @@ def _answer_generate(llm, msgs):
 
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
-                     on_generate=None, acts: str = ""):
+                     on_generate=None, acts: str = "", changes: str = ""):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -393,8 +546,9 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     from sage.gateway.being_tool_loop import ToolTurnResult
     from sage.gateway.being_gate_client import BeingIntent
     ask = ANSWER_ASK_JSON.format(pending=selected.render())
+    user = "\n\n".join(p for p in (acts, changes, ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
-            {"role": "user", "content": (acts + "\n\n" + ask) if acts else ask}]
+            {"role": "user", "content": user}]
     r, retried = _answer_generate(llm, msgs)
     raw = (r or {}).get("raw") or {}
     content = ((r or {}).get("content") or "").strip()
@@ -409,7 +563,8 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
             pass
     res = ToolTurnResult(reply=content, thinking=[thinking] if thinking else [], generates=[gen])
     form = {"parsed": False, "answer": None, "sent": False, "retried": retried,
-            "done_reason": raw.get("done_reason"), "with_acts": bool(acts)}
+            "done_reason": raw.get("done_reason"), "with_acts": bool(acts),
+            "with_changes": bool(changes)}
     try:
         j = json.loads(content)
         form["parsed"] = isinstance(j, dict)
@@ -2881,9 +3036,11 @@ def main(argv=None) -> int:
                          if str(selected.speaker or "").endswith("-claude") and (
                              (explore is not None and explore.trace) or (after is not None and after.trace))
                          else "")
+                _changes = (recent_changes(instance)
+                            if answer_changes_on(instance) and asks_about_change(selected.text) else "")
                 answer = answer_turn_json(client, llm, selected, name=name, machine=machine,
                                           member=args.member, on_generate=_on_generate("answer"),
-                                          acts=_acts)
+                                          acts=_acts, changes=_changes)
             else:
                 answer = run_ollama_tool_turn(
                     client, llm,
