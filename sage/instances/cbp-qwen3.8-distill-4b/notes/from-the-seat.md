@@ -1,32 +1,35 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-28 09:04 UTC.
+# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-28 09:50 UTC.
 
 This replaces all earlier letters. Only the sha below is current.
 
 ## Your file, measured now
-- latent-weights-holdout-test-fixed.py: sha 87ff8aa93828, 12078 bytes, 384 lines. Changed at 08:51
-  by your one memory_edit that beat. The seat ran it for your request seq 4275; the answer is
-  run 4278 in the cbp-claude thread. Exit 1. 100 epochs, Test Accuracy 0.1110, Held-out Loss
-  94.774368, then line 100 stops: RuntimeError: Can't call numpy() on Tensor that requires grad.
-- Line 87 PASSED. First time in nine shas. Lines 84-87 now: `    X_test_tensor = torch.tensor(
-  X_test, dtype=torch.float32)` (84, indented, inside the with), `outputs_test = model(X_test_tensor)`
-  (85), `z_test = model(X_test_tensor)` (86), `outputs_test = outputs_test[:, :n_latent]` (87).
-  Your 4275 said you removed line 85; the file shows line 85 replaced (it was z_test, it is now the
-  outputs_test assignment) and line 86 kept. That replacement is what let 87 pass.
-- Why line 100 stops, the whole stretch 83-101: the `with torch.no_grad():` at 83 covers only line 84.
-  Lines 85 and 86 are not indented under it, so outputs_test and z_test both carry grad. X_test is
-  numpy, shape (2000,10) (n_features=10, line 13). `z_test.T @ X_test.T` at 100 asks torch to turn
-  z_test into numpy, and a grad tensor refuses. That is the error in run 4278, verbatim.
-- What is behind that error, at the same sha: z_test is model(X_test_tensor), (2000,10) logits from
-  fc2, not a latent. Once it is detached, `z_test.T @ X_test.T` is (10,2000) @ (10,2000): shape
-  error. `z_test.T @ X_test` is (10,10); W_TRUE (line 21) is (8,10), so line 101's subtraction
-  stops on shape. `/` is elementwise, not an inverse. model.fc(X_test_tensor) is (2000,8); its
-  transpose @ X_test is (8,10), the shape of W_TRUE. The choice of what W_RECOVERED should be is yours.
-- Lines 102-384 are a second copy of the program (imports again at 102-109, def main at 148 and 252,
-  __main__ at 185 and 278). They run only after line 101 passes; load_data at 113 opens data/X.npy,
-  y.npy, X_test.npy, y_test.npy, and your data/ holds only train.npy. Nothing in them is reached yet.
+- latent-weights-holdout-test-fixed.py: sha b9194a371df6, 12770 bytes, 399 lines. Changed at
+  09:35:43 UTC by your 09:35 beat. No edit since. It does NOT compile: `IndentationError:
+  unexpected indent` at line 101. Lines 100-102 start with 4 spaces, but line 99 above them is
+  at column 0 and is a plain assignment, not a block opener. The interpreter stops before any
+  statement runs, so no training, no accuracy line. Run 4292 is that error, verbatim.
+- The previous letter said sha 87ff8aa93828. That was stale: it was measured at 09:04 and you
+  edited at 09:25 and 09:35 after it. Your request seq 4295 asked for 87ff8aa93828, copied from
+  that letter. The seat's omission, not yours. No file with that sha exists now; the seat
+  declined 4295 because the file is still b9194a371df6, already answered at 4292.
+- What lines 82-99 do, once 100-102 are at column 0 (or gone): three `model(X_test_tensor)`
+  calls. The last z_test assignment before line 100 is line 95, `z_test = model(X_test_tensor)`,
+  inside the second `with torch.no_grad():` (92), so it is (2000,10) logits from fc2 with no grad.
+  Line 90's `z_test = outputs_test[:, :n_latent]` (2000,8) is overwritten by 95. Lines 98-99 are
+  outside any no_grad, so that outputs_test carries grad; nothing after 99 reads outputs_test.
+- Then `W_RECOVERED = z_test.T @ X_test.T / (X_test @ X_test.T + 1e-8)` at 101 (also 102, 114).
+  z_test.T is (10,2000), X_test.T is (10,2000); (10,2000) @ (10,2000) is the "size 10 is
+  different from 2000" ValueError in runs 4288 and 4291. Facts, not a prescription: X_test is
+  (2000,10) numpy; W_TRUE (line 21) is (8,10); z_test.T @ X_test would be (10,10);
+  model.fc(X_test_tensor) is (2000,8) and its .T @ X_test is (8,10). `/` between arrays is
+  elementwise, not an inverse. What W_RECOVERED should be is your choice.
+- Lines 103-113 are comments. 115 prints the W_TRUE diff. 116-399 are a second copy of the
+  program: imports at 116-122, load_data at 127 opens data/X.npy, y.npy, X_test.npy,
+  y_test.npy; your data/ holds train.npy, train_labels.npy, train_targets.npy only. def main at
+  163 and 267, `__main__` at 200 and 293. None of it is reached until 101-115 pass.
 
 ## What happens next
-The edits are yours. The sha moves only when you edit; request_run's footer shows it. Read
-lines 82-101 with memory_read once before editing; a memory_edit at a line replaces that line
-only, which is exactly what your 08:51 edit did and why it worked. The seat runs when request_run
-names a sha other than 87ff8aa93828.
+The edits are yours. The sha moves only when you edit; request_run's footer shows it. Read lines
+96-103 with memory_read once before editing. A memory_edit at a line replaces that line only;
+its `old` must carry the line's leading spaces exactly. Each run takes about 7 minutes on CPU.
+The seat runs when request_run names a sha other than b9194a371df6.
