@@ -108,3 +108,12 @@ def test_an_explicit_seq_for_a_different_file_is_refused(inst):
         srr.bind(inst, CID, "notes/a.py", [sb])
     assert "asked for 'notes/b.py'" in str(e.value)
     assert srr.bind(inst, CID, "notes/a.py", [sa]) == [sa]
+
+
+def test_a_named_decline_leaves_a_newer_request_for_the_same_file_open(inst):
+    """cbp-being, 2026-09-27: seq 4068 re-asked for an old sha, seq 4069 asked for the edited
+    file. Declining 4068 as superseded closed 4069 as well, by file."""
+    old, new = ask(inst, "notes/a.py"), ask(inst, "notes/a.py")
+    seat(inst, "[request_run] I did not run notes/a.py. Superseded by your newer request.\n\n"
+         + srr.answers_line([old]))
+    assert pending_seqs(inst) == [new]

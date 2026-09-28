@@ -98,14 +98,14 @@ def test_do_camera_success(tmp_path):
     os.makedirs(out_dir, exist_ok=True)
     out_path = f"{out_dir}/last-frame.jpg"
 
-    old = b"\\xff\\xd8\\xffOLD\\xff\\xd9"
+    old = b"\xff\xd8\xffOLD\xff\xd9"
     Path(out_path).write_bytes(old)
 
     captured = {}
 
     def fake_run(cmd, **kwargs):
         captured["cmd"] = cmd
-        Path(cmd[-1]).write_bytes(b"\\xff\\xd8\\xffNEW\\xff\\xd9")
+        Path(cmd[-1]).write_bytes(b"\xff\xd8\xffNEW\xff\xd9")
         return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
 
     d = _dispatcher(wt)
@@ -128,7 +128,7 @@ def test_do_camera_success(tmp_path):
     assert "-frames:v" in cmd_str
     assert "-atomic_writing 1" in cmd_str
     assert cmd_str.endswith("last-frame.jpg")
-    assert Path(out_path).read_bytes() == b"\\xff\\xd8\\xffNEW\\xff\\xd9"
+    assert Path(out_path).read_bytes() == b"\xff\xd8\xffNEW\xff\xd9"
 
 
 def test_do_camera_device_busy(tmp_path):
@@ -350,7 +350,7 @@ def test_camera_creates_its_output_directory_and_names_a_write_failure(tmp_path)
         if not os.path.isdir(os.path.dirname(out)):
             return types.SimpleNamespace(returncode=251, stdout=b"",
                                          stderr=b"Unable to open: No such file or directory")
-        open(out, "wb").write(b"\xff\xd8frame")
+        open(out, "wb").write(b"\xff\xd8\xffframe\xff\xd9")   # a complete JPEG shape: this test is about the directory, not validity
         wrote["path"] = out
         return types.SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
 

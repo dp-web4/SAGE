@@ -23,6 +23,13 @@ WorkingDirectory=/home/dp/ai-workspace/SAGE
 Environment=HOME=/home/dp
 Environment="PATH=/home/dp/.local/bin:/usr/local/bin:/usr/bin:/bin"
 Environment=PYTHONUNBUFFERED=1
+# REQUIRED: a service unit does not read ~/.bashrc, and the being's gate client resolves
+# the shared law as: explicit override, then the INSTALLED copy hestia-deploy attests
+# ($HESTIA_HOME/shared), then the source checkout. Without this line it falls through to
+# the checkout, and the being is judged by a different law than the seat beside it.
+# Measured on HUB 2026-09-25: the resolver returned hestia/plugins/_shared (source, ahead
+# of the install) until this line was added; hestia #1076's LAW-SOURCE finding names it.
+Environment=HESTIA_HOME=%h/.hestia
 ExecStart=/usr/bin/python3 -m sage.gateway.heartbeat --member <machine>-being --model <model> --instance sage/instances/<instance-dir> --max-steps 8
 TimeoutStartSec=1500
 StandardOutput=append:/home/dp/ai-workspace/SAGE/sage/instances/<instance-dir>/heartbeat.log

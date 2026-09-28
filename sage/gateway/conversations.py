@@ -246,9 +246,13 @@ def recent(instance: Path, conv_id: str, limit: int = DEFAULT_LIMIT) -> list[dic
     return out
 
 
+RESERVED_TURN_KEYS = frozenset({"ts", "seq", "from", "text", "via", "witness", "beat"})
+
+
 def append(instance: Path, conv_id: str, *, speaker: str, text: str,
            witness: Optional[str] = None, beat: Optional[str] = None,
-           enforce_write: bool = True, via: Optional[str] = None) -> dict:
+           enforce_write: bool = True, via: Optional[str] = None,
+           ts: Optional[str] = None, extra: Optional[dict] = None) -> dict:
     """Add one turn. Refuses a speaker the conversation does not permit.
 
     `via` is PROVENANCE, recorded on the turn: which channel asserted the speaker's name.
@@ -272,6 +276,14 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
         raise ValueError(
             f"{speaker} may read '{conv_id}' and may not speak in it "
             f"(writable_by: {m.get('writable_by')})")
+    # `extra` adds annotations (room.py: heard_id, mic). It can never supply a key the store
+    # itself owns, even one this turn happens not to carry: an absent witness or beat must stay
+    # absent, not be asserted by a caller (GPT on #228). Refused HERE, before the lock, because
+    # `next_seq` writes the witness: a refusal after it spends a seq on disk and the next real
+    # turn records a truncation scar for a turn that never existed (legion on #232).
+    reserved = RESERVED_TURN_KEYS.intersection(extra or {})
+    if reserved:
+        raise ValueError(f"extra may not set {sorted(reserved)}; the store owns those fields")
     log, _ = _paths(instance, conv_id)
     log.parent.mkdir(parents=True, exist_ok=True)
     # TWO PROCESSES WRITE THIS FILE: the Python heartbeat (the being's `say`) and the Rust
@@ -292,14 +304,18 @@ def append(instance: Path, conv_id: str, *, speaker: str, text: str,
             # `next_seq`: line count is wrong after any gap, and the witness lives outside
             # Git's rewrite domain so a rollback of every tracked file is still detected.
             f.seek(0)
+            # Everything that can refuse, refuses ABOVE the lock: next_seq spends the number.
             seq = next_seq(instance, conv_id, f.read().splitlines())
-            turn = {"ts": _now(), "seq": seq, "from": speaker, "text": text}
+            # `ts` is when it was SAID, for a turn recorded after the fact (a heard voice is
+            # carried into the room at the next beat, minutes later). Default: now.
+            turn = {"ts": ts or _now(), "seq": seq, "from": speaker, "text": text}
             if via:
                 turn["via"] = via
             if witness:
                 turn["witness"] = witness
             if beat:
                 turn["beat"] = beat
+            turn.update(extra or {})       # reserved keys were refused above
             f.write(json.dumps(turn, ensure_ascii=False) + "\n")
             f.flush()
             os.fsync(f.fileno())
@@ -546,10 +562,15 @@ def echo_of(instance: Path, conv_id: str, me: str, text: str, lookback: int = 4)
     return None
 
 
+VOICE_TAG = " _(heard through the mic; who spoke is not known unless the words say)_"
+
+
 def _provenance_tag(turn: dict) -> str:
     via = turn.get("via")
     if via is None:
         return " _(provenance unrecorded)_"
+    if via == "voice":
+        return VOICE_TAG
     return UNSIGNED_TAG if via in UNSIGNED_VIA else ""
 
 
@@ -566,9 +587,20 @@ def _shown_text(turn: dict, turn_chars: Optional[int], conv_id: str) -> str:
     26 of cbp-being's 33 reads of a conversation file started at line 1 of ~2,950."""
     text = turn.get("text", "")
     if turn_chars and len(text) > turn_chars:
-        return (text[:turn_chars].rstrip()
-                + f" …[+{len(text) - turn_chars} chars; the whole turn: memory_read path "
-                  f"conversations/{conv_id}.jsonl start_line {turn.get('seq')}]")
+        # KEEP THE END AS WELL AS THE START (2026-09-26). The cut used to keep only the head.
+        # A seat's run answer is stdout and then stderr, with the traceback last. In 24 of
+        # cbp-being's 128 run answers the error text sat ONLY in the part that was cut: it saw
+        # fifty lines of epoch losses and never the line that said what broke, and then
+        # reasoned, fairly, that the run was going or had worked. dp's message giving it two
+        # options lost both options and its closing question the same way. The end of a turn
+        # is where a message asks and where output fails, so the cut goes in the middle.
+        head_n = turn_chars * 2 // 5
+        tail_n = turn_chars - head_n
+        omitted = len(text) - head_n - tail_n
+        return (text[:head_n].rstrip()
+                + f"\n …[{omitted} chars omitted from the middle; the whole turn: memory_read "
+                  f"path conversations/{conv_id}.jsonl start_line {turn.get('seq')}]…\n"
+                + text[-tail_n:].lstrip())
     return text
 
 
@@ -629,10 +661,16 @@ def _refuted_mark(text: str, refuted) -> str:
     if not refuted:
         return ""
     low = text.lower()
-    if not _DOWN_WORDS.search(text):
-        return ""
-    for keys, note in refuted:
-        if any(k and k.lower() in low for k in keys):
+    for entry in refuted:
+        # (keys, note) is a SERVICE refutation: it fires on "down" words naming the service.
+        # (keys, note, claim) carries its own claim pattern (2026-09-26: "still running" about
+        # a run the beat measured as not running). keys None means the measurement refutes
+        # the claim whatever it names, e.g. "nothing of yours is running".
+        keys, note = entry[0], entry[1]
+        claim = entry[2] if len(entry) > 2 else _DOWN_WORDS
+        if not claim.search(text):
+            continue
+        if keys is None or any(k and k.lower() in low for k in keys):
             return f"  _[refuted: {note}]_"
     return ""
 

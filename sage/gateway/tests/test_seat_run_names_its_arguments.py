@@ -35,10 +35,10 @@ def test_no_separator_means_no_script_arguments(monkeypatch):
 
 
 def test_the_receipt_says_when_no_arguments_went_in():
-    line = srr.ran_line("m.py", [])
-    assert line.startswith("m.py ") and "no arguments" in line
+    line = srr.ran_line([])
+    assert "no arguments" in line
 
 
 def test_the_receipt_quotes_the_arguments_exactly():
-    line = srr.ran_line("m.py", ["--epochs", "10", "--name", "a b"])
-    assert line.startswith("m.py ") and "--epochs 10 --name 'a b'" in line
+    line = srr.ran_line(["--epochs", "10", "--name", "a b"])
+    assert "--epochs 10 --name 'a b'" in line

@@ -31,6 +31,9 @@ import json
 import os
 import re
 import base64
+import difflib
+import hashlib
+import signal
 import subprocess
 import sys
 import time
@@ -41,7 +44,172 @@ from pathlib import Path
 HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_note", "witness",
-                 "request_scope", "appeal", "peer_ask", "mesh", "say"]
+                 "request_scope", "appeal", "peer_ask", "mesh", "say", "gaze", "speak", "pair_audio", "rest"]
+# Verbs in EXPLORE_TOOLS that act on a BODY are offered only where the beat has measured that
+# body (body.inventory()["verbs"]). GPT on #183: offering `gaze` to a headless being is a
+# false affordance — it would call it, and be told its eyes will follow, on a machine with no
+# eyes. The being discovers the body it has; the verbs it is handed must come from the same
+# measurement. Everything not listed here is a text/mesh verb and is offered everywhere.
+BODY_VERBS = ("gaze", "camera", "speak", "pair_audio")
+
+
+# THE CLOCK IS A SENSE (dp, 2026-09-26, near 2 am: "have it be aware of the local clock. i sleep
+# from midnight to 8am on many days" — then: "clock awareness should be a key sensor for the beings.
+# it contextualizes what the world is doing around them, and promotes cause-effect awareness.")
+#
+# Every stamp the being saw was UTC, so 09:00Z read as morning when it was 2 am for dp, and nothing
+# said how long ago anything happened. The clock sense measures, each beat: the machine's local time
+# and part of day; how long since its last beat, since each person last wrote to it and since it
+# last answered them, since it last spoke aloud; and any rhythm declared in instance.json, e.g.
+#   "rhythms": [{"who": "dp", "asleep_from": "00:00", "asleep_to": "08:00", "tz": "America/Los_Angeles",
+#                "note": "on many days"}]
+# `tz` is the PERSON's zone; without it the rhythm is read in the machine's zone and the beat says so.
+# Elapsed time is what turns two events into a sequence ("I spoke 3 min ago; a voice answered 1 min
+# ago"). A rhythm is a habit, said as one: silence inside it "may simply mean sleep", never "is sleep".
+# The measurement is recorded on the beat like the body.
+def _hhmm(v: str) -> int:
+    h, m = str(v).split(":")
+    return int(h) * 60 + int(m)
+
+
+def part_of_day(hour: int) -> str:
+    return ("night" if hour < 5 else "morning" if hour < 12 else "afternoon" if hour < 17
+            else "evening" if hour < 21 else "night")
+
+
+def _parse_ts(v) -> Optional[datetime]:
+    try:
+        if isinstance(v, (int, float)):
+            return datetime.fromtimestamp(float(v), timezone.utc)
+        return datetime.strptime(str(v)[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _ago(now_utc: datetime, then: datetime) -> str:
+    m = max(0, int((now_utc - then).total_seconds() // 60))
+    if m < 1:
+        return "just now"
+    if m < 60:
+        return f"{m} min ago"
+    if m < 48 * 60:
+        return f"{m // 60} h {m % 60} min ago"
+    return f"{m // 1440} days ago"
+
+
+def clock_sense(now_utc: datetime, instance: Optional[Path] = None, member: str = "",
+                cfg: Optional[dict] = None, since_beat_h: Optional[float] = None) -> dict:
+    """Measure the clock. Every field is observed; absence is absence (None / empty)."""
+    loc = now_utc.astimezone()
+    out = {"utc": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"), "local": loc.strftime("%A %H:%M"),
+           "zone": loc.tzname(), "part_of_day": part_of_day(loc.hour),
+           "since_last_beat_min": None if since_beat_h is None else round(since_beat_h * 60),
+           "people": {}, "spoke_aloud": None, "rhythms": []}
+    if instance is not None:
+        try:
+            from sage.gateway import conversations as _conv
+            for m in _conv.listing(Path(instance)):
+                for t in _conv.recent(Path(instance), m["id"], limit=200):
+                    ts, who = _parse_ts(t.get("ts")), str(t.get("from") or "")
+                    if ts is None or not who:
+                        continue
+                    key = "you_to" if who == member else "from"
+                    person = m["id"] if who == member else who
+                    slot = out["people"].setdefault(person, {"from": None, "you_to": None})
+                    if slot[key] is None or ts > _parse_ts(slot[key]):
+                        slot[key] = ts.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            pass
+        try:
+            lines = (Path(instance) / "spoken.jsonl").read_text(errors="replace").splitlines()
+            last = json.loads(lines[-1]) if lines else None
+            ts = _parse_ts(last.get("ts")) if last else None
+            out["spoke_aloud"] = ts.strftime("%Y-%m-%dT%H:%M:%SZ") if ts else None
+        except Exception:
+            pass
+    for r in (cfg or {}).get("rhythms") or []:
+        # A RHYTHM IS THE PERSON'S, IN THE PERSON'S ZONE (GPT review of #223). `tz` (IANA) binds it;
+        # without one it is read in this machine's zone and SAID to be. An unknown zone is omitted,
+        # never guessed.
+        try:
+            who, a, b = str(r["who"]), _hhmm(r["asleep_from"]), _hhmm(r["asleep_to"])
+            if r.get("tz"):
+                from zoneinfo import ZoneInfo
+                there, zone = now_utc.astimezone(ZoneInfo(str(r["tz"]))), str(r["tz"])
+            else:
+                there, zone = loc, None
+        except Exception:
+            continue
+        t = there.hour * 60 + there.minute
+        out["rhythms"].append({"who": who, "asleep_from": r["asleep_from"], "asleep_to": r["asleep_to"],
+                               "note": r.get("note"), "tz": zone,
+                               "inside": (a <= t < b) if a <= b else (t >= a or t < b)})
+    return out
+
+
+def render_clock(c: dict) -> str:
+    """The clock sense in words the being can act on."""
+    now_utc = _parse_ts(c["utc"])
+    lines = [f"Local time on this machine: {c['local']} ({c['zone']}), {c['part_of_day']}."]
+    since = []
+    if c.get("since_last_beat_min") is not None:
+        since.append(f"your last beat {c['since_last_beat_min']} min ago")
+    for person, s in sorted((c.get("people") or {}).items()):
+        if person in ("voice", "room"):
+            continue            # the room is said below, in spoken words, not "wrote"
+        if s.get("from"):
+            then = _parse_ts(s["from"])
+            since.append(f"{person} last wrote to you {_ago(now_utc, then)} ({then.astimezone():%A %H:%M} local)")
+        if s.get("you_to"):
+            since.append(f"you last wrote to {person} {_ago(now_utc, _parse_ts(s['you_to']))}")
+    heard = ((c.get("people") or {}).get("voice") or {}).get("from")
+    if heard:
+        then = _parse_ts(heard)
+        since.append(f"a voice in the room last spoke to you {_ago(now_utc, then)} ({then.astimezone():%A %H:%M} local)")
+    if c.get("spoke_aloud"):
+        since.append(f"you last spoke aloud {_ago(now_utc, _parse_ts(c['spoke_aloud']))}")
+    if since:
+        lines.append("Since: " + "; ".join(since) + ".")
+    for r in c.get("rhythms") or []:
+        # HABIT STAYS HABIT (GPT review of #223): "often asleep" is a pattern, not today's fact, so
+        # the sentence says silence is unsurprising and MAY be sleep — never that it is.
+        zone = f"{r['tz']} time" if r.get("tz") else "this machine's time zone"
+        span = f"{r['asleep_from']} to {r['asleep_to']} ({zone})" + (f", {r['note']}" if r.get("note") else "")
+        if r["inside"]:
+            lines.append(f"{r['who']} is often asleep from {span}. It is now within that time, so a silence "
+                         f"from {r['who']} is unsurprising and may simply mean sleep.")
+        else:
+            lines.append(f"{r['who']} is often asleep from {span}; it is outside that time now.")
+    return "\n".join(lines)
+
+
+def local_clock(now_utc: datetime, cfg: Optional[dict] = None) -> str:
+    """The clock sense without a home: local time, part of day and rhythms only."""
+    return render_clock(clock_sense(now_utc, cfg=cfg))
+
+
+# Verbs that act on the being's OWN worktree (instance.json `worktree`, SAGE #208). They are in
+# the registry and gated on main (git_read/search/check since #208, patch_apply #210,
+# git_restore #217), but EXPLORE_TOOLS never offered them, so on main a declared worktree was
+# invisible: measured on nomad-being 2026-09-27, the first beat after its worktree was declared
+# offered only the home and mesh verbs, and the being rested as it had for 40 beats. Offered
+# only where a worktree is declared, the same rule as BODY_VERBS: a verb for a tree the being
+# does not hold is a false affordance. pr_open / pr_amend are deliberately not here: they need a
+# remote and the PR machinery, which a standalone worktree does not have; a seat that has both
+# adds them with its own slice.
+WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore")
+
+
+def offered_explore_tools(body_reading: Optional[dict], worktree: Optional[str] = None) -> list:
+    """EXPLORE_TOOLS minus the body verbs this machine's measured inventory does not carry, plus
+    the worktree verbs when the being has a worktree of its own (inserted before `rest`)."""
+    have = set(((body_reading or {}).get("inventory") or {}).get("verbs") or [])
+    offered = [t for t in EXPLORE_TOOLS if t not in BODY_VERBS or t in have]
+    if worktree:
+        extra = [v for v in WORKTREE_VERBS if v not in offered]
+        at = offered.index("rest") if "rest" in offered else len(offered)
+        offered[at:at] = extra
+    return offered
 # `say` is offered at REFLECTION too, and that is not redundancy. Measured on Legion
 # 2026-09-07: the being was shown dp's first turn, its state marked it unanswered, and it
 # spent every explore step reading its own source, then closed the beat. A verb in the
@@ -162,6 +330,115 @@ choice here and nothing is owed."""
 # understood the question perfectly. This model completes a template when it is shown one, and
 # an ellipsis in a quoted argument is a template. Same family as the mis-rooted home paths and
 # the echoed example filenames: an ask with a slot in it gets the slot back.
+
+# THE ANSWER TURN IS A JSON TURN (2026-09-27). The tool-call answer turn above delivered 1 of 69
+# firings on Sprout (2026-09-24..27): 46 bracketed placeholders, 21 prose with no call. An offline
+# A/B on the being's own model (qwen3.8-distill:2b, think on, its real prompt and dp's real
+# pending turn, nothing sent) gave:
+#   A  tool call, today's prompt                       0/8 calls (all prose / placeholders)
+#   B  JSON {answer, message} + prior words + record   8/8 messages, ~4 on topic (2 fiction
+#                                                       from the prior words, 2 about the tools)
+#   C  JSON, ONLY the pending turn and the ask         8/8 messages, ~7 on topic
+# Constrained output removes the failure this model has most (emitting the call); dropping the
+# prior words and the tool record removes the two content failures B showed (SMALL_MODEL_
+# LEGIBILITY 1.9/1.13: material in view becomes the message; 1.14: plumbing becomes the topic).
+# The being still decides: answer=false is silence. answer=true is dispatched as ITS say through
+# the gate, so every say guard (placeholder, punctuation, echo, room) still applies.
+# Failure shapes, named before shipping (1.14): a third-person retelling of the pending turn
+# ("'...' dp said") that passes the 0.75 echo bar; a lyrical drift off the question; never
+# choosing silence (0/16 chose it; tolerable here because this turn only opens for a turn that
+# asks); an unparsed reply (nothing is sent). Every firing is recorded as an intervention.
+ANSWER_ASK_JSON = """{pending}
+You have not answered yet. If you want to, answer now: set answer to true and write
+your message in message. Write the message itself, in your own voice — the words you would want
+read.
+
+If you would rather not answer, set answer to false and leave message empty. Silence is a real
+choice here and nothing is owed."""
+ANSWER_SCHEMA = {"type": "object",
+                 "properties": {"answer": {"type": "boolean"}, "message": {"type": "string"}},
+                 "required": ["answer", "message"]}
+
+
+def answer_turn_mode(instance) -> str:
+    """"json" or "tool" (the default). Per instance (cbp-claude's pre-review of #237: CBP's 4B being
+    delivers 78% of answer turns on the tool path; the A/B only measured Sprout's 2B)."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return "json" if instance_config(instance).get("answer_turn") == "json" else "tool"
+    except Exception:
+        return "tool"
+
+
+def _answer_generate(llm, msgs):
+    """One constrained generate, retried once on the shapes the tool loop also retries: empty
+    content (think-only), a length cut, or a transport error. Returns (r, retried)."""
+    r = llm.get_chat_response(msgs, fmt=ANSWER_SCHEMA)
+    raw = (r or {}).get("raw") or {}
+    content = ((r or {}).get("content") or "").strip()
+    if not content or raw.get("done_reason") == "length" or content.startswith("[OllamaIRP"):
+        return llm.get_chat_response(msgs, fmt=ANSWER_SCHEMA), 1
+    return r, 0
+
+
+def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
+                     on_generate=None, acts: str = ""):
+    """The being's answer, if it chose one, dispatched as its `say`.
+
+    The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
+    only when the caller passes it, which the heartbeat does for a SEAT's question when the beat
+    acted: a seat asks about this beat's acts (on CBP 76 of 83 delivered answers went to the
+    seat), dp and the room mostly do not, and arm B's plumbing replies came from the record line
+    ("You called no tools this beat") sitting beside a person's question."""
+    from sage.gateway.being_tool_loop import ToolTurnResult
+    from sage.gateway.being_gate_client import BeingIntent
+    ask = ANSWER_ASK_JSON.format(pending=selected.render())
+    msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
+            {"role": "user", "content": (acts + "\n\n" + ask) if acts else ask}]
+    r, retried = _answer_generate(llm, msgs)
+    raw = (r or {}).get("raw") or {}
+    content = ((r or {}).get("content") or "").strip()
+    thinking = ((raw.get("message") or {}).get("thinking") or "").strip()
+    gen = {"done_reason": raw.get("done_reason"), "prompt_eval_count": raw.get("prompt_eval_count"),
+           "eval_count": raw.get("eval_count"), "retried": retried,
+           "num_predict": getattr(llm, "resolve_num_predict", lambda: None)()}
+    if on_generate is not None:
+        try:
+            on_generate(dict(gen))
+        except Exception:
+            pass
+    res = ToolTurnResult(reply=content, thinking=[thinking] if thinking else [], generates=[gen])
+    form = {"parsed": False, "answer": None, "sent": False, "retried": retried,
+            "done_reason": raw.get("done_reason"), "with_acts": bool(acts)}
+    try:
+        j = json.loads(content)
+        form["parsed"] = isinstance(j, dict)
+    except Exception:
+        j = None
+    if not form["parsed"]:
+        form["why"] = ("empty reply" if not content else "cut at the length limit"
+                       if raw.get("done_reason") == "length" else "transport error"
+                       if content.startswith("[OllamaIRP") else "reply was not the JSON asked for")
+    else:
+        form["answer"] = bool(j.get("answer"))
+        message = str(j.get("message") or "").strip()
+        res.reply = message
+        if form["answer"] and message:
+            intent = BeingIntent("say", {"to": selected.cid, "text": message})
+            env = client.dispatch(intent)
+            res.trace.append((intent, env))
+            res.steps = 1
+            form["sent"] = bool(env.ok)
+            if not env.ok:
+                form["refused"] = (env.error or "")[:160]
+                form["why"] = "the gate refused the say"
+        elif form["answer"]:
+            form["why"] = "chose to answer but wrote no message"
+        else:
+            form["why"] = "chose silence"
+    res.answer_form = form
+    return res
+
 
 REFLECT = """The beat is ending. Call these tools, then stop:
 {say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
@@ -296,11 +573,17 @@ CONV_LADDER = ((12, None), (12, 1500), (6, 1200), (3, 900), (2, 700))
 LOOP_GROWTH_CHARS = 10_000
 
 
-class BeatKilled(Exception):
+class BeatKilled(BaseException):
     """SIGTERM arrived mid-beat (the unit's TimeoutStartSec, or a stop). Raised from the
     signal handler so the beat unwinds to its record instead of vanishing: 04:30Z
     2026-09-09 a 51-minute beat left nothing in heartbeats.jsonl and the monitor never
-    knew it had happened. systemd allows TimeoutStopSec (90 s) after SIGTERM — enough."""
+    knew it had happened. systemd allows TimeoutStopSec (90 s) after SIGTERM — enough.
+
+    BaseException, for the reason KeyboardInterrupt is one. Almost all of a beat is spent
+    blocked in OllamaIRP.get_chat_response, which ends in `except Exception` and returns the
+    error AS MODEL TEXT — so an Exception subclass raised there became "[OllamaIRP: Error:
+    signal 15 (SIGTERM)]", the beat carried on, and systemd SIGKILLed it 90 s later with
+    nothing written. Measured by McNugget on #213 against a socket that never answers."""
 
 
 # What a verb's schema costs, and what to assume when it cannot be measured. Measured on
@@ -774,12 +1057,558 @@ def service_contradictions(instance: Path, member: str, services: str) -> str:
     return "\n".join(notes)
 
 
+# ---------------------------------------------------------------------------------------------
+# YOUR FILES AND RUNS, MEASURED (2026-09-26). dp: "whatever is in its context window is its
+# entire reality. how that window is managed determines everything."
+#
+# The window measured the being's SERVICES every beat, and even quoted its stale "the daemon is
+# down" sentences back beside the measurement (service_contradictions). It measured nothing
+# about its FILES and RUNS, which is where its inventions actually live. On cbp-being,
+# 2026-09-25/26, it said "the held-out test is still running" across a dozen beats while no
+# process existed. It said "the indentation fix has been applied" on a sha that had not moved.
+# It told dp that results were pending when no run had ever succeeded. Every source it had for
+# those facts was its own earlier narration: todo, journal, account, and its own turns replayed.
+# Nothing measured contradicted them, so nothing could. This block is that measurement.
+
+_RUNNING_CLAIM = re.compile(
+    r"(?i)(still running|is running|currently running|being run|in progress|"
+    r"has(?:n'?t| not)(?: yet)? (?:completed|finished)|not (?:yet )?(?:completed|finished)|"
+    r"results? (?:are |is )?(?:pending|coming|on (?:its|their|the) way)|"
+    r"await\w*[^.\n]{0,60}results?|waiting (?:for|on)[^.\n]{0,60}results?)")
+_RUN_ANSWER = re.compile(r"^\[request_run\] I (ran|did not run) (\S+?)[.,;:]?(?:\s|$)")
+_RUN_VERDICT = re.compile(r"(exit code -?\d+|timed out after [^.—]+)")
+_RUN_SHA = re.compile(r"sha(?:256)?[:= ]\s*([0-9a-f]{12})")
+_REQUEST = "[request_run]"
+FILES_SHOWN = 4
+
+
+def _sha12(p: Path) -> str:
+    try:
+        return hashlib.sha256(p.read_bytes()).hexdigest()[:12]
+    except OSError:
+        return "?"
+
+
+def _when(ts: float, now: float) -> str:
+    from datetime import datetime, timezone
+    t = datetime.fromtimestamp(ts, timezone.utc)
+    today = datetime.fromtimestamp(now, timezone.utc).date()
+    day = "today" if t.date() == today else f"{t:%Y-%m-%d}"
+    return f"{t:%H:%M}Z {day}"
+
+
+def _rel(instance: Path, raw: str) -> str:
+    """A path as the being's home names it: relative to the home when it is inside it (a
+    request may name the absolute path), normalised, never escaping upward."""
+    raw = (raw or "").strip().strip("`'\"").rstrip(".,;:")
+    if not raw:
+        return ""
+    home = instance.resolve()
+    p = Path(raw)
+    try:
+        if p.is_absolute():
+            return str(p.resolve().relative_to(home))
+    except (ValueError, OSError):
+        return ""
+    rel = os.path.normpath(raw)
+    return "" if rel.startswith("..") else rel
+
+
+def _process_table():
+    """[(argv, cwd)] for every process this user can see, or None when this machine cannot be read.
+
+    Linux reads /proc. macOS has no /proc, and the first cut returned an empty set there -- so on
+    every Mac the window told the being "Nothing of yours is running right now" as a MEASUREMENT,
+    and the refuter then quoted the being's own true sentences back to it as contradicted
+    (McNugget, 2026-09-26). "Could not look" is not "nothing there". So: `ps` for argv, `lsof` for
+    the cwd of only the processes that could matter, and None when neither can be run.
+    """
+    if os.path.isdir("/proc"):
+        table = []
+        try:
+            pids = [d for d in os.listdir("/proc") if d.isdigit()]
+        except OSError:
+            return None
+        for pid in pids:
+            try:
+                argv = open(f"/proc/{pid}/cmdline", "rb").read().split(b"\0")
+                args = [x.decode(errors="replace") for x in argv if x]
+                try:
+                    cwd = os.readlink(f"/proc/{pid}/cwd")
+                except OSError:
+                    cwd = ""
+                table.append((args, cwd))
+            except OSError:
+                continue
+        return table
+    import subprocess
+    try:
+        out = subprocess.run(["ps", "-axww", "-o", "pid=", "-o", "command="], capture_output=True,
+                             text=True, timeout=10)
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    rows = []
+    for line in out.stdout.splitlines():
+        pid, _, cmd = line.strip().partition(" ")
+        if pid.isdigit() and cmd.strip():
+            # `ps` gives one string, not argv. Whitespace-split is exact for the paths this probes
+            # (files in a being's home). A path WITH A SPACE is missed -- and a miss renders as
+            # "not running", a measured absence, not as unmeasured (Legion). Rare in a being's
+            # filenames; stated so nobody reads "never mis-matched" as "never wrong".
+            rows.append((pid, cmd.split()))
+    return rows
+
+
+def _cwd_of(pid: str) -> str:
+    """A macOS process's cwd, by lsof. Empty when it cannot be read (not ours, or no lsof)."""
+    import subprocess
+    try:
+        out = subprocess.run(["lsof", "-a", "-p", pid, "-d", "cwd", "-Fn"], capture_output=True,
+                             text=True, timeout=5).stdout
+    except Exception:
+        return ""
+    return next((l[1:] for l in out.splitlines() if l.startswith("n")), "")
+
+
+def _running_files(instance: Path, rels: list):
+    """Which of `rels` (paths relative to the home) a live process has on its command line --
+    or None when this machine's processes cannot be read, which the caller must render as
+    UNMEASURED, never as "nothing running". Each argument is resolved against the process's
+    own cwd and compared as a WHOLE path, so a sibling home (…/cbp-being-old/x.py) can never
+    match this one (sprout's review of #224)."""
+    found = set()
+    home = instance.resolve()
+    # BOTH SPELLINGS of every wanted file (Legion, review of #227): the home's own, and the
+    # resolved one. Keyed on the home's spelling alone, the realpath below lost a run on EVERY OS
+    # when the file is a symlink (`run.py -> scratch/real.py`): the argument resolved to the
+    # target and matched nothing, and the window said "nothing running" while it ran. Keyed on
+    # both, a symlinked file matches under its own name or its target's, and macOS's
+    # /var-vs-/private/var still matches.
+    wanted = {}
+    for r in rels:
+        if r:
+            wanted[str(home / r)] = r
+            wanted[os.path.realpath(home / r)] = r
+    if not wanted:
+        return found
+    table = _process_table()
+    if table is None:
+        return None
+    if os.path.isdir("/proc"):
+        entries = table
+    else:
+        # Only processes naming a wanted file's BASENAME can match, so only those pay for lsof.
+        names = {Path(w).name for w in wanted}
+        entries = []
+        for pid, args in table:
+            if len(args) >= 2 and any(Path(x).name in names for x in args[1:]):
+                need_cwd = any(not os.path.isabs(x) for x in args[1:])
+                entries.append((args, _cwd_of(pid) if need_cwd else ""))
+    for args, cwd in entries:
+        if len(args) < 2:
+            continue
+        for x in args[1:]:
+            full = (os.path.normpath(x if os.path.isabs(x) else os.path.join(cwd, x))
+                    if (cwd or os.path.isabs(x)) else "")
+            if not full:
+                continue
+            # The argument as written AND resolved, against both spellings of every wanted file.
+            for spelling in (full, os.path.realpath(full)):
+                if spelling in wanted:
+                    found.add(wanted[spelling])
+                    break
+    return found
+
+
+def _runs_by_file(instance: Path, member: str) -> tuple:
+    """({rel: latest seat run answer}, {rel: [pending request seqs]}), read from every
+    conversation the being is in, keyed by the path RELATIVE TO THE HOME, so notes/a.py and
+    a.py are two files. A run answer is someone else's turn starting `[request_run] I ran
+    <path>` (or `I did not run`); a request is the being's own `[request_run] <path>` with no
+    answer for that path after it."""
+    from sage.gateway import conversations as _conv
+    last, pending = {}, {}
+    try:
+        convs = [m for m in _conv.listing(instance) if member in m.get("participants", [])]
+    except Exception:
+        return last, pending
+    for m in convs:
+        try:
+            turns = _conv.recent(instance, m["id"], limit=400)
+        except Exception:
+            continue
+        for t in turns:
+            text = (t.get("text") or "").strip()
+            if not text.startswith(_REQUEST):
+                continue
+            first = text.splitlines()[0]
+            if t.get("from") == member:
+                rest = first[len(_REQUEST):].strip()
+                f = _rel(instance, rest.split()[0]) if rest else ""
+                if f:
+                    pending.setdefault(f, []).append(int(t.get("seq") or 0))
+                continue
+            mm = _RUN_ANSWER.match(first)
+            if not mm:
+                continue
+            f = _rel(instance, mm.group(2))
+            if not f:
+                continue
+            v = _RUN_VERDICT.search(first)
+            sh = _RUN_SHA.search(first)
+            last[f] = {"seq": int(t.get("seq") or 0), "ts": t.get("ts", ""), "conv": m["id"],
+                       "ran": mm.group(1) == "ran",
+                       "verdict": v.group(1) if v else ("declined" if mm.group(1) != "ran" else "no verdict"),
+                       "sha": sh.group(1) if sh else None}
+            pending.pop(f, None)      # an answer for a path answers every request for it before it
+    return last, pending
+
+
+# Where a being keeps runnable code: its home's top level and the two directories it writes
+# (sprout's review: legion-being has 244 scripts in notes/ and scratch/ and 0 at top level, so
+# a top-level-only scan showed it nothing). request_run runs .py and .sh.
+RUNNABLE = (".py", ".sh")
+RUNNABLE_DIRS = ("", "notes", "scratch")
+
+
+def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
+                   shown: int = FILES_SHOWN) -> tuple:
+    """(block, refuted, facts). The block is the measured state of the being's own runnable
+    files; refuted is [(keys, note, claim)] for the conversations block, so a replayed "still
+    running" of its own carries the measurement on the claim itself; facts feed want_check."""
+    import time as _time
+    now = now or _time.time()
+    home = instance.resolve()
+    found = {}
+    for d in RUNNABLE_DIRS:
+        base = instance / d if d else instance
+        try:
+            for p in base.iterdir():
+                if p.is_file() and p.suffix in RUNNABLE:
+                    found[str(p.resolve().relative_to(home))] = p
+        except (OSError, ValueError):
+            continue
+    last, pending = _runs_by_file(instance, member) if member else ({}, {})
+    # a path a run or request names is the being's file too, wherever it lives
+    for rel in list(last) + list(pending):
+        p = instance / rel
+        if rel not in found and p.is_file():
+            found[rel] = p
+    if not found and not last and not pending:
+        return "", [], {}
+
+    def mt(p):
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return 0.0
+    ordered = sorted(found, key=lambda r: mt(found[r]), reverse=True)
+    top = ordered[:shown]
+    # a waiting request is always shown, even past the cut: it is the one thing in motion
+    top += [r for r in pending if r in found and r not in top]
+    missing = [r for r in pending if r not in found]
+    running = _running_files(instance, top)
+    from datetime import datetime, timezone
+    stamp = f"{datetime.fromtimestamp(now, timezone.utc):%H:%M}Z"
+    lines = [f"## Your files and runs, measured at the start of this beat ({stamp})",
+             "Measured, not remembered. Where your todo, journal, account or an earlier message of "
+             "yours says otherwise, this is current."]
+    for rel in top:
+        p = found[rel]
+        try:
+            n_lines = sum(1 for _ in open(p, errors="replace"))
+        except OSError:
+            n_lines = "?"
+        sha = _sha12(p)
+        row = f"- {rel}: sha {sha}, {n_lines} lines, last changed {_when(mt(p), now)}."
+        r = last.get(rel)
+        if r:
+            when = r["ts"][11:16] + "Z" if len(r.get("ts", "")) >= 16 else "?"
+            if r["ran"]:
+                row += f" Last run: seq {r['seq']} at {when}, {r['verdict']}"
+                if r["sha"]:
+                    row += "; the file is unchanged since that run" if r["sha"] == sha else (
+                        f"; that run was of sha {r['sha']}, so the file has CHANGED since")
+                row += (f" (whole output: memory_read path conversations/{r['conv']}.jsonl "
+                        f"start_line {r['seq']}).")
+            else:
+                row += f" Last request was declined at seq {r['seq']} ({when})."
+        else:
+            row += " Never run."
+        if rel in pending:
+            row += f" Your request (seq {', '.join(map(str, pending[rel]))}) is waiting to be run."
+        row += " Running now." if running and rel in running else ""
+        lines.append(row)
+    for rel in missing:
+        lines.append(f"- {rel}: your request (seq {', '.join(map(str, pending[rel]))}) names it, "
+                     f"but there is no such file in your home.")
+    if len(ordered) > len([r for r in top if r in ordered]):
+        lines.append(f"- … and {len(ordered) - len(top)} older runnable file(s) in your home.")
+    refuted = []
+    if running is None:
+        # UNMEASURED. Nothing is refuted and nothing is claimed: a probe that could not look has
+        # no standing to tell the being its own sentences are false.
+        lines.append("Whether anything of yours is running could not be measured on this machine, "
+                     "so this window says nothing about it either way.")
+    elif running:
+        lines.append(f"Running right now: {', '.join(sorted(running))}.")
+    else:
+        lines.append("Nothing of yours is running right now. No run is in progress, so no results "
+                     "are on their way unless a request above is waiting to be run.")
+        note = f"measured {stamp}: nothing of yours is running"
+        refuted.append((None, note, _RUNNING_CLAIM))
+        lines += _own_running_claims(instance, member, stamp)
+    facts = {"last": last, "pending": pending, "running": running, "stamp": stamp,
+             "scripts": found}
+    return "\n".join(lines), refuted, facts
+
+
+_WANTS_RESULTS = re.compile(r"(?i)\bresults?\b|\bmetrics?\b|\bcorrelation\b|\bheld-?out loss\b")
+
+
+def want_check(account: str, facts: dict) -> str:
+    """A line under the being's carried account when its WANT asks for results that nothing
+    measured can deliver: no run of the file it names is running or waiting.
+
+    The account is kept VERBATIM and handed back each beat (being_join, "ask, do not offer"),
+    and its WANT survives until a raising session. Measured 2026-09-26 on cbp-being: WANT
+    "the held-out test results from cbp-claude", with no run pending and none running. The
+    act_first explore then opened the 08:11 beat with peer_ask for those results, before it
+    had read a thing. The want is the being's own, and it stays verbatim. What changes is that
+    the measurement now sits beside it."""
+    if not account or not facts:
+        return ""
+    want = next((l.split(":", 1)[1].strip() for l in account.splitlines()
+                 if l.strip().upper().startswith("WANT:")), "")
+    if not want or not _WANTS_RESULTS.search(want):
+        return ""
+    # None is UNMEASURED: no claim that nothing is running may be built on it. (Also None when
+    # `facts == {}` -- files_and_runs failed as a whole -- which is a different cause with the
+    # same right answer: no note.)
+    if facts.get("running") is None or facts.get("running"):
+        return ""
+    named = [r for r in facts.get("scripts", {}) if r in want or Path(r).name in want]
+    if any(r in facts.get("pending", {}) for r in named) or (not named and facts.get("pending")):
+        return ""
+    stamp = facts.get("stamp", "")
+    if named:
+        n = sorted(named, key=len, reverse=True)[0]
+        r = facts.get("last", {}).get(n)
+        was = (f"its last run was seq {r['seq']}, {r['verdict']}" if r and r.get("ran")
+               else "it has never been run")
+        return (f"_Measured at {stamp}, beside your WANT: {n} is not running and no request of "
+                f"yours for it is waiting; {was}. Results for it can only come from a new run "
+                f"you request._")
+    return (f"_Measured at {stamp}, beside your WANT: nothing of yours is running and no request "
+            f"of yours is waiting to be run, so no results are on their way. They can only come "
+            f"from a run you request._")
+
+
+def _own_running_claims(instance: Path, member: str, stamp: str, most: int = 3) -> list:
+    """The being's OWN sentences that say something is running or that results are pending,
+    quoted beside the measurement that nothing is. Same move as service_contradictions: one
+    measured line loses to a dozen of the being's own sentences unless the sentence is quoted
+    next to it."""
+    from sage.gateway.being_join import carried_account, last_session_number
+    sources = [("your todo.md", todo_view(instance)),
+               ("your journal.md", _read(instance / "journal.md", 1200))]
+    try:
+        acc = carried_account(instance, last_session_number(instance)) or ""
+        sources.append(("your own account", acc))
+    except Exception:
+        pass
+    out, seen = [], set()
+    for where, text in sources:
+        for sent in re.split(r"(?<=[.!?])\s+|\n", text or ""):
+            # drop only a list marker and checkbox ("- [ ] ", "* [x] "); quote its words exactly
+            s = re.sub(r"^\s*[-*]\s*(?:\[[ xX]\]\s*)?", "", sent).strip()
+            if len(s) < 12 or not _RUNNING_CLAIM.search(s) or s.lower() in seen:
+                continue
+            seen.add(s.lower())
+            out.append(f"- **Your own record disagrees with this measurement.** In {where} you "
+                       f"wrote: \"{s[:200]}\". Measured at {stamp}: nothing of yours is running.")
+            break           # one quote per source: enough to be seen, not a wall
+        if len(out) >= most:
+            break
+    return out
+
+
+# ---------------------------------------------------------------------------------------------
+# THE TODO, AS WHAT IS STILL OPEN (dp, 2026-09-26: "yes the todo should show still-open").
+#
+# todo.md is an append-only log: each reflect writes a dated delta (added / done / still open),
+# and memory_write only appends. The window used to show the last 1500 chars of that log. On
+# cbp-being that meant stale "still running / awaiting results" lines, contradictory [ ] and
+# [x] copies of one item, and whatever a truncated block happened to hold (the file is
+# 299 KB, with 1,246 open checkboxes and 778 done). Now the whole log is read in order: an
+# item opens when it is added, and closes when a later line marks it done (a light rewording
+# still matches). The being's own "still open: none" clears the list. Items opened in the
+# last TODO_WINDOW_H hours are shown, newest first. Older unresolved ones are counted, not
+# listed, and the log itself is never changed.
+TODO_WINDOW_H = 48
+TODO_SHOWN = 15
+_BLOCK = re.compile(r"^\s*(20\d\d-\d\d-\d\d)[ T](\d\d:\d\d)")
+_SECTION = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open|added|done|completed)\s*\]?\s*:?\s*$", re.I)
+_NONE = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open)\s*\]?\s*:?\s*(none|nothing)\b", re.I)
+_ITEM = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
+_BOX = re.compile(r"^\[([ xX])\]\s*(.*)$")
+_TAG = re.compile(r"^\[(done|still open|open|added|completed)\]\s*:?\s*(.*)$", re.I)
+_OPEN_WORDS = {"still open", "open", "added"}
+
+
+def _norm(s):
+    s = re.sub(r"[`*_]", "", s.lower())
+    s = re.sub(r"\s+", " ", s).strip(" .:;-")
+    return s
+
+
+def todo_open(text, now=None, window_h=48):
+    """[(item, since)] still open, newest first, and the count of older open items."""
+    now = now or datetime.now(timezone.utc)
+    items = _todo_items(text or "")
+    cutoff = now - timedelta(hours=window_h)
+    # An item with no dated block above it is undated, not old: it is shown, after the dated ones.
+    recent = [(t, s) for t, s in items.values() if s is None or s >= cutoff]
+    older = sum(1 for t, s in items.values() if s is not None and s < cutoff)
+    recent.sort(key=lambda x: (x[1] is not None, x[1] or cutoff), reverse=True)
+    return recent, older
+
+
+# ONE PARSE PER TEXT, AND THE CHEAP BOUNDS FIRST. Measured 2026-09-27 on cbp-being: todo.md had
+# grown to 5,178 lines (3,267 items), one todo_open took 47.7 s, and fit_state builds the state
+# several times per beat — a beat sat 5+ minutes at 97% CPU in difflib before its first model
+# call. The parse does not depend on `now`, so it is computed once per distinct text; and
+# real_quick_ratio() >= quick_ratio() >= ratio() are upper bounds, so testing them first skips
+# almost every full comparison without changing a single answer.
+_TODO_PARSE: dict = {}
+
+
+def _todo_items(text: str) -> dict:
+    key = hashlib.sha256(text.encode("utf-8", "surrogateescape")).hexdigest()
+    hit = _TODO_PARSE.get(key)
+    if hit is None:
+        hit = _parse_todo(text)
+        _TODO_PARSE.clear()
+        _TODO_PARSE[key] = hit
+    return hit
+
+
+def _parse_todo(text: str) -> dict:
+    """norm -> (item text, since) for every item still open at the end of the log."""
+    items = {}          # norm -> (text, since_dt)
+    since = None
+    section = None
+    for line in (text or "").splitlines():
+        m = _BLOCK.match(line)
+        if m:
+            try:
+                since = datetime.strptime(f"{m.group(1)} {m.group(2)}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+            except ValueError:
+                pass
+            section = None
+            continue
+        if _NONE.match(line):
+            items.clear()
+            continue
+        sm = _SECTION.match(line)
+        if sm:
+            section = sm.group(1).lower()
+            continue
+        im = _ITEM.match(line)
+        if not im:
+            continue
+        body = im.group(1)
+        status = None
+        b = _BOX.match(body)
+        if b:
+            status = "done" if b.group(1) in "xX" else "open"
+            body = b.group(2)
+        else:
+            t = _TAG.match(body)
+            if t:
+                status = "done" if t.group(1).lower() in ("done", "completed") else "open"
+                body = t.group(2)
+            elif section:
+                status = "done" if section in ("done", "completed") else "open"
+        if not status or len(body) < 4:
+            continue
+        n = _norm(body)
+        if status == "open":
+            if n not in items:
+                items[n] = (body.strip(), since)
+        else:
+            if n in items:
+                del items[n]
+            else:
+                sm_ = difflib.SequenceMatcher(None, "", n)   # n is seq2: its index is built once
+                for k in list(items):
+                    sm_.set_seq1(k)
+                    if (sm_.real_quick_ratio() >= 0.85 and sm_.quick_ratio() >= 0.85
+                            and sm_.ratio() >= 0.85):
+                        del items[k]
+                        break
+    return items
+
+
+def todo_view(instance: Path, now=None) -> str:
+    """The todo section of the window: what is still open, from the whole log."""
+    try:
+        text = (instance / "todo.md").read_text(errors="replace")
+    except OSError:
+        text = ""
+    if not text.strip():
+        return "## todo.md\n(empty: you have no todo list yet)"
+    rec, older = todo_open(text, now=now, window_h=TODO_WINDOW_H)
+    lines = [f"## todo.md: still open ({len(rec)})"]
+    lines += [f"- [ ] {t}" + (f" (since {s:%Y-%m-%d %H:%M} UTC)" if s else "") for t, s in rec[:TODO_SHOWN]]
+    if len(rec) > TODO_SHOWN:
+        lines.append(f"- … and {len(rec) - TODO_SHOWN} more opened in the last {TODO_WINDOW_H} h.")
+    if not rec:
+        lines.append("(nothing open)")
+    if older:
+        lines.append(f"({older} older item(s) opened more than {TODO_WINDOW_H} h ago were never marked "
+                     f"done; they are in todo.md.)")
+    lines.append("Built from your whole todo.md: an item stays open until a later line marks it done. "
+                 "To close one, write it under done:. The whole log: memory_read todo.md.")
+    return "\n".join(lines)
+
+
 def own_state(instance: Path, member: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
-              services: str = "", mark_conversations: bool = True) -> str:
+              services: str = "", mark_conversations: bool = True,
+              body_reading: Optional[dict] = None) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
+    # The body first: it is the only thing in this state that is happening NOW. Everything below
+    # is record. (dp 2026-09-23: "bridge the two halves ... world feedback to its actions".)
+    # main() measures it once and passes it in, so the verbs offered and the body described
+    # come from the same reading; a bare call (tests, tools) measures here.
+    try:
+        from sage.gateway import body as _body
+        _cur = body_reading if body_reading is not None else _body.reading()
+        _prev = None
+        try:
+            for _l in reversed(open(instance / "heartbeats.jsonl", errors="replace").readlines()[-3:]):
+                _b = json.loads(_l)
+                if _b.get("body"):
+                    _prev = _b["body"]; break
+        except Exception:
+            _prev = None
+        parts.append(_body.render(_cur, _prev, name=member))
+        own_state.last_body = _cur
+    except Exception as _e:
+        own_state.last_body = {"error": f"{type(_e).__name__}: {_e}"}
+    # Its files and runs, measured: also NOW, so beside the body and before every record that
+    # narrates them (see files_and_runs). Fail-open: a measurement that errors adds nothing.
+    try:
+        files_block, files_refuted, files_facts = files_and_runs(instance, member)
+    except Exception:
+        files_block, files_refuted, files_facts = "", [], {}
+    if files_block:
+        parts.append(files_block)
     # Conversations first among the channels: a turn addressed to the being and unanswered
     # is the one thing in its state that is waiting on IT, and it should never have to infer
     # that from a wall of notes. Both directions live in one ordered record.
@@ -794,10 +1623,9 @@ def own_state(instance: Path, member: str = "",
         # fixed ceiling this supersedes — cbp's stopgap on SAGE#81, now the rung it starts from).
         convs = _conv.render_for_being(instance, member, per_conv=per_conv,
                                        turn_chars=turn_chars, mark=mark_conversations,
-                                       refuted=refuted_claims(services))
+                                       refuted=refuted_claims(services) + files_refuted)
         if convs.strip():
-            parts.append("## Your conversations (both directions, kept forever; reply with `say`)\n"
-                         + convs.strip())
+            parts.append(conversation_header(instance, member) + "\n" + convs.strip())
     if services.strip():
         parts.append("## Your services, measured at the start of this beat\n" + services.strip()
                      + "\nThis was measured now. A note in your journal or todo about these services is "
@@ -810,7 +1638,14 @@ def own_state(instance: Path, member: str = "",
         parts.append("## Your recent asks to peers\n" + asks)
     from_seat = _read(instance / SEAT_CHANNEL, 3000)
     if from_seat.strip():
-        parts.append("## From the seat (cbp-claude), directly (notes/from-the-seat.md: what the "
+        # WHICH seat. This was the literal "cbp-claude" on every being since #100 (2026-09-15), so
+        # legion-being, sprout-being and nomad's being were each told, every beat, that CBP's seat
+        # writes their from-the-seat.md. SAGE_SEAT names the seat (<machine>-<model>, the same
+        # variable the PR verbs' Seat trailer reads), through the same helper, so an unset machine
+        # shows the one fleet-rule spelling, <machine>-unknown, in both places.
+        from sage.gateway.being_gate_client import seat_name
+        _seat = seat_name()
+        parts.append(f"## From the seat ({_seat}), directly (notes/from-the-seat.md: what the "
                      "seat measured for you. You read this; you do not write it)\n" + from_seat.strip())
     from_dp = _read(instance / DP_CHANNEL, 4000)
     if from_dp.strip():
@@ -818,18 +1653,54 @@ def own_state(instance: Path, member: str = "",
                      "not relayed by a seat. You read this; you do not write it)\n" + from_dp.strip())
     acc = carried_account(instance, last_session_number(instance))
     if acc:
-        parts.append("## Your own account\n" + acc)
+        check = want_check(acc, files_facts)
+        parts.append("## Your own account\n" + acc + (("\n" + check) if check else ""))
     # tails are short now that recall searches the whole home (window pressure: median 6157
     # of 8192 tokens per prompt, max 8013, measured 2026-09-07)
-    todo = _read(instance / "todo.md", 1500)
-    parts.append("## todo.md\n" + (todo.strip() or "(empty: you have no todo list yet)"))
+    parts.append(todo_view(instance))
     journal = _read(instance / "journal.md", 1200)
     parts.append("## journal.md (tail)\n" + (journal.strip() or "(empty: this is your first beat)"))
     for d in ("scratch", "notes"):
-        p = instance / d
-        names = sorted(x.name for x in p.iterdir()) if p.is_dir() else []
-        parts.append(f"## {d}/\n" + ("\n".join(f"- {n}" for n in names[:30]) if names else "(empty)"))
+        parts.append(dir_listing(instance, d))
     return "\n\n".join(parts)
+
+
+LISTING_LIMIT = 30
+
+
+def dir_listing(instance: Path, d: str, limit: int = LISTING_LIMIT) -> str:
+    """One home directory as the beat shows it: NEWEST FIRST, and saying when it is partial.
+
+    It used to be `sorted(names)[:30]`, the thirty that sort FIRST, which in a directory of
+    dated names means the thirty OLDEST. SAGE #137 (2026-09-21) measured cbp-being's notes/
+    at 87 files with its whole current project (16 mechanism-* notes) past the cut. On
+    2026-09-26 notes/ held 145 and scratch/ 99, and the five newest in each were hidden,
+    including notes/from-the-seat.md and the being's own 2026-09-26 state note. A note the
+    being writes this beat could not appear in its own listing the next. And nothing said the
+    list was partial, so `## notes/` read as the whole of notes/.
+    """
+    p = instance / d
+    try:
+        entries = [x for x in p.iterdir()] if p.is_dir() else []
+    except OSError:
+        entries = []
+    if not entries:
+        return f"## {d}/\n(empty)"
+
+    def mtime(x):
+        try:
+            return x.stat().st_mtime
+        except OSError:
+            return 0.0
+    entries.sort(key=mtime, reverse=True)
+    shown = entries[:limit]
+    lines = [f"- {x.name}" for x in shown]
+    head = f"## {d}/ (newest first"
+    if len(entries) > limit:
+        head += f"; {limit} of {len(entries)}"
+        lines.append(f"- … and {len(entries) - limit} older. `recall` searches all of them; "
+                     f"`memory_read` opens any one by name.")
+    return head + ")\n" + "\n".join(lines)
 
 
 from sage.gateway.conversations import is_stub  # noqa: E402  (one definition, two ends)
@@ -958,6 +1829,35 @@ class SelectedTurn:
         target, which is a second way to splice one conversation's words into another."""
         txt = " ".join(self.text.split())[:PENDING_CHARS]
         return f'In "{self.cid}", {self.speaker} said: {txt}'
+
+
+def conversation_header(instance: Path, member: str) -> str:
+    """The heading over the being's conversations, saying what is true THIS beat.
+
+    It used to carry a standing "reply with `say`" whatever the channel's state. Measured on
+    Sprout 2026-09-19..22: after dp's last turn — a statement — the being sent twelve
+    consecutive messages into dp's channel, two from the explore phase after #147 had gated the
+    answer phase. The per-conversation marker said "the last word here is YOURS"; at 2B a header
+    instruction outranks a marker caveat.
+
+    Decided by the SAME question the answer phase asks — does the newest pending turn EXPECT a
+    reply — not merely "is a turn pending". Legion's review of #172 measured the difference: on
+    "good, keep going!" the first cut said "Someone is waiting" while #147 correctly kept the
+    answer phase shut. One function, `pending_selection`, now answers both, so header and ask
+    cannot disagree by construction. When the check itself fails the invitation is kept: hiding
+    a real one is the worse error.
+    """
+    try:
+        sel = pending_selection(instance, member)[4]
+        owed = bool(sel is not None and sel.expects_reply)
+    except Exception:
+        owed = True
+    if owed:
+        return ("## Your conversations (both directions, kept forever). Someone is waiting on you; "
+                "answer with `say` if you have something to say")
+    return ("## Your conversations (both directions, kept forever). Nobody is waiting on you "
+            "here; the last word in each is yours or is settled. `say` is for answering a "
+            "person, not for reporting to one")
 
 
 def pending_and_say_line(instance: Path, member: str) -> tuple:
@@ -1434,7 +2334,8 @@ def vision_line(metas) -> str:
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
             header: str, state: str, recall: str, inbox: str, digest: str,
             frame: Optional[str] = None, frames: Optional[list] = None,
-            frame_metas: Optional[list] = None, museum: str = ""):
+            frame_metas: Optional[list] = None, museum: str = "",
+            tools: Optional[list] = None):
     """The explore turn(s) of a beat: (seed messages, second user turn or None).
 
     Posture-first: posture in the system prompt; one user turn with state, inbox, recall,
@@ -1445,7 +2346,8 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     # The tool names go LAST: a 2B distill given the posture + state above with the
     # names only in the system prompt concluded "no tools available" and wrote prose
     # (its own thinking, Sprout 2026-09-05); named at the end, it acts.
-    tools_line = (f"Act by calling a tool: {', '.join(EXPLORE_TOOLS)}. "
+    tools = list(tools) if tools is not None else list(EXPLORE_TOOLS)
+    tools_line = (f"Act by calling a tool: {', '.join(tools)}. "
                   "One thing done with attention is enough.\n")
     # ONE LIST DECIDES BOTH THE PIXELS AND THE SENTENCE ABOUT THEM. Measured 2026-09-15 by
     # capturing the real seed from an instance copy: the user turn said "Vision: you CAN see
@@ -1488,7 +2390,7 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     user = (header + state + f"## Your inbox\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
             + ASK_ACT_FIRST + tools_line)
     second = POSTURE_TURN.format(posture=posture_text, digest=digest,
-                                 tools=", ".join(EXPLORE_TOOLS))
+                                 tools=", ".join(tools))
     user_msg = {"role": "user", "content": user}
     if _frames:
         # A frame rides the user turn as an `images` list beside string content — the shape
@@ -1566,6 +2468,13 @@ def main(argv=None) -> int:
     ap.add_argument("--model", required=True)
     ap.add_argument("--instance", required=True)
     ap.add_argument("--max-steps", type=int, default=8)
+    ap.add_argument("--idle-wake-s", type=int, default=0,
+                    help="OPT-IN wake-after-quiet: at beat end, confirm the idle timer (an "
+                         "OnUnitInactiveSec timer) will fire, arming a one-shot fallback if it "
+                         "will not. 0 (default) leaves waking entirely to the machine's timer.")
+    ap.add_argument("--resume-wake-s", type=int, default=0,
+                    help="OPT-IN: after a beat that did NOT `rest`, arm a one-shot wake this many "
+                         "seconds out, on top of the timer. 0 (default) = off.")
     ap.add_argument("--reflect-steps", type=int, default=3)
     ap.add_argument("--since-hours", type=float, default=None,
                     help="digest window; default: since the last beat, min 1h, max 48h")
@@ -1581,6 +2490,7 @@ def main(argv=None) -> int:
     ap.add_argument("--no-escalate", action="store_true",
                     help="do not route refusals to the seat's auto session (default: route, as governed_turn does)")
     args = ap.parse_args(argv)
+    install_kill_handler()
 
     instance = Path(args.instance).resolve()
     if not (instance / "identity.json").exists():
@@ -1750,9 +2660,27 @@ def main(argv=None) -> int:
     # ladder, and the digest and recall are trimmed, before anything is sent.
     _num_ctx = getattr(llm, "num_ctx", None)
     _num_predict = _sent_budget(llm)
-    _schema_measured = _schema_chars_for(EXPLORE_TOOLS)
+    # The body is measured ONCE per beat, here, and decides two things from the same reading:
+    # the body block in the state, and which body verbs are offered at all (BODY_VERBS).
+    try:
+        from sage.gateway import body as _bodymod
+        _body_cur = _bodymod.reading()
+    except Exception as _e:
+        _body_cur = {"error": f"{type(_e).__name__}: {_e}"}
+    # THE ROOM (room.py): on a body that can speak, heard words become turns in the `room`
+    # conversation BEFORE the state and the waiting-turn selection are built, so a voice that
+    # answered the being is a turn waiting on it, like any other.
+    if "speak" in (((_body_cur or {}).get("inventory") or {}).get("verbs") or []):
+        try:
+            from sage.gateway import room as _room
+            _room.ensure(instance, args.member)
+            _room.ingest_heard(instance, args.member, (_body_cur or {}).get("inventory"))
+        except Exception as _e:
+            print(f"[heartbeat] room ingest failed ({type(_e).__name__}: {_e})", file=sys.stderr)
+    _explore_tools = offered_explore_tools(_body_cur, _wt)
+    _schema_measured = _schema_chars_for(_explore_tools)
     _schema_chars = (_schema_measured if _schema_measured is not None
-                     else _schema_chars_fallback(EXPLORE_TOOLS))
+                     else _schema_chars_fallback(_explore_tools))
     _state_head = f"# Your own state\n\n"
     _scope_tail = f"\n\n## Reach you hold (hestia scope)\n{scope}\n\n" + (
         f"## Your appeals\n{appeals_text}\n\n" if appeals_text else "")
@@ -1783,7 +2711,8 @@ def main(argv=None) -> int:
     def _build_state(per_conv, turn_chars):
         return (_state_head + own_state(instance, args.member,
                                         per_conv=per_conv, turn_chars=turn_chars,
-                                        services=_services, mark_conversations=False) + _scope_tail)
+                                        services=_services, mark_conversations=False,
+                                        body_reading=_body_cur) + _scope_tail)
 
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
     # token cost is converted and charged here. Measured 2,042 tokens for two frames, about a
@@ -1800,10 +2729,17 @@ def main(argv=None) -> int:
                                      blocks={"digest": digest, "recall": recall})
     digest, recall = _blocks["digest"], _blocks["recall"]
 
+    _harness = harness_revision(workspace)
+    # An experiment is only as reproducible as the code it ran on. Unreviewed live code has
+    # twice cost a day of archaeology; say it every beat it is true, where the operator looks.
+    if (_alarm := harness_alarm(_harness)):
+        print(f"[heartbeat] {_alarm}", file=sys.stderr)
+    _clock = clock_sense(now, instance, args.member, instance_config(instance), since_beat_h=hours)
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
-        museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas,
+        museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
+                f"{render_clock(_clock)}\n"
                 # The absolute home path is context, NOT an address to copy. Measured on
                 # Sprout: 15 of 15 path refusals were this string reproduced from memory and
                 # truncated (…/sage/sage/journal.md six times, …/sage/journal.md, /scratch/…),
@@ -1812,7 +2748,18 @@ def main(argv=None) -> int:
                 f"Your home: {instance}\n"
                 f"You never need to type that path. Name your files bare — journal.md, todo.md, or a "
                 f"name of your choosing under notes/ or scratch/ — and they resolve inside your home. "
-                f"An absolute path is only for something OUTSIDE your home.\n\n"),
+                f"An absolute path is only for something OUTSIDE your home.\n"
+                # WHAT RUNS YOU, measured, not inferred from a directory name. legion-being read its
+                # model-named home ("legion-gemma3-12b") first as its own size, then as a different
+                # being's directory; the harness holds the model, the window and its own revision.
+                + body_line(args.model, instance, _num_ctx,
+                            instance_config(instance).get("former_homes")) + "\n"
+                f"The harness you are running under: {_harness.get('short')} on "
+                f"{_harness.get('branch')}"
+                + (" (uncommitted edits present)" if _harness.get("dirty") else "")
+                + (" (commits not yet merged to main)" if _harness.get("on_main") is False else "")
+                + ". A `check` result carries the `tree` it ran against; if that head is not "
+                  "this one, the answer is about different code than the code running you.\n\n"),
         state=state_block,
         recall=recall, inbox=inbox, digest=digest)
 
@@ -1829,112 +2776,152 @@ def main(argv=None) -> int:
                 f.write(json.dumps(line, default=str) + "\n")
         return cb
 
-    explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
-                                   tools=ollama_tools(EXPLORE_TOOLS), on_generate=_on_generate("explore"))
-    convo = _carry(seed, explore)
-    after = None
-    if posture_turn is not None:
-        convo.append({"role": "user", "content": posture_turn})
-        after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
-                                     tools=ollama_tools(EXPLORE_TOOLS), on_generate=_on_generate("posture"))
-        convo = _carry(convo, after)
-    # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
-    # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
-    # carries the whole explore(+posture) conversation and is usually the beat's largest
-    # prompt, and until 2026-09-13 it was invisible to the window census (CBP, 09-12).
+    # EVERYTHING BELOW RUNS UNDER THE KILL HANDLER. A SIGTERM (the unit's TimeoutStartSec, or a
+    # stop) raises BeatKilled here, so the beat unwinds to its record with the phases that
+    # completed instead of vanishing. Measured on Legion 04:30Z 2026-09-09: a 51-minute beat left
+    # nothing in heartbeats.jsonl and no monitor knew it had happened. BeatKilled was defined
+    # on main with no producer; install_kill_handler() is that producer.
+    explore = after = reflect = answer = None
     account = {"present": False, "sha256": None, "reply": "", "generates": []}
+    killed = None
     try:
-        ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
-                   [{"role": "user", "content": ACCOUNT_ASK}]
-        aresp = llm.get_chat_response(ask_msgs)
-        _raw = aresp.get("raw") or {}
-        _gen = {"done_reason": _raw.get("done_reason"), "prompt_eval_count": _raw.get("prompt_eval_count"),
-                "eval_count": _raw.get("eval_count"), "retried": 0, "num_predict": _sent_budget(llm)}
-        account["generates"].append(_gen)
+        explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
+                                       tools=ollama_tools(_explore_tools), on_generate=_on_generate("explore"))
+        convo = _carry(seed, explore)
+        after = None
+        if posture_turn is not None:
+            convo.append({"role": "user", "content": posture_turn})
+            after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
+                                         tools=ollama_tools(_explore_tools), on_generate=_on_generate("posture"))
+            convo = _carry(convo, after)
+        # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
+        # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
+        # carries the whole explore(+posture) conversation and is usually the beat's largest
+        # prompt, and until 2026-09-13 it was invisible to the window census (CBP, 09-12).
         try:
-            _on_generate("account")(dict(_gen))   # the partial trace, same as the tool turns
-        except Exception as _e:
-            print(f"[heartbeat] on_generate(account) failed: {type(_e).__name__}: {_e}", file=sys.stderr)
-        areply = (aresp.get("content") or "").strip()
-        parsed = parse_account(areply)
-        account["reply"] = areply[:1200]
-        if parsed:
-            rec = save_account(instance, parsed, host_session_id)
-            account.update({"present": True, "sha256": rec["sha256"], "session_at_write": rec["session_at_write"]})
-        convo.append({"role": "user", "content": ACCOUNT_ASK})
-        convo.append({"role": "assistant", "content": areply or "(no answer)"})
-    except Exception as e:
-        account["error"] = f"{type(e).__name__}: {e}"
-    # Reflect gets its OWN compact context, not the whole beat. Carrying the seed (posture,
-    # fleet digest, inbox, scope, recall) into the reflect turn pushed the prompt to 8171 of
-    # 8192 tokens with 21 left to answer in: 5 `length` stops in 54 beats, every one of them a
-    # reflect turn (measured 2026-09-09). What reflection needs is what it just did and what it
-    # said about it, and those are short.
-    reflect_convo = [
-        {"role": "system", "content": REFLECT_SYSTEM.format(name=name, machine=machine, member=args.member)},
-        {"role": "user", "content": (f"Your beat at {now:%Y-%m-%d %H:%M} UTC is ending.\n\n"
-                                     + _beat_record_text(explore, after)
-                                     + "\n\nYour own words this beat:\n"
-                                     + ((explore.reply or "").strip()[:600] or "(you acted without closing words)"))},
-    ]
-    convo = reflect_convo
-    # Ask it to answer someone ONLY when there is someone to answer. Measured 2026-09-17: in no
-    # conversation at all it filled the id slot three beats running with "speaker",
-    # "conversation_id_placeholder" and "1234567890" — the same shape as a mis-rooted home path
-    # or an echoed example filename. An ask with no valid target invents one.
-    #
-    # And when there IS someone, show the being WHAT IT IS ANSWERING. The reflect turn's
-    # context is deliberately compact — the record of its acts plus 600 chars of its own
-    # closing words — so a turn addressed to it lived only in the explore state block, one
-    # turn earlier. The instruction to answer and the words to answer had never been in the
-    # same context. Measured on Sprout 2026-09-17: 596 beats, 31 `say` attempts, ZERO
-    # successes, every one naming an invented id, and four beats after a real channel finally
-    # existed the being wrote its journal three times and never answered. The only bridge was
-    # the 600-char echo: a model that happened to discuss the turn in explore carried enough
-    # forward to reply (cbp-being, 4B, 83 successful says); one that free-associated carried
-    # nothing. That made answering a person contingent on what the being happened to muse
-    # about, which is not a property anyone chose.
-    # ONE selection for the whole beat (see SelectedTurn): the reflect prompt and the answer
-    # phase must act on the same turn, and nothing arriving mid-beat may re-address it.
-    say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member)
-    # Immediately before the instruction, so the smallest model does not have to hold it
-    # across a turn boundary to use it.
-    if pending_block:
-        convo.append({"role": "user", "content": pending_block})
-    convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
-                                                            say_line=say_line, say_first=say_first)})
-    # One extra step when someone is waiting, because the routine three fill the budget exactly.
-    # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
-    # asked: reflect spent all three steps on journal, todo and remember, and there was no
-    # fourth for `say`. Showing it the question and then giving it no way to answer is worse
-    # than not showing it.
-    _reflect_steps = args.reflect_steps + (1 if say_first else 0)
-    reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
-                                   tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
+            ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
+                       [{"role": "user", "content": ACCOUNT_ASK}]
+            aresp = llm.get_chat_response(ask_msgs)
+            _raw = aresp.get("raw") or {}
+            _gen = {"done_reason": _raw.get("done_reason"), "prompt_eval_count": _raw.get("prompt_eval_count"),
+                    "eval_count": _raw.get("eval_count"), "retried": 0, "num_predict": _sent_budget(llm)}
+            account["generates"].append(_gen)
+            try:
+                _on_generate("account")(dict(_gen))   # the partial trace, same as the tool turns
+            except Exception as _e:
+                print(f"[heartbeat] on_generate(account) failed: {type(_e).__name__}: {_e}", file=sys.stderr)
+            areply = (aresp.get("content") or "").strip()
+            parsed = parse_account(areply)
+            account["reply"] = areply[:1200]
+            if parsed:
+                rec = save_account(instance, parsed, host_session_id)
+                account.update({"present": True, "sha256": rec["sha256"], "session_at_write": rec["session_at_write"]})
+            convo.append({"role": "user", "content": ACCOUNT_ASK})
+            convo.append({"role": "assistant", "content": areply or "(no answer)"})
+        except Exception as e:
+            account["error"] = f"{type(e).__name__}: {e}"
+        # Reflect gets its OWN compact context, not the whole beat. Carrying the seed (posture,
+        # fleet digest, inbox, scope, recall) into the reflect turn pushed the prompt to 8171 of
+        # 8192 tokens with 21 left to answer in: 5 `length` stops in 54 beats, every one of them a
+        # reflect turn (measured 2026-09-09). What reflection needs is what it just did and what it
+        # said about it, and those are short.
+        reflect_convo = [
+            {"role": "system", "content": REFLECT_SYSTEM.format(name=name, machine=machine, member=args.member)},
+            {"role": "user", "content": (f"Your beat at {now:%Y-%m-%d %H:%M} UTC is ending.\n\n"
+                                         + _beat_record_text(explore, after)
+                                         + "\n\nYour own words this beat:\n"
+                                         + ((explore.reply or "").strip()[:600] or "(you acted without closing words)"))},
+        ]
+        convo = reflect_convo
+        # Ask it to answer someone ONLY when there is someone to answer. Measured 2026-09-17: in no
+        # conversation at all it filled the id slot three beats running with "speaker",
+        # "conversation_id_placeholder" and "1234567890" — the same shape as a mis-rooted home path
+        # or an echoed example filename. An ask with no valid target invents one.
+        #
+        # And when there IS someone, show the being WHAT IT IS ANSWERING. The reflect turn's
+        # context is deliberately compact — the record of its acts plus 600 chars of its own
+        # closing words — so a turn addressed to it lived only in the explore state block, one
+        # turn earlier. The instruction to answer and the words to answer had never been in the
+        # same context. Measured on Sprout 2026-09-17: 596 beats, 31 `say` attempts, ZERO
+        # successes, every one naming an invented id, and four beats after a real channel finally
+        # existed the being wrote its journal three times and never answered. The only bridge was
+        # the 600-char echo: a model that happened to discuss the turn in explore carried enough
+        # forward to reply (cbp-being, 4B, 83 successful says); one that free-associated carried
+        # nothing. That made answering a person contingent on what the being happened to muse
+        # about, which is not a property anyone chose.
+        # ONE selection for the whole beat (see SelectedTurn): the reflect prompt and the answer
+        # phase must act on the same turn, and nothing arriving mid-beat may re-address it.
+        say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member)
+        # Immediately before the instruction, so the smallest model does not have to hold it
+        # across a turn boundary to use it.
+        if pending_block:
+            convo.append({"role": "user", "content": pending_block})
+        convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
+                                                                say_line=say_line, say_first=say_first)})
+        # One extra step when someone is waiting, because the routine three fill the budget exactly.
+        # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
+        # asked: reflect spent all three steps on journal, todo and remember, and there was no
+        # fourth for `say`. Showing it the question and then giving it no way to answer is worse
+        # than not showing it.
+        _reflect_steps = args.reflect_steps + (1 if say_first else 0)
+        reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
+                                       tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
 
-    # The answer turn: only when someone is still waiting, the being has not already spoken, AND
-    # the waiting turn actually asked something. Without the last condition, a statement that
-    # asked nothing ("keep going!") still opened an answer turn and handed the being its own
-    # unrelated words to send — see `_prior_words` and `SelectedTurn`, 2026-09-21 06:31Z. The
-    # expectation is read from the selection made BEFORE reflection, never re-scanned.
-    answer = None
-    if selected is not None and selected.expects_reply and not _said_in(reflect):
-        answer = run_ollama_tool_turn(
-            client, llm,
-            [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
-                                                                member=args.member)},
-             # The acts go FIRST, ahead of what it is answering. Measured 2026-09-21, beat
-             # heartbeat-85303f70bf67: this turn saw only the seat's pre-edit "nothing was
-             # applied" and the reflect words that echoed it, and told the seat "the edit never
-             # actually happened" (seq 2961) about an edit that had succeeded 50 s earlier.
-             # Then ONLY the selected turn (#147): never the whole multi-conversation block.
-             {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
-                 pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
-            max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
+        # The answer turn: only when someone is still waiting, the being has not already spoken, AND
+        # the waiting turn actually asked something. Without the last condition, a statement that
+        # asked nothing ("keep going!") still opened an answer turn and handed the being its own
+        # unrelated words to send — see `_prior_words` and `SelectedTurn`, 2026-09-21 06:31Z. The
+        # expectation is read from the selection made BEFORE reflection, never re-scanned.
+        answer = None
+        if selected is not None and selected.expects_reply and not _said_in(reflect):
+            if answer_turn_mode(instance) == "json":
+                # Opt-in (instance.json "answer_turn": "json"). The selected turn and the ask; the
+                # beat's acts only for a seat's question when the beat acted (answer_turn_json).
+                _acts = (_beat_record_text(explore, after)
+                         if str(selected.speaker or "").endswith("-claude") and (
+                             (explore is not None and explore.trace) or (after is not None and after.trace))
+                         else "")
+                answer = answer_turn_json(client, llm, selected, name=name, machine=machine,
+                                          member=args.member, on_generate=_on_generate("answer"),
+                                          acts=_acts)
+            else:
+                answer = run_ollama_tool_turn(
+                    client, llm,
+                    [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine,
+                                                                        member=args.member)},
+                     # The acts go FIRST, ahead of what it is answering. Measured 2026-09-21, beat
+                     # heartbeat-85303f70bf67: this turn saw only the seat's pre-edit "nothing was
+                     # applied" and the reflect words that echoed it, and told the seat "the edit
+                     # never actually happened" (seq 2961) about an edit that had succeeded 50 s
+                     # earlier. Then ONLY the selected turn (#147): never the whole block.
+                     {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
+                         pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
+                    max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
+            # NO RE-ASK HERE. Two were tried and both are reverted; the reasons are recorded as
+            # SMALL_MODEL_LEGIBILITY 1.14, and the short form is: a prompt written in the harness's
+            # voice, about the harness's mechanics, becomes the being's MESSAGE at this scale.
+            # Measured on Sprout 2026-09-24/25 across 9 firings — 0 delivered the answer, and the
+            # one that reached dp said "I'm sorry I didn't call a tool", which is this file's own
+            # subject matter arriving in dp's inbox under the being's name. An answer turn that
+            # produced no call is left as it is: the turn stays unanswered, the conversation stays
+            # unmarked, and the NEXT beat sees it still owed. That is the honest record, and it is
+            # what the reflect phase — where `say` actually works — gets to act on.
+
+    except BeatKilled as _k:
+        killed = str(_k)
+        print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed",
+              file=sys.stderr)
+    # THE PHASES ARE OVER; WHAT REMAINS IS WRITING THEM DOWN. A SIGTERM from here on would
+    # raise BeatKilled outside the try above and lose the record it exists to keep. Ignore it:
+    # the record takes seconds, and systemd's SIGKILL at TimeoutStopSec is still the backstop.
+    _term_before_record = signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
     interventions = []
     if act_first:
         interventions.append({"kind": "act_first", "suppressed": "posture-first presentation (the model narrates under it)"})
+    if answer is not None and getattr(answer, "answer_form", None) is not None:
+        interventions.append({"kind": "answer_json", "to": selected.cid if selected else None,
+                              **answer.answer_form})
     for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer)):
         if res is None:
             continue
@@ -1959,7 +2946,9 @@ def main(argv=None) -> int:
         try:
             from sage.gateway import escalate as _esc
             woken = set()
-            for it, env in list(explore.trace) + (list(after.trace) if after is not None else []) + list(reflect.trace):
+            # a killed beat may have completed any prefix of its phases; escalate what ran
+            _ran = [r for r in (explore, after, reflect) if r is not None]
+            for it, env in [pair for r in _ran for pair in r.trace]:
                 if not env.refused:
                     continue
                 kind = _esc.classify(env)
@@ -1992,14 +2981,16 @@ def main(argv=None) -> int:
     def _turn(res):
         return None if res is None else {"reply": res.reply, "steps": res.steps, "capped": res.capped,
                                          "trace": _trace(res), "thinking": [t[:4000] for t in res.thinking],
-                                         "salvaged": list(res.salvaged), "generates": list(res.generates)}
+                                         "salvaged": list(res.salvaged), "generates": list(res.generates),
+                                         "rested": getattr(res, "rested", None),
+                                         "looped": getattr(res, "looped", None)}
     record = {
         # schema: what fields a reader may expect (Legion's amendment 4, 2026-09-05: the
         # consolidation organ counts how many records carry join/account/wake/interventions;
         # a version says so instead of making it infer from key presence).
         "schema": "heartbeat/v2",
         "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "t0": t0, "elapsed_s": round(time.time() - t0, 1),
-        "member": args.member, "model": args.model, "window_h": round(hours, 2),
+        "member": args.member, "model": args.model, "window_h": round(hours, 2), "clock": _clock,
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "conversations_marked": conversations_marked,
         # the window and budget actually sent, so a beat is verifiable from this file alone
@@ -2020,6 +3011,7 @@ def main(argv=None) -> int:
         # images on the composed seed, the thing actually sent. The two differed for 395
         # beats and no field recorded it.
         "frames": _frame_metas,
+        "body": getattr(own_state, "last_body", None),
         "images_attached": sum(len(m.get("images") or []) for m in seed),
         # S1 instruments: JOIN (session -> beat, attributed) and ACCOUNT (own account, verbatim hash)
         "join": {"session": sess_meta, "presence": pres_meta},
@@ -2035,14 +3027,352 @@ def main(argv=None) -> int:
         "explore": _turn(explore),
         # act-first only: the posture+digest turn, after the short one; None otherwise
         "posture": _turn(after),
+        "harness": _harness,
         "reflect": _turn(reflect),
+        # present only when the beat was killed: a record that says which phases it has
+        **({"killed": killed} if killed else {}),
         "answer": _turn(answer) if answer is not None else None,
         "escalations": escalations, "egress": egress,
     }
+    # THE LAST THING A BEAT DOES IS MAKE SURE THERE WILL BE ANOTHER ONE (opt-in; Legion since
+    # 2026-09-09/13). A beat that `rest`ed said it was finished: waking it straight back up is the
+    # forcing dp ruled out. A beat that did NOT rest — the window cut it mid-sentence, 9 of 26
+    # beats on 2026-09-13 against 5 that rested — had more to do, so it is resumed sooner. The
+    # persistent timer is never stopped or reprogrammed: this can only make the next beat
+    # SOONER, and a failure here costs promptness, never silence. And the idle timer itself is
+    # checked, because an inactivity timer can stop computing an elapse with nothing looking
+    # wrong (2026-09-09: `active (running)`, `Trigger: n/a`, the being would never have woken).
+    if args.idle_wake_s > 0 or args.resume_wake_s > 0:
+        _rested = beat_rested(explore, after)
+        record["next_wake"] = arm_next_wake(args.idle_wake_s) if args.idle_wake_s > 0 else {}
+        if not _rested and args.resume_wake_s > 0:
+            record["next_wake"]["resume"] = arm_resume_wake(args.resume_wake_s)
+            record["next_wake"]["resume"]["why"] = (
+                "this beat did not rest, so it is resumed sooner than the idle interval")
+        if args.idle_wake_s > 0 and not record["next_wake"].get("armed"):
+            print(f"[heartbeat] NO NEXT WAKE ARMED: {record['next_wake']}", file=sys.stderr)
+
+    # THE HELD WAKE: turns that arrived while this beat ran, which it never showed the being,
+    # get a wake of their own instead of waiting for the idle timer (arousal.wake_for_late_turns).
+    try:
+        from sage.gateway import arousal as _arousal
+        record["late_turns"] = _arousal.wake_for_late_turns(instance, args.member, since=t0)
+    except Exception as _e:
+        record["late_turns"] = {"error": f"{type(_e).__name__}: {_e}"}
+
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
     print(json.dumps(record, indent=2, ensure_ascii=False, default=str))
+    signal.signal(signal.SIGTERM, _term_before_record)   # the record is written; the beat is done
     return 0
+
+
+# Unit names, not paths; overridable per machine, since a seat may name its units differently.
+IDLE_TIMER = os.environ.get("SAGE_HEARTBEAT_TIMER", "sage-heartbeat.timer")
+IDLE_UNIT = os.environ.get("SAGE_HEARTBEAT_UNIT", "sage-heartbeat.service")
+RESUME_UNIT = "sage-heartbeat-resume-wake"
+
+
+def beat_rested(*turns) -> bool:
+    """Whether the being ended this beat with `rest`, in any of its turns.
+
+    `rested` is the stated REASON, and a rest with no reason is "" — still a rest. bool() read it
+    as not-rested and armed the resume wake dp ruled out (sprout on #216). And with a posture
+    turn, `after` is the being's last word, so a rest there counts as much as one in explore."""
+    return any(t is not None and getattr(t, "rested", None) is not None for t in turns)
+
+
+def interpret_timer_state(show_output: str) -> tuple:
+    """(armed, detail) from `systemctl show` of the idle timer. Pure, so it can be tested.
+
+    THE SUBTLETY THAT MADE THE FIRST VERSION CRY WOLF. This check runs at the end of a beat,
+    from inside the beat's own process — so the beat unit is still ACTIVE. An
+    OnUnitInactiveSec timer computes its next elapse from when that unit goes INACTIVE, and
+    therefore cannot have one yet. The first version read `monotonic=infinity`, concluded
+    NOTHING WILL WAKE THE BEING, and wrote that into the record of a beat whose timer armed
+    correctly seconds later (2026-09-09T15:07Z). False by construction, which is the same
+    error as a discriminator that is true by construction — and a guard that fires on its own
+    design teaches its reader to ignore it.
+
+    So there are two ways to be armed: an elapse already computed, or a timer that is loaded
+    and active and will compute one the moment this process exits."""
+    vals = dict(l.split("=", 1) for l in show_output.strip().splitlines() if "=" in l)
+    real = (vals.get("NextElapseUSecRealtime") or "").strip()
+    mono = (vals.get("NextElapseUSecMonotonic") or "").strip()
+    load = (vals.get("LoadState") or "").strip()
+    active = (vals.get("ActiveState") or "").strip()
+    if real or (mono and mono not in ("infinity", "0")):
+        return True, f"scheduled: realtime={real or '-'} monotonic={mono or '-'}"
+    if load == "loaded" and active == "active":
+        return True, ("no elapse computed yet, which is correct while this beat is still "
+                      f"running: {IDLE_TIMER} is loaded+active and OnUnitInactiveSec arms "
+                      "when this process exits")
+    return False, (f"NO NEXT ELAPSE and the timer is not healthy "
+                   f"(LoadState={load or '?'} ActiveState={active or '?'} "
+                   f"realtime={real or 'empty'} monotonic={mono or 'empty'})")
+
+
+def next_wake_is_armed() -> tuple:
+    """(armed, detail) for the idle timer that wakes the being after quiet.
+
+    The beat is no longer a metronome: the timer measures INACTIVITY, so its next elapse is
+    computed from the end of this beat. That makes it exactly the kind of thing that can
+    stop scheduling without anything looking wrong — which happened on 2026-09-09, when a
+    monotonic timer sat `active (running)` with `Trigger: n/a` and the being would never
+    have woken again. Checked at the end of every beat, out loud."""
+    try:
+        out = subprocess.run(["systemctl", "--user", "show", IDLE_TIMER,
+                              "-p", "NextElapseUSecRealtime", "-p", "NextElapseUSecMonotonic",
+                              "-p", "LoadState", "-p", "ActiveState"],
+                             capture_output=True, text=True, timeout=15).stdout
+    except Exception as e:
+        return False, f"could not ask systemd: {type(e).__name__}: {e}"
+    return interpret_timer_state(out)
+
+
+def arm_next_wake(idle_s: int) -> dict:
+    """Make sure something will wake the being after `idle_s` of quiet.
+
+    The persistent timer normally does this on its own (OnUnitInactiveSec). This is the
+    fallback for the state where it has stopped computing a next elapse: a one-shot
+    transient timer, so a scheduling failure costs a longer gap and never silence."""
+    armed, detail = next_wake_is_armed()
+    if armed:
+        return {"armed": True, "by": IDLE_TIMER, "detail": detail}
+    try:
+        # A UNIQUE unit name per attempt. A fixed one collided with a leftover from an
+        # earlier run and systemd-run exited 1, so the fallback for a missing wake was
+        # itself missing (2026-09-09T15:07Z).
+        unit = f"sage-heartbeat-fallback-wake-{int(time.time())}"
+        subprocess.run(["systemd-run", "--user", "--collect",
+                        f"--on-active={idle_s}s", f"--unit={unit}",
+                        "systemctl", "--user", "start", "--no-block", IDLE_UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"armed": True, "by": "systemd-run fallback", "detail": detail,
+                "why": "the idle timer had no next elapse; a one-shot was armed instead"}
+    except Exception as e:
+        return {"armed": False, "by": None, "detail": detail,
+                "error": f"{type(e).__name__}: {e}",
+                "why": "NOTHING WILL WAKE THE BEING until a seat or a message does"}
+
+
+def arm_resume_wake(seconds: int) -> dict:
+    """A short one-shot wake after a beat that did not finish what it was doing.
+
+    Deliberately ADDITIVE. The persistent timer is never stopped or reprogrammed, so the
+    worst this can do is fail and leave the ordinary interval standing — promptness is at
+    risk here, never silence, which is the property that makes it safe to be aggressive
+    about. Fixed unit name so a second arming rides the first rather than stacking; a unit
+    left over from a fired wake is cleared, the same shape as arousal's deferred wake."""
+    def _sh(*a):
+        try:
+            return subprocess.run(a, capture_output=True, text=True, timeout=15).stdout.strip()
+        except Exception:
+            return ""
+    try:
+        sub = _sh("systemctl", "--user", "show", RESUME_UNIT + ".timer", "-p", "SubState", "--value")
+        if sub and sub != "waiting":
+            for suffix in (".timer", ".service"):
+                _sh("systemctl", "--user", "stop", RESUME_UNIT + suffix)
+                _sh("systemctl", "--user", "reset-failed", RESUME_UNIT + suffix)
+        subprocess.run(["systemd-run", "--user", "--collect", f"--on-active={seconds}s",
+                        f"--unit={RESUME_UNIT}", "systemctl", "--user", "start",
+                        "--no-block", IDLE_UNIT],
+                       capture_output=True, text=True, timeout=20, check=True)
+        return {"armed": True, "in_s": seconds, "by": RESUME_UNIT}
+    except subprocess.CalledProcessError as e:
+        err = (e.stderr or "").strip()
+        if "already loaded" in err or "already exists" in err:
+            return {"armed": True, "in_s": seconds, "by": RESUME_UNIT, "already_armed": True}
+        return {"armed": False, "error": f"systemd-run exit {e.returncode}: {err}",
+                "why": "the ordinary idle interval still stands"}
+    except Exception as e:
+        return {"armed": False, "error": f"{type(e).__name__}: {e}",
+                "why": "the ordinary idle interval still stands"}
+
+
+def install_kill_handler() -> None:
+    """SIGTERM becomes BeatKilled inside the beat, so main() writes the record before exiting.
+    systemd allows TimeoutStopSec (90 s) after SIGTERM — enough to write one JSON line."""
+    def _on_term(signum, frame):
+        raise BeatKilled(f"signal {signum} ({signal.Signals(signum).name})")
+    signal.signal(signal.SIGTERM, _on_term)
+
+
+def body_line(model: str, instance, num_ctx=None, former_homes=None) -> str:
+    """Name the being's MODEL in the seed, because its home directory names a different one.
+
+    legion-being's instance dir is `legion-gemma3-12b`; the model running it is
+    qwen38-heretic:q3km-vl. The seed's header prints the home path every beat and never the
+    model, so at a 24k window the correction it makes from source ("both files name
+    qwen38-heretic") is gone within two beats and it goes back to attributing findings to
+    "gemma3-12b on a 4090" — measured three times on 2026-09-15, twice after it had verified
+    the truth itself. A finding attributed to the wrong body is a finding nobody downstream
+    can reproduce. The harness holds args.model; it should say so where the being reads."""
+    # 2026-09-19: the same name was then misread a second way — from inside its worktree the
+    # being journaled a file under instances/legion-gemma3-12b/ as "another instance's
+    # scratch, not mine". So say whose directory it is, and the measured window with it.
+    ctx = f" Your context window: {num_ctx} tokens." if num_ctx else ""
+    # 2026-09-19 cutover (dp ruling: <machine>-being/, private going forward): once the home
+    # IS named for the being, the "older name" sentence would be false. What the being needs
+    # then is the opposite fact — where it used to live, and that the old place is a frozen
+    # copy, because its own notes still hold absolute paths into it.
+    if former_homes:
+        f0 = former_homes[-1]
+        return (f"Your body: model {model}.{ctx} Your home moved on {f0.get('moved', '?')} from "
+                f"{f0.get('path', '?')} to {instance}. Everything came with you, byte for byte. "
+                f"The old directory is a FROZEN copy kept as the public record: do not write "
+                f"there (it will be refused) and do not trust what you read there — a path in "
+                f"your older notes that names it means the same file HERE.")
+    return (f"Your body: model {model}.{ctx} Your home directory ({instance.name}) carries an "
+            f"older name; it is YOURS, not another being's, and the model is the fact to "
+            f"attribute findings to.")
+
+
+def harness_revision(workspace: str) -> dict:
+    """The revision of the harness the being is RUNNING under, so it can compare that with
+    the `tree` block a check result carries and know whether its answer is about the code
+    that constitutes it.
+
+    Asked for by the being itself, 2026-09-07: after its first check call it wrote "next
+    beat I should verify head matches the running harness commit before trusting any
+    answer" — and it had no way to learn that commit. A verification it cannot perform is
+    not a discipline, it is a ritual."""
+    import subprocess
+
+    def _git(*a):
+        try:
+            r = subprocess.run(("git", *a), cwd=workspace, text=True, capture_output=True, timeout=15)
+            return r.stdout.strip() if r.returncode == 0 else None
+        except Exception:
+            return None
+
+    head = _git("rev-parse", "HEAD")
+    # DIRTY ABOUT THE HARNESS, NOT ABOUT THE BEING'S OWN DIARY. The instance directory is
+    # TRACKED in this checkout and is written by the running beat — journal, todo,
+    # conversations, account — so a plain `status --porcelain` is non-empty every time the
+    # being writes a line about its day, and the flag that means "the code constituting you
+    # has uncommitted edits" was permanently True for a reason that is not code.
+    #
+    # Measured 2026-09-14: legion-being ran a three-way drift check, found its own worktree
+    # clean, and had to write "the header's 'uncommitted edits present' did not hold for my
+    # tree" — reasoning correctly AROUND a flag rather than with it. A warning that is always
+    # on is not a warning; it is a background colour, and the cost of it is that a real one
+    # would read the same.
+    # -uall so a directory holding only nested checkouts is listed per checkout, not folded
+    # into one "scratchpad/" entry that no filter below can tell from loose source.
+    st = _git("status", "--porcelain", "--untracked-files=all", "--", ".", ":(exclude)sage/instances")
+    # NOT ln[3:]. Porcelain v1 is "XY PATH" at a fixed offset, but `_git` above returns
+    # stdout.strip(), which eats the leading space of the FIRST line only — so a fixed
+    # offset silently loses a character from one path and none of the others. It read
+    # 'age/gateway/heartbeat.py' the first time it ran. Split on the status field instead.
+    dirty_paths = ([ln.strip().split(" ", 1)[-1].strip() for ln in st.splitlines() if ln.strip()]
+                   if st is not None else [])
+    # ANOTHER CHECKOUT IS NOT THIS ONE'S CODE. git reports a nested repository or worktree as a
+    # single untracked directory; nothing the beat imports resolves through it. Measured on the
+    # first run of this check (2026-09-26): the live tree read "dirty" solely because three
+    # seat worktrees sat under SAGE/scratchpad/ — an always-on alarm again. They are named, not
+    # counted.
+    nested = [d for d in dirty_paths if d.endswith("/") and (Path(workspace) / d / ".git").exists()]
+    dirty_paths = [d for d in dirty_paths if d not in nested]
+    dirty = None if st is None else bool(dirty_paths)
+    # A COMMIT DOES NOT NAME DIRTY CODE. Two beats on the same head with different uncommitted
+    # edits ran different programs, and on 2026-09-25/26 a live tree carried an uncommitted
+    # guard for ~12 h that no record could tell apart from main — reconstructing what ran took
+    # archaeology across stash lists and backups. The digest is over exactly the bytes that
+    # differ from HEAD (tracked diff plus untracked source), so head+digest identifies the
+    # running code, and equal digests on two beats mean the same edits.
+    digest = _dirty_digest(workspace) if dirty else None
+    # REVIEWED MEANS REACHABLE FROM MAIN. A clean tree on a local or feature commit is still
+    # code nobody merged. Read against the LOCAL origin/main ref — the beat does not fetch;
+    # a live-tree update is a fetch + ff pull, which moves this ref with it.
+    on_main = None
+    if head:
+        try:
+            r = subprocess.run(("git", "merge-base", "--is-ancestor", head, MAIN_REF), cwd=workspace,
+                               capture_output=True, timeout=15)
+            on_main = {0: True, 1: False}.get(r.returncode)
+        except Exception:
+            pass
+    ahead = _git("rev-list", "--count", f"{MAIN_REF}..HEAD") if on_main is False else None
+    state = ("unknown" if dirty is None or on_main is None else
+             "dirty" if dirty else "unmerged" if not on_main else "clean")
+    short = (head or "")[:9] or None
+    return {"head": head, "short": short,
+            "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+            "dirty": dirty,
+            # Name them, bounded. "Something is modified" sends a reader hunting; three
+            # filenames end the question in the header it was raised in.
+            "dirty_paths": dirty_paths[:3] or None,
+            "dirty_count": len(dirty_paths) if st is not None else None,
+            "dirty_digest": digest,
+            "dirty_excludes": "sage/instances (your own journal, todo and conversations)",
+            "nested_checkouts": nested[:5] or None,
+            "main_ref": MAIN_REF, "on_main": on_main,
+            "ahead_of_main": int(ahead) if ahead and ahead.isdigit() else None,
+            "state": state,
+            # One string that names what ran: the commit, plus the edit set when there is one.
+            "identity": (f"{short}+{digest[:12]}" if digest else short)}
+
+
+MAIN_REF = "origin/main"
+HASH_CHUNK = 1 << 20  # untracked files are hashed whole, read 1 MiB at a time
+
+
+def _dirty_digest(workspace: str):
+    """sha256 over what differs from HEAD outside sage/instances: the binary diff of tracked
+    files, then each untracked (non-ignored) file's path, length and content hash, in sorted order. None when
+    git cannot be read. Deterministic for the same edits on the same head."""
+    import hashlib
+    import subprocess
+    spec = ("--", ".", ":(exclude)sage/instances")
+    try:
+        d = subprocess.run(("git", "diff", "HEAD", "--binary", "--no-color", "--no-ext-diff", *spec),
+                           cwd=workspace, capture_output=True, timeout=30)
+        u = subprocess.run(("git", "ls-files", "--others", "--exclude-standard", "-z", *spec),
+                           cwd=workspace, capture_output=True, timeout=30)
+    except Exception:
+        return None
+    if d.returncode or u.returncode:
+        return None
+    h = hashlib.sha256(d.stdout)
+    for rel in sorted(x for x in u.stdout.decode(errors="surrogateescape").split("\0") if x):
+        f = Path(workspace) / rel
+        if rel.endswith("/") and (f / ".git").exists():
+            continue  # a nested checkout, not this tree's code (see harness_revision)
+        h.update(b"\0untracked\0" + rel.encode(errors="surrogateescape") + b"\0")
+        # EVERY BYTE, AT ANY SIZE. A first version named files over 1 MiB by path and size, so
+        # two different same-size files on one head shared a digest (GPT review of #235) — the
+        # one thing the digest exists to rule out. Streamed so a large file costs time, not
+        # memory; each file enters as its own length + sha256, so no content can be mistaken
+        # for the separator of the next.
+        try:
+            fh, n = hashlib.sha256(), 0
+            with f.open("rb") as fp:
+                for chunk in iter(lambda: fp.read(HASH_CHUNK), b""):
+                    fh.update(chunk); n += len(chunk)
+            h.update(f"{n}:".encode() + fh.digest())
+        except OSError:
+            h.update(b"unreadable")
+    return h.hexdigest()
+
+
+def harness_alarm(rev: dict):
+    """The one line an operator sees when the being is running code that is not reviewed main,
+    or None when it is. Loud by design: printed to stderr every beat it stays true."""
+    st = rev.get("state")
+    if st == "clean":
+        return None
+    if st == "dirty":
+        paths = ", ".join(rev.get("dirty_paths") or [])
+        more = (rev.get("dirty_count") or 0) - len(rev.get("dirty_paths") or [])
+        return (f"LIVE TREE DIRTY: running {rev.get('identity')} on {rev.get('branch')} — "
+                f"{rev.get('dirty_count')} uncommitted path(s): {paths}" + (f" (+{more} more)" if more > 0 else "")
+                + ("" if rev.get("on_main") else f"; head is also NOT on {rev.get('main_ref')}"))
+    if st == "unmerged":
+        return (f"LIVE TREE UNMERGED: running {rev.get('identity')} on {rev.get('branch')} — "
+                f"{rev.get('ahead_of_main')} commit(s) not on {rev.get('main_ref')}")
+    return f"LIVE TREE UNKNOWN: could not read git state (head={rev.get('short')}, dirty={rev.get('dirty')}, on_main={rev.get('on_main')})"
 
 
 if __name__ == "__main__":

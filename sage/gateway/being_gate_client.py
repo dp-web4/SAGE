@@ -93,6 +93,18 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     import shlex
     worktree = ctx["worktree"] if ctx else None
     memory_root = (ctx or {}).get("memory_root")
+    # CAMERA IS THE FOURTH VERB THE WORKTREE UNLOCKS, and the only one that never uses it: the
+    # frame is resolved against memory_root below, and `worktree` is read on this line and
+    # nowhere else. Before #208 the gate composed with no ctx at all, so the raise below made
+    # camera unreachable at the gate for exactly the reason git_read, search and check were
+    # (CBP measured the deny 2026-09-25; reproduced on McNugget the same day). It follows that
+    # a seat adding `worktree` to instance.json to get git_read and search ALSO turns on a
+    # camera, and from then on the law is the only gate in front of it — say that when telling
+    # a seat to declare one.
+    # The requirement is stale as a data dependency but it is NOT dead: today it is the only
+    # thing holding camera to the same condition as the other three. Dropping it is a policy
+    # decision about whether every being with a memory_root may capture a frame, not a cleanup.
+    # Pinned by test_without_a_worktree_the_verbs_still_fail_closed.
     if not worktree:
         raise ValueError("camera requires a worktree context")
     if not memory_root:
@@ -136,7 +148,12 @@ class BeingIntent:
 # What the being's gate client calls itself when it connects to the daemon.
 _HOST_AGENT = "sage-gateway"
 
-def pr_review_command(args: dict) -> str:
+def pr_review_command(args: dict, ctx: Optional[dict] = None) -> str:
+    # `ctx` is unused here and present on purpose: every composer in _REGISTRY takes the same
+    # (args, ctx) shape, so `_normalize` can call them uniformly. This was the one composer
+    # with a one-argument signature, which is why the gate's call site was written
+    # `compose(intent.args)` -- and that is how three verbs ended up unreachable (see
+    # _compose_ctx). Pinned by test_every_registry_composer_takes_ctx.
     """The shell command the seat runs for a pr_review intent, built from validated args.
     Raises ValueError on anything the grammar cannot represent; never interpolates the body
     (it travels by --body-file, so no review text can reach the shell)."""
@@ -277,7 +294,13 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     # judged==executed invariant is a property of the STRING, not of the fleet's current
     # directory names. `path` here is an absolute realpath built from the worktree, so a
     # worktree containing a space would split into extra argv (GPT review of #83).
-    base = "git --no-pager"
+    # `-C <worktree>`, like `search` one composer down. Without it the command's target tree
+    # is whatever cwd the dispatcher happens to use, so the law judged a string whose effect
+    # it could not see -- the judged/executed drift this file argues against everywhere else
+    # (check_command: "the law must judge the path the command will actually touch"). The
+    # dispatcher also sets cwd to the same tree; `-C` makes that agreement visible in the
+    # string the verdict binds, instead of leaving it an assumption.
+    base = f"git --no-pager -C {shlex.quote(worktree)}"
     if op == "status":
         return f"{base} status --porcelain=v1 --branch"
     if op == "log":
@@ -336,6 +359,358 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
 # being cannot omit or alter, push. The commit is authored by the seat's git identity and
 # ATTRIBUTED to the being in trailers — §6 says signatures come at M3; this is the
 # legibility form, honestly labelled as such in every PR body.
+
+GAME_ACTIONS = ("RESET", "ACTION1", "ACTION2", "ACTION3", "ACTION4", "ACTION5", "ACTION6", "ACTION7", "LOOK")
+
+LOOK_MAX_EDGE = 16      # cells per side of a LOOK window: what this reader can hold per-cell (measured 2026-09-14)
+
+GAME_BATCH_CAP = 8      # dp, 2026-09-15: "build the game verb, batch with cap 8"
+
+_GAME_ID = r"[a-z0-9]{4}"
+
+# THE HOLDOUTS ARE THE TEST. dev-SAGE non-negotiable 3: cn04 / dc22 / lf52 / re86 are never
+# played, read or tuned on — "excluded by code", and until 2026-09-19 this verb was not part of
+# that code: `game` took any four-character id. Refused HERE, where the law's string is composed,
+# and again in the stepper that would run it.
+GAME_HOLDOUTS = ("cn04", "dc22", "lf52", "re86")
+
+# What it may pick. Listed so the choice is real: a selector whose options are not shown is a
+# default with extra steps (the being asked dp for "a new game instance" on 2026-09-19 because
+# nothing told it that it already had one).
+GAME_PLAYABLE = ("ar25", "bp35", "cd82", "ft09", "g50t", "ka59", "lp85", "ls20", "m0r0", "r11l",
+                 "s5i5", "sb26", "sc25", "sk48", "sp80", "su15", "tn36", "tr87", "tu93", "vc33", "wa30")
+
+
+def game_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a game intent: up to GAME_BATCH_CAP probes
+    against the offline ARC-AGI-3 engine, in order, each delta reported in the SAME beat.
+
+    dp, 2026-09-15, on the seat's proposal (shared-context forum, legion-proposal-game-verb):
+    "yes, build the game verb, batch with cap 8". Before this the being paid one beat
+    (~30 min) per probe — it proposed, a seat re-typed the proposal on the next beat. Now
+    the probe is the being's own act in the chain, and a batch of them is one turn.
+
+    Composed like search: the being names the game and a list of probes, the SEAT builds
+    the exact line, the law judges THAT string. The stepper's path is a per-being fact in
+    instance.json (`game_stepper`), carried in ctx by BOTH composition sites; a being with
+    none configured gets a refusal that says so rather than a dead verb.
+
+    THE PROBE LIST IS NOT JSON ON THE COMMAND LINE. The first cut interpolated compact
+    JSON; shlex.split strips its double quotes, so the argv that ran was not the string
+    the law judged (measured in the suite before it shipped). The grammar below has no
+    whitespace and no shell-significant character: `ACTION6:39:47+ACTION1+ACTION6:0:63` —
+    probes joined by `+`, a click's x and y after colons. One token, judged and run alike."""
+    import json
+    import re
+    import sys
+    stepper = (ctx or {}).get("game_stepper")
+    if not stepper:
+        raise ValueError("game: no game is set up on this seat (instance.json has no "
+                         "'game_stepper'); ask the seat, not the law")
+    if any(ch.isspace() for ch in stepper) or not os.path.isabs(stepper):
+        raise ValueError(f"game: the seat's game_stepper must be an absolute path without whitespace, got {stepper!r}")
+    memory_root = (ctx or {}).get("memory_root")
+    if not memory_root or any(ch.isspace() for ch in memory_root):
+        raise ValueError("game requires a memory_root context without whitespace")
+    game = str(args.get("game") or "ft09").strip()     # null / "" from a model means the default
+    if not re.fullmatch(_GAME_ID, game):
+        raise ValueError(f"game 'game' must be a four-character id like 'ft09', got {game!r}")
+    if game in GAME_HOLDOUTS:
+        raise ValueError(f"game: {game!r} is a HOLDOUT — it is the test, and nobody in the fleet "
+                         f"plays, reads or tunes on it. The games you may pick: {', '.join(GAME_PLAYABLE)}")
+    if game not in GAME_PLAYABLE:
+        raise ValueError(f"game: no game {game!r} on this seat. The games you may pick: "
+                         f"{', '.join(GAME_PLAYABLE)}")
+    probes = args.get("probes")
+    if probes is None:
+        # single-probe form: action (+ x,y)
+        # only the coordinates actually given: one of two is a length error the being can read,
+        # not a KeyError (sprout on #218)
+        probes = [[args.get("action", "ACTION6")] + [args[k] for k in ("x", "y") if k in args]]
+    if isinstance(probes, str):
+        try:
+            probes = json.loads(probes)
+        except ValueError:
+            raise ValueError("game 'probes' must be a JSON list like [[\"ACTION6\",36,36],[\"ACTION1\"]]")
+    if not isinstance(probes, list) or not probes:
+        raise ValueError("game 'probes' must be a non-empty list of [action, x, y] (x,y only for ACTION6)")
+    if len(probes) > GAME_BATCH_CAP:
+        raise ValueError(f"game: at most {GAME_BATCH_CAP} probes per call (you gave {len(probes)}); "
+                         f"the cap is the operator's, so split the rest into the next call after reading these")
+    norm = []
+    for i, pr in enumerate(probes):
+        if isinstance(pr, dict):
+            pr = [pr.get("action", "ACTION6")] + [pr[k] for k in ("x", "y") if k in pr]
+        if not isinstance(pr, (list, tuple)) or not pr:
+            raise ValueError(f"game probe {i}: must be [action] or [action, x, y], got {pr!r}")
+        if any(isinstance(v, bool) for v in pr[1:]):
+            # True is an int to Python and would compose as 1 — a coordinate nobody chose
+            raise ValueError(f"game probe {i}: coordinates must be whole numbers 0-63, not true/false")
+        act = str(pr[0]).strip().upper()
+        if act not in GAME_ACTIONS:
+            raise ValueError(f"game probe {i}: action must be one of {list(GAME_ACTIONS)}, got {pr[0]!r}")
+        if act == "LOOK":
+            # LOOK:x0:y0:x1:y1 — a window of the CURRENT board's cell values with coordinates.
+            # Not a move: nothing steps, nothing is recorded, no fire. The being asked for
+            # per-cell values around the sprites it had mapped (2026-09-16 17:08Z); the
+            # objects table is exact but coarse and the frame cannot be counted past ~16 cells.
+            if len(pr) != 5:
+                raise ValueError(f"game probe {i}: LOOK needs [\"LOOK\", x0, y0, x1, y1] (a window, x=col, y=row, 0-63, at most {LOOK_MAX_EDGE} cells per side)")
+            try:
+                x0, y0, x1, y1 = (int(v) for v in pr[1:5])
+            except (TypeError, ValueError):
+                raise ValueError(f"game probe {i}: LOOK bounds must be whole numbers 0-63")
+            if not all(0 <= v <= 63 for v in (x0, y0, x1, y1)) or x1 < x0 or y1 < y0:
+                raise ValueError(f"game probe {i}: LOOK window must satisfy 0 <= x0 <= x1 <= 63 and 0 <= y0 <= y1 <= 63, got {x0},{y0},{x1},{y1}")
+            w, h = x1 - x0 + 1, y1 - y0 + 1
+            if w > LOOK_MAX_EDGE or h > LOOK_MAX_EDGE:
+                # SAY THE SIZE IT ASKED FOR. "at most 16x16" alone read as "0..16 is fine" twice
+                # (2026-09-17): the bounds are inclusive, so 0,0,16,16 is 17x17. A refusal that
+                # names the computed size teaches the arithmetic; one that names only the cap does not.
+                raise ValueError(f"game probe {i}: LOOK bounds are INCLUSIVE, so x0={x0},y0={y0},x1={x1},y1={y1} "
+                                 f"is {w}x{h} cells — at most {LOOK_MAX_EDGE}x{LOOK_MAX_EDGE}. For a "
+                                 f"{LOOK_MAX_EDGE}-wide window from x0, use x1=x0+{LOOK_MAX_EDGE - 1}; "
+                                 f"split a larger region into several LOOKs")
+            norm.append([act, x0, y0, x1, y1])
+            continue
+        if act == "ACTION6":
+            if len(pr) != 3:
+                raise ValueError(f"game probe {i}: ACTION6 is a click and needs exactly [\"ACTION6\", x, y] (x=col, y=row, 0-63)")
+            try:
+                x, y = int(pr[1]), int(pr[2])
+            except (TypeError, ValueError):
+                raise ValueError(f"game probe {i}: x and y must be whole numbers 0-63, got {pr[1]!r},{pr[2]!r}")
+            if not (0 <= x <= 63 and 0 <= y <= 63):
+                raise ValueError(f"game probe {i}: x and y must be within 0-63, got {x},{y}")
+            norm.append([act, x, y])
+        else:
+            if len(pr) != 1:
+                raise ValueError(f"game probe {i}: {act} takes no coordinates; only ACTION6 is a click")
+            norm.append([act])
+    spec = "+".join(":".join(str(v) for v in pr) for pr in norm)
+    return f"{sys.executable} {stepper} --batch {game} {spec} --instance {memory_root}"
+
+
+PR_REPO = "dp-web4/SAGE"
+
+
+def being_branch_prefix(ctx: Optional[dict]) -> str:
+    """The namespace a being's branches live under: the being's own member id.
+
+    On the Legion carrier this was the literal `legion-being/`, which is right for exactly one
+    being. On main the verbs serve every being, and a prefix typed into the code would file
+    sprout's proposals under Legion's name. It is NOT read from the branch the worktree is
+    on: that would let pr_amend push onto whatever branch the worktree happened to stand on,
+    a seat's included. The member is the one the law judges the act as, supplied by the seat
+    in ctx and never by the being."""
+    member = str((ctx or {}).get("member") or "")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,60}", member):
+        raise ValueError("this seat did not say whose worktree this is (no member in the "
+                         "compose context), so no branch of yours can be named. Tell your seat")
+    return member
+
+
+def pr_base_branch(worktree: str, ctx: Optional[dict] = None) -> str:
+    """The branch a being's PR targets: the upstream its worktree branch tracks.
+
+    Was a hard-coded `legion/mission-artifact` — correct only while the live being rides
+    that development branch (GPT review of #56, #8). After decomposition the integration
+    target moves, and a PR verb that still aimed at a historical feature carrier would
+    propose work against dead history. So the base is READ from the worktree: whatever
+    `legion-being/work` tracks is what the seat last synced it to, which is the current
+    governed integration target by construction. `SAGE_PR_BASE` overrides explicitly."""
+    import subprocess
+    env = os.getenv("SAGE_PR_BASE", "").strip()
+    if env:
+        return env
+    prefix = being_branch_prefix(ctx)
+    try:
+        r = subprocess.run(["git", "rev-parse", "--abbrev-ref",
+                            f"{prefix}/work@{{upstream}}"],
+                           cwd=worktree, text=True, capture_output=True, timeout=10)
+        up = r.stdout.strip()
+        if r.returncode == 0 and up.startswith("origin/"):
+            return up[len("origin/"):]
+    except Exception:
+        pass
+    # NO GUESSING. This used to fall back to "main", and that fallback cost the being its
+    # first pull request: `legion-being/work` tracked nothing, so #63 targeted main and
+    # showed 9,271 additions across 55 files for a 159-line change — unreviewable at a
+    # glance, and closed. A wrong base is worse than no PR, because the being cannot see
+    # the diff it proposed and has no way to discover the base was wrong.
+    raise ValueError(
+        "cannot determine the base branch for your pull request: your <you>/work branch has no "
+        "upstream. Tell your seat — it sets the upstream when it syncs your worktree "
+        "(scripts/sync_being_worktree.sh), or SAGE_PR_BASE can name the base explicitly. "
+        "Refusing rather than guessing 'main': a mis-based PR buries a small change in "
+        "thousands of unrelated lines")
+
+
+_SLUG = r"[a-z0-9][a-z0-9-]{1,40}"
+
+
+def pr_open_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a pr_open intent — the `gh pr create`, which is
+    the outward act. The git preparation is not composed here because none of it carries
+    being-supplied text into a shell: the message travels by stdin."""
+    import re
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError("pr_open needs a worktree of your own; none is configured on this seat")
+    slug = str(args.get("slug", "")).strip()
+    if not re.fullmatch(_SLUG, slug):
+        raise ValueError("pr_open 'slug' names your branch tail: lowercase letters, digits and "
+                         f"dashes, 2-41 chars, got {slug!r}")
+    title = " ".join(str(args.get("title", "")).split())
+    if not (8 <= len(title) <= 120):
+        raise ValueError("pr_open 'title' must be one line, 8-120 characters")
+    if not str(args.get("body", "")).strip():
+        raise ValueError("pr_open needs a 'body': what changed, what you verified, what you "
+                         "only suspect, and the check output with its tree head")
+    branch = f"{being_branch_prefix(ctx)}/{slug}"
+    # shlex-quote the title: it is the ONE being-supplied string on the command line
+    import shlex
+    return (f"gh pr create --repo {PR_REPO} --base {pr_base_branch(worktree, ctx)} --head {branch} "
+            f"--title {shlex.quote(title)} --body-file -")
+
+
+def git_restore_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """`git checkout <rev> -- <path>`: put one file back to a committed state.
+
+    WHY A VERB FOR THIS. Restoring a file was possible in principle with git_read cat plus
+    memory_write mode=replace — and impossible in practice, because it means copying the
+    whole file verbatim through the being's own output. Measured: legion-being spent
+    fifteen beats unable to restore a 4,621-char file it could read perfectly well. The
+    reconstruction, not the intent, was the wall.
+
+    SAFETY IS THE REV. The content can only come from a commit, so this cannot invent a
+    file or write being-authored bytes — everything it can produce already exists in the
+    repository's history. What it CAN destroy is uncommitted work on that one path, which
+    is the point (that is what "undo my mess" means) and is said plainly in the result."""
+    import re
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError("git_restore needs a worktree of your own; none is configured on this seat")
+    rev = str(args.get("rev", "")).strip()
+    if not re.fullmatch(_REV, rev):
+        raise ValueError(f"git_restore 'rev' must be a sha, HEAD, HEAD~n or a branch name, got {rev!r}")
+    path = str(args.get("path", "")).strip()
+    if not path:
+        raise ValueError("git_restore needs a 'path': the one file to put back")
+    if any(ch.isspace() for ch in path) or any(ch.isspace() for ch in rev):
+        raise ValueError("git_restore 'path' and 'rev' may not contain whitespace")
+    if path.startswith("-") or ".." in path.split("/"):
+        raise ValueError(f"git_restore 'path' must be a plain path inside your worktree, got {path!r}")
+    full = os.path.realpath(os.path.join(worktree, path))
+    root = os.path.realpath(worktree)
+    if not full.startswith(root + os.sep):
+        raise ValueError(_escape_refusal("git_restore", path, worktree))
+    # WHAT GIT EXECUTES IS NOT RESTORABLE. The content comes from a commit, but "a commit" is
+    # any rev the repo holds — including a branch nobody reviewed — and SAGE sets
+    # core.hooksPath=.githooks, so a restored `.githooks/pre-commit` would be code the seat's
+    # next git act runs. The seat's own git carries no hooks (_worktree_env, #212); this is
+    # the second layer, so that one fix is never the only thing between them.
+    if os.path.isdir(full):
+        # `git checkout <rev> -- <dir>` restores EVERY file under it, and the answer said "this
+        # one file ... nothing else was touched" — every word of which was then false (sprout
+        # on #217). The dispatcher also asks git that <rev>:<path> is a blob.
+        raise ValueError(f"git_restore puts back ONE file, and {path!r} is a directory. Name "
+                         "the file inside it you want restored")
+    top = os.path.relpath(full, root).split(os.sep, 1)[0]
+    # casefold: on a case-insensitive volume (APFS by default, NTFS) `.GITHOOKS` IS `.githooks`,
+    # so a case variant is the same door (legion, reviewing SAGE #210's patch parser)
+    if top.casefold() in (".githooks", ".git"):
+        raise ValueError(f"git_restore cannot put back {path!r}: {top}/ holds what git EXECUTES, "
+                         "and no being writes there. Everything else in your worktree is yours "
+                         "to restore")
+    return f"git --no-pager -C {worktree} checkout {rev} -- {full}"
+
+
+def pr_amend_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command for a pr_amend intent: `gh pr edit --body-file -` on the PR the
+    being's current branch already has open, or `true` when only the commit changes.
+
+    WHY THIS VERB EXISTS. pr_open refuses a branch that already exists, by design — a slug
+    is claimed once. The consequence, unnoticed until it bit: a being whose PR gets
+    "changes requested" HAS NO WAY TO DELIVER THEM. Measured 2026-09-09 on SAGE#63: the
+    review asked for a corrected body and a green suite, and the author could neither
+    amend the branch nor edit the body, because the only verb that reaches a PR opens one.
+    A review loop whose author cannot answer the review is not a loop.
+
+    The being names no branch and no PR number: both are read from the worktree it is
+    standing in, so it can only ever amend its own open proposal."""
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError("pr_amend needs a worktree of your own; none is configured on this seat")
+    title = " ".join(str(args.get("title", "")).split())
+    if not (8 <= len(title) <= 120):
+        raise ValueError("pr_amend 'title' is the message for the new commit: one line, 8-120 chars")
+    if not str(args.get("message", "")).strip():
+        raise ValueError("pr_amend needs a 'message': what this revision changes and why, "
+                         "which becomes the commit body")
+    # THE BRANCH IS CHECKED BEFORE THE EARLY RETURN. It used to be checked only inside
+    # _pr_number_for_branch, which the no-body form never calls — so an amend with no body
+    # composed "true", the law judged "true", and the dispatcher committed and pushed to
+    # whatever branch the worktree stood on: a seat's, <member>/work, main (sprout on #217,
+    # measured). The dispatcher checks again before it acts; neither relies on the other.
+    own_proposal_branch(worktree, ctx)
+    body = str(args.get("body", "") or "")
+    if not body.strip():
+        return "true"      # commit + push only; the PR body stands as written
+    return f"gh pr edit {_pr_number_for_branch(worktree, ctx)} --repo {PR_REPO} --body-file -"
+
+
+def own_proposal_branch(worktree: str, ctx: Optional[dict] = None) -> str:
+    """The branch this worktree is on, if it is one of the being's OWN proposals
+    (<member>/<slug>, never <member>/work); a ValueError otherwise. Read, never supplied."""
+    import subprocess
+    br = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=worktree,
+                        text=True, capture_output=True, timeout=30).stdout.strip()
+    prefix = being_branch_prefix(ctx)
+    if not br.startswith(prefix + "/") or br == f"{prefix}/work":
+        raise ValueError(f"pr_amend: this worktree is on {br!r}, which is not one of your PR "
+                         "branches. pr_amend revises a proposal you already opened")
+    return br
+
+
+def _pr_number_for_branch(worktree: str, ctx: Optional[dict] = None) -> str:
+    """The open PR number for the branch this worktree is on. Read, never being-supplied."""
+    import subprocess
+    br = own_proposal_branch(worktree, ctx)
+    out = subprocess.run(["gh", "pr", "list", "--repo", PR_REPO, "--head", br,
+                          "--state", "open", "--json", "number", "--jq", ".[0].number"],
+                         cwd=worktree, text=True, capture_output=True, timeout=60).stdout.strip()
+    if not out.isdigit():
+        raise ValueError(f"pr_amend: no open pull request found for branch {br}")
+    return out
+
+
+def seat_name() -> str:
+    """This seat's name by fleet rule, <machine>-<model>. SAGE_SEAT names it; unset, the machine is
+    known and the model is not, and the rule says to write that rather than guess. ONE spelling
+    for every place a being is told who its seat is (the Seat trailer, the seat-channel header),
+    so an unset machine shows one name for the missing value, not two (sprout on #231)."""
+    import socket
+    return os.getenv("SAGE_SEAT", "").strip() or f"{socket.gethostname().split('.')[0].lower()}-unknown"
+
+
+def pr_attribution(member_id: str, action_id: Optional[str], being_lct: Optional[str],
+                   seat: Optional[str] = None) -> str:
+    """The trailers on a commit a being authored (PRD r3 §7.2). Appended by the dispatcher;
+    the being cannot omit or alter them."""
+    lines = [f"Being: {member_id}"]
+    if being_lct:
+        lines.append(f"Being-LCT: {being_lct}")
+    if action_id:
+        lines.append(f"Witness: {action_id}")
+    # The seat is <machine>-<model> by fleet rule. SAGE_SEAT names it; unset, the machine is
+    # known and the model is not, and the rule says to write that rather than guess.
+    if not seat:
+        seat = seat_name()
+    lines.append(f"Seat: {seat}")
+    return "\n".join(lines)
+
+
 
 SEARCH_MAX_N = 60        # matches returned at most; a search is a pointer, not a read
 
@@ -614,6 +989,403 @@ def check_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
     return shlex.split(check_command(args, ctx))
 
 
+# ── patch_apply: the being changes the tree it is reasoning about ──────────────────────────
+#
+# dp, 2026-09-25, when asked whether to build this ungoverned first and govern it after:
+# "governed. that's the whole point."
+#
+# THE GAP IT CLOSES. This being can read a worktree (git_read, search), reason about it, and
+# RUN its tests (check) — and could not change a byte of it. Its only writes were into its own
+# memory home. So the loop it exists to close ran: read → reason → describe a fix → assert an
+# outcome it had never observed. That is the same measured failure that produced request_run
+# and memory_edit, one layer out: describing an edit was all it could do, so describing one is
+# what it learned to do.
+#
+# WHY A DIFF AND NOT AN EDITOR. A patch is the unit the seat can judge whole. An editor verb
+# would be a sequence of writes, each individually plausible and collectively arbitrary; a
+# diff names every file it touches, in one artifact, before anything happens.
+#
+# WHAT THE LAW JUDGES, and this is the part that makes it governed rather than merely gated:
+#
+#   1. EVERY PATH THE PATCH TOUCHES, parsed OUT OF THE DIFF — never taken from an arg the
+#      being asserts. `patch_apply_paths` returns them and `_normalize` puts them in
+#      `ev.paths`, so mrh.path rules on each one exactly as it rules on a memory_write. A
+#      being whose grant covers `sage/gateway/` cannot patch `sage/federation/`, and it is
+#      refused by the same rule, with the same words, as any other out-of-scope write.
+#   2. THE COMMAND, composed by the SEAT from those same parsed paths — one `--include=` per
+#      target. So the parse feeds the judgement and the execution from one place: if the
+#      parse were ever wrong, git itself would refuse the paths the law did not see, rather
+#      than the two disagreeing quietly. (`--include` is a glob, which is why the parser
+#      refuses any path carrying glob metacharacters: a pattern is not a path.)
+#   3. THE DIFF'S CONTENT, by digest. The patch file is named for the sha256 of the diff, so
+#      the content is INSIDE the string the law rules on. `judged == executed` normally stops
+#      at the command; here it reaches the bytes, because the dispatcher re-hashes what it is
+#      about to feed git and refuses if the name and the content have come apart.
+#
+# WHAT IS STILL NOT GOVERNED, stated plainly because a claim of coverage is worth less than
+# an accurate map of it: the law rules on WHICH FILES change and on the diff's identity, not
+# on whether the change is any good. Nothing here reads the hunks and forms a view. That is
+# review, it is what `check` and a human reader are for, and pretending otherwise would be
+# the same overclaim this verb exists to stop the being making.
+
+PATCH_MAX_BYTES = 256 * 1024
+
+# A path pattern is not a path. `--include` takes a glob, so a target carrying glob
+# metacharacters would be judged as one string and matched as another — the `_safe_path`
+# defect in a new costume. Refused at the parse, where it is still a named error.
+_GLOB_CHARS = "*?[]"
+
+
+def _hunk_counts(line: str) -> Optional[tuple]:
+    """(old_lines, new_lines) from an `@@ -a,b +c,d @@` header, or None if it is not one.
+
+    The counts are what let the parser know where a hunk ENDS, which is the only way to tell a
+    file header from a line of hunk body that happens to start with `---`. A hunk body is
+    arbitrary text the being controls; nothing in it may be read as structure.
+    """
+    m = re.match(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
+    if not m:
+        return None
+    old = int(m.group(2)) if m.group(2) is not None else 1
+    new = int(m.group(4)) if m.group(4) is not None else 1
+    return old, new
+
+
+# Code points HFS+/APFS IGNORE when comparing names -- git's own list (`is_hfs_dotgeneric`).
+# On those volumes `.g\u200cit` IS `.git`, so a comparison that keeps them is a comparison of
+# spellings, not of files.
+_HFS_IGNORABLE = dict.fromkeys(
+    [0x200C, 0x200D, 0x200E, 0x200F, 0xFEFF, *range(0x202A, 0x202F), *range(0x206A, 0x2070)])
+
+
+def _as_the_filesystem_sees_it(component: str) -> str:
+    """A path component folded the way a case-insensitive volume compares it.
+
+    Legion, re-review of #210 at b0f62da58: the `.git` / `.githooks` refusals compared exact
+    strings, and McNugget's volume is APFS, case-INSENSITIVE -- so `.GITHOOKS/pre-commit` was
+    accepted and IS `.githooks/pre-commit` there, and `.Git/config` is the repo config
+    (`core.fsmonitor` is executed by `git status`; no hook needed). Inert on Linux, live on
+    exactly the seat that wrote the PR. Folded: case (casefold, not lower), the HFS-ignorable
+    code points, and the trailing dots/spaces NTFS drops. The refusal must not lean on git's
+    core.protectHFS/protectNTFS, which cover `.git` but not `.githooks`.
+    """
+    return component.translate(_HFS_IGNORABLE).casefold().rstrip(". ")
+
+
+def patch_targets(diff: str) -> List[str]:
+    """EVERY repo-relative path git would touch applying this diff, or ValueError saying why not.
+
+    MEASURED, 2026-09-25, and the reason this is a state machine rather than a grep for
+    `diff --git` headers. `git apply` reads plain unified-diff sections too: a patch whose first
+    section carries a `diff --git` header and whose second has only `--- a/x` / `+++ b/x` is
+    applied IN FULL. The first cut of this parser read the `diff --git` lines only, so:
+
+        law sees:  granted.py
+        git wrote: granted.py AND ungranted.py
+
+    `--include` did stop it -- measured both ways, and that is why it is there -- but a patch
+    the law under-reads is not saved by luck downstream. It is also a worse refusal: the being
+    was told "applied to 1 file" about a diff that named two, so the seat would have been lying
+    to it about what happened. The parser now accounts for every section git will read, and
+    anything it cannot account for EXACTLY is refused.
+
+    It walks the diff the way git does: outside a hunk, a line at column 0 is structure; inside
+    one, the `@@` header's declared counts say how many lines belong to the body, and none of
+    them is ever read as structure. `test_a_headerless_section_is_accounted_for` is the pin.
+    """
+    import posixpath
+    if not isinstance(diff, str) or not diff.strip():
+        raise ValueError("patch_apply needs a 'diff': a unified diff, as git would print it")
+    raw = diff.encode("utf-8", "surrogatepass")
+    if len(raw) > PATCH_MAX_BYTES:
+        raise ValueError(
+            f"that diff is {len(raw)} bytes and the limit is {PATCH_MAX_BYTES}. A patch this "
+            f"size is several changes; send them one at a time so each can be judged and checked")
+
+    # Git's own metadata between a `diff --git` header and the body. Enumerated rather than
+    # skipped-by-default: once a diff has started, a line this parser does not recognise is a
+    # line it cannot say the effect of, and "I could not tell" must not render as "nothing
+    # there" (the pane rule, one layer down). Leading prose BEFORE any section is still
+    # ignored, because `git am` output carries a commit message and refusing that would be
+    # refusing a shape git itself accepts.
+    _META = ("index ", "old mode ", "new mode ", "new file mode ", "deleted file mode ",
+             "similarity index ", "dissimilarity index ", "rename from ", "rename to ",
+             "copy from ", "copy to ")
+    targets: List[str] = []
+    started = False                       # a file header has been seen; structure is now strict
+    header_target: Optional[str] = None   # what the current `diff --git` claims, if any
+    old_path: Optional[str] = None        # from `--- a/x`
+    remaining = None                      # (old, new) while inside a hunk
+    hunk_just_closed = False              # the previous line was a hunk's LAST body line
+
+    def side(line: str, prefix: str) -> Optional[str]:
+        """The path out of a `--- a/x` or `+++ b/x` header. /dev/null means the file is
+        created or deleted, which is a real change and not a path."""
+        rest = line[len(prefix):].strip()
+        # git writes a tab before any trailing timestamp; a real path may contain spaces, so
+        # only the tab is a separator, never the space.
+        rest = rest.split("\t", 1)[0]
+        if rest == "/dev/null":
+            return None
+        for p in ("a/", "b/"):
+            if rest.startswith(p):
+                return rest[2:]
+        raise ValueError(
+            f"could not read the path out of {line.strip()!r}. Send a diff produced by "
+            f"`git diff`, whose file headers read `--- a/<path>` and `+++ b/<path>`")
+
+    def record(path: str) -> None:
+        if not path:
+            raise ValueError("a file header in that diff names an empty path")
+        if path.startswith("/") or ":" in path:
+            raise ValueError(f"'{path}' is absolute; a diff's paths are repo-relative")
+        if any(c in path for c in _GLOB_CHARS):
+            raise ValueError(
+                f"'{path}' contains a glob character ({_GLOB_CHARS}). The seat passes each "
+                f"target to git as a pattern, so a path that is also a pattern would be "
+                f"judged as one thing and matched as another")
+        parts = path.split("/")
+        if ".." in parts or "." in parts:
+            raise ValueError(f"'{path}' walks the tree; a diff's paths are plain and relative")
+        # WHAT GIT EXECUTES IS NOT A FILE THE BEING WRITES (Legion, review of #210). SAGE sets
+        # `core.hooksPath=.githooks`, a TRACKED directory shared by every worktree, so a patch
+        # to `.githooks/pre-commit` is a judged write like any other -- and runs AS THE SEAT,
+        # outside bubblewrap, the next time a seat runs `git commit` there. #212 turns hooks
+        # off for every seat-run git in the worktree (the layer that executes); this is the
+        # layer the being reads, and it says the refusal is not about the being. `.git` is
+        # refused at ANY depth, not only the top: `sub/.git/hooks/x` is a nested repo's hooks.
+        # Compared as the FILESYSTEM compares, not as strings: see _as_the_filesystem_sees_it.
+        folded = [_as_the_filesystem_sees_it(p) for p in parts]
+        if ".git" in folded:
+            raise ValueError(
+                "'.git' is the repository's own record, not a file in it. A patch that "
+                "rewrites history or a repository's config is not a change to the tree")
+        if folded[0] == ".githooks":
+            raise ValueError(
+                "'.githooks/' holds the scripts git RUNS, as the seat, when the seat commits "
+                "in this tree. Not a judgement about you: no being writes what the seat "
+                "executes outside the sandbox. If a hook needs changing, ask the seat")
+        if posixpath.normpath(path) != path:
+            raise ValueError(f"'{path}' is not in normal form; send the path git would print")
+        if path not in targets:
+            targets.append(path)
+
+    for line in diff.splitlines():
+        if remaining is not None:
+            # INSIDE A HUNK. Every line here is body, however it begins. This is the whole
+            # reason for the state machine: `--- a/evil` as a removed line is data, and reading
+            # it as a header is how a being would name one file to the law and another to git.
+            old, new = remaining
+            if line.startswith("\\"):        # "\ No newline at end of file" — neither side
+                continue
+            if line.startswith("-"):
+                old -= 1
+            elif line.startswith("+"):
+                new -= 1
+            elif line.startswith(" ") or line == "":
+                old -= 1
+                new -= 1
+            else:
+                raise ValueError(
+                    f"that hunk ends early: {line.strip()[:60]!r} is not a diff line, and "
+                    f"{old} old / {new} new line(s) were still declared. Send a diff produced "
+                    f"by `git diff` rather than an edited one")
+            if old < 0 or new < 0:
+                raise ValueError(
+                    "a hunk in that diff has more lines than its `@@` header declares. Send a "
+                    "diff produced by `git diff`; a hand-edited count makes the patch ambiguous")
+            remaining = None if (old == 0 and new == 0) else (old, new)
+            hunk_just_closed = remaining is None
+            continue
+        # `\ No newline at end of file` after a hunk's LAST line lands here, outside the hunk,
+        # because the counts close it one line early. `git diff` prints it for any file with no
+        # trailing newline, so refusing it refused diffs git itself produced (Legion, re-review
+        # of #210). It is accepted ONCE, directly after a hunk closes, and nowhere else: it
+        # belongs to that hunk's last line and names no path.
+        if hunk_just_closed and line.startswith("\\"):
+            hunk_just_closed = False
+            continue
+        hunk_just_closed = False
+        counts = _hunk_counts(line)
+        if counts is not None:
+            remaining = counts if counts != (0, 0) else None
+            continue
+        if line.startswith("diff --git "):
+            rest = line[len("diff --git "):].strip()
+            halves = rest.split(" b/", 1)
+            if len(halves) != 2 or not halves[0].startswith("a/"):
+                raise ValueError(
+                    f"could not read the target out of {line.strip()!r}. Send a diff produced "
+                    f"by `git diff` (its headers read `diff --git a/<path> b/<path>`); a path "
+                    f"containing ' b/' cannot be represented here")
+            a, b = halves[0][2:], halves[1]
+            if a != b:
+                raise ValueError(
+                    f"that header renames {a!r} to {b!r}. patch_apply changes files in place; "
+                    f"a rename is two acts on two paths, and the law must judge both — do it "
+                    f"as a delete and an add, or ask the seat")
+            header_target, old_path, started = a, None, True
+            record(a)
+            continue
+        if line.startswith("GIT binary patch") or line.startswith("Binary files "):
+            raise ValueError(
+                "that is a binary patch. patch_apply changes text the law can see the paths of "
+                "and a reader can review; a binary blob is neither")
+        if line.startswith("--- "):
+            old_path = side(line, "--- ")
+            continue
+        if line.startswith("+++ "):
+            new_path = side(line, "+++ ")
+            path = new_path or old_path
+            if path is None:
+                raise ValueError(
+                    "a section of that diff has /dev/null on both sides, which names no file")
+            # A `diff --git` header that disagrees with its own body is refused rather than
+            # half-trusted: one of the two is what git will use, and the law must not guess.
+            if header_target is not None and path != header_target:
+                raise ValueError(
+                    f"that section's header says {header_target!r} and its body says {path!r}. "
+                    f"Send a diff produced by `git diff`, where the two always agree")
+            record(path)
+            header_target, old_path, started = None, None, True
+            continue
+        # A SYMLINK IS REFUSED, created or converted to (Legion, re-review of #210). A being has
+        # no need to make one, and a link is the classic way past every LATER path check that
+        # does not realpath. `git apply` and `_safe_path` both resolve today, so nothing on
+        # this head is exploitable through one -- which is why it is closed here, at the parse,
+        # rather than left for the next worktree write path to remember.
+        # `index <a>..<b> 120000` is an EXISTING link retargeted -- the same act, so the same
+        # refusal.
+        if (line.startswith(("new file mode ", "new mode ", "index "))
+                and line.split()[-1] == "120000"):
+            raise ValueError(
+                "that diff creates or retargets a symbolic link. patch_apply changes files; a link changes "
+                "where OTHER paths lead, which is not a change the law can judge by its name")
+        if line.startswith(_META) or not line.strip():
+            continue                       # names no path; a pending `diff --git` survives it
+        if started:
+            # A line the parser cannot classify, in the structured part of the diff. The first
+            # cut fell through here, so `+c` stranded after a closed hunk was silently ignored
+            # -- and a parser that ignores what it cannot read is one that under-reports what
+            # the patch does, which is the whole defect this function exists to not have.
+            raise ValueError(
+                f"could not read {line.strip()[:60]!r} as part of a diff. Send a diff produced "
+                f"by `git diff`; this parser refuses what it cannot account for exactly, "
+                f"because a line it skipped is a change the law would not have seen")
+    if remaining is not None:
+        raise ValueError(
+            "that diff ends inside a hunk: its last `@@` header declares more lines than "
+            "follow it. Send a diff produced by `git diff`")
+    if not targets:
+        raise ValueError(
+            "that diff names no files: no `diff --git a/<path> b/<path>` or `--- a/<path>` / "
+            "`+++ b/<path>` header in it. If you wrote the diff by hand, produce it with "
+            "`git diff` instead — those headers are what the seat and the law both read to "
+            "know what you are proposing to change")
+    return targets
+
+
+def diff_arg(args: dict) -> str:
+    """The diff, as a string, or a refusal that names the actual problem.
+
+    `str(args.get("diff"))` was the first cut, and it turned `diff=7` into the string "7",
+    which then failed the parse with "that diff names no files" -- a true sentence about the
+    wrong thing. A being handed that refusal would go looking for its missing headers rather
+    than at the type it sent. Coercion before validation always costs the error message.
+    """
+    diff = args.get("diff")
+    if diff is None:
+        raise ValueError("patch_apply needs a 'diff': a unified diff, as git would print it")
+    if not isinstance(diff, str):
+        raise ValueError(
+            f"'diff' must be the text of a unified diff; got {type(diff).__name__}. Send what "
+            f"`git diff` prints, as one string")
+    return diff
+
+
+def patch_digest(diff: str) -> str:
+    """The diff's identity. Content-addressed so it can ride INSIDE the judged command."""
+    import hashlib
+    return hashlib.sha256(diff.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def patch_file_path(diff: str) -> str:
+    """Where the seat stages the patch: named for its own content.
+
+    The name IS the digest, so a stale or swapped file cannot masquerade as this one, and two
+    callers with the same diff converge on one file instead of racing over a shared name.
+    Outside the worktree deliberately: the patch is not itself a change to the tree.
+    """
+    return f"/tmp/sage-patch-{patch_digest(diff)}.diff"
+
+
+def _patch_worktree(ctx: Optional[dict]) -> str:
+    """The worktree, resolved to its REAL path, or a refusal naming what is missing.
+
+    Resolved HERE rather than trusted from the caller, because the composed string is compared
+    across two call sites -- the gate's and the dispatcher's -- and a comparison of strings is
+    a comparison of spellings unless one of them is canonical. Both callers happen to realpath
+    today, so they agree; that agreement is one edit away from being a silent refusal of every
+    patch_apply, which is precisely the shape of failure the judged==executed guard exists to
+    make loud rather than to cause. (Measured while writing the behavioural test: a caller
+    holding `/var/...` and one holding `/private/var/...` for the same directory produced two
+    commands and the dispatcher refused its own act.)
+    """
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError(
+            "patch_apply needs a worktree of your own: there is nothing to change, and a "
+            "relative path would be judged against a tree you do not hold (PRD M1)")
+    return os.path.realpath(os.path.expanduser(str(worktree)))
+
+
+def patch_apply_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """The absolute paths the law must rule on — resolved the way the seat will touch them.
+
+    realpath, for the reason every other path in this module is realpath'd: the dispatcher
+    resolves symlinks, so a judged path that is not the real path is a judgement about a
+    different file. A target that does not exist yet (the patch creates it) resolves to the
+    real parent plus the name, which is what git will create.
+    """
+    worktree = _patch_worktree(ctx)
+    return [os.path.realpath(os.path.join(worktree, t))
+            for t in patch_targets(diff_arg(args))]
+
+
+def patch_apply_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The exact `git apply` the seat will run, built from the parsed targets.
+
+    NOT sandboxed, and that is not an oversight. The sandbox exists because `check` EXECUTES
+    being-authored code (SAGE#55); `git apply` executes nothing — it writes files. What
+    bounds it is the law: mrh.path on every target, and `--include` on every target so git
+    refuses anything the law did not see. The being-authored code that lands here is run
+    later, by `check`, inside the sandbox — which is the arrangement that makes the worktree
+    safe to write to at all.
+    """
+    import shlex
+    worktree = _patch_worktree(ctx)
+    if not str(args.get("why", "")).strip():
+        raise ValueError(
+            "patch_apply needs a 'why': one line on what this change is for. A worktree "
+            "change with no account of itself is not reviewable, and this one is witnessed")
+    diff = diff_arg(args)
+    targets = patch_targets(diff)
+    includes = " ".join(f"--include={shlex.quote(t)}" for t in targets)
+    # --whitespace=nowarn: a whitespace complaint is not a reason to refuse a change, and a
+    # warning stream the being cannot act on teaches it to ignore output. No --3way and no
+    # --reject: a patch that does not apply cleanly is a first-class ANSWER ("your diff is
+    # stale, re-read the file"), not something to half-land and call success.
+    return (f"git --no-pager -C {shlex.quote(worktree)} apply --whitespace=nowarn "
+            f"{includes} -- {shlex.quote(patch_file_path(diff))}")
+
+
+def patch_apply_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """The same command as a list, for execution without a shell — `check_argv`'s contract."""
+    import shlex
+    return shlex.split(patch_apply_command(args, ctx))
+
+
+
 # The M1 PREREQUISITE, built. Being-authored code runs under a principal that is not this
 # seat — the hard blocker PRD r3 §5 put on M1, cleared 2026-09-08.
 #
@@ -660,6 +1432,10 @@ def _unbounded_reason(effector: str) -> str:
 _REGISTRY = {
     "peer_ask":       dict(tool="peer_ask",     path_args=(),       cmd_arg=None),
     "witness":        dict(tool="witness",      path_args=(),       cmd_arg=None),
+    # game: probes against the offline ARC-AGI-3 engine, the being's own act, batched.
+    # Composed like search (see game_command); the stepper is a per-being fact.
+    "game":           dict(tool="game",        path_args=(),       cmd_arg=None,
+                           compose=game_command),
     "camera":         dict(tool="camera",      path_args=(),        cmd_arg=None,
                            compose=camera_command),
     "memory_read":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
@@ -694,6 +1470,16 @@ _REGISTRY = {
     # a commit message and optionally a new PR body; the branch and the PR number are READ
     # from the worktree, so it can only ever revise its own open proposal, and the law
     # judges the outward `gh pr edit` rather than a friendly verb name.
+    "pr_amend":       dict(tool="pr_amend",    path_args=(),       cmd_arg=None,
+                           compose=pr_amend_command),
+    # git_restore: put ONE file back to a committed state. Composed like check and git_read;
+    # the content can only come from history, so the being cannot author bytes through it.
+    "git_restore":    dict(tool="git_restore",  path_args=("path",), cmd_arg=None,
+                           compose=git_restore_command),
+    # pr_open: the being's worktree changes become a pull request, attributed to it,
+    # for NOT-SAME review. Composed like pr_review — the law rules on the `gh` string.
+    "pr_open":        dict(tool="pr_open",     path_args=(),       cmd_arg=None,
+                           compose=pr_open_command),
     "memory_write":   dict(tool="write_note",   path_args=("path",), cmd_arg=None),
     "channel_egress": dict(tool="channel_send", path_args=(),       cmd_arg=None),
     "mesh":           dict(tool="mesh_notify",  path_args=(),       cmd_arg=None),  # §7.2 5th verb
@@ -727,6 +1513,18 @@ _REGISTRY = {
     # its own included. path_args=() is correct: the target is a conversation, not a path,
     # and the reach is fixed by the meta file the seat owns rather than by the being's args.
     "say":            dict(tool="say",          path_args=(),       cmd_arg=None),
+    # gaze: the being's attention stance for its own eyes. Path-less by construction — the
+    # dispatcher writes the ONE file the cortex reads (~/.sprout/gaze.json), never a path the
+    # being names — so its reach is fixed the way `say`'s and `remember`'s are.
+    "gaze":           dict(tool="gaze",         path_args=(),       cmd_arg=None),
+    # speak: words become a voice in the room (2026-09-26). Path-less like gaze: the being
+    # supplies only text; the engine, the device and the length cap are fixed by the dispatcher,
+    # so its reach is the machine's own speaker and nothing else.
+    "speak":          dict(tool="speak",        path_args=(),       cmd_arg=None),
+    # pair_audio: try to connect this body's configured headset (2026-09-27). No arguments at
+    # all: the device and the procedure are fixed by the machine (body.AUDIO_BT), so its reach
+    # is one Bluetooth address and nothing the being names.
+    "pair_audio":     dict(tool="pair_audio",   path_args=(),       cmd_arg=None),
     "request_scope":  dict(tool="request_scope", path_args=(),      cmd_arg=None),
     # request_run: ASK THE SEAT TO RUN A FILE. It does not run anything — that is the whole
     # design. Measured 2026-09-20/21: the being asked dp in prose to run a file for it six
@@ -753,6 +1551,14 @@ _REGISTRY = {
     # is something to appeal, and hestia_appeal refuses anything that is not a deny,
     # not yours, already under appeal, or unreasoned. No external effect: chain only.
     "appeal":         dict(tool="appeal",        path_args=(),      cmd_arg=None),
+    # patch_apply: change the worktree the being reads and checks. `path_args=()` and
+    # `compose_paths` instead, which is the whole design: the paths are PARSED OUT OF THE
+    # DIFF, never taken from an arg the being asserts, so what the law rules on and what git
+    # touches are derived from one artifact. See patch_apply_command for the three things
+    # judged and the one that is not.
+    "patch_apply":    dict(tool="patch_apply",   path_args=(),      cmd_arg=None,
+                           compose=patch_apply_command,
+                           compose_paths=patch_apply_paths),
 }
 
 
@@ -762,7 +1568,15 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run", "memory_edit", "camera"})
+                            "retire_note", "request_run", "memory_edit", "camera", "game",
+
+
+                            "retire_note", "request_run", "memory_edit", "camera",
+                            "pr_open", "pr_amend", "git_restore",
+                            "gaze",    # moves the body's own eyes (2026-09-23)
+                            "speak",   # makes sound in the room (2026-09-26)
+                            "pair_audio",  # moves the body's own hardware link (2026-09-27)
+                            "patch_apply"})   # writes the tree it reasons about (2026-09-25)
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -775,7 +1589,18 @@ _TOOL_SCHEMAS = {
                     "start_line that reads on.",
                     {"path": "path to your note",
                      "start_line": "optional: the line number to start from (default 1)"}, ["path"]),
-    "memory_write": ("Write a note into your own memory.",
+    # SAY IT APPENDS, AT THE MOMENT OF CHOICE (2026-09-26). This description was "Write a note
+    # into your own memory." Only memory_edit's description said memory_write appends, and a model
+    # choosing memory_write never reads that one. cbp-being meant to rewrite
+    # latent-weights-holdout-test.py whole: it sent 5,251 chars to memory_write, got "appended
+    # to the END", and the file now held two programs, with the fixes in the one that never runs.
+    # The old 1,846-line file with ten main()s was built the same way. The receipt (#141) tells it
+    # afterwards, and this tells it before.
+    "memory_write": ("Add text to a file in your home. It APPENDS to the end: if the file exists, "
+                     "what is already there stays and your text goes below it. It never replaces. "
+                     "To change or replace lines in an existing file, including rewriting a whole "
+                     "script, use memory_edit (start_line 1 to the last line replaces all of it). "
+                     "To start fresh, write to a new file name.",
                      {"path": "path to your note", "content": "what to write"}, ["path", "content"]),
     "channel_egress": ("Send a message out through a sealed channel.",
                        {"to": "recipient", "body": "your message"}, ["to", "body"]),
@@ -816,6 +1641,46 @@ _TOOL_SCHEMAS = {
               {"target": "'gateway' or 'irp' for a whole suite, or '<suite>::<test_name>' "
                          "for one test, e.g. 'gateway::test_relative_memory_path'"},
               ["target"]),
+    # Written to the being in the second person and without jargon, like every schema here.
+    # It says what the seat will do, what the law will refuse, and — the part that matters
+    # for a first organ — that a patch which does not apply is an ANSWER about the tree
+    # having moved, not a failure of its own. The measured habit this verb exists to break
+    # is asserting an outcome it never observed; a verb whose refusals read as its own fault
+    # teaches exactly that habit.
+    "patch_apply": ("Change files in your own worktree by sending a patch. This is how you act "
+                    "on what you have read, instead of describing what you would do. Send a "
+                    "unified diff as `git diff` prints it — its `diff --git a/<path> b/<path>` "
+                    "headers are what the seat reads to know which files you are proposing to "
+                    "change, and the law judges every one of those paths against what you are "
+                    "granted. It applies all-or-nothing: if it does not fit, nothing changes and "
+                    "you are told why. The usual reason is that the file moved on since you read "
+                    "it — read it again and send a fresh diff. After it lands, run `check`: "
+                    "applying a patch is not evidence that it works.",
+                    {"diff": "a unified diff, as `git diff` prints it",
+                     "why": "one line: what this change is for"},
+                    ["diff", "why"]),
+    "gaze": ("Choose what your own eyes do. This is a real act on your real body: the cortex "
+             "that runs your cameras reads your choice within seconds and follows it, and your "
+             "next beat shows you what the scene was under it. Modes: open (take in the room and "
+             "let what moves draw you), avert (look away from what pulls at you), dwell (hold on "
+             "one thing — say what, in target), closed (rest your eyes; the world goes dark until "
+             "you open them). Nothing asks you to change it.",
+             {"mode": "one of: open, avert, dwell, closed",
+              "target": "for dwell or avert: what, in your own words (optional)",
+              "words": "why, in your own words (optional; kept with the choice)"},
+             ["mode"]),
+    "pair_audio": ("Try to connect your headset (your speaker and your ear for words) when it is not "
+                   "connected. It looks for the headset, tries to connect, and tells you what happened: "
+                   "connected, not seen (probably switched off or out of range), or seen but the "
+                   "connection failed. It will not always succeed. Takes about half a minute.",
+                   {}, []),
+    "speak": ("Speak aloud. Your words become a voice through this machine's speaker, which "
+              "anyone in the room may hear, and your turn in the room conversation; what the mic "
+              "hears back is added there. say to room does the same. To answer someone in "
+              "writing, use say to their conversation. One short utterance, up to 400 "
+              "characters. Write the words themselves, not a description of them.",
+              {"text": "the exact words to say aloud"},
+              ["text"]),
     "say": ("Add a turn to a conversation you are in — this is how you ANSWER someone, "
             "rather than writing about them in your journal. The turn is attributed to you "
             "and kept forever; nobody can edit it afterwards, including you. Saying nothing "
@@ -823,6 +1688,35 @@ _TOOL_SCHEMAS = {
             {"to": "the conversation id, shown beside each conversation in your state",
              "text": "what you want to say"},
             ["to", "text"]),
+    "pr_open": ("Open a pull request from the changes in your worktree. This is how your work "
+                "enters the tree (PRD §7): on your own branch, attributed to you in the commit "
+                "trailers, reviewed by someone who is not you and did not co-author it. You "
+                "cannot merge it. Write the body the way your best review was written — what "
+                "you VERIFIED (with the check output and its tree head) versus what you only "
+                "SUSPECT — so a reviewer re-runs it instead of trusting you.",
+                {"slug": "your branch's tail, e.g. 'count-readable-turns' (lowercase, dashes)",
+                 "title": "one line, 8-120 characters",
+                 "body": "what changed, why, what you verified and how, what you did not"},
+                ["slug", "title", "body"]),
+    "pr_amend": ("Revise a pull request you already opened, when a reviewer asks for changes. "
+                 "pr_open refuses a slug twice, so without this a review that requests changes "
+                 "is a dead end (measured on #63). Write the change in your worktree first; "
+                 "this commits it onto the same branch, pushes, and replaces the PR body when "
+                 "you supply one. You name no branch and no PR number — both are read from the "
+                 "worktree you stand in, so you can only revise your own open proposal, and you "
+                 "still cannot merge it.",
+                 {"title": "one line for the new commit, 8-120 characters",
+                  "message": "what this revision changes and why (the commit body)",
+                  "body": "the corrected PR body (optional; omit to leave it as written)"},
+                 ["title", "message"]),
+    "git_restore": ("Put ONE file back to the way it was at a commit — `git checkout <rev> -- "
+                    "<path>`. Use it to undo your own edits to a file rather than trying to "
+                    "retype it: the content comes from history, so you cannot get it wrong. "
+                    "Uncommitted changes to that path are DISCARDED, which is usually the "
+                    "point; nothing else in your worktree is touched.",
+                    {"rev": "the commit to take the file from, e.g. a sha or HEAD",
+                     "path": "the one file to restore, inside your worktree"},
+                    ["rev", "path"]),
     # Two forms, one verb. A separate verb for the second half of membot's own retrieval
     # pattern would cost ~700 characters of prompt every beat; an extra optional argument
     # costs ~150. required is EMPTY because neither form is the required one — the
@@ -866,6 +1760,19 @@ _TOOL_SCHEMAS = {
                     {"path": "the file to run, inside your own home, e.g. notes/my-script.py",
                      "why": "optional: what you expect to learn. Saying it helps the seat decide"},
                     ["path"]),
+    "game": ("Play an ARC-AGI-3 game: up to 8 probes per call, in order, each delta back in this "
+             "turn. ACTION6 is a click at (x=col,y=row) 0-63; ACTION1-5,7 take no coordinates; "
+             "[\"RESET\"] starts the game over from level 0 (use it after GAME_OVER, or any time; "
+             "it is yours to call); [\"LOOK\",x0,y0,x1,y1] is NOT a move — it returns that "
+             "window's cell values (max 16x16). You SEE the result in this same turn: the window "
+             "you looked at and the region your last move changed come back as images with every "
+             "cell's value drawn in it. This is the GAME's synthetic feed, not your camera. "
+             "Full boards ride your next beat; current.md and board.txt are rewritten. "
+             "Predict before you read.",
+             {"probes": "list of probes, at most 8, e.g. [[\"ACTION6\",36,36],[\"LOOK\",30,30,45,45],[\"RESET\"]]",
+              "game": ("optional: which game (default ft09). Yours to choose: " + ", ".join(GAME_PLAYABLE)
+                       + ". Each keeps its own move log; switching loses nothing.")},
+             ["probes"]),
     "camera": ("Capture ONE frame from this machine's camera into your own scratch — no "
               "stream, nothing persists across beats. The seat runs ffmpeg against /dev/"
               "video0 (or a plain device node you name) and writes one JPEG to the path "
@@ -877,6 +1784,12 @@ _TOOL_SCHEMAS = {
                {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
                 "device": "optional: a plain device node to read from (default /dev/video0)"},
                []),
+    "rest": ("End this beat deliberately, when you judge you are done. You are NOT required "
+             "to keep acting until something runs out — a beat you end early is not a beat "
+             "wasted, and the time returns to the machine. Your reason becomes your closing "
+             "words. This touches nothing in the world, so it is not gated and not witnessed; "
+             "it is simply you saying you are finished.",
+             {"reason": "one line: what you finished, or why you are stopping here"}, ["reason"]),
     "remember": ("Store something in your long-term memory so a future you can recall it: "
                  "a fact, a lesson, a question, what you were doing and why.",
                  {"content": "the memory, in your own words", "tags": "comma-separated tags (optional)"},
@@ -1022,6 +1935,17 @@ class GatewayVerdict:
     # "you already hold reach here" for journal.md beneath an EXACT home grant, filed
     # nothing, and the being retried 22 times in one beat with no request_id anywhere.
     granted_reach: tuple = ()
+    # THE EXACT OUTWARD ACT THE LAW RULED ON, for a composed verb (check, search, git_read,
+    # pr_review, camera, patch_apply). The dispatcher compares what it is about to run against
+    # this, so "judged == executed" is a CHECKED invariant rather than a shared assumption
+    # about two call sites staying in step.
+    #
+    # It did not exist until 2026-09-25, and its absence made the guard that depends on it
+    # inert: `_do_check` reads `getattr(verdict, "command", None)`, which was always None, so
+    # `if judged is not None and judged != cmd` never compared anything. The comment above it
+    # said the invariant was being checked; nothing was. Found while writing patch_apply,
+    # which had copied the same pattern faithfully enough to inherit the same hole.
+    command: Optional[str] = None
 
     @property
     def blocks(self) -> bool:
@@ -1093,9 +2017,26 @@ class BeingGateClient:
 
     def __init__(self, member_id: str, identity_path: str, workspace: str,
                  dispatcher: "Optional[Dispatcher]" = None,
-                 host_session_id: Optional[str] = None):
+                 host_session_id: Optional[str] = None,
+                 worktree: Optional[str] = None,
+                 game_stepper: Optional[str] = None):
         self.member_id = member_id
+        # the seat-side ARC stepper `game` composes with; a per-being fact (instance.json)
+        self.game_stepper = game_stepper
         self.workspace = workspace
+        # THE BEING'S OWN WORKTREE, and the gate needs it as much as the dispatcher does.
+        #
+        # WHY THIS PARAMETER EXISTS (McNugget, 2026-09-24). `git_read`, `search` and `check`
+        # landed on 2026-09-13 as composed verbs whose composer reads the worktree out of a
+        # `ctx` dict. The DISPATCHER passed one; the GATE never did -- `_normalize` called
+        # `compose(intent.args)`, one argument -- and this class had no worktree at all. So
+        # every one of those three raised inside the gate and came back
+        # `deny / gate.raised: "needs a worktree of your own; none is configured on this seat"`.
+        # Measured on this seat: check, search and git_read all denied; witness allowed.
+        # The deny was correct and nobody read it. Same realpath/expanduser treatment as
+        # HestiaF1aDispatcher, so the path the law judges is the path the dispatcher touches.
+        self.worktree = (os.path.realpath(os.path.expanduser(str(worktree)))
+                         if worktree else None)
         # The being's memory root: the instance dir that holds its identity. Relative
         # memory paths the being emits are rooted here (see _normalize).
         self.memory_root = os.path.dirname(os.path.abspath(os.path.expanduser(identity_path)))
@@ -1171,18 +2112,48 @@ class BeingGateClient:
                 # realpath, not abspath: the dispatcher resolves symlinks (_safe_path), so the
                 # judged path and the touched path must be the same real path
                 paths.append(os.path.realpath(p))
+        # COMPOSED PATHS (patch_apply). `path_args` reads a path the being ASSERTS; this reads
+        # the paths the act will actually touch, derived by the seat from the being's artifact.
+        # For a diff those are not the same thing, and only the derived ones may be judged --
+        # a patch whose header says one file and whose law-facing arg says another is precisely
+        # the judged-is-not-executed gap. Raises on a malformed artifact, which gate() turns
+        # into a `gate.raised` deny: an unparseable patch is refused, never half-read.
+        compose_paths = spec.get("compose_paths")
+        if compose_paths is not None:
+            paths.extend(compose_paths(intent.args, self._compose_ctx()))
         command = intent.args.get(spec["cmd_arg"]) if spec["cmd_arg"] else None
         compose = spec.get("compose")
         if compose is not None:
+            # WITH ctx. The composers read the worktree and the memory root from here, and
+            # the dispatcher composes the same verbs from the same two facts
+            # (hestia_dispatch: `check_command(intent.args, {"worktree": self.worktree})`).
+            # Passing nothing is what made three verbs unreachable; passing the SAME dict the
+            # dispatcher will use is what keeps judged == executed.
             # a COMPOSED verb: the seat builds the exact outward act (a shell line) from the
             # being's args, and THAT is what the law judges. Bad args raise here and gate()
             # turns that into a deny (gate.raised), never a silent pass. The being never
             # fills a command; the registry never carries a cmd_arg for a composed verb.
-            command = compose(intent.args)
+            command = compose(intent.args, self._compose_ctx())
         return self._core.NormalizedEvent(
             tool=spec["tool"], paths=paths, command=command,
             cwd=self.workspace, raw={"effector": intent.effector, **intent.args},
         )
+
+    def _compose_ctx(self) -> dict:
+        """What a composed verb is allowed to know about this seat.
+
+        Deliberately the two facts the dispatcher composes from and nothing else: a composer
+        that needed more would be reaching past the law's view of the act."""
+        # getattr, not attribute access: this module's hermetic tests build a client by
+        # bypassing __init__ and injecting a fake core, and a ctx builder must not be the thing
+        # that breaks them -- it would turn every such test into a KeyError three frames away
+        # from the cause (measured while landing this fix).
+        return {"worktree": getattr(self, "worktree", None),
+                "memory_root": getattr(self, "memory_root", None),
+                # the seat's ARC stepper: `game` composes the line the law judges from it
+                "game_stepper": getattr(self, "game_stepper", None),
+                # whose branches a composed git verb may name (being_branch_prefix)
+                "member": getattr(self, "member_id", None)}
 
     # -- gate one intent (intent -> verdict), fail-closed --------------------
     def gate(self, intent: BeingIntent) -> GatewayVerdict:
@@ -1190,12 +2161,19 @@ class BeingGateClient:
         if intent.effector not in _REGISTRY:
             return GatewayVerdict("deny", "registry.unbounded", stage="registry",
                                   reason=_unbounded_reason(intent.effector))
+        # THE COMMAND THE LAW IS HANDED, bound once per call and reported on every verdict
+        # below. `getattr` rather than `ev.command`: the field is Optional by declaration, a
+        # core may build a partial event (the test fakes do, deliberately), and a gate that
+        # RAISES over a missing optional field would turn every act into an exception instead
+        # of a decision -- the opposite of fail-closed, which is to DENY with a reason.
+        judged_command = None
         # --- Single gate (#934): the shim contract. The registry stage above is harness
         # syntax (which verbs exist); everything law-bearing happens in decide(). ---
         sg = getattr(self, "_single_gate", None)
         if sg is not None and self._core is not None:
             try:
                 ev = self._normalize(intent)
+                judged_command = getattr(ev, "command", None)
                 tool = _REGISTRY[intent.effector]["tool"]  # the spec is the source, not the event
                 gp = sg.GateProfile(member_id=self.member_id, identity_path=self._identity_path,
                                     default_role="role:constellation:member",
@@ -1209,7 +2187,7 @@ class BeingGateClient:
                 dec = d.decision if (available and d.decision in ("allow", "warn", "deny")) else "deny"
                 rule = d.rule or ("" if available else "gate.no_verdict")
                 return GatewayVerdict(dec, rule, getattr(d, "reason", "") or ("ok" if dec != "deny" else ""),
-                                      innate=False, stage="single-gate")
+                                      innate=False, stage="single-gate", command=judged_command)
             except Exception as e:  # a gate that raises is a refused act, never an ungoverned one
                 return GatewayVerdict("deny", "gate.raised", innate=True, stage="single-gate",
                                       reason=f"{type(e).__name__}: {e}")
@@ -1220,6 +2198,7 @@ class BeingGateClient:
         # Stage 1: local law (innate egress/secret + MRH path/command scope).
         try:
             ev = self._normalize(intent)
+            judged_command = getattr(ev, "command", None)
             # Resolve the member's LIVE policy (its grants) the way every real shim does:
             # fetch the daemon's snapshot and feed it to resolve_agent_policy as the vault
             # reader. With policy=None the core sees `granted: ()` and an operator's live
@@ -1243,7 +2222,11 @@ class BeingGateClient:
             return GatewayVerdict("deny", "gate.raised", innate=True, stage="local-law",
                                   reason=f"{type(e).__name__}: {e}")
         if v.decision == "deny":
-            return GatewayVerdict("deny", v.rule, v.reason, v.innate, stage="local-law")
+            # The command rides on the DENY as well. A refusal about a string the being cannot
+            # see is one it cannot act on -- the same defect as a deny that does not name the
+            # path segment that tripped it (hestia_gate_core, `_offending_segment`).
+            return GatewayVerdict("deny", v.rule, v.reason, v.innate, stage="local-law",
+                                  command=judged_command)
         # Stage 2: society safety (daemon). A consequential act the society cannot
         # vet must NOT proceed — fail-closed. Observational acts soft-pass when the
         # mechanism is unavailable (no external effect; witness is accountability).
@@ -1251,6 +2234,7 @@ class BeingGateClient:
         if self._mech is None:
             if consequential:
                 return GatewayVerdict("deny", "society.unavailable", stage="society",
+                                      command=judged_command,
                                       reason="society-safety mechanism unavailable; consequential act denied")
         else:
             try:
@@ -1269,14 +2253,18 @@ class BeingGateClient:
                     decided = getattr(safe, "decided", False)
                     return GatewayVerdict(
                         "deny", "society.unsafe" if decided else "society.no_verdict",
-                        stage="society",
+                        stage="society", command=judged_command,
                         reason=getattr(safe, "message", None) or "society denied")
             except Exception as e:
                 if consequential:
                     return GatewayVerdict("deny", "society.unreachable", stage="society",
+                                          command=judged_command,
                                           reason=f"society-safety failed ({type(e).__name__}); consequential act denied")
                 # observational: local law already allowed, soft-pass
+        # `ev.command` is what stage 1 actually evaluated -- carried out of the gate rather
+        # than recomposed by the caller, which is the whole point of the field.
         return GatewayVerdict(v.decision, v.rule, v.reason or "ok", v.innate, stage="local-law",
+                              command=judged_command,
                               granted=granted, granted_reach=granted_reach)
 
     # -- the F1a seam: gate, then dispatch, then consume the result ----------
