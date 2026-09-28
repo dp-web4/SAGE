@@ -97,6 +97,7 @@ def test_inventory_finds_a_laptop_body(monkeypatch):
     monkeypatch.setattr(body.glob, "glob", lambda pat: ["/dev/video0"] if "video" in pat else [])
     monkeypatch.setattr(body, "_pw_audio", lambda **k: {"sinks": [{"name": "Built-in Speaker", "kind": "wired"}],
                                                           "sources": [{"name": "Built-in Mic", "kind": "wired"}]})
+    monkeypatch.setattr(body.shutil, "which", lambda t: None)   # a speaker, but no speech engine
     inv = body.inventory()
     assert inv["verbs"] == ["camera", "say", "peer_ask"] and inv["not_yet_wired"] == ["speak"]
     out = body.render_inventory(inv)
@@ -118,7 +119,7 @@ def test_headless_beat_is_not_offered_gaze_and_a_live_cortex_beat_is(monkeypatch
     monkeypatch.setattr(body, "_pw_audio", lambda **k: {})
     headless = offered_explore_tools(body.reading())
     assert "gaze" not in headless and "camera" not in headless
-    assert [t for t in EXPLORE_TOOLS if t not in ("gaze", "camera")] == headless, "text verbs untouched"
+    assert [t for t in EXPLORE_TOOLS if t not in ("gaze", "camera", "speak", "pair_audio")] == headless, "text verbs untouched"
     assert "gaze" not in offered_explore_tools(None) and "say" in offered_explore_tools(None), \
         "an unmeasurable body offers no body verb"
     monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp))
@@ -212,3 +213,18 @@ def test_coord_pair_is_total_over_anything_a_being_can_write():
         assert body._coord_pair(bad) is None, f"{bad!r} must not reach arithmetic"
     assert body._coord_pair([0.1, 0.9]) == [0.1, 0.9]
     assert body._coord_pair((0, 1)) == [0.0, 1.0]
+
+
+def test_worktree_verbs_are_offered_only_to_a_being_with_a_worktree():
+    """nomad-being, 2026-09-27: a declared worktree changed nothing, because explore never
+    offered the verbs that act on it."""
+    from sage.gateway.heartbeat import offered_explore_tools, WORKTREE_VERBS
+    from sage.gateway.being_gate_client import _REGISTRY
+    assert all(v in _REGISTRY for v in WORKTREE_VERBS), "an offered verb must exist"
+    without = offered_explore_tools(None)
+    assert not any(v in without for v in WORKTREE_VERBS)
+    with_wt = offered_explore_tools(None, "/some/worktree")
+    assert all(v in with_wt for v in WORKTREE_VERBS)
+    assert with_wt[-1] == "rest" or "rest" not in with_wt, "rest stays the last choice"
+    assert len(with_wt) == len(set(with_wt)), "no verb offered twice"
+    assert "pr_open" not in with_wt, "PR verbs need a remote; not offered by this rule"

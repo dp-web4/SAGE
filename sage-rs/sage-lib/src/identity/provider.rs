@@ -370,6 +370,52 @@ impl IdentityProvider {
     /// IOPlatformUUID (macOS), else the hostname. NOT a MAC — python's `uuid.getnode()`
     /// changed interface on Legion between 2026-03-28 and 2026-09-19 and orphaned the seal.
     /// Must return the same string as python `IdentityProvider._machine_anchor`.
+    /// Absolute path of a system tool WITHOUT consulting PATH. `None` when not found.
+    ///
+    /// NONE, NOT THE BARE NAME. The first cut returned the bare name, and `Command::new` then
+    /// consults PATH again -- so wherever the fixed directories miss, the defect came straight
+    /// back (GPT seat, SAGE #130). A miss skips the probe and falls through to the next anchor
+    /// source, identically in every process on the machine.
+    ///
+    /// Must search the same directories, in the same order, and accept on the same predicate
+    /// (a regular file that is executable) as python `_system_tool` -- the two derive one
+    /// sealing key, so a machine where they disagree about a tool is a machine with two keys.
+    ///
+    /// Measured on McNugget (macOS, 2026-09-20): `ioreg` is /usr/sbin/ioreg, `ifconfig` is
+    /// /sbin/ifconfig, and a launchd agent with no PATH key runs with `/usr/bin:/bin` -- which
+    /// is how this daemon runs there. By bare name both were found from a shell and NOT from
+    /// the unit, so one machine produced two anchors (IOPlatformUUID vs `host:<name>`), two v2
+    /// keys, and a seal either process wrote was unreadable to the other. Silently: the
+    /// fallback is a valid anchor, just a different one.
+    fn system_tool(name: &str) -> Option<std::path::PathBuf> {
+        Self::system_tool_in(name, &["/usr/sbin", "/sbin", "/usr/bin", "/bin"])
+    }
+
+    fn system_tool_in(name: &str, dirs: &[&str]) -> Option<std::path::PathBuf> {
+        for d in dirs {
+            let cand = std::path::Path::new(d).join(name);
+            if cand.is_file() && Self::is_executable(&cand) {
+                return Some(cand);
+            }
+        }
+        None
+    }
+
+    /// Parity with python's `os.access(p, os.X_OK)`: a file that is not executable is not the
+    /// tool. Unix-only detail, so non-unix accepts any regular file rather than refusing all.
+    fn is_executable(p: &std::path::Path) -> bool {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            return std::fs::metadata(p).map(|m| m.permissions().mode() & 0o111 != 0).unwrap_or(false);
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = p;
+            true
+        }
+    }
+
     fn machine_anchor() -> String {
         for p in ["/etc/machine-id", "/var/lib/dbus/machine-id"] {
             if let Ok(v) = std::fs::read_to_string(p) {
@@ -379,14 +425,16 @@ impl IdentityProvider {
                 }
             }
         }
-        if let Ok(out) = std::process::Command::new("ioreg")
-            .args(["-rd1", "-c", "IOPlatformExpertDevice"]).output()
-        {
-            for line in String::from_utf8_lossy(&out.stdout).lines() {
-                if line.contains("IOPlatformUUID") {
-                    let parts: Vec<&str> = line.split('"').collect();
-                    if parts.len() >= 2 {
-                        return parts[parts.len() - 2].to_string();
+        if let Some(ioreg) = Self::system_tool("ioreg") {
+            if let Ok(out) = std::process::Command::new(ioreg)
+                .args(["-rd1", "-c", "IOPlatformExpertDevice"]).output()
+            {
+                for line in String::from_utf8_lossy(&out.stdout).lines() {
+                    if line.contains("IOPlatformUUID") {
+                        let parts: Vec<&str> = line.split('"').collect();
+                        if parts.len() >= 2 {
+                            return parts[parts.len() - 2].to_string();
+                        }
                     }
                 }
             }
@@ -449,8 +497,10 @@ impl IdentityProvider {
             }
         }
         if out.is_empty() {
-            if let Ok(o) = std::process::Command::new("ifconfig").arg("-a").output() {
-                out = Self::parse_ether_lines(&String::from_utf8_lossy(&o.stdout));
+            if let Some(ifconfig) = Self::system_tool("ifconfig") {
+                if let Ok(o) = std::process::Command::new(ifconfig).arg("-a").output() {
+                    out = Self::parse_ether_lines(&String::from_utf8_lossy(&o.stdout));
+                }
             }
         }
         out
@@ -818,6 +868,64 @@ mod tests {
                       bridge0: flags=8863 mtu 1500\n\tether 36:6f:24:00:11:22\n";
         assert_eq!(IdentityProvider::parse_ether_lines(sample),
                    vec![0xf01898aabbccu64.to_string(), 0x366f24001122u64.to_string()]);
+    }
+
+    /// A system tool is found by ABSOLUTE path, never through PATH. The anchor is an input to
+    /// the sealing key, so "found from a shell, not from the launchd unit" was two keys for
+    /// one machine (McNugget, 2026-09-20). Mirrors python `test_system_tool_ignores_path`.
+    #[test]
+    fn system_tool_is_resolved_without_path() {
+        let dir = temp_dir("system-tool");
+        let tool = dir.join("ioreg");
+        std::fs::write(&tool, "#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let d = dir.to_str().unwrap();
+        assert_eq!(IdentityProvider::system_tool_in("ioreg", &["/nonexistent-dir", d]), Some(tool),
+                   "the first directory that HAS it wins, as an absolute path");
+        // NOT the bare name: `Command::new("ioreg")` would consult PATH, which is the defect
+        // this function exists to close (GPT seat, SAGE #130). A miss skips the probe.
+        assert_eq!(IdentityProvider::system_tool_in("ioreg", &["/nonexistent-dir"]), None);
+        // A DIRECTORY named like the tool is not the tool.
+        let sub = dir.join("sub");
+        std::fs::create_dir_all(sub.join("ifconfig")).unwrap();
+        assert_eq!(IdentityProvider::system_tool_in("ifconfig", &[sub.to_str().unwrap()]), None);
+        // Nor is a file that is not executable -- the predicate python applies (os.X_OK), so
+        // the two providers cannot disagree about what a tool is and derive two keys.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let plain = dir.join("plain");
+            std::fs::write(&plain, "x").unwrap();
+            std::fs::set_permissions(&plain, std::fs::Permissions::from_mode(0o644)).unwrap();
+            assert_eq!(IdentityProvider::system_tool_in("plain", &[d]), None,
+                       "a non-executable regular file is not the tool");
+        }
+        // THE NEGATIVE CONTROL: reachable only through PATH is not reachable at all.
+        let planted = dir.join("planted");
+        std::fs::create_dir_all(&planted).unwrap();
+        let fake = planted.join("sage-no-such-system-tool");
+        std::fs::write(&fake, "#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let prev = std::env::var("PATH").unwrap_or_default();
+            std::env::set_var("PATH", format!("{}:{}", planted.display(), prev));
+            let found = IdentityProvider::system_tool("sage-no-such-system-tool");
+            std::env::set_var("PATH", prev);
+            assert_eq!(found, None, "a tool planted on PATH must be invisible to this lookup");
+        }
+        // Same directories, same order, as python `_system_tool` -- the two must agree.
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(IdentityProvider::system_tool("ioreg"), Some(std::path::PathBuf::from("/usr/sbin/ioreg")));
+            assert_eq!(IdentityProvider::system_tool("ifconfig"), Some(std::path::PathBuf::from("/sbin/ifconfig")));
+        }
+        cleanup(&dir);
     }
 
     /// Pins the bytes the python provider mirrors (test_v2_key_is_the_documented_bytes).

@@ -41,7 +41,7 @@ v0.1 covers only artifacts with an authoritative local reference:
 4. explicit memory records with source metadata;
 5. later: sensor observations with retained capture/reference metadata.
 
-External web claims, broad semantic truth, and unsupported introspection are out of scope for the first slice.
+External web claims and broad semantic truth are out of scope for the first slice. **Phenomenological/self-report observations are not errors and are not taboo; they are simply a different evidence class from source-checkable artifact claims.** A statement such as `I feel ashamed` may be preserved as first-person report even when no local artifact can mechanically prove the underlying metabolic/mechanistic state. The source-grounding path must not silently rewrite phenomenology into either verified mechanism or invalid content.
 
 ## 4. Required data
 
@@ -98,11 +98,11 @@ A promotion event is any write that attempts to create or update one of:
 - structured fact;
 - durable belief;
 - procedure;
-- identity/self claim;
+- identity/self claim;\n- phenomenological/self-report record when promoted beyond its original utterance;
 - directive/standing obligation;
 - summary that will be replayed as authoritative context.
 
-Verbatim evidence can be stored without promotion.
+Verbatim evidence can be stored without promotion. Phenomenological reports should preserve that they are first-person reports, the speaker/instance, time, and surrounding context; support status applies to what was said and by whom, not to a mechanical verdict on whether the reported experience "really" existed.
 
 If a promotion explicitly cites a local source and makes a mechanically checkable claim, the support check runs before the state is tagged as source-backed.
 
@@ -240,6 +240,12 @@ Prototype, do not assume deployment.
 Run the matched comparative source-grounding experiment across the closest practical safety-trained, distilled, and abliterated variants.
 
 **Done when:** results report rates with repeated trials and enough configuration metadata to separate intervention effects from model/scaffold differences.
+
+### M7 — longitudinal state/phenomenology linkage
+
+Prototype a separate evidence path, informed by `STATE_CONDITIONED_AGENCY.md`, that can correlate first-person reports with later behavior without turning either into authority over the other.
+
+**Done when:** at least one longitudinal case can preserve: triggering event -> phenomenological/self-report observation -> later behavioral change or null result -> correction/recovery, with source lineage and no substrate-specific dismissal rule.
 
 ## 9. Metrics
 

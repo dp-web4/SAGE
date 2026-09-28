@@ -1527,16 +1527,32 @@ RESPONSE STYLE:
             # witness/memory via the reference (witness already chain-recorded); channel_egress
             # honest-pending until hestia grows a send side. Falls back to the reference-only
             # dispatcher if the real one cannot be constructed — never breaks a session.
+            # THE BEING'S WORKTREE, resolved ONCE and handed to both halves -- the same
+            # contract as `build_client`, through the same resolver, because THIS is the
+            # construction site the running service uses. `autonomous-sprout-sage.service`
+            # runs this module, not `governed_turn`, so before this line a seat that declared
+            # `worktree` in its instance.json still heard "none is configured on this seat"
+            # from all four composed verbs (sprout's review of #208, measured on sprout).
+            # `ollama_tools()` offers the whole registry here, git_read/search/check/camera
+            # included, so this is the path on which the being actually meets them.
+            from sage.gateway.governed_turn import worktree_for
+            worktree = worktree_for(self.instance.root)
             try:
                 from sage.gateway.hestia_dispatch import HestiaF1aDispatcher, make_forum_publisher
                 _ppd = os.path.expanduser("~/ai-workspace/shared-context/forum")
                 _pid = f"{getattr(self, 'machine', 'sprout')}-being"
                 dispatcher = HestiaF1aDispatcher(
                     _pid, memory_root=str(self.instance.root),
-                    publish_fn=make_forum_publisher(_ppd, _pid) if os.path.isdir(_ppd) else None)
+                    publish_fn=make_forum_publisher(_ppd, _pid) if os.path.isdir(_ppd) else None,
+                    worktree=worktree)
             except Exception as _e:
                 print(f"[tools] real F1a unavailable ({type(_e).__name__}); using reference dispatcher")
                 from sage.gateway.hestia_witness import make_hestia_witness_fn
+                # The reference dispatcher takes no worktree and needs none: it has no
+                # _do_git_read/_do_search/_do_check/_do_camera, so an ALLOWED worktree verb
+                # comes back honest-pending. Judged and executed cannot disagree about a tree
+                # nothing touches. The gate below still gets the worktree either way, so the
+                # being sees the same verdict on both dispatchers.
                 dispatcher = ReferenceF1aDispatcher(
                     memory_root=str(self.instance.root),
                     witness_fn=make_hestia_witness_fn(f"{getattr(self, 'machine', 'sprout')}-being"))
@@ -1545,6 +1561,7 @@ RESPONSE STYLE:
                 identity_path=str(self.instance.identity),
                 workspace=workspace,
                 dispatcher=dispatcher,
+                worktree=worktree,
             )
             seed = [
                 {"role": "system", "content":

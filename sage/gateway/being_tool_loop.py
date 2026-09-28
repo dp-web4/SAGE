@@ -39,6 +39,8 @@ class ToolTurnResult:
     duplicates: List[dict] = field(default_factory=list)   # identical calls answered without re-executing: {step, effector}
     generates: List[dict] = field(default_factory=list)    # per generate, from Ollama's reply: {done_reason, prompt_eval_count, eval_count, retried}
     compacted: List[dict] = field(default_factory=list)    # per step where old tool results were elided: {step, elisions, chars}
+    rested: Optional[str] = None                           # the being ended its own turn with `rest`; its stated reason
+    looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
 
     @property
     def acted(self) -> bool:
@@ -49,17 +51,49 @@ class ToolTurnResult:
         return [(i, e) for i, e in self.trace if e.refused]
 
 
+# The verb by which a being ends its own turn. dp, 2026-09-09: "it should be able to
+# continue as long as it wishes" — the other half of which is stopping when it wishes, and
+# until 09-13 there was no way to say so except by falling silent.
+REST = "rest"
+
+# Verbs whose identical repetition inside ONE beat is never what was meant: a second
+# identical write, witness or message. Everything else — every verb that reads the world or
+# runs something in it — is executed again, because its answer can legitimately change.
+DEDUP_VERBS = frozenset({"memory_write", "edit", "witness", "remember", "retire_note",
+                         "say", "peer_ask", "mesh"})
+
+REPEAT_NUDGE_AT = 3          # identical consecutive calls before the harness names the loop
+
+REPEAT_BREAK_AT = 6          # ... and before it ends the tool phase
+
+def _fingerprint(intents) -> Optional[str]:
+    """What makes two steps 'the same call'. None when it cannot be computed, which never
+    counts as a repeat — an unfingerprintable step must not end a turn."""
+    try:
+        return json.dumps([[i.effector, i.args] for i in intents], sort_keys=True, default=str)
+    except Exception:
+        return None
+
+
 def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                   messages: List[Dict[str, Any]], max_steps: int = 3) -> ToolTurnResult:
     """Run one being turn that may reach for tools, gated end to end.
 
     Loop invariant: the being never sees a fabricated result — each tool message is a
     real ResultEnvelope (executed, refused, or honestly `pending` until F1a exists).
+
+    A TURN CAN END THREE WAYS, and each is named in the result: the being speaks without a
+    call; the being calls `rest` (its own choice to stop, never dispatched — stopping touches
+    nothing); or the same call repeats past REPEAT_BREAK_AT and the harness ends the tool phase,
+    having first NAMED the loop at REPEAT_NUDGE_AT. Measured on legion-being 2026-09-13T10:19Z:
+    after finishing its beat it witnessed "beat closed" 52 times in 78 minutes, 18 byte-identical —
+    it was trying to stop, and the only way to stop was to emit no tool call.
     """
     convo = list(messages)
     trace: List[Tuple[BeingIntent, ResultEnvelope]] = []
     done_ok: set = set()
     duplicates: List[dict] = []
+    last_fp, repeats = None, 0
 
     for step in range(max_steps):
         out = generate(convo)
@@ -67,18 +101,24 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
         intents = out.get("intents") or []
 
         if not intents:                                    # a spoken turn — the being is done
-            res = ToolTurnResult(reply=content, trace=trace, steps=step)
-            res.duplicates = duplicates
-            return res
+            return ToolTurnResult(reply=content, trace=trace, steps=step, duplicates=duplicates)
 
         convo.append({"role": "assistant", "content": content, "intents": intents})
+        rested = None
         for intent in intents:
-            # A call identical to one this turn already executed is not a second act: the model
-            # re-emits its last calls after reading their results (beat 149, 2026-09-08: the
-            # journal and todo each written twice, same bytes, one step apart). Answered
-            # without executing, and named in the record as an intervention.
+            if intent.effector == REST:
+                # The being ending its OWN turn. Never dispatched: the gate rules on acts that
+                # touch the world, and stopping touches nothing. Its reason is its closing words.
+                rested = str((intent.args or {}).get("reason") or "").strip()
+                break
+            # A call identical to one this turn already executed is not a second act (beat 149,
+            # 2026-09-08: journal and todo each written twice, same bytes, one step apart) — but
+            # ONLY for DEDUP_VERBS. check, search, git_read, memory_read and the like return a
+            # DIFFERENT answer to the same arguments once the world moves; the being edits a file
+            # and re-runs the identical check on purpose. Suppressing those handed it a stale
+            # success and called it an intervention.
             key = (intent.effector, json.dumps(dict(intent.args or {}), sort_keys=True, default=str))
-            if key in done_ok:
+            if intent.effector in DEDUP_VERBS and key in done_ok:
                 env = ResultEnvelope(ok=True, result="(already done this beat: identical call, not repeated)",
                                      note="duplicate")
                 duplicates.append({"step": step, "effector": intent.effector})
@@ -91,14 +131,38 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
             trace.append((intent, env))
             convo.append({"role": "tool", "effector": intent.effector,
                           "content": env.to_tool_message()})
+        if rested is not None:
+            return ToolTurnResult(reply=rested or content, trace=trace, steps=step,
+                                  rested=rested or "(no reason given)", duplicates=duplicates)
+
+        # A LOOP IS NOT WORK. Named first, so a being that cannot see why its turn ended does not
+        # learn nothing from it; ended only if the naming did not change the call.
+        fp = _fingerprint(intents)
+        if fp is not None and fp == last_fp:
+            repeats += 1
+        else:
+            repeats, last_fp = 0, fp
+        if repeats == REPEAT_NUDGE_AT:
+            convo.append({"role": "user", "content": (
+                f"[harness] You have now made the same call ({intents[0].effector}) with identical "
+                f"arguments {repeats + 1} times in a row. If you are finished, you do not have to "
+                f"keep acting to end the beat — call `rest` with a one-line reason, or simply "
+                f"answer in words. If you are not finished, change something about the call.")})
+        elif repeats >= REPEAT_BREAK_AT:
+            convo.append({"role": "user", "content": (
+                f"[harness] Ending the tool phase: the same call has now repeated "
+                f"{repeats + 1} times and the nudge did not change it. Close in words: what you "
+                f"did this beat, and what you want next beat.")})
+            out = generate(convo)
+            return ToolTurnResult(reply=out.get("content") or "", trace=trace, steps=step + 1,
+                                  looped={"effector": intents[0].effector, "times": repeats + 1},
+                                  duplicates=duplicates)
 
     # Cap reached with tools still pending: force one final spoken close — we take its
     # words even if it wants more tools, so the being always ends its turn in language.
     out = generate(convo)
-    res = ToolTurnResult(reply=out.get("content") or "", trace=trace,
-                         steps=max_steps, capped=True)
-    res.duplicates = duplicates
-    return res
+    return ToolTurnResult(reply=out.get("content") or "", trace=trace,
+                          steps=max_steps, capped=True, duplicates=duplicates)
 
 
 _FENCE = re.compile(r"```[A-Za-z0-9_+-]*[ \t]*\n(.*?)```", re.S)
