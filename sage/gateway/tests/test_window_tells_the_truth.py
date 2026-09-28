@@ -92,6 +92,34 @@ def test_files_and_runs_says_what_ran_what_it_returned_and_that_nothing_is_runni
     assert refuted and refuted[0][0] is None and "nothing of yours is running" in refuted[0][1]
 
 
+def test_a_machine_whose_processes_cannot_be_read_claims_nothing_and_refutes_nothing(tmp_path, monkeypatch):
+    """McNugget, 2026-09-26. macOS has no /proc, and the first cut of the probe returned an EMPTY
+    set there -- so on every Mac the window said "Nothing of yours is running right now" as a
+    measurement, and the refuter quoted the being's own true sentences back to it as
+    contradicted. "Could not look" must not render as "nothing there". When the process table
+    cannot be read, the window says so and every downstream claim built on "nothing is
+    running" is withheld: no refutation, no WANT note, no "Running now" either way."""
+    inst = _home(tmp_path)
+    _script(inst, "latent-weights-fixed-v2.py")
+    conv.append(inst, SEAT, speaker=SEAT, text="[request_run] I ran latent-weights-fixed-v2.py. exit code 1.")
+    monkeypatch.setattr(hb, "_process_table", lambda: None)
+    block, refuted, facts = hb.files_and_runs(inst, BEING)
+    assert "could not be measured on this machine" in block
+    assert "Nothing of yours is running right now" not in block, "an unmeasured absence was asserted"
+    assert refuted == [], "a probe that could not look refuted the being's own sentences"
+    assert facts["running"] is None
+    assert hb.want_check(ACCOUNT.format(want="the held-out test results from cbp-claude"), facts) == "", \
+        "a WANT note was built on a measurement that was never taken"
+
+
+def test_the_process_table_is_readable_on_this_machine():
+    """The positive half, on whatever this runs on: Linux reads /proc, macOS reads ps. If this
+    ever returns None on a seat the fleet runs beings on, that seat's window has gone blind --
+    and says so, per the test above -- but it should not be blind by default."""
+    table = hb._process_table()
+    assert table is not None and len(table) > 0
+
+
 def test_a_file_changed_after_its_run_is_called_changed(tmp_path):
     """"The fix has been applied" is answered by the sha, not by the being's say-so."""
     inst = _home(tmp_path)
@@ -132,6 +160,57 @@ def test_a_process_that_is_really_running_is_reported_and_nothing_is_refuted(tmp
         block, refuted, facts = hb.files_and_runs(inst, BEING)
         assert "Running now." in block and "Running right now: a.py." in block
         assert refuted == [], "a true claim is not refuted"
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_a_symlinked_file_in_the_home_is_found_running_under_its_own_name(tmp_path):
+    """Legion's regression, review of #227: the realpath added for macOS resolved a symlinked
+    argument to its target, which matched nothing keyed on the home's own spelling -- so a
+    running `run.py -> scratch/real.py` read as "nothing running", on every OS. Runs on Linux
+    too, so it also pins the two-spelling rule where the /var alias test skips."""
+    inst = _home(tmp_path)
+    (inst / "scratch").mkdir(exist_ok=True)
+    real = inst / "scratch" / "real.py"
+    real.write_text("import time\ntime.sleep(30)\n")
+    (inst / "run.py").symlink_to(real)
+    proc = subprocess.Popen([sys.executable, str(inst / "run.py")])
+    try:
+        seen = set()
+        for _ in range(50):
+            seen = hb._running_files(inst, ["run.py"]) or set()
+            if "run.py" in seen:
+                break
+            time.sleep(0.1)
+        assert "run.py" in seen, "a symlinked file that is running was reported as not running"
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_a_process_naming_the_file_by_another_spelling_of_the_same_path_is_found(tmp_path):
+    """macOS: /var is a symlink to /private/var, so a process launched as `python3 /var/…/a.py`
+    names the same file as the being's resolved home `/private/var/…/a.py`. Compared as strings
+    they differ and the run is missed -- the window would then say nothing is running while it
+    is. Found by sabotage: removing the realpath left every other test green. Skipped where the
+    temp dir has no second spelling to test (most Linux seats)."""
+    inst = _home(tmp_path)
+    _script(inst, "a.py", "import time\ntime.sleep(30)\n")
+    real = str((inst / "a.py").resolve())
+    alias = real.replace("/private/var/", "/var/", 1)
+    if alias == real or not os.path.exists(alias):
+        import pytest
+        pytest.skip("no second spelling of the temp dir on this machine")
+    proc = subprocess.Popen([sys.executable, alias])
+    try:
+        seen = set()
+        for _ in range(50):
+            seen = hb._running_files(inst, ["a.py"]) or set()
+            if "a.py" in seen:
+                break
+            time.sleep(0.1)
+        assert "a.py" in seen, f"launched as {alias}, home resolves to {real}: missed"
     finally:
         proc.kill()
         proc.wait()
@@ -377,3 +456,24 @@ def test_the_window_shows_the_open_view_not_the_log_tail(tmp_path):
     assert sec.startswith("## todo.md: still open (")
     assert "- [x]" not in sec and "await metrics" not in sec
     assert "memory_read todo.md" in sec and "write it under done:" in sec
+
+
+def test_todo_open_parses_each_text_once_and_answers_as_before():
+    """cbp-being's todo.md reached 3,267 items and one todo_open took 47.7 s; fit_state calls it
+    several times per beat. Same text -> one parse; the cheap difflib bounds change no answer."""
+    from datetime import datetime, timezone
+    now = datetime(2026, 9, 27, 22, 30, tzinfo=timezone.utc)
+    text = ("2026-09-27 20:00 UTC\n- [ ] train the linear model on held-out data\n"
+            "- [ ] report the correlation with W_TRUE\n"
+            "2026-09-27 21:00 UTC\n- [x] train the linear model on the held-out data\n")
+    calls = []
+    orig = hb._parse_todo
+    hb._TODO_PARSE.clear()
+    try:
+        hb._parse_todo = lambda t: calls.append(1) or orig(t)
+        a = hb.todo_open(text, now=now); b = hb.todo_open(text, now=now, window_h=1)
+    finally:
+        hb._parse_todo = orig
+    assert len(calls) == 1, "the parse does not depend on now/window, so it runs once per text"
+    assert [t for t, _ in a[0]] == ["report the correlation with W_TRUE"], "the near-duplicate done item closed its open twin"
+    assert b[0] == [] and b[1] == 1

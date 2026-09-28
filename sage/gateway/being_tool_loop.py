@@ -287,33 +287,47 @@ _ATTR_PAIR = re.compile(r"([A-Za-z_]\w*)\s*=\s*(?:" + _ATTR_VALUE + ")")
 
 
 def _attr_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
-    """`say to="dp" text="..."`: a tool name followed directly by key="value" pairs, often
-    inside markdown bold. Measured 2026-09-14 19:30Z on cbp-being: dp asked "what are you
-    curious about?", the being's thinking said it would answer, and both its explore and
-    posture replies were `**say to="dp" text="..."**` in the text channel. Neither form above
-    reads it, the trace was empty, nothing was said, and the question was marked seen.
-    Only an offered tool name immediately followed by at least one pair whose key is one of
-    that tool's parameters counts, so prose that mentions a tool is still never a call."""
+    """Read the measured attr form only when it IS the reply.
+
+    Accepted example: **say to="dp" text="hello"**.
+    Rejected: narration, negation, future tense, fenced/inline code, or any prose before/after
+    the call. Salvage is an intent recovery path, not a parser for tool-shaped substrings.
+    """
+    stripped = (text or "").strip()
+    if not stripped or stripped.startswith("`") or stripped.startswith("```"):
+        return []
+
+    # The measured CBP form is often wrapped in markdown emphasis. Remove only balanced
+    # whole-reply emphasis; backticks are deliberately not accepted because code is quotation,
+    # not an act.
+    for mark in ("**", "__", "*", "_"):
+        if stripped.startswith(mark) and stripped.endswith(mark) and len(stripped) > 2 * len(mark):
+            stripped = stripped[len(mark):-len(mark)].strip()
+            break
+
     out: List[dict] = []
     for name, params in names.items():
-        for m in re.finditer(r"(?<![\w.])" + re.escape(name) + r"\s+(?=[A-Za-z_]\w*\s*=\s*[\"'])", text):
-            args: Dict[str, Any] = {}
-            pos = m.end()
-            while True:
-                pm = _ATTR_PAIR.match(text, pos)
-                if not pm:
-                    break
-                raw = pm.group(2) if pm.group(2) is not None else pm.group(3)
-                args[pm.group(1)] = raw.replace('\\"', '"').replace("\\'", "'").replace("\\n", "\n")
-                pos = pm.end()
-                ws = re.match(r"[ \t]*", text[pos:])
-                pos += ws.end() if ws else 0
-            if params:
-                args = {k: v for k, v in args.items() if k in params}
-            if args:
-                out.append({"function": {"name": name, "arguments": args}, "_salvaged": "attr"})
+        m = re.match(r"^" + re.escape(name) + r"\s+(?=[A-Za-z_]\w*\s*=\s*[\"\'])", stripped)
+        if not m:
+            continue
+        args: Dict[str, Any] = {}
+        pos = m.end()
+        while True:
+            pm = _ATTR_PAIR.match(stripped, pos)
+            if not pm:
+                break
+            raw = pm.group(2) if pm.group(2) is not None else pm.group(3)
+            args[pm.group(1)] = raw.replace('\\\"', '"').replace("\\'", "\'").replace("\\n", "\n")
+            pos = pm.end()
+            ws = re.match(r"[ \t]*", stripped[pos:])
+            pos += ws.end() if ws else 0
+        if stripped[pos:].strip():
+            continue
+        if params:
+            args = {k: v for k, v in args.items() if k in params}
+        if args:
+            out.append({"function": {"name": name, "arguments": args}, "_salvaged": "attr"})
     return out
-
 
 def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
     """Lift well-formed tool calls that a model put in the TEXT channel, in Ollama's

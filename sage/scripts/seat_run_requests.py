@@ -16,7 +16,7 @@ auto-runner would be the unconfined capability dp ruled against, with extra step
 
 Usage:
     seat_run_requests.py list
-    seat_run_requests.py run     <path-in-being-home> [--timeout 120] [--seq N ...]
+    seat_run_requests.py run     <path-in-being-home> [--timeout 120] [--seq N ...] [-- <script args>]
     seat_run_requests.py decline <path-in-being-home> --reason "..." [--seq N ...]
 
 An answer names the requests it answers ("Answers your request seq N."), and only a named
@@ -32,6 +32,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import urllib.error
@@ -223,6 +224,16 @@ def child_env(gpu: bool) -> dict:
     return env
 
 
+def ran_line(script_args: list[str]) -> str:
+    """The command as the receipt states it. The being names flags in its `why`
+    (36 of its first 77 requests did: `--output-dim 5`, then 20/25/30); the runner passed none,
+    and a receipt reading "I ran X" let it read default-argument runs as its own experiments.
+    So the receipt always says exactly which arguments went in, including none."""
+    if not script_args:
+        return "with no arguments (the script's defaults)"
+    return f"with arguments: {shlex.join(script_args)}"
+
+
 # THE CARD HOLDS THE BEING'S OWN MIND. Fleet policy 2026-09-13: the being has priority on the
 # GPU. The comment below used to say `--gpu` was "for a seat that has checked the card has
 # room" -- but nothing checked, so the safeguard was a seat remembering. Measured 2026-09-25:
@@ -293,6 +304,7 @@ def run_child(argv: list[str], cwd: str, timeout: float, env: dict):
 
 
 def cmd_run(args) -> None:
+    script_args = list(getattr(args, "script_args", None) or [])
     inst = _instance()
     p = _target(inst, args.path)
     rel = p.relative_to(inst.resolve())
@@ -323,7 +335,7 @@ def cmd_run(args) -> None:
     # and the heartbeat would call code that never ran "unchanged since that run" (sprout's
     # review of SAGE #224). heartbeat.files_and_runs compares this sha with the file now.
     ran_sha = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
-    rc, out, err, timed = run_child(interp + [str(p)], str(inst), args.timeout, child_env(args.gpu))
+    rc, out, err, timed = run_child(interp + [str(p)] + script_args, str(inst), args.timeout, child_env(args.gpu))
 
     def block(name: str, s: str) -> str:
         s = (s or "").rstrip()
@@ -337,7 +349,7 @@ def cmd_run(args) -> None:
                if timed else f"exit code {rc}")
     print(f"ran {rel}: {verdict}")
     _say("\n".join([
-        f"[request_run] I ran {rel} (sha {ran_sha}) {WHERE_GPU if args.gpu else WHERE_HIDDEN}. {verdict}.",
+        f"[request_run] I ran {rel} (sha {ran_sha}) {ran_line(script_args)}, {WHERE_GPU if args.gpu else WHERE_HIDDEN}. {verdict}.",
         "",
         block("stdout", out),
         "",
@@ -379,7 +391,17 @@ def main() -> int:
     d = sub.add_parser("decline"); d.add_argument("path"); d.add_argument("--reason", required=True)
     d.add_argument("--seq", type=int, action="append", help="as for run")
     d.set_defaults(fn=cmd_decline)
-    args = ap.parse_args()
+    # Everything after `--` is the being's script's own argv. Split by hand: argparse
+    # subparsers reject `--` followed by option-shaped words ("unrecognized arguments").
+    argv = sys.argv[1:]
+    script_args: list[str] = []
+    if "--" in argv:
+        i = argv.index("--")
+        argv, script_args = argv[:i], argv[i + 1:]
+    args = ap.parse_args(argv)
+    if script_args and args.cmd != "run":
+        ap.error("arguments after `--` go to the script, so only `run` takes them")
+    args.script_args = script_args
     args.fn(args)
     return 0
 

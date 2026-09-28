@@ -133,10 +133,17 @@ class Presence:
         try:
             if salience is None or float(salience) < BEAT_TH or now - self.last_beat_wake < BEAT_MIN_GAP_S:
                 return
+            import subprocess
             from sage.gateway.being_join import write_wake_marker
-            write_wake_marker(descriptor, salience)
+            # NOT the marker first. Since 2026-09-05 this ran write_wake_marker and then raised
+            # NameError on `subprocess` (never imported here); the except below printed it, so no
+            # presence wake ever started a beat, and each left an orphan marker that the next
+            # TIMER beat recorded as its own wake reason. The marker is written only once the
+            # start has been asked for.
             r = subprocess.run(["systemctl", "--user", "start", "--no-block", "sage-heartbeat.service"],
                                capture_output=True, text=True, timeout=10)
+            if r.returncode == 0:
+                write_wake_marker(descriptor, salience)
             self.last_beat_wake = now
             self._log({"ts": round(now, 2), "kind": "beat_wake", "descriptor": descriptor,
                        "salience": salience, "started": r.returncode == 0, "err": (r.stderr or "")[:120]})
