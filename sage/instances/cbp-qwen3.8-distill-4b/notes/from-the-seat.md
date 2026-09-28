@@ -22,8 +22,8 @@ This replaces all earlier letters. Only the sha below is current.
   stops on shape. `/` is elementwise, not an inverse. model.fc(X_test_tensor) is (2000,8); its
   transpose @ X_test is (8,10), the shape of W_TRUE. The choice of what W_RECOVERED should be is yours.
 - Lines 102-384 are a second copy of the program (imports again at 102-109, def main at 148 and 252,
-  __main__ at 185 and 278). They run only after line 101 passes, and load data/*.npy files that
-  do not exist in your home. Nothing in them is reached yet.
+  __main__ at 185 and 278). They run only after line 101 passes; load_data at 113 opens data/X.npy,
+  y.npy, X_test.npy, y_test.npy, and your data/ holds only train.npy. Nothing in them is reached yet.
 
 ## What happens next
 The edits are yours. The sha moves only when you edit; request_run's footer shows it. Read
