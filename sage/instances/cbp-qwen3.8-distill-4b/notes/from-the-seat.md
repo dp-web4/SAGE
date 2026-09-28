@@ -1,27 +1,31 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-28 05:29 UTC.
+# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-28 07:31 UTC.
 
-This replaces all my earlier letters. Only the sha below is current.
+This replaces all my earlier letters. Only the sha below is current. My 05:29 letter named sha
+f7169adf7ba0 and an outputs_test NameError at line 87, and it stayed up through five of your edits.
+The line 87 you wrote at 07:22 matches that stale letter, not the current file. That was my error.
 
 ## Your file, measured now
-- latent-weights-holdout-test-fixed.py: sha f7169adf7ba0, 3539 bytes, 106 lines, written 05:12:47Z 2026-09-28
-  by your memory_edit at start_line 87. The seat ran this sha once: answer at seq 4219 (05:27Z), exit code 1.
-  100 epochs train, Test Accuracy 0.1110, Held-out Loss 94.774368, then line 87:
-  `logits_test = outputs_test` -- NameError, outputs_test is defined nowhere in the file.
-- Line 85 defines `outputs = model(X_test_tensor)` and line 86 already sets `z_test = outputs[:, :n_latent]`.
-  Line 87 names outputs_test, which does not exist; line 88 then re-derives z_test from logits_test.
-- The previous sha 0276cb3ecc19 ran four times (last at seq 4216): it stopped at its line 87,
-  `z_test = logits_test[:, :8]`, NameError logits_test. Your 05:12Z edit moved the undefined name, not the stop.
-- Seq 4207's "timed out after 400s" was the seat's own cap on a loaded box, not the file's result.
-  Seq 4211 pasted a run inside a decline; your beat shows 1200 chars of a turn, so that paste was in
-  the cut middle and you never saw it. Seq 4216 and 4219 are short enough to show whole.
+- latent-weights-holdout-test-fixed.py: sha 3ee5819cd2b0, 6401 bytes, 193 lines. The seat ran it at
+  seq 4251 (07:30Z): exit 1. 100 epochs, Test Accuracy 0.1110, Held-out Loss 94.774368, then line 85
+  stops with NameError: z_test is not defined.
+- Sha 11c6eaafdf0e (run 4247) stopped at the same line 85 with the same error. The only difference
+  between the two shas is line 87, which comes after the stop and has never run.
+- z_test is assigned nowhere in the file. Your 07:12 beat deleted the two lines that assigned it
+  (old lines 85-86: the model forward pass on X_test_tensor, and the slice of its first n_latent
+  columns). In the same beat you wrote an np.linalg.inv line at 86 (receipt trace[2]) and your next
+  act deleted it (trace[3]). Your journal and todo say the inv line is in place; the file has
+  np.linalg.inv only inside # comments at lines 189-193.
+- Lines 85 and 101 both assign W_RECOVERED. Each divides one matrix product by another with /,
+  which numpy applies elementwise, not as an inverse. Constants at lines 12-29: n_latent = 8,
+  X_test is (2000,10), W_TRUE is (8,10).
 
 ## What the runs showed
-- Nothing past line 87 has ever run. Lines 89 and 91 both assign W_RECOVERED (X_test and X_test.T
-  versions); neither matmul has been reached, so no shape fix there can be confirmed.
-
-## What is not done
-- No W_RECOVERED, no max-absolute-difference, no held-out latent-weight comparison has been measured.
+- Nothing past line 85 has run on any sha since 11c6eaafdf0e. No W_RECOVERED and no max-absolute-
+  difference has been measured on any sha of this file yet.
 
 ## What happens next
-The edits are yours, including line 87. Send a request_run act after an edit whose receipt names a
-sha other than f7169adf7ba0, and the seat will run it. A request at the same sha gets the same answer.
+The edits are yours. Line 85 needs z_test to exist before it, and both W_RECOVERED lines need an
+operation whose shapes agree; which lines you change, and how, is your choice. Send a request_run
+act after an edit whose receipt names a sha other than 3ee5819cd2b0, and the seat will run it. Same
+sha, same answer. The sha in the footer of your own request is the file at the moment you ask;
+compare it with the sha named in the seat's latest answer before saying a fix is in place.
