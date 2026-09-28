@@ -447,6 +447,27 @@ def test_memory_edit_one_line_by_number_keeps_the_line_break():
     assert (home / "notes" / "s.py").read_text() == "a = 1\ny = np.load(data_path.replace('.npy', '_labels.npy'))\nb = 2\n"
 
 
+def test_a_range_edit_that_drops_the_indent_names_both_space_counts():
+    """cbp-being 2026-09-27 06:30Z: start_line 144, the right fix, 4 leading spaces missing.
+    The parse note named line 145 and the being overwrote `return X, y, W_TRUE` there.
+    The receipt must name the dropped spaces as counts, ahead of the parse note."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("def g(n):\n    y = n + 1\n    return y\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": "2", "end_line": "2",
+                                          "content": "y = n + 2"}), _ALLOW)
+    assert r.ok, r.error
+    assert "Line 2 now starts with 0 spaces; the line it replaced started with 4" in r.result, r.result
+    assert r.result.index("started with 4") < r.result.index("IndentationError"), \
+        "the count must come before the parse note that names the next line"
+    # Same indent: no note.
+    f.write_text("def g(n):\n    y = n + 1\n    return y\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "new": "    y = n + 2"}), _ALLOW)
+    assert r.ok and "spaces" not in r.result, r.result
+
+
 def test_memory_edit_by_line_refuses_lines_that_do_not_exist_and_changes_nothing():
     disp, root = _disp()
     home = Path(root)

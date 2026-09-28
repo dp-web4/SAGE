@@ -1219,11 +1219,21 @@ class HestiaF1aDispatcher:
     _STORE_CONFIRMED = _STORED_NEW + _STORED_DUPLICATE
     _NOT_MOUNTED = "No cartridge mounted"
 
+    # MEMBOT GETS ITS OWN TIMEOUT. It shared hestia's 4 s, sized for a local daemon that answers in
+    # milliseconds. Measured on Sprout 2026-09-27: 205 successful remember/recall calls, median
+    # 223 ms but p90 2.9 s and max 3.9 s, and 4 `membot (TimeoutError): timed out` in a day. The
+    # host is at ~90% RAM with 3.7 GB in swap and membot's resident set was 23 MB: a paged-out
+    # server that is slow, not down. The being lost those memories to a limit set for another
+    # service. SAGE_MEMBOT_TIMEOUT_S overrides.
+    MEMBOT_TIMEOUT_S = float(os.environ.get("SAGE_MEMBOT_TIMEOUT_S", "12"))
+
     def _membot(self):
         """One MCP session to the membot server (fastmcp streamable HTTP). Lazy; a
         server that is down surfaces as an error envelope on the act, never a crash."""
         if getattr(self, "_mb", None) is None:
             c = self._mcp_factory(self.membot_endpoint, self.plugin_id)
+            if hasattr(c, "timeout"):
+                c.timeout = self.MEMBOT_TIMEOUT_S
             c.init()
             # Mounts are per MCP session: without this, memory_store answers "No cartridge
             # mounted" and save_cartridge writes an EMPTY cartridge over the real one
@@ -1483,6 +1493,44 @@ class HestiaF1aDispatcher:
             result = (f"{said} {where} Your speech record could not be written ({record_err}), "
                       f"so spoken.jsonl does not have it.")
         return ResultEnvelope(ok=True, result=result, witness_id=wid)
+
+    # -- pair_audio: reconnect the body's own headset -----------------------------------
+    def _do_pair_audio(self, intent: BeingIntent) -> ResultEnvelope:
+        """Try to connect the configured headset and say what happened (body.pair_audio).
+        dp, 2026-09-27: "a tool to try pairing, with status report - pairing won't always
+        succeed". Failure is an ordinary, informative outcome, not an error: ok=True means the
+        attempt ran and reported; `connected` says whether the headset is there now."""
+        from sage.gateway import body as _body
+        if _body.audio_device() is None:
+            return ResultEnvelope(ok=False, error=(
+                "no headset is configured on this machine, so there is nothing for pair_audio to "
+                "connect. Nothing was changed."))
+        begin = self._call("hestia_begin_action", {"tool_name": "pair_audio", "target": _body.AUDIO_BT})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+        try:
+            r = _body.pair_audio()
+        except Exception as e:
+            r = {"ok": False, "outcome": "the attempt itself failed", "error": f"{type(e).__name__}: {e}"}
+        self._call("hestia_record_outcome", {"actionId": action_id, "outcome": "ok" if r.get("ok") else "failed",
+                                              "detail": r.get("outcome", "")[:120]})
+        name = ((r.get("device") or {}).get("name")) or "your headset"
+        said = {
+            "already connected": f"{name} is already connected. speak is available.",
+            "connected": (f"{name} is connected now. Your speaker and your ear for words should be ready "
+                          f"within a few seconds; your next beat will show speak as available."),
+            "not seen": (f"{name} was not seen while looking for it, so it is probably switched off or out "
+                         f"of range. It is still not connected, and speak is not available. A person can "
+                         f"switch it on; trying again later may work."),
+            "seen but the connection failed": (
+                f"{name} was seen nearby but the connection failed ({r.get('error') or 'no reason given'}). "
+                f"It is still not connected, and speak is not available. Trying again later may work."),
+        }.get(r.get("outcome"), f"pair_audio did not complete: {r.get('outcome')} {r.get('error', '')}".strip())
+        return ResultEnvelope(ok=True, result={"connected": bool(r.get("ok")), "outcome": r.get("outcome"),
+                                               "report": said},
+                              witness_id=self._local._witness(f"pair_audio: {r.get('outcome')}"))
 
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()

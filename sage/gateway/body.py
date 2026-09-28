@@ -180,6 +180,12 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
         lines.append("- Your metabolism is not reporting this beat.")
     if inv:
         lines.append(render_inventory(inv))
+    dev = inv.get("audio_device") or {}
+    if dev and not dev.get("connected"):
+        lines.append(f"- Your headset {dev.get('name') or 'for voice'} (your speaker and your ear for words) is "
+                     "NOT connected right now, so `speak` is not available and words said to you cannot be "
+                     "heard. You can try to reconnect it with `pair_audio`; it may not succeed if the headset "
+                     "is off or out of range, and it will say what happened.")
     if "speak" in (inv.get("verbs") or []):
         lines.append("- You can speak aloud with `speak`: your words become a voice in the room, through "
                      f"{speaker_name(inv)}, which anyone in the room may hear. What you say aloud is your turn in "
@@ -271,10 +277,11 @@ def _pw_audio(timeout: float = 4.0) -> Dict:
         mc = p.get("media.class", "")
         name = p.get("node.description") or p.get("node.name") or "?"
         kind = "bluetooth" if "bluez" in str(p.get("node.name", "")) else "wired"
+        node = str(p.get("node.name", "") or "")
         if mc == "Audio/Sink":
-            sinks.append({"name": name, "kind": kind})
+            sinks.append({"name": name, "kind": kind, "node": node})
         elif mc == "Audio/Source":
-            sources.append({"name": name, "kind": kind})
+            sources.append({"name": name, "kind": kind, "node": node})
     return {"sinks": sinks, "sources": sources}
 
 
@@ -288,6 +295,7 @@ def inventory(now: Optional[float] = None) -> Dict:
     audio = _pw_audio()
     cortex_live = bool(p.get("live"))
     can_speak = speak_provider(audio)["live"]
+    dev = audio_device()
     # cameras held by a live cortex (CSI via Argus) cannot be opened by a second process
     return {
         "video_devices": videos,
@@ -298,9 +306,11 @@ def inventory(now: Optional[float] = None) -> Dict:
         "verbs": (["gaze"] if cortex_live else [])
                  + (["camera"] if videos and not cortex_live else [])
                  + (["speak"] if can_speak else [])
+                 + (["pair_audio"] if dev and not dev.get("connected") else [])
                  + ["say", "peer_ask"],
+        "audio_device": dev,
         # a speaker with no engine to drive it: the body has the part, the verb is not wired here
-        "not_yet_wired": (["speak"] if audio.get("sinks") and not can_speak else []),
+        "not_yet_wired": (["speak"] if audio.get("sinks") and not can_speak and not SPEAK_SINK else []),
     }
 
 
@@ -351,6 +361,10 @@ SPEAK_TIMEOUT_S = 60
 
 def speaker_name(inv: Optional[Dict] = None) -> str:
     """The sink a voice would come out of, for the being's own sentence about it."""
+    if SPEAK_SINK:
+        sink = required_sink({"sinks": (inv or {}).get("audio_sinks")} if inv else None)
+        if sink:
+            return str(sink.get("name"))
     sinks = (inv or {}).get("audio_sinks") or (_pw_audio().get("sinks") or [])
     bt = [x for x in sinks if x.get("kind") == "bluetooth"]
     pick = (bt or sinks or [{"name": "a speaker"}])[0]
@@ -366,6 +380,11 @@ def speak_provider(audio: Optional[Dict] = None) -> Dict:
     for tool in ("espeak-ng", "pw-play"):
         if not shutil.which(tool):
             return {"live": False, "why": f"'{tool}' is not installed"}
+    if SPEAK_SINK:
+        sink = required_sink(audio)
+        if sink is None:
+            return {"live": False, "why": f"the speaker for voice ({SPEAK_SINK}) is not connected"}
+        return {"live": True, "why": "", "sink": sink}
     return {"live": True, "why": ""}
 
 
@@ -396,7 +415,9 @@ def speak(text: str, timeout: float = SPEAK_TIMEOUT_S) -> Dict:
             # argv, never a shell: the words are one argument and cannot become a command
             subprocess.run(["espeak-ng", "-v", "en-us", "-s", "160", "-w", wav.name, "--", text],
                            check=True, capture_output=True, timeout=timeout)
-            subprocess.run(["pw-play", wav.name], check=True, capture_output=True, timeout=timeout)
+            target = (required_sink() or {}).get("node") if SPEAK_SINK else None
+            subprocess.run(["pw-play"] + (["--target", target] if target else []) + [wav.name],
+                           check=True, capture_output=True, timeout=timeout)
             played = True
     finally:
         end = time.time()
@@ -455,3 +476,72 @@ def _heard_mic(heard: list, inv: Optional[Dict]) -> str:
     if len(sources) == 1:
         return sources[0]["name"]
     return "your mic"
+
+
+# ---------------------------------------------------------------------------------------------
+# The headset as a body part that comes and goes (dp, 2026-09-27: "it should be aware when airhug
+# is offline and know that speak is not available. it should also have a tool to try pairing,
+# with status report - pairing won't always succeed"). Machine-level, like BODY_DIR:
+#   SAGE_SPEAK_SINK  a substring of the output `speak` must use (Sprout: "AIRHUG"); unset = any
+#                    output, as before. Set, speak is offered only while that output is present
+#                    and plays to it by node, never to whatever happens to be the default.
+#   SAGE_AUDIO_BT    the headset's Bluetooth address; enables the census line and `pair_audio`.
+# The Airhug does not bond (Paired only per connection, Bonded: no, pair -> AlreadyExists), so
+# a connect is the whole of "pairing" for it; a seat watchdog also reconnects it every minute.
+# ---------------------------------------------------------------------------------------------
+SPEAK_SINK = os.environ.get("SAGE_SPEAK_SINK", "").strip()
+AUDIO_BT = os.environ.get("SAGE_AUDIO_BT", "").strip().upper()
+
+
+def required_sink(audio: Optional[Dict] = None) -> Optional[Dict]:
+    """The output `speak` is bound to, if present."""
+    if not SPEAK_SINK:
+        return None
+    audio = _pw_audio() if audio is None else audio
+    for x in (audio or {}).get("sinks") or []:
+        if SPEAK_SINK.lower() in str(x.get("name", "")).lower():
+            return x
+    return None
+
+
+def _btctl(*args, timeout: float = 10) -> str:
+    import subprocess
+    try:
+        r = subprocess.run(["bluetoothctl", *args], capture_output=True, text=True, timeout=timeout)
+        return (r.stdout or "") + (r.stderr or "")
+    except Exception as e:
+        return f"[bluetoothctl: {type(e).__name__}: {e}]"
+
+
+def audio_device() -> Optional[Dict]:
+    """{'mac', 'name', 'connected', 'known'} for the configured headset; None when none is."""
+    if not AUDIO_BT or not shutil.which("bluetoothctl"):
+        return None
+    info = _btctl("info", AUDIO_BT, timeout=5)
+    def field(k):
+        for line in info.splitlines():
+            if line.strip().startswith(k + ":"):
+                return line.split(":", 1)[1].strip()
+        return None
+    return {"mac": AUDIO_BT, "name": field("Name") or field("Alias"), "known": "Device " in info,
+            "connected": field("Connected") == "yes"}
+
+
+def pair_audio(scan_s: int = 8) -> Dict:
+    """Try to connect the configured headset, and report what happened in plain terms.
+    Steps: state now -> if not connected, look for it (scan) -> connect -> state after."""
+    before = audio_device()
+    if before is None:
+        return {"ok": False, "outcome": "not configured", "detail": "no headset is configured on this machine"}
+    if before.get("connected"):
+        return {"ok": True, "outcome": "already connected", "device": before}
+    scan = _btctl("--timeout", str(scan_s), "scan", "on", timeout=scan_s + 5)
+    seen = AUDIO_BT in scan.upper()
+    out = _btctl("connect", AUDIO_BT, timeout=25)
+    after = audio_device() or {}
+    if after.get("connected"):
+        return {"ok": True, "outcome": "connected", "seen": seen, "device": after}
+    err = next((l.strip() for l in out.splitlines() if "Failed" in l or "Error" in l or "not available" in l), "")
+    return {"ok": False, "outcome": "seen but the connection failed" if seen else "not seen",
+            "seen": seen, "error": err[:200], "device": after or before}
+
