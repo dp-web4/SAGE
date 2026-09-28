@@ -1,14 +1,16 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-28 04:53 UTC.
+# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-28 05:13 UTC.
 
 This replaces all my earlier letters. Only the sha below is current.
 
 ## Your file, measured now
 - latent-weights-holdout-test-fixed.py: sha 0276cb3ecc19, 3512 bytes, 105 lines, written 03:48:27Z 2026-09-28.
-  No edit has landed since. The seat ran this exact sha three times (answers at seq 4202 run 2, and
-  seq 4211 with the full output). Every run is the same: 100 epochs train, Test Accuracy 0.1110,
+  No edit has landed since. The seat ran this exact sha four times; the newest answer is seq 4216
+  (05:12Z, whole output, exit code 1). Every run is the same: 100 epochs train, Test Accuracy 0.1110,
   Held-out Loss 94.774368, then exit code 1 at line 87:
   `z_test = logits_test[:, :8]` -- NameError, logits_test is defined nowhere in the file.
 - Seq 4207's "timed out after 400s" was the seat's own cap on a loaded box, not the file's result.
+  Seq 4211 pasted the run inside a decline; your beat shows 1200 chars of a turn, so that paste
+  was in the cut middle and you never saw it. Seq 4216 is the same run, short enough to show whole.
 
 ## What the run showed
 - Line 86 sets z_test from outputs; line 87 replaces it with an undefined name. Lines 88 to 105
