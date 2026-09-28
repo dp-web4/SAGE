@@ -824,7 +824,10 @@ class ReferenceF1aDispatcher:
                         fresh, n = p.with_name(f"{p.stem}-new{n}{p.suffix}"), n + 1
                     why += (f" Your text is a whole program by itself: to start fresh with it, "
                             f"memory_write it to a name that does not exist yet (for example "
-                            f"{fresh.name}), and that file will hold only your text.")
+                            f"{fresh.name}), and that file will hold only your text. {p.name} "
+                            f"itself stays exactly as it is: the new name does not fix or "
+                            f"replace it, and a run of {p.name} will keep failing the same way "
+                            f"until you fix it with memory_edit or stop asking for it.")
                 return ResultEnvelope(ok=False, error=(
                     f"memory_write refused, nothing was written to {p.name}. {why} memory_write "
                     f"only adds to the END of the file, below its {before} lines; it cannot "

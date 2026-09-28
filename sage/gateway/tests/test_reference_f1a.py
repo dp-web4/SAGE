@@ -620,6 +620,7 @@ def test_a_whole_program_refused_on_a_broken_file_names_a_new_name_that_creates_
     prog = "import os\n\ndef main():\n    print(os.sep)\n\nif __name__ == '__main__':\n    main()\n"
     r = disp(BeingIntent("memory_write", {"path": "s.py", "content": prog}), _ALLOW)
     assert not r.ok and "whole program by itself" in r.error and "s-new2.py" in r.error, r.error
+    assert "s.py itself stays exactly as it is" in r.error and "keep failing" in r.error, r.error
     assert f.read_text() == BROKEN_MID
     new = disp(BeingIntent("memory_write", {"path": "s-new2.py", "content": prog}), _ALLOW)
     assert new.ok and new.result.startswith("created s-new2.py"), new.result
