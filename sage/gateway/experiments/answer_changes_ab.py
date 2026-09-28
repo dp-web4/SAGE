@@ -7,7 +7,7 @@ import json, re, subprocess, sys, time, urllib.request
 import argparse
 ap = argparse.ArgumentParser(description="A/B: the recent-changes line in the answer turn (nothing is sent)")
 ap.add_argument("--home", required=True); ap.add_argument("--member", required=True)
-ap.add_argument("--model", default=A.model); ap.add_argument("--conv", default="dp")
+ap.add_argument("--model", default="qwen3.8-distill:2b"); ap.add_argument("--conv", default="dp")
 ap.add_argument("--seqs", default="76,67"); ap.add_argument("--reps", type=int, default=6); ap.add_argument("--out", required=True)
 A = ap.parse_args()
 from pathlib import Path
