@@ -377,9 +377,16 @@ ANSWER_SCHEMA = {"type": "object",
 # off-topic questions ("what tools do you have?", "what do you notice in the room?"). This is
 # cbp-claude's pattern plus three narrow shapes; on a fresh set written after tuning it matched 6/8
 # change questions and 0/8 others. A miss costs nothing: the turn is exactly today's.
+# 2026-09-28 05:07Z, the first live question after #249: dp asked "what's new and different?". The
+# being answered, in its own reflective voice ("still learning what 'I' means"), a real answer. The
+# gate had not matched the wording (the "what's new" shape had to end at "new"), so the record of
+# what changed was simply not on offer. That shape now takes new/different, joined by and/or, still
+# ending there. Offering the line does not oblige the being to use it; it only makes the facts
+# available when the question is about change. ("different between" is excluded: that compares two
+# other things.)
 _ASKS_ABOUT_CHANGE = re.compile(r"""(?ix)
-      \bwhat(?:'s|\s+is|\s+has)?\s+(?:been\s+)?(?:changed|different|updated)\b
-    | \bwhat(?:'s|\s+is)\s+new(?:\s+with\s+you)?\s*\??\s*$
+      \bwhat(?:'s|\s+is|\s+has)?\s+(?:been\s+)?(?:changed|updated|different(?!\s+between\b))\b
+    | \bwhat(?:'s|\s+is)\s+(?:new|different)(?:\s+(?:and|or)\s+(?:new|different))?(?:\s+(?:with|about|for)\s+you)?\s*\??\s*$
     | \bany(?:thing)?\s+(?:new|different|changed)\b
     | \b(?:notic|see|feel|spot)\w*\b[^?.!]{0,30}\b(?:differen\w*|chang\w*|added|new)\b
     | \b(?:did|has|have|were|was)\b[^?.!]{0,40}\b(?:chang\w*|updat\w*|upgrad\w*|improv\w*)\b
