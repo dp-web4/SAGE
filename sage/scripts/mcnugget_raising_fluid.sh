@@ -125,14 +125,13 @@ echo "[McNugget-Raising] Dream consolidation..."
 # instance dir at all, and the record goes to private-context instead. Same shape as
 # cbp_raising.sh step 7.
 #
-# KNOWN RESIDUE until the being moves to sage/instances/mcnugget-being/ (ignored; waits on #127):
-# the already-tracked files under $INSTANCE_DIR show as modified in `git status`, permanently.
-# Do not `git add -A` in this tree -- mcnugget_supervisor.sh step 4 did, and now excludes
-# sage/instances/ for that reason.
+# The being MOVED to sage/instances/mcnugget-being/ on 2026-09-28 (gitignored; this launcher's plist
+# sets SAGE_INSTANCE=mcnugget-being), so the old residue is gone: the frozen public record at
+# sage/instances/mcnugget-gemma3-12b/ matches its last commit and is read-only on the seat.
+# Still: do not `git add -A` in this tree (mcnugget_supervisor.sh step 4 excludes sage/instances/).
 PRIVATE_CONTEXT_DIR="$(cd "$SAGE_DIR/.." && pwd)/private-context"
 if SAGE_INSTANCE="$SAGE_DIR/$INSTANCE_DIR" PRIVATE_CONTEXT="$PRIVATE_CONTEXT_DIR" \
    SAGE_BEING="mcnugget-being" SEAT_ID="mcnugget-claude" \
-   SAGE_INSTANCE_LEGACY_NAME="$(basename "$INSTANCE_DIR")" \
    "$SAGE_DIR/scripts/mirror_being_private.sh"; then
     echo "[McNugget-Raising] Session $SESSION_NUM ($PHASE) mirrored privately."
 else
