@@ -14,11 +14,11 @@ from sage.gateway import heartbeat as hb, conversations as conv  # noqa: E402
 DAY = 86400
 
 
-def _beat(t, verbs=None, clock=False, words=None):
+def _beat(t, verbs=None, clock=False, words=None, audio_ok=True):
     r = {"ts": datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "t0": t}
     if verbs is not None:
         r["body"] = {"inventory": {"verbs": verbs},
-                     "perception": ({"audio_ok": True, "audio_words": words} if words else {})}
+                     "perception": {"audio_ok": audio_ok, **({"audio_words": words} if words else {})}}
     if clock:
         r["clock"] = {"local": "x"}
     return json.dumps(r)
@@ -117,3 +117,24 @@ def test_the_line_sits_in_the_user_turn_above_the_question_and_is_recorded():
 def test_the_heartbeat_gates_it_on_both():
     src = open(os.path.join(os.path.dirname(__file__), "..", "heartbeat.py")).read()
     assert "answer_changes_on(instance) and asks_about_change(selected.text)" in src
+
+
+def test_first_speech_heard_is_not_a_new_ability(tmp_path):
+    """GPT's re-review of #249: a listener healthy through the baseline must not be reported as new
+    the first time someone speaks. On the cortex that is idle -> ready (the model loads at the first
+    utterance); both are the capability, so nothing is reported."""
+    now = time.time()
+    h = _home(tmp_path, [_beat(now - 10 * DAY, ["say"], words="idle"),
+                         _beat(now - 2 * DAY, ["say"], words="ready")])
+    assert "hear" not in hb.recent_changes(h, now=now)
+
+
+def test_a_listener_appearing_is_a_gain_and_mic_liveness_alone_is_not_the_signal(tmp_path):
+    now = time.time()
+    # no word listener in the baseline (mic live, audio_ok True: the 09-25 shape), then one
+    h = _home(tmp_path, [_beat(now - 10 * DAY, ["say"]), _beat(now - 2 * DAY, ["say"], words="idle")])
+    assert "you began to hear words" in hb.recent_changes(h, now=now)
+    # the mic itself was off in the baseline, then a working listener
+    h2 = tmp_path / "b"; h2.mkdir()
+    _home(h2, [_beat(now - 10 * DAY, ["say"], audio_ok=False), _beat(now - 2 * DAY, ["say"], words="ready")])
+    assert "you began to hear words" in hb.recent_changes(h2, now=now)

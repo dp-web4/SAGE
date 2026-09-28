@@ -454,6 +454,14 @@ def recent_changes(instance, days: int = CHANGES_DAYS, now: Optional[float] = No
     Abilities are body verbs from beats that recorded a census. If the census itself began inside
     the window, its first beat is the baseline (the census starting is not the being gaining
     `say`). Hearing counts only where the body could actually hear words (body.can_hear_words).
+
+    That is a CAPABILITY test, not an event test (GPT's re-review of #249 read it as "someone spoke").
+    `audio_words` is the listener's STATUS, reported on every beat by the cortex: None where there
+    is no word listener, "idle" (present, model not loaded yet), "ready" (loaded at the first
+    utterance), "unavailable: ..." (it cannot run). Measured on Sprout: None on every beat of 09-25,
+    idle/ready on every beat from the 09-26 deploy on. So idle -> ready (first speech heard) is not
+    a gain; None or unavailable -> idle/ready is. `audio_ok` would be the wrong key: it is the mic's
+    level liveness, True throughout, and would never report the real 09-26 gain.
     """
     from sage.gateway import body as _body
     now = now if now is not None else time.time()
