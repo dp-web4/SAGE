@@ -3268,7 +3268,7 @@ def main(argv=None) -> int:
             record["next_wake"]["resume"]["why"] = (
                 "this beat did not rest, so it is resumed sooner than the idle interval")
         if args.idle_wake_s > 0 and not record["next_wake"].get("armed"):
-            print(f"[heartbeat] NO NEXT WAKE ARMED: {record['next_wake']}", file=sys.stderr)
+            print(f"[heartbeat] IDLE WAKE NOT CONFIRMED: {record['next_wake']}", file=sys.stderr)
 
     # THE HELD WAKE: turns that arrived while this beat ran, which it never showed the being,
     # get a wake of their own instead of waiting for the idle timer (arousal.wake_for_late_turns).
@@ -3300,7 +3300,7 @@ def beat_rested(*turns) -> bool:
     return any(t is not None and getattr(t, "rested", None) is not None for t in turns)
 
 
-def interpret_timer_state(show_output: str) -> tuple:
+def interpret_timer_state(show_output: str, *, unit_state: str = "") -> tuple:
     """(armed, detail) from `systemctl show` of the idle timer. Pure, so it can be tested.
 
     THE SUBTLETY THAT MADE THE FIRST VERSION CRY WOLF. This check runs at the end of a beat,
@@ -3312,40 +3312,58 @@ def interpret_timer_state(show_output: str) -> tuple:
     error as a discriminator that is true by construction — and a guard that fires on its own
     design teaches its reader to ignore it.
 
-    So there are two ways to be armed: an elapse already computed, or a timer that is loaded
-    and active and will compute one the moment this process exits."""
+    An active timer alone is not that evidence. Verify its target and, when no elapse is
+    computed, both the inactivity directive and the target service's running state.
+    This is a scheduling observation, not proof that a future beat will execute."""
     vals = dict(l.split("=", 1) for l in show_output.strip().splitlines() if "=" in l)
     real = (vals.get("NextElapseUSecRealtime") or "").strip()
     mono = (vals.get("NextElapseUSecMonotonic") or "").strip()
     load = (vals.get("LoadState") or "").strip()
     active = (vals.get("ActiveState") or "").strip()
-    if real or (mono and mono not in ("infinity", "0")):
+    target_ok = IDLE_UNIT in vals.get("Triggers", "").split()
+    healthy = load == "loaded" and active == "active" and target_ok
+    absent = ("", "infinity", "0", "n/a", "[not set]")
+    if healthy and (real.lower() not in absent or mono.lower() not in absent):
         return True, f"scheduled: realtime={real or '-'} monotonic={mono or '-'}"
-    if load == "loaded" and active == "active":
-        return True, ("no elapse computed yet, which is correct while this beat is still "
-                      f"running: {IDLE_TIMER} is loaded+active and OnUnitInactiveSec arms "
-                      "when this process exits")
-    return False, (f"NO NEXT ELAPSE and the timer is not healthy "
+    # TimersMonotonic can occur on multiple lines (boot + inactivity); do not collapse
+    # it into the property dict. Match the interval, not the following next_elapse.
+    intervals = re.findall(r"OnUnitInactiveUSec=([^;}\n]+)", show_output)
+    has_inactivity_timer = any(re.search(r"[1-9]", interval) for interval in intervals)
+    if healthy and has_inactivity_timer and unit_state in ("active", "activating"):
+        return True, ("no elapse computed yet; verified OnUnitInactiveSec for the running "
+                      f"target {IDLE_UNIT} (state={unit_state}); expected to arm on deactivation")
+    return False, (f"idle wake not confirmed: timer/target not healthy or scheduling basis absent "
                    f"(LoadState={load or '?'} ActiveState={active or '?'} "
+                   f"target_matches={target_ok} inactivity_timer={has_inactivity_timer} "
+                   f"unit_state={unit_state or '?'} "
                    f"realtime={real or 'empty'} monotonic={mono or 'empty'})")
 
 
 def next_wake_is_armed() -> tuple:
     """(armed, detail) for the idle timer that wakes the being after quiet.
 
-    The beat is no longer a metronome: the timer measures INACTIVITY, so its next elapse is
-    computed from the end of this beat. That makes it exactly the kind of thing that can
-    stop scheduling without anything looking wrong — which happened on 2026-09-09, when a
-    monotonic timer sat `active (running)` with `Trigger: n/a` and the being would never
-    have woken again. Checked at the end of every beat, out loud."""
+    With OnUnitInactiveSec, the next elapse may await this beat's completion. Other
+    configurations need an actual scheduled elapse. Verify the installed configuration,
+    not the example or our own intended design. Called at beat end only when opted in;
+    this observation cannot guarantee future execution or detect a later service failure."""
     try:
-        out = subprocess.run(["systemctl", "--user", "show", IDLE_TIMER,
+        timer = subprocess.run(["systemctl", "--user", "show", IDLE_TIMER,
                               "-p", "NextElapseUSecRealtime", "-p", "NextElapseUSecMonotonic",
-                              "-p", "LoadState", "-p", "ActiveState"],
-                             capture_output=True, text=True, timeout=15).stdout
+                              "-p", "LoadState", "-p", "ActiveState",
+                              "-p", "TimersMonotonic", "-p", "Triggers"],
+                             capture_output=True, text=True, timeout=15)
+        if timer.returncode != 0:
+            return False, f"could not inspect idle timer: systemctl exit {timer.returncode}"
+        scheduled = interpret_timer_state(timer.stdout)
+        if scheduled[0]:
+            return scheduled  # A concrete deadline needs no pending-deactivation inference.
+        unit = subprocess.run(["systemctl", "--user", "show", IDLE_UNIT,
+                               "-p", "ActiveState", "--value"],
+                              capture_output=True, text=True, timeout=15)
     except Exception as e:
         return False, f"could not ask systemd: {type(e).__name__}: {e}"
-    return interpret_timer_state(out)
+    return interpret_timer_state(timer.stdout,
+                                 unit_state=unit.stdout.strip() if unit.returncode == 0 else "")
 
 
 def arm_next_wake(idle_s: int) -> dict:
@@ -3371,7 +3389,7 @@ def arm_next_wake(idle_s: int) -> dict:
     except Exception as e:
         return {"armed": False, "by": None, "detail": detail,
                 "error": f"{type(e).__name__}: {e}",
-                "why": "NOTHING WILL WAKE THE BEING until a seat or a message does"}
+                "why": "idle wake not confirmed and fallback failed; other wake sources may still fire"}
 
 
 def arm_resume_wake(seconds: int) -> dict:
