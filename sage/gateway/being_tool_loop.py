@@ -954,6 +954,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     if idx and _est_tokens(size(out), measured) > room:
         i = idx[-1]
         body = out[i].get("content") or ""
+        lines = body.count('\n') + 1
         keep = COMPACT_KEEP_CHARS * 4
         if len(body) > keep + COMPACT_MIN_BODY:
             h = keep // 2
