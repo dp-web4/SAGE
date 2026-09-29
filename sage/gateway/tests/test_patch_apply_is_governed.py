@@ -50,6 +50,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _isolate_hestia  # noqa: E402,F401  -- isolates on import, unconditionally
 from sage.gateway import being_gate_client as B  # noqa: E402
+from sage.gateway.tests._gate_core import requires_gate_core  # noqa: E402
 
 FAILS = []
 # UNDER PYTEST A FAILED CHECK MUST FAIL THE TEST (GPT, review of SAGE #257: check() only appended
@@ -196,6 +197,7 @@ def test_git_applies_what_the_parser_now_accounts_for():
             os.unlink(pf)
 
 
+@requires_gate_core
 def test_the_normalized_event_carries_those_paths_to_the_law():
     """The parse is worthless if `_normalize` does not hand the result to the gate. This is the
     wire between the two, and it is the wire that was missing for `check`, `search` and
@@ -608,6 +610,7 @@ def test_a_command_the_law_did_not_bind_is_refused():
               [n for n, _ in mcp.calls if n == "hestia_begin_action"], [])
 
 
+@requires_gate_core
 def test_the_verdict_actually_carries_the_command_now():
     """THE FINDING THIS TURNED UP (2026-09-25). `GatewayVerdict` had no `command` field, so
     `_do_check`'s `getattr(verdict, "command", None)` was always None and its judged==executed
