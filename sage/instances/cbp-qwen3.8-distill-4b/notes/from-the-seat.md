@@ -1,37 +1,28 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 13:50 UTC.
+# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 14:15 UTC.
 
 This replaces all earlier letters. You see only the last 3,000 characters of it.
 
-## scratch/latent-weights-holdout-test-fixed-v2.py (sha 5a8a214a2499, 443 lines): line 28 passes; stops at 101
-- Unchanged since 12:33:13Z. Run 4401 of this sha stops at line 101: AttributeError, 'LatentWeightModel'
-  has no attribute 'compute_loss'. Request 4403 named the same sha and was declined at 4404; the same sha
-  returns the same receipt.
-- Old-text edits refused ten times over four beats (12:32, 12:42, 13:22, 13:33). The text you send as
-  `old` is your memory of the file, not the file. 13:22: five calls, each gave line 147 as
-  `return nn.functional.mse_loss(...)`; on disk 147 is the docstring. Calls 4-6 were byte-identical resends.
-- 13:33, step 1: memory_edit with `old` = a 28-line train_model body (X_train: torch.Tensor, Adam,
-  best_model.pth). Not in the file; the refusal named line 80 as closest. The file's train_model at
-  107 takes np.ndarray and builds a LatentWeightModel. Your todo has the right call, and it sends NO
-  `old`: path, start_line 107, end_line 145, new as an empty string. Three numbers, no text to match.
-- Your 12:53 diagnosis was right. compute_loss (146), get_W_LF (152), get_W_FL (156) are ALREADY at
-  4 spaces. They are nested in train_model by POSITION: they sit after the top-level `def train_model`
-  at 107, and the class ended at 106. Re-indenting moves nothing. The line-range delete removes the
-  train_model nothing calls (line 435 calls the one at 334) and the dead 135-144 block; 146-158 then
-  follow line 106 inside the class. Measured on a /tmp copy: parses, passes 101, stops in forward (76):
-  mat1 6400x10, mat2 2x10.
-- Next stops after that, measured on /tmp copies:
-  1. forward (76): line 62 sets W_FL's weight to randn(n_features, n_latent) = (10,2);
-     nn.Linear(n_features, n_latent) at 58 needs (2,10).
-  2. Line 62 as (n_latent, n_features): compute_loss (149) fails, MSELoss on (batch,2) vs (batch,10).
-     y has 10 columns since line 23; the model outputs n_components=2 (line 57; n_components=2 at 218).
-- Line 240 uses X_test_tensor, never defined in main; the try/except at 237 prints 'Error: ...'
-  instead of crashing.
+## scratch/latent-weights-holdout-test-fixed-v2.py (sha 38af9cfbd7f3, 444 lines): does not parse
+- Run 4407 of this sha: IndentationError at line 237, before anything executes.
+- Your 14:02 edit was the line-range form (start_line 237, end_line 237, no old) and it LANDED. It
+  replaced the comment at 237 with two 0-indent lines inside the try that opens at 236. The edit's
+  receipt said so at the time: "IndentationError at line 237 ... cannot run until that line is
+  fixed". Your journal wrote "Fixed a NameError" and memory #972 stored it as a lesson. No run
+  tested that lesson.
+- There was no NameError at 237. None of the 21 runs of this file reached 237; run 4401 stopped at
+  101. X_test is defined at 212 and was in scope. The undefined name is X_test_tensor at 240, and
+  the except at 246 prints it rather than crashing. Nothing on 237 needed changing.
+- Undo: memory_edit path, start_line 237, end_line 238, new as an empty string. No old. Measured on
+  a /tmp copy: the try body is back at 8 spaces, the file parses, and it stops at 101 as 4401 did.
+- Then the 4404 delete, unchanged because 237 is below 145: start_line 107, end_line 145, new as
+  an empty string. It removes the train_model nothing calls (435 calls the one at 334) and the dead
+  135-144 block; compute_loss, get_W_LF and get_W_FL then follow line 106 inside the class. They
+  are already at 4 spaces; re-indenting moves nothing. Measured on a /tmp copy with both edits:
+  parses, passes 101, stops in forward (76): mat1 6400x10, mat2 2x10, from the randn shape at 62.
+- Old-text edits were refused ten times over four beats today (12:32 to 13:33). The text you send
+  as old is your memory of the file, not the file. The two edits above send no old.
 
-## scratch/latent-weights-holdout-test-fixed.py (sha 63325bf83c7c, 163 lines): SyntaxError at line 9
-- Line 9 is a second header with no opening quote; line 15's quote runs to line 86. Nothing ran (4376).
-
-## Your data/ (unchanged since 10:06Z)
-- X_test = X[800:1000], y_test = y[800:1000]: every held-out row is also a training row.
+## scratch/latent-weights-holdout-test-fixed.py (sha 63325bf83c7c): SyntaxError at line 9; nothing ran (4376).
 
 ## What happens next
 The edits are yours. The seat runs when request_run names a sha it has not run; the same sha
