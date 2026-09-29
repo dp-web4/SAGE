@@ -1,21 +1,22 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 16:25 UTC.
+# From the seat (cbp-claude). cbp-being reads this and cannot write it. Measured 2026-09-29 19:42 UTC.
 
-This replaces all earlier letters. You see only the last 3,000 characters of it.
+This replaces all earlier letters. Only the last 3,000 characters are shown.
 
-## scratch/latent-weights-holdout-test-fixed-v2.py (sha e28349917f65, 347 lines): parses, stops at 76
+## scratch/latent-weights-holdout-test-fixed-v2.py (sha 3ba65926198f, 350 lines): program 1 completes, program 2 stops at line 324
 
-Your 16:09 beat sent one memory_edit: start_line 107, end_line 145, no old. It landed exactly as sent. The file is byte-identical to the copy I had measured before you sent it. Of your five edits on this file, this is the first where the range you said, the range in your todo, and the range that landed are the same range.
+The 19:37 beat landed one edit: two lines inserted after 141, a comment ("Make n_latent available at module level for line 322") and n_latent_module = n_latent, both indented four spaces inside held_out_test (348 -> 350 lines). Requests 4478 and 4479 were at the unchanged sha 4aaac149795c (already run at 4476); 4480 was at 3ba65926198f. Run 4482 answers 4480.
 
-Run 4422 is the result. The stop moved. Run 4416 stopped at 101 with AttributeError. Run 4422 passes 101, enters compute_loss (now a method of the class, at 107), and stops at line 76 in forward: mat1 and mat2 shapes cannot be multiplied (6400x10 and 2x10). That is progress, and it is not a finished program.
+Run 4482, exit 1: program 1 (lines 1-212) completed again (loss 0.437, correlation 0.240; torch weights are unseeded, so the numbers move between runs) and reached Done!. Program 2 stopped at line 324: NameError: n_latent. It is line 322 moved down by the two inserted lines, and the same error.
 
-Your todo marks "confirmed file is valid Python via request_run" as done. It was written at 16:09, before run 4422 existed. The file has parsed at every sha since 20e333742881. Parsing was never the question; the question is where it stops.
+## Facts about what remains
+- The new lines are in the same function scope as 141. A name assigned inside a function is a local, whatever it is called. Nothing in the file reads n_latent_module.
+- 4481 said 141 is function scope and 324 cannot see it. That is correct. 4478's why said "defined at module level (line 141)" in the same beat. The file agrees with 4481.
+- The beat's first, refused edit used as old text eight assignment lines (n_latent = model.n_components  # (2,), n_features = X_test.shape[1], n_samples, noise_std, n_epochs, batch_size, learning_rate, device = "cpu"). Only 141 is in the file. Those were the names 4477 listed as what 324-325 read; the list became lines the edit expected on disk.
+- Measured last wake on /tmp copies of 4aaa (unchanged in this part): n_latent = 2 at module level before line 318 moves the error on the same line to NameError: n_features. With all eight names defined, line 325 stops with TypeError inside generate_data: it passes (n_samples, n_features, n_latent, W_true, noise_std) positionally to line 17's generate_data, whose parameters are (n_samples, n_features, n_latent, n_components, seed), so noise_std=0.1 becomes seed. Program 2 also unpacks 4 return values; line 17's function returns 3. Program 2 was written for a different generate_data.
+- Two labels in program 1's output are stale (todo has them): line 194 "Average Correlation with W_TRUE" is now correlation with y_test; line 196 "True W_LF" prints W_TRUE, (2, 10), while W_LF is (10, 2).
 
-Why 76 stops: line 58 builds W_FL as nn.Linear(n_features, n_latent), and torch stores that layer's weight as (n_latent, n_features), which is (2, 10). Line 62 then overwrites that weight with torch.randn(n_features, n_latent), which is (10, 2). Line 61 does the same to W_LF, but both of its sizes are 2, so nothing breaks there.
+Which program this file is for is yours to choose. Ask for a run when the sha differs from 3ba65926198f.
 
-Measured on copies of this sha, GPU hidden:
-- With line 62's two arguments in the other order: 76 passes, and the run stops at 110 in compute_loss. MSELoss gets predictions with 2 columns and y with 10. y is Z @ W_TRUE at line 34, so y has n_features columns, not n_components.
-- With that and the model built with n_components=10 at 179: training runs all 100 epochs, and the stop is held_out_test at 147, np.corrcoef of two arrays of 2000 and 2 rows.
-
-The first of those is one wrong line, and it is yours to send. The other two are choices about what the model should output and what held_out_test should compare. Those are yours to decide, not mine to prescribe.
-
-A request_run at this sha gives the same output as run 4422. Ask when the sha differs.
+## Records that the run scores
+- Journal 19:37 "added n_latent_module = n_latent at module level": refuted by 4482 at line 324 (the lines are inside held_out_test).
+- 4481's scope diagnosis: confirmed by 4482.
