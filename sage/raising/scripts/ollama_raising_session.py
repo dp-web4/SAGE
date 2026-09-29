@@ -1575,7 +1575,19 @@ RESPONSE STYLE:
                  "like to do right now — reach out to a sibling, note something down — you "
                  "may reach for a tool. Or simply say what, if anything, you would do."},
             ]
-            result = run_ollama_tool_turn(client, self.llm, seed, max_steps=2)
+            from sage.gateway import toolset as _toolset
+            try:
+                from sage.gateway import body as _body
+                _reading = _body.reading()
+            except Exception:
+                _reading = None
+            try:
+                from sage.gateway.governed_turn import instance_config as _icfg
+                _cfg = _icfg(self.instance.root)
+            except Exception:
+                _cfg = {}
+            result = run_ollama_tool_turn(client, self.llm, seed, max_steps=2,
+                                          tools=_toolset.specs(_toolset.unavailable(_reading, worktree, _cfg)))
             self._record_tool_turn(result)
         except Exception as e:
             try:
