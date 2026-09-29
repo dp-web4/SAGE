@@ -571,10 +571,17 @@ class ReferenceF1aDispatcher:
         # file is syntactically valid" -- Python stopped at line 1722 with IndentationError.
         # Its journal, todo and memory recorded "fix complete and verified", and it told the
         # seat it had already run the script. Nothing it was shown contradicted the reading.
+        # Again 2026-09-29 11:41Z: it read all 443 lines of a scratch .py in three windows, said
+        # "appears syntactically correct", and asked the seat to run it; the run stopped at line
+        # 135, IndentationError, inside the first window it had been shown (seat thread 4384).
         status = _python_status(p).strip()
         parse = f"\n[{status}]" if status else ""
         if start == 1 and end >= len(lines):
-            return ResultEnvelope(ok=True, result=content + parse,
+            # A whole-file read has no end marker, so a bare bracket line after the last line
+            # would read as the file's last line and could be copied into an edit anchor.
+            # Say where the file ends before saying what Python makes of it.
+            whole_note = f"\n[end of file: line {len(lines)} is the last line. {status}]" if status else ""
+            return ResultEnvelope(ok=True, result=content + whole_note,
                                   witness_id=self._witness(f"memory_read {p.name}"))
         head = f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else ""
         tail = (f"\n[… truncated: this shows lines {start}-{end} of {len(lines)} "
