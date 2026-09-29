@@ -864,3 +864,80 @@ def test_a_read_or_check_repeated_in_a_turn_is_executed_again():
                  {"content": "done", "intents": []}])
     r = run_tool_turn(c, lambda convo: next(outs), [], max_steps=5)
     assert [e for e, _ in c.calls] == ["check", "check"] and r.duplicates == []
+
+
+def _stubbed(n_results, body_len=9000):
+    """A long beat: a seed, then n (assistant, tool) pairs, each result big enough to elide."""
+    msgs = [{"role": "system", "content": "S" * 2000}, {"role": "user", "content": "U" * 6000}]
+    for k in range(n_results):
+        msgs += [{"role": "assistant", "content": f"step {k}"},
+                 {"role": "tool", "content": f"read file_{k}.py lines 1-200\n" + "T" * body_len
+                  + f"\nverdict {k}: 3 passed"}]
+    return msgs
+
+
+class _LLMTight:
+    num_ctx = 16384
+
+
+def test_the_oldest_stubs_are_collapsed_to_a_pointer_once_stubs_fill_the_window():
+    """legion-being 2026-09-29: 38 stubs at step 42 held the prompt at 23-24.4k of 24,576 and
+    every generate after that was empty-then-retried. Past the newest COMPACT_STUBS_KEPT, the
+    oldest stubs become one-line pointers to the file that holds the WHOLE result."""
+    import os, tempfile
+    from sage.gateway.being_tool_loop import (compact_convo, COMPACT_STUBS_KEPT, _COLLAPSED_SIGIL,
+                                              _ELIDED_SIGIL)
+    root = tempfile.mkdtemp(prefix="collapse-")
+    # every step appends a result and compacts, as the loop does
+    msgs = _stubbed(0)
+    for k, m in enumerate(_stubbed(40)[2:]):
+        msgs.append(m)
+        if m["role"] == "tool":
+            msgs, _ = compact_convo(msgs, _LLMTight(), spill_root=root)
+    tools = [m["content"] for m in msgs if m["role"] == "tool"]
+    collapsed = [t for t in tools if _COLLAPSED_SIGIL in t]
+    stubs = [t for t in tools if _ELIDED_SIGIL in t]
+    assert collapsed, "the stubs filled the window, so the oldest were collapsed"
+    assert len(stubs) >= COMPACT_STUBS_KEPT, "the newest stubs are kept as stubs"
+    first_stub = next(i for i, t in enumerate(tools) if _ELIDED_SIGIL in t)
+    assert all(_COLLAPSED_SIGIL in t for t in tools[:first_stub]), "oldest first, no gaps"
+    for k, t in enumerate(tools[:first_stub]):
+        assert f"read file_{k}.py" in t and f"verdict {k}: 3 passed" in t, "first and last line kept"
+        path = t.split("saved as ")[1].split(" ")[0]
+        assert os.path.exists(os.path.join(root, path)), path
+        assert f"verdict {k}: 3 passed" in open(os.path.join(root, path)).read(), "nothing is lost"
+    assert len(collapsed[0]) < 400
+    n = len(os.listdir(os.path.join(root, "scratch", "elided")))
+    assert n <= 40, f"a collapse writes no new spill: at most one file per result ({n} for 40)"
+
+
+def test_a_stub_whose_result_was_not_saved_is_never_collapsed():
+    """The pointer is only honest if the file it points at exists: a stub without a spill is the
+    only copy of its head and tail, so it stays."""
+    from sage.gateway.being_tool_loop import compact_convo, _COLLAPSED_SIGIL
+    msgs = _stubbed(0)
+    for m in _stubbed(40)[2:]:
+        msgs.append(m)
+        if m["role"] == "tool":
+            msgs, _ = compact_convo(msgs, _LLMTight(), spill_root="/proc/definitely-not-writable")
+    assert not any(_COLLAPSED_SIGIL in (m["content"] or "") for m in msgs)
+
+
+def test_a_collapsed_pointer_is_reported_with_the_room_it_freed_and_never_cut_again():
+    from sage.gateway.being_tool_loop import compact_convo, _COLLAPSED_SIGIL
+    import tempfile
+    root = tempfile.mkdtemp(prefix="collapse-rec-")
+    msgs, recs = _stubbed(0), []
+    for m in _stubbed(40)[2:]:
+        msgs.append(m)
+        if m["role"] == "tool":
+            before = [x["content"] for x in msgs]
+            msgs, el = compact_convo(msgs, _LLMTight(), spill_root=root)
+            for r in el:
+                if r.get("collapsed"):
+                    assert r["chars"] == len(before[r["index"]]) - len(msgs[r["index"]]["content"])
+                    assert r["spill"] in msgs[r["index"]]["content"]
+                    recs.append(r)
+    assert recs
+    idxs = [r["index"] for r in recs]
+    assert len(idxs) == len(set(idxs)), "a pointer is collapsed once"
