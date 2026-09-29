@@ -242,6 +242,27 @@ CONV_TURN_CHARS = 1200
 POSTURE_FILE = Path(__file__).with_name("BEING_POSTURE.md")
 
 
+# What this being is entrusted with, if anything. Seat-owned and unwritable by the being
+# (reference_f1a.SEAT_OWNED): what it was GIVEN must stay separable from what it DECIDED, or the
+# record cannot be read later. The being's own reading of it goes in notes/plan.md.
+#
+# `entrustment`, not `mission`, on dp's correction the day it was written (Legion, 2026-09-07):
+# "this is not a 'task i set' for the being, it is an affordance i entrust it with. because i
+# want it to thrive and grow." A task is owed and graded; an entrustment is room extended.
+# Carried to main from legion/mission-artifact, where only Legion's being could receive one:
+# on main the file was named as untrimmable (fit_seed) but nothing read it.
+ENTRUSTMENT_FILE = "entrustment.md"
+
+
+def entrustment(instance: Path) -> str:
+    """What this being is entrusted with, or "" if nothing yet. Read WHOLE and fresh every beat:
+    a tail-truncated read would drop the opening, which says who extended it and on what terms."""
+    try:
+        return (Path(instance) / ENTRUSTMENT_FILE).read_text(errors="replace").strip()
+    except Exception:
+        return ""
+
+
 def posture() -> str:
     """The fleet-wide being posture (dp's words), read fresh every beat so an edit to
     BEING_POSTURE.md reaches every being on its next beat. Missing file = fail loud."""
@@ -1755,7 +1776,7 @@ def todo_view(instance: Path, now=None) -> str:
     return "\n".join(lines)
 
 
-def own_state(instance: Path, member: str = "",
+def own_state(instance: Path, member: str = "", entrusted: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
               services: str = "", mark_conversations: bool = True,
@@ -1781,6 +1802,11 @@ def own_state(instance: Path, member: str = "",
         own_state.last_body = _cur
     except Exception as _e:
         own_state.last_body = {"error": f"{type(_e).__name__}: {_e}"}
+    if entrusted:
+        # After the body (the only thing happening NOW) and ahead of every record: what the being
+        # was extended frames how it reads the rest. Carried from legion/mission-artifact.
+        parts.append("## What you are entrusted with (extended to you; you cannot edit this "
+                     "file. Your own reading of it belongs in notes/plan.md)\n" + entrusted)
     # Its files and runs, measured: also NOW, so beside the body and before every record that
     # narrates them (see files_and_runs). Fail-open: a measurement that errors adds nothing.
     try:
@@ -2866,6 +2892,7 @@ def main(argv=None) -> int:
     # the names are DERIVED from the specs offered, never kept beside them: the seed's tool list
     # and the window's schema measurement must describe exactly what the model is handed
     _explore_tools = [t["function"]["name"] for t in _explore_specs]
+    entrusted = entrustment(instance)
     _schema_measured = _schema_chars_for(_explore_tools, _unavail)
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
@@ -2897,7 +2924,7 @@ def main(argv=None) -> int:
     _shown_upto = _convs.latest_seqs(instance, args.member) if args.member else {}
 
     def _build_state(per_conv, turn_chars):
-        return (_state_head + own_state(instance, args.member,
+        return (_state_head + own_state(instance, args.member, entrusted,
                                         per_conv=per_conv, turn_chars=turn_chars,
                                         services=_services, mark_conversations=False,
                                         body_reading=_body_cur) + _scope_tail)
@@ -3182,6 +3209,7 @@ def main(argv=None) -> int:
         "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "t0": t0, "elapsed_s": round(time.time() - t0, 1),
         "member": args.member, "model": args.model, "window_h": round(hours, 2), "clock": _clock,
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
+        "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,
         # the window and budget actually sent, so a beat is verifiable from this file alone
         # (beat 46's 8192 wall was reconstructed from stderr; Sprout's review of SAGE #40)

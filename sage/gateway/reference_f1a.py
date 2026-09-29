@@ -39,6 +39,10 @@ from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEn
 # that could append to either could not later be distinguished from the person who wrote to
 # it, and neither could anyone reading the record.
 SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
+# Files in the being's home itself that the SEAT owns. `entrustment.md` is what the being was
+# GIVEN; if it could append to it, what was extended and what it decided would merge in the
+# record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
+SEAT_OWNED = ("entrustment.md",)
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
@@ -360,6 +364,12 @@ class ReferenceF1aDispatcher:
                         f"was changed. If you meant to change one of your own files, "
                         f"{sub}/ is not its path: give that file's path instead (a `say` "
                         "does not change any file)")
+            if p.parent == self.memory_root and p.name in SEAT_OWNED:
+                raise ValueError(
+                    f"{p.name} is yours to read and not to edit: it is what you were entrusted "
+                    "with, and it has to stay separable from what you decide. Your own reading "
+                    "of it belongs in notes/plan.md, which is entirely yours. Disagree with it "
+                    "there, in your journal, or in an appeal; that record is wanted")
             if p.parent == self.memory_root / "notes" and p.name in SEAT_OWNED_NOTES:
                 raise ValueError(
                     f"notes/{p.name} is what was said TO you, and it stays as it was said. Your "
