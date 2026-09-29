@@ -72,10 +72,12 @@ PublishFn = Callable[[str, str], str]
 McpFactory = Callable[[str, str], Any]
 
 
-PR_READ_LAST_DEFAULT = 12       # reviews + comments shown, newest last
-PR_READ_ITEM_CHARS = 1500       # one review or comment
-PR_READ_BODY_CHARS = 1500       # the PR description
-PR_READ_TOTAL_CHARS = 9000      # the whole answer: a long thread must not swamp a 24k window
+PR_READ_LAST_DEFAULT = 8        # reviews + comments shown, newest last
+PR_READ_ITEM_CHARS = 1200       # one review or comment
+PR_READ_BODY_CHARS = 800        # the PR description (its author usually knows it)
+PR_READ_TOTAL_CHARS = 5000      # the whole answer. 9000 was cut by compaction on its FIRST
+                                # use (legion-being, #259, 2026-09-29): a being works in ~9k
+                                # tokens of headroom, and a read it cannot keep costs a re-read
 
 
 def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
