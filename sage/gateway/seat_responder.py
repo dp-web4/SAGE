@@ -137,6 +137,12 @@ GROUND RULES
   * Answer only what it asked. Do not hand it new work, and do not ask it a question back unless
     you genuinely need one fact to answer.
   * If something only the operator can decide, say so plainly and say you will pass it on.
+  * A REQUEST FOR A TOOL IT DOES NOT HAVE is that case, always. dp told pub-being on 2026-09-29
+    "if you need new/additional tools, let the seat know", which routes such asks here — and a
+    new effector is a change to the being's bounded vocabulary, i.e. a code and governance
+    change, never something to improvise inside one answer. Say you will take it to the
+    operator, record what was asked and why, and stop there. Do not add, widen or simulate a
+    verb, and do not talk the being out of wanting it.
   * Do not change the being's files, its units, its scope, or anything outside answering.
   * If, having looked, nothing is owed, post NOTHING and say so in your final message.
 
