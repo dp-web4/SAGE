@@ -591,26 +591,57 @@ def test_a_spill_that_cannot_be_written_never_breaks_the_beat():
     assert "NARROW range" in out[3]["content"], "it falls back to the advice it used to give"
 
 
-def test_the_spill_directory_is_a_spill_not_an_archive():
-    from sage.gateway.being_tool_loop import _spill, COMPACT_SPILL_KEEP
+def test_a_heavy_beat_does_not_prune_its_own_spills():
+    """THE LOAD THAT BROKE THE PROMISE. Measured on legion-being 2026-09-21..23: one compaction
+    pass wrote 33 spills in a second and beats elided up to 954 results, so a count cap of 40
+    pruned a spill before the next step could read it — 26 reads followed a marker to a file
+    that was gone. Everything a beat spills must still be there for the being's NEXT beat."""
+    from sage.gateway.being_tool_loop import _spill
     import os, tempfile
-
-    root = tempfile.mkdtemp(prefix="spill-prune-")
-    kept = []
-    for i in range(COMPACT_SPILL_KEEP + 5):
-        p = _spill(root, f"body {i}", i)
-        assert p, i
-        kept.append(p)
+    root = tempfile.mkdtemp(prefix="spill-load-")
+    made = [_spill(root, f"body {i}", i % 50) for i in range(1000)]
+    assert all(made)
     d = os.path.join(root, "scratch", "elided")
-    left = os.listdir(d)
-    assert len(left) == COMPACT_SPILL_KEEP, len(left)
-    # EVERY newest one survives and every oldest one is gone. Pruning by NAME passes a
-    # weaker check and fails this one: "…-5.txt" sorts after "…-40.txt", so the fortieth
-    # spill is deleted while the fifth is kept.
-    newest = {os.path.basename(k) for k in kept[-COMPACT_SPILL_KEEP:]}
-    oldest = {os.path.basename(k) for k in kept[:5]}
-    assert newest == set(left), sorted(newest.symmetric_difference(left))
-    assert not (oldest & set(left))
+    left = set(os.listdir(d))
+    assert {os.path.basename(m) for m in made} <= left, "a spill named in a marker must exist"
+    assert len(left) == 1000
+
+
+def test_spills_older_than_the_window_are_pruned_and_younger_ones_are_not():
+    from sage.gateway import being_tool_loop as L
+    import os, tempfile, time
+    root = tempfile.mkdtemp(prefix="spill-age-")
+    d = os.path.join(root, "scratch", "elided"); os.makedirs(d)
+    old = time.strftime("%Y%m%d-%H%M%S", time.gmtime(time.time() - L.COMPACT_SPILL_KEEP_S - 3600))
+    young = time.strftime("%Y%m%d-%H%M%S", time.gmtime(time.time() - 600))
+    for stamp, tag in ((old, "old"), (young, "young")):
+        for i in range(3):
+            open(os.path.join(d, f"{stamp}-{i:03d}-000.txt"), "w").write(tag)
+    open(os.path.join(d, "not-a-stamp.txt"), "w").write("unparsable: never pruned by age")
+    assert L._spill(root, "fresh", 7)
+    left = sorted(os.listdir(d))
+    assert not any(f.startswith(old) for f in left), left
+    assert sum(1 for f in left if f.startswith(young)) == 3, left
+    assert "not-a-stamp.txt" in left
+    assert any(f.endswith("-007-000.txt") for f in left)
+
+
+def test_over_the_byte_cap_the_oldest_go_first_and_the_newest_survive(monkeypatch):
+    """The backstop for a pathological beat: oldest by NAME, which is creation order."""
+    from sage.gateway import being_tool_loop as L
+    import os, tempfile
+    monkeypatch.setattr(L, "COMPACT_SPILL_MAX_BYTES", 12 * 200)
+    root = tempfile.mkdtemp(prefix="spill-cap-")
+    kept = [_p for _p in (L._spill(root, "x" * 150, i) for i in range(30)) if _p]
+    assert len(kept) == 30
+    d = os.path.join(root, "scratch", "elided")
+    left = sorted(os.listdir(d))
+    total = sum(os.path.getsize(os.path.join(d, f)) for f in left)
+    assert total <= 12 * 200, total
+    assert os.path.basename(kept[-1]) in left, "the spill just written must stand"
+    assert os.path.basename(kept[0]) not in left, "the oldest goes first"
+    newest_n = len(left)
+    assert set(left) == {os.path.basename(k) for k in kept[-newest_n:]}, "pruning is by creation order"
 
 
 def test_two_spills_of_the_same_step_in_one_second_do_not_overwrite_each_other():
@@ -628,35 +659,36 @@ def test_two_spills_of_the_same_step_in_one_second_do_not_overwrite_each_other()
     assert open(os.path.join(root, b), encoding="utf-8").read().endswith("the second result")
 
 
-def test_collision_names_preserve_creation_order_at_the_prune_boundary():
-    """The filename is the retention clock. A same-step retry must sort AFTER the file
-    it followed, even when there are enough collisions to cross 9 -> 10."""
-    from sage.gateway.being_tool_loop import _spill, COMPACT_SPILL_KEEP
+def test_collision_names_preserve_creation_order_at_the_prune_boundary(monkeypatch):
+    """The filename is the retention clock. A same-step retry must sort AFTER the file it
+    followed, even when there are enough collisions to cross 9 -> 10, so that when the byte
+    cap prunes oldest-first the newest retries are the ones that survive."""
+    from sage.gateway import being_tool_loop as L
     import os, tempfile
     from unittest.mock import patch
-
+    import time
     root = tempfile.mkdtemp(prefix="spill-collision-prune-")
-    # Freeze the second so every spill shares the same timestamp. Fill most of retention
-    # with earlier steps, then create twelve retries of the same newest step.
+    # one frozen second, NOW — a stamp from the past would be pruned by age before the cap
+    # is ever consulted, which is the correct behaviour and not what this test is about
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
     with patch("time.strftime") as fmt:
         fmt.side_effect = lambda pattern, *_: (
-            "20260919-120000" if pattern == "%Y%m%d-%H%M%S" else "2026-09-19T12:00:00Z"
-        )
-        made = []
-        for i in range(COMPACT_SPILL_KEEP - 12):
-            made.append(_spill(root, f"old {i}", i))
-        collisions = [_spill(root, f"retry {i}", 999) for i in range(12)]
-
+            stamp if pattern == "%Y%m%d-%H%M%S" else "2026-09-19T12:00:00Z")
+        made = [L._spill(root, f"old {i}", i) for i in range(28)]
+        collisions = [L._spill(root, f"retry {i}", 999) for i in range(12)]
     assert all(made) and all(collisions)
-    d = os.path.join(root, "scratch", "elided")
-    left = sorted(os.listdir(d))
-    assert len(left) == COMPACT_SPILL_KEEP
     collision_names = [os.path.basename(p) for p in collisions]
     assert collision_names == sorted(collision_names), collision_names
     assert collision_names[-1].endswith("-999-011.txt"), collision_names[-1]
-    assert set(collision_names).issubset(left), (
-        "newest same-step retries must survive pruning; filename order is retention order"
-    )
+    # now a cap that keeps roughly the newest 20 files: every collision must survive, the
+    # oldest plain spills must not
+    d = os.path.join(root, "scratch", "elided")
+    per = os.path.getsize(os.path.join(d, collision_names[0]))
+    monkeypatch.setattr(L, "COMPACT_SPILL_MAX_BYTES", per * 20)
+    L._prune_spills(d)
+    left = sorted(os.listdir(d))
+    assert set(collision_names).issubset(left), "newest same-step retries must survive pruning"
+    assert os.path.basename(made[0]) not in left
 
 
 # ---- the vision line's last mile, carried with the organ (SAGE #159) ----
@@ -880,64 +912,102 @@ class _LLMTight:
     num_ctx = 16384
 
 
-def test_the_oldest_stubs_are_collapsed_to_a_pointer_once_stubs_fill_the_window():
-    """legion-being 2026-09-29: 38 stubs at step 42 held the prompt at 23-24.4k of 24,576 and
-    every generate after that was empty-then-retried. Past the newest COMPACT_STUBS_KEPT, the
-    oldest stubs become one-line pointers to the file that holds the WHOLE result."""
-    import os, tempfile
-    from sage.gateway.being_tool_loop import (compact_convo, COMPACT_STUBS_KEPT, _COLLAPSED_SIGIL,
-                                              _ELIDED_SIGIL)
-    root = tempfile.mkdtemp(prefix="collapse-")
-    # every step appends a result and compacts, as the loop does
-    msgs = _stubbed(0)
-    for k, m in enumerate(_stubbed(40)[2:]):
-        msgs.append(m)
+def _compact_like_the_loop(n_results, root, llm=None, check=None):
+    """THE REAL SHAPE (run_ollama_tool_turn): the messages are rebuilt from the UNCOMPACTED
+    conversation every generate and compacted afresh, so each step re-spills what it elides.
+    Returns the prompt as sent after every step."""
+    from sage.gateway.being_tool_loop import compact_convo
+    full, sent = _stubbed(0), []
+    for m in _stubbed(n_results)[2:]:
+        full.append(m)
         if m["role"] == "tool":
-            msgs, _ = compact_convo(msgs, _LLMTight(), spill_root=root)
-    tools = [m["content"] for m in msgs if m["role"] == "tool"]
-    collapsed = [t for t in tools if _COLLAPSED_SIGIL in t]
-    stubs = [t for t in tools if _ELIDED_SIGIL in t]
-    assert collapsed, "the stubs filled the window, so the oldest were collapsed"
-    assert len(stubs) >= COMPACT_STUBS_KEPT, "the newest stubs are kept as stubs"
+            out, _ = compact_convo([dict(x) for x in full], llm or _LLMTight(), spill_root=root)
+            if check:
+                check(len(sent), out)          # at the moment this prompt is SENT
+            sent.append(out)
+    return sent
+
+
+def _named_spills(msgs):
+    from sage.gateway.being_tool_loop import _SPILL_REF
+    return [r for m in msgs for r in _SPILL_REF.findall(m.get("content") or "")]
+
+
+def test_past_forty_results_every_pointer_and_stub_names_a_file_that_exists():
+    """GPT on #274: with the 40-file count cap, a 55-result beat left the oldest collapsed
+    pointer naming a file already pruned -- and, since every step re-spills, every stub's
+    'outlives this beat' was false past 40 too. Every file the prompt names must be readable."""
+    import os, tempfile
+    from sage.gateway.being_tool_loop import _COLLAPSED_SIGIL
+    root = tempfile.mkdtemp(prefix="collapse-55-")
+    sent = _compact_like_the_loop(55, root)
+    assert any(_COLLAPSED_SIGIL in (m.get("content") or "") for m in sent[-1]), "it collapsed"
+    # by AGE, so every file ANY step named is still there at the end of the beat -- which is
+    # what "outlives this beat" promises, for a stub and for a pointer alike
+    for step, prompt in enumerate(sent):
+        for ref in _named_spills(prompt):
+            assert os.path.isfile(os.path.join(root, ref)), f"step {step}: {ref} is gone"
+
+
+def test_the_oldest_stubs_become_pointers_that_keep_first_and_last_line_and_the_file():
+    import os, tempfile
+    from sage.gateway.being_tool_loop import COMPACT_STUBS_KEPT, _COLLAPSED_SIGIL, _ELIDED_SIGIL
+    root = tempfile.mkdtemp(prefix="collapse-shape-")
+    last = _compact_like_the_loop(40, root)[-1]
+    tools = [m["content"] for m in last if m["role"] == "tool"]
     first_stub = next(i for i, t in enumerate(tools) if _ELIDED_SIGIL in t)
-    assert all(_COLLAPSED_SIGIL in t for t in tools[:first_stub]), "oldest first, no gaps"
+    assert first_stub > 0 and all(_COLLAPSED_SIGIL in t for t in tools[:first_stub]), "oldest first"
+    assert sum(1 for t in tools if _ELIDED_SIGIL in t) >= COMPACT_STUBS_KEPT, "the newest stay stubs"
     for k, t in enumerate(tools[:first_stub]):
         assert f"read file_{k}.py" in t and f"verdict {k}: 3 passed" in t, "first and last line kept"
-        path = t.split("saved as ")[1].split(" ")[0]
-        assert os.path.exists(os.path.join(root, path)), path
-        assert f"verdict {k}: 3 passed" in open(os.path.join(root, path)).read(), "nothing is lost"
-    assert len(collapsed[0]) < 400
-    n = len(os.listdir(os.path.join(root, "scratch", "elided")))
-    assert n <= 40, f"a collapse writes no new spill: at most one file per result ({n} for 40)"
+        ref = _named_spills([{"content": t}])[0]
+        assert f"verdict {k}: 3 passed" in open(os.path.join(root, ref)).read(), "the file is whole"
+        assert len(t) < 500
 
 
-def test_a_stub_whose_result_was_not_saved_is_never_collapsed():
-    """The pointer is only honest if the file it points at exists: a stub without a spill is the
-    only copy of its head and tail, so it stays."""
-    from sage.gateway.being_tool_loop import compact_convo, _COLLAPSED_SIGIL
-    msgs = _stubbed(0)
-    for m in _stubbed(40)[2:]:
-        msgs.append(m)
-        if m["role"] == "tool":
-            msgs, _ = compact_convo(msgs, _LLMTight(), spill_root="/proc/definitely-not-writable")
-    assert not any(_COLLAPSED_SIGIL in (m["content"] or "") for m in msgs)
-
-
-def test_a_collapsed_pointer_is_reported_with_the_room_it_freed_and_never_cut_again():
-    from sage.gateway.being_tool_loop import compact_convo, _COLLAPSED_SIGIL
+def test_a_stub_whose_file_is_missing_at_collapse_time_keeps_its_head_and_tail(monkeypatch):
+    """The control GPT asked for: a marker that NAMES a file which is not there must not be
+    collapsed -- the stub is then the only copy of what it kept."""
     import tempfile
+    from sage.gateway import being_tool_loop as L
+    real = L._spill
+    monkeypatch.setattr(L, "_spill", lambda root, body, step, pinned=None:
+                        (lambda p: (os.remove(os.path.join(root, p)), p)[1] if p else p)(real(root, body, step, pinned)))
+    root = tempfile.mkdtemp(prefix="collapse-gone-")
+    last = _compact_like_the_loop(40, root)[-1]
+    assert not any(L._COLLAPSED_SIGIL in (m.get("content") or "") for m in last)
+    assert sum(1 for m in last if L._ELIDED_SIGIL in (m.get("content") or "")) > L.COMPACT_STUBS_KEPT
+
+
+def test_the_byte_cap_never_deletes_a_file_the_prompt_names(monkeypatch):
+    """The backstop prunes oldest first; a pinned file is skipped even when that leaves the
+    directory over the cap for now. Controlled: a cap far below one beat's spills."""
+    import os, tempfile
+    from sage.gateway import being_tool_loop as L
+    monkeypatch.setattr(L, "COMPACT_SPILL_MAX_BYTES", 20_000)
+    root = tempfile.mkdtemp(prefix="collapse-cap-")
+
+    def every_named_file_exists(step, prompt):
+        for ref in _named_spills(prompt):
+            assert os.path.isfile(os.path.join(root, ref)), f"step {step}: pinned {ref} was pruned"
+    sent = _compact_like_the_loop(45, root, check=every_named_file_exists)
+    written = sum(len(_named_spills(p)) for p in sent)
+    d = os.path.join(root, "scratch", "elided")
+    assert len(os.listdir(d)) < written, "and the cap still prunes what no live prompt names"
+
+
+def test_a_collapse_is_reported_with_the_room_it_freed():
+    import tempfile
+    from sage.gateway.being_tool_loop import compact_convo, _ELIDED_SIGIL
     root = tempfile.mkdtemp(prefix="collapse-rec-")
-    msgs, recs = _stubbed(0), []
-    for m in _stubbed(40)[2:]:
-        msgs.append(m)
-        if m["role"] == "tool":
-            before = [x["content"] for x in msgs]
-            msgs, el = compact_convo(msgs, _LLMTight(), spill_root=root)
-            for r in el:
-                if r.get("collapsed"):
-                    assert r["chars"] == len(before[r["index"]]) - len(msgs[r["index"]]["content"])
-                    assert r["spill"] in msgs[r["index"]]["content"]
-                    recs.append(r)
-    assert recs
-    idxs = [r["index"] for r in recs]
-    assert len(idxs) == len(set(idxs)), "a pointer is collapsed once"
+    full = _stubbed(30)
+    out, el = compact_convo([dict(x) for x in full], _LLMTight(), spill_root=root)
+    col = [r for r in el if r.get("collapsed")]
+    assert col and len({r["index"] for r in col}) == len(col), "a result is collapsed once"
+    for r in col:
+        stub = next(e for e in el if e["index"] == r["index"] and not e.get("collapsed"))
+        stub_len = len(full[r["index"]]["content"]) - stub["chars"]    # what the stub was
+        assert stub_len > len(out[r["index"]]["content"])
+        # the stub's length is kept + marker, so chars freed == stub length - pointer length
+        assert r["chars"] > 0 and r["spill"] in out[r["index"]]["content"]
+        assert _ELIDED_SIGIL not in out[r["index"]]["content"]
