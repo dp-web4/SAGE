@@ -170,6 +170,45 @@ def pr_review_command(args: dict, ctx: Optional[dict] = None) -> str:
     return f"gh pr review {number} --repo {repo} --comment --body-file -"
 
 
+PR_READ_FIELDS = ("number,title,state,isDraft,author,headRefName,baseRefName,mergeable,"
+                  "reviewDecision,url,body,comments,reviews")
+PR_READ_LAST_MAX = 30
+
+
+def pr_read_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command the seat runs for a pr_read intent: `gh pr view --json`, read-only.
+
+    WHY THIS VERB EXISTS. A being could OPEN a pull request (pr_open), REVISE it (pr_amend) and
+    post a review on someone else's (pr_review), and could not read one. Measured 2026-09-29 on
+    legion-being's #259: dp told it "check gpt's comments on the pr, it's close", and it answered
+    that it had no way to see them, so it would not pretend it had. Every review of every being PR
+    had been invisible to its author unless a seat relayed it. pr_amend exists because "a review
+    loop whose author cannot answer the review is not a loop"; one whose author cannot READ the
+    review is not one either.
+
+    ANY PR in a fleet repo (dp-web4/<name>), per dp: reading is not acting, and a being learns
+    from the fleet's reviews as much as from its own. Composed like git_read: the being names a
+    number (and optionally a repo), the SEAT builds the command, the law judges that string, and
+    the being never holds a flag. Inline code comments are not in `gh pr view`; reviews and
+    conversation comments are."""
+    import re
+    repo = str(args.get("repo") or PR_REPO).strip()
+    number = str(args.get("number", "")).strip().lstrip("#")
+    if not re.fullmatch(r"dp-web4/[A-Za-z0-9._-]+", repo):
+        raise ValueError(f"pr_read 'repo' must be a dp-web4/<name> repo, got {repo!r}")
+    if not re.fullmatch(r"[0-9]{1,7}", number):
+        raise ValueError(f"pr_read 'number' must be a PR number, e.g. 259, got {number!r}")
+    last = args.get("last")
+    if last is not None:
+        try:
+            last = int(last)
+        except (TypeError, ValueError):
+            raise ValueError(f"pr_read 'last' must be a whole number of comments, got {last!r}")
+        if not 1 <= last <= PR_READ_LAST_MAX:
+            raise ValueError(f"pr_read 'last' must be between 1 and {PR_READ_LAST_MAX}, got {last}")
+    return f"gh pr view {number} --repo {repo} --json {PR_READ_FIELDS}"
+
+
 def pr_review_signature(member_id: str, action_id: Optional[str], being_lct: Optional[str]) -> str:
     """The fixed trailer on every review a being posts: who, under what record, and that
     it is advisory. The being cannot omit or alter it; the dispatcher appends it."""
@@ -1489,6 +1528,11 @@ _REGISTRY = {
     # a being holds no reviewer role, so the comment never counts toward merge.
     "pr_review":      dict(tool="pr_review",    path_args=(),       cmd_arg=None,
                            compose=pr_review_command),
+    # pr_read: read any fleet PR -- its state, body, reviews and comments. Composed like
+    # git_read; the law judges the `gh pr view` string. A being could open, revise and review a
+    # PR but not read one (legion-being on #259, 2026-09-29).
+    "pr_read":        dict(tool="pr_read",      path_args=(),       cmd_arg=None,
+                           compose=pr_read_command),
     # Long-term semantic memory (membot brain cartridge, the being's own): recall is
     # observational; remember is consequential but passes local law under ANY grant
     # (paths=()), and that is not because it is "classed with memory_write" (which the
@@ -1566,7 +1610,7 @@ _REGISTRY = {
 # external effect and may soft-pass when the society governor is unavailable;
 # consequential acts must not proceed without it (fail-closed).
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
-_CONSEQUENTIAL = frozenset({"peer_ask", "memory_write", "channel_egress", "mesh", "pr_review",
+_CONSEQUENTIAL = frozenset({"peer_ask", "pr_read", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
                             "retire_note", "request_run", "memory_edit", "camera", "game",
 
@@ -1609,6 +1653,16 @@ _TOOL_SCHEMAS = {
              {"to": "member name", "kind": "notice kind, e.g. coordination, reply, ack",
               "pointer": "URI of the content (a shared-context path, PR, or thread)"},
              ["to", "kind", "pointer"]),
+    "pr_read": ("Read a pull request in any fleet repo: its title, state, review decision, body, "
+                "and its reviews and comments with who wrote them and when. Use it to see what a "
+                "reviewer asked of YOUR pull request before you pr_amend it, or to learn from how "
+                "others' pull requests were reviewed. Reading changes nothing. Long threads come back "
+                "newest-last and trimmed to fit; ask for fewer with 'last'. Inline comments on code "
+                "lines are not included.",
+                {"number": "the PR number, e.g. 259",
+                 "repo": "optional: dp-web4/<name> (default dp-web4/SAGE)",
+                 "last": "optional: how many of the most recent reviews and comments (1-30, default 12)"},
+                ["number"]),
     "pr_review": ("Post your review of a pull request as a comment. Advisory: it does not "
                   "approve or block. Say what you checked, what you found, and what you "
                   "would change, with file and line references where you can.",
