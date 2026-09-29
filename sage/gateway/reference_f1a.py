@@ -622,6 +622,10 @@ class ReferenceF1aDispatcher:
             rel = intent.args["path"]
             where = (f"relative paths resolve under your home {self.memory_root}"
                      if not str(rel).startswith("/") else "absolute path, resolved as given")
+            wt_hint = ""
+            if self.worktree and not str(rel).startswith("/") and (Path(self.worktree) / rel).exists():
+                wt_hint = (f"; note: {rel} does exist in your worktree ({self.worktree}) — if you meant "
+                           f"the repository file, read it there (the law will judge the path)")
             parent = p.parent
             siblings = ""
             if parent.is_dir():
@@ -649,7 +653,7 @@ class ReferenceF1aDispatcher:
                 ok=True,
                 result=(f"[no such path: '{shown}' does not exist ({where}). This is not an empty "
                         f"file: there is nothing here to read, so it is no evidence about anything "
-                        f"else{found}{siblings}. memory_write creates a file inside your home.]"),
+                        f"else{found}{siblings}{wt_hint}. memory_write creates a file inside your home.]"),
                 witness_id=self._witness(f"memory_read {p.name} (does not exist)"))
         if p.is_dir():
             # A directory read is a listing: name, kind, size — what a being without `ls`

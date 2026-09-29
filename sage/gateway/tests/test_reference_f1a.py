@@ -242,6 +242,34 @@ def test_injected_witness_fn_is_used():
 
 
 
+def test_memory_read_names_a_worktree_file_that_is_absent_from_home():
+    """A relative path that is absent from the home but present in the worktree must be
+    answered with a pointer to the worktree, not a bare absence (2026-09-28: the being
+    read moves.md / current.md / board.txt at the home root and each cost a verb)."""
+    home = tempfile.mkdtemp(prefix="ref-f1a-home-")
+    wt = tempfile.mkdtemp(prefix="ref-f1a-wt-")
+    (Path(wt) / "moves.md").write_text("worktree-only file")
+    disp = ReferenceF1aDispatcher(memory_root=home, worktree=wt)
+    env = disp(BeingIntent("memory_read", {"path": "moves.md"}), _ALLOW)
+    assert env.ok
+    assert "no such path" in env.result
+    assert "does exist in your worktree" in env.result, "the worktree pointer is missing: " + env.result
+    assert "worktree" in env.result, "the worktree pointer is missing: " + env.result
+    assert wt in env.result, "the worktree path is not named: " + env.result
+
+
+def test_memory_read_worktree_hint_absent_when_file_is_in_home():
+    """The worktree pointer must NOT be added when the path exists in the home: it is a
+    hint for the absent case only, and a present file already answers the question."""
+    home = tempfile.mkdtemp(prefix="ref-f1a-home-")
+    wt = tempfile.mkdtemp(prefix="ref-f1a-wt-")
+    (Path(home) / "moves.md").write_text("home file")
+    disp = ReferenceF1aDispatcher(memory_root=home, worktree=wt)
+    env = disp(BeingIntent("memory_read", {"path": "moves.md"}), _ALLOW)
+    assert env.ok
+    assert "worktree" not in env.result, "hint leaked into a present-file result: " + env.result
+
+
 def test_relative_memory_path_roots_at_memory_root_not_cwd():
     """A being names its notes relative to its own memory ("notes/x.md"). That must
     land under memory_root regardless of the process cwd (2026-09-03, Legion: the
