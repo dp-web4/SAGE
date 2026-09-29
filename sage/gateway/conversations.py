@@ -675,6 +675,9 @@ def _refuted_mark(text: str, refuted) -> str:
     return ""
 
 
+SETTLED_TURNS = 2   # turns shown of a conversation whose last word is the being's and nothing waits
+
+
 def render_for_being(instance: Path, me: str, per_conv: int = 12,
                      turn_chars: Optional[int] = None, *, mark: bool = True,
                      refuted=None) -> str:
@@ -695,6 +698,16 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
     blocks = []
     for m in convs:
         turns = recent(instance, m["id"], limit=per_conv)
+        # A SETTLED CONVERSATION IS SHOWN SHORT. When the last word is the being's own and
+        # nothing is waiting on it, the exchange is closed; six re-rendered turns of it are rent
+        # paid every beat out of the window the being works in. Measured on legion-being
+        # 2026-09-29: 7,255 of its 27,009-char state was two settled conversations, in a prompt
+        # that opened at 15k of 24.5k tokens and hit the window every beat. The turn count
+        # line below still says how many there are, and the full thread stays one memory_read
+        # away. A conversation with anything unanswered is untouched.
+        if (len(turns) > SETTLED_TURNS and turns[-1].get("from") == me
+                and not awaiting(instance, m["id"], me)):
+            turns = turns[-SETTLED_TURNS:]
         # what the being is shown NOW is what it has seen; the marker below and the next
         # beat's "unanswered" both key off this, not off whether it spoke afterwards
         if turns and mark:
