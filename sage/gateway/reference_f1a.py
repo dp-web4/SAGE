@@ -27,7 +27,7 @@ import json
 import os
 import re
 import textwrap
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -313,27 +313,65 @@ def missing_args(args: dict, required, tool: str, hint: str = "") -> Optional[st
 # still won. The file's mtime could not help: the being had appended to inbox.md at 06:10 that
 # day, so the file was "40 minutes old" while most of its lines were fifteen days old. So the read
 # reports the age of the DATED LINES it shows, not the age of the file.
-_DATED_LINE = re.compile(r"^\s*(?:[-*]\s*(?:\[[ xX]\]\s*)?)?(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d))?")
+_DATED_LINE = re.compile(
+    r"^\s*(?:[-*]\s*(?:\[[ xX]\]\s*)?)?"            # optional bullet / checkbox
+    r"(?P<date>20\d\d-\d\d-\d\d)"
+    r"(?:[ T](?P<hm>\d\d:\d\d)(?::\d\d(?:\.\d+)?)?)?"    # optional time, optional seconds
+    r"\s*(?P<zone>Z\b|UTC\b|GMT\b|[+-]\d\d:?\d\d\b)?")    # optional explicit zone / offset
 STALE_LINE_SECS = 24 * 3600
+# The widest real UTC offsets are -12:00 and +14:00. A time written WITHOUT a zone is placed at
+# its LATEST possible instant (as if UTC-12), so it is never called older than it could be.
+_LATEST_UNZONED = timedelta(hours=12)
+
+
+def _latest_instant(date: str, hm: Optional[str], zone: Optional[str]) -> Optional[datetime]:
+    """The LATEST UTC instant this date/time could denote. Exact when a zone is given; for a
+    time with no zone, UTC-12; for a date with no time, the end of that calendar day at UTC-12
+    (an unknown time on a known date, never assumed to be midnight)."""
+    try:
+        day = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return None
+    if hm is None:
+        return (day + timedelta(days=1)).replace(tzinfo=timezone.utc) + _LATEST_UNZONED
+    try:
+        local = datetime.strptime(date + " " + hm, "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+    if zone in ("Z", "UTC", "GMT"):
+        return local.replace(tzinfo=timezone.utc)
+    if zone:
+        sign = -1 if zone[0] == "-" else 1
+        digits = zone[1:].replace(":", "")
+        off = timedelta(hours=int(digits[:2]), minutes=int(digits[2:]))
+        return (local - sign * off).replace(tzinfo=timezone.utc)
+    return local.replace(tzinfo=timezone.utc) + _LATEST_UNZONED
 
 
 def dated_lines_note(text: str, now: Optional[datetime] = None) -> str:
     """One bracketed line about the dated lines in `text`, or "" when none is more than a day old.
 
     A line that starts with a date (optionally after a bullet or checkbox) opens a dated span;
-    undated lines that follow belong to it. Only the window being shown is counted, so the note
-    describes what the reader is looking at."""
+    undated lines that follow belong to it. Only the window being shown is counted.
+
+    What can be timed (GPT review of #270): an explicit zone or numeric offset (Z, UTC, GMT,
+    +hh:mm, -hhmm) is honoured exactly. A time with no zone, and a date with no time, cannot be
+    placed exactly, so each is counted at the LATEST instant it could denote, which means a line
+    is only ever called old when it is old under every reading. Other zone spellings (PDT, CET)
+    are not parsed and are treated as no zone, which is the conservative direction."""
     now = now or datetime.now(timezone.utc)
     current = None
+    zoned_all = True
     under: dict = {}
+    written: dict = {}
     for line in text.splitlines():
         m = _DATED_LINE.match(line)
         if m:
-            try:
-                current = datetime.strptime(m.group(1) + " " + (m.group(2) or "00:00"),
-                                            "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
-            except ValueError:
-                current = None
+            current = _latest_instant(m.group("date"), m.group("hm"), m.group("zone"))
+            if current is not None:
+                written.setdefault(current, m.group("date"))
+                if not (m.group("hm") and m.group("zone")):
+                    zoned_all = False
         if current is not None and line.strip():
             under[current] = under.get(current, 0) + 1
     if not under:
@@ -343,11 +381,13 @@ def dated_lines_note(text: str, now: Optional[datetime] = None) -> str:
         return ""
     oldest, newest = min(under), max(under)
     days = int((now - oldest).total_seconds() // 86400)
-    return (f"[dated lines shown here run from {oldest:%Y-%m-%d} to {newest:%Y-%m-%d}; "
+    caveat = "" if zoned_all else (" Lines without a time zone are counted at the latest time "
+                                   "they could mean, so these ages are minimums.")
+    return (f"[dated lines shown here run from {written[oldest]} to {written[newest]}; "
             f"{sum(old.values())} of {sum(under.values())} dated lines are more than a day old "
-            f"(the oldest {days} day{'s' if days != 1 else ''} ago). A dated line says what was "
-            f"true on its date; appending to a file does not make its older lines current. For "
-            f"what is up now, the measured lines in your state are from this beat.]\n")
+            f"(the oldest at least {days} day{'s' if days != 1 else ''} ago).{caveat} A dated line "
+            f"says what was true on its date; appending to a file does not make its older lines "
+            f"current. For what is up now, the measured lines in your state are from this beat.]\n")
 
 class ReferenceF1aDispatcher:
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
@@ -609,9 +649,25 @@ class ReferenceF1aDispatcher:
             content, end = lines[end][: self.max_read_chars], end + 1
         else:
             content = "".join(lines[start - 1:end])
+        # A READ OF CODE IS WHERE THE VERDICT ON IT IS FORMED. #162 put the parse check on
+        # write and edit receipts only. Measured 2026-09-23 on cbp-being (beat
+        # heartbeat-f4be191ca52d): it read lines 1718-1937 of its script, which showed line
+        # 1721 at column 0 and the lines under it indented four spaces, and concluded "the
+        # file is syntactically valid" -- Python stopped at line 1722 with IndentationError.
+        # Its journal, todo and memory recorded "fix complete and verified", and it told the
+        # seat it had already run the script. Nothing it was shown contradicted the reading.
+        # Again 2026-09-29 11:41Z: it read all 443 lines of a scratch .py in three windows, said
+        # "appears syntactically correct", and asked the seat to run it; the run stopped at line
+        # 135, IndentationError, inside the first window it had been shown (seat thread 4384).
         dated = dated_lines_note(content)
+        status = _python_status(p).strip()
+        parse = f"\n[{status}]" if status else ""
         if start == 1 and end >= len(lines):
-            return ResultEnvelope(ok=True, result=dated + content,
+            # A whole-file read has no end marker, so a bare bracket line after the last line
+            # would read as the file's last line and could be copied into an edit anchor.
+            # Say where the file ends before saying what Python makes of it.
+            whole_note = f"\n[end of file: line {len(lines)} is the last line. {status}]" if status else ""
+            return ResultEnvelope(ok=True, result=dated + content + whole_note,
                                   witness_id=self._witness(f"memory_read {p.name}"))
         head = dated + (f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else "")
         tail = (f"\n[… truncated: this shows lines {start}-{end} of {len(lines)} "
@@ -619,7 +675,7 @@ class ReferenceF1aDispatcher:
                 f"absence here is not evidence of absence in the file. To read on, call "
                 f"memory_read with path '{shown}' and start_line={end + 1}. …]"
                 if end < len(lines) else f"\n[end of file: line {len(lines)} is the last line.]")
-        return ResultEnvelope(ok=True, result=head + content + tail,
+        return ResultEnvelope(ok=True, result=head + content + tail + parse,
                               witness_id=self._witness(f"memory_read {p.name} (lines {start}-{end})"))
 
     def _do_memory_edit(self, intent: BeingIntent) -> ResultEnvelope:

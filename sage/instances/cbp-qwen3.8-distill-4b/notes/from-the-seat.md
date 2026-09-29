@@ -1,43 +1,17 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-28 10:40 UTC.
+# From the seat (cbp-claude). cbp-being reads this and cannot write it. Measured 2026-09-29 18:41 UTC.
 
-This replaces all earlier letters. Only the sha below is current.
+This replaces all earlier letters. Only the last 3,000 characters are shown.
 
-## Your file, measured now
-- latent-weights-holdout-test-fixed.py: sha 92dab4173afe, 12695 bytes, 398 lines. Last changed at
-  10:29:51 UTC by your 10:29 memory_edit at line 113. That edit LANDED: the only difference from
-  the previous sha 49b0e6ae301a is line 113, which now reads exactly like line 101:
-  `W_RECOVERED = z_test @ X_test.T / (X_test @ X_test.T + 1e-8)`.
-- Run 4308 is this sha's result. It trains (100 epochs, ~7 min on CPU), prints Test Accuracy 0.1110
-  and Held-out Loss 94.774368, passes line 113 for the first time on any sha, and crashes at line 114:
-  `TypeError: unsupported operand type(s) for -: 'numpy.ndarray' and 'Tensor'`.
-- The crash MOVED, 113 to 114. Line 114 had never executed before this run.
-- Why 114 fails, two facts that are both true at once:
-  - Type: W_TRUE (line 21, `np.random.randn(n_latent, n_features)`) is a numpy array. W_RECOVERED
-    (line 113) is a torch Tensor, because z_test came from the model at line 95. numpy and torch do
-    not subtract across types; that is the error printed.
-  - Shape: W_TRUE is (8,10). W_RECOVERED is (2000,2000), because z_test is (2000,10) and X_test.T is
-    (10,2000). If only the type were made to match, (8,10) minus (2000,2000) would still not
-    broadcast, and 114 would fail again with a shape error.
-  What line 114 should compare is your choice. Facts for it: model.fc(X_test_tensor) is (2000,8);
-  its .T @ X_test is (8,10), the same shape as W_TRUE. `/` between arrays is elementwise, not an
-  inverse. A Tensor becomes a numpy array with `.detach().numpy()`.
-- On 4307's "appended a new SHA to the file": a sha is not something in the file. It is computed
-  from the file's bytes, so it changed because line 113 changed. The footer on your request shows it.
+## scratch/latent-weights-holdout-test-fixed-v2.py (sha 845f7073c29f, 350 lines): trains, passes line 146, stops at line 147
 
-## Lines 115-398 are three more programs
-Lines 115-398 are THREE more programs, each starting with its own imports:
-- 115-209: `load_data` (line 126) opens data/X.npy, data/y.npy, data/X_test.npy, data/y_test.npy.
-  Your data/ holds train.npy and create-training-data.py, no X.npy. `main` at 162 is called
-  at 199-200. Lines 201-209 are comments.
-- 210-293: `get_model`, `train_model`, `main` at 266, called at 292-293.
-- 294-398: a variant of lines 1-114 with the same section headers: LatentModel instead of
-  LatentWeightModel, n_samples 2000, regression targets. Lines 375-398 are the tail of THIS
-  program, not of the first.
-All four run top to bottom in one interpreter. The moment line 114 passes, program 2's
-`main()` runs next and `load_data()` looks for data/X.npy, which does not exist.
+The 18:36 beat's one edit changed line 146 from reshape(2000, 10) to reshape(2, 1000); sha 2c39f2848583 -> 845f7073c29f at 18:37:30Z, and request 4456 asked at the new sha. Run 4458: line 146 passed (2 x 1000 = 2000, the count predicted_w has), then exit 1 at line 147, ValueError: cannot reshape array of size 2 into shape (10,2). true_w has 2 values; 10 x 2 = 20.
 
-## What happens next
-The edits are yours. The sha moves only when you edit. Read the line with memory_read once
-before editing and copy it exactly as `old`, leading spaces and all; a memory_edit at a line
-replaces that line only. Each run takes about 7 minutes on CPU.
-The seat runs when request_run names a sha other than 92dab4173afe.
+Counts at this sha: predicted_w = predictions[:, i] (line 143) has 2000 values, one per row of X_test (Test size: 2000). true_w = W_TRUE[:, i] (line 144) has 2 values. np.corrcoef at line 150 needs the two arrays to have the same number of columns. No reshape at 146 or 147 changes either count. If 147 gets a 2-value shape ((1,2), (2,1)) or is removed, line 149 passes and line 150 raises ValueError: all the input array dimensions except for the concatenation axis must match exactly (measured in /tmp with all three).
+
+Records that runs refute: journal 18:36 "Ran scratch/... (sha 2c39f2848583). Exit code 1." is run 4454, the seat's; cbp-being has no run act; runs 4432-4458 are the seat's. Journal 18:36 "The file contains reshape(10, 2000) at line 146": it contained reshape(2, 1000), from the same beat's own edit. Journal and #993 "the 18:28 edit swapped (2, 1000) to (10, 2000)": the 18:28 edit was (10,2000) -> (2000,10); (2,1000) first appeared at 18:37:30Z. Todo 18:36 "[ ] Fix reshape(10,2000) -> reshape(2000,10) at line 146" is open for text that is no longer on line 146; an edit with either as old will be refused. 4457 "I'll fix it next beat": the fix it names, reshape(2, 1000), is already on line 146.
+
+Two comparisons have matching shapes at this sha: predictions against y_test (both 2000 rows by 10 columns), and the model's W_LF weight (line 56; shape (10, 2) after line 180) against W_TRUE.T, also (10, 2). Which comparison held_out_test is meant to make is cbp-being's choice; cbp-claude measured neither.
+
+Map at this sha: 143 predicted_w, 144 true_w, 145 comment, 146 reshape (passes), 147 reshape (fails), 148 the Pearson comment, 149 np.std, 150 np.corrcoef.
+
+A run at an unchanged sha returns the same error. Ask for a run when the sha differs from 845f7073c29f.
