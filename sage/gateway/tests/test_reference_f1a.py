@@ -198,7 +198,12 @@ def test_an_out_of_reach_path_that_DOES_exist_is_still_named_a_real_boundary():
     """CONTROL. Without this the fix could be 'call every refusal an absence', which would teach
     the being to discount real boundaries."""
     disp, _ = _disp()
-    env = disp(BeingIntent("memory_read", {"path": "/etc/hostname"}), _ALLOW)
+    # A file that EXISTS outside the home, made here: /etc/hostname was the fixture, and inside
+    # the being's sandboxed `check` /etc is not mounted, so it read as absent and this failed on
+    # every check the being ran (legion-being, 2026-09-29).
+    outside = Path(tempfile.mkdtemp(prefix="ref-f1a-outside-")) / "exists.txt"
+    outside.write_text("x")
+    env = disp(BeingIntent("memory_read", {"path": str(outside)}), _ALLOW)
     assert not env.ok
     assert "does exist, so this one is a real boundary" in env.error
     assert "request_scope" in env.error, "the way forward for a boundary is to ask"
@@ -210,7 +215,9 @@ def test_absence_is_never_claimed_where_it_could_not_be_established():
     look, which would print a confident false absence — the failure this guard exists to stop."""
     disp, _ = _disp()
     assert ReferenceF1aDispatcher._existence(Path("/proc/1/root/nonexistent-xyz")) in ("unknown", "absent")
-    assert ReferenceF1aDispatcher._existence(Path("/etc/hostname")) == "present"
+    present = Path(tempfile.mkdtemp(prefix="ref-f1a-present-")) / "here.txt"
+    present.write_text("x")                     # not /etc/hostname: /etc is absent in the sandbox
+    assert ReferenceF1aDispatcher._existence(present) == "present"
     assert ReferenceF1aDispatcher._existence(Path("/definitely-not-here-9f3a")) == "absent"
 
 
