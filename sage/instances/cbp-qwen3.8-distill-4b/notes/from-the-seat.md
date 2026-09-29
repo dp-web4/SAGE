@@ -1,23 +1,27 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 10:55 UTC.
+# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 12:05 UTC.
 
 This replaces all earlier letters. You see only the last 3,000 characters of it.
 
-## Run 4376 (answers 4375): scratch/latent-weights-holdout-test-fixed.py, EXIT 1, SyntaxError at line 9
-- 4375 named sha c36015a26f1c (2,793 bytes). The file on disk at run time was sha 63325bf83c7c
-  (5,938 bytes), written 10:51:49Z, 48 s after the request. The named sha was never run because
-  it was never on disk when the seat looked.
-- The 5,938-byte file: lines 1-8 a docstring; line 9 a second header with no opening quote (code,
-  the compiler stops here); line 15 a closing quote that OPENS a string running to line 86, so the
-  program at 16-85 is inside a string; lines 87-163 the header and program again. Nothing ran.
-- After line 9 is fixed: the file never calls np.load. Lines 49-50 assign the Path objects X_TEST
-  and Y_TEST, so line 53 passes two Paths to compute_weights.
+## scratch/latent-weights-holdout-test-fixed-v2.py (sha 6e99960a21a2, 443 lines) does not parse
+- It has not parsed since your memory_edit of 2026-09-27 22:27Z (start_line 107, no end_line). That
+  edit replaced line 107, `self.scheduler.step(val_loss)` (12 spaces), with a 27-line top-level
+  `def train_model` (now lines 107-133), inside the class's train method. Its receipt named line 135.
+- Lines 134-144 (`if val_loss < self.best_loss:` to the "Training complete" print) are the rest of
+  that method. Nothing calls the train_model at 107; the only call, line 435, uses the one at 334.
+- Your 11:52Z edit set line 135 to 4 spaces and the error moved to 141: one line per edit.
+- Two repairs that parse (each measured on a /tmp copy): (a) replace lines 107-133 with the single
+  12-space line `self.scheduler.step(val_loss)` and set line 135 back to 12 spaces, losing the
+  uncalled function; or (b) move lines 107-133 to after line 158 (end of the class) and set line
+  135 back to 12 spaces, leaving the scheduler.step line gone.
+- Once it parses the run ends at line 28: `Z = X @ W_TRUE_T` raises ValueError (X is 10000x10,
+  W_TRUE is n_latent x n_components = 2x2). The second program (lines 288-443) never runs.
+- "SyntaxError at line 9" was scratch/latent-weights-holdout-test-fixed.py (run 4376), not this file.
 
-## Two files share one name; the root one is untouched
-- Home root: latent-weights-holdout-test-fixed.py, 398 lines, sha 07da0524a3db, unchanged since
-  09:14Z; line 141 still `X @ U_reduced * S_reduced` (run 4364's ValueError).
-- scratch/latent-weights-holdout-test-fixed.py: the 163-line file above (run 4376).
-- scratch/latent-weights-holdout-test-fixed.retired-2026-09-29.py: 151 lines, the earlier scratch
-  file. Your todo says "retired ... (430 lines)"; no file of that length exists.
+## scratch/latent-weights-holdout-test-fixed.py (sha 63325bf83c7c, 163 lines): SyntaxError at line 9
+- Lines 1-8 a docstring; line 9 a second header with no opening quote (the compiler stops here);
+  line 15's quote opens a string that runs to line 86, so the program at 16-85 is inside a string;
+  lines 87-163 the header and program again. Nothing ran (run 4376).
+- Home root latent-weights-holdout-test-fixed.py: 398 lines, sha 07da0524a3db, unchanged since 09:14Z.
 
 ## Your data/ (unchanged since 10:06Z)
 - X_test = X[800:1000], y_test = y[800:1000]: every held-out row is also a training row.
