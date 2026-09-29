@@ -304,6 +304,51 @@ def missing_args(args: dict, required, tool: str, hint: str = "") -> Optional[st
     return msg
 
 
+
+# A DATED LINE SAYS WHAT WAS TRUE ON ITS DATE (2026-09-29). cbp-being escalated to dp that "the MCP
+# server has been offline ~6 hours" and that coordination requests #12529/#12530/#12624/#12638 had
+# gone unanswered, while membot and hestia were both up. Every element of it was in its own
+# inbox.md, written 2026-09-13/14; the being read that file in the beat and repeated it as
+# current. #92 had already put a MEASURED reachability line in every beat's state, and the read
+# still won. The file's mtime could not help: the being had appended to inbox.md at 06:10 that
+# day, so the file was "40 minutes old" while most of its lines were fifteen days old. So the read
+# reports the age of the DATED LINES it shows, not the age of the file.
+_DATED_LINE = re.compile(r"^\s*(?:[-*]\s*(?:\[[ xX]\]\s*)?)?(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d))?")
+STALE_LINE_SECS = 24 * 3600
+
+
+def dated_lines_note(text: str, now: Optional[datetime] = None) -> str:
+    """One bracketed line about the dated lines in `text`, or "" when none is more than a day old.
+
+    A line that starts with a date (optionally after a bullet or checkbox) opens a dated span;
+    undated lines that follow belong to it. Only the window being shown is counted, so the note
+    describes what the reader is looking at."""
+    now = now or datetime.now(timezone.utc)
+    current = None
+    under: dict = {}
+    for line in text.splitlines():
+        m = _DATED_LINE.match(line)
+        if m:
+            try:
+                current = datetime.strptime(m.group(1) + " " + (m.group(2) or "00:00"),
+                                            "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+            except ValueError:
+                current = None
+        if current is not None and line.strip():
+            under[current] = under.get(current, 0) + 1
+    if not under:
+        return ""
+    old = {d: n for d, n in under.items() if (now - d).total_seconds() > STALE_LINE_SECS}
+    if not old:
+        return ""
+    oldest, newest = min(under), max(under)
+    days = int((now - oldest).total_seconds() // 86400)
+    return (f"[dated lines shown here run from {oldest:%Y-%m-%d} to {newest:%Y-%m-%d}; "
+            f"{sum(old.values())} of {sum(under.values())} dated lines are more than a day old "
+            f"(the oldest {days} day{'s' if days != 1 else ''} ago). A dated line says what was "
+            f"true on its date; appending to a file does not make its older lines current. For "
+            f"what is up now, the measured lines in your state are from this beat.]\n")
+
 class ReferenceF1aDispatcher:
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
 
@@ -564,9 +609,11 @@ class ReferenceF1aDispatcher:
             content, end = lines[end][: self.max_read_chars], end + 1
         else:
             content = "".join(lines[start - 1:end])
+        dated = dated_lines_note(content)
         if start == 1 and end >= len(lines):
-            return ResultEnvelope(ok=True, result=content, witness_id=self._witness(f"memory_read {p.name}"))
-        head = f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else ""
+            return ResultEnvelope(ok=True, result=dated + content,
+                                  witness_id=self._witness(f"memory_read {p.name}"))
+        head = dated + (f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else "")
         tail = (f"\n[… truncated: this shows lines {start}-{end} of {len(lines)} "
                 f"({len(whole)} characters in all). Lines {end + 1}-{len(lines)} were NOT shown, so "
                 f"absence here is not evidence of absence in the file. To read on, call "

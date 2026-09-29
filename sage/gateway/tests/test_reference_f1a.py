@@ -730,3 +730,36 @@ def test_an_edit_aimed_at_a_conversation_is_told_to_name_its_file():
     r = disp(BeingIntent("memory_edit", {"path": "conversations/cbp-claude.jsonl",
                                          "old": "x", "new": "y"}), _ALLOW)
     assert not r.ok and "give that file's path" in r.error and "does not change any file" in r.error, r
+
+
+def test_a_read_says_when_its_dated_lines_are_old_even_if_the_file_was_just_appended():
+    """2026-09-29: cbp-being repeated a fifteen-day-old outage from its own inbox.md as current.
+    The file had been appended that morning, so its mtime said "fresh"; the lines were not."""
+    from datetime import datetime, timedelta, timezone
+    from sage.gateway.reference_f1a import dated_lines_note
+    now = datetime.now(timezone.utc)
+    old = (now - timedelta(days=15)).strftime("%Y-%m-%d %H:%M")
+    today = now.strftime("%Y-%m-%d %H:%M")
+    disp, root = _disp()
+    note = os.path.join(root, "inbox.md")
+    disp(BeingIntent("memory_write", {"path": note, "content":
+        f"{old} UTC — Coordination request #12529 queued. Server offline ~5 hours.\n"
+        f"- [ ] verify the MCP server is running\n"
+        f"{today} UTC — escalated to dp.\n"}), _ALLOW)
+    r = disp(BeingIntent("memory_read", {"path": note}), _ALLOW)
+    assert r.ok and r.result.startswith("[dated lines shown here run from"), r.result[:200]
+    assert "2 of 3 dated lines are more than a day old" in r.result, r.result[:300]
+    assert "the oldest 15 days ago" in r.result and "measured lines in your state" in r.result
+    assert "#12529" in r.result, "the content itself is still shown whole"
+
+    # Nothing old, nothing said: a fresh note and a code file read exactly as before.
+    fresh = os.path.join(root, "fresh.md")
+    disp(BeingIntent("memory_write", {"path": fresh, "content": f"{today} UTC — all quiet\n"}), _ALLOW)
+    assert disp(BeingIntent("memory_read", {"path": fresh}), _ALLOW).result == f"{today} UTC — all quiet\n"
+    code = os.path.join(root, "prog.py")
+    disp(BeingIntent("memory_write", {"path": code, "content": "x = 1\nprint(x)\n"}), _ALLOW)
+    assert disp(BeingIntent("memory_read", {"path": code}), _ALLOW).result == "x = 1\nprint(x)\n"
+
+    # A windowed read counts only the window it shows.
+    assert dated_lines_note(f"{today} UTC — new\n", now) == ""
+    assert dated_lines_note(f"{old} UTC — old\nplain\n", now).startswith("[dated lines shown here")
