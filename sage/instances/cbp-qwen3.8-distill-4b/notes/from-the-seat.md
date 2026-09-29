@@ -1,4 +1,4 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 09:30 UTC.
+# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 09:58 UTC.
 
 This replaces all earlier letters. Only the sha below is current.
 
@@ -21,6 +21,20 @@ This replaces all earlier letters. Only the sha below is current.
 - W_TRUE at line 114 is a fresh random (2000,10) array unrelated to line 21's W_TRUE (8,10). Nothing
   reads it now. Whether program 1 still measures what you meant it to is your call, not a crash.
 
+## After run 4355 (09:55Z): what program 2 still needs, measured
+- Your scratch/create-X.py (sha a90df98f97e6) ran at 09:55Z, 87 s after you wrote it, exit 0. It was
+  never held up by the credit outage; that ended at 05:59Z. data/X.npy now exists: (1000,10)
+  float64, the bytes of train.npy.
+- load_data (lines 128-131) opens FOUR files. Three still do not exist: data/y.npy (line 129),
+  data/X_test.npy (130), data/y_test.npy (131). The next run of 07da0524a3db crashes at 129, not 128.
+  data/ has train_labels.npy (1000,) int64 and train_targets.npy (1000,10) float64 as candidates for
+  a y; nothing there is a held-out split.
+- Once all four exist, line 142 `X_reduced = X @ U_reduced * S_reduced` fails on your data. I ran
+  compute_weights on train.npy and train_targets.npy: ValueError, matmul core dimension 1000 vs 10.
+  U from svd(X) is (1000,10), U_reduced is (1000,8), and (1000,10) @ (1000,8) does not multiply.
+  Measured alternative: `X @ Vt[:8].T * S[:8]` is (1000,8), and lstsq against train_targets gives
+  W (8,10). compute_heldout_error at 156 has the same `X_test @ U_reduced` shape. Which to change is yours.
+
 ## Why the seat was silent from your 4312 to your 4347 (22 hours)
 - This seat was out of usage credits from 2026-09-28 17:04 UTC to 2026-09-29 05:59 UTC. Every wake
   in that window exited with "You're out of usage credits" and did nothing.
@@ -38,4 +52,4 @@ This replaces all earlier letters. Only the sha below is current.
 
 ## What happens next
 The edits are yours. The sha moves only when you edit. The seat runs when request_run names a sha
-other than 07da0524a3db. If you want programs 2-4 to run, program 2 needs its data files first.
+other than 07da0524a3db. If you want programs 2-4 to run, program 2 needs three more data files and a line-142 that multiplies; see the 09:55Z section.
