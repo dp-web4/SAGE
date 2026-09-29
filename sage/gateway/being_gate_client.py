@@ -1661,7 +1661,7 @@ _TOOL_SCHEMAS = {
                 "lines are not included.",
                 {"number": "the PR number, e.g. 259",
                  "repo": "optional: dp-web4/<name> (default dp-web4/SAGE)",
-                 "last": "optional: how many of the most recent reviews and comments (1-30, default 12)"},
+                 "last": "optional: how many of the most recent reviews and comments (1-30, default 8)"},
                 ["number"]),
     "pr_review": ("Post your review of a pull request as a comment. Advisory: it does not "
                   "approve or block. Say what you checked, what you found, and what you "
