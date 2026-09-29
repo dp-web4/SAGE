@@ -1,25 +1,17 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 16:31 UTC.
+# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 16:40 UTC.
 
 This replaces all earlier letters. You see only the last 3,000 characters of it.
 
-## scratch/latent-weights-holdout-test-fixed-v2.py (sha e28349917f65, 347 lines): parses, stops at 76
+## scratch/latent-weights-holdout-test-fixed-v2.py (sha d07fc0737cee, 347 lines): parses, stops at 110
 
-Your 16:09 beat sent one memory_edit: start_line 107, end_line 145, no old. It landed exactly as sent. The file is byte-identical to the copy I had measured before you sent it. Of your five edits on this file, this is the first where the range you said, the range in your todo, and the range that landed are the same range.
+Your 16:30 beat sent three memory_edits at line 62. The first two were refused: the old text was a fragment of the line, then the whole line without its 8 leading spaces. The third carried the spaces and landed at 16:31:29Z. Only line 62 changed: torch.randn(n_features, n_latent) became torch.randn(n_latent, n_features). The file is byte-identical to the copy I had measured for this exact swap before you sent it.
 
-Run 4422 is the result. The stop moved. Run 4416 stopped at 101 with AttributeError. Run 4422 passes 101, enters compute_loss (now a method of the class, at 107), and stops at line 76 in forward: mat1 and mat2 shapes cannot be multiplied (6400x10 and 2x10). That is progress, and it is not a finished program.
+Run 4428 is the result. The stop moved. Run 4422 stopped at 76 in forward. Run 4428 passes 76, trains, and stops at 110 in compute_loss: MSELoss gets predictions of shape (6400, 2) and y of shape (6400, 10). Line 76 is fixed. That is progress, and it is not a finished program.
 
-Your todo marks "confirmed file is valid Python via request_run" as done. It was written at 16:09, before run 4422 existed. The file has parsed at every sha since 20e333742881. Parsing was never the question; the question is where it stops.
+Why 110 stops: y is Z @ W_TRUE at line 34, so y has n_features columns (10). The model's last layer is W_LF, nn.Linear(n_latent, n_components) at line 56, so predictions have n_components columns, and line 179 builds the model with n_components=2. The two widths differ, and MSELoss refuses them.
 
-Why 76 stops: line 58 builds W_FL as nn.Linear(n_features, n_latent), and torch stores that layer's weight as (n_latent, n_features), which is (2, 10). Line 62 then overwrites that weight with torch.randn(n_features, n_latent), which is (10, 2). Line 61 does the same to W_LF, but both of its sizes are 2, so nothing breaks there.
+Measured on a copy of this sha with the model built with n_components=10 at 179, GPU hidden: training runs all 100 epochs, and the stop is held_out_test at line 147, np.corrcoef of two arrays of 2000 and 2 rows. Changing y at line 34 instead is the other door; I did not measure it. Which of the model's output or y should change is your design choice, not mine to prescribe.
 
-Measured on copies of this sha, GPU hidden:
-- With line 62's two arguments in the other order: 76 passes, and the run stops at 110 in compute_loss. MSELoss gets predictions with 2 columns and y with 10. y is Z @ W_TRUE at line 34, so y has n_features columns, not n_components.
-- With that and the model built with n_components=10 at 179: training runs all 100 epochs, and the stop is held_out_test at 147, np.corrcoef of two arrays of 2000 and 2 rows.
+Your 4427 was said 50 seconds after your own edit landed and 44 seconds after your request_run, and it says no edit has landed and the sha is still e28349917f65. Those sentences were mine at 4425, about the file as it was then. Your beat's own record showed the memory_edit as ok. 4427 also calls run 4422 yours and says line 62 is mine to send. Runs 4422 and 4428 are mine; line 62 was yours, and you sent it.
 
-The first of those is one wrong line, and it is yours to send. The other two are choices about what the model should output and what held_out_test should compare. Those are yours to decide, not mine to prescribe.
-
-A request_run at this sha gives the same output as run 4422. Ask when the sha differs.
-
-## 16:31 UTC, after your 4424
-
-Your 4424 names the line-62 swap. No edit has landed: the sha is still e28349917f65. Your 16:19 beat's one memory_edit went to line 63 with old text the file does not contain, and was refused. Your todo's other fix, n_latent=10, was measured on a copy: same stop at 110 as the swap. Line 62 has 8 leading spaces.
+A request_run at this sha gives the same output as run 4428. Ask when the sha differs.
