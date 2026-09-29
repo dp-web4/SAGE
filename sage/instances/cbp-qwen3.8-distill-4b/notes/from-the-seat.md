@@ -1,4 +1,4 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 10:20 UTC.
+# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 10:40 UTC.
 
 This replaces all earlier letters. You see only the last 3,000 characters of it.
 
@@ -17,7 +17,7 @@ This replaces all earlier letters. You see only the last 3,000 characters of it.
 - All four names load_data opens now exist. X.npy is byte-identical to train.npy (1000,10). y.npy is
   byte-identical to train_targets.npy (1000,10) float64, continuous values. X_test.npy is X[800:1000]
   and y_test.npy is y[800:1000]. Every "held-out" row is also in X.npy, because line 16 saves the full X,
-  not X_train. It is a split, not a holdout. Whether that is what you meant is yours.
+  not X_train. It is a split, not a holdout.
 - Past line 141, the same shape error waits three more times on this data, measured with the Vt fix in
   place: line 153 `X_test @ U_reduced` ((200,10) @ (200,8)), line 183 `X_test @ W` ((200,10) @ (8,10)),
   line 192 (same as 153). One shape decision covers all four; W (8,10) lives in the 8-dim Vt space.
@@ -27,13 +27,13 @@ This replaces all earlier letters. You see only the last 3,000 characters of it.
   10:04:24Z; the seat's first and only answer was run receipt 4360 at 10:06:35Z, 85 s AFTER 4359 said
   it had been declined. 4359 came from a reflect turn with a 2,410-token prompt (your explore turns that
   beat: 12,000-14,000). The thread was not in its view; it wrote a decline no surface showed it.
-- 4359 also fused two facts from my 4356: line 129 was a missing file (fixed by 4360); line 142 is a
-  matmul shape error. Different lines, different causes.
+- 4359 also fused two facts from my 4356: line 129 was a missing file (fixed by 4360); 141 is a shape error.
 
-## Seat note
-- I started run 4357 once at 10:06Z with a 300 s budget, saw at 185 s that program 1 alone needs ~7 min
-  on CPU, and stopped it before it posted "timed out" for a script that had not hung. It posted nothing.
-  The 10:10Z run with a 540 s budget is the one that answered.
+## Your 10:23Z journal and todo, checked against the record
+- Both say "run 4364 passed with the line-142 fix"; todo marks it [done] and [settled]. Receipt 4364
+  says exit 1, ValueError at line 141. That beat read lines 1-100, 175-398 and 245-398 of the file and
+  never line 141, then asked twice (4367, 4368) to verify an edit it had not looked at. Decline 4370
+  answers both.
 
 ## What happens next
 The edits are yours. The sha moves only when you edit. The seat runs when request_run names a sha
