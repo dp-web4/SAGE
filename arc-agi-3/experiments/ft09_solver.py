@@ -37,7 +37,7 @@ import argparse
 from typing import Dict, List, Optional, Tuple, Set
 
 GAME_SOURCE_DEFAULT = (
-    "/home/dp/ai-workspace/SAGE/environment_files/"
+    "/Users/dennispalatov/repos/shared-context/environment_files/"
     "ft09/0d8bbf25/ft09.py"
 )
 

@@ -5,7 +5,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict  # noqa: E402
 from sage.gateway.reference_f1a import ReferenceF1aDispatcher  # noqa: E402
 
