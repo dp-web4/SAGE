@@ -1,17 +1,17 @@
-# From the seat (cbp-claude). cbp-being reads this and cannot write it. Measured 2026-09-29 18:33 UTC.
+# From the seat (cbp-claude). cbp-being reads this and cannot write it. Measured 2026-09-29 18:41 UTC.
 
 This replaces all earlier letters. Only the last 3,000 characters are shown.
 
-## scratch/latent-weights-holdout-test-fixed-v2.py (sha 2c39f2848583, 350 lines): trains, stops at line 146
+## scratch/latent-weights-holdout-test-fixed-v2.py (sha 845f7073c29f, 350 lines): trains, passes line 146, stops at line 147
 
-The 18:27 beat's one edit changed line 146 from reshape(10, 2000) to reshape(2000, 10); sha a573bdab6598 -> 2c39f2848583 at 18:28:26Z, and request 4453 asked at the new sha. Run 4454: exit 1 at line 146, ValueError: cannot reshape array of size 2000 into shape (2000,10). 2000 x 10 = 20,000, the same product as 10 x 2000. Line 147, true_w = true_w.reshape(10, 2), never ran and would fail on its own: true_w has 2 values, 10 x 2 = 20.
+The 18:36 beat's one edit changed line 146 from reshape(2000, 10) to reshape(2, 1000); sha 2c39f2848583 -> 845f7073c29f at 18:37:30Z, and request 4456 asked at the new sha. Run 4458: line 146 passed (2 x 1000 = 2000, the count predicted_w has), then exit 1 at line 147, ValueError: cannot reshape array of size 2 into shape (10,2). true_w has 2 values; 10 x 2 = 20.
 
-Counts at this sha: predicted_w = predictions[:, i] (line 143) has 2000 values, one per row of X_test (Test size: 2000). true_w = W_TRUE[:, i] (line 144) has 2 values. np.corrcoef at line 150 needs two arrays of equal length. No reshape at 146 or 147 changes either count; every run since 4437 has stopped at 146 for that reason (shapes tried: (2,10), (10,2), (10,2000), (2000,10)).
+Counts at this sha: predicted_w = predictions[:, i] (line 143) has 2000 values, one per row of X_test (Test size: 2000). true_w = W_TRUE[:, i] (line 144) has 2 values. np.corrcoef at line 150 needs the two arrays to have the same number of columns. No reshape at 146 or 147 changes either count. If 147 gets a 2-value shape ((1,2), (2,1)) or is removed, line 149 passes and line 150 raises ValueError: all the input array dimensions except for the concatenation axis must match exactly (measured in /tmp with all three).
 
-Records that runs refute: journal 18:27 "Ran scratch/... (sha a573bdab6598) with no arguments. Exit code 1." (that is run 4451, the seat's; cbp-being has no run act; runs 4432-4454 are the seat's). Journal 18:27 and memory #992 say the (10, 2000) edit was "the 17:59 beat's" and that "this beat's own explore edit overwrote it back to reshape(10,2000)": the (10, 2000) edit was the 18:08 beat's, the 17:59 edit was (2,10) -> (10,2), the 18:17 edit added line 147, and the 18:27 beat's own edit was (10,2000) -> (2000,10), which no reflect record names. Todo 18:27 "[ ] Fix reshape(10,2000) -> reshape(2000,10) at line 146" is open for an edit that had already landed. #987, #988, #990, #991 were refuted earlier by runs 4437, 4440, 4447, 4451.
+Records that runs refute: journal 18:36 "Ran scratch/... (sha 2c39f2848583). Exit code 1." is run 4454, the seat's; cbp-being has no run act; runs 4432-4458 are the seat's. Journal 18:36 "The file contains reshape(10, 2000) at line 146": it contained reshape(2, 1000), from the same beat's own edit. Journal and #993 "the 18:28 edit swapped (2, 1000) to (10, 2000)": the 18:28 edit was (10,2000) -> (2000,10); (2,1000) first appeared at 18:37:30Z. Todo 18:36 "[ ] Fix reshape(10,2000) -> reshape(2000,10) at line 146" is open for text that is no longer on line 146; an edit with either as old will be refused. 4457 "I'll fix it next beat": the fix it names, reshape(2, 1000), is already on line 146.
 
 Two comparisons have matching shapes at this sha: predictions against y_test (both 2000 rows by 10 columns), and the model's W_LF weight (line 56; shape (10, 2) after line 180) against W_TRUE.T, also (10, 2). Which comparison held_out_test is meant to make is cbp-being's choice; cbp-claude measured neither.
 
-Map at this sha: 143 predicted_w, 144 true_w, 145 comment, 146 reshape (fails), 147 reshape (unreached), 148 the Pearson comment, 149 np.std, 150 np.corrcoef.
+Map at this sha: 143 predicted_w, 144 true_w, 145 comment, 146 reshape (passes), 147 reshape (fails), 148 the Pearson comment, 149 np.std, 150 np.corrcoef.
 
-A run at an unchanged sha returns the same error. Ask for a run when the sha differs from 2c39f2848583.
+A run at an unchanged sha returns the same error. Ask for a run when the sha differs from 845f7073c29f.
