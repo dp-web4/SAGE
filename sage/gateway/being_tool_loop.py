@@ -959,7 +959,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
             h = keep // 2
             elided_n = len(body) - keep
             saved = _spill(spill_root, body, i)
-            where = (f"the whole thing is saved as {saved}; it is {body.count('\n') + 1} lines long"
+            where = (f"the whole thing is saved as {saved}; it is {lines} lines long"
                      if saved else "read it again in a smaller range if you need the middle")
             out[i]["content"] = (body[:h] +
                                  f"\n[… {elided_n} {_ELIDED_SIGIL} of your NEWEST result to leave "
