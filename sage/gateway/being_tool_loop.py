@@ -526,7 +526,7 @@ COMPACT_SPILL_DIR = "scratch/elided"
 # 5,979 bytes), so keeping a day of them costs a few MB; the byte cap is the backstop for a
 # pathological beat, and even then the OLDEST go first, by name, which is creation order.
 COMPACT_SPILL_KEEP_S = 24 * 3600            # nothing younger than this is pruned, whatever the count
-COMPACT_SPILL_MAX_BYTES = 64 * 1024 * 1024  # backstop: over this, oldest first
+COMPACT_SPILL_MAX_BYTES = 64 * 1024 * 1024  # backstop: over this, oldest first -- never a pinned file
 _ELIDED_SIGIL = "characters elided from the middle"
 # A stub that is itself collapsed, oldest first, once the stubs are what fills the window.
 _COLLAPSED_SIGIL = "collapsed to a pointer"
@@ -544,11 +544,13 @@ def _spill_age_s(name: str, now: float) -> Optional[float]:
         return None
 
 
-def _prune_spills(d: str) -> None:
+def _prune_spills(d: str, pinned: Iterable[str] = ()) -> None:
     """Keep every spill younger than COMPACT_SPILL_KEEP_S; then, only if the directory is over
     COMPACT_SPILL_MAX_BYTES, remove the oldest (by name = creation order) until it is not.
-    Never raises: pruning is housekeeping, and the spill that was just written must stand."""
+    A PINNED name is never removed, by either rule: it is named by a marker or pointer in the
+    prompt being built right now (GPT on #274). Never raises: pruning is housekeeping."""
     import time as _t
+    keep = {os.path.basename(x) for x in pinned}
     try:
         now = _t.time()
         names = sorted(os.listdir(d))
@@ -560,7 +562,7 @@ def _prune_spills(d: str) -> None:
                 sizes[f] = 0
         for f in names:
             age = _spill_age_s(f, now)
-            if age is not None and age > COMPACT_SPILL_KEEP_S:
+            if f not in keep and age is not None and age > COMPACT_SPILL_KEEP_S:
                 try:
                     os.remove(os.path.join(d, f))
                     sizes.pop(f, None)
@@ -570,6 +572,8 @@ def _prune_spills(d: str) -> None:
         for f in sorted(sizes):                      # oldest first
             if total <= COMPACT_SPILL_MAX_BYTES:
                 break
+            if f in keep:
+                continue
             try:
                 os.remove(os.path.join(d, f))
                 total -= sizes[f]
@@ -579,7 +583,8 @@ def _prune_spills(d: str) -> None:
         pass
 
 
-def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
+def _spill(root: Optional[str], body: str, step: int,
+           pinned: Optional[set] = None) -> Optional[str]:
     """Save one elided tool-result body under the being's home. Returns the bare path to
     name in the marker, or None if there is nowhere to put it or the write failed."""
     if not root:
@@ -610,10 +615,16 @@ def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
             fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
                      f"result the harness elided from your window, {len(body)} characters]\n\n")
             fh.write(body)
-        _prune_spills(d)
-        return f"{COMPACT_SPILL_DIR}/{name}"
+        name_rel = f"{COMPACT_SPILL_DIR}/{name}"
+        if pinned is not None:
+            pinned.add(name_rel)
+        _prune_spills(d, pinned if pinned is not None else (name_rel,))
+        return name_rel
     except Exception:
         return None
+
+
+_SPILL_REF = re.compile(re.escape(COMPACT_SPILL_DIR) + r"/[0-9]{8}-[0-9]{6}-[0-9]{3}-[0-9]{3}\.txt")
 
 
 
@@ -898,6 +909,9 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # scratch, and the elision marker tells it where to look if not.
     idx = [i for i, m in enumerate(out) if m.get("role") == "tool"]
     elided = []
+    # EVERY SPILL THE PROMPT NAMES IS PINNED, and so is every spill written in this pass: no
+    # prune may delete a file a marker or pointer the being is about to read still names.
+    pinned = {r for m in out for r in _SPILL_REF.findall(m.get("content") or "")}
     for i in idx[:-1] if len(idx) > 1 else []:
         if _est_tokens(size(out), measured) <= room:
             break
@@ -932,7 +946,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         # issuing the instruction that refilled the window it had just cleared.
         # The head of a ranged read already names its range, so point at a NARROWER read
         # and at the being's own notes, which is where its conclusions actually live.
-        saved = _spill(spill_root, body, i)
+        saved = _spill(spill_root, body, i, pinned)
         where = (f"The WHOLE result is saved as {saved} and outlives this beat — "
                  f"memory_read a narrow range of it when you need the middle."
                  if saved else
@@ -965,8 +979,11 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
                 break
             body = out[i].get("content") or ""
             m = re.search(r"saved as (" + re.escape(COMPACT_SPILL_DIR) + r"/\S+?)(?=[\s,;]|$)", body)
-            if not m:
+            # the pointer is only honest if the bytes are there NOW (GPT on #274): a stub whose
+            # file is gone keeps its head and tail, the only copy left of them
+            if not m or not spill_root or not os.path.isfile(os.path.join(spill_root, m.group(1))):
                 continue
+            pinned.add(m.group(1))
             lines = [ln for ln in body.splitlines() if ln.strip()]
             first = lines[0][:120] if lines else ""
             last = lines[-1][:120] if len(lines) > 1 else ""
@@ -991,7 +1008,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         if len(body) > keep + COMPACT_MIN_BODY:
             h = keep // 2
             elided_n = len(body) - keep
-            saved = _spill(spill_root, body, i)
+            saved = _spill(spill_root, body, i, pinned)
             where = (f"the whole thing is saved as {saved}"
                      if saved else "read it again in a smaller range if you need the middle")
             out[i]["content"] = (body[:h] +
