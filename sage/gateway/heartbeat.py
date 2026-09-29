@@ -1776,11 +1776,19 @@ def todo_view(instance: Path, now=None) -> str:
     return "\n".join(lines)
 
 
+def settled_turns_for(cfg: Optional[dict]) -> Optional[int]:
+    """instance.json `conversation_settled_turns`: how many turns a settled conversation shows.
+    Absent, or anything but a whole number >= 1, means the default rendering (no collapse)."""
+    v = (cfg or {}).get("conversation_settled_turns")
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 1 else None
+
+
 def own_state(instance: Path, member: str = "", entrusted: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
               services: str = "", mark_conversations: bool = True,
-              body_reading: Optional[dict] = None) -> str:
+              body_reading: Optional[dict] = None,
+              settled_turns: Optional[int] = None) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
     # The body first: it is the only thing in this state that is happening NOW. Everything below
@@ -1829,7 +1837,8 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
         # fixed ceiling this supersedes — cbp's stopgap on SAGE#81, now the rung it starts from).
         convs = _conv.render_for_being(instance, member, per_conv=per_conv,
                                        turn_chars=turn_chars, mark=mark_conversations,
-                                       refuted=refuted_claims(services) + files_refuted)
+                                       refuted=refuted_claims(services) + files_refuted,
+                                       settled_turns=settled_turns)
         if convs.strip():
             parts.append(conversation_header(instance, member) + "\n" + convs.strip())
     if services.strip():
@@ -2923,10 +2932,14 @@ def main(argv=None) -> int:
     from sage.gateway import conversations as _convs
     _shown_upto = _convs.latest_seqs(instance, args.member) if args.member else {}
 
+    # PER-INSTANCE (RESEARCH_GENERALIZATION_RULE): absent means the default rendering.
+    _settled_turns = settled_turns_for(instance_config(instance))
+
     def _build_state(per_conv, turn_chars):
         return (_state_head + own_state(instance, args.member, entrusted,
                                         per_conv=per_conv, turn_chars=turn_chars,
                                         services=_services, mark_conversations=False,
+                                        settled_turns=_settled_turns,
                                         body_reading=_body_cur) + _scope_tail)
 
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
@@ -3208,6 +3221,8 @@ def main(argv=None) -> int:
         "schema": "heartbeat/v2",
         "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "t0": t0, "elapsed_s": round(time.time() - t0, 1),
         "member": args.member, "model": args.model, "window_h": round(hours, 2), "clock": _clock,
+        # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
+        "conversation_settled_turns": _settled_turns,
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,
