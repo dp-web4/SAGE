@@ -1807,11 +1807,19 @@ def conversation_header(instance: Path, member: str) -> str:
             "person, not for reporting to one")
 
 
+def settled_turns_for(cfg: Optional[dict]) -> Optional[int]:
+    """instance.json `conversation_settled_turns`: how many turns a settled conversation shows.
+    Absent, or anything but a whole number >= 1, means the default rendering (no collapse)."""
+    v = (cfg or {}).get("conversation_settled_turns")
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 1 else None
+
+
 def own_state(instance: Path, entrusted: str = "", member: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
               services: str = "", mark_conversations: bool = True,
-              body_reading: Optional[dict] = None) -> str:
+              body_reading: Optional[dict] = None,
+              settled_turns: Optional[int] = None) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
     # The body first: it is the only thing in this state that is happening NOW. Everything below
@@ -1861,7 +1869,8 @@ def own_state(instance: Path, entrusted: str = "", member: str = "",
         # fixed ceiling this supersedes — cbp's stopgap on SAGE#81, now the rung it starts from).
         convs = _conv.render_for_being(instance, member, per_conv=per_conv,
                                        turn_chars=turn_chars, mark=mark_conversations,
-                                       refuted=refuted_claims(services) + files_refuted)
+                                       refuted=refuted_claims(services) + files_refuted,
+                                       settled_turns=settled_turns)
         if convs.strip():
             parts.append(conversation_header(instance, member) + "\n" + convs.strip())
     if services.strip():
@@ -2952,11 +2961,14 @@ def main(argv=None) -> int:
     from sage.gateway import conversations as _convs
     _shown_upto = _convs.latest_seqs(instance, args.member) if args.member else {}
 
+    # PER-INSTANCE (RESEARCH_GENERALIZATION_RULE): absent means the default rendering.
+    _settled_turns = settled_turns_for(instance_config(instance))
+
     def _build_state(per_conv, turn_chars):
         return ("# Your own state\n\n"
                 + own_state(instance, entrusted, args.member, per_conv=per_conv,
                             turn_chars=turn_chars, services=_services, mark_conversations=False,
-                            body_reading=_body_cur) + _scope_tail)
+                            settled_turns=_settled_turns, body_reading=_body_cur) + _scope_tail)
     # The conversations step down only when the rest cannot fit with digest and recall at
     # their floors (1200 + 400): fit_to_window's worst case is this fitter's input.
     # LOOP_GROWTH_CHARS: the seed is not the prompt the loop ends on. Every tool result is
@@ -3001,6 +3013,8 @@ def main(argv=None) -> int:
     # Sizes into the record, so the next overcommit names its block from the file and the
     # chars-per-token assumption can be checked against prompt_tokens_max at beat end.
     prompt_sizes = {
+        # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
+        "conversation_settled_turns": _settled_turns,
         "prompt_blocks_chars": {"posture": len(posture()), "state": len(state_block),
                                 "inbox": len(inbox), "digest": len(blocks["digest"] or ""),
                                 "recall": len(blocks["recall"] or ""), "fixed_other": _schema_chars + _template_guess,
