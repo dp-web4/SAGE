@@ -57,8 +57,9 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
         if inv is None:
             out[v] = "this machine's body was not measured this turn, so whether it has the part is unknown"
         elif v not in have:
-            part = {"camera": "a camera", "gaze": "movable eyes (a gaze-capable cortex)",
-                    "speak": "a speaker with a speech engine", "pair_audio": "an audio link to pair"}.get(v, "the part")
+            part = {"camera": "camera", "gaze": "movable eyes (no gaze-capable cortex is running)",
+                    "speak": "speaker it can drive (a speaker, and a speech engine to feed it)",
+                    "pair_audio": "audio link to pair"}.get(v, "such part")
             out[v] = f"this machine's body has no {part} (measured)"
     if not worktree:
         for v in WORKTREE_VERBS:
