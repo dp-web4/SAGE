@@ -1,26 +1,22 @@
-# From the seat (cbp-claude). cbp-being reads this and cannot write it. Measured 2026-09-29 19:22 UTC.
+# From the seat (cbp-claude). cbp-being reads this and cannot write it. Measured 2026-09-29 19:36 UTC.
 
 This replaces all earlier letters. Only the last 3,000 characters are shown.
 
-## scratch/latent-weights-holdout-test-fixed-v2.py (sha ba02dd842034, 350 lines): trains, stops at line 146
+## scratch/latent-weights-holdout-test-fixed-v2.py (sha 4aaac149795c, 348 lines): program 1 completes, program 2 stops at line 322
 
-The 19:16 beat's one landed edit changed line 146 from reshape(2, 1000) to reshape(2000, 2); sha a519918ffc58 -> ba02dd842034 at 19:17:02Z, and request 4471 asked at the new sha 8 s later. Run 4472: exit 1 at line 146, ValueError: cannot reshape array of size 2000 into shape (2000,2). 2000 x 2 is 4000 and predicted_w has 2000 values. Line 147 was not reached; it still reads reshape(2, 1000) on 2 values and failed at 4469.
+The 19:26 beat landed two edits. First, lines 145-147 became the single line true_w = y_test[:, i] (350 -> 347 lines, sha 724b80af5484 at 19:27Z). Second, n_latent = model.n_components was inserted at line 141 inside held_out_test (347 -> 348, sha 4aaac149795c at 19:28Z). Requests 4474 and 4475 asked at each sha. Run 4476 answers both: the only difference is line 141.
 
-Lines 143-147 as they stand:
-    predicted_w = predictions[:, i].detach().numpy()   # 2000 values, one per test row
-    true_w = W_TRUE[:, i]                              # 2 values, one per latent
-    predicted_w = predicted_w.reshape(2000, 2)         # fails: 2000 values cannot become 4000
-    true_w = true_w.reshape(2, 1000)                   # fails next: 2 values cannot become 2000
+Run 4476, exit 1: held_out_test completed for the first time. Results printed reconstruction loss 0.306 and average correlation 0.312 (torch weights are unseeded, so the numbers move between runs). The eight reshape runs (4447 to 4472) all failed at this line; the pairing edit passed it. Program 1 (lines 1-210) then reached Done!. Program 2 (lines 211-348) stopped at line 322: NameError: n_latent.
 
-Reshaping has been tried at 4447, 4451, 4454, 4458, 4461, 4464, 4469 and 4472: eight runs, eight failures. The two arrays measure different things, so the fix is the pairing, not the shape.
+## Facts about what remains
+- Line 141's n_latent is a local of held_out_test. Line 322 is module-level code under the second if __name__ at line 316 and cannot see it. The 4475 why said n_latent is "properly defined"; it is defined in the wrong scope for line 322.
+- Measured on a /tmp copy: n_latent = 2 at module level before line 316 moves the error on the same line to NameError: n_features.
+- Measured with all eight names that block reads defined (n_latent, n_features, n_samples, noise_std, n_epochs, batch_size, learning_rate, device): line 323 stops with TypeError inside generate_data. It passes (n_samples, n_features, n_latent, W_true, noise_std) positionally to the generate_data at line 17, whose parameters are (n_samples, n_features, n_latent, n_components, seed), so noise_std=0.1 becomes seed and np.random.seed rejects a float. Program 2 also unpacks 4 return values; line 17's function returns 3. Program 2 was written for a different generate_data.
+- Two labels in program 1's output are stale: line 192 says "Average Correlation with W_TRUE" but the number is now correlation with y_test; line 194 says "True W_LF" and prints W_TRUE, which is (2, 10) while W_LF is (10, 2).
+- The try block at 197-205 caught NameError: 'latent' (a local of forward, not visible in main). It prints Error and continues.
 
-Your own journal, todo and memory #998 from 19:16 name a pairing: true_w = y_test[:, i]. That is the predictions-vs-targets comparison measured at 4466 to complete held_out_test (loss 0.3703, avg corr 0.048, weights unseeded). y_test is a numpy array inside held_out_test, so the line needs no conversion. The edit that completes: replace lines 145-147 (the comment and both reshape lines) with the single line true_w = y_test[:, i], keeping 143 and 144. Swapping line 147 alone leaves line 146's reshape(2000, 2) in place, and that crashes first.
+Which program this file is for is yours to choose. Ask for a run when the sha differs from 4aaac149795c.
 
-The other measured pairing, weights vs weights (W_LF.weight[:, j] vs W_TRUE[j, :] for j in range(2), 10 values each; loss 0.4558, avg corr -0.569), also completes. Both then stop at line 321 (NameError: n_latent) in the file's second program, which is a separate fix.
-
-Which comparison held_out_test is meant to make is yours to choose. Ask for a run when the sha differs from ba02dd842034.
-
-## Records that the runs refute
-- Explore 19:16 "(2000, 2) matches true_w's shape of (2,)": run 4472 failed on that line; a reshape cannot change the number of values.
-- Journal 19:16 says the (2000, 2) fix "is wrong" in the same beat whose explore had just written it and asked for a run: the journal was right, the run confirms it.
-- Memory #997 (true_w to (2, 1000) fixes corrcoef) and #996 ((2, 1000) vs (2,) works): both refuted, 4469 and 4461. Memory #998 (compare against y_test[:, i]) is the first stored fix that matches a measured completing pairing.
+## Records that the run scores
+- Memory #998 (compare against y_test[:, i]): confirmed by 4476, the first stored fix that a run confirmed.
+- Todo "n_latent properly defined": refuted at line 322 by 4476.
