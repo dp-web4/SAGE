@@ -528,6 +528,9 @@ COMPACT_SPILL_DIR = "scratch/elided"
 COMPACT_SPILL_KEEP_S = 24 * 3600            # nothing younger than this is pruned, whatever the count
 COMPACT_SPILL_MAX_BYTES = 64 * 1024 * 1024  # backstop: over this, oldest first
 _ELIDED_SIGIL = "characters elided from the middle"
+# A stub that is itself collapsed, oldest first, once the stubs are what fills the window.
+_COLLAPSED_SIGIL = "collapsed to a pointer"
+COMPACT_STUBS_KEPT = 8         # the newest elision stubs are never collapsed: recent context
 
 
 def _spill_age_s(name: str, now: float) -> Optional[float]:
@@ -904,7 +907,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         # ALREADY ELIDED, LEAVE IT. An elided body is ~850 characters — over COMPACT_MIN_BODY
         # — so a later step used to elide the MARKER: cutting the middle out of the sentence
         # that explains the cut, and counting its characters as freed content.
-        if _ELIDED_SIGIL in body:
+        if _ELIDED_SIGIL in body or _COLLAPSED_SIGIL in body:
             continue
         # ONE constant for what is kept, and the accounting derives from it. The first cut
         # kept body[:400] and reported len(body) - 160 — every elision overstated by 240
@@ -943,6 +946,39 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         if saved:
             rec["spill"] = saved
         elided.append(rec)
+    # THE STUBS BECOME THE WALL. An elided result is kept as a ~850-char stub and never cut
+    # again (above), so a long beat accumulates them linearly: legion-being's 16:24Z beat on
+    # 2026-09-29 carried 38 of them (~32k chars, ~9k tokens) at step 42, and the compactor
+    # could no longer reach its own target -- the prompt sat at 23-24.4k of 24,576, leaving
+    # 174-1,100 tokens to answer in. Measured over 25 beats (546 generates): half of all
+    # generates ran above the target, and the empty-then-retried rate went 0-2% below 20k
+    # tokens, 8% at 20-22k, 17% at 22-24k, 56% above 24k. So once the older results are all
+    # stubs, the OLDEST stubs are collapsed to a pointer: first line, last line, and the
+    # saved file that holds the whole result. Only a stub whose result WAS saved (nothing is
+    # lost), and never the newest COMPACT_STUBS_KEPT (what the being is still working with).
+    if _est_tokens(size(out), measured) > room:
+        older = idx[:-1] if len(idx) > 1 else []
+        stubs = [i for i in older if _ELIDED_SIGIL in (out[i].get("content") or "")
+                 and _COLLAPSED_SIGIL not in (out[i].get("content") or "")]
+        for i in stubs[:-COMPACT_STUBS_KEPT] if len(stubs) > COMPACT_STUBS_KEPT else []:
+            if _est_tokens(size(out), measured) <= room:
+                break
+            body = out[i].get("content") or ""
+            m = re.search(r"saved as (" + re.escape(COMPACT_SPILL_DIR) + r"/\S+?)(?=[\s,;]|$)", body)
+            if not m:
+                continue
+            lines = [ln for ln in body.splitlines() if ln.strip()]
+            first = lines[0][:120] if lines else ""
+            last = lines[-1][:120] if len(lines) > 1 else ""
+            ptr = (f"[result {_COLLAPSED_SIGIL} to leave room for your answer. It began: "
+                   f"{first!r}" + (f" and ended: {last!r}" if last else "")
+                   + f". The WHOLE result is saved as {m.group(1)} -- memory_read a narrow "
+                     f"range of it if you need it.]")
+            if len(ptr) >= len(body):
+                continue
+            out[i]["content"] = ptr
+            elided.append({"index": i, "chars": len(body) - len(ptr), "collapsed": True,
+                           "spill": m.group(1)})
     # THE NEWEST RESULT IS PROTECTED — until protecting it is what cuts the answer. When
     # every older result is already a stub and the prompt still does not fit, the newest
     # one is trimmed too, with a larger keep (the being is working from it right now),
