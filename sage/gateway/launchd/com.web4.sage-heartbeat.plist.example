@@ -81,7 +81,7 @@
 	</dict>
 
 	<!-- ~30 min, like the systemd timer. launchd does not start an interval job that is still
-	     running, so a slow beat is not stacked; a beat is bounded by its own --max-steps. -->
+	     running, so a slow beat is not stacked; a beat is bounded by its own max-steps argument. -->
 	<key>StartInterval</key>
 	<integer>1800</integer>
 	<key>RunAtLoad</key>
