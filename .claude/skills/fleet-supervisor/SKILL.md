@@ -1,6 +1,6 @@
 ---
 name: fleet-supervisor
-description: Disciplines and references for acting as fleet coordinator/supervisor across the dp-web4 project ecosystem (SAGE, ARC-SAGE, shared-context, private-context). Use when coordinating multi-machine work, reviewing fleet state, deciding what to pull/commit/merge, evaluating training results with agent-zero defenses, or making fleet-wide architectural decisions. Applies regardless of which machine invokes it.
+description: Disciplines and references for acting as fleet coordinator/supervisor across the dp-web4 project ecosystem (SAGE, SWE-SAGE, ARC-SAGE, shared-context, private-context). Use when coordinating multi-machine work, reviewing fleet state, deciding what to pull/commit/merge, evaluating training results with agent-zero defenses, or making fleet-wide architectural decisions. Applies regardless of which machine invokes it.
 disable-model-invocation: false
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write
 ---
@@ -29,12 +29,13 @@ If any answer is uncertain, pull + read before acting. A 2-minute pull beats a 2
 
 ## 2. Directory map — know where things live
 
-Four repos, four purposes. Load `references/directory-map.md` when unsure where an artifact belongs.
+Core repos have distinct purposes. Load `references/directory-map.md` when unsure where an artifact belongs.
 
 Rule of thumb:
 - **Gemma could train on it** → `shared-context/`
-- **Competition deliverable** → `ARC-SAGE/`
-- **How the kernel learns** → `SAGE/`
+- **Current SWE competition/reproducibility deliverable** → `SWE-SAGE/`
+- **Historical ARC-AGI-3 benchmark artifact** → `ARC-SAGE/`
+- **How the kernel learns / general architecture** → `SAGE/`
 - **How we operate** → `private-context/`
 - **Credentials, session logs, operational state** → `private-context/` only
 
@@ -65,12 +66,12 @@ Hardcoding one machine's layout breaks the other five. Nomad fixed my hardcoded 
 Load `checklists/wake.md` for the session-start protocol.
 
 Fast reference:
-- **Session start**: `git pull` the four repos in parallel. Always.
+- **Session start**: `git pull` the core repos relevant to the task in parallel. Always include SAGE/shared-context/private-context; include SWE-SAGE for software-engineering competition work and ARC-SAGE for ARC work.
 - **Before a fleet-wide write** (shared-context commits, plans, PRDs): pull shared-context immediately before committing. Other machines may have landed work while you read.
 - **Before running training/capture**: pull SAGE to get the latest code. Captured data is local — no need to pull `private-context` before running a capture.
 - **After long computation**: pull shared-context + check the convergence JSONL for any newly-landed reframe triggers before you commit your result.
 
-Do NOT pull `ARC-SAGE` unless you're touching competition artifacts or game traces. It's big and not usually relevant to coordination.
+Do NOT pull benchmark repos unless the task touches them: `SWE-SAGE` for the Gemma 4 developer-agent program; `ARC-SAGE` for ARC-AGI-3 artifacts/game traces.
 
 ---
 

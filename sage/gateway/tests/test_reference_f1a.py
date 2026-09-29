@@ -198,7 +198,12 @@ def test_an_out_of_reach_path_that_DOES_exist_is_still_named_a_real_boundary():
     """CONTROL. Without this the fix could be 'call every refusal an absence', which would teach
     the being to discount real boundaries."""
     disp, _ = _disp()
-    env = disp(BeingIntent("memory_read", {"path": "/etc/hostname"}), _ALLOW)
+    # A file that EXISTS outside the home, made here: /etc/hostname was the fixture, and inside
+    # the being's sandboxed `check` /etc is not mounted, so it read as absent and this failed on
+    # every check the being ran (legion-being, 2026-09-29).
+    outside = Path(tempfile.mkdtemp(prefix="ref-f1a-outside-")) / "exists.txt"
+    outside.write_text("x")
+    env = disp(BeingIntent("memory_read", {"path": str(outside)}), _ALLOW)
     assert not env.ok
     assert "does exist, so this one is a real boundary" in env.error
     assert "request_scope" in env.error, "the way forward for a boundary is to ask"
@@ -210,7 +215,9 @@ def test_absence_is_never_claimed_where_it_could_not_be_established():
     look, which would print a confident false absence — the failure this guard exists to stop."""
     disp, _ = _disp()
     assert ReferenceF1aDispatcher._existence(Path("/proc/1/root/nonexistent-xyz")) in ("unknown", "absent")
-    assert ReferenceF1aDispatcher._existence(Path("/etc/hostname")) == "present"
+    present = Path(tempfile.mkdtemp(prefix="ref-f1a-present-")) / "here.txt"
+    present.write_text("x")                     # not /etc/hostname: /etc is absent in the sandbox
+    assert ReferenceF1aDispatcher._existence(present) == "present"
     assert ReferenceF1aDispatcher._existence(Path("/definitely-not-here-9f3a")) == "absent"
 
 
@@ -447,6 +454,27 @@ def test_memory_edit_one_line_by_number_keeps_the_line_break():
     assert (home / "notes" / "s.py").read_text() == "a = 1\ny = np.load(data_path.replace('.npy', '_labels.npy'))\nb = 2\n"
 
 
+def test_a_range_edit_that_drops_the_indent_names_both_space_counts():
+    """cbp-being 2026-09-27 06:30Z: start_line 144, the right fix, 4 leading spaces missing.
+    The parse note named line 145 and the being overwrote `return X, y, W_TRUE` there.
+    The receipt must name the dropped spaces as counts, ahead of the parse note."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("def g(n):\n    y = n + 1\n    return y\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": "2", "end_line": "2",
+                                          "content": "y = n + 2"}), _ALLOW)
+    assert r.ok, r.error
+    assert "Line 2 now starts with 0 spaces; the line it replaced started with 4" in r.result, r.result
+    assert r.result.index("started with 4") < r.result.index("IndentationError"), \
+        "the count must come before the parse note that names the next line"
+    # Same indent: no note.
+    f.write_text("def g(n):\n    y = n + 1\n    return y\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "new": "    y = n + 2"}), _ALLOW)
+    assert r.ok and "spaces" not in r.result, r.result
+
+
 def test_memory_edit_by_line_refuses_lines_that_do_not_exist_and_changes_nothing():
     disp, root = _disp()
     home = Path(root)
@@ -510,12 +538,153 @@ def test_a_py_receipt_says_whether_python_can_parse_the_file_now():
     home = Path(root)
     r = disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": "def main():\n    pass\n"}), _ALLOW)
     assert r.ok and "Python can parse s.py now. That is not the same as running it." in r.result
-    # the being's real 20:18 write: a bracketed description appended where an edit was meant
-    r = disp(BeingIntent("memory_write", {"path": "notes/s.py",
-                                          "content": "            noise=0.1,\n        )"}), _ALLOW)
-    assert r.ok and "Python cannot parse s.py now: IndentationError at line 3" in r.result, r.result
-    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3, "end_line": 4, "new": ""}), _ALLOW)
-    assert r.ok and "Python can parse s.py now" in r.result, r.result
+    # a new file is not gated: its receipt carries the parse error
+    r = disp(BeingIntent("memory_write", {"path": "notes/t.py",
+                                          "content": "def main():\n            noise=0.1,\n        )"}), _ALLOW)
+    assert r.ok and "Python cannot parse t.py now: IndentationError at line 3" in r.result, r.result
+    r = disp(BeingIntent("memory_edit", {"path": "notes/t.py", "start_line": 2, "end_line": 3, "new": "    pass"}), _ALLOW)
+    assert r.ok and "Python can parse t.py now" in r.result, r.result
+
+
+LABELS = [  # cbp-being's real appends to mechanism-training-script-clean.py
+    "[Fix #1: Removed extra closing parenthesis on line 1685 in argparse.ArgumentParser call]\n",
+    "[BEAT 2026-09-23 05:18 UTC] Applying fix #1: removing extra closing parenthesis on line 1685.\n"
+    "Line 1685 currently reads:\n    parser = argparse.ArgumentParser(description=\"x\"))\n",
+    "[Remove lines 344-347, which are a broken duplicate of the for loop at lines 340-343]",
+    "Remove lines 180-184 (orphaned docstring tail and return statement) and insert new label generation code",
+]
+
+
+def test_a_description_of_an_edit_is_refused_before_it_lands_in_a_py_file():
+    """2026-09-21..23: 15 memory_write calls appended prose ("[Fix #1: Removed ...]") to the
+    being's script where an edit was meant; every receipt said "only adds" and named
+    memory_edit, and the being still reported the fixes applied. Refuse before writing."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text("def main():\n    pass\n")
+    for text in LABELS:
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert not r.ok and "nothing was written to s.py" in r.error, r.error
+        assert "memory_edit" in r.error and "journal.md" in r.error and "Python cannot read line 1 of your text as code" in r.error
+        assert "Python can parse s.py now" in r.error
+        assert f.read_text() == "def main():\n    pass\n"
+    # also refused when the file is already broken -- that is where the labels landed
+    f.write_text("x = f(1))\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": LABELS[0]}), _ALLOW)
+    assert not r.ok and "Python cannot parse s.py now" in r.error and f.read_text() == "x = f(1))\n"
+
+
+def test_code_appended_to_a_py_file_still_lands():
+    """What must stay open on a healthy file: a whole function, a real comment, and the last part
+    of a program written in parts (it makes the file parse). Indented fragments used to be here
+    ("dedented it parses"). Appended to a working file they make it INVALID, and the monotonic
+    rule refuses that (test_a_healthy_file_is_never_made_invalid_by_an_append)."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    for text in ("def g():\n    return 1\n",
+                 "# TODO: tune lr\n"):
+        f.write_text("import os\n")
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert r.ok, (text, r.error)
+    f.write_text("def h(\n    a,\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    b,\n):\n    return a + b\n"}), _ALLOW)
+    assert r.ok and "Python can parse s.py now" in r.result, r.error
+    # not .py, and not an existing file: ungated
+    for path in ("journal.md", "notes/new.py"):
+        r = disp(BeingIntent("memory_write", {"path": path, "content": LABELS[0]}), _ALLOW)
+        assert r.ok, (path, r.error)
+
+
+BROKEN_MID = "import os\nx = f(1))\ndef g():\n    return 1\n"     # stops at line 2, not at the end
+
+
+def test_an_append_to_a_broken_file_that_leaves_the_error_in_place_is_refused():
+    """GPT's review of #186: an append below the first error cannot repair it. The two measured
+    forms that the grammar check alone let through, both refused, with the file unchanged:
+    - seq 3405 (2026-09-23 07:15): a label written as `#` comments. Comments are Python.
+    - 2026-09-24 10:31: VALID Python appended to a file stopped mid-way. The stop did not move."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    for text in ("# Remove stray ']' at line 1736 ...\n# OLD (line 1736): ]\n",
+                 "def train(model, X, y):\n    for epoch in range(10):\n        model.step(X, y)\n"):
+        f.write_text(BROKEN_MID)
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert not r.ok, (text, r.result)
+        assert "stops at line 2" in r.error and "Appending below it cannot fix that" in r.error
+        assert "memory_edit" in r.error
+        assert f.read_text() == BROKEN_MID, "nothing written"
+
+
+def test_a_whole_program_refused_on_a_broken_file_names_a_new_name_that_creates_it():
+    """2026-09-27 18:52Z: cbp-being wrote one whole clean program three times to a broken file's
+    name; each refusal named only memory_edit. A text that is a program by itself is a fresh
+    start, so the refusal names a name that does not exist yet, and that door must create it.
+    A fragment or a label (not a program alone) gets no such door."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text(BROKEN_MID)
+    (Path(root) / "s-new.py").write_text("taken = 1\n")
+    prog = "import os\n\ndef main():\n    print(os.sep)\n\nif __name__ == '__main__':\n    main()\n"
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": prog}), _ALLOW)
+    assert not r.ok and "whole program by itself" in r.error and "s-new2.py" in r.error, r.error
+    assert "s.py itself stays exactly as it is" in r.error and "keep failing" in r.error, r.error
+    assert f.read_text() == BROKEN_MID
+    new = disp(BeingIntent("memory_write", {"path": "s-new2.py", "content": prog}), _ALLOW)
+    assert new.ok and new.result.startswith("created s-new2.py"), new.result
+    for frag in ("# fixed line 2\n", "    return 2\n"):
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": frag}), _ALLOW)
+        assert not r.ok and "whole program" not in r.error, r.error
+
+
+def test_an_append_that_repairs_or_grows_an_unfinished_program_still_lands():
+    """What the invariant must keep open on a broken file: the append that makes it parse (the
+    last part of a program written in parts), and code that moves an end-of-file stop later
+    (an unfinished program still growing). A label that 'moves' that stop is not code, so it is
+    still refused."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text("def h(\n    a,\n")                                   # stops at the end
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    b,\n):\n    return a + b\n"}), _ALLOW)
+    assert r.ok and "Python can parse s.py now" in r.result, r.error
+    f.write_text("def h(\n    a,\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    b,\n    c,\n"}), _ALLOW)
+    assert r.ok, r.error                                                 # still open, but grew
+    f.write_text("def h(\n    a,\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "[Fix: closed the call on line 1]\n"}), _ALLOW)
+    assert not r.ok and f.read_text() == "def h(\n    a,\n"
+
+
+def test_a_healthy_file_is_never_made_invalid_by_an_append():
+    """GPT's ruling on #186 (2026-09-26): healthy -> healthy. The original rule admitted these
+    because each parses on its own once dedented (or as a function body), but appended to a
+    working file each makes it INVALID ("unexpected indent", "'return' outside function"). The
+    file is left exactly as it was."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    # Ends at module level: a trailing def would make an indented fragment a legitimate
+    # continuation of its body (it parses), which the rule correctly allows.
+    healthy = "import os\n\nx = 1\n"
+    for text in ("        X = np.load(data_path)\n        y = X[:, 0]\n",
+                 "    y = X.sum()\n    return X, y\n"):
+        f.write_text(healthy)
+        r = disp(BeingIntent("memory_write", {"path": "s.py", "content": text}), _ALLOW)
+        assert not r.ok, (text, r.result)
+        assert "this text would break it" in r.error and "Python would stop at line" in r.error
+        assert f.read_text() == healthy, "nothing written"
+    # the same fragment continuing a trailing function body keeps the file healthy, and lands
+    f.write_text("def g(X):\n    X = X * 2\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "    y = X.sum()\n    return X, y\n"}), _ALLOW)
+    assert r.ok and "Python can parse s.py now" in r.result, r.error
+
+
+def test_a_comment_on_a_healthy_file_is_still_a_comment():
+    """The control GPT asked for: a real source comment on a file that parses is not a label
+    that masks a broken stop, and it lands."""
+    disp, root = _disp()
+    f = Path(root) / "s.py"
+    f.write_text("import os\n\ndef g():\n    return 1\n")
+    r = disp(BeingIntent("memory_write", {"path": "s.py", "content": "# returns the batch size\n"}), _ALLOW)
+    assert r.ok, r.error
 
 
 def test_a_non_python_receipt_says_nothing_about_parsing():
@@ -555,3 +724,29 @@ def test_a_py_read_says_whether_python_can_parse_the_file_now():
     (Path(root) / "journal.md").write_text("a note\n")
     r = disp(BeingIntent("memory_read", {"path": "journal.md"}), _ALLOW)
     assert r.ok and r.result == "a note\n", r.result
+
+
+def test_an_identical_replacement_says_nothing_changed():
+    """2026-09-24 10:42 cbp-being replaced line 2686 with the text already on it; the receipt
+    said "This changed the file on disk", and its closing note listed 2686 as fixed. Again
+    2026-09-28 10:08Z at line 113 of latent-weights-holdout-test-fixed.py, followed by a
+    request_run at the unchanged sha (seq 4301)."""
+    disp, root = _disp()
+    p = Path(root) / "s.py"
+    p.write_text("def f():\n    print(1)\n")
+    before = os.stat(p).st_mtime_ns
+    for args in ({"start_line": "2", "end_line": "2", "new": "    print(1)"},
+                 {"old": "    print(1)", "new": "    print(1)"}):
+        r = disp(BeingIntent("memory_edit", {"path": "s.py", **args}), _ALLOW)
+        assert not r.ok and "changed nothing" in r.error and "not in this edit" in r.error, r
+    assert os.stat(p).st_mtime_ns == before
+
+
+def test_an_edit_aimed_at_a_conversation_is_told_to_name_its_file():
+    """Same beat: memory_edit lines 2367-2377 of conversations/cbp-claude.jsonl (the fix was
+    for a .py). The refusal named only `say`; the being then said the fix was done."""
+    disp, root = _disp()
+    os.makedirs(os.path.join(root, "conversations"))
+    r = disp(BeingIntent("memory_edit", {"path": "conversations/cbp-claude.jsonl",
+                                         "old": "x", "new": "y"}), _ALLOW)
+    assert not r.ok and "give that file's path" in r.error and "does not change any file" in r.error, r

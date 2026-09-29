@@ -43,7 +43,10 @@ from typing import Any, Dict, Optional, Optional
 from sage.gateway.being_gate_client import BeingGateClient, BeingIntent, ResultEnvelope, _REGISTRY
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap
 
-NOTE_DIR = os.path.expanduser("~/ai-workspace/shared-context/escalations")
+# Derived, not the Linux seats' layout (fleet_paths): on McNugget the being's first escalation was
+# written to ~/ai-workspace/shared-context, which is not a checkout there, and never landed.
+from sage.gateway.fleet_paths import escalations_dir as _escalations_dir
+NOTE_DIR = str(_escalations_dir())
 # the gate workspace: this checkout (governed_turn/heartbeat use the same root). Not a
 # hard-coded ~/ai-workspace/sage — Legion's checkout is ~/ai-workspace/SAGE (case matters).
 WORKSPACE = str(Path(__file__).resolve().parents[2])

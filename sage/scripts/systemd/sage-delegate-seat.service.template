@@ -1,0 +1,14 @@
+# Substitute @BEING@ (<machine>-being) and @ROOT@ (the SAGE checkout), then install to ~/.config/systemd/user/.
+[Unit]
+Description=Keep this seat's delegation to rule @BEING@'s scope escalations alive (hestia #952)
+After=hestia.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=@ROOT@
+Environment=SAGE_BEING=@BEING@
+Environment=SAGE_ROOT=@ROOT@
+Environment=SEAT=claude-code
+StandardOutput=append:@ROOT@/sage-delegate-seat.log
+StandardError=append:@ROOT@/sage-delegate-seat.log
+ExecStart=/bin/bash @ROOT@/scripts/delegate_seat_for_being.sh
