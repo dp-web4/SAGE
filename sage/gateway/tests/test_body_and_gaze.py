@@ -109,21 +109,25 @@ def test_inventory_finds_a_laptop_body(monkeypatch):
 # as the body described, and a headless being that calls `gaze` anyway is refused before any
 # hestia action opens and leaves no Sprout-shaped file on its machine.
 
-def test_headless_beat_is_not_offered_gaze_and_a_live_cortex_beat_is(monkeypatch):
-    from sage.gateway.heartbeat import offered_explore_tools, EXPLORE_TOOLS
+def test_a_headless_beat_is_offered_gaze_and_told_it_cannot_work_here(monkeypatch):
+    """THE CANONICAL TOOLSET (dp 2026-09-29): every being is offered every verb. What used to be
+    enacted by omission ("gaze not offered to a headless being", GPT on #183) is now SAID: the
+    verb is offered with the reason it cannot work on this body."""
+    from sage.gateway import toolset
+    from sage.gateway.heartbeat import offered_explore_tools
     tmp = tempfile.mkdtemp()
     monkeypatch.setattr(body, "PERCEPTION_PATH", os.path.join(tmp, "absent.json"))
     monkeypatch.setattr(body, "GAZE_PATH", os.path.join(tmp, "gaze.json"))
     monkeypatch.setattr(body, "metabolism", lambda **k: {"live": True, "state": "wake", "atp": 50.0})
     monkeypatch.setattr(body.glob, "glob", lambda pat: [])
     monkeypatch.setattr(body, "_pw_audio", lambda **k: {})
-    headless = offered_explore_tools(body.reading())
-    assert "gaze" not in headless and "camera" not in headless
-    assert [t for t in EXPLORE_TOOLS if t not in ("gaze", "camera", "speak", "pair_audio")] == headless, "text verbs untouched"
-    assert "gaze" not in offered_explore_tools(None) and "say" in offered_explore_tools(None), \
-        "an unmeasurable body offers no body verb"
+    headless = body.reading()
+    assert "gaze" in offered_explore_tools(headless) and "camera" in offered_explore_tools(headless)
+    u = toolset.unavailable(headless, "/wt", {})
+    assert "gaze" in u and "camera" in u and "measured" in u["gaze"]
+    assert "unknown" in toolset.unavailable(None, "/wt", {})["gaze"], "unmeasured is not absent"
     monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp))
-    assert "gaze" in offered_explore_tools(body.reading())
+    assert "gaze" not in toolset.unavailable(body.reading(), "/wt", {}), "a live cortex can gaze"
 
 
 def test_headless_gaze_is_refused_and_creates_nothing(monkeypatch):
@@ -215,16 +219,19 @@ def test_coord_pair_is_total_over_anything_a_being_can_write():
     assert body._coord_pair((0, 1)) == [0.0, 1.0]
 
 
-def test_worktree_verbs_are_offered_only_to_a_being_with_a_worktree():
+def test_worktree_verbs_are_offered_to_every_being_and_said_unavailable_without_a_worktree():
     """nomad-being, 2026-09-27: a declared worktree changed nothing, because explore never
-    offered the verbs that act on it."""
-    from sage.gateway.heartbeat import offered_explore_tools, WORKTREE_VERBS
+    offered the verbs that act on it. Now they are offered to every being; without a worktree
+    each says so."""
+    from sage.gateway import toolset
+    from sage.gateway.heartbeat import offered_explore_tools
     from sage.gateway.being_gate_client import _REGISTRY
-    assert all(v in _REGISTRY for v in WORKTREE_VERBS), "an offered verb must exist"
-    without = offered_explore_tools(None)
-    assert not any(v in without for v in WORKTREE_VERBS)
-    with_wt = offered_explore_tools(None, "/some/worktree")
-    assert all(v in with_wt for v in WORKTREE_VERBS)
-    assert with_wt[-1] == "rest" or "rest" not in with_wt, "rest stays the last choice"
-    assert len(with_wt) == len(set(with_wt)), "no verb offered twice"
-    assert "pr_open" not in with_wt, "PR verbs need a remote; not offered by this rule"
+    assert all(v in _REGISTRY for v in toolset.WORKTREE_VERBS), "an offered verb must exist"
+    for wt in (None, "/some/worktree"):
+        offered = offered_explore_tools(None, wt)
+        assert all(v in offered for v in toolset.WORKTREE_VERBS)
+        assert offered[-1] == "rest", "rest stays the last choice"
+        assert len(offered) == len(set(offered)), "no verb offered twice"
+    u = toolset.unavailable(None, None, {})
+    assert all("no git worktree" in u[v] for v in toolset.WORKTREE_VERBS)
+    assert not any(v in toolset.unavailable(None, "/some/worktree", {}) for v in toolset.WORKTREE_VERBS)

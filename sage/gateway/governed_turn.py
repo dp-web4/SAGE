@@ -199,9 +199,15 @@ def offered_tools(tools_arg, instance):
     from sage.gateway.being_gate_client import ollama_tools
     if tools_arg:
         return ollama_tools([t.strip() for t in tools_arg.split(",")])
-    if instance_config(instance).get("game_stepper"):
-        return None
-    return [t for t in ollama_tools() if t["function"]["name"] != "game"]
+    # THE CANONICAL TOOLSET (sage/gateway/toolset.py): every verb, availability said. This used
+    # to drop `game` where no stepper was set up; now `game` is offered with that reason instead.
+    from sage.gateway import toolset
+    try:
+        from sage.gateway import body as _body
+        reading = _body.reading()
+    except Exception:
+        reading = None
+    return toolset.specs(toolset.unavailable(reading, worktree_for(instance), instance_config(instance)))
 
 
 def build_client(member: str, instance: Path, model: str, workspace: str,
