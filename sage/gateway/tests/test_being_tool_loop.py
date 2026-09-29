@@ -712,6 +712,22 @@ def test_an_elided_result_is_saved_where_the_being_can_still_read_it():
     assert "outlives this beat" in out[3]["content"], "and says why that matters"
 
 
+def test_the_elision_marker_says_how_many_lines_the_saved_file_is():
+    """The marker tells the being how long the saved file is, so it can pick a narrow
+    range that fits instead of guessing (legion-being, 2026-09-29): a being that was
+    told only 'read a narrow range' had to guess the range, and a guess that is too
+    wide elides again — the recursive elision this exists to break."""
+    from sage.gateway.being_tool_loop import compact_convo, _ELIDED_SIGIL
+    body = "\n".join(f"line {i:03d} " + "x" * 40 for i in range(200))
+    out, elided = compact_convo(_elidable(body), _LLM16k(), spill_root="/proc/definitely-not-writable")
+    assert len(elided) == 1, elided
+    # compact_convo elides the second-to-last tool message, not necessarily index 3 —
+    # locate the elided one by its sigil instead of assuming a position.
+    elided_msgs = [m for m in out if _ELIDED_SIGIL in (m.get("content") or "")]
+    assert len(elided_msgs) == 1, "exactly one message should be elided"
+    assert "it is 200 lines long" in elided_msgs[0]["content"], "the marker must carry the line count"
+
+
 def test_an_already_elided_result_is_not_elided_again():
     """An elided body is ~850 characters, over COMPACT_MIN_BODY, so a second pass used to
     cut the middle out of the MARKER — and count the marker's characters as room freed."""

@@ -930,11 +930,14 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         # The head of a ranged read already names its range, so point at a NARROWER read
         # and at the being's own notes, which is where its conclusions actually live.
         saved = _spill(spill_root, body, i)
+        lines = body.count('\n') + 1
         where = (f"The WHOLE result is saved as {saved} and outlives this beat — "
-                 f"memory_read a narrow range of it when you need the middle."
+                 f"it is {lines} lines long; memory_read a narrow range of it "
+                 f"when you need the middle."
                  if saved else
                  "If you need part of it, read a NARROW range of the source rather than the "
-                 "whole file again — a full re-read costs more room than this elision freed.")
+                 f"whole file again — a full re-read costs more room than this elision freed. "
+                 f"it is {lines} lines long.")
         out[i]["content"] = (kept_head +
                              f"\n[… {elided_n} {_ELIDED_SIGIL} to leave room for your answer. "
                              f"{where} …]\n"
@@ -956,7 +959,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
             h = keep // 2
             elided_n = len(body) - keep
             saved = _spill(spill_root, body, i)
-            where = (f"the whole thing is saved as {saved}"
+            where = (f"the whole thing is saved as {saved}; it is {body.count('\n') + 1} lines long"
                      if saved else "read it again in a smaller range if you need the middle")
             out[i]["content"] = (body[:h] +
                                  f"\n[… {elided_n} {_ELIDED_SIGIL} of your NEWEST result to leave "
