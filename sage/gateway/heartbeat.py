@@ -26,6 +26,7 @@ reflect. Same words, same tools, different order; a presentation, not a fork (Le
 """
 from __future__ import annotations
 
+from sage.gateway.fleet_paths import forum_dir as _fleet_forum_dir
 import argparse
 import json
 import os
@@ -2642,7 +2643,7 @@ def main(argv=None) -> int:
     ap.add_argument("--reflect-steps", type=int, default=3)
     ap.add_argument("--since-hours", type=float, default=None,
                     help="digest window; default: since the last beat, min 1h, max 48h")
-    ap.add_argument("--forum-dir", default=os.path.expanduser("~/ai-workspace/shared-context/forum"))
+    ap.add_argument("--forum-dir", default=str(_fleet_forum_dir()))
     ap.add_argument("--repos", default="SAGE,hestia,web4")
     ap.add_argument("--temperature", type=float, default=0.4)
     ap.add_argument("--max-tokens", type=int, default=3000,
