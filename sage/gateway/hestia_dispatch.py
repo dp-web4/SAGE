@@ -72,6 +72,58 @@ PublishFn = Callable[[str, str], str]
 McpFactory = Callable[[str, str], Any]
 
 
+PR_READ_LAST_DEFAULT = 12       # reviews + comments shown, newest last
+PR_READ_ITEM_CHARS = 1500       # one review or comment
+PR_READ_BODY_CHARS = 1500       # the PR description
+PR_READ_TOTAL_CHARS = 9000      # the whole answer: a long thread must not swamp a 24k window
+
+
+def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
+    """A PR as the being reads it: a header, the description, then reviews and comments merged in
+    time order, newest last, each trimmed, the whole bounded, and every cut SAID."""
+    def who(x):
+        a = (x or {}).get("author") or {}
+        return a.get("login") or a.get("name") or "?"
+
+    def cut(text, n):
+        text = (text or "").strip()
+        return text if len(text) <= n else text[:n] + f" …[{len(text) - n} more chars]"
+
+    head = (f"{target}: {pr.get('title', '')}\n"
+            f"state {pr.get('state')}{' (draft)' if pr.get('isDraft') else ''}, "
+            f"review decision {pr.get('reviewDecision') or 'none'}, mergeable {pr.get('mergeable')}; "
+            f"{pr.get('headRefName')} -> {pr.get('baseRefName')}; author {who(pr)}\n{pr.get('url', '')}")
+    items = []
+    for c in pr.get("comments") or []:
+        items.append((c.get("createdAt") or "", f"comment by {who(c)}", c.get("body")))
+    for r in pr.get("reviews") or []:
+        if (r.get("body") or "").strip() or r.get("state") not in (None, "COMMENTED"):
+            items.append((r.get("submittedAt") or r.get("createdAt") or "",
+                          f"review by {who(r)} ({r.get('state', '?')})", r.get("body")))
+    items.sort(key=lambda t: t[0])
+    total = len(items)
+    shown = items[-max(1, last):] if items else []
+    def build(shown):
+        parts = [head, "", "## Description", cut(pr.get("body"), PR_READ_BODY_CHARS) or "(empty)", ""]
+        parts.append(f"## Reviews and comments: {total} in all" +
+                     (f", the last {len(shown)} shown, newest last" if total > len(shown) else ", newest last"))
+        for ts, kind, body in shown:
+            parts.append(f"--- {ts[:16].replace('T', ' ')}Z {kind}\n{cut(body, PR_READ_ITEM_CHARS) or '(no text)'}")
+        if not items:
+            parts.append("(none yet)")
+        return "\n".join(parts)
+
+    # OVER THE CAP, THE OLDEST GO FIRST. A cut at the end would drop the NEWEST comments -- the
+    # very review a being is about to answer with pr_amend (caught by this function's own test).
+    out = build(shown)
+    while len(out) > PR_READ_TOTAL_CHARS and len(shown) > 1:
+        shown = shown[1:]
+        out = build(shown)
+    if len(out) > PR_READ_TOTAL_CHARS:          # one item and a long description: trim the tail
+        out = out[:PR_READ_TOTAL_CHARS] + f"\n…[answer trimmed at {PR_READ_TOTAL_CHARS} chars]"
+    return out
+
+
 def _hestia_error(env: dict) -> Optional[str]:
     """Render a daemon error envelope as the r1 `error` string keyed by hestia's own code."""
     err = env.get("_hestia_error")
@@ -786,6 +838,59 @@ class HestiaF1aDispatcher:
                                                "evicted": out.get("evicted", 0)})
 
     # -- pr_review: the seat posts the being's review, as the gated command -------
+    def _do_pr_read(self, intent: BeingIntent) -> ResultEnvelope:
+        """Read a fleet PR through the seat's gh: state, body, reviews and comments, rendered to
+        fit a small window. Only reached on an intent the gate ALLOWED as the exact `gh pr view`
+        command below; rebuilt here from the same function and refused on any mismatch."""
+        import json as _json
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import pr_read_command
+        try:
+            cmd = pr_read_command(intent.args, getattr(self, "_git_ctx", lambda: {})())
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "pr_read refused: the command the law judged is not the command this "
+                "dispatcher would execute."))
+        argv = shlex.split(cmd)
+        target = f"{argv[argv.index('--repo') + 1]}#{argv[3]}"
+        begin = self._call("hestia_begin_action", {"tool_name": "pr_read", "target": target})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=f"pr_read UNVERIFIED: the witness substrate is "
+                                                  f"unreachable ({str(err)[:160]})")
+        action_id = begin.get("actionId")
+        try:
+            proc = subprocess.run(argv, text=True, capture_output=True, timeout=60)
+            ok = proc.returncode == 0
+            detail = proc.stdout if ok else (proc.stderr or proc.stdout)
+        except Exception as e:  # gh missing, timeout: a failed read, said as such
+            ok, detail = False, f"{type(e).__name__}: {e}"
+        pr = None
+        if ok:
+            try:
+                pr = _json.loads(detail)
+            except ValueError:
+                ok, detail = False, "gh returned something that is not JSON: " + detail[:200]
+        try:
+            self._call("hestia_record_outcome", {"action_id": action_id, "success": ok,
+                                                 "magnitude": 0.0,
+                                                 **({} if ok else {"error": str(detail)[:300]})})
+        except Exception:
+            pass
+        if not ok:
+            return ResultEnvelope(ok=False, witness_id=action_id,
+                                  error=f"pr_read could not read {target}: {str(detail).strip()[:400]}")
+        try:
+            last = int(intent.args.get("last") or PR_READ_LAST_DEFAULT)
+        except (TypeError, ValueError):
+            last = PR_READ_LAST_DEFAULT
+        return ResultEnvelope(ok=True, witness_id=action_id,
+                              result=render_pr(pr, target, last=last))
+
     def _do_pr_review(self, intent: BeingIntent) -> ResultEnvelope:
         """Only ever reached on an intent the gate ALLOWED as the exact `gh pr review`
         command below. Order: begin_action (chain) -> post -> record_outcome. The

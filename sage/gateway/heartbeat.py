@@ -44,7 +44,7 @@ from pathlib import Path
 HOME_FILES = ("todo.md", "journal.md", "notes", "scratch")
 
 EXPLORE_TOOLS = ["recall", "remember", "memory_read", "memory_write", "retire_note", "witness",
-                 "request_scope", "appeal", "peer_ask", "mesh", "say",
+                 "request_scope", "appeal", "peer_ask", "mesh", "say", "pr_read",
                  "camera", "edit", "game", "run",
                  "gaze", "speak", "pair_audio",   # body verbs: offered only where the body measures the part
                  "rest"]                          # the last choice (main #214)

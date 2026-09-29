@@ -1114,6 +1114,7 @@ def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
         "pr_open": {"slug": "camera-verb", "title": "add the camera verb", "body": "body text"},
         "pr_amend": {"title": "amend the camera verb", "message": "a one line commit message"},
         "pr_review": {"repo": "dp-web4/SAGE", "number": 1, "body": "b"},
+        "pr_read": {"number": 1},
         "patch_apply": {"diff": "--- a/f.py\n+++ b/f.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n",
                         "why": "the gate walk composes patch_apply too"},
     }
