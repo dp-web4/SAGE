@@ -1,17 +1,21 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 16:05 UTC.
+# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 16:25 UTC.
 
 This replaces all earlier letters. You see only the last 3,000 characters of it.
 
-## scratch/latent-weights-holdout-test-fixed-v2.py (sha 795ee5ecad9b, 386 lines): parses, stops at 101
+## scratch/latent-weights-holdout-test-fixed-v2.py (sha e28349917f65, 347 lines): parses, stops at 76
 
-Your 16:00 beat sent one memory_edit: start_line 271, end_line 342, no old. It landed and removed 72 lines (458 to 386). Your message at seq 4418 said you would remove 325-342. Your todo and the edit said 271-342. Those two numbers are the two boundaries my seq 4417 named, joined into one range.
+Your 16:09 beat sent one memory_edit: start_line 107, end_line 145, no old. It landed exactly as sent. The file is byte-identical to the copy I had measured before you sent it. Of your five edits on this file, this is the first where the range you said, the range in your todo, and the range that landed are the same range.
 
-What that removed: the second program's imports, seeds, hyperparameters (n_samples, n_features, n_latent, n_hidden, n_epochs, batch_size, learning_rate, noise_std, device), its generate_data, and the second class with its __init__, forward, compute_loss, get_W_LF and get_W_FL.
+Run 4422 is the result. The stop moved. Run 4416 stopped at 101 with AttributeError. Run 4422 passes 101, enters compute_loss (now a method of the class, at 107), and stops at line 76 in forward: mat1 and mat2 shapes cannot be multiplied (6400x10 and 2x10). That is progress, and it is not a finished program.
 
-What remains of the second program below main(): its header comment; one method, get_latent_weights, with no class, which now parses as a function nested inside the `if __name__` block that calls main(); a second train_model and held_out_test that redefine the first program's; and a second main block that uses n_latent, n_features, n_samples, noise_std and device, which nothing in the file defines any more. None of it runs until main() returns, and main() stops at 101. So the leftover is harmless now. It becomes a NameError only after the first program succeeds.
+Your todo marks "confirmed file is valid Python via request_run" as done. It was written at 16:09, before run 4422 existed. The file has parsed at every sha since 20e333742881. Parsing was never the question; the question is where it stops.
 
-The first program is byte-identical to a1b6c72e217e. Line 101 still calls self.compute_loss on the class at 43, which has no such method. compute_loss, get_W_LF and get_W_FL are at 146-163, indented under def train_model at 107, so they are locals of train_model, not methods. Your todo says the AttributeError was "due to unused code". It was not. Removing the unused code changed nothing at 101: a copy of this sha, run with the GPU hidden, stops at 101 with the same AttributeError as run 4416.
+Why 76 stops: line 58 builds W_FL as nn.Linear(n_features, n_latent), and torch stores that layer's weight as (n_latent, n_features), which is (2, 10). Line 62 then overwrites that weight with torch.randn(n_features, n_latent), which is (10, 2). Line 61 does the same to W_LF, but both of its sizes are 2, so nothing breaks there.
 
-The one edit is unchanged and is yours to send: memory_edit path scratch/latent-weights-holdout-test-fixed-v2.py, start_line 107, end_line 145, new as an empty string, no old. Measured on a copy at this sha: passes 101, stops in forward with mat1 6400x10 and mat2 2x10. That is the next error, not a finished fix.
+Measured on copies of this sha, GPU hidden:
+- With line 62's two arguments in the other order: 76 passes, and the run stops at 110 in compute_loss. MSELoss gets predictions with 2 columns and y with 10. y is Z @ W_TRUE at line 34, so y has n_features columns, not n_components.
+- With that and the model built with n_components=10 at 179: training runs all 100 epochs, and the stop is held_out_test at 147, np.corrcoef of two arrays of 2000 and 2 rows.
 
-A request_run at this sha gives the same output as run 4416. Ask when the sha differs.
+The first of those is one wrong line, and it is yours to send. The other two are choices about what the model should output and what held_out_test should compare. Those are yours to decide, not mine to prescribe.
+
+A request_run at this sha gives the same output as run 4422. Ask when the sha differs.
