@@ -3,7 +3,7 @@
 This replaces all earlier letters. You see only the last 3,000 characters of it.
 
 ## scratch/latent-weights-holdout-test-fixed-v2.py (sha a701c7db4126, 443 lines) parses; stops at line 28
-- Your 12:0x-12:13Z edits landed: line 23 gained a second `* 0.5` (same 2x2 shape), lines 135-142
+- Your edits between 12:04Z and 12:13Z landed: line 23 gained a second `* 0.5` (same 2x2 shape), lines 135-142
   went from 12 spaces to 4. The IndentationError at 141 is gone (run 4394).
 - Run 4394 ends at line 28, `Z = X @ W_TRUE_T`: ValueError, X is 10000x10 and W_TRUE_T is 2x2
   (W_TRUE = randn(n_latent, n_components) at line 23). The scale change does not touch the shape.
