@@ -536,20 +536,20 @@ fn loopback_reader(peer: std::net::SocketAddr, route: &str)
     }))))
 }
 
-/// What to tell the speaker about delivery, from what arousal OBSERVED. `engage` is the
-/// policy wanting a wake; `started` is the wake actually launching. They differ on a host
-/// whose beats are not systemd units or when the unit fails, and "waking the being now"
-/// must never be said for a wake that did not start (GPT review of SAGE#81).
+/// Scheduler acceptance is not observed beat entry. Legacy started=true also meant only
+/// acceptance; never turn it into execution evidence. Shared fixtures pin the Python peer.
 fn delivery_text(woke: &serde_json::Value) -> String {
-    let started = woke.get("started").and_then(|v| v.as_bool()).unwrap_or(false);
+    let accepted = match woke.get("start_accepted") {
+        Some(value) => value.as_bool(),
+        None => woke.get("started").and_then(|v| v.as_bool()).filter(|v| *v),
+    };
     let engage = woke.get("engage").and_then(|v| v.as_bool()).unwrap_or(false);
-    if started {
-        "waking the being now".to_string()
-    } else if engage {
-        let why = woke.get("wake_error").and_then(|v| v.as_str()).unwrap_or("unknown reason");
-        format!("recorded; a wake was wanted and did not start ({why}); it will be read at the next beat")
-    } else {
-        "recorded; it will be read at the next beat".to_string()
+    let why = woke.get("wake_error").and_then(|v| v.as_str()).unwrap_or("unknown reason");
+    match accepted {
+        Some(true) => "recorded; wake request accepted; beat entry unconfirmed".to_string(),
+        Some(false) => format!("recorded; wake request was not accepted ({why}); awaiting a later beat"),
+        None if engage => format!("recorded; wake request outcome unknown ({why}); beat entry unconfirmed"),
+        None => "recorded; awaiting the next beat".to_string(),
     }
 }
 
@@ -1074,14 +1074,18 @@ mod speaker_route_tests {
     fn peer(s: &str) -> std::net::SocketAddr { s.parse().unwrap() }
 
     #[test]
+    fn delivery_evidence_matches_python_contract() {
+        let cases: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../sage/gateway/tests/fixtures/wake_delivery.json"
+        )).unwrap();
+        for case in cases.as_array().unwrap() {
+            assert_eq!(delivery_text(&case["input"]), case["expected"].as_str().unwrap(),
+                       "fixture {}", case["name"]);
+        }
+    }
+
+    #[test]
     fn a_speaker_is_accepted_only_from_this_machine() {
-        // delivery text follows the observed start, never the policy alone
-        let j = |v: &str| -> serde_json::Value { serde_json::from_str(v).unwrap() };
-        assert_eq!(delivery_text(&j(r#"{"engage":true,"started":true}"#)), "waking the being now");
-        let failed = delivery_text(&j(r#"{"engage":true,"started":false,"wake_error":"no systemctl"}"#));
-        assert!(failed.contains("did not start") && failed.contains("no systemctl") && !failed.contains("waking"), "{failed}");
-        assert!(!delivery_text(&j(r#"{"engage":true}"#)).contains("waking"), "engage without started is not a wake");
-        assert_eq!(delivery_text(&j(r#"{"engage":false}"#)), "recorded; it will be read at the next beat");
         assert!(loopback_reader(peer("127.0.0.1:5000"), "/conversations").is_none());
         assert!(loopback_reader(peer("[::1]:5000"), "/conversations/:id").is_none());
         for lan in ["10.0.0.146:5000", "100.75.141.17:5000", "192.168.1.9:5000"] {

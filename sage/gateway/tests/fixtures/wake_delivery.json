@@ -1,0 +1,14 @@
+[
+  {"name":"accepted_v2","input":{"engage":true,"wake_evidence_version":2,"start_accepted":true,"started":null},"expected":"recorded; wake request accepted; beat entry unconfirmed"},
+  {"name":"rejected_v2","input":{"engage":true,"start_accepted":false,"started":null,"wake_error":"request rejected"},"expected":"recorded; wake request was not accepted (request rejected); awaiting a later beat"},
+  {"name":"timeout_v2","input":{"engage":true,"start_accepted":null,"started":null,"wake_error":"timeout"},"expected":"recorded; wake request outcome unknown (timeout); beat entry unconfirmed"},
+  {"name":"legacy_true_is_only_acceptance","input":{"engage":true,"started":true},"expected":"recorded; wake request accepted; beat entry unconfirmed"},
+  {"name":"legacy_false_is_not_execution_evidence","input":{"engage":true,"started":false,"wake_error":"unavailable"},"expected":"recorded; wake request outcome unknown (unavailable); beat entry unconfirmed"},
+  {"name":"policy_is_not_acceptance","input":{"engage":true},"expected":"recorded; wake request outcome unknown (unknown reason); beat entry unconfirmed"},
+  {"name":"declined","input":{"engage":false},"expected":"recorded; awaiting the next beat"},
+  {"name":"explicit_null_beats_legacy_true","input":{"engage":true,"start_accepted":null,"started":true},"expected":"recorded; wake request outcome unknown (unknown reason); beat entry unconfirmed"},
+  {"name":"explicit_false_beats_legacy_true","input":{"engage":true,"start_accepted":false,"started":true},"expected":"recorded; wake request was not accepted (unknown reason); awaiting a later beat"},
+  {"name":"malformed_is_not_truthy","input":{"engage":true,"start_accepted":"true","started":true,"wake_error":null},"expected":"recorded; wake request outcome unknown (unknown reason); beat entry unconfirmed"},
+  {"name":"numeric_is_not_boolean","input":{"engage":true,"start_accepted":1,"started":true},"expected":"recorded; wake request outcome unknown (unknown reason); beat entry unconfirmed"},
+  {"name":"empty","input":{},"expected":"recorded; awaiting the next beat"}
+]
