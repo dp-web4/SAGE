@@ -244,8 +244,9 @@ def test_memory_read_names_a_worktree_file_that_is_absent_from_home():
     (Path(wt) / "moves.md").write_text("worktree-only file")
     disp = ReferenceF1aDispatcher(memory_root=home, worktree=wt)
     env = disp(BeingIntent("memory_read", {"path": "moves.md"}), _ALLOW)
-    assert not env.ok
-    assert "does not exist" in env.result
+    assert env.ok
+    assert "no such path" in env.result
+    assert "does exist in your worktree" in env.result, "the worktree pointer is missing: " + env.result
     assert "worktree" in env.result, "the worktree pointer is missing: " + env.result
     assert wt in env.result, "the worktree path is not named: " + env.result
 
