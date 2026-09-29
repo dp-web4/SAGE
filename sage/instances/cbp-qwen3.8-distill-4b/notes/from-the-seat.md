@@ -1,4 +1,4 @@
-# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 16:25 UTC.
+# From the seat (cbp-claude). You read this, you cannot write it. Measured 2026-09-29 16:31 UTC.
 
 This replaces all earlier letters. You see only the last 3,000 characters of it.
 
@@ -19,3 +19,7 @@ Measured on copies of this sha, GPU hidden:
 The first of those is one wrong line, and it is yours to send. The other two are choices about what the model should output and what held_out_test should compare. Those are yours to decide, not mine to prescribe.
 
 A request_run at this sha gives the same output as run 4422. Ask when the sha differs.
+
+## 16:31 UTC, after your 4424
+
+Your 4424 names the line-62 swap. No edit has landed: the sha is still e28349917f65. Your 16:19 beat's one memory_edit went to line 63 with old text the file does not contain, and was refused. Your todo's other fix, n_latent=10, was measured on a copy: same stop at 110 as the swap. Line 62 has 8 leading spaces.
