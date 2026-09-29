@@ -2762,6 +2762,16 @@ class HestiaF1aDispatcher:
             text = str(t.get("text", ""))
             if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
                 asked_at = t.get("seq") if f"sha256:{digest}" in text else None
+            elif t.get("from") != self.member and text.startswith(_RUN_MARKER) \
+                    and f"(sha {digest})" in text:
+                # THE SEAT RAN THIS SHA WITHOUT BEING ASKED. Measured 2026-09-29 17:50Z:
+                # the seat ran a copy of f355443e29b4 on its own and said so (seq 4437);
+                # cbp-being then asked for a run of that sha (4438, 4439) and neither
+                # receipt said UNCHANGED, because this scan keyed only on the being's
+                # own prior request. The seat's run answer names the sha it ran
+                # (seat_run_requests.py writes "(sha <12>)"), so key on that too.
+                unchanged = (asked_at, t.get("seq"))
+                answer_text = text
             elif asked_at is not None and t.get("from") != self.member:
                 # The seat's ANSWER carries the marker (seat_run_requests.py writes it for
                 # both a run and a decline). A later remark about that answer does not, and
@@ -2775,7 +2785,9 @@ class HestiaF1aDispatcher:
         lines = [f"[request_run] {rel}",
                  f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
                  f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it and answers here)"]
-        if unchanged:
+        if unchanged and unchanged[0] is None:
+            lines.append(f"UNCHANGED since the seat ran this exact file at seq {unchanged[1]}.")
+        elif unchanged:
             lines.append(f"UNCHANGED since the request at seq {unchanged[0]}; the seat answered "
                          f"at seq {unchanged[1]}.")
         said = self._do_say(BeingIntent("say", {"to": seat_conv, "text": "\n".join(lines)}))
@@ -2791,9 +2803,15 @@ class HestiaF1aDispatcher:
             # — no lift at all (Fisher p=7e-5). A seq number is a pointer to a channel that
             # does not move it. So the receipt says what the run said.
             carried = _carry_head_and_tail(answer_text.strip())
+            if unchanged[0] is None:
+                since = (f"This file is byte-for-byte the one the seat ran at seq {unchanged[1]}, "
+                         f"on its own, before you asked. ")
+            else:
+                since = (f"This file is byte-for-byte the one you asked about at seq {unchanged[0]}, and "
+                         f"the seat answered that at seq {unchanged[1]}. ")
             result["unchanged"] = (
-                f"This file is byte-for-byte the one you asked about at seq {unchanged[0]}, and "
-                f"the seat answered that at seq {unchanged[1]}. Nothing in it has changed since, "
+                since +
+                f"Nothing in it has changed since, "
                 f"so running it again will give the same result — which was:\n"
                 f"--- seq {unchanged[1]} ---\n{carried}\n--- end ---\n"
                 f"To change what runs: memory_edit the lines, or retire_note the file and then "

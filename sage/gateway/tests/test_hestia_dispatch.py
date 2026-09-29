@@ -1659,6 +1659,46 @@ def test_an_unchanged_receipt_carries_the_seat_answer_not_a_pointer_to_it():
     assert f"seq {ran_at}" in got and f"seq {aside_at}" not in got, (ran_at, aside_at, got)
 
 
+def test_an_unchanged_receipt_sees_a_seat_run_the_being_never_asked_for():
+    """Measured 2026-09-29 17:50Z: the seat ran a copy of sha f355443e29b4 on its own and
+    posted the traceback (seq 4437). cbp-being then asked for a run of that sha twice (4438,
+    4439) and neither receipt said UNCHANGED: the scan keyed on the being's own prior request.
+    The seat's run answer names the sha it ran; that is enough to key on."""
+    import hashlib
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "train.py"
+    f.write_text("print('a')\n")
+    sha = hashlib.sha256(f.read_bytes()).hexdigest()[:12]
+
+    # no request from the being at all; the seat ran it unasked and said which sha
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/train.py (sha {sha}) with no arguments. exit code 1.\n\n"
+                     "stderr:\nValueError: cannot reshape array of size 2000 into shape (2,10)\n")
+    ran_at = conv.recent(home, "seat", limit=1)[-1]["seq"]
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "confirm the fix"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False
+    got = r.result.get("unchanged")
+    assert got, r.result
+    assert f"seq {ran_at}" in got and "before you asked" in got, got
+    assert "cannot reshape array of size 2000" in got, got
+    turn = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert f"UNCHANGED since the seat ran this exact file at seq {ran_at}" in turn, turn
+
+    # a seat run of a DIFFERENT sha does not count
+    f.write_text("print('b')\n")
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "after edit"}), _ALLOW)
+    assert r.ok and "unchanged" not in r.result, r.result
+
+
 def test_an_unchanged_receipt_caps_what_it_carries():
     """A seat answer is capped at both ends by the seat, but a decline can be prose of any
     length. The tail is what carries the exception line, so the cap keeps the tail."""
