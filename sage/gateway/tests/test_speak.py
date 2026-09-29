@@ -103,16 +103,19 @@ def test_a_playback_failure_is_reported_as_not_heard(monkeypatch):
     assert not os.path.exists(os.path.join(home, "spoken.jsonl")), "only what was heard is recorded"
 
 
-def test_offered_only_where_the_body_can_speak(monkeypatch):
-    from sage.gateway.heartbeat import offered_explore_tools, BODY_VERBS
-    assert "speak" in BODY_VERBS
+def test_offered_everywhere_and_said_unavailable_where_the_body_cannot_speak(monkeypatch):
+    from sage.gateway import toolset
+    from sage.gateway.heartbeat import offered_explore_tools
+    assert "speak" in toolset.BODY_VERBS
     monkeypatch.setattr(body.shutil, "which", lambda t: "/usr/bin/" + t)
     assert body.speak_provider(_SPEAKER)["live"]
     assert not body.speak_provider({"sinks": []})["live"]
     monkeypatch.setattr(body.shutil, "which", lambda t: None if t == "pw-play" else "/usr/bin/" + t)
     assert body.speak_provider(_SPEAKER)["why"] == "'pw-play' is not installed"
     assert "speak" in offered_explore_tools({"inventory": {"verbs": ["speak"]}})
-    assert "speak" not in offered_explore_tools({"inventory": {"verbs": ["gaze"]}})
+    assert "speak" in offered_explore_tools({"inventory": {"verbs": ["gaze"]}}), "offered anyway"
+    assert "speak" not in toolset.unavailable({"inventory": {"verbs": ["speak"]}}, "/wt", {})
+    assert "speaker" in toolset.unavailable({"inventory": {"verbs": ["gaze"]}}, "/wt", {})["speak"]
 
 
 def test_registered_pathless_consequential_and_words_only():

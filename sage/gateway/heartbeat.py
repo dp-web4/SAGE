@@ -202,6 +202,15 @@ WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore")
 
 
 def offered_explore_tools(body_reading: Optional[dict], worktree: Optional[str] = None) -> list:
+    """SUPERSEDED by the canonical toolset (sage/gateway/toolset.py, 2026-09-29): every being is
+    offered every verb, and availability is said rather than enacted. Kept so callers that ask
+    "what is offered here" get the true answer."""
+    from sage.gateway.toolset import canonical_toolset
+    return canonical_toolset()
+
+
+def _offered_explore_tools_before_the_canonical_toolset(body_reading: Optional[dict],
+                                                         worktree: Optional[str] = None) -> list:
     """EXPLORE_TOOLS minus the body verbs this machine's measured inventory does not carry, plus
     the worktree verbs when the being has a worktree of its own (inserted before `rest`)."""
     have = set(((body_reading or {}).get("inventory") or {}).get("verbs") or [])
@@ -763,7 +772,7 @@ _SCHEMA_CHARS_PER_VERB = 700   # above the 651 measured, so the bound stays cons
 _SCHEMA_CHARS_FLOOR = 12_000   # at least the 18-verb measurement, for when the verb count is unknown too
 
 
-def _schema_chars_for(offered) -> Optional[int]:
+def _schema_chars_for(offered, unavail: Optional[dict] = None) -> Optional[int]:
     """Chars the offered verbs' schemas actually cost. None rather than a guess if it
     cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
     13 verbs to 18. Callers must route None through _schema_chars_fallback, never `or`
@@ -772,6 +781,12 @@ def _schema_chars_for(offered) -> Optional[int]:
     if not offered:
         return None
     try:
+        if unavail is not None:
+            # the canonical toolset as actually offered: availability shortens what cannot work
+            # here, so the cost is measured on THOSE specs, not on the full descriptions
+            from sage.gateway import toolset
+            names = set(offered)
+            return len(json.dumps([t for t in toolset.specs(unavail) if t["function"]["name"] in names]))
         from sage.gateway.being_gate_client import ollama_tools
         return len(json.dumps(ollama_tools(list(offered))))
     except Exception:
@@ -2842,8 +2857,16 @@ def main(argv=None) -> int:
             _room.ingest_heard(instance, args.member, (_body_cur or {}).get("inventory"))
         except Exception as _e:
             print(f"[heartbeat] room ingest failed ({type(_e).__name__}: {_e})", file=sys.stderr)
-    _explore_tools = offered_explore_tools(_body_cur, _wt)
-    _schema_measured = _schema_chars_for(_explore_tools)
+    # THE CANONICAL TOOLSET (sage/gateway/toolset.py, dp 2026-09-29): every verb, for every
+    # being. What this machine cannot do is SAID in the verb's description, never done by
+    # leaving the verb out.
+    from sage.gateway import toolset as _toolset
+    _unavail = _toolset.unavailable(_body_cur, _wt, instance_config(instance))
+    _explore_specs = _toolset.specs(_unavail)
+    # the names are DERIVED from the specs offered, never kept beside them: the seed's tool list
+    # and the window's schema measurement must describe exactly what the model is handed
+    _explore_tools = [t["function"]["name"] for t in _explore_specs]
+    _schema_measured = _schema_chars_for(_explore_tools, _unavail)
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
     _state_head = f"# Your own state\n\n"
@@ -2951,13 +2974,13 @@ def main(argv=None) -> int:
     killed = None
     try:
         explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
-                                       tools=ollama_tools(_explore_tools), on_generate=_on_generate("explore"))
+                                       tools=_explore_specs, on_generate=_on_generate("explore"))
         convo = _carry(seed, explore)
         after = None
         if posture_turn is not None:
             convo.append({"role": "user", "content": posture_turn})
             after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
-                                         tools=ollama_tools(_explore_tools), on_generate=_on_generate("posture"))
+                                         tools=_explore_specs, on_generate=_on_generate("posture"))
             convo = _carry(convo, after)
         # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
         # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
