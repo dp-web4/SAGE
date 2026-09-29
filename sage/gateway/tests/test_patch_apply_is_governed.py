@@ -50,7 +50,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _isolate_hestia  # noqa: E402,F401  -- isolates on import, unconditionally
 from sage.gateway import being_gate_client as B  # noqa: E402
-from sage.gateway.tests._gate_core import requires_gate_core  # noqa: E402
+from sage.gateway.tests._gate_core import requires_gate_core, standalone_skip_reason  # noqa: E402
 
 FAILS = []
 # UNDER PYTEST A FAILED CHECK MUST FAIL THE TEST (GPT, review of SAGE #257: check() only appended
@@ -678,7 +678,13 @@ TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_") and ca
 
 
 def main():
+    gate_skipped = 0
     for fn in TESTS:
+        why = standalone_skip_reason(fn)
+        if why:
+            print(f"SKIPPED {fn.__name__}: {why}")
+            gate_skipped += 1
+            continue
         try:
             fn()
         except Exception as e:  # noqa: BLE001
@@ -691,7 +697,7 @@ def main():
         print(f"SKIPPED: the dispatcher arm (4 tests) -- it could not be imported here "
               f"({SKIPPED[0][:90]}). The source pins above still ran; CI is the authority.")
     print(f"{'FAILED' if FAILS else 'ok'}: {len(FAILS)} failure(s) across "
-          f"{len(TESTS) - (4 if SKIPPED else 0)} tests that ran")
+          f"{len(TESTS) - (4 if SKIPPED else 0) - gate_skipped} tests that ran")
     return 1 if FAILS else 0
 
 
