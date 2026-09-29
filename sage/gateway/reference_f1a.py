@@ -39,6 +39,10 @@ from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEn
 # that could append to either could not later be distinguished from the person who wrote to
 # it, and neither could anyone reading the record.
 SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
+# Files in the being's home itself that the SEAT owns. `entrustment.md` is what the being was
+# GIVEN; if it could append to it, what was extended and what it decided would merge in the
+# record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
+SEAT_OWNED = ("entrustment.md",)
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
@@ -1188,7 +1192,9 @@ class ReferenceF1aDispatcher:
 SEAT_OWNED = ("entrustment.md",)
 
 
-SHARED_FORUM = "/ai-workspace/shared-context/forum"
+# Matched as a path SEGMENT, wherever the checkout lives (main #258: shared-context is found beside
+# the SAGE checkout, not assumed under ~/ai-workspace).
+SHARED_FORUM = "/shared-context/forum"
 
 
 def _shared_destination_hint(p) -> str:

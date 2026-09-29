@@ -18,6 +18,7 @@ id the daemon returned. A refused act is a first-class outcome, not an error.
 """
 from __future__ import annotations
 
+from sage.gateway.fleet_paths import forum_dir as _fleet_forum_dir
 import argparse
 import json
 import os
@@ -214,6 +215,8 @@ def offered_tools(tools_arg, instance):
     from sage.gateway.being_gate_client import ollama_tools
     if tools_arg:
         return ollama_tools([t.strip() for t in tools_arg.split(",")])
+    # THE CANONICAL TOOLSET (sage/gateway/toolset.py): every verb, availability said. This used
+    # to drop `game` where no stepper was set up; now `game` is offered with that reason instead.
     from sage.gateway import toolset
     try:
         from sage.gateway import body as _body
@@ -286,7 +289,7 @@ def main(argv=None) -> int:
                     help="judge every intent by the law but execute nothing (allowed -> pending)")
     ap.add_argument("--system-file", help="system turn; default is the gateway seed")
     ap.add_argument("--workspace", default=None, help="gate workspace root (default: repo root)")
-    ap.add_argument("--forum-dir", default=os.path.expanduser("~/ai-workspace/shared-context/forum"))
+    ap.add_argument("--forum-dir", default=str(_fleet_forum_dir()))
     ap.add_argument("--max-steps", type=int, default=2)
     ap.add_argument("--no-escalate", action="store_true",
                     help="do not route refusals to the seat's auto session (default: route)")

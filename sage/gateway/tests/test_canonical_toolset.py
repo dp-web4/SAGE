@@ -27,6 +27,8 @@ def test_every_launcher_offers_the_same_toolset(tmp_path):
     assert [t["function"]["name"] for t in offered_tools(None, inst)] == canon
     main = inspect.getsource(hb.main)
     assert main.count("tools=_explore_specs") == 2, "explore AND posture offer the canonical specs"
+    assert '_explore_tools = [t["function"]["name"] for t in _explore_specs]' in main, \
+        "the names used for the seed and the window measurement come FROM the offered specs"
     from pathlib import Path
     raising = (Path(hb.__file__).resolve().parents[1] / "raising" / "scripts" / "ollama_raising_session.py").read_text()
     assert "_toolset.specs(" in raising, "the raising sessions offer the canonical toolset too"
