@@ -162,9 +162,9 @@ def test_a_long_read_names_its_window_and_the_start_line_that_reads_on():
     r = disp(BeingIntent("memory_read", {"path": "notes/big.py", "start_line": 206}), _ALLOW)
     assert r.result.startswith("[lines 206-") and "\nline 0206 " + "x" * 90 + "\n" in r.result
     # a file that fits carries no marker at all
-    Path(root, "notes", "small.py").write_text("a = 1\n")
-    assert disp(BeingIntent("memory_read", {"path": "notes/small.py"}), _ALLOW).result == "a = 1\n"
-    r = disp(BeingIntent("memory_read", {"path": "notes/small.py", "start_line": 9}), _ALLOW)
+    Path(root, "notes", "small.md").write_text("a = 1\n")
+    assert disp(BeingIntent("memory_read", {"path": "notes/small.md"}), _ALLOW).result == "a = 1\n"
+    r = disp(BeingIntent("memory_read", {"path": "notes/small.md", "start_line": 9}), _ALLOW)
     assert r.ok and r.result.startswith("[past the end:")
 
 
@@ -730,3 +730,31 @@ def test_an_edit_aimed_at_a_conversation_is_told_to_name_its_file():
     r = disp(BeingIntent("memory_edit", {"path": "conversations/cbp-claude.jsonl",
                                          "old": "x", "new": "y"}), _ALLOW)
     assert not r.ok and "give that file's path" in r.error and "does not change any file" in r.error, r
+
+
+def test_a_py_read_says_whether_python_can_parse_the_file_now():
+    """2026-09-23: cbp-being read lines 1718-1937 of its script -- line 1721 at column 0, the
+    lines under it indented four -- and concluded "syntactically valid"; Python stopped at
+    1722. #162 told it on write and edit, never on the read where the verdict was formed.
+    Again 2026-09-29 11:41Z: it read all 443 lines of scratch/latent-weights-holdout-test-fixed-v2.py
+    in three windows (1-207, 208-427, 428-443), said "appears syntactically correct", and asked
+    the seat to run it; the run (seq 4384) stopped at line 135, IndentationError, inside the
+    first window it had been shown. A whole-file read has no end marker, so the note is
+    prefixed with one: a bare bracket line after the last line reads as the file's last line."""
+    disp, root = _disp()
+    f = Path(root) / "notes" / "s.py"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("p = 1\n    q = 2\n")
+    r = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
+    assert r.ok and r.result.endswith("\n[end of file: line 2 is the last line. Python cannot parse s.py now: "
+                                      "IndentationError at line 2: unexpected indent. It cannot run until that "
+                                      "line is fixed.]"), r.result
+    r = disp(BeingIntent("memory_read", {"path": "notes/s.py", "start_line": 2}), _ALLOW)
+    assert r.ok and r.result.startswith("[lines 2-2 of 2") and "cannot parse s.py now" in r.result, r.result
+    f.write_text("p = 1\nq = 2\n")
+    r = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
+    assert r.ok and r.result.endswith("\n[end of file: line 2 is the last line. Python can parse s.py now. "
+                                      "That is not the same as running it.]"), r.result
+    (Path(root) / "journal.md").write_text("a note\n")
+    r = disp(BeingIntent("memory_read", {"path": "journal.md"}), _ALLOW)
+    assert r.ok and r.result == "a note\n", r.result
