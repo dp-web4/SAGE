@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _isolate_hestia  # noqa: E402,F401  -- isolates on import, unconditionally
 from sage.gateway import being_gate_client as B  # noqa: E402
+from sage.gateway.tests._gate_core import requires_gate_core  # noqa: E402
 
 FAILS = []
 # UNDER PYTEST A FAILED CHECK MUST FAIL THE TEST (GPT, review of SAGE #257: check() only appended
@@ -76,6 +77,7 @@ def test_every_registry_composer_takes_ctx():
               inspect.signature(compose).parameters["ctx"].default is None)
 
 
+@requires_gate_core
 def test_the_gate_composes_with_the_worktree():
     """With a worktree, the worktree verbs reach the law instead of raising in the composer."""
     with tempfile.TemporaryDirectory() as wt:
@@ -109,6 +111,7 @@ def test_the_gate_composes_with_the_worktree():
               c.worktree not in (ev.command or ""))
 
 
+@requires_gate_core
 def test_without_a_worktree_the_verbs_still_fail_closed():
     """The refusal is CORRECT and must survive. A seat with no worktree declared gets a deny
     that names what is missing -- not a command composed against the shared checkout, which is
