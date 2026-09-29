@@ -53,6 +53,26 @@ read old producers conservatively. An old reader paired with the new producer ma
 mislabel `started=null` as a failed start; retaining the field is not full semantic
 backward compatibility. No automatic live rollout is part of this change.
 
+### Merge prerequisite: reader rollout
+
+Where the daemon invokes Python from the working tree, updating that tree changes
+the producer immediately; it does not replace the already-running Rust reader.
+A source update alone therefore does not satisfy the rollout requirement.
+
+Before merging, arrange a release rebuild and restart for every deployment using
+the Rust daemon. Build the updated reader with
+`cargo build --release --manifest-path sage-rs/Cargo.toml -p sage-daemon`, install
+the resulting binary at the service's configured executable path, and run
+`systemctl --user restart sage-daemon`. Verify that the service is running the
+updated binary before activating the new Python producer. The new reader can run
+against the old producer while that update is pending. If updating the source tree
+would activate the producer first, prepare the reader from a separate checkout.
+
+Keep the merge on hold until this sequence has an operator and a deployment plan.
+Passing contract tests establishes reader agreement, not completion of rollout;
+a successful restart likewise does not establish heartbeat entry or event
+consumption.
+
 ## Tests and limits
 
 The focused Python suite covers producer success/rejection/timeout/signal results,
