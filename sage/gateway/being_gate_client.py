@@ -1838,6 +1838,13 @@ _TOOL_SCHEMAS = {
                {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
                 "device": "optional: a plain device node to read from (default /dev/video0)"},
                []),
+    "stay_awake": ("Ask for another beat right after this one, because you want to keep going: "
+                   "something you are in the middle of, something in your surroundings, or your "
+                   "own curiosity. The next beat starts as soon as this one ends. You never need "
+                   "it to be woken by the world (every message and every sense event wakes you on "
+                   "its own); this is only for wanting more time now. Your reason is recorded. "
+                   "It touches nothing in the world, so it is not gated and not witnessed.",
+                   {"reason": "one line: what you want to keep doing"}, ["reason"]),
     "rest": ("End this beat deliberately, when you judge you are done. You are NOT required "
              "to keep acting until something runs out — a beat you end early is not a beat "
              "wasted, and the time returns to the machine. Your reason becomes your closing "

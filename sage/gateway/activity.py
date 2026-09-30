@@ -9,7 +9,8 @@ Now the beat reports as it goes:
 
     beat start, explore, posture, account  -> wake
     reflect, answer                        -> wrap-up
-    beat end (every exit path)             -> rest
+    beat end (every exit path)             -> rest, or wake ("heartbeat:end:continuing") when
+                                              the next beat is already armed (SAGE #295)
 
 and the consolidation unit reports dream while `sage.memory.consolidation` runs, then rest
 (from its ExecStartPre/ExecStopPost: consolidation.py itself is pre-registered to make no
@@ -92,13 +93,28 @@ def reported_active() -> bool:
     return _reported_active
 
 
-def end(source: str, beat_id: Optional[str] = None, url: Optional[str] = None) -> bool:
-    """Report rest, but only if this process reported something else first. A beat that
-    exited before it began (no identity.json) must not overwrite another reporter's state."""
+# How long a hand-off to the next beat stands before it decays to rest. The next beat reports
+# wake within seconds of starting; if it never starts (its ExecCondition failed, the unit is
+# broken), the display must not say wake for a whole beat's TTL.
+HANDOFF_TTL_S = 300
+
+
+def end(source: str, beat_id: Optional[str] = None, url: Optional[str] = None,
+        continuing: bool = False) -> bool:
+    """The beat is over. Report rest, but only if this process reported something else first: a
+    beat that exited before it began (no identity.json) must not overwrite another reporter's state.
+
+    `continuing` (SAGE #295): the next beat is already armed because work is pending or the being
+    asked to stay awake. Wake continues: report wake as a hand-off (`<source>:continuing`, bounded by
+    HANDOFF_TTL_S), never rest, so back-to-back beats show no rest between them. The daemon counts a
+    beat as ended on either report (a source whose phase starts with "end")."""
     global _reported_active
     if not _reported_active:
         return False
-    ok = report("rest", source, beat_id=beat_id, url=url)
+    if continuing:
+        ok = report("wake", f"{source}:continuing", beat_id=beat_id, ttl_secs=HANDOFF_TTL_S, url=url)
+    else:
+        ok = report("rest", source, beat_id=beat_id, url=url)
     _reported_active = False
     return ok
 
