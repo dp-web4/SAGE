@@ -2775,6 +2775,18 @@ class HestiaF1aDispatcher:
         lines = [f"[request_run] {rel}",
                  f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
                  f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it and answers here)"]
+        # EVERY ARGUMENT THE BEING GAVE REACHES THE SEAT. Measured 2026-09-22 08:3xZ: cbp-being
+        # put its flags in 'body' ("Run ... with --input-dim 10 --output-dim 1 ...") and the
+        # seat was shown "why: (none given)" and no flags. Across its first 66 request_runs,
+        # 20 carried their content in a key read nowhere: 'arguments' 9, 'command' 6, 'body'
+        # 5. Aliasing each word as it turns up (as 'reason' was) chases the next one; carrying
+        # whatever is left, under the being's own key, cannot miss. 'to' names the addressee,
+        # which is always this conversation. The seat passes flags it chooses to accept after
+        # `--` (seat_run_requests.py, #175); this is how it sees them. The first line stays
+        # "[request_run] <rel>", which the unchanged check above and the seat's reader key on.
+        for k, v in intent.args.items():
+            if k not in ("path", "why", "reason", "to") and str(v).strip():
+                lines.append(f"{k}: {str(v).strip()}")
         if unchanged:
             lines.append(f"UNCHANGED since the request at seq {unchanged[0]}; the seat answered "
                          f"at seq {unchanged[1]}.")
@@ -2998,19 +3010,6 @@ def _carry_vs_main(git) -> dict:
     return out
 
 
-
-if __name__ == "__main__":  # live smoke against the local daemon: mesh -> member_notify
-    import sys
-    inst = os.path.expanduser("~/ai-workspace/sage/sage/instances/sprout-qwen3.8-distill-2b")
-    d = HestiaF1aDispatcher("sprout-being", inst)
-    to, kind, ptr = (sys.argv[1:4] + [None, None, None])[:3]
-    if not (to and kind and ptr):
-        print("usage: hestia_dispatch.py <to> <kind> <pointer_uri>"); sys.exit(2)
-    env = d(BeingIntent("mesh", {"to": to, "kind": kind, "pointer": ptr}), GatewayVerdict("allow"))
-    print(json.dumps({"ok": env.ok, "result": env.result, "error": env.error,
-                      "witness_id": env.witness_id, "pending": env.pending, "note": env.note}, indent=1))
-
-
 def _git_land(path: str, message: str) -> None:
     """Commit ONE file and push it to the checkout's upstream (rebase-on-upstream first).
     Raises on every failure: no repo, identity missing, rebase blocked by a sibling's dirty
@@ -3079,3 +3078,15 @@ def make_forum_publisher(pointer_dir: str, plugin_id: str, push: bool = True) ->
         sp = str(p); i = sp.find("shared-context/")
         return sp[i:] if i >= 0 else sp
     return publish
+
+
+if __name__ == "__main__":  # live smoke against the local daemon: mesh -> member_notify
+    import sys
+    inst = os.path.expanduser("~/ai-workspace/sage/sage/instances/sprout-qwen3.8-distill-2b")
+    d = HestiaF1aDispatcher("sprout-being", inst)
+    to, kind, ptr = (sys.argv[1:4] + [None, None, None])[:3]
+    if not (to and kind and ptr):
+        print("usage: hestia_dispatch.py <to> <kind> <pointer_uri>"); sys.exit(2)
+    env = d(BeingIntent("mesh", {"to": to, "kind": kind, "pointer": ptr}), GatewayVerdict("allow"))
+    print(json.dumps({"ok": env.ok, "result": env.result, "error": env.error,
+                      "witness_id": env.witness_id, "pending": env.pending, "note": env.note}, indent=1))

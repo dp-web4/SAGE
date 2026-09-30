@@ -110,12 +110,16 @@ so the being **notices it near-real-time** — in its own voice, its metabolic s
 experience. The mind summoned by its world, not by a clock. Uses the daemon that's *already* resident —
 no fourth substrate.
 
-Discipline (noticing what matters, not twitching at every flicker):
-- a **high salience bar** (`WAKE_TH=0.45` engaged; the cortex already stripped the redundant torrent);
-- the **gaze is honored** — if Sprout chose to rest (`gaze=closed`), only an alarm-level moment
-  (`WAKE_TH_REST=0.70`) stirs it; a reafference **conflict** auto-wakes when engaged;
-- a **cooldown** (`COOLDOWN_S=300`) + **rolling hourly cap** (`HOURLY_CAP=6`) + descriptor dedup, so a
-  sustained event wakes it once.
+Since SAGE #295 (dp, 2026-09-30: "words detected on audio, motion on video or imu - all should wake
+it" and "there should not be artificial cap on beats") **every sense event wakes the being**:
+- an event is what the cortex's own detectors report (motion on a live eye, IMU self-motion, an audio
+  onset, a new object) or words in `heard.jsonl`. SNARC salience is recorded on it, never a bar;
+- each event starts a beat (`sage.gateway.arousal.request_beat`), or, while one runs, is queued so the
+  next beat starts the moment it ends. Between beats the being also voices a one-line noticing first;
+- the gaze is honored by the cortex itself: with eyes closed it does not sense, so there are no sense
+  events (heard words still wake it);
+- the one flood mechanism is descriptor dedup, which coalesces a sustained identical event into its
+  pending entry and drops nothing. There is no cooldown, hourly cap or salience bar.
 
 Each noticing lands in `~/.sprout/presence_log.jsonl` (the being's continuous record) and is **bridged
 into the raising** (`_load_perceptual_digest` folds recent noticings into the SensorsBlock) — so presence

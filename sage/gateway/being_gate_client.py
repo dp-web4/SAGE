@@ -1454,7 +1454,7 @@ def patch_apply_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
 # Where the profile is absent, SANDBOX_REQUIRED decides whether to refuse or degrade.
 
 
-def _unbounded_reason(effector: str) -> str:
+def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
     """The registry refusal, plus the door when the name is a FILE.
 
     2026-09-21 14:06Z: cbp-being called a tool named `mechanism-training-script-clean.py`
@@ -1465,6 +1465,23 @@ def _unbounded_reason(effector: str) -> str:
     if "/" in effector or re.search(r"\.[A-Za-z0-9]{1,5}$", effector or ""):
         reason += (f". That is a file name, and a file is not a tool. To run one of your own "
                    f"files, call request_run with path='{effector}'; the seat runs it and answers")
+        return reason
+    # THE SAME WANT, SPELLED AS A SHELL VERB. 2026-09-22 06:27Z: cbp-being sent run_command
+    # {"command": "python mechanism-training-script-clean.py"}; 7 of the 9 registry.unbounded
+    # refusals in its heartbeats carried the file in an ARG, not the effector, and none named
+    # the door. After the latest it asked the seat "What's the correct way to execute the
+    # script from here?". A script-looking token (.py/.sh, not a flag) gets the door; a bare
+    # verb (`shell ls`) does not, because request_run would be the wrong door for it.
+    for v in (args or {}).values():
+        for s in (v if isinstance(v, (list, tuple)) else [v]):
+            if not isinstance(s, str):
+                continue
+            for tok in s.split():
+                tok = tok.strip("'\"`")
+                if tok and not tok.startswith("-") and re.search(r"\.(py|sh)$", tok):
+                    return reason + (f". There is no shell here, but you named a file: to run "
+                                     f"one of your own files, call request_run with "
+                                     f"path='{tok}'; the seat runs it and answers")
     return reason
 
 
@@ -1838,6 +1855,13 @@ _TOOL_SCHEMAS = {
                {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
                 "device": "optional: a plain device node to read from (default /dev/video0)"},
                []),
+    "stay_awake": ("Ask for another beat right after this one, because you want to keep going: "
+                   "something you are in the middle of, something in your surroundings, or your "
+                   "own curiosity. The next beat starts as soon as this one ends. You never need "
+                   "it to be woken by the world (every message and every sense event wakes you on "
+                   "its own); this is only for wanting more time now. Your reason is recorded. "
+                   "It touches nothing in the world, so it is not gated and not witnessed.",
+                   {"reason": "one line: what you want to keep doing"}, ["reason"]),
     "rest": ("End this beat deliberately, when you judge you are done. You are NOT required "
              "to keep acting until something runs out — a beat you end early is not a beat "
              "wasted, and the time returns to the machine. Your reason becomes your closing "
@@ -2214,7 +2238,7 @@ class BeingGateClient:
         # Stage 0: bounded registry. Unknown effector never reaches the law.
         if intent.effector not in _REGISTRY:
             return GatewayVerdict("deny", "registry.unbounded", stage="registry",
-                                  reason=_unbounded_reason(intent.effector))
+                                  reason=_unbounded_reason(intent.effector, intent.args))
         # THE COMMAND THE LAW IS HANDED, bound once per call and reported on every verdict
         # below. `getattr` rather than `ev.command`: the field is Optional by declaration, a
         # core may build a partial event (the test fakes do, deliberately), and a gate that

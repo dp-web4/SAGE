@@ -151,6 +151,7 @@ def _fake_beat(phases, raise_at=None):
     """Stands in for heartbeat.main: reports the phases it passes through, as main does."""
     def main(argv=None):
         hb._BEAT_ID["id"] = "heartbeat-test"
+        hb._BEAT_ID["continuing"] = False     # nothing pending: this beat ends in rest (#295)
         for state, phase in phases:
             if phase == raise_at:
                 raise RuntimeError("the beat crashed")

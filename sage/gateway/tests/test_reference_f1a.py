@@ -487,6 +487,41 @@ def test_memory_edit_by_line_refuses_lines_that_do_not_exist_and_changes_nothing
     assert (home / "notes" / "s.py").read_text() == "a\nb\n"
 
 
+def test_a_range_edit_missed_only_by_indentation_names_the_space_counts():
+    """cbp-being 2026-09-24: old without the line's 4 leading spaces, refused twice with the
+    line shown, then appended with memory_write instead. The refusal now gives the counts."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    before = "def main():\n    m = M(10)\n    run(m)\n"
+    f.write_text(before)
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 2,
+                                         "old": "m = M(10)", "new": "m = M(50)"}), _ALLOW)
+    assert not r.ok
+    assert "Line 2 in the file starts with 4 spaces; that line of your old starts with 0" in r.error, r.error
+    assert "change nothing" not in r.error
+    assert f.read_text() == before
+    # multi-line: the count names the first line that differs
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 1, "end_line": 3,
+                                         "old": "def main():\n    m = M(10)\nrun(m)", "new": "x"}), _ALLOW)
+    assert not r.ok and "Line 3 in the file starts with 4 spaces" in r.error, r.error
+    # A real content miss gets no indentation note: the note must not explain a wrong line.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3,
+                                         "old": "m = M(10)", "new": "m = M(50)"}), _ALLOW)
+    assert not r.ok and "spaces at the start" not in r.error
+    assert f.read_text() == before
+    # 2026-09-27 04:58Z: the same miss with new identical to old would be a no-op even fixed
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 2,
+                                         "old": "m = M(10)", "new": "m = M(10)"}), _ALLOW)
+    assert not r.ok and "Line 2 in the file starts with 4 spaces" in r.error
+    assert "would change nothing" in r.error, r.error
+    # with the spaces, it lands
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2,
+                                         "old": "    m = M(10)", "new": "    m = M(50)"}), _ALLOW)
+    assert r.ok and f.read_text() == "def main():\n    m = M(50)\n    run(m)\n"
+
+
 def test_memory_edit_with_lines_and_old_is_a_checked_edit():
     """Both given: the lines must BE the old text. A line number read before an earlier edit
     shifted the file points at different lines now; this refuses and shows what is there."""
@@ -911,3 +946,36 @@ def test_a_record_write_naming_no_code_file_is_unchanged():
     # a .py write gets its parse status, not stamps
     r = disp(BeingIntent("memory_write", {"path": "notes/a.py", "content": "import b  # b.py"}), _ALLOW)
     assert r.ok and "Files this names" not in r.result
+
+
+def test_memory_edit_reads_delete_lines_as_the_range():
+    """2026-09-24 05:57Z: cbp-being sent start_line 180, delete_lines 5, new "". Nothing read
+    the 5, end_line defaulted to 180, and one line was deleted while the being journaled five."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("a\nb\nc\nd\ne\nf\ng\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": "2", "delete_lines": "5", "new": ""}), _ALLOW)
+    assert r.ok, r.error
+    assert f.read_text() == "a\ng\n"
+    assert "replaced lines 2-6 (5 lines)" in r.result, r.result
+
+
+def test_memory_edit_delete_lines_agrees_with_end_line_or_refuses():
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("a\nb\nc\nd\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 2, "delete_lines": 3, "new": ""}), _ALLOW)
+    assert not r.ok and "name different ranges" in r.error, r.error
+    for bad in (0, -1, "five"):
+        r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "delete_lines": bad, "new": ""}), _ALLOW)
+        assert not r.ok and "Nothing was changed" in r.error and "delete_lines 7" in r.error, (bad, r.error)
+    # a count that runs past the end is refused by the existing range check, not truncated
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3, "delete_lines": 5, "new": ""}), _ALLOW)
+    assert not r.ok and "are not all in" in r.error, r.error
+    # agreeing end_line and delete_lines is fine
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 3, "delete_lines": 2, "new": ""}), _ALLOW)
+    assert r.ok and f.read_text() == "a\nd\n", r.error
