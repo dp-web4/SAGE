@@ -90,7 +90,11 @@ struct HealthResponse {
     // succeeded anyway — so a reachable peer went green carrying nothing at all.
     metabolic_state: Option<String>,
     atp_level: Option<f64>,
+    /// No longer populated (SAGE #295): it carried the loop's 100 ms tick count (uptime x 10),
+    /// which a peer read as work done. Kept as a field so an older monitor still parses.
     cycle_count: Option<u64>,
+    /// Beats that reported their end since this daemon started, from the heartbeat's reports.
+    beats_completed: u64,
 }
 
 #[derive(Serialize)]
@@ -116,7 +120,13 @@ struct StatusResponse {
     /// 100 ms, kept for the shadow-metabolism experiment. It is not the being's energy and
     /// not what `metabolic_state` shows (SAGE #291).
     atp_percentage: f64,
-    total_cycles: u64,
+    /// The consciousness loop's 100 ms ticks (uptime x 10). Was `total_cycles` (SAGE #295); it
+    /// counts nothing the being did. Beats are `beats`.
+    loop_ticks: u64,
+    /// Real counts, from the heartbeat's activity reports (SAGE #295): beats completed since
+    /// the daemon started, the beat running now (its phase and phase reports), and how long
+    /// since the last beat ended.
+    beats: activity::BeatsView,
     model: String,
     fleet_size: usize,
     /// Derived from the publish age, not asserted (SAGE #111): it was a hard-coded `true`.
@@ -197,7 +207,7 @@ struct ChatResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     salience: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    cycle: Option<u64>,
+    tick: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -358,7 +368,8 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
         // unrefreshed report decays to rest on its own. So it is shown either way.
         metabolic_state: Some(activity::read(&state.activity, now_secs()).state.to_string()),
         atp_level: alive.then_some(snap.atp_percentage),
-        cycle_count: alive.then_some(snap.total_cycles),
+        cycle_count: None,
+        beats_completed: activity::read_beats(&state.activity, now_secs()).completed,
     })
 }
 
@@ -397,7 +408,8 @@ async fn status(State(state): State<Arc<AppState>>) -> Json<StatusResponse> {
         metabolic_beat_id: shown.beat_id.clone(),
         metabolic_decayed: shown.decayed,
         atp_percentage: snap.atp_percentage,
-        total_cycles: snap.total_cycles,
+        loop_ticks: snap.ticks,
+        beats: activity::read_beats(&state.activity, now_secs()),
         model: state.model.clone(),
         fleet_size: state.fleet.as_ref().map_or(0, |f| f.fleet_size()),
         consciousness_loop: alive,
@@ -484,7 +496,7 @@ async fn chat(
                 "metabolic_state": resp.metabolic_state,
                 "atp_percentage": resp.atp_percentage,
                 "salience": resp.salience.total,
-                "cycle": resp.cycle,
+                "tick": resp.tick,
             }))),
             Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({
                 "error": e,

@@ -54,7 +54,7 @@ pub struct ConsciousnessResponse {
     pub salience: SalienceScore,
     pub metabolic_state: String,
     pub atp_percentage: f64,
-    pub cycle: u64,
+    pub tick: u64,
 }
 
 /// What the loop knows about itself, published where the HTTP layer can read it.
@@ -68,7 +68,10 @@ pub struct ConsciousnessResponse {
 /// The loop is the only writer. Readers get a clone; nobody else may mutate it.
 #[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct LoopSnapshot {
-    pub total_cycles: u64,
+    /// Loop ticks: one per 100 ms idle timer or message (uptime x 10). Named `ticks` since
+    /// SAGE #295: as `total_cycles` it was read as a count of something the being did. Beats are
+    /// counted from the heartbeat's reports (`crate::activity::BeatsView`).
+    pub ticks: u64,
     pub messages_processed: u64,
     pub experiences_recorded: u64,
     /// Transitions of the INTERNAL ATP controller, which is not the displayed state (#291).
@@ -96,7 +99,8 @@ pub struct LoopSnapshot {
 }
 
 pub struct LoopStats {
-    pub total_cycles: u64,
+    /// 100 ms loop ticks (uptime x 10). Not beats, not cycles of anything the being did (#295).
+    pub ticks: u64,
     pub messages_processed: u64,
     pub observations_felt: u64,
     pub experiences_recorded: u64,
@@ -113,7 +117,8 @@ pub struct ConsciousnessLoop {
     ollama: OllamaClient,
     experience: ExperienceBuffer,
     message_rx: mpsc::Receiver<PendingMessage>,
-    cycle: u64,
+    /// 100 ms loop ticks (SAGE #295: was `cycle`).
+    tick: u64,
     stats: LoopStats,
     machine_name: String,
     model_name: String,
@@ -176,9 +181,9 @@ impl ConsciousnessLoop {
             message_rx,
             ollama,
             experience,
-            cycle: 0,
+            tick: 0,
             stats: LoopStats {
-                total_cycles: 0,
+                ticks: 0,
                 messages_processed: 0,
                 observations_felt: 0,
                 experiences_recorded: 0,
@@ -222,7 +227,7 @@ impl ConsciousnessLoop {
     fn snapshot_now(&self, salience: Option<sage_lib::consciousness::observation::SalienceScore>,
                     salience_source: Option<String>) -> LoopSnapshot {
         LoopSnapshot {
-            total_cycles: self.stats.total_cycles,
+            ticks: self.stats.ticks,
             messages_processed: self.stats.messages_processed,
             observations_felt: self.stats.observations_felt,
             experiences_recorded: self.stats.experiences_recorded,
@@ -275,10 +280,11 @@ impl ConsciousnessLoop {
         };
         // `real_state` is the internal controller's state, kept under its old key so the
         // experiment's existing rows and readers stay comparable. It is not the being's
-        // displayed state (SAGE #291).
+        // displayed state (SAGE #291). Likewise the `cycle` key: it is the loop tick (#295), kept
+        // under its old name so the shadow log's rows stay comparable across the rename.
         let line = format!(
             "{{\"cycle\":{},\"event\":\"{}\",\"real_atp\":{:.3},\"real_state\":\"{}\",\"coherence\":{},\"valence_delta\":{:.3},\"shadow_atp\":{:.3},\"divergence\":{:.3}}}",
-            self.cycle, event, real_atp, self.metabolic.current_state.as_str(),
+            self.tick, event, real_atp, self.metabolic.current_state.as_str(),
             coh, valence_delta, self.shadow_atp, self.shadow_atp - real_atp,
         );
         use std::io::Write;
@@ -322,16 +328,16 @@ impl ConsciousnessLoop {
                 }
             }
 
-            self.cycle += 1;
-            self.stats.total_cycles = self.cycle;
+            self.tick += 1;
+            self.stats.ticks = self.tick;
             // Publish what this loop knows, every cycle. Ten writes a second of a small struct
             // behind a try_lock; a contended tick simply skips and the next one wins.
             self.publish(None, None).await;
 
-            if self.cycle % 100 == 0 {
+            if self.tick % 100 == 0 {
                 info!(
-                    "cycle={} state={} ATP={:.1} msgs={} felt={} exp={}",
-                    self.cycle,
+                    "tick={} internal_state={} internal_ATP={:.1} msgs={} felt={} exp={}",
+                    self.tick,
                     self.metabolic.current_state.as_str(),
                     self.metabolic.atp_current,
                     self.stats.messages_processed,
@@ -341,7 +347,7 @@ impl ConsciousnessLoop {
             }
             // Shadow-metabolism baseline heartbeat (~every 60s) — samples the trajectory
             // shape between noticings so the divergence curve is legible offline.
-            if self.cycle % 600 == 0 {
+            if self.tick % 600 == 0 {
                 self.shadow_log_line("heartbeat", None, 0.0);
             }
         }
@@ -474,10 +480,14 @@ impl ConsciousnessLoop {
                     salience.clone(),
                     &shown,
                     self.metabolic.atp_percentage(),
-                    self.cycle,
+                    self.tick,
                 );
                 entry.machine = Some(self.machine_name.clone());
                 entry.model = Some(self.model_name.clone());
+                // The beat this exchange happened in, when one is running (SAGE #295).
+                entry.beat_id = self.activity.as_ref().and_then(|c| {
+                    crate::activity::read_beats(c, crate::activity::now_secs()).current.map(|b| b.beat_id)
+                });
 
                 if self.experience.record(entry) {
                     self.stats.experiences_recorded += 1;
@@ -490,7 +500,7 @@ impl ConsciousnessLoop {
                     salience,
                     metabolic_state: shown.clone(),
                     atp_percentage: self.metabolic.atp_percentage(),
-                    cycle: self.cycle,
+                    tick: self.tick,
                 };
                 let _ = response_tx.send(Ok(response));
             }
@@ -524,7 +534,7 @@ impl ConsciousnessLoop {
 
     fn print_summary(&self) {
         info!("=== Consciousness Loop Summary ===");
-        info!("  total cycles: {}", self.stats.total_cycles);
+        info!("  loop ticks: {}", self.stats.ticks);
         info!("  messages processed: {}", self.stats.messages_processed);
         info!("  experiences recorded: {}", self.stats.experiences_recorded);
         info!("  state transitions: {}", self.stats.state_transitions);
@@ -695,16 +705,16 @@ mod snapshot_tests {
         let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
         let mut l = loop_with(cell.clone());
 
-        assert_eq!(cell.lock().await.total_cycles, 0, "nothing published yet");
+        assert_eq!(cell.lock().await.ticks, 0, "nothing published yet");
         assert_eq!(cell.lock().await.published_at, 0, "and it says so");
 
-        l.cycle = 1_593_000;
-        l.stats.total_cycles = l.cycle;
+        l.tick = 1_593_000;
+        l.stats.ticks = l.tick;
         l.stats.messages_processed = 12;
         l.publish(None, None).await;
 
         let s = cell.lock().await.clone();
-        assert_eq!(s.total_cycles, 1_593_000);
+        assert_eq!(s.ticks, 1_593_000);
         assert_eq!(s.messages_processed, 12);
         assert!((s.atp_current - l.metabolic.atp_current).abs() < 1e-12, "the loop's own ATP");
         assert!(s.published_at > 0, "a publish stamps its time; staleness is the liveness signal");
