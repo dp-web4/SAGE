@@ -403,24 +403,41 @@ def _answers(seqs: list[int]) -> str:
             else "No pending request named this file, so this answers none of your requests.")
 
 
-def decline_text(rel, reason: str, seqs: list[int]) -> str:
-    # The closing line names no way forward of its own; the seat's reason is where that goes.
-    # Until 2026-09-30 it ended "If you want it run under different conditions, say which and
-    # ask again." on every decline, whatever the reason. Measured on cbp-being: 96 declines
-    # carried it; the phrase was in 0 of the 433 beats before the first one and in 15 of the 666
-    # since (13 within ten minutes of a decline), seven times as a todo line such as "[ ] Re-run
-    # ... under different conditions"; and 0 of 377 request_run calls named a condition. Most of
-    # those declines were for an unchanged file, where what the seat needed was a different sha
-    # and the stock sentence pointed somewhere else.
-    return (f"[request_run] I did not run {rel}. {reason}\n\n{_answers(seqs)}\n"
-            f"This is a decision, not a failure, and it is not about your standing.")
+STANDING = "This is a decision, not a failure, and it is not about your standing."
+STOCK_DOOR = "If you want it run under different conditions, say which and ask again."
+
+
+def decline_closing(inst: Path) -> str | None:
+    """This being's `decline_closing` policy from its instance.json (heartbeat.decline_closing_for,
+    the same reader the beat record uses), or None for the default."""
+    try:
+        from sage.gateway.heartbeat import decline_closing_for  # noqa: E402
+        return decline_closing_for(json.loads((Path(inst) / "instance.json").read_text()))
+    except Exception:
+        return None
+
+
+def decline_text(rel, reason: str, seqs: list[int], closing: str | None = None) -> str:
+    """The decline turn. By default it closes on the standing line and the stock door (STOCK_DOOR).
+
+    `closing="standing_only"` is a PER-INSTANCE experiment (instance.json "decline_closing",
+    RESEARCH_GENERALIZATION_RULE; SAGE #289): the turn ends on the standing line and names no way
+    forward of its own, so the seat's reason is the only one. Measured on cbp-being alone,
+    2026-09-21..30: 96 declines carried the stock door; the phrase was in 0 of the 433 beats before
+    the first one and in 15 of the 666 since (13 within ten minutes of a decline), seven times as a
+    todo line such as "[ ] Re-run ... under different conditions"; and 0 of 377 request_run calls
+    named a condition. Most of those declines were for an unchanged file, where what the seat
+    needed was a different sha and the stock sentence pointed somewhere else. That measures the
+    PHRASE's uptake; what removing it does (to todo lines, re-asks) is the untested part."""
+    tail = STANDING if closing == "standing_only" else f"{STANDING} {STOCK_DOOR}"
+    return f"[request_run] I did not run {rel}. {reason}\n\n{_answers(seqs)}\n{tail}"
 
 
 def cmd_decline(args) -> None:
     inst = _instance()
     rel = _target(inst, args.path).relative_to(inst.resolve())
     seqs = bind(inst, _conv_id(), str(rel), args.seq)
-    text = decline_text(rel, args.reason, seqs)
+    text = decline_text(rel, args.reason, seqs, decline_closing(inst))
     shown, hidden = as_shown(text)
     if hidden and not args.cut_anyway:
         # A decline says why not. Evidence pasted into one falls in the cut (see as_shown): the
