@@ -104,7 +104,16 @@ def perception(now: Optional[float] = None, path: Optional[str] = None) -> Dict:
 
 
 def metabolism(timeout: float = 3.0) -> Dict:
-    """The daemon's own reading of the being's metabolism, or {'live': False}."""
+    """What the daemon's /status truthfully says about the being, or {'live': False}.
+
+    NO ATP (SAGE #291). `atp_percentage` is the daemon's internal controller: a free-running
+    oscillator ticked every 100 ms for the shadow-metabolism experiment, not the being's energy.
+    It is not read here, so it cannot reach the body block or the beat record.
+
+    `state` / `state_source` / `state_age_s` are the activity indicator #293 made honest (set by
+    reports of real activity). They are RECORDED on the beat but not RENDERED: the beat itself
+    reports `wake` before this is read, so inside a beat the line could only ever say "wake,
+    for a few seconds, set by your own beat" -- true, and nothing the being can act on."""
     try:
         with urllib.request.urlopen(DAEMON_STATUS, timeout=timeout) as r:
             d = json.loads(r.read())
@@ -112,7 +121,8 @@ def metabolism(timeout: float = 3.0) -> Dict:
         return {"live": False}
     s = d.get("salience") or {}
     return {"live": bool(d.get("consciousness_loop")), "state": d.get("metabolic_state"),
-            "atp": d.get("atp_percentage"), "felt": d.get("observations_felt"),
+            "state_source": d.get("metabolic_source"), "state_age_s": d.get("metabolic_age_secs"),
+            "felt": d.get("observations_felt"),
             "felt_source": d.get("salience_source"), "felt_total": s.get("total")}
 
 
@@ -171,13 +181,15 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
                          f"the scene then was: {pp['descriptor']}")
         else:
             lines.append(f"- Last beat your senses reported: {pp['descriptor']}")
+    # No energy line and no state line (SAGE #291, see metabolism()): the ATP is an internal
+    # oscillator, not a reading of this body, and the state inside a beat is always the beat's
+    # own `wake`. What remains is real: whether the daemon's loop is running, and whose input it
+    # last felt.
     if m.get("live"):
-        atp = m.get("atp")
-        lines.append(f"- Your metabolism: {m.get('state')}, energy {float(atp):.0f}%"
-                     + (f"; the last thing you felt came from {m['felt_source']}" if m.get("felt_source") else "")
-                     + ".")
+        if m.get("felt_source"):
+            lines.append(f"- The last thing you felt came from {m['felt_source']}.")
     else:
-        lines.append("- Your metabolism is not reporting this beat.")
+        lines.append("- Your daemon's loop is not reporting this beat.")
     if inv:
         lines.append(render_inventory(inv))
     dev = inv.get("audio_device") or {}

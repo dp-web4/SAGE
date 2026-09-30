@@ -15,7 +15,7 @@
     --text-dim: #666;
     --accent: #00ff41;
     --state-wake: #00ff41;
-    --state-focus: #ffd700;
+    --state-wrap-up: #ffd700;
     --state-rest: #4488ff;
     --state-dream: #cc44ff;
     --state-crisis: #ff3333;
@@ -228,12 +228,14 @@
       </div>
       <div class="machine-name" id="machine-name">--</div>
       <div class="metabolic-badge" id="metabolic-badge">--</div>
+      <!-- What the being is doing and for how long, and who said so (SAGE #291). -->
+      <div class="model-label" id="metabolic-age">--</div>
       <div class="model-label" id="model-label">--</div>
 
       <div class="stats-section">
         <div class="stat-row">
           <div class="stat-compact">
-            <label>ATP</label>
+            <label title="The daemon's internal ATP oscillator (a 10-second cycle). Not the being's energy, and not the state shown above (SAGE #291).">ATP (internal)</label>
             <div class="value" id="atp-value">--</div>
             <div class="bar-wrap"><div class="bar-fill atp" id="atp-bar" style="width:0%"></div></div>
           </div>
@@ -288,7 +290,9 @@
 <script>
 const BASE = window.location.origin;
 const STATE_COLORS = {
-  wake: '#00ff41', focus: '#ffd700', rest: '#4488ff',
+  // The activity indicator's states (SAGE #291). `focus` was the old oscillator's salience
+  // state; nothing reports it now. `wrap-up` is the end of a beat (reflect, answer).
+  wake: '#00ff41', 'wrap-up': '#ffd700', rest: '#4488ff',
   dream: '#cc44ff', crisis: '#ff3333',
 };
 
@@ -296,8 +300,25 @@ let machineName = 'sage';
 let connected = false;
 
 function setStateColor(state) {
-  const color = STATE_COLORS[state] || STATE_COLORS.wake;
+  const color = STATE_COLORS[state] || STATE_COLORS.rest;
   document.documentElement.style.setProperty('--state-color', color);
+}
+
+function fmtAge(secs) {
+  if (secs == null) return '?';
+  if (secs < 90) return secs + 's';
+  if (secs < 5400) return Math.round(secs / 60) + 'm';
+  if (secs < 172800) return (secs / 3600).toFixed(1) + 'h';
+  return Math.round(secs / 86400) + 'd';
+}
+
+function describeActivity(d) {
+  if (d.metabolic_age_secs == null) return '';
+  const src = d.metabolic_source || 'unknown';
+  if (d.metabolic_decayed) {
+    return 'for ' + fmtAge(d.metabolic_age_secs) + ' \u00b7 no report from ' + src.replace(/^stale:/, '');
+  }
+  return 'for ' + fmtAge(d.metabolic_age_secs) + ' \u00b7 ' + src;
 }
 
 function escapeHtml(text) {
@@ -357,9 +378,11 @@ async function refreshStatus() {
   try {
     const r = await fetch(BASE + '/status');
     const d = await r.json();
-    const state = (d.metabolic_state || 'wake').toLowerCase();
+    const state = (d.metabolic_state || 'unknown').toLowerCase();
     document.getElementById('metabolic-badge').textContent = state.toUpperCase();
     setStateColor(state);
+    // How long, and who said so: an indicator that cannot say its own age reads as current.
+    document.getElementById('metabolic-age').textContent = describeActivity(d);
 
     const pct = d.atp_percentage || 0;
     document.getElementById('atp-value').textContent = pct.toFixed(0) + '%';

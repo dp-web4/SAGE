@@ -156,8 +156,11 @@ def acts_under_posture(model: str) -> bool:
     then the posture and the digest as a second tool turn, then reflect. The words are
     BEING_POSTURE.md verbatim either way; only the order of presentation is per model.
     qwen2.5:1.5b is deliberately not here: under a short prompt it emits the tool call as
-    text, so a different order would not move it (a parser question, Legion 09-05)."""
-    return not any(k in model.lower() for k in ("distill",))
+    text, so a different order would not move it (a parser question, Legion 09-05).
+    gemma4:e2b narrates under the posture (nomad-being, 2026-09-26..29: 0 explore tool calls in
+    100+ beats, replies "Resting." or "I am Gemma 4 ... How may I assist you?") while calling
+    tools natively in reflect every beat, where the ask is short and concrete."""
+    return not any(k in model.lower() for k in ("distill", "gemma4:e2b"))
 
 
 def instance_config(instance: Path) -> dict:

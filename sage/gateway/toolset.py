@@ -55,7 +55,7 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
         if v not in _TOOL_SCHEMAS:
             continue
         if inv is None:
-            out[v] = "this machine's body was not measured this turn, so whether it has the part is unknown"
+            out[v] = "availability unknown: this machine's body was not measured this turn"
         elif v not in have:
             part = {"camera": "camera", "gaze": "movable eyes (no gaze-capable cortex is running)",
                     "speak": "speaker it can drive (a speaker, and a speech engine to feed it)",

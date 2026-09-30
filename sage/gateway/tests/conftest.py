@@ -18,3 +18,14 @@ os.environ.setdefault("SAGE_CONV_NOTIFY_DIR", tempfile.mkdtemp(prefix="conv-noti
 import sys  # noqa: E402
 sys.path.insert(0, os.path.dirname(__file__))
 import _isolate_hestia  # noqa: E402,F401  -- isolates on import
+
+import pytest  # noqa: E402
+
+
+# NOR THE LIVE DAEMON'S STATE DISPLAY (SAGE #291). A test that runs heartbeat.main would POST
+# wake/wrap-up/rest to the real :8760/activity and show a beat that never happened. Every test,
+# unconditionally; subprocesses inherit it. The activity tests opt back in, per test, against
+# their own fake daemon.
+@pytest.fixture(autouse=True)
+def _no_activity_reports_to_the_live_daemon(monkeypatch):
+    monkeypatch.setenv("SAGE_ACTIVITY_REPORT", "0")

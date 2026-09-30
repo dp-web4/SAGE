@@ -34,6 +34,18 @@ def test_note_carries_verdict_and_arbiter_protocol(monkeypatch=None):
     t = open(p).read()
     assert "mrh.path" in t and "scope-1" in t and "Arbiter protocol" in t and "STANDING" in t
 
+def test_a_referee_that_never_answered_is_not_noted_as_a_law_verdict():
+    # cbp-being 2026-09-29: a memory_edit refused society.no_verdict (daemon timeout) reached the seat as
+    # "A law verdict ... Approve ONLY if all hold". There was no verdict and nothing to approve.
+    d = tempfile.mkdtemp(); e.NOTE_DIR = d
+    for rule in ("society.no_verdict", "society.unreachable", "society.unavailable"):
+        t = open(e.write_note("b", BeingIntent("memory_edit", {"path": "scratch/a.py"}), _ref(rule, "no verdict [fail-closed]"), "society", {})).read()
+        assert rule in t and "NOT a law verdict" in t
+        assert "A law verdict." not in t and "Arbiter protocol" not in t and "Approve ONLY" not in t
+    # a decided society deny is still a law verdict, with the protocol
+    t = open(e.write_note("b", BeingIntent("memory_edit", {"path": "scratch/a.py"}), _ref("society.unsafe", "denied"), "society", {})).read()
+    assert "A law verdict." in t and "Arbiter protocol" in t and "NOT a law verdict" not in t
+
 def test_no_wake_files_the_request_but_writes_no_note():
     # the heartbeat's 2nd..9th refusal of a kind in one beat: the request is (re)filed and deduped
     # by the daemon; a note only exists to be pointed at by a wake, so none is written
