@@ -235,6 +235,12 @@ DP_CHANNEL = "notes/from-dp.md"
 # cbp-being and the being never saw them, because the beat only listed the file name among
 # notes/. A channel nothing renders is a channel nobody reads.
 SEAT_CHANNEL = "notes/from-the-seat.md"
+# How much of each letter one beat shows (see letter_view). Both were bare numbers at the call
+# site. LETTER_CUT_ROOM is what the cut's own marker may take OUT of that, not on top of it: the
+# seed is already at the edge of the loop's room (#275).
+SEAT_CHANNEL_CHARS = 3000
+DP_CHANNEL_CHARS = 4000
+LETTER_CUT_ROOM = 300
 # Bounds on the conversations block in the being's state (see own_state).
 CONV_PER_CONV = 6
 CONV_TURN_CHARS = 1200
@@ -649,6 +655,42 @@ def _read(p: Path, limit: int = 4000) -> str:
         return t[-limit:] if len(t) > limit else t
     except Exception:
         return ""
+
+
+def letter_view(p: Path, limit: int, rel: str) -> str:
+    """A letter written FOR the being, as one beat shows it: whole, or its END with the cut SAID.
+
+    It was `_read(p, limit)`: the last `limit` characters, starting wherever that count fell,
+    and nothing in the window said a cut had happened. Measured on cbp-being, 2026-09-30: 8 of
+    the 75 committed versions of notes/from-the-seat.md were over 3,000 characters, the last
+    three in a row. The 04:24Z letter (3,945) offered two fixes for one file. The being's view of
+    it opened on ` end_line 311, new "".`: fix (a) had lost its first words, "memory_edit
+    start_line 238,", and fix (b) arrived whole. The 05:00Z beat chose (b) and sent no
+    line-range edit. One sample, so the cut is not shown to be the cause; it is shown to be what
+    the being was given.
+
+    Now the shown part starts at the start of a line, the being is told how much is above it,
+    and the read that shows the rest is named. A letter that fits is returned untouched.
+    """
+    try:
+        t = p.read_text(errors="replace")
+    except Exception:
+        return ""
+    if len(t) <= limit:
+        return t
+    tail = t[len(t) - max(limit - LETTER_CUT_ROOM, 0):] if limit > LETTER_CUT_ROOM else ""
+    starts = "the line below is not the letter's first line"
+    if tail and t[len(t) - len(tail) - 1] != "\n":
+        nl = tail.find("\n")
+        if 0 <= nl < len(tail) - 1:
+            tail = tail[nl + 1:]
+        else:
+            # one line longer than the window: there is no line start to move to
+            starts = "the text below starts in the middle of a line"
+    hidden = t[:len(t) - len(tail)]
+    return (f"[This letter is {len(t):,} characters and one beat shows the end of it. The first "
+            f"{len(hidden):,} characters ({hidden.count(chr(10))} lines) are NOT shown here: {starts}. "
+            f"memory_read path \"{rel}\" reads it from the start.]\n" + tail)
 
 
 def _run(cmd: list[str], timeout: int = 30) -> str:
@@ -1783,6 +1825,20 @@ def settled_turns_for(cfg: Optional[dict]) -> Optional[int]:
     return v if isinstance(v, int) and not isinstance(v, bool) and v >= 1 else None
 
 
+DECLINE_CLOSINGS = ("standing_only",)
+
+
+def decline_closing_for(cfg: Optional[dict]) -> Optional[str]:
+    """instance.json `decline_closing`: how a seat's request_run decline ends. PER-INSTANCE
+    (RESEARCH_GENERALIZATION_RULE): absent, or any value not in DECLINE_CLOSINGS, means the
+    default closing, which still offers "If you want it run under different conditions, say which
+    and ask again." `"standing_only"` drops that stock door and ends on the standing line, leaving
+    the way forward to the seat's reason. Measured on cbp-being alone (SAGE #289), so it is
+    recorded in every beat record where it is on, and it is nobody else's default."""
+    v = (cfg or {}).get("decline_closing")
+    return v if v in DECLINE_CLOSINGS else None
+
+
 def own_state(instance: Path, member: str = "", entrusted: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
@@ -1851,7 +1907,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     asks = recent_asks_block(instance)
     if asks:
         parts.append("## Your recent asks to peers\n" + asks)
-    from_seat = _read(instance / SEAT_CHANNEL, 3000)
+    from_seat = letter_view(instance / SEAT_CHANNEL, SEAT_CHANNEL_CHARS, SEAT_CHANNEL)
     if from_seat.strip():
         # WHICH seat. This was the literal "cbp-claude" on every being since #100 (2026-09-15), so
         # legion-being, sprout-being and nomad's being were each told, every beat, that CBP's seat
@@ -1862,7 +1918,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
         _seat = seat_name()
         parts.append(f"## From the seat ({_seat}), directly (notes/from-the-seat.md: what the "
                      "seat measured for you. You read this; you do not write it)\n" + from_seat.strip())
-    from_dp = _read(instance / DP_CHANNEL, 4000)
+    from_dp = letter_view(instance / DP_CHANNEL, DP_CHANNEL_CHARS, DP_CHANNEL)
     if from_dp.strip():
         parts.append("## From dp, the operator, directly (notes/from-dp.md: dp's own words, "
                      "not relayed by a seat. You read this; you do not write it)\n" + from_dp.strip())
@@ -2677,6 +2733,16 @@ def _carry(convo: list, res) -> list:
     return out
 
 
+# The running beat's session id, for the end-of-beat report `run` sends (SAGE #291).
+_BEAT_ID: dict = {}
+
+
+def _phase(state: str, phase: str, beat_id: str) -> None:
+    """Report the phase the beat is entering. Never raises (sage.gateway.activity)."""
+    from sage.gateway import activity as _activity
+    _activity.report(state, f"heartbeat:{phase}", beat_id=beat_id, ttl_secs=_activity.BEAT_TTL_S)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="one heartbeat for a SAGE being")
     ap.add_argument("--member", required=True)
@@ -2754,6 +2820,10 @@ def main(argv=None) -> int:
     from sage.gateway.being_tool_loop import run_ollama_tool_turn, _sent_budget
     workspace = str(Path(__file__).resolve().parents[2])
     host_session_id = f"heartbeat-{uuid.uuid4().hex[:12]}"
+    # The beat has begun: wake, before anything below reads the daemon's /status into the
+    # being's own body block (SAGE #291).
+    _BEAT_ID["id"] = host_session_id
+    _phase("wake", "start", host_session_id)
     client, llm = build_client(args.member, instance, args.model, workspace, args.forum_dir,
                                host_session_id, args.temperature, args.max_tokens,
                                gate_only=args.gate_only)
@@ -3013,12 +3083,14 @@ def main(argv=None) -> int:
     account = {"present": False, "sha256": None, "reply": "", "generates": []}
     killed = None
     try:
+        _phase("wake", "explore", host_session_id)
         explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
                                        tools=_explore_specs, on_generate=_on_generate("explore"))
         convo = _carry(seed, explore)
         after = None
         if posture_turn is not None:
             convo.append({"role": "user", "content": posture_turn})
+            _phase("wake", "posture", host_session_id)
             after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
                                          tools=_explore_specs, on_generate=_on_generate("posture"))
             convo = _carry(convo, after)
@@ -3026,6 +3098,7 @@ def main(argv=None) -> int:
         # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
         # carries the whole explore(+posture) conversation and is usually the beat's largest
         # prompt, and until 2026-09-13 it was invisible to the window census (CBP, 09-12).
+        _phase("wake", "account", host_session_id)
         try:
             ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
                        [{"role": "user", "content": ACCOUNT_ASK}]
@@ -3092,6 +3165,8 @@ def main(argv=None) -> int:
         # fourth for `say`. Showing it the question and then giving it no way to answer is worse
         # than not showing it.
         _reflect_steps = args.reflect_steps + (1 if say_first else 0)
+        # The beat's wrap-up: reflection, and the answer turn after it (SAGE #291).
+        _phase("wrap-up", "reflect", host_session_id)
         reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
                                        tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
 
@@ -3102,6 +3177,7 @@ def main(argv=None) -> int:
         # expectation is read from the selection made BEFORE reflection, never re-scanned.
         answer = None
         if selected is not None and selected.expects_reply and not _said_in(reflect):
+            _phase("wrap-up", "answer", host_session_id)
             if answer_turn_mode(instance) == "json":
                 # Opt-in (instance.json "answer_turn": "json"). The selected turn and the ask; the
                 # beat's acts only for a seat's question when the beat acted (answer_turn_json).
@@ -3223,6 +3299,7 @@ def main(argv=None) -> int:
         "member": args.member, "model": args.model, "window_h": round(hours, 2), "clock": _clock,
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
+        "decline_closing": decline_closing_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,
@@ -3493,7 +3570,12 @@ def harness_revision(workspace: str) -> dict:
 
     def _git(*a):
         try:
-            r = subprocess.run(("git", *a), cwd=workspace, text=True, capture_output=True, timeout=15)
+            # --no-optional-locks: status and diff otherwise take .git/index.lock to refresh the
+            # index as a side effect. When the timeout below kills git mid-refresh, the lock is
+            # left behind and every later git act in this checkout fails until a human removes it.
+            # Measured on nomad 2026-09-28 00:23 and 2026-09-29 18:18: both locks were left by a
+            # beat whose harness_revision overlapped the raising session on a 9p (/mnt/c) checkout.
+            r = subprocess.run(("git", "--no-optional-locks", *a), cwd=workspace, text=True, capture_output=True, timeout=15)
             return r.stdout.strip() if r.returncode == 0 else None
         except Exception:
             return None
@@ -3578,7 +3660,7 @@ def _dirty_digest(workspace: str):
     import subprocess
     spec = ("--", ".", ":(exclude)sage/instances")
     try:
-        d = subprocess.run(("git", "diff", "HEAD", "--binary", "--no-color", "--no-ext-diff", *spec),
+        d = subprocess.run(("git", "--no-optional-locks", "diff", "HEAD", "--binary", "--no-color", "--no-ext-diff", *spec),
                            cwd=workspace, capture_output=True, timeout=30)
         u = subprocess.run(("git", "ls-files", "--others", "--exclude-standard", "-z", *spec),
                            cwd=workspace, capture_output=True, timeout=30)
@@ -3626,5 +3708,24 @@ def harness_alarm(rev: dict):
     return f"LIVE TREE UNKNOWN: could not read git state (head={rev.get('short')}, dirty={rev.get('dirty')}, on_main={rev.get('on_main')})"
 
 
+
+def run(argv=None) -> int:
+    """One beat, with the daemon's state display told the truth about it (SAGE #291). This is
+    what `python -m sage.gateway.heartbeat` (the unit's ExecStart) runs.
+
+    `main` reports wake as soon as the beat has a session id, before the body block reads
+    `/status`, so the being is not told "rest" in its own beat. It also reports each phase as it
+    enters it: wake for explore/posture/account, wrap-up for reflect/answer. This wrapper owns
+    the END: every exit path, including a return before any phase ran, an exception, or
+    BeatKilled, reports rest. It does so only if something else was reported first.
+    Reporting is best-effort (sage.gateway.activity): a daemon that is down never fails a
+    beat, and slows it by at most the reporter's 0.5 s timeout per report."""
+    from sage.gateway import activity as _activity
+    try:
+        return main(argv)
+    finally:
+        _activity.end("heartbeat:end", beat_id=_BEAT_ID.get("id"))
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run())

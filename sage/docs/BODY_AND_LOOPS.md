@@ -46,12 +46,12 @@ First block of the state every beat, because it is the only thing there that is 
     - Your senses (2 of 2 eyes live, hearing on, body still) report: I see a clock. the scene is still; clear view
     - How much that moment stood out: 0.00 of 1; how well your senses agree: 0.87 of 1
     - Your gaze stance is **open**, chosen by sprout.
-    - Your metabolism: wake, energy 38%; the last thing you felt came from dp.
+    - The last thing you felt came from dp.
     - This body has: 2 cameras run by your cortex, which reports the scene to you in words, 2 microphones, 3 speakers, a serial sensor port (your inner ear).
     - Verbs that act on it or through it: gaze, say, peer_ask. Present but not yet wired to a verb: speak.
 
 Sources: the cortex's `perception.json` (age-bounded: older than 15 s reads "offline this beat"),
-the daemon's `/status` (metabolic state, ATP, what it last felt and from whom), and the
+the daemon's `/status` (whether its loop is running, and whose input it last felt; not its internal ATP, which is an oscillator, nor the activity state, which inside a beat is always the beat's own `wake` — SAGE #291), and the
 **inventory** below. The reading is recorded on the beat (`body`), so the next beat can say what
 changed and why.
 

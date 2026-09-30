@@ -80,6 +80,65 @@ def test_no_gateway_module_hard_codes_the_path_again():
     assert offenders == [], offenders
 
 
+def _private_with(sage_root, explicit=None, home=None):
+    saved = (fleet_paths._SAGE_ROOT, os.getenv("SAGE_PRIVATE_CONTEXT"), os.getenv("HOME"))
+    try:
+        fleet_paths._SAGE_ROOT = Path(sage_root)
+        if explicit is None:
+            os.environ.pop("SAGE_PRIVATE_CONTEXT", None)
+        else:
+            os.environ["SAGE_PRIVATE_CONTEXT"] = explicit
+        if home:
+            os.environ["HOME"] = str(home)
+        return fleet_paths.hub_notify_path()
+    finally:
+        fleet_paths._SAGE_ROOT = saved[0]
+        for k, v in (("SAGE_PRIVATE_CONTEXT", saved[1]), ("HOME", saved[2])):
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_hub_notify_is_found_beside_the_sage_checkout():
+    """McNugget, 2026-09-29: egress_drain hard-coded ~/ai-workspace/private-context/hub-mesh/hub-notify.sh,
+    and every peer send mcnugget-being made failed "hub-notify sender not available"."""
+    with tempfile.TemporaryDirectory() as d:
+        repos = Path(d) / "repos"; (repos / "SAGE").mkdir(parents=True); (repos / "private-context").mkdir()
+        assert _private_with(repos / "SAGE", home=Path(d)) == repos / "private-context" / "hub-mesh" / "hub-notify.sh"
+
+
+def test_hub_notify_on_the_linux_layout_is_exactly_the_old_path():
+    with tempfile.TemporaryDirectory() as d:
+        ws = Path(d) / "ai-workspace"; (ws / "SAGE").mkdir(parents=True); (ws / "private-context").mkdir()
+        assert _private_with(ws / "SAGE", home=Path(d)) == Path(d) / "ai-workspace/private-context/hub-mesh/hub-notify.sh"
+
+
+def test_hub_notify_override_wins():
+    with tempfile.TemporaryDirectory() as d:
+        repos = Path(d) / "repos"; (repos / "SAGE").mkdir(parents=True); (repos / "private-context").mkdir()
+        got = _private_with(repos / "SAGE", explicit=str(Path(d) / "pc"))
+        assert got == Path(d) / "pc" / "hub-mesh" / "hub-notify.sh", got
+
+
+def test_no_gateway_module_hard_codes_private_context():
+    """Code (not comments) may not name ~/ai-workspace/private-context."""
+    offenders = []
+    for py in sorted((HERE.parent).glob("*.py")):
+        if py.name == "fleet_paths.py":
+            continue
+        for n, line in enumerate(py.read_text().splitlines(), 1):
+            if re.search(r"ai-workspace/private-context", line.split("#", 1)[0]):
+                offenders.append(f"{py.name}:{n}")
+    assert offenders == [], offenders
+
+
+def test_the_drain_sends_through_the_resolved_path():
+    from sage.gateway import egress_drain
+    importlib.reload(egress_drain)
+    assert egress_drain.HUB_NOTIFY == str(fleet_paths.hub_notify_path())
+
+
 def test_escalations_land_in_the_resolved_checkout():
     from sage.gateway import escalate
     importlib.reload(escalate)
