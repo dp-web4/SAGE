@@ -861,3 +861,36 @@ def test_dated_lines_count_from_the_end_of_their_written_precision():
     at_minute = datetime(2026, 9, 29, 12, 1, tzinfo=timezone.utc)
     assert old("2026-09-28T12:00Z", at_minute)      # every reading is > 24 h
     assert not old("2026-09-28T12:00Z", datetime(2026, 9, 29, 12, 0, 59, tzinfo=timezone.utc))
+
+
+def test_memory_edit_reads_delete_lines_as_the_range():
+    """2026-09-24 05:57Z: cbp-being sent start_line 180, delete_lines 5, new "". Nothing read
+    the 5, end_line defaulted to 180, and one line was deleted while the being journaled five."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("a\nb\nc\nd\ne\nf\ng\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": "2", "delete_lines": "5", "new": ""}), _ALLOW)
+    assert r.ok, r.error
+    assert f.read_text() == "a\ng\n"
+    assert "replaced lines 2-6 (5 lines)" in r.result, r.result
+
+
+def test_memory_edit_delete_lines_agrees_with_end_line_or_refuses():
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("a\nb\nc\nd\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 2, "delete_lines": 3, "new": ""}), _ALLOW)
+    assert not r.ok and "name different ranges" in r.error, r.error
+    for bad in (0, -1, "five"):
+        r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "delete_lines": bad, "new": ""}), _ALLOW)
+        assert not r.ok and "Nothing was changed" in r.error and "delete_lines 7" in r.error, (bad, r.error)
+    # a count that runs past the end is refused by the existing range check, not truncated
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3, "delete_lines": 5, "new": ""}), _ALLOW)
+    assert not r.ok and "are not all in" in r.error, r.error
+    # agreeing end_line and delete_lines is fine
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 3, "delete_lines": 2, "new": ""}), _ALLOW)
+    assert r.ok and f.read_text() == "a\nd\n", r.error
