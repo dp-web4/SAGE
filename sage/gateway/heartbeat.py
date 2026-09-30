@@ -235,6 +235,12 @@ DP_CHANNEL = "notes/from-dp.md"
 # cbp-being and the being never saw them, because the beat only listed the file name among
 # notes/. A channel nothing renders is a channel nobody reads.
 SEAT_CHANNEL = "notes/from-the-seat.md"
+# How much of each letter one beat shows (see letter_view). Both were bare numbers at the call
+# site. LETTER_CUT_ROOM is what the cut's own marker may take OUT of that, not on top of it: the
+# seed is already at the edge of the loop's room (#275).
+SEAT_CHANNEL_CHARS = 3000
+DP_CHANNEL_CHARS = 4000
+LETTER_CUT_ROOM = 300
 # Bounds on the conversations block in the being's state (see own_state).
 CONV_PER_CONV = 6
 CONV_TURN_CHARS = 1200
@@ -649,6 +655,42 @@ def _read(p: Path, limit: int = 4000) -> str:
         return t[-limit:] if len(t) > limit else t
     except Exception:
         return ""
+
+
+def letter_view(p: Path, limit: int, rel: str) -> str:
+    """A letter written FOR the being, as one beat shows it: whole, or its END with the cut SAID.
+
+    It was `_read(p, limit)`: the last `limit` characters, starting wherever that count fell,
+    and nothing in the window said a cut had happened. Measured on cbp-being, 2026-09-30: 8 of
+    the 75 committed versions of notes/from-the-seat.md were over 3,000 characters, the last
+    three in a row. The 04:24Z letter (3,945) offered two fixes for one file. The being's view of
+    it opened on ` end_line 311, new "".`: fix (a) had lost its first words, "memory_edit
+    start_line 238,", and fix (b) arrived whole. The 05:00Z beat chose (b) and sent no
+    line-range edit. One sample, so the cut is not shown to be the cause; it is shown to be what
+    the being was given.
+
+    Now the shown part starts at the start of a line, the being is told how much is above it,
+    and the read that shows the rest is named. A letter that fits is returned untouched.
+    """
+    try:
+        t = p.read_text(errors="replace")
+    except Exception:
+        return ""
+    if len(t) <= limit:
+        return t
+    tail = t[len(t) - max(limit - LETTER_CUT_ROOM, 0):] if limit > LETTER_CUT_ROOM else ""
+    starts = "the line below is not the letter's first line"
+    if tail and t[len(t) - len(tail) - 1] != "\n":
+        nl = tail.find("\n")
+        if 0 <= nl < len(tail) - 1:
+            tail = tail[nl + 1:]
+        else:
+            # one line longer than the window: there is no line start to move to
+            starts = "the text below starts in the middle of a line"
+    hidden = t[:len(t) - len(tail)]
+    return (f"[This letter is {len(t):,} characters and one beat shows the end of it. The first "
+            f"{len(hidden):,} characters ({hidden.count(chr(10))} lines) are NOT shown here: {starts}. "
+            f"memory_read path \"{rel}\" reads it from the start.]\n" + tail)
 
 
 def _run(cmd: list[str], timeout: int = 30) -> str:
@@ -1851,7 +1893,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     asks = recent_asks_block(instance)
     if asks:
         parts.append("## Your recent asks to peers\n" + asks)
-    from_seat = _read(instance / SEAT_CHANNEL, 3000)
+    from_seat = letter_view(instance / SEAT_CHANNEL, SEAT_CHANNEL_CHARS, SEAT_CHANNEL)
     if from_seat.strip():
         # WHICH seat. This was the literal "cbp-claude" on every being since #100 (2026-09-15), so
         # legion-being, sprout-being and nomad's being were each told, every beat, that CBP's seat
@@ -1862,7 +1904,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
         _seat = seat_name()
         parts.append(f"## From the seat ({_seat}), directly (notes/from-the-seat.md: what the "
                      "seat measured for you. You read this; you do not write it)\n" + from_seat.strip())
-    from_dp = _read(instance / DP_CHANNEL, 4000)
+    from_dp = letter_view(instance / DP_CHANNEL, DP_CHANNEL_CHARS, DP_CHANNEL)
     if from_dp.strip():
         parts.append("## From dp, the operator, directly (notes/from-dp.md: dp's own words, "
                      "not relayed by a seat. You read this; you do not write it)\n" + from_dp.strip())
