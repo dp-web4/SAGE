@@ -3010,19 +3010,6 @@ def _carry_vs_main(git) -> dict:
     return out
 
 
-
-if __name__ == "__main__":  # live smoke against the local daemon: mesh -> member_notify
-    import sys
-    inst = os.path.expanduser("~/ai-workspace/sage/sage/instances/sprout-qwen3.8-distill-2b")
-    d = HestiaF1aDispatcher("sprout-being", inst)
-    to, kind, ptr = (sys.argv[1:4] + [None, None, None])[:3]
-    if not (to and kind and ptr):
-        print("usage: hestia_dispatch.py <to> <kind> <pointer_uri>"); sys.exit(2)
-    env = d(BeingIntent("mesh", {"to": to, "kind": kind, "pointer": ptr}), GatewayVerdict("allow"))
-    print(json.dumps({"ok": env.ok, "result": env.result, "error": env.error,
-                      "witness_id": env.witness_id, "pending": env.pending, "note": env.note}, indent=1))
-
-
 def _git_land(path: str, message: str) -> None:
     """Commit ONE file and push it to the checkout's upstream (rebase-on-upstream first).
     Raises on every failure: no repo, identity missing, rebase blocked by a sibling's dirty
@@ -3091,3 +3078,15 @@ def make_forum_publisher(pointer_dir: str, plugin_id: str, push: bool = True) ->
         sp = str(p); i = sp.find("shared-context/")
         return sp[i:] if i >= 0 else sp
     return publish
+
+
+if __name__ == "__main__":  # live smoke against the local daemon: mesh -> member_notify
+    import sys
+    inst = os.path.expanduser("~/ai-workspace/sage/sage/instances/sprout-qwen3.8-distill-2b")
+    d = HestiaF1aDispatcher("sprout-being", inst)
+    to, kind, ptr = (sys.argv[1:4] + [None, None, None])[:3]
+    if not (to and kind and ptr):
+        print("usage: hestia_dispatch.py <to> <kind> <pointer_uri>"); sys.exit(2)
+    env = d(BeingIntent("mesh", {"to": to, "kind": kind, "pointer": ptr}), GatewayVerdict("allow"))
+    print(json.dumps({"ok": env.ok, "result": env.result, "error": env.error,
+                      "witness_id": env.witness_id, "pending": env.pending, "note": env.note}, indent=1))
