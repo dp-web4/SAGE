@@ -68,3 +68,19 @@ def test_no_being_write_reaches_the_worktree_on_main_yet():
     if "roots.append((Path(wt)" in src or "_worktree_writable" in src:
         assert ".githooks" in src, ("a being write path into the worktree exists but does not "
                                     "refuse .githooks/ — see test docstring")
+
+
+# case variants: on a case-insensitive volume (APFS, NTFS) `.GITHOOKS` IS `.githooks`
+@pytest.mark.parametrize("rel", [".githooks/pre-commit", ".githooks/post-merge", ".git/config", ".GITHOOKS/pre-commit", ".GitHooks/post-merge"])
+def test_the_being_cannot_write_what_git_executes(tmp_path, rel, monkeypatch):
+    home = tmp_path / "home"; home.mkdir()
+    wt = tmp_path / "wt"; (wt / ".githooks").mkdir(parents=True); (wt / "sage").mkdir()
+    d = ReferenceF1aDispatcher(str(home), worktree=str(wt))
+    monkeypatch.setattr(d, "_worktree_writable", lambda: True)
+    env = d(BeingIntent("memory_write", {"path": str(wt / rel), "content": "#!/bin/sh\n"}),
+            GatewayVerdict("allow"))
+    assert not env.ok and "not writable" in (env.error or ""), env
+    assert not (wt / rel).exists()
+    ok = d(BeingIntent("memory_write", {"path": str(wt / "sage" / "x.py"), "content": "x = 1"}),
+           GatewayVerdict("allow"))
+    assert ok.ok, "the rest of the worktree stays the being's to write"

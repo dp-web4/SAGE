@@ -52,7 +52,19 @@ _log = logging.getLogger('sage.adapter.cleaning')
 #
 # This does not weaken "the being takes priority for the GPU". Priority means the being gets
 # the card when it ACTS; it never required holding the card while idle.
-OLLAMA_KEEP_ALIVE = os.environ.get('SAGE_OLLAMA_KEEP_ALIVE', '5m')
+def _parse_keep_alive(raw: str):
+    """A bare integer becomes a NUMBER (seconds; negative = hold indefinitely); anything else
+    is passed through as a duration string. Measured 2026-09-19 against ollama on Legion:
+    keep_alive "-1" (string) is REJECTED — `time: missing unit in duration "-1"` — while -1
+    (number) and "-1s" both pin. So the natural spelling of "pin it" in a host setting would
+    have failed every generate on the host that set it, which is the host that most wants it."""
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return str(raw).strip()
+
+
+OLLAMA_KEEP_ALIVE = _parse_keep_alive(os.environ.get('SAGE_OLLAMA_KEEP_ALIVE', '5m'))
 
 
 class ModelAdapter:

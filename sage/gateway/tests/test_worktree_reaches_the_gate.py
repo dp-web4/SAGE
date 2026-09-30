@@ -93,7 +93,9 @@ def test_the_gate_composes_with_the_worktree():
         # composed git verb needs to name only the being's own branches (being_branch_prefix).
         # A key not listed here is a composer reaching past the law's view of the act.
         check("the ctx carries nothing unlisted -- a composer must not reach past the act",
-              sorted(ctx), ["game_stepper", "member", "memory_root", "worktree"])
+              # Legion carrier: + `workspace`, which this branch's search composes its reach to
+              # the fleet repo root from; the dispatcher carries the same, so judged == run.
+              sorted(ctx), ["game_stepper", "member", "memory_root", "workspace", "worktree"])
         for eff, args in (("search", {"pattern": "def compose("}), ("git_read", {"op": "log"})):
             ev = c._normalize(B.BeingIntent(effector=eff, args=args))
             check(f"{eff}: the gate composed a command at all", bool(ev.command))

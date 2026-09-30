@@ -86,9 +86,10 @@ def test_the_tool_schemas_are_measured_not_budgeted():
     window the fitter did not know it was spending. Every verb added made it worse, and a
     budget is a promise the code makes to itself and never checks."""
     import json
-    from sage.gateway.heartbeat import _schema_chars_for, EXPLORE_TOOLS
+    from sage.gateway.heartbeat import _schema_chars_for, EXPLORE_TOOLS, _config_check
     from sage.gateway.being_gate_client import ollama_tools
     from pathlib import Path
+    from types import SimpleNamespace
 
     n = _schema_chars_for(EXPLORE_TOOLS)
     assert n == len(json.dumps(ollama_tools(EXPLORE_TOOLS)))
@@ -100,9 +101,11 @@ def test_the_tool_schemas_are_measured_not_budgeted():
 
     assert _schema_chars_for([]) is None and _schema_chars_for(None) is None
 
-    # (the _config_check coupling is asserted on the branch where that function
-    #  lives; it is the beat-record builder, not part of this slice.)
-
+    # and _config_check must actually RUN. ollama_tools is imported inside main(), which
+    # binds it as a local there; referencing it from _config_check NameErrors at runtime,
+    # and no test called _config_check, so nothing would have caught it.
+    c = _config_check(Path("."), "m", SimpleNamespace(num_ctx=24576), EXPLORE_TOOLS)
+    assert c["tool_schema_chars"] == n
 
     # THE FITTER MUST USE THE SAME NUMBER. Pinning the helper alone left the fitter free to
     # go back to a constant — a mutation replacing its call with 4000 passed everything.

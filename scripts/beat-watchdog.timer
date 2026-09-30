@@ -1,0 +1,14 @@
+[Unit]
+Description=Check every 10 minutes that legion-being is still being woken
+
+[Timer]
+# A CALENDAR schedule on purpose. This is the thing that catches a timer which has stopped
+# scheduling, so it must not be able to fail the same way: OnCalendar is computed from the
+# clock and cannot end up with no next elapse.
+OnCalendar=*-*-* *:00/10:40
+OnBootSec=3min
+Persistent=true
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

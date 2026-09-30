@@ -1,0 +1,11 @@
+[Unit]
+Description=Find being-authored PRs waiting on a reviewer and make the wait loud
+Documentation=file:///home/dp/ai-workspace/SAGE/scripts/being_pr_sweep.sh
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /home/dp/ai-workspace/SAGE/scripts/being_pr_sweep.sh
+Environment="PATH=/home/dp/.cargo/bin:/home/dp/miniforge3/bin:/home/dp/.local/bin:/usr/local/bin:/usr/bin:/bin"
+# exit 3 = a being's PR is late. That is the point: a failed unit is visible, a quiet one is not.
+TimeoutStartSec=300
+Nice=15

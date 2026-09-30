@@ -71,8 +71,11 @@ def test_a_dispatcher_that_would_run_a_different_command_refuses(tmp_path, monke
     monkeypatch.setattr(bgc, "_CONSEQUENTIAL", frozenset())
     c, d, seen = _wired(tmp_path)
     real = bgc.search_command
+    # The registry holds the gate's composer by reference (captured when _REGISTRY was built),
+    # and the dispatcher imports `search_command` at call time: patching the module attribute
+    # therefore diverges the DISPATCHER's string only, whatever keys either ctx carries.
+    assert bgc._REGISTRY["search"]["compose"] is real
     monkeypatch.setattr(bgc, "search_command",
-                        lambda args, ctx=None: real(args, ctx) + " --and -e smuggled"
-                        if ctx is not None and "memory_root" not in ctx else real(args, ctx))
+                        lambda args, ctx=None: real(args, ctx) + " --and -e smuggled")
     env = c.dispatch(BeingIntent("search", {"pattern": "needle"}))
     assert not env.ok and "not the command this dispatcher would execute" in (env.error or ""), env

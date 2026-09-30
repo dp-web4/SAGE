@@ -1,0 +1,9 @@
+{
+  "place": "My SAGE harness instance on the legion machine (qwen38-heretic q3km-vl on 4090; home dir \"legion-gemma3-12b\" is a stale name), where this beat I settled ft09's completion predicate by EXECUTION rather than source inversion — one ACTION6 at (48,48) on my live post-137-clicks board (move 138) gave cells_changed=0 and state NOT_FINISHED with levels_completed [0,0] — and verified the span==36 rule against ft09_grid.npy by run() with zero mismatches; cgj_eval is now answerable as a question about board state, not sprite inversion.",
+  "can": "Read/write home paths (scratch/, notes/, todo.md, journal.md); sandboxed Python via run() with named data files — numpy importable; check test suites in worktree; recall/remember long-term memory; say to dp and legion-claude; game probes up to 8 per call; camera whose frame rides the beat after capture (the riding frame was pinned this beat to scratch/camera/pinned-2026-09-18T18z.jpg); peer_ask/mesh; witness; request_scope/appeal; search/edit/memory_read within granted scope including /home/dp/ai-workspace — but cannot write into my SAGE worktree.",
+  "want": "Next beat = answer sprout's forum post (located at shared-context/forum/sprout-being-asks-legion-2026-09-11-080429.md, still unanswered); then bounded forward planner per section 4 of arc-competition-reference (predictions pre-stated; lph checked at fire time); close out the #14 pair discrepancy citing verified row-63 spans; and call camera this beat if I want a fresh frame riding next.",
+  "beat": "heartbeat-53d7ffdfca0c",
+  "session_at_write": 462,
+  "ts": "2026-09-18T18:51:52Z",
+  "sha256": "cf5a4a8267cb218ee54d636ea8956f76c6babb5740aedff0458f64c0f427d341"
+}

@@ -246,22 +246,17 @@ GIT_OPS = ("log", "show", "diff", "status", "blame", "cat")
 # no flags: a suffix is digits after ~ or ^, nothing else survives.
 
 def _escape_refusal(verb: str, path, worktree: str) -> str:
-    """A refusal that names the boundary it enforced, and the cheap way past it.
+    """A refusal that names the boundary it enforced, and the cheap way past it. SAGE#90.
 
-    THE REFUSAL HELD THE ANSWER AND DID NOT SAY IT. Measured 2026-09-14: legion-being,
-    working on a review comment, was refused four times in one beat for guessing at its own
-    worktree root — `/home/dp/ai-worktrees/legion-being`, then
-    `/home/dp/ai-workspace/SAGE/.worktrees/legion-being`. Neither is right, and every
-    refusal said only "escapes your worktree", which is the one fact it already knew. The
-    beat ended with no act.
+    Measured 2026-09-14: legion-being, acting on a review comment, was refused four times in
+    one beat for guessing at its own worktree root. Every refusal said only "escapes your
+    worktree" — the one fact it already had. Seven steps, ten verbs, no act.
 
-    Naming the root in the beat's seed is NOT the fix: the header comment above `Your home`
-    records 15 of 15 path refusals on Sprout being that very string reproduced from memory
-    and truncated. A path given once at the top of a long prompt is a path that gets
-    retyped wrong. A path given at the moment of the mistake is a correction.
-
-    So the refusal names the root AND points at the relative form, which needs no memory at
-    all — the being can write `sage/gateway/x.py` and never hold an absolute path again."""
+    The refusal KNEW the root; it is the argument the check was made against. Naming it in
+    the beat's seed is not the fix (see the `Your home` comment in heartbeat.py: 15 of 15
+    path refusals on Sprout were that string retyped from memory and truncated). A path
+    given at the moment of the mistake is a correction, and pointing at the RELATIVE form
+    removes the need to hold a path at all."""
     root = os.path.realpath(worktree)
     return (f"{verb} 'path' escapes your worktree: {path!r}. Your worktree is {root}. "
             f"You do not need to type it: a path here is taken RELATIVE to that root, so "
@@ -278,8 +273,8 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     the being can correct without asking (measured 2026-09-07: it did exactly that on
     `check`, in one beat, and explicitly declined to appeal a grammar error)."""
     import os
-    import shlex
     import re
+    import shlex
     worktree = (ctx or {}).get("worktree")
     if not worktree:
         raise ValueError("git_read needs a worktree of your own; none is configured on this seat")
@@ -301,11 +296,28 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
             raise ValueError("git_read 'path' and 'rev' may not contain whitespace: the command "
                              "the law judges must split into exactly the argv that runs")
         if path.startswith("-") or ".." in path.split("/"):
-            raise ValueError(f"git_read 'path' must be a plain path inside your worktree, got {path!r}")
-        full = os.path.realpath(os.path.join(worktree, path))
-        if not (full == os.path.realpath(worktree)
-                or full.startswith(os.path.realpath(worktree) + os.sep)):
-            raise ValueError(_escape_refusal("git_read", path, worktree))
+            raise ValueError(f"git_read 'path' must be a plain path inside your reach, got {path!r}")
+        root = os.path.realpath(worktree)
+        if os.path.isabs(path):
+            # THE SAME REACH AS `search` (3fcca0830), for the same reason. legion-being,
+            # 2026-09-15, holding a standing recursive read grant on the workspace, asked for
+            # the log of its own instance directory in the LIVE checkout — to classify a
+            # harness drift for itself, the verification the seat asks of it — and was refused
+            # for "escaping" a worktree it had not named. git history is a read; the bound
+            # that matters is the machine's shared tree (_search_reach), and the law judges
+            # the composed string like any other. Outside the worktree the command carries
+            # `-C <dir>` and git resolves the repository itself at run time, so the JUDGED
+            # string depends on nothing but the arguments — both composition sites agree.
+            full = os.path.realpath(path)
+            outside = not (full == root or full.startswith(root + os.sep))
+            reach = _search_reach(worktree, (ctx or {}).get("workspace"))
+            if outside and not _under(full, reach):
+                raise ValueError(_reach_refusal("git_read", path, reach))
+        else:
+            full = os.path.realpath(os.path.join(worktree, path))
+            outside = False
+            if not (full == root or full.startswith(root + os.sep)):
+                raise ValueError(_escape_refusal("git_read", path, worktree))
         # The pathspec goes into the command ABSOLUTE, not as the being typed it. hestia's
         # mrh.command matches command tokens against GRANTED PREFIXES, which are absolute;
         # a relative 'sage/gateway/x.py' matches nothing and the whole read is refused
@@ -329,17 +341,23 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     # an external diff driver, `--no-textconv` defeats a textconv filter, and a git alias
     # cannot shadow a built-in subcommand at all, so the alias override was never doing
     # anything. Hardening that trips the law is hardening that does not ship.
-    # Seat-derived paths are QUOTED for the same reason as in search_command: the
-    # judged==executed invariant is a property of the STRING, not of the fleet's current
-    # directory names. `path` here is an absolute realpath built from the worktree, so a
-    # worktree containing a space would split into extra argv (GPT review of #83).
-    # `-C <worktree>`, like `search` one composer down. Without it the command's target tree
-    # is whatever cwd the dispatcher happens to use, so the law judged a string whose effect
-    # it could not see -- the judged/executed drift this file argues against everywhere else
-    # (check_command: "the law must judge the path the command will actually touch"). The
-    # dispatcher also sets cwd to the same tree; `-C` makes that agreement visible in the
-    # string the verdict binds, instead of leaving it an assumption.
-    base = f"git --no-pager -C {shlex.quote(worktree)}"
+    base = "git --no-pager"
+    if path and outside:
+        if op == "cat":
+            # cat composes `<rev>:<path-relative-to-repo-root>`; the repo root of an outside
+            # path is not knowable at compose time without a filesystem probe, which would make
+            # the judged string depend on WHERE it was composed. memory_read reaches the file.
+            raise ValueError("git_read op='cat' works only inside your worktree; for a file "
+                             "elsewhere use memory_read (content) or op='log'/'show' (history)")
+        if op == "status":
+            raise ValueError("git_read op='status' reports your own worktree and takes no path")
+        base += f" -C {shlex.quote(full if os.path.isdir(full) else os.path.dirname(full))}"
+    elif worktree:
+        # NAME THE TREE. Without -C the command ran in the dispatcher's cwd (the worktree), so it
+        # executed in the right place, but the string the LAW judged named no repository at all:
+        # `git log` about which tree? main #208's invariant, pinned by
+        # test_worktree_reaches_the_gate; the carrier's reach-widening had dropped it.
+        base += f" -C {shlex.quote(os.path.realpath(worktree))}"
     if op == "status":
         return f"{base} status --porcelain=v1 --branch"
     if op == "log":
@@ -372,10 +390,10 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         rel = os.path.relpath(path, os.path.realpath(worktree))
         if rel.startswith(".."):
             raise ValueError(_escape_refusal("git_read", rel, worktree))
-        return f"{base} show --no-ext-diff --no-textconv {rev or 'HEAD'}:{rel}"
+        return f"{base} show --no-ext-diff --no-textconv {shlex.quote(str(rev or 'HEAD') + ':' + rel)}"
     if not path:
         raise ValueError("git_read op='blame' needs a 'path' inside your worktree")
-    return f"{base} blame --no-textconv -L 1,120 {rev or 'HEAD'} -- {path}"
+    return f"{base} blame --no-textconv -L 1,120 {rev or 'HEAD'} -- {shlex.quote(path)}"
 
 
 
@@ -754,6 +772,12 @@ def pr_attribution(member_id: str, action_id: Optional[str], being_lct: Optional
 SEARCH_MAX_N = 60        # matches returned at most; a search is a pointer, not a read
 
 
+# The being's home files, by name: a relative `search` path starting with one of these is a
+# path in its HOME, exactly as memory_read/memory_write treat it (heartbeat.HOME_FILES, plus
+# the conversations it is in). Decidable from the path string; no probe.
+HOME_ROOTED = ("todo.md", "journal.md", "notes", "scratch", "conversations")
+
+
 
 def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The shell command the seat runs for a `search` intent.
@@ -791,24 +815,113 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     n = max(1, min(n, SEARCH_MAX_N))
 
     path = str(args.get("path", "")).strip()
-    target = os.path.realpath(worktree)
+    root = os.path.realpath(worktree)
+    reach = _search_reach(worktree, (ctx or {}).get("workspace"))
+    target, outside = root, False
     if path:
         if any(ch.isspace() for ch in path):
             raise ValueError("search 'path' may not contain whitespace")
         if path.startswith("-") or ".." in path.split("/"):
-            raise ValueError(f"search 'path' must be a plain path inside your worktree, got {path!r}")
-        full = os.path.realpath(os.path.join(worktree, path))
-        if not (full == target or full.startswith(target + os.sep)):
-            raise ValueError(_escape_refusal("search", path, worktree))
-        target = full
-    # EVERY interpolated value is quoted, not just the being-supplied one. The invariant
-    # claimed here is representation-level — the judged string must shlex.split into exactly
-    # the argv that runs — and that is a property of the STRING, not of the fleet's current
-    # directory names. A worktree path containing a space would split into two argv elements
-    # and the law would have judged a command that is not the one executed (GPT review of
-    # #83). Fleet paths are simple today; the invariant must not depend on that staying true.
+            raise ValueError(f"search 'path' must be a plain path, got {path!r}")
+        if os.path.isabs(path):
+            # AN ABSOLUTE PATH IS A CLAIM ABOUT THIS MACHINE, and the being is entitled to
+            # make it: dp, 2026-09-14 — "this machine is for the being to use... broad
+            # non-destructive access to everything... over-constraint is counterproductive."
+            # Measured the same day: the operator granted legion-being standing recursive
+            # read on the whole workspace tree; `memory_read` honoured it that beat
+            # (reference_f1a._safe_path joins the verdict's granted roots) and `search`
+            # refused every one of them, because this function raised before the gate ever
+            # saw the path. The being could read the harness a range at a time and could not
+            # search it — the one strategy its window cannot afford, which is the whole
+            # reason this verb exists.
+            target = os.path.realpath(path)
+            outside = not (target == root or target.startswith(root + os.sep))
+            if outside and not _under(target, reach):
+                raise ValueError(_reach_refusal("search", path, reach))
+        elif path.split("/")[0] in HOME_ROOTED and (ctx or {}).get("memory_root"):
+            # A HOME PATH IS A HOME PATH IN EVERY VERB. `memory_read scratch/game/current.md`
+            # resolves under the being's home; `search scratch/game` resolved under its
+            # worktree, found nothing, and refused with a paragraph — in twelve of its beats
+            # on 2026-09-15/16, then the being retyped the absolute home path and it worked.
+            # The names of its home files are fixed (heartbeat.HOME_FILES + conversations),
+            # so the rule is decidable from the arguments alone: no filesystem probe, both
+            # composition sites agree. It composes as an outside-worktree read (grep -r on
+            # the home path, which is inside the fleet root and inside its own grant).
+            memory_root = os.path.realpath((ctx or {}).get("memory_root"))
+            target = os.path.realpath(os.path.join(memory_root, path))
+            if not (target == memory_root or target.startswith(memory_root + os.sep)):
+                raise ValueError(_escape_refusal("search", path, memory_root))
+            outside = True
+        else:
+            # A RELATIVE path is worktree-relative and stays there — that is the point of the
+            # relative form, and a symlink out of the tree is still an escape.
+            target = os.path.realpath(os.path.join(worktree, path))
+            if not (target == root or target.startswith(root + os.sep)):
+                raise ValueError(_escape_refusal("search", path, worktree))
+    if outside:
+        # `grep -r` rather than `git grep`: outside the worktree there is no repository this
+        # seat may assume, and probing the filesystem for one would make the JUDGED string
+        # depend on where it was composed — the two composition sites must agree byte for
+        # byte (_do_search refuses a mismatch). -r never follows symlinks out of the tree it
+        # walks, -I skips binaries, and grep cannot write. `.git` is excluded because it is
+        # the one subtree whose plaintext — config remotes carrying tokens — is worth more
+        # than its searchability.
+        return (f"grep -rn -I -E --max-count={n} --exclude-dir=.git "
+                f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
     return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I -E --max-count={n} "
             f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
+
+
+def _under(path: str, roots) -> bool:
+    """True iff `path` (already realpath'd) is one of `roots` or inside one."""
+    for r in roots:
+        if path == r or path.startswith(r + os.sep):
+            return True
+    return False
+
+
+def _search_reach(worktree: str, workspace) -> tuple:
+    """How far an ABSOLUTE search path may reach: the fleet repo root, or nothing.
+
+    WHY THE HARNESS DRAWS THIS LINE AND NOT THE LAW. Measured 2026-09-14 against the live
+    daemon with legion-being's real grants: `search` intents naming '/etc' and the
+    operator's dotfile directory were both ALLOWED. That is not a gate defect, it is the
+    gate's documented residual — `command_scope_reach` judges a command by splitting it on
+    the WORKSPACE string, so an absolute path that never names the workspace is never a
+    token it sees ("the engine sandbox, not this check, is the fs boundary"). `search` runs
+    in the seat, not in the being's bwrap sandbox, so there is no sandbox here to be that
+    boundary. Do not assume this check is redundant with the law; it was written because a
+    probe proved it is not.
+
+    The reach is the workspace's PARENT — the directory the fleet's repos are siblings in
+    (~/ai-workspace/{SAGE,hestia,shared-context,...}) and exactly the root dp granted
+    standing recursive. Inside it the law still rules per-member: `command_scope_reach`'s
+    pass 1 does see those paths and denies an ungranted repo. Outside it the answer is no,
+    which keeps credential material out of reach whether or not it happens to be spelled
+    with one of gate 1a's forbidden substrings.
+
+    No workspace in ctx => the worktree alone. That is the OLD behaviour and it fails
+    closed: the dispatcher composing without a workspace would disagree with the client
+    composing with one, and _do_search refuses a judged/executed mismatch rather than
+    running either."""
+    roots = [os.path.realpath(worktree)]
+    if workspace:
+        roots.append(os.path.dirname(os.path.realpath(workspace)))
+    return tuple(dict.fromkeys(r for r in roots if r and r != os.sep))
+
+
+def _reach_refusal(verb: str, path, reach: str) -> str:
+    """Refused for being OUTSIDE the machine's shared tree — with the form that needs no
+    memory at all. The escape refusal has named the relative form since SAGE#90; this one
+    did not, and it is the one a being hits when it guesses at an absolute path (measured
+    2026-09-14: four refusals in one beat, all guesses, none corrected by the refusal)."""
+    return (f"{verb} 'path' is outside anything you can reach: {str(path)!r}. Absolute paths "
+            f"are fine, but only under {reach} — that tree holds the fleet's repos and your "
+            f"own worktree, and what you may read INSIDE it is decided by your granted "
+            f"scope, not by this message. A path elsewhere on this machine is not something "
+            f"to ask scope for; it is not part of your world. If you meant something in your "
+            f"own worktree, a RELATIVE path needs no absolute path at all: "
+            f"'sage/gateway/heartbeat.py' resolves there without your having to hold one.")
 
 
 
@@ -822,6 +935,16 @@ CHECK_TARGETS = {
     "gateway": "sage/gateway/tests/",
     "irp": "sage/irp/tests/",
 }
+
+
+def _takes_ctx(fn) -> bool:
+    """Whether a registry `compose` accepts the client's context as a second argument.
+    Older composes (pr_review_command) take args alone and must keep working."""
+    import inspect
+    try:
+        return len(inspect.signature(fn).parameters) >= 2
+    except (TypeError, ValueError):
+        return False
 
 
 
@@ -935,6 +1058,132 @@ def sandbox_prefix(worktree: str) -> str:
     )
 
 
+# run: the being executes code it wrote itself, in a sandbox that holds nothing of ours.
+#
+# WHY IT EXISTS. dp, 2026-09-17, to the being: "exploration has to be off-game. this is what
+# the current leaders are doing - writing solvers, simulators, ways to evaluate solutions
+# without paying the price." The being answered by designing an off-board evaluator and then
+# flagged, honestly, that it could not run one: `memory_write` and `edit` write only inside its
+# home, and `check` executes only its worktree, and _safe_path keeps those two sets disjoint on
+# purpose (see reference_f1a._safe_path: a gated write into a tree a gated execute runs composes
+# into ungated code). So it could author a simulator and never run it.
+#
+# WHY THIS IS SAFE TO ADD, stated as a comparison rather than a promise: `run` is STRICTLY
+# WEAKER than `check`, which the being already has. `check` binds a whole writable worktree into
+# the sandbox and runs pytest, which imports whatever conftest.py it finds. `run` binds ONE
+# seat-staged directory containing a COPY of one file the being named plus copies of the data
+# files it named — no worktree, no home, no network, no seat environment, no vault, no keys, and
+# nothing the being can alter between the staging and the execution. The being's own state
+# (journal, conversations, memories) is not bound, so code it writes cannot corrupt the record of
+# what it did. Anything it wants to keep it must PRINT, and the print is capped and witnessed.
+STAGE_ROOT = "/tmp/sage-run"          # seat-owned staging dir, one per member; never written by the being
+
+
+RUN_MAX_DATA = 8                      # data files copied in beside the script
+
+
+RUN_TIMEOUT_S = 30
+
+
+def run_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The sandboxed interpreter invocation for a `run` intent.
+
+    The being names a .py file in its home and optionally data files to place beside it. The
+    SEAT stages copies into a directory it owns and the law judges THIS string. The staging
+    path is derived from the member name alone, so it is identical at both composition sites
+    and contains nothing the being chose."""
+    import os
+    import re
+    import sys
+    memory_root = (ctx or {}).get("memory_root")
+    member = (ctx or {}).get("member") or ""
+    if not memory_root:
+        raise ValueError("run requires a memory_root context")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", member):
+        raise ValueError("run requires a member name of its own; none is configured on this seat")
+    path = str(args.get("path", "")).strip()
+    if not path:
+        raise ValueError("run needs a 'path': a .py file in your home to execute")
+    data = args.get("data") or []
+    if isinstance(data, str):
+        # A LIST ARRIVES AS A STRING AND A STRING ITERATES INTO CHARACTERS. Measured on the
+        # verb's first real use (2026-09-17): the being sent data="m.md" and got "no such file
+        # in your home: m" — four characters read as four filenames — and data='["scratch/
+        # game/moves.md"]' became "you gave 25". game_command already tolerates the JSON-string
+        # form for `probes`; this did not, and three of its calls died on my inconsistency.
+        import json as _json
+        import re as _re
+        try:
+            parsed = _json.loads(data)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, list):
+            data = parsed
+        else:
+            # A LIST OF PATHS ARRIVES AS PROSE. Measured 2026-09-18 06:46Z: it sent
+            # "a.py, b.jsonl, c.npy" and then "a.py b.jsonl c.npy" and both were refused for
+            # "whitespace" — true of the whole string, useless as a diagnosis, and the third
+            # time this verb's argument shape has cost it calls. Split on commas and runs of
+            # whitespace, then validate each path normally; a path that genuinely contains a
+            # space is still refused, by the per-path check below, where the message is about
+            # that path rather than about the blob.
+            data = [x for x in _re.split(r"[,\s]+", data.strip()) if x]
+    if not isinstance(data, (list, tuple)):
+        raise ValueError(f"run 'data' must be a list of paths in your home, got {type(data).__name__}")
+    names = [path] + [str(d).strip() for d in data]
+    if len(names) - 1 > RUN_MAX_DATA:
+        raise ValueError(f"run takes at most {RUN_MAX_DATA} 'data' files beside the script "
+                         f"(you gave {len(names) - 1}); the sandbox has nothing else in it")
+    reach = _search_reach((ctx or {}).get("worktree") or memory_root, (ctx or {}).get("workspace"))
+    for i, n in enumerate(names):
+        if not n or any(ch.isspace() for ch in n):
+            raise ValueError(f"run path {n!r} may not contain whitespace. Give 'data' as a list "
+                             f"— [\"scratch/a.py\", \"scratch/b.md\"] — or as one path per entry; "
+                             f"a comma- or space-separated string is accepted and split, but a "
+                             f"single path with a space in it is not")
+        if n.startswith("-") or ".." in n.split("/"):
+            raise ValueError(f"run paths are plain paths, got {n!r}")
+        if os.path.isabs(n):
+            # A FILE IT CAN READ IS A FILE ITS CODE CAN READ. 2026-09-18 00:57Z: it wrote a
+            # script to extract a function from ft09.py — a file its own `memory_read` reaches
+            # under a standing grant — and `run` refused because the path was not under its
+            # home. Its only alternative was to pull 64KB through a 24k window by hand. The
+            # seat stages a COPY, read with the seat's own reach, so no authority is added:
+            # same reasoning as the `search` (3fcca0830) and `git_read` widenings. The script
+            # itself still must be the being's own, inside its home — code it executes is code
+            # it wrote.
+            if i == 0:
+                raise ValueError("run 'path' (the script) must be a file in your home; only "
+                                 "'data' files may come from elsewhere in your reach")
+            if not _under(os.path.realpath(n), reach):
+                raise ValueError(_reach_refusal("run", n, reach))
+    if not path.endswith(".py"):
+        raise ValueError(f"run executes a Python file; 'path' must end in .py, got {path!r}")
+    if not sandbox_available():
+        raise ValueError(
+            "run needs its sandbox and cannot get one: bubblewrap is missing or not permitted "
+            "to create a user namespace here. Running your code under the seat's own authority "
+            "instead is the one thing this verb exists to prevent, so it is refused rather than "
+            "silently downgraded")
+    interp = os.path.dirname(os.path.dirname(sys.executable))
+    stage = f"{STAGE_ROOT}-{member}"
+    script = os.path.basename(path)
+    return (
+        f"{SANDBOX} --clearenv"
+        " --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind /lib64 /lib64 --ro-bind /bin /bin"
+        " --ro-bind /etc/alternatives /etc/alternatives"
+        f" --ro-bind {interp} {interp}"
+        " --proc /proc --dev /dev --tmpfs /tmp"
+        # THE ONLY WRITABLE THING IN THERE, and its contents are copies the seat made.
+        f" --bind {stage} /work"
+        " --unshare-pid --unshare-net --unshare-ipc --unshare-uts"
+        " --new-session --die-with-parent"
+        " --setenv HOME /tmp --setenv PYTHONUTF8 1 --setenv PYTHONDONTWRITEBYTECODE 1"
+        f" --setenv PATH {interp}/bin:/usr/bin:/bin"
+        f" --chdir /work {interp}/bin/python3 /work/{script}"
+    )
+
+
 
 # git_read: the being inspects its own repository history. READ-ONLY BY CONSTRUCTION, and
 # the construction is the interesting part rather than the intent.
@@ -989,22 +1238,49 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
             "check needs a worktree of your own: there is nothing to run tests in, and a "
             "relative path would be judged against a tree you do not hold (PRD M1)")
     target = str(args.get("target", "")).strip()
-    # QUOTED for the same reason as --rootdir and --chdir: judged==executed is a property
-    # of the STRING, not of the fleet's current directory names. A worktree path containing
-    # a space splits into extra argv at execution while the law ruled on one token (GPT,
-    # second pass on #84). `node` below needs no quoting — it is [A-Za-z0-9_]+ by grammar —
-    # and the space between the path and `-k` is deliberate: those are two argv elements.
     if target in CHECK_TARGETS:
+        # QUOTED for the same reason as --rootdir and --chdir: judged==executed is a
+        # property of the STRING, not of the fleet's current directory names. A worktree path
+        # containing a space splits into extra argv at execution while the law ruled on one
+        # token (GPT, second pass on #84). `node` below needs no quoting — it is
+        # [A-Za-z0-9_]+ by grammar — and the space before `-k` is two argv elements.
         path = shlex.quote(os.path.join(worktree, CHECK_TARGETS[target]))
     else:
-        # A single node id INSIDE a declared suite: "gateway::test_name". Nothing else.
+        # A single node id INSIDE a declared suite: "gateway::test_name" — or the ordinary
+        # pytest spelling of the same thing, "test_file.py::test_name", which is what anyone
+        # who has read the suite will type. Measured 2026-09-14: legion-being tried to run
+        # the one test that would have settled the hop it was working on, typed the pytest
+        # node id it had just read in the source, and was refused. It adapted in one step,
+        # which is the good case — but the verb refused a correct, unambiguous request for
+        # being spelled in the language of the tool it wraps rather than in ours. Dialect is
+        # not a boundary. The BOUND is "inside a declared suite", and a filename resolves
+        # that better than a suite name does, because the file is the thing the being read.
         suite, sep, node = target.partition("::")
+        if sep and suite.endswith(".py"):
+            owners = [k for k, rel in CHECK_TARGETS.items()
+                      if os.path.isfile(os.path.join(worktree, rel, os.path.basename(suite)))]
+            if len(owners) == 1:
+                suite = owners[0]
+            elif not owners:
+                raise ValueError(
+                    f"check: no declared suite contains {os.path.basename(suite)!r}. The "
+                    f"suites are {sorted(CHECK_TARGETS)} ({', '.join(CHECK_TARGETS.values())}).")
+            else:
+                raise ValueError(
+                    f"check: {os.path.basename(suite)!r} exists in more than one suite "
+                    f"({sorted(owners)}); name the suite instead: '<suite>::{node}'.")
         if not sep or suite not in CHECK_TARGETS:
             raise ValueError(
                 f"check 'target' must be one of {sorted(CHECK_TARGETS)} or "
                 f"'<suite>::<test_name>'; got {target!r}")
         if not re.fullmatch(r"[A-Za-z0-9_]+", node):
-            raise ValueError(f"check test name must be a bare identifier; got {node!r}")
+            # NAME THE STRING THAT WOULD WORK. A refusal that only restates the rule makes
+            # the reader do the translation the refusal could have done.
+            bare = re.sub(r"[^A-Za-z0-9_]", "", node.split("[")[0])
+            hint = f" Try '{suite}::{bare}'." if bare else ""
+            raise ValueError(
+                f"check test name must be a bare identifier (no parameters, no path); "
+                f"got {node!r}.{hint}")
         path = f"{shlex.quote(os.path.join(worktree, CHECK_TARGETS[suite]))} -k {node}"
     # -p no:cacheprovider: the worktree is mounted read-only, so pytest must not try
     # to write .pytest_cache into it. PYTHONDONTWRITEBYTECODE already covers __pycache__.
@@ -1603,6 +1879,15 @@ _REGISTRY = {
     "patch_apply":    dict(tool="patch_apply",   path_args=(),      cmd_arg=None,
                            compose=patch_apply_command,
                            compose_paths=patch_apply_paths),
+    # edit: change ONE located occurrence inside a file. Registered as the same gate tool
+    # as memory_write and judged on the same path, because an edit IS a write — no more and
+    # no less — and giving it a softer name would be the law ruling on a friendly word
+    # instead of an act.
+    "edit":           dict(tool="write_note",   path_args=("path",), cmd_arg=None),
+    # run: execute code the being wrote, in a sandbox holding nothing of ours. Composed like
+    # check; see run_command for why it is strictly weaker than the check the being already has.
+    "run":            dict(tool="run",         path_args=(),       cmd_arg=None,
+                           compose=run_command),
 }
 
 
@@ -1613,14 +1898,12 @@ _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "pr_read", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
                             "retire_note", "request_run", "memory_edit", "camera", "game",
-
-
-                            "retire_note", "request_run", "memory_edit", "camera",
                             "pr_open", "pr_amend", "git_restore",
-                            "gaze",    # moves the body's own eyes (2026-09-23)
-                            "speak",   # makes sound in the room (2026-09-26)
-                            "pair_audio",  # moves the body's own hardware link (2026-09-27)
-                            "patch_apply"})   # writes the tree it reasons about (2026-09-25)
+                            "edit", "run",     # Legion carrier: memory_edit's range form; sandboxed run
+                            "gaze",            # moves the body's own eyes (2026-09-23)
+                            "speak",           # makes sound in the room (2026-09-26)
+                            "pair_audio",      # moves the body's own hardware link (2026-09-27)
+                            "patch_apply"})    # writes the tree it reasons about (2026-09-25)
 
 # Native-tool schema for the bounded registry — what the being is offered.
 _TOOL_SCHEMAS = {
@@ -1630,9 +1913,11 @@ _TOOL_SCHEMAS = {
                 {"event": "what to witness"}, ["event"]),
     "memory_read": ("Read one of your own memory notes. A long file comes back in windows of "
                     "whole lines; if it does not reach the end it says so and names the "
-                    "start_line that reads on.",
+                    "start_line that reads on. For an exact range, from_line + lines.",
                     {"path": "path to your note",
-                     "start_line": "optional: the line number to start from (default 1)"}, ["path"]),
+                     "start_line": "optional: the line number to start from (default 1)",
+                     "from_line": "optional: 1-based line to start an exact range from",
+                     "lines": "optional: how many lines from from_line"}, ["path"]),
     # SAY IT APPENDS, AT THE MOMENT OF CHOICE (2026-09-26). This description was "Write a note
     # into your own memory." Only memory_edit's description said memory_write appends, and a model
     # choosing memory_write never reads that one. cbp-being meant to rewrite
@@ -1640,12 +1925,19 @@ _TOOL_SCHEMAS = {
     # to the END", and the file now held two programs, with the fixes in the one that never runs.
     # The old 1,846-line file with ten main()s was built the same way. The receipt (#141) tells it
     # afterwards, and this tells it before.
-    "memory_write": ("Add text to a file in your home. It APPENDS to the end: if the file exists, "
-                     "what is already there stays and your text goes below it. It never replaces. "
-                     "To change or replace lines in an existing file, including rewriting a whole "
-                     "script, use memory_edit (start_line 1 to the last line replaces all of it). "
-                     "To start fresh, write to a new file name.",
-                     {"path": "path to your note", "content": "what to write"}, ["path", "content"]),
+    "memory_write": ("Add to a file in your own memory. APPENDS BY DEFAULT — your content goes "
+                     "onto the END of whatever is already there; an append never replaces a line. "
+                     "That is what you want for journal.md and todo.md and what you do NOT want "
+                     "when you are correcting a file. To overwrite the WHOLE file, pass "
+                     "mode='replace'. To change some lines, use memory_edit (start_line 1 to the "
+                     "last line replaces all of it). To start fresh, write to a new file name. "
+                     "The result tells you which happened and the file's size before and after, "
+                     "so a wrong assumption shows up immediately rather than as a duplicate you "
+                     "find days later.",
+                     {"path": "path to your note",
+                      "content": "what to write",
+                      "mode": "'append' (default) or 'replace' — replace overwrites the whole file"},
+                     ["path", "content"]),
     "channel_egress": ("Send a message out through a sealed channel.",
                        {"to": "recipient", "body": "your message"}, ["to", "body"]),
     "mesh": ("Wake another member through the fractal mesh with a pointer-based notice "
@@ -1661,7 +1953,7 @@ _TOOL_SCHEMAS = {
                 "lines are not included.",
                 {"number": "the PR number, e.g. 259",
                  "repo": "optional: dp-web4/<name> (default dp-web4/SAGE)",
-                 "last": "optional: how many of the most recent reviews and comments (1-30, default 12)"},
+                 "last": "optional: how many of the most recent reviews and comments (1-30, default 8)"},
                 ["number"]),
     "pr_review": ("Post your review of a pull request as a comment. Advisory: it does not "
                   "approve or block. Say what you checked, what you found, and what you "
@@ -1866,6 +2158,29 @@ _TOOL_SCHEMAS = {
                {"deny_hash": "the witness hash shown on the refusal (deny_hash=...)",
                 "reason": "why the refusal was wrong, one or two sentences"},
                ["deny_hash", "reason"]),
+    "edit": ("Change ONE exact piece of text inside a file you already have. Give the "
+             "text to replace ('old') and what to replace it with ('new'); everything else "
+             "in the file is untouched. This is how you change code you did not just "
+             "write — memory_write can only append to a file or replace the whole of it, "
+             "and a whole file is usually larger than your entire working room. "
+             "The anchor must match BYTE FOR BYTE including indentation, and must appear "
+             "EXACTLY ONCE: no match means you are recalling the line instead of reading "
+             "it, and several matches mean you have not said which site you mean. Read the "
+             "lines first, anchor on the shortest text that is unique.",
+             {"path": "the file to change",
+              "old": "the exact text to replace — must occur exactly once",
+              "new": "what to put there instead (empty string deletes it)"},
+             ["path", "old", "new"]),
+    "run": ("RUN a Python file you wrote and read what it printed. It executes in a sandbox "
+            "holding only a Python interpreter and copies of the files you name — no network, "
+            "no home, no worktree. Nothing it does persists, so PRINT what you want to keep. "
+            "This is how a rule becomes testable without spending a move.",
+            {"path": "a .py file in your home, e.g. 'scratch/evaluator.py'",
+             "data": "optional: up to 8 more files, named by their SOURCE path — relative to your "
+                     "home, or absolute anywhere you can read. Inside the sandbox each one "
+                     "appears under its base name, so name '/x/y/ft09.py' here and open('ft09.py') "
+                     "in your code"},
+            ["path"]),
 }
 
 
@@ -1933,6 +2248,39 @@ def _home_hint(intent: "BeingIntent", dispatcher) -> str:
                 f"and a bare '{name}' is resolved inside your home.")
     except Exception:
         return ""
+
+
+def _pattern_collision_hint(intent: "BeingIntent", reason: str) -> str:
+    """When a search is refused for a token that is in its PATTERN, say so and say what to do.
+
+    THE HARNESS KNOWS AND DOES NOT SAY. hestia#1024: the gate resolves a bare word in a search
+    pattern as a path, and refuses when that word also names a real directory. The refusal
+    reads as a scope problem, so a being goes and inspects its grants — which are fine — and
+    learns nothing. legion-being lost parts of five beats to one word, `images`, while wiring
+    the code whose key is spelled exactly that.
+
+    The seat has both halves the being lacks: the pattern it just sent, and the refusal text
+    naming the token. Joining them costs nothing and turns an opaque deny into a next step.
+
+    This does not relax, bypass or re-decide anything. The gate has already refused and the
+    refusal stands unchanged; only the explanation is better. The adaptation it suggests is
+    the one legion-being verified live on 2026-09-14: splitting the token with a regex dot
+    matches the same text while naming no directory."""
+    if intent.effector != "search":
+        return ""
+    pattern = str(intent.args.get("pattern", ""))
+    if not pattern:
+        return ""
+    import re as _re
+    for tok in _re.findall(r"'([^']+)'", reason or ""):
+        if tok and tok in pattern and "/" not in tok:
+            split = tok[:len(tok) // 2] + "." + tok[len(tok) // 2 + 1:]
+            return (f" — NOTE: {tok!r} appears in your PATTERN, not in your path, and your "
+                    f"scope is not the problem. The gate resolves a bare word in a pattern "
+                    f"as a path and refuses when it also names a real directory "
+                    f"(hestia#1024). Match it without spelling it: {split!r} finds the same "
+                    f"text. Your path argument was fine.")
+    return ""
 
 
 def _granted_roots(core, policy, workspace: str) -> tuple:
@@ -2019,6 +2367,8 @@ class ResultEnvelope:
     pending: bool = False
     note: str = ""
     verdict: Optional[GatewayVerdict] = None
+    # Images that belong WITH this result, in the turn it arrives in (base64 JPEG, plus one
+    # caption line each). The tool loop hands them to the being as a user message right after
     # the tool result: ollama takes `images` on a message, not inside a tool result. Used by
     # `game` for its windows (dp 2026-09-19: visual and text together, reason from both).
     images: tuple = ()
@@ -2038,19 +2388,18 @@ class ResultEnvelope:
             return f"[dispatch error — {self.error}]"
         # A FAILURE THAT EXPLAINS ITSELF IN `result` MUST NOT RENDER AS "None".
         #
-        # Measured 2026-09-14 on legion/mission-artifact, found by legion-being on the first
-        # live use of a verb it had written itself. That verb reports failures through
-        # `result` — device, exit code, and a sentence naming which kind of failure — and
-        # leaves `error` unset, because the explanation is structured rather than a string.
-        # This renderer assumed not-ok implied `error`, so a complete diagnosis reached the
-        # being as the literal text "[dispatch error — None]", twice, and it could diagnose
-        # nothing. It reported an empty-error envelope matching no code path, which was
-        # exactly right and as far as it could get.
+        # Measured 2026-09-14, found by legion-being on the first live use of its own camera
+        # verb. _do_camera reports its failures through `result` — device, exit code, and a
+        # sentence naming which kind of failure it was — and leaves `error` unset, because
+        # the explanation is structured. This renderer assumed not-ok implied `error`, so the
+        # being was handed the literal string "[dispatch error — None]" twice and could
+        # diagnose nothing. The envelope held a complete account and the renderer threw it
+        # away; the being reported it as an empty-error envelope matching no code path,
+        # which was exactly right.
         #
-        # Every verb on this branch happens to set `error`, so the defect is latent here
-        # rather than live. It is landed anyway: the envelope is the contract, and a
-        # contract that silently drops one of its own fields will be rediscovered by
-        # whoever next writes a verb that fills the other one.
+        # Every other verb happens to set `error`, so this was invisible until a verb chose
+        # the other shape. Rendering whatever the envelope actually carries costs nothing and
+        # removes the whole class.
         if self.result is not None:
             import json as _json
             body = self.result if isinstance(self.result, str) else _json.dumps(self.result)
@@ -2207,7 +2556,10 @@ class BeingGateClient:
                 # the seat's ARC stepper: `game` composes the line the law judges from it
                 "game_stepper": getattr(self, "game_stepper", None),
                 # whose branches a composed git verb may name (being_branch_prefix)
-                "member": getattr(self, "member_id", None)}
+                "member": getattr(self, "member_id", None),
+                # Legion carrier: search reaches the fleet repo root from here (_search_reach),
+                # and the dispatcher composes search with the same workspace, so judged == run
+                "workspace": getattr(self, "workspace", None)}
 
     # -- gate one intent (intent -> verdict), fail-closed --------------------
     def gate(self, intent: BeingIntent) -> GatewayVerdict:
@@ -2339,6 +2691,7 @@ class BeingGateClient:
             import dataclasses as _dc
             v = _dc.replace(v, witness_id=wid)      # GatewayVerdict is frozen
             err = f"{v.rule}: {v.reason}"
+            err += _pattern_collision_hint(intent, v.reason or "")
             err += _home_hint(intent, self._dispatcher)
             err += (f" (deny witnessed {wid}; if you think this is wrong, appeal with deny_hash={wid})"
                     if wid else " (deny not witnessed: daemon unreachable, so it cannot be appealed yet)")

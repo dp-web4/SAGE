@@ -1,0 +1,19 @@
+[Unit]
+Description=SAGE being heartbeat (legion-being): one governed exploration beat
+After=network.target sage-daemon.service membot-legion.service
+Wants=membot-legion.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/dp/ai-workspace/SAGE
+Environment=HOME=/home/dp
+Environment="PATH=/home/dp/.cargo/bin:/home/dp/miniforge3/bin:/home/dp/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/dp/miniforge3/bin/python3 -m sage.gateway.heartbeat --member legion-being --model qwen38-heretic:q3km-vl --instance sage/instances/legion-being --max-steps 0 --idle-wake-s 600 --resume-wake-s 30
+# A beat now runs while there is work (--max-steps 0), bounded by --explore-budget-s
+# (2 h) rather than by a step count. This must sit comfortably ABOVE that budget: the
+# record is written at beat end, so a kill loses the whole beat. 3 h leaves an hour for
+# the account ask, reflect, and a long final generate after the budget closes explore.
+TimeoutStartSec=10800
+StandardOutput=append:/home/dp/ai-workspace/SAGE/sage/instances/legion-being/heartbeat.log
+StandardError=inherit

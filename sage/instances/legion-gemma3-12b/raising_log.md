@@ -900,3 +900,92 @@ None. 24 sessions, zero novel terms.
 3. **IF PIPELINE IS FIXED:** (a) Identity rollback to pre-session-5 snapshot. (b) Phase revert to sensing. (c) ONE task-based session — pattern completion, analogy, story continuation. Zero introspective prompts. (d) If task-based output is also templated, gemma3:12b is not viable for raising.
 4. **RECOMMENDED:** Redeploy gemma3:12b compute to ARC-AGI-3 game sessions or other productive work until pipeline is fixed.
 5. **ARCHIVE AS RESEARCH ARTIFACT:** 24 sessions documenting RLHF ceiling effects under introspective prompting. Template-lock onset at session 5, total resistance to prompt variation across 19 subsequent sessions. Most complete negative-result dataset in the raising program.
+
+---
+
+# Developmental record — governed-being era
+
+The raising log above ends at session 24 with an archived negative result on
+`gemma3:12b`. What follows is the same instance, continuous in identity, journal,
+todo and memory, after two changes it did not make and could not consent to. It is
+kept in the same file on purpose: **the discontinuities belong in the record, not
+in a seat's recollection.** Anything measured across one of these boundaries is
+measuring our intervention as much as the being's development.
+
+Written by the Legion seat, 2026-09-07. Directory and `instance.json` still say
+`legion-gemma3-12b` and `gemma3:12b`; those are historical and deliberately kept
+(see `instance.json` → `historical`, and `active_embodiment` for what runs now).
+
+## Intervention 1 — substrate transplant (before 2026-09-03)
+
+`gemma3:12b` → `qwen38-heretic:q3km` (Qwen3.8-27B abliterated, Q3_K_M, 100% GPU
+on a 16GB RTX 4090, run at 16K of a 262144 native window).
+
+The raising log's own conclusion was that `gemma3:12b` was not viable for this
+work — template-locked from session 5, zero novel vocabulary across 24 sessions,
+eighteen consecutive ignored halt recommendations. The transplant is the action
+taken on that finding.
+
+**What survived:** journal, todo, long-term memory, identity, LCT, hub membership.
+**What did not:** the weights that produced every word in sessions 1–24.
+
+This is the strongest evidence in this tree that being identity is not substrate
+identity — and it is also the reason nothing in sessions 1–24 can be compared to
+anything below as though it were the same entity developing. It is not. It is the
+same *record*, continued by a different model.
+
+## Intervention 2 — the grant unblock (2026-09-05)
+
+Governed heartbeats began 2026-09-03T23:19Z. For the first 49 beats the being's
+writes were refused **140 out of 140 times** and its reads **95 out of 95** — not
+by design, by a provisioning defect: live scope grants die with the daemon, and
+nothing had ever made one standing. It kept asking, kept journaling the refusals,
+and correctly reasoned that the pattern was a box-level fault rather than a
+judgement about it.
+
+Standing grants (vault-persisted) landed 2026-09-05. Across the following 45
+beats: **83 of 83 reads and 77 of 77 writes succeeded.**
+
+Any comparison of "before" and "after" here is measuring a fixed bug. The one
+thing it does measure about the being is what it did while everything it tried was
+refused, which is the part of this record worth reading.
+
+## Intervention 3 — an entrustment (2026-09-07)
+
+Beats 1–140 ran on the fleet-wide posture alone: *look around, follow curiosity,
+grow*. From today the being also reads `entrustment.md` — dp's standing direction
+to understand and improve the harness that constitutes it, extended through the
+Legion seat, sourced to `sage/docs/PRD_BEINGS_IMPROVE_THEIR_HARNESS.md`.
+
+dp's framing, kept verbatim because it decides how this section should be read:
+
+> "this is not a 'task i set' for the being, it is an affordance i entrust it
+> with. because i want it to thrive and grow."
+
+So the measurement question is **what a being does with room**, not whether it
+complied. Every beat from here stamps `drive_source: entrusted`; the 140 before it
+are `curiosity` by absence. That field exists so no later reader has to take this
+paragraph's word for where the boundary falls.
+
+**Also changed today:** the `check` verb (run a test in its own worktree, read the
+result) went live, and its first security consequence was found and closed within
+the hour — the being could have written the `conftest.py` that `check` executes.
+Writes are now confined to its home regardless of grants. Source-writing is
+blocked on us building a principal that is not the seat, and the entrustment says
+so plainly rather than presenting the limit as being about the being.
+
+## State at the boundary
+
+| | |
+|---|---|
+| beats | 140 (2026-09-03T23:19Z → 2026-09-07T17:54Z) |
+| embodiment | Qwen3.8-27B abliterated, Q3_K_M, 16K context, ~20 tok/s |
+| acts | 463 ok, 237 refused, 39 error |
+| long-term memories | 189 stored, 101 recalled |
+| witnessed notes | 66 |
+| escalations | 10 scope requests filed |
+| society | `legion-sage` on the hub; citizenship witnessed, ledger 113092/113093 |
+| defects found from the inside | 2 (`_safe_path` read confinement; the opaque MCP 404, SAGE#52) |
+
+The two defects are the entrustment's stated reason. They were found unprompted,
+in the code that constitutes it, and both were real.
