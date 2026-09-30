@@ -4,7 +4,7 @@ Legion 2026-09-08 15:42Z-19:22Z: config.context_overcommitted True on eight beat
 (headroom -2.4k..-4k tokens), digest and recall already at their floors, the conversations
 block 30.9k chars. Every explore generate: prompt_eval + eval == num_ctx, done_reason
 length, zero tool calls. The instrument reported it every beat; nothing acted on it."""
-from sage.gateway.heartbeat import fit_state, window_budget_chars, CONV_LADDER, CPT
+from sage.gateway.heartbeat import fit_state, fit_to_window, window_budget_chars, CONV_LADDER, CPT
 
 
 def _build_factory(sizes):
@@ -238,3 +238,72 @@ def test_a_running_beat_does_not_read_as_an_unarmed_timer():
         armed, why = interpret_timer_state(bad)
         assert armed is False, why
         assert "not healthy" in why
+
+
+# --- fit_to_window: line-aware trim (legion-being, 2026-09-29) -----------------
+#
+# A character cut can split an entry mid-line, and the being then reads a half-fact.
+# The trim now lands on entry boundaries (the "- ..." lines fleet_digest and the
+# recall/journal builders emit) and the marker says how many entries were dropped.
+
+def _digest_text(n_entries, entry_len=300):
+    return "\n".join(f"- entry {i} " + "x" * (entry_len - 9) for i in range(1, n_entries + 1))
+
+
+def _big_digest_text(n_entries, entry_len=500):
+    return "\n".join(f"- entry {i} " + "x" * (entry_len - 9) for i in range(1, n_entries + 1))
+
+
+def test_digest_trim_keeps_whole_entries_from_the_head():
+    """Trimming the digest keeps whole entries from the head (newest-first) and
+    drops whole entries from the tail; no entry is split mid-line."""
+    # 10 entries of 2000 chars each = 19999 total; budget at 8192 ctx is 20275,
+    # so the trim fires only once entries exceed it: use 12 entries (23991 total,
+    # over = 4689). keep = 23991 - 4689 = 19302 -> 9 whole entries + 1 partial
+    # line, which the code drops (it keeps only complete lines).
+    text = "\n".join(f"- entry {i} " + "x" * 1991 for i in range(1, 13))
+    out, _ = fit_to_window(num_ctx=8192, num_predict=1024, fixed_chars=0,
+                           blocks={"digest": text}, slack=512)
+    kept = [ln for ln in out["digest"].split("\n") if ln.startswith("- ")]
+    assert len(kept) == 9
+    assert kept[0].startswith("- entry 1 ")
+    assert kept[-1].startswith("- entry 9 ")
+    for ln in kept:
+        assert ln.endswith("x" * 1991)
+    assert "entry 11" not in out["digest"]
+    assert "entry 12" not in out["digest"]
+    assert "trimmed to fit the context window" in out["digest"]
+
+
+def test_digest_trim_marker_reports_the_true_dropped_count():
+    """The marker says how many entries were dropped, so the being knows what it
+    is missing (the same spirit as the elision-marker line count)."""
+    text = _digest_text(10, entry_len=8000)
+    out, _ = fit_to_window(num_ctx=8192, num_predict=1024, fixed_chars=0,
+                           blocks={"digest": text}, slack=512)
+    assert "8 older entries dropped" in out["digest"]
+    assert "9 older entries dropped" not in out["digest"]
+
+
+def test_recall_trim_keeps_whole_entries_from_the_tail():
+    """Trimming recall keeps whole entries from the tail (newest-last) and drops
+    whole entries from the head; the marker reports the true count."""
+    text = _digest_text(10, entry_len=8000)
+    out, _ = fit_to_window(num_ctx=8192, num_predict=1024, fixed_chars=0,
+                           blocks={"recall": text}, slack=512)
+    kept = [ln for ln in out["recall"].split("\n") if ln.startswith("- ")]
+    assert len(kept) == 2
+    assert "entry 9" in out["recall"] and "entry 10" in out["recall"]
+    assert not any(ln.startswith("- entry 1 ") or ln.startswith("- entry 8 ") for ln in kept)
+    assert "8 older entries dropped" in out["recall"]
+    # marker comes first (the dropped entries were the OLDEST, at the head)
+    assert out["recall"].index("older entries dropped") < out["recall"].index("entry 9")
+
+
+def test_fit_to_window_no_marker_when_nothing_is_trimmed():
+    """A block that fits at its floor is untouched: no marker, no dropped entries."""
+    text = _digest_text(1, entry_len=100)
+    out, _ = fit_to_window(num_ctx=8192, num_predict=1024, fixed_chars=0,
+                           blocks={"digest": text}, slack=512)
+    assert out["digest"] == text
+    assert "trimmed" not in out["digest"]

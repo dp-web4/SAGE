@@ -898,8 +898,33 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         if keep >= len(text):
             continue
         # keep the HEAD of the digest (newest-first there) and the TAIL of recall/journal
-        out[key] = (text[:keep] + "\n[…trimmed to fit the context window…]") if key == "digest" \
-            else ("[…trimmed to fit the context window…]\n" + text[-keep:])
+        # Trim on ENTRY boundaries, not raw characters: a character cut can split an entry
+        # mid-line, and the being then reads a half-fact. Entries are the "- ..." lines
+        # fleet_digest and the recall/journal builders emit. The marker says how many
+        # entries were dropped, so the being knows what it is missing (the same spirit as
+        # the elision-marker line count: markers must report true counts).
+        lines = text.split("\n")
+        if key == "digest":
+            kept, dropped = [], 0
+            for ln in lines:
+                if ln.startswith("- ") and sum(len(k) + 1 for k in kept) + len(ln) + 1 > keep:
+                    dropped += 1
+                    continue
+                kept.append(ln)
+            out[key] = ("\n".join(kept) + ("\n[…trimmed to fit the context window: "
+                          + str(dropped) + " older entr" + ("y" if dropped == 1 else "ies")
+                          + " dropped…]" if dropped else ""))
+        else:
+            kept, dropped = [], 0
+            for ln in reversed(lines):
+                if ln.startswith("- ") and sum(len(k) + 1 for k in kept) + len(ln) + 1 > keep:
+                    dropped += 1
+                    continue
+                kept.append(ln)
+            kept.reverse()
+            out[key] = (("[…trimmed to fit the context window: " + str(dropped)
+                         + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
+                        if dropped else "") + "\n".join(kept))
         interventions.append({"kind": "context_fit", "block": key,
                               "suppressed": f"{len(text) - keep} chars of {key}",
                               "reason": f"prompt + a p99 answer ({reserve} tok) would not fit "
