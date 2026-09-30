@@ -404,9 +404,16 @@ def _answers(seqs: list[int]) -> str:
 
 
 def decline_text(rel, reason: str, seqs: list[int]) -> str:
+    # The closing line names no way forward of its own; the seat's reason is where that goes.
+    # Until 2026-09-30 it ended "If you want it run under different conditions, say which and
+    # ask again." on every decline, whatever the reason. Measured on cbp-being: 96 declines
+    # carried it; the phrase was in 0 of the 433 beats before the first one and in 15 of the 666
+    # since (13 within ten minutes of a decline), seven times as a todo line such as "[ ] Re-run
+    # ... under different conditions"; and 0 of 377 request_run calls named a condition. Most of
+    # those declines were for an unchanged file, where what the seat needed was a different sha
+    # and the stock sentence pointed somewhere else.
     return (f"[request_run] I did not run {rel}. {reason}\n\n{_answers(seqs)}\n"
-            f"This is a decision, not a failure, and it is not about your standing. If you want "
-            f"it run under different conditions, say which and ask again.")
+            f"This is a decision, not a failure, and it is not about your standing.")
 
 
 def cmd_decline(args) -> None:

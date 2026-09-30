@@ -48,6 +48,19 @@ def test_run_paste_in_a_decline_is_hidden_from_the_being():
     assert shown.startswith("[request_run] I did not run f.py.")
 
 
+def test_a_decline_closes_on_the_standing_line_and_names_no_door_of_its_own():
+    """The stock "run under different conditions" door: offered on 96 declines, written into
+    cbp-being's todo as an open item seven times, used by 0 of 377 request_run calls. The way
+    forward belongs to the reason, which knows why this file was declined."""
+    reason = "sha dc129ac0a7a9 is the file 4538 ran. Ask again when the sha differs."
+    text = srr.decline_text("scratch/f.py", reason, [4540, 4541])
+    assert text.startswith("[request_run] I did not run scratch/f.py. " + reason)
+    assert text.endswith("This is a decision, not a failure, and it is not about your standing.")
+    after_reason = text.split(reason, 1)[1]
+    assert "condition" not in after_reason and "ask again" not in after_reason.lower()
+    assert srr.answers_line([4540, 4541]) in after_reason
+
+
 def test_cmd_decline_refuses_a_cut_reason_and_posts_nothing(monkeypatch, tmp_path):
     posted = []
     monkeypatch.setattr(srr, "_say", lambda t: posted.append(t))
