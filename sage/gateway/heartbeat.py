@@ -225,7 +225,9 @@ def _offered_explore_tools_before_the_canonical_toolset(body_reading: Optional[d
 # spent every explore step reading its own source, then closed the beat. A verb in the
 # registry and not in the offered set is a verb the being does not have, and from outside
 # that is indistinguishable from choosing not to answer.
-REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "say"]
+# `stay_awake` is offered here because reflection is where the being says what it wants next;
+# asking for another beat right away is one answer to that (SAGE #295).
+REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "say", "stay_awake"]
 
 # The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
 # Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
@@ -2809,7 +2811,15 @@ def main(argv=None) -> int:
     # The beat has begun: wake, before anything below reads the daemon's /status into the
     # being's own body block (SAGE #291).
     _BEAT_ID["id"] = host_session_id
+    _BEAT_ID["continuing"] = False
     _phase("wake", "start", host_session_id)
+    # WHAT WOKE THIS BEAT (SAGE #295): claim every pending event now, before anything is composed,
+    # so an event arriving from here on is pending for the NEXT beat rather than lost in this one.
+    try:
+        from sage.gateway import arousal as _arousal_claim
+        _claimed = _arousal_claim.claim_pending(host_session_id)
+    except Exception as _e:
+        _claimed = [{"claim_error": f"{type(_e).__name__}: {_e}"}]
     client, llm = build_client(args.member, instance, args.model, workspace, args.forum_dir,
                                host_session_id, args.temperature, args.max_tokens,
                                gate_only=args.gate_only)
@@ -2909,6 +2919,9 @@ def main(argv=None) -> int:
     if pres_text:
         digest = "# What you sensed since your last beat\n\n" + pres_text + "\n\n" + digest
     woke = consume_wake_marker()
+    woke["events"] = _claimed
+    if _claimed and woke.get("by") == "timer" and not any("claim_error" in e for e in _claimed):
+        woke["by"] = "event"
     # No `/no_think` suffix rides any turn. The request's `think` field is the only control
     # surface on this stack: measured on Sprout at ollama 0.30.8 and on CBP at 0.20.7, the
     # suffix leaves the think block intact (qwen3.5:0.8b 1428 -> 1441 chars, qwen3.8-distill:2b
@@ -3347,16 +3360,31 @@ def main(argv=None) -> int:
         if args.idle_wake_s > 0 and not record["next_wake"].get("armed"):
             print(f"[heartbeat] IDLE WAKE NOT CONFIRMED: {record['next_wake']}", file=sys.stderr)
 
-    # THE HELD WAKE: turns that arrived while this beat ran, which it never showed the being,
-    # get a wake of their own instead of waiting for the idle timer (arousal.wake_for_late_turns).
+    # WAKE CONTINUES WHILE THERE IS WORK (SAGE #295). Turns that arrived while this beat ran join
+    # the pending set (most are there already: the daemon's arousal call queued them); then, if
+    # anything is pending or the being asked to stay awake, the next beat is armed to start the
+    # moment this one ends, and `run` reports no rest in between. Nothing pending: the being rests,
+    # and the watchdog timer counts its 30 quiet minutes from this beat's end.
     try:
         from sage.gateway import arousal as _arousal
         record["late_turns"] = _arousal.wake_for_late_turns(instance, args.member, since=t0)
     except Exception as _e:
         record["late_turns"] = {"error": f"{type(_e).__name__}: {_e}"}
+    record["stay_awake"] = stay_awake_reason(explore, after, reflect, answer)
+    try:
+        from sage.gateway import arousal as _arousal
+        record["next_beat"] = _arousal.after_beat(stay_awake=record["stay_awake"])
+    except Exception as _e:
+        record["next_beat"] = {"continuing": False, "error": f"{type(_e).__name__}: {_e}"}
+    _BEAT_ID["continuing"] = bool(record["next_beat"].get("continuing"))
 
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+    try:
+        from sage.gateway import arousal as _arousal
+        _arousal.release_claim(host_session_id)   # what this beat claimed is in its record
+    except Exception:
+        pass
     print(json.dumps(record, indent=2, ensure_ascii=False, default=str))
     signal.signal(signal.SIGTERM, _term_before_record)   # the record is written; the beat is done
     return 0
@@ -3366,6 +3394,16 @@ def main(argv=None) -> int:
 IDLE_TIMER = os.environ.get("SAGE_HEARTBEAT_TIMER", "sage-heartbeat.timer")
 IDLE_UNIT = os.environ.get("SAGE_HEARTBEAT_UNIT", "sage-heartbeat.service")
 RESUME_UNIT = "sage-heartbeat-resume-wake"
+
+
+def stay_awake_reason(*turns) -> Optional[str]:
+    """The being's own ask for another beat right after this one (`stay_awake`, SAGE #295), from
+    any of its turns: the first reason given, or None when it did not ask."""
+    for t in turns:
+        r = getattr(t, "stay_awake", None) if t is not None else None
+        if r:
+            return r
+    return None
 
 
 def beat_rested(*turns) -> bool:
@@ -3704,7 +3742,11 @@ def run(argv=None) -> int:
     try:
         return main(argv)
     finally:
-        _activity.end("heartbeat:end", beat_id=_BEAT_ID.get("id"))
+        # Back-to-back beats (SAGE #295): when the next beat is already armed, this beat hands
+        # off in `wake` instead of reporting rest, so the display never blips to rest between
+        # them. Rest only when nothing is left.
+        _activity.end("heartbeat:end", beat_id=_BEAT_ID.get("id"),
+                      continuing=bool(_BEAT_ID.get("continuing")))
 
 
 if __name__ == "__main__":

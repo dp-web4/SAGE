@@ -1,78 +1,105 @@
 """
-Arousal — a metabolic response to world input.
+Arousal: every event wakes the being.
 
-dp, 2026-09-07: *"we should have metabolic response to events. beat is default idle state.
-world inputs require engagement."*
+dp, 2026-09-30 (SAGE #295):
+  "events wake the being, and wake state continues for as long as it has something to do. the
+   rest timer is a watchdog that wakes it if nothing else has. but a message from me, you, mesh
+   watcher, words detected on audio, motion on video or imu - all should wake it."
+  "wake indicates an active beat. there should not be artificial cap on beats, and if the being
+   decides to stay awake continously because of environment or curiosity, then so be it."
+  "the state display is an indicator not a control" / "the snarc is likewise an indicator not a
+   control."
 
-That is a correction to what the heartbeat had become. A 30-minute timer is a fine IDLE
-rhythm — it exists so a being has a reason to look around when nothing is happening — but
-it had become the ONLY rhythm, which makes every arriving thing wait an average of fifteen
-minutes for attention regardless of what it is. dp posted a turn and immediately asked how
-frequent the beats were, which is the question you ask when the system has no answer to
-"something just happened".
+WHAT THIS REPLACES. Until #295 this module was a GRADED, REFRACTORY policy (dp, 2026-09-07:
+"world inputs require engagement"): a fixed per-kind salience table with a 0.6 bar (a mesh
+digest at 0.1 and any unknown kind at 0.2 never woke the being), an 8-minute refractory, a
+"beat already due in 4 min" hold-back, a 60 s conversing refractory and an 8-beats-an-hour
+cap. Each of those decided WHETHER or WHEN an event got a beat. They are gone. The salience
+table stays, as a recorded value on each event, never as a gate.
 
-So: the timer is the floor, not the clock. A world input carries salience, and salience
-above the engagement threshold wakes the being now.
+WHAT DECIDES NOW. One thing only: whether a beat is already running.
+  * No beat running: the event starts one now.
+  * A beat running: the event is QUEUED. It goes into the pending set, and a successor is
+    armed so the next beat starts as soon as the running one ends (`arm_next`). At beat end
+    the heartbeat also checks the pending set itself, so an event is never left for the
+    watchdog timer.
 
-WHAT MAKES THIS METABOLIC RATHER THAN AN INTERRUPT.
+THE PENDING SET (`PENDING_PATH`, one per machine, like the wake marker). Every event is written
+here first, before any start is attempted, so a failed start or a crashed caller leaves work
+behind rather than losing it. A beat CLAIMS the set when it starts (it is moved aside and read,
+so what arrives after the claim is pending for the next beat) and releases its claim when its
+record is written. A claim left by a beat that died is absorbed by the next claim.
 
-  * It is GRADED. Not everything that arrives deserves a beat. dp speaking directly is not
-    the same event as a seat leaving a note, and neither is the same as a peer digest
-    moving. Each carries a weight, and only weights above the threshold spend a beat.
-  * It is REFRACTORY. After engaging, there is a period in which the being does not engage
-    again, however loud the world gets. Without it a burst of five turns is five beats, the
-    GPU thrashes, and the being's attention is shredded across fragments of the same
-    conversation — the opposite of engagement.
-  * It COSTS something. A beat is ~18 minutes of the only GPU on this machine. Waking is
-    an expenditure and the record says what it was spent on, so "was that worth a beat"
-    stays an answerable question instead of a feeling.
-
-WHAT IT IS NOT: a way for anything outside to seize the being's attention on demand. The
-threshold, the refractory period and the weights live here, in the seat's code, not in the
-event. A caller says what happened; this decides what it is worth.
+THE ONE FLOOD MECHANISM, and it drops nothing: an event whose `key` matches one already pending
+is COALESCED into it (count and last time move). A sustained identical event is one entry, not
+a hundred. Nothing else limits how often the being wakes; a beat that runs back-to-back with the
+next is the being staying awake because there is something to do.
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import subprocess
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-# What a kind of world input is worth, 0..1. These are a starting posture, not a finding:
-# they are the seat's guess at what deserves ~18 minutes of GPU, and they should move when
-# the record says they are wrong.
+# What a kind of event is worth, 0..1. RECORDED on the event and shown; never a gate (#295).
+# A kind missing from the table is recorded at DEFAULT_SALIENCE and wakes the being like
+# every other kind.
 SALIENCE = {
-    # The operator speaking directly. dp is asynchronous by rule, so a turn from dp is rare
-    # and is the strongest signal the being gets that someone is actually present.
-    "dp_turn": 0.9,
-    # A peer being reaching across the mesh: another body, which is the only source of
-    # facts this being cannot gather itself.
-    "peer_turn": 0.7,
-    # An operator ruling on something it asked for — it has been waiting, sometimes days.
-    "scope_decided": 0.7,
-    # A seat leaving a turn. This sat at 0.4, below the threshold, on the argument that a
-    # seat can reach the being at the next beat anyway. dp's stated vision of the beat
-    # (2026-09-12) is the opposite: "a message from you or me wakes it immediately to
-    # respond." The refractory period, not a low salience, is what stops a seat that sends
-    # three turns in a row from spending three beats; and a seat turn that is not worth a
-    # beat is a turn the seat should not have sent.
-    "seat_turn": 0.6,
-    # Ambient fleet movement. Real information, no urgency.
-    "digest": 0.1,
+    "dp_turn": 0.9,        # the operator speaking directly
+    "peer_turn": 0.7,      # another being across the mesh
+    "scope_decided": 0.7,  # an operator ruling the being asked for
+    "seat_turn": 0.6,      # its seat leaving a turn
+    "digest": 0.1,         # ambient fleet movement (a mesh watcher's digest)
+    "sense": 0.3,          # a sense event from the cortex (presence); its own score is recorded when known
+    "heard": 1.0,          # words heard on audio
 }
+DEFAULT_SALIENCE = 0.2
 
-ENGAGE_AT = 0.6          # at or above this, spend a beat now
-REFRACTORY_S = 8 * 60    # after engaging, do not engage again this soon
-IMMINENT_S = 4 * 60      # a beat already this close: let it arrive rather than racing it
 UNIT = os.environ.get("SAGE_HEARTBEAT_UNIT", "sage-heartbeat.service")
 TIMER = os.environ.get("SAGE_HEARTBEAT_TIMER", "sage-heartbeat.timer")
+
+# The successor: a transient unit, ordered After= the beat unit, that starts the beat unit.
+# Measured on CBP 2026-09-30 with throwaway units (SAGE #295):
+#   * a transient started with `systemd-run --no-block -p After=<beat>.service` waits while the
+#     beat's start job runs, including its ExecStopPost, and runs 22 ms after it finishes. So
+#     "start the next beat right after this one" does not race the running beat. (A plain
+#     `systemctl start` on the running oneshot would be merged into its job and do nothing.)
+#   * a second `systemd-run` with the same unit name while the first is waiting fails with
+#     "already loaded", and the successor runs ONCE: two requests coalesce into one next beat.
+#     While waiting, the unit shows LoadState=loaded, ActiveState=inactive and a Job id.
+NEXT_UNIT = "sage-heartbeat-next"
+
+PENDING_PATH = os.path.expanduser(os.getenv("SAGE_PENDING_EVENTS", "~/.sprout/pending_events.json"))
+
+# How long the successor may take to be collected after it fired, before a new one is armed.
+# Firing is a single `systemctl start --no-block`; it is gone in well under a second.
+_NEXT_SETTLE_S = 3.0
+
+
+# ---------------------------------------------------------------------------------------------
+# systemd, in one place, so tests can see (and refuse) every call
+
+def _systemd_disabled() -> bool:
+    """SAGE_NO_SYSTEMD=1: never run systemctl or systemd-run. The gateway and embodiment test
+    conftests set it for every test (and subprocesses inherit it), so no test can start the real
+    beat unit or arm a real successor on the machine it runs on."""
+    return os.getenv("SAGE_NO_SYSTEMD", "") not in ("", "0")
+
+
+def _systemd(args: list, timeout: float = 10) -> subprocess.CompletedProcess:
+    if _systemd_disabled():
+        raise FileNotFoundError("systemd calls are disabled here (SAGE_NO_SYSTEMD)")
+    return subprocess.run(args, text=True, capture_output=True, timeout=timeout)
 
 
 def _sh(*args: str) -> str:
     try:
-        return subprocess.run(args, text=True, capture_output=True, timeout=10).stdout.strip()
+        return _systemd(list(args)).stdout.strip()
     except Exception:
         return ""
 
@@ -80,19 +107,14 @@ def _sh(*args: str) -> str:
 def _start_wake() -> dict:
     """Start the beat unit now, and say whether that actually happened.
 
-    `_sh` discards the exit code and turns every exception into "", so `started` used to be
-    True whenever the POLICY said engage, including on a host with no systemctl (McNugget is
-    launchd-managed), with no such user unit (CBP runs its beats from cron), or with a unit
-    that failed to start (GPT review of SAGE#81). The record and the UI said "waking now"
-    when nothing woke. Now `started` is the observed result, and a failure carries the
-    reason; the turn is still recorded and waits for the ordinary beat."""
+    `started` is the observed result of the start request, and a failure carries the reason
+    (GPT review of SAGE#81). A failed start loses nothing: the event is already in the pending
+    set and the next beat, whatever starts it, claims it."""
     try:
-        p = subprocess.run(["systemctl", "--user", "start", "--no-block", UNIT],
-                           text=True, capture_output=True, timeout=10)
-    except FileNotFoundError:
+        p = _systemd(["systemctl", "--user", "start", "--no-block", UNIT])
+    except FileNotFoundError as e:
         return {"started": False,
-                "wake_error": "no systemctl on this host: its beats are not systemd user units "
-                              "(launchd on macOS, or cron); the turn waits for the ordinary beat"}
+                "wake_error": f"no systemctl here ({e}); the event is pending for the next beat"}
     except Exception as e:
         return {"started": False, "wake_error": f"{type(e).__name__}: {e}"}
     if p.returncode != 0:
@@ -105,176 +127,240 @@ def beat_running() -> bool:
     return _sh("systemctl", "--user", "is-active", UNIT) in ("active", "activating")
 
 
-def seconds_to_next_beat() -> Optional[int]:
-    """From `list-timers --output=json`, which reports raw microseconds. The `show -p`
-    forms are not usable here: NextElapseUSecRealtime is empty for an OnUnitActiveSec
-    timer, and the monotonic one renders a human-readable duration."""
-    try:
-        rows = json.loads(_sh("systemctl", "--user", "list-timers", TIMER, "--output=json") or "[]")
-        return int(int(rows[0]["next"]) / 1_000_000 - time.time())
-    except (ValueError, KeyError, IndexError, TypeError):
-        return None
+def _next_state() -> dict:
+    out = _sh("systemctl", "--user", "show", NEXT_UNIT + ".service",
+              "-p", "LoadState", "-p", "ActiveState", "-p", "Job")
+    return dict(l.split("=", 1) for l in out.splitlines() if "=" in l)
 
 
-def last_beat_end(instance: Path) -> Optional[float]:
+def arm_next(*, _retry: bool = True) -> dict:
+    """Make the next beat start as soon as the running one ends. Never raises.
+
+    {"armed": True} when a successor is waiting on the beat unit, including one that was already
+    waiting ("already_armed": the requests coalesced). A successor that has already fired but not
+    yet been collected is not a waiting one: wait for it to go (bounded), then arm a new one."""
+    cmd = ["systemd-run", "--user", "--no-block", "--collect", f"--unit={NEXT_UNIT}",
+           "-p", f"After={UNIT}", "systemctl", "--user", "start", "--no-block", UNIT]
     try:
-        rec = json.loads((Path(instance) / "heartbeats.jsonl")
-                         .read_text(errors="replace").strip().splitlines()[-1])
-        return float(rec["t0"]) + float(rec.get("elapsed_s") or 0)
+        p = _systemd(cmd, timeout=20)
+    except FileNotFoundError as e:
+        return {"armed": False, "error": str(e), "why": "the event stays pending for the next beat"}
+    except Exception as e:
+        return {"armed": False, "error": f"{type(e).__name__}: {e}",
+                "why": "the event stays pending for the next beat"}
+    if p.returncode == 0:
+        return {"armed": True, "by": NEXT_UNIT}
+    err = (p.stderr or p.stdout or "").strip()
+    if "already loaded" in err or "already exists" in err:
+        st = _next_state()
+        if st.get("Job"):
+            return {"armed": True, "by": NEXT_UNIT, "already_armed": True}
+        if _retry:
+            deadline = time.time() + _NEXT_SETTLE_S
+            while time.time() < deadline and _next_state().get("LoadState") == "loaded":
+                time.sleep(0.2)
+            d = arm_next(_retry=False)
+            d["after_a_fired_successor"] = True
+            return d
+    return {"armed": False, "error": f"systemd-run exit {p.returncode}: {err[:300]}",
+            "why": "the event stays pending for the next beat"}
+
+
+# ---------------------------------------------------------------------------------------------
+# the pending set
+
+def _pending_path(path: Optional[str] = None) -> Path:
+    return Path(path or PENDING_PATH)
+
+
+@contextmanager
+def _locked(path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(str(path) + ".lock", "a+") as lk:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
+
+
+def _read_set(p: Path) -> dict:
+    try:
+        d = json.loads(p.read_text())
+        return d if isinstance(d, dict) else {}
     except Exception:
-        return None
+        return {}
 
 
-def _parse_iso(v) -> Optional[float]:
-    from datetime import datetime, timezone
-    try:
-        return datetime.strptime(str(v)[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
-    except Exception:
-        return None
+def _write_set(p: Path, d: dict) -> None:
+    tmp = p.with_name(p.name + f".tmp{os.getpid()}")
+    tmp.write_text(json.dumps(d))
+    os.replace(tmp, p)
 
+
+def event_key(kind: str, descriptor: str) -> str:
+    return f"{kind}:{' '.join(str(descriptor).split())}"
+
+
+def add_pending(kind: str, descriptor: str, *, salience=None, key: Optional[str] = None,
+                source: str = "", now: Optional[float] = None, path: Optional[str] = None) -> dict:
+    """Put an event in the pending set, coalescing it into an identical one already there."""
+    now = time.time() if now is None else now
+    key = key or event_key(kind, descriptor)
+    p = _pending_path(path)
+    with _locked(p):
+        s = _read_set(p)
+        e = s.get(key)
+        if e:
+            e["count"] = int(e.get("count", 1)) + 1
+            e["last_ts"] = round(now, 2)
+        else:
+            e = {"kind": kind, "descriptor": descriptor,
+                 "salience": SALIENCE.get(kind, DEFAULT_SALIENCE) if salience is None else salience,
+                 "source": source, "first_ts": round(now, 2), "last_ts": round(now, 2), "count": 1}
+            s[key] = e
+        _write_set(p, s)
+    return dict(e, key=key)
+
+
+def touch_pending(key: str, *, now: Optional[float] = None, path: Optional[str] = None) -> bool:
+    """A sustained event persisting: count it into its pending entry if that is still pending.
+    False when it is not (a beat has already claimed it): the persisting event is not new work."""
+    p = _pending_path(path)
+    with _locked(p):
+        s = _read_set(p)
+        if key not in s:
+            return False
+        s[key]["count"] = int(s[key].get("count", 1)) + 1
+        s[key]["last_ts"] = round(time.time() if now is None else now, 2)
+        _write_set(p, s)
+    return True
+
+
+def peek_pending(path: Optional[str] = None) -> list:
+    p = _pending_path(path)
+    with _locked(p):
+        return [dict(v, key=k) for k, v in _read_set(p).items()]
+
+
+def claim_pending(beat_id: str, path: Optional[str] = None) -> list:
+    """At beat start: take everything pending, so what arrives from here on is pending for the
+    NEXT beat. The set is moved to a claim file named for this beat; claims left by a beat that
+    died before releasing them are absorbed into this one."""
+    p = _pending_path(path)
+    claim = p.with_name(f"{p.name}.claimed.{beat_id}")
+    with _locked(p):
+        merged = {}
+        for orphan in sorted(p.parent.glob(p.name + ".claimed.*")):
+            if orphan != claim:
+                merged.update(_read_set(orphan))
+                orphan.unlink(missing_ok=True)
+        merged.update(_read_set(p))
+        _write_set(claim, merged)
+        p.unlink(missing_ok=True)
+    return [dict(v, key=k) for k, v in merged.items()]
+
+
+def release_claim(beat_id: str, path: Optional[str] = None) -> None:
+    """The beat's record is written: what it claimed has been met."""
+    p = _pending_path(path)
+    with _locked(p):
+        p.with_name(f"{p.name}.claimed.{beat_id}").unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------------------------
+# the decision, and the response
 
 def decide(instance: Path, kind: str, *, now: Optional[float] = None) -> dict:
-    """Should this event spend a beat? Returns the decision AND its reasoning, because a
-    wake policy that cannot say why it declined is indistinguishable from one that is
-    broken — the failure this codebase keeps meeting from the other side."""
-    now = now if now is not None else time.time()
-    sal = SALIENCE.get(kind, 0.2)
-    d = {"kind": kind, "salience": sal, "engage": False, "reason": ""}
+    """What an event gets. There is no threshold: every event gets a beat. The only question is
+    whether one is running (then this event is queued behind it) or not (then it starts one).
 
-    if sal < ENGAGE_AT:
-        d["reason"] = (f"salience {sal} is below the engagement threshold {ENGAGE_AT}; "
-                       f"it will be read at the next scheduled beat")
-        return d
+    `engage` means "start a beat now", as the daemon (`delivery_text`) and the dp console read
+    it. A queued event is `engage: False, queued: True`, and its reason says the next beat starts
+    as soon as the running one ends."""
+    sal = SALIENCE.get(kind, DEFAULT_SALIENCE)
+    d = {"kind": kind, "salience": sal, "engage": False, "queued": False, "reason": ""}
     if beat_running():
-        # The conversation block is composed at beat START, so a turn arriving mid-beat is
-        # not in the beat that is running. On legion/mission-artifact the tool loop drains
-        # new turns between steps (conversations.drain_new_for via an `interject` hook) and
-        # this branch said so; that hook is not on main, so saying it here would be a claim
-        # about a capability this tree does not have (GPT review of SAGE#81). Until the
-        # interject slice lands: recorded, read at the next beat, and no in-flight delivery.
-        d["reason"] = ("a beat is already running and composed its state before this turn "
-                       "arrived; the turn is recorded and will be read at the next beat")
+        d["queued"] = True
         d["beat_running"] = True
+        # The conversation block is composed at beat start, so the running beat does not see
+        # this event (no in-flight delivery on main; GPT review of SAGE#81).
         d["delivered_in_flight"] = False
+        d["reason"] = ("a beat is already running; this is queued, and the next beat starts as "
+                       "soon as the running one ends")
         return d
-
-    since = None
-    end = last_beat_end(instance)
-    if end is not None:
-        since = now - end
-        refr, why = refractory_s(instance, now)
-        d["refractory"] = why
-        if since < refr:
-            d["reason"] = (f"refractory: only {int(since)}s since the last beat ended "
-                           f"({refr}s; {why}). Engaging again this soon shreds attention "
-                           f"across fragments of the same exchange")
-            d["refractory_s_left"] = int(refr - since)
-            # DEFER, do not drop. This used to return here and the input waited for the
-            # idle timer — up to 30 minutes for a turn that had earned a beat, because it
-            # arrived 3 minutes too early. Measured 2026-09-13T07:45Z: two seat turns
-            # correcting a broken fixture, declined at 298s, nothing armed. dp's vision is
-            # "a message wakes it immediately"; the refractory bounds HOW SOON, it must
-            # not decide WHETHER.
-            d["deferred_s"] = d["refractory_s_left"] + 1
-            return d
-
-    nxt = seconds_to_next_beat()
-    if nxt is not None and 0 <= nxt <= IMMINENT_S:
-        d["reason"] = f"a beat is already due in {nxt}s; racing it would waste one"
-        d["next_beat_s"] = nxt
-        return d
-
     d["engage"] = True
-    d["reason"] = f"salience {sal} >= {ENGAGE_AT} and the being is idle"
-    if since is not None:
-        d["idle_s"] = int(since)
+    d["reason"] = "every event wakes the being, and no beat is running"
     return d
 
 
-def respond(instance: Path, kind: str, *, descriptor: str) -> dict:
-    """Register a world input and, if it earns one, wake the being now.
+def request_beat(kind: str, descriptor: str, *, salience=None, key: Optional[str] = None,
+                 source: str = "", instance: Optional[Path] = None) -> dict:
+    """An event happened: record it as pending, then start a beat or queue behind the running one.
 
-    The wake marker is written whatever the decision, so a beat that arrives on the timer
-    still learns that something specific happened and what it was. Only the systemd start
-    is conditional."""
-    from sage.gateway.being_join import write_wake_marker
-    d = decide(instance, kind)
+    The wake marker (being_join) is written too, so the beat's record says who woke it."""
+    d = decide(Path(instance or "."), kind)
+    if salience is not None:
+        d["salience"] = salience
     d["descriptor"] = descriptor
     try:
+        d["pending"] = add_pending(kind, descriptor, salience=d["salience"], key=key, source=source)
+    except Exception as e:
+        d["pending_error"] = f"{type(e).__name__}: {e}"
+    try:
+        from sage.gateway.being_join import write_wake_marker
         write_wake_marker(descriptor, d["salience"])
     except Exception as e:
         d["marker_error"] = f"{type(e).__name__}: {e}"
     if d["engage"]:
         d.update(_start_wake())
         if not d["started"]:
-            d["fallback"] = "recorded; it will be read at the next scheduled beat"
-    elif d.get("deferred_s"):
-        d.update(_arm_deferred_wake(d["deferred_s"]))
+            # It may have lost a race with a beat that just started: queue behind it.
+            d["next"] = arm_next()
+            d["fallback"] = "pending; the next beat claims it"
+    else:
+        d["next"] = arm_next()
     return d
 
 
-DEFERRED_UNIT = "sage-heartbeat-deferred-wake"
+def respond(instance: Path, kind: str, *, descriptor: str) -> dict:
+    """A world input (a turn through /chat or /say, a dp console turn, anything a watcher sends).
+    Every one wakes the being (#295)."""
+    return request_beat(kind, descriptor, instance=instance, source=f"arousal:{kind}")
 
 
-def _arm_deferred_wake(seconds: int, *, retry: bool = True) -> dict:
-    """One-shot transient timer that starts the beat when the refractory period ends.
-
-    ONE pending at a time: the unit name is fixed on purpose, so a second engage-worthy
-    input inside the same refractory window finds the timer already armed and rides it.
-    heartbeat.py's fallback wake uses a unique name for the opposite reason — there a
-    collision meant a missing wake; here it means the wake is already coming.
-
-    `--no-block` on the start is load-bearing. Without it the transient service blocks
-    until the BEAT finishes (measured 2026-09-13T07:48Z: timer and service both
-    active/running two minutes after firing, the whole beat long), the pair is never
-    collected, and the next deferral collides with a timer that has already fired — an
-    `already_armed` for a wake that is not coming. So a collision is believed only if the
-    timer is actually WAITING; a stale pair is cleared and the arm retried once."""
+def after_beat(*, stay_awake: Optional[str] = None, path: Optional[str] = None) -> dict:
+    """Called by the heartbeat as its last act before writing its record. If anything is pending
+    (events that arrived during the beat), or the being asked to stay awake, the next beat is
+    armed to start the moment this one ends. Otherwise nothing: the being rests, and the watchdog
+    timer (OnUnitInactiveSec) counts 30 quiet minutes from this beat's end."""
     try:
-        subprocess.run(["systemd-run", "--user", "--collect", f"--on-active={seconds}s",
-                        f"--unit={DEFERRED_UNIT}",
-                        "systemctl", "--user", "start", "--no-block", UNIT],
-                       capture_output=True, text=True, timeout=20, check=True)
-        return {"deferred": True, "deferred_by": DEFERRED_UNIT}
-    except subprocess.CalledProcessError as e:
-        err = (e.stderr or "").strip()
-        if "already loaded" in err or "already exists" in err:
-            if _deferred_timer_waiting():
-                return {"deferred": True, "deferred_by": DEFERRED_UNIT, "already_armed": True}
-            if retry:
-                for suffix in (".timer", ".service"):
-                    _sh("systemctl", "--user", "stop", DEFERRED_UNIT + suffix)
-                    _sh("systemctl", "--user", "reset-failed", DEFERRED_UNIT + suffix)
-                d = _arm_deferred_wake(seconds, retry=False)
-                d["cleared_stale"] = True
-                return d
-        return {"deferred": False, "error": f"systemd-run exit {e.returncode}: {err}",
-                "why": "the input waits for the idle timer"}
+        pending = peek_pending(path)
     except Exception as e:
-        return {"deferred": False, "error": f"{type(e).__name__}: {e}",
-                "why": "the input waits for the idle timer"}
+        pending = []
+        err = f"{type(e).__name__}: {e}"
+    else:
+        err = None
+    d = {"pending": len(pending), "kinds": sorted({str(e.get("kind")) for e in pending}),
+         "stay_awake": stay_awake}
+    if err:
+        d["pending_error"] = err
+    if not pending and not stay_awake:
+        d["continuing"] = False
+        d["why"] = "nothing pending and the being did not ask to stay awake: rest"
+        return d
+    d["next"] = arm_next()
+    d["continuing"] = bool(d["next"].get("armed"))
+    d["why"] = ("the being asked to stay awake" if stay_awake and not pending
+                else f"{len(pending)} event(s) pending" + ("; the being also asked to stay awake"
+                                                           if stay_awake else ""))
+    return d
 
 
-def _deferred_timer_waiting() -> bool:
-    """True only if the deferred timer exists AND has not fired yet."""
-    try:
-        out = subprocess.run(["systemctl", "--user", "show", DEFERRED_UNIT + ".timer",
-                              "-p", "SubState", "--value"],
-                             capture_output=True, text=True, timeout=10).stdout.strip()
-    except Exception:
-        return False
-    return out == "waiting"
+# ---------------------------------------------------------------------------------------------
+# turns that arrived while a beat ran
 
-
-# THE HELD WAKE AND CONVERSATION MODE (dp, 2026-09-27: "should we speed up the beat cadence?" ->
-# not the timer). Both are OPT-IN per instance (cbp-claude's pre-review of #239: fleet-wide they
-# would lower CBP's refractory to 60 s on 77% of beats, because its being `say`s to its seat
-# nearly every beat, on a shared GPU that has crashed from VRAM starvation). instance.json:
-#   "arousal": {"held_wake": true, "conversation_mode": true, "people": ["dp"]}
-CONVERSING_WINDOW_S = 15 * 60
-CONVERSING_REFRACTORY_S = 60
-MAX_BEATS_PER_HOUR = 8          # conversation mode's brake: past this, the ordinary pause returns
-PEOPLE = ("dp",)                # operators; instance.json "people" adds to them
+PEOPLE = ("dp",)                # operators; instance.json "arousal.people" adds to them
 
 
 def _parse_iso(v) -> Optional[float]:
@@ -286,7 +372,6 @@ def _parse_iso(v) -> Optional[float]:
 
 
 def flags(instance: Path) -> dict:
-    """The instance's arousal opt-ins. Absent -> all off, which is today's behaviour."""
     try:
         d = json.loads((Path(instance) / "instance.json").read_text()).get("arousal") or {}
         return d if isinstance(d, dict) else {}
@@ -299,8 +384,8 @@ def people(instance: Path) -> set:
 
 
 def sender_kind(instance: Path, sender: str) -> Optional[str]:
-    """What a turn from `sender` is worth, as a SALIENCE kind. None: not this path's to wake
-    (a heard voice: presence holds that wake itself, with the heard words)."""
+    """The SALIENCE kind of a turn from `sender`. None: a heard voice, which presence queues
+    itself, with the heard words."""
     if sender == "voice":
         return None
     if sender in people(instance):
@@ -310,67 +395,10 @@ def sender_kind(instance: Path, sender: str) -> Optional[str]:
     return "peer_turn"
 
 
-def _recent_turns(instance: Path, since: float, until: Optional[float] = None):
-    from sage.gateway import conversations as conv
-    for m in conv.listing(Path(instance)):
-        for t in conv.recent(Path(instance), m["id"], limit=200):
-            ts = _parse_iso(t.get("ts"))
-            if ts is not None and ts >= since and (until is None or ts <= until):
-                yield m, t, ts
-
-
-def beats_last_hour(instance: Path, now: float) -> int:
-    n = 0
-    try:
-        for line in (Path(instance) / "heartbeats.jsonl").read_text(errors="replace").splitlines()[-40:]:
-            try:
-                if now - float(json.loads(line).get("t0") or 0) <= 3600:
-                    n += 1
-            except Exception:
-                continue
-    except Exception:
-        return 0
-    return n
-
-
-def conversing(instance: Path, now: Optional[float] = None) -> tuple:
-    """(bool, why). A live exchange with a PERSON: within CONVERSING_WINDOW_S a person wrote to
-    the being AND the being spoke (say/speak). The being talking to its seat is not this."""
-    now = now if now is not None else time.time()
-    if not flags(instance).get("conversation_mode"):
-        return False, "conversation mode is off for this instance"
-    ppl = people(instance)
-    heard_person = spoke = False
-    try:
-        for m, t, ts in _recent_turns(instance, now - CONVERSING_WINDOW_S, now):
-            if t.get("from") in ppl:
-                heard_person = True
-            if t.get("via") in ("say", "speak") and not str(m["id"]).endswith("-claude"):
-                spoke = True          # the being's own turn, anywhere but a seat's channel
-    except Exception:
-        return False, "conversations unreadable"
-    if heard_person and spoke:
-        return True, f"a person wrote and the being spoke within {CONVERSING_WINDOW_S // 60} min"
-    return False, "no live exchange with a person"
-
-
-def refractory_s(instance: Path, now: Optional[float] = None) -> tuple:
-    """(seconds, why): short in a live exchange with a person, unless the beat cap is reached."""
-    now = now if now is not None else time.time()
-    live, why = conversing(instance, now)
-    if live:
-        n = beats_last_hour(instance, now)
-        if n >= MAX_BEATS_PER_HOUR:
-            return REFRACTORY_S, f"{why}, but {n} beats in the last hour (cap {MAX_BEATS_PER_HOUR})"
-        return CONVERSING_REFRACTORY_S, f"conversing: {why}"
-    return REFRACTORY_S, why
-
-
 def late_turns(instance: Path, member: str, since: float) -> list:
     """Turns from someone else that arrived after `since` (the beat's start) and that the beat
     never showed the being. [(conversation id, turn)]. Bounded by `since` on purpose: an older
-    unseen turn (one the context-fit ladder trimmed, say) must not re-arm a wake every beat.
-    Heard voice is left to presence, which holds that wake with the words."""
+    unseen turn (one the context-fit ladder trimmed, say) must not re-queue a beat every beat."""
     from sage.gateway import conversations as conv
     out = []
     try:
@@ -387,36 +415,25 @@ def late_turns(instance: Path, member: str, since: float) -> list:
 
 
 def wake_for_late_turns(instance: Path, member: str, since: float, now: Optional[float] = None) -> dict:
-    """THE HELD WAKE. A turn that arrives while a beat runs is declined by decide() ("a beat is
-    already running ... read at the next beat") and nothing re-arms it: measured on Sprout, 2 of
-    13 dp turns since 09-25 waited ~31 min for the idle timer. The beat that just ran knows which
-    turns it never showed; it arms the deferred wake for them, held to the same salience bar as
-    decide() and after the refractory pause. Opt-in (instance.json arousal.held_wake).
-    Not a complete close: a turn landing after this runs but before the unit exits, or a beat
-    killed before it gets here, still falls back to the idle timer."""
+    """Turns that arrived while this beat ran go into the pending set, so `after_beat` starts the
+    next beat for them. No opt-in, no salience bar, no refractory (#295; this was the opt-in
+    "held wake" of 2026-09-27). Most of them are already pending, because the daemon's arousal
+    call queued them when they arrived; this catches the ones that came in by another path.
+    Coalesced by conversation and turn, so a turn is one entry however it got here."""
     late = late_turns(instance, member, since)
     if not late:
         return {"late": 0}
-    if not flags(instance).get("held_wake"):
-        return {"late": len(late), "armed": False, "why": "held_wake is off for this instance"}
-    now = now if now is not None else time.time()
-    kinds = {k for k in (sender_kind(instance, str(t.get("from"))) for _, t in late) if k}
-    sal = max((SALIENCE.get(k, 0.2) for k in kinds), default=0.0)
-    who = sorted({str(t.get("from")) for _, t in late})
-    d = {"late": len(late), "from": who, "kinds": sorted(kinds), "salience": sal}
-    if sal < ENGAGE_AT:
-        d.update(armed=False, why=f"salience {sal} is below {ENGAGE_AT}; read at the next beat")
-        return d
-    refr, why = refractory_s(instance, now)
-    d["refractory"] = why
-    d.update(_arm_deferred_wake(max(1, int(refr))))
-    if d.get("deferred"):
+    kinds = []
+    for cid, t in late:
+        k = sender_kind(instance, str(t.get("from"))) or "peer_turn"
+        kinds.append(k)
         try:
-            from sage.gateway.being_join import write_wake_marker
-            write_wake_marker(f"{', '.join(who)} wrote while your last beat was running", sal)
+            add_pending(k, f"{t.get('from')} wrote in '{cid}' while your last beat was running",
+                        key=f"turn:{cid}:{t.get('seq')}", source="heartbeat:late_turns", now=now)
         except Exception:
             pass
-    return d
+    return {"late": len(late), "from": sorted({str(t.get("from")) for _, t in late}),
+            "kinds": sorted(set(kinds)), "queued": True}
 
 
 def main(argv=None) -> int:
@@ -424,31 +441,23 @@ def main(argv=None) -> int:
 
     The Rust daemon (sage-rs conversations::arouse) runs
         python3 -m sage.gateway.arousal --instance <dir> --kind <kind> --descriptor <line>
-    when a turn arrives through /chat or /conversations/:id/say, and reads the decision as
-    JSON on stdout. Encoding the weights and the refractory period a second time in Rust
-    would make two producers of one fact. Exit 0 whether or not it engaged: "declined, and
-    here is why" is a successful answer.
+    when a turn arrives through /chat or /conversations/:id/say, and reads the decision as JSON
+    on stdout. A mesh watcher, or anything else that sees an event for the being, can run the
+    same line with its own --kind (any kind wakes the being). Exit 0 always.
 
-    This entry point existed (042ef5eae) and was lost when 723c04d73 rewrote the end of the
-    file on legion/mission-artifact; the daemon then read empty stdout, reported "arousal
-    policy unreadable", and never woke the being (GPT review of SAGE#81). Pinned now by a
-    real module invocation in test_arousal.py and a real daemon turn in
-    test_daemon_conversations.py.
-
-    --dry-run (or SAGE_AROUSAL_DRY_RUN=1 in the process environment, which the daemon
-    passes through to this subprocess) decides and reports only: no wake marker, no
-    systemd start, no deferred timer.
+    --dry-run (or SAGE_AROUSAL_DRY_RUN=1, which the daemon passes through) decides and reports
+    only: nothing is made pending, no marker, no unit started or armed.
     """
     import argparse
-    import os as _os
-    ap = argparse.ArgumentParser(description="metabolic response to a world input")
+    ap = argparse.ArgumentParser(description="an event for the being: every one wakes it")
     ap.add_argument("--instance", required=True)
-    ap.add_argument("--kind", required=True, help=f"one of {sorted(SALIENCE)} (unknown = quiet)")
+    ap.add_argument("--kind", required=True,
+                    help=f"what happened; the recorded weights are {sorted(SALIENCE)}, any kind wakes")
     ap.add_argument("--descriptor", required=True, help="what happened, in one line")
     ap.add_argument("--dry-run", action="store_true", help="decide and report; never start a beat")
     a = ap.parse_args(argv)
     inst = Path(a.instance)
-    flag = _os.getenv("SAGE_AROUSAL_DRY_RUN", "").strip().lower()
+    flag = os.getenv("SAGE_AROUSAL_DRY_RUN", "").strip().lower()
     dry = a.dry_run or flag in ("1", "true", "yes")
     d = decide(inst, a.kind) if dry else respond(inst, a.kind, descriptor=a.descriptor)
     d.setdefault("descriptor", a.descriptor)
