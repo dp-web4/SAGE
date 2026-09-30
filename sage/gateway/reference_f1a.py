@@ -316,7 +316,7 @@ def missing_args(args: dict, required, tool: str, hint: str = "") -> Optional[st
 _DATED_LINE = re.compile(
     r"^\s*(?:[-*]\s*(?:\[[ xX]\]\s*)?)?"            # optional bullet / checkbox
     r"(?P<date>20\d\d-\d\d-\d\d)"
-    r"(?:[ T](?P<hm>\d\d:\d\d)(?::\d\d(?:\.\d+)?)?)?"    # optional time, optional seconds
+    r"(?:[ T](?P<hm>\d\d:\d\d)(?::(?P<sec>\d\d)(?:\.(?P<frac>\d+))?)?)?"  # time; seconds, fraction
     r"\s*(?P<zone>Z\b|UTC\b|GMT\b|[+-]\d\d:?\d\d\b)?")    # optional explicit zone / offset
 STALE_LINE_SECS = 24 * 3600
 # The widest real UTC offsets are -12:00 and +14:00. A time written WITHOUT a zone is placed at
@@ -324,10 +324,13 @@ STALE_LINE_SECS = 24 * 3600
 _LATEST_UNZONED = timedelta(hours=12)
 
 
-def _latest_instant(date: str, hm: Optional[str], zone: Optional[str]) -> Optional[datetime]:
-    """The LATEST UTC instant this date/time could denote. Exact when a zone is given; for a
-    time with no zone, UTC-12; for a date with no time, the end of that calendar day at UTC-12
-    (an unknown time on a known date, never assumed to be midnight)."""
+def _latest_instant(date: str, hm: Optional[str], zone: Optional[str],
+                    sec: Optional[str] = None, frac: Optional[str] = None) -> Optional[datetime]:
+    """The SUPREMUM of the UTC instants this date/time could denote: every reading is strictly
+    earlier. The zone is honoured exactly when given; with no zone the time is placed as if
+    UTC-12. The written precision is honoured too: a time is the whole interval that truncates
+    to it (a minute-precision time covers :00 to :59.999..., seconds cover their fraction, a
+    date with no time its whole calendar day), never its first instant."""
     try:
         day = datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
@@ -335,9 +338,20 @@ def _latest_instant(date: str, hm: Optional[str], zone: Optional[str]) -> Option
     if hm is None:
         return (day + timedelta(days=1)).replace(tzinfo=timezone.utc) + _LATEST_UNZONED
     try:
-        local = datetime.strptime(date + " " + hm, "%Y-%m-%d %H:%M")
+        local = datetime.strptime(date + " " + hm + ":" + (sec or "00"), "%Y-%m-%d %H:%M:%S")
     except ValueError:
         return None
+    # ADD ONE UNIT OF THE LAST WRITTEN PRECISION (GPT re-review of #270: the seconds were parsed
+    # and discarded, so `12:00:59Z` was read as 12:00:00 and called more than a day old at
+    # 23h59m31s). The result is the interval's supremum, which no reading reaches, hence the >=
+    # in `dated_lines_note`. A fraction is taken in integer microseconds and rounded UP, so the
+    # bound is never early even when more than six digits were written.
+    if frac:
+        local += timedelta(microseconds=-(-(int(frac) + 1) * 10 ** 6 // 10 ** len(frac)))
+    elif sec is not None:
+        local += timedelta(seconds=1)
+    else:
+        local += timedelta(minutes=1)
     if zone in ("Z", "UTC", "GMT"):
         return local.replace(tzinfo=timezone.utc)
     if zone:
@@ -354,10 +368,11 @@ def dated_lines_note(text: str, now: Optional[datetime] = None) -> str:
     A line that starts with a date (optionally after a bullet or checkbox) opens a dated span;
     undated lines that follow belong to it. Only the window being shown is counted.
 
-    What can be timed (GPT review of #270): an explicit zone or numeric offset (Z, UTC, GMT,
-    +hh:mm, -hhmm) is honoured exactly. A time with no zone, and a date with no time, cannot be
-    placed exactly, so each is counted at the LATEST instant it could denote, which means a line
-    is only ever called old when it is old under every reading. Other zone spellings (PDT, CET)
+    What can be timed (GPT reviews of #270): an explicit zone or numeric offset (Z, UTC, GMT,
+    +hh:mm, -hhmm) is honoured exactly, and so is the written precision: `12:00Z` means some
+    instant in [12:00:00, 12:01:00), `12:00:59Z` one in [12:00:59, 12:01:00). A time with no
+    zone, and a date with no time, are wider intervals still. Every line is counted from the
+    END of its interval, so a line is only ever called old when it is old under every reading. Other zone spellings (PDT, CET)
     are not parsed and are treated as no zone, which is the conservative direction."""
     now = now or datetime.now(timezone.utc)
     current = None
@@ -367,7 +382,8 @@ def dated_lines_note(text: str, now: Optional[datetime] = None) -> str:
     for line in text.splitlines():
         m = _DATED_LINE.match(line)
         if m:
-            current = _latest_instant(m.group("date"), m.group("hm"), m.group("zone"))
+            current = _latest_instant(m.group("date"), m.group("hm"), m.group("zone"),
+                                      m.group("sec"), m.group("frac"))
             if current is not None:
                 written.setdefault(current, m.group("date"))
                 if not (m.group("hm") and m.group("zone")):
@@ -376,7 +392,9 @@ def dated_lines_note(text: str, now: Optional[datetime] = None) -> str:
             under[current] = under.get(current, 0) + 1
     if not under:
         return ""
-    old = {d: n for d, n in under.items() if (now - d).total_seconds() > STALE_LINE_SECS}
+    # `d` is a supremum no reading attains, so an age of EXACTLY a day from it means every
+    # reading is more than a day old: >= here is the strict "more than a day" of each reading.
+    old = {d: n for d, n in under.items() if (now - d).total_seconds() >= STALE_LINE_SECS}
     if not old:
         return ""
     oldest, newest = min(under), max(under)

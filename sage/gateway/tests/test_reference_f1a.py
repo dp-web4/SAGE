@@ -765,7 +765,10 @@ def test_a_read_says_when_its_dated_lines_are_old_even_if_the_file_was_just_appe
     from datetime import datetime, timedelta, timezone
     from sage.gateway.reference_f1a import dated_lines_note
     now = datetime.now(timezone.utc)
-    old = (now - timedelta(days=15)).strftime("%Y-%m-%d %H:%M")
+    # Two minutes past fifteen days: a minute-precision stamp stands for the whole minute, so a
+    # stamp written exactly fifteen days ago is only GUARANTEED 14d 23h 59m+ old, and "at least
+    # 15 days" would overstate it (the precision rule, GPT re-review of #270).
+    old = (now - timedelta(days=15, minutes=2)).strftime("%Y-%m-%d %H:%M")
     today = now.strftime("%Y-%m-%d %H:%M")
     disp, root = _disp()
     note = os.path.join(root, "inbox.md")
@@ -820,3 +823,41 @@ def test_dated_lines_honour_explicit_zones_and_never_overstate_an_unzoned_age():
     assert "counted at the latest time" in three and "at least 2 days" in three, three
     # Fully zoned lines carry no caveat.
     assert "latest time" not in note("2026-09-20T10:00Z old\n", now)
+
+
+def test_dated_lines_count_from_the_end_of_their_written_precision():
+    """GPT re-review of #270 (d4ed406): the regex consumed seconds and fractions and discarded
+    them, so `2026-09-28T12:00:59Z` at now=2026-09-29T12:00:30Z (23h59m31s old) was called more
+    than a day old. A written time stands for every instant that truncates to it, and a line is
+    old only when it is old under every such reading."""
+    from datetime import datetime, timezone
+    from sage.gateway.reference_f1a import dated_lines_note as note
+    old = lambda s, now: note(s + " done\n", now).startswith("[dated lines")
+    now = datetime(2026, 9, 29, 12, 0, 30, tzinfo=timezone.utc)
+    # GPT's exact reproduction: 23h59m31s -> not old.
+    assert not old("2026-09-28T12:00:59Z", now)
+    # SECONDS at the boundary. 12:00:30 covers [:30, :31): at worst exactly 24 h -> not old.
+    assert not old("2026-09-28T12:00:31Z", now)     # just under a day
+    assert not old("2026-09-28T12:00:30Z", now)     # exact: some reading is 24 h, not more
+    assert old("2026-09-28T12:00:29Z", now)         # just over: every reading is > 24 h
+    assert old("2026-09-28 12:00:29 UTC", now)      # same, space form
+    assert not old("2026-09-28T14:00:31+02:00", now)  # offset + seconds: = 12:00:31Z
+    assert old("2026-09-28T07:00:29-05:00", now)      # = 12:00:29Z
+    # FRACTIONS at the boundary: .9 covers [.9, 1.0), and fraction digits are honoured.
+    assert old("2026-09-28T12:00:29.9Z", now)       # every reading in (24h, 24h+0.1s]
+    assert not old("2026-09-28T12:00:30.0Z", now)   # exact 24 h is not "more than"
+    assert not old("2026-09-28T12:00:30.000001Z", now)
+    frac_now = datetime(2026, 9, 29, 12, 0, 29, 950000, tzinfo=timezone.utc)
+    assert not old("2026-09-28T12:00:29.9Z", frac_now)    # could be 29.99 -> 23h59m59.96s
+    assert old("2026-09-28T12:00:29.90Z", frac_now)   # two digits: [.90, .91) -> > 24 h, so the
+                                                      # written digits, not just the value, count
+    assert old("2026-09-28T12:00:29.94Z", frac_now)        # every reading < 29.95 -> > 24 h
+    assert not old("2026-09-28T12:00:29.95Z", frac_now)    # exact
+    # More than six fraction digits: the bound rounds UP, never down.
+    assert old("2026-09-28T12:00:29.9999999Z", now)        # sup is exactly :30 -> > 24 h all
+    assert not old("2026-09-28T12:00:30.0000001Z", now)
+    # MINUTE precision covers the whole minute: 12:00 could be 12:00:59.
+    assert not old("2026-09-28T12:00Z", now)        # 23h59m31s at its latest reading
+    at_minute = datetime(2026, 9, 29, 12, 1, tzinfo=timezone.utc)
+    assert old("2026-09-28T12:00Z", at_minute)      # every reading is > 24 h
+    assert not old("2026-09-28T12:00Z", datetime(2026, 9, 29, 12, 0, 59, tzinfo=timezone.utc))
