@@ -48,6 +48,84 @@ def test_run_paste_in_a_decline_is_hidden_from_the_being():
     assert shown.startswith("[request_run] I did not run f.py.")
 
 
+REASON = "sha dc129ac0a7a9 is the file 4538 ran. Ask again when the sha differs."
+OLD_CLOSE = ("This is a decision, not a failure, and it is not about your standing. If you want "
+             "it run under different conditions, say which and ask again.")
+
+
+def test_by_default_a_decline_still_offers_the_stock_door():
+    """Every instance that has not opted in keeps the closing it had before #289, byte for byte
+    (RESEARCH_GENERALIZATION_RULE: the evidence for dropping it is one being's)."""
+    text = srr.decline_text("scratch/f.py", REASON, [4540, 4541])
+    assert text == ("[request_run] I did not run scratch/f.py. " + REASON + "\n\n"
+                    + srr.answers_line([4540, 4541]) + "\n" + OLD_CLOSE)
+    for other in (None, "", "no_door", True, 1):
+        assert srr.decline_text("scratch/f.py", REASON, [4540], other).endswith(OLD_CLOSE)
+
+
+def test_standing_only_closes_on_the_standing_line_and_names_no_door_of_its_own():
+    """The stock "run under different conditions" door: offered on 96 declines, written into
+    cbp-being's todo as an open item seven times, used by 0 of 377 request_run calls. Opted in per
+    instance, the way forward belongs to the reason, which knows why this file was declined."""
+    text = srr.decline_text("scratch/f.py", REASON, [4540, 4541], "standing_only")
+    assert text.startswith("[request_run] I did not run scratch/f.py. " + REASON)
+    assert text.endswith("This is a decision, not a failure, and it is not about your standing.")
+    after_reason = text.split(REASON, 1)[1]
+    assert "condition" not in after_reason and "ask again" not in after_reason.lower()
+    assert srr.answers_line([4540, 4541]) in after_reason
+
+
+@pytest.mark.parametrize("cfg, closes_on_door", [
+    (None, True),                                         # no instance.json at all
+    ({"slug": "sprout-qwen3.8-distill-2b"}, True),        # an instance that never opted in
+    ({"decline_closing": "nonsense"}, True),              # an unknown value is the default
+    ({"decline_closing": "standing_only"}, False),        # the opt-in
+])
+def test_cmd_decline_reads_the_closing_from_this_beings_instance_json(monkeypatch, tmp_path, cfg, closes_on_door):
+    import json
+    if cfg is not None:
+        (tmp_path / "instance.json").write_text(json.dumps(cfg))
+    posted = []
+    monkeypatch.setattr(srr, "_say", lambda t: posted.append(t))
+    monkeypatch.setattr(srr, "_instance", lambda: tmp_path)
+    monkeypatch.setattr(srr, "_target", lambda inst, raw: (tmp_path / raw))
+    monkeypatch.setattr(srr, "bind", lambda *a: [4210])
+    monkeypatch.setattr(srr, "_conv_id", lambda: "cbp-claude")
+
+    class A:
+        path = "f.py"; seq = [4210]; cut_anyway = False; reason = REASON
+    srr.cmd_decline(A())
+    assert len(posted) == 1
+    assert posted[0].endswith(OLD_CLOSE) is closes_on_door
+    assert srr.STANDING in posted[0] and (posted[0].endswith(srr.STANDING) is not closes_on_door)
+
+
+def test_the_beat_record_and_the_seat_script_read_one_key():
+    """Activation is recorded where the other per-instance policies are: the heartbeat record's
+    `decline_closing` field, from the same reader the seat script uses."""
+    from sage.gateway.heartbeat import decline_closing_for
+    assert decline_closing_for(None) is None
+    assert decline_closing_for({}) is None
+    assert decline_closing_for({"decline_closing": "nonsense"}) is None
+    assert decline_closing_for({"decline_closing": "standing_only"}) == "standing_only"
+    src = (REPO / "sage/gateway/heartbeat.py").read_text()
+    assert '"decline_closing": decline_closing_for(instance_config(instance))' in src
+
+
+def test_cbp_being_is_the_instance_that_opted_in():
+    """The measured being carries the opt-in; no other checked-in instance.json does."""
+    import json
+    on = []
+    for cfg_path in sorted((REPO / "sage/instances").glob("*/instance.json")):
+        try:
+            cfg = json.loads(cfg_path.read_text())
+        except Exception:
+            continue
+        if cfg.get("decline_closing"):
+            on.append(cfg_path.parent.name)
+    assert on == ["cbp-qwen3.8-distill-4b"]
+
+
 def test_cmd_decline_refuses_a_cut_reason_and_posts_nothing(monkeypatch, tmp_path):
     posted = []
     monkeypatch.setattr(srr, "_say", lambda t: posted.append(t))
