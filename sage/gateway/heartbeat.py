@@ -2677,6 +2677,16 @@ def _carry(convo: list, res) -> list:
     return out
 
 
+# The running beat's session id, for the end-of-beat report `run` sends (SAGE #291).
+_BEAT_ID: dict = {}
+
+
+def _phase(state: str, phase: str, beat_id: str) -> None:
+    """Report the phase the beat is entering. Never raises (sage.gateway.activity)."""
+    from sage.gateway import activity as _activity
+    _activity.report(state, f"heartbeat:{phase}", beat_id=beat_id, ttl_secs=_activity.BEAT_TTL_S)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="one heartbeat for a SAGE being")
     ap.add_argument("--member", required=True)
@@ -2754,6 +2764,10 @@ def main(argv=None) -> int:
     from sage.gateway.being_tool_loop import run_ollama_tool_turn, _sent_budget
     workspace = str(Path(__file__).resolve().parents[2])
     host_session_id = f"heartbeat-{uuid.uuid4().hex[:12]}"
+    # The beat has begun: wake, before anything below reads the daemon's /status into the
+    # being's own body block (SAGE #291).
+    _BEAT_ID["id"] = host_session_id
+    _phase("wake", "start", host_session_id)
     client, llm = build_client(args.member, instance, args.model, workspace, args.forum_dir,
                                host_session_id, args.temperature, args.max_tokens,
                                gate_only=args.gate_only)
@@ -3013,12 +3027,14 @@ def main(argv=None) -> int:
     account = {"present": False, "sha256": None, "reply": "", "generates": []}
     killed = None
     try:
+        _phase("wake", "explore", host_session_id)
         explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
                                        tools=_explore_specs, on_generate=_on_generate("explore"))
         convo = _carry(seed, explore)
         after = None
         if posture_turn is not None:
             convo.append({"role": "user", "content": posture_turn})
+            _phase("wake", "posture", host_session_id)
             after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
                                          tools=_explore_specs, on_generate=_on_generate("posture"))
             convo = _carry(convo, after)
@@ -3026,6 +3042,7 @@ def main(argv=None) -> int:
         # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
         # carries the whole explore(+posture) conversation and is usually the beat's largest
         # prompt, and until 2026-09-13 it was invisible to the window census (CBP, 09-12).
+        _phase("wake", "account", host_session_id)
         try:
             ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
                        [{"role": "user", "content": ACCOUNT_ASK}]
@@ -3092,6 +3109,8 @@ def main(argv=None) -> int:
         # fourth for `say`. Showing it the question and then giving it no way to answer is worse
         # than not showing it.
         _reflect_steps = args.reflect_steps + (1 if say_first else 0)
+        # The beat's wrap-up: reflection, and the answer turn after it (SAGE #291).
+        _phase("wrap-up", "reflect", host_session_id)
         reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
                                        tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
 
@@ -3102,6 +3121,7 @@ def main(argv=None) -> int:
         # expectation is read from the selection made BEFORE reflection, never re-scanned.
         answer = None
         if selected is not None and selected.expects_reply and not _said_in(reflect):
+            _phase("wrap-up", "answer", host_session_id)
             if answer_turn_mode(instance) == "json":
                 # Opt-in (instance.json "answer_turn": "json"). The selected turn and the ask; the
                 # beat's acts only for a seat's question when the beat acted (answer_turn_json).
@@ -3626,5 +3646,24 @@ def harness_alarm(rev: dict):
     return f"LIVE TREE UNKNOWN: could not read git state (head={rev.get('short')}, dirty={rev.get('dirty')}, on_main={rev.get('on_main')})"
 
 
+
+def run(argv=None) -> int:
+    """One beat, with the daemon's state display told the truth about it (SAGE #291). This is
+    what `python -m sage.gateway.heartbeat` (the unit's ExecStart) runs.
+
+    `main` reports wake as soon as the beat has a session id, before the body block reads
+    `/status`, so the being is not told "rest" in its own beat. It also reports each phase as it
+    enters it: wake for explore/posture/account, wrap-up for reflect/answer. This wrapper owns
+    the END: every exit path, including a return before any phase ran, an exception, or
+    BeatKilled, reports rest. It does so only if something else was reported first.
+    Reporting is best-effort (sage.gateway.activity): a daemon that is down never fails a
+    beat, and slows it by at most the reporter's 0.5 s timeout per report."""
+    from sage.gateway import activity as _activity
+    try:
+        return main(argv)
+    finally:
+        _activity.end("heartbeat:end", beat_id=_BEAT_ID.get("id"))
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run())

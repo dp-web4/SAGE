@@ -110,9 +110,17 @@ class Presence:
     def _should_wake(self, sal: dict, gaze: str, descriptor: str, now: float):
         atp, mstate = self._read_energy(now)
         resting = (gaze == "closed")
-        # a depleted being (low ATP, or a resting metabolic phase) is less receptive — it recovers,
-        # then attends again. This is the metabolic rhythm of attention, not just a rate limit.
-        depleted = atp < LOW_ATP or mstate in ("dream", "rest")
+        # a depleted being (low ATP) is less receptive — it recovers, then attends again.
+        #
+        # NOT THE STATE DISPLAY (SAGE #291). This also read `mstate in ("dream", "rest")` as
+        # depleted. dp, 2026-09-30: "the state display is an indicator not a control." Until #291
+        # that state was a 10-second oscillator. Now it is what the being is doing, and "rest"
+        # means only "no beat is running", which is most of the day, so reading it as depletion
+        # would pin presence at the 0.70 bar. If presence needs a real depletion signal, that
+        # is a separate input, not the indicator. `mstate` is still read, for the log only.
+        # The ATP half is unchanged: that number is still the daemon's internal oscillator,
+        # flagged on #291 for dp.
+        depleted = atp < LOW_ATP
         threshold = WAKE_TH_REST if (resting or depleted) else WAKE_TH
         # strong enough: high blended salience, OR a reafference conflict while fully receptive.
         strong = sal.get("salience", 0.0) >= threshold or (sal.get("conflict") == 1 and not (resting or depleted))
