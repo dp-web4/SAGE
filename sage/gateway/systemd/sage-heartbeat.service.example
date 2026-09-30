@@ -30,6 +30,12 @@ Environment=PYTHONUNBUFFERED=1
 # Measured on HUB 2026-09-25: the resolver returned hestia/plugins/_shared (source, ahead
 # of the install) until this line was added; hestia #1076's LAW-SOURCE finding names it.
 Environment=HESTIA_HOME=%h/.hestia
+# OPTIONAL, where a GPU courtesy window scheme runs (CBP: shared-context/machines/cbp-gpu-windows.md).
+# While a window is held, the beat rests: the unit is skipped, not failed. The helper reports
+# rest with the holder as its reason, and if events are pending it arms a beat for the window's
+# end (sage/gateway/gpu_window.py). Exit 3 means held. Any other exit, a crash included, runs the
+# beat, so a broken helper fails open instead of resting the being forever.
+#ExecCondition=/bin/sh -c '/usr/bin/python3 -m sage.gateway.gpu_window check; test $$? -ne 3'
 ExecStart=/usr/bin/python3 -m sage.gateway.heartbeat --member <machine>-being --model <model> --instance sage/instances/<instance-dir> --max-steps 8
 TimeoutStartSec=1500
 StandardOutput=append:/home/dp/ai-workspace/SAGE/sage/instances/<instance-dir>/heartbeat.log
