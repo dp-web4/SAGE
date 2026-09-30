@@ -101,6 +101,12 @@ pub struct TransitionRecord {
     pub cycles_in_old_state: u64,
 }
 
+/// How many transitions `history` keeps. The daemon ticks this controller every 100 ms for
+/// the life of the process, and it transitions about once a second. An unbounded `history`
+/// was a slow leak (~180k records after 2.5 days on CBP, SAGE #291). `transitions_total`
+/// still counts all of them.
+pub const HISTORY_CAP: usize = 1024;
+
 pub struct MetabolicController {
     pub current_state: MetabolicState,
     pub atp_current: f64,
@@ -112,7 +118,10 @@ pub struct MetabolicController {
     min_cycles_in_state: u64,
 
     circadian: Option<CircadianClock>,
+    /// The most recent `HISTORY_CAP` transitions.
     pub history: Vec<TransitionRecord>,
+    /// Every transition since construction, including the ones `history` has let go.
+    pub transitions_total: u64,
 }
 
 impl MetabolicController {
@@ -127,6 +136,7 @@ impl MetabolicController {
             min_cycles_in_state: 5,
             circadian: circadian_period.map(CircadianClock::day_night),
             history: Vec::new(),
+            transitions_total: 0,
         }
     }
 
@@ -249,6 +259,11 @@ impl MetabolicController {
             atp_at_transition: self.atp_current,
             cycles_in_old_state: self.cycles_in_state,
         });
+        self.transitions_total += 1;
+        if self.history.len() > HISTORY_CAP {
+            let excess = self.history.len() - HISTORY_CAP;
+            self.history.drain(..excess);
+        }
 
         self.current_state = new_state;
         self.state_entry_cycle = self.total_cycles;
@@ -293,6 +308,17 @@ mod tests {
 
     fn crisis_cycle() -> CycleData {
         CycleData { crisis_detected: true, ..Default::default() }
+    }
+
+    #[test]
+    fn history_is_bounded_but_every_transition_is_counted() {
+        let mut ctrl = MetabolicController::with_defaults();
+        for _ in 0..200_000 {
+            ctrl.update(&idle_cycle());
+        }
+        assert!(ctrl.transitions_total as usize > HISTORY_CAP,
+                "the oscillator transitioned {} times", ctrl.transitions_total);
+        assert!(ctrl.history.len() <= HISTORY_CAP);
     }
 
     #[test]
