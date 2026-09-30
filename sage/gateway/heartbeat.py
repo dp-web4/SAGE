@@ -3555,7 +3555,12 @@ def harness_revision(workspace: str) -> dict:
 
     def _git(*a):
         try:
-            r = subprocess.run(("git", *a), cwd=workspace, text=True, capture_output=True, timeout=15)
+            # --no-optional-locks: status and diff otherwise take .git/index.lock to refresh the
+            # index as a side effect. When the timeout below kills git mid-refresh, the lock is
+            # left behind and every later git act in this checkout fails until a human removes it.
+            # Measured on nomad 2026-09-28 00:23 and 2026-09-29 18:18: both locks were left by a
+            # beat whose harness_revision overlapped the raising session on a 9p (/mnt/c) checkout.
+            r = subprocess.run(("git", "--no-optional-locks", *a), cwd=workspace, text=True, capture_output=True, timeout=15)
             return r.stdout.strip() if r.returncode == 0 else None
         except Exception:
             return None
@@ -3640,7 +3645,7 @@ def _dirty_digest(workspace: str):
     import subprocess
     spec = ("--", ".", ":(exclude)sage/instances")
     try:
-        d = subprocess.run(("git", "diff", "HEAD", "--binary", "--no-color", "--no-ext-diff", *spec),
+        d = subprocess.run(("git", "--no-optional-locks", "diff", "HEAD", "--binary", "--no-color", "--no-ext-diff", *spec),
                            cwd=workspace, capture_output=True, timeout=30)
         u = subprocess.run(("git", "ls-files", "--others", "--exclude-standard", "-z", *spec),
                            cwd=workspace, capture_output=True, timeout=30)
