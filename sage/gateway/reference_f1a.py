@@ -752,10 +752,29 @@ class ReferenceF1aDispatcher:
             try:
                 s0 = int(str(a.get("start_line", a.get("line", a.get("old_line", "")))).strip())
                 s1 = int(str(a.get("end_line", s0)).strip())
+                # A COUNT IS A RANGE TOO. Measured 2026-09-24 05:57Z: cbp-being sent
+                # `start_line: 180, delete_lines: 5, new: ""` to cut five lines. No key read
+                # the 5, end_line defaulted to start_line, and ONE line went. The receipt said
+                # "replaced lines 180-180" honestly, and the being journaled "removed lines
+                # 180-184 (5 lines)". An explicit argument that is dropped deletes the wrong
+                # amount. This is a correction of an ignored explicit argument (see
+                # RESEARCH_GENERALIZATION_RULE.md), not a new policy: a call that sends
+                # delete_lines now removes the lines it names, where before it removed one.
+                if "delete_lines" in a:
+                    n = int(str(a["delete_lines"]).strip())
+                    if n < 1:
+                        raise ValueError
+                    if "end_line" in a and s1 != s0 + n - 1:
+                        return ResultEnvelope(ok=False, error=(
+                            f"end_line {s1} and delete_lines {n} name different ranges "
+                            f"({s0}-{s1} vs {s0}-{s0 + n - 1}), so nothing was changed. "
+                            f"Send one of them."))
+                    s1 = s0 + n - 1
             except ValueError:
                 return ResultEnvelope(ok=False, error=(
                     "start_line and end_line must be line numbers, like start_line 1610 and "
-                    "end_line 1616. Nothing was changed."))
+                    "end_line 1616 (or a count of lines from start_line, like delete_lines 7). "
+                    "Nothing was changed."))
             rng = (s0, s1)
         if not path or (not old and rng is None):
             got = ", ".join(sorted(a)) or "nothing"
