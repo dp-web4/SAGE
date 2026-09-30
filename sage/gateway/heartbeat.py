@@ -1825,6 +1825,20 @@ def settled_turns_for(cfg: Optional[dict]) -> Optional[int]:
     return v if isinstance(v, int) and not isinstance(v, bool) and v >= 1 else None
 
 
+DECLINE_CLOSINGS = ("standing_only",)
+
+
+def decline_closing_for(cfg: Optional[dict]) -> Optional[str]:
+    """instance.json `decline_closing`: how a seat's request_run decline ends. PER-INSTANCE
+    (RESEARCH_GENERALIZATION_RULE): absent, or any value not in DECLINE_CLOSINGS, means the
+    default closing, which still offers "If you want it run under different conditions, say which
+    and ask again." `"standing_only"` drops that stock door and ends on the standing line, leaving
+    the way forward to the seat's reason. Measured on cbp-being alone (SAGE #289), so it is
+    recorded in every beat record where it is on, and it is nobody else's default."""
+    v = (cfg or {}).get("decline_closing")
+    return v if v in DECLINE_CLOSINGS else None
+
+
 def own_state(instance: Path, member: str = "", entrusted: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
@@ -3285,6 +3299,7 @@ def main(argv=None) -> int:
         "member": args.member, "model": args.model, "window_h": round(hours, 2), "clock": _clock,
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
+        "decline_closing": decline_closing_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,
