@@ -27,7 +27,7 @@ import json
 import os
 import re
 import textwrap
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -304,6 +304,109 @@ def missing_args(args: dict, required, tool: str, hint: str = "") -> Optional[st
     return msg
 
 
+
+# A DATED LINE SAYS WHAT WAS TRUE ON ITS DATE (2026-09-29). cbp-being escalated to dp that "the MCP
+# server has been offline ~6 hours" and that coordination requests #12529/#12530/#12624/#12638 had
+# gone unanswered, while membot and hestia were both up. Every element of it was in its own
+# inbox.md, written 2026-09-13/14; the being read that file in the beat and repeated it as
+# current. #92 had already put a MEASURED reachability line in every beat's state, and the read
+# still won. The file's mtime could not help: the being had appended to inbox.md at 06:10 that
+# day, so the file was "40 minutes old" while most of its lines were fifteen days old. So the read
+# reports the age of the DATED LINES it shows, not the age of the file.
+_DATED_LINE = re.compile(
+    r"^\s*(?:[-*]\s*(?:\[[ xX]\]\s*)?)?"            # optional bullet / checkbox
+    r"(?P<date>20\d\d-\d\d-\d\d)"
+    r"(?:[ T](?P<hm>\d\d:\d\d)(?::(?P<sec>\d\d)(?:\.(?P<frac>\d+))?)?)?"  # time; seconds, fraction
+    r"\s*(?P<zone>Z\b|UTC\b|GMT\b|[+-]\d\d:?\d\d\b)?")    # optional explicit zone / offset
+STALE_LINE_SECS = 24 * 3600
+# The widest real UTC offsets are -12:00 and +14:00. A time written WITHOUT a zone is placed at
+# its LATEST possible instant (as if UTC-12), so it is never called older than it could be.
+_LATEST_UNZONED = timedelta(hours=12)
+
+
+def _latest_instant(date: str, hm: Optional[str], zone: Optional[str],
+                    sec: Optional[str] = None, frac: Optional[str] = None) -> Optional[datetime]:
+    """The SUPREMUM of the UTC instants this date/time could denote: every reading is strictly
+    earlier. The zone is honoured exactly when given; with no zone the time is placed as if
+    UTC-12. The written precision is honoured too: a time is the whole interval that truncates
+    to it (a minute-precision time covers :00 to :59.999..., seconds cover their fraction, a
+    date with no time its whole calendar day), never its first instant."""
+    try:
+        day = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return None
+    if hm is None:
+        return (day + timedelta(days=1)).replace(tzinfo=timezone.utc) + _LATEST_UNZONED
+    try:
+        local = datetime.strptime(date + " " + hm + ":" + (sec or "00"), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+    # ADD ONE UNIT OF THE LAST WRITTEN PRECISION (GPT re-review of #270: the seconds were parsed
+    # and discarded, so `12:00:59Z` was read as 12:00:00 and called more than a day old at
+    # 23h59m31s). The result is the interval's supremum, which no reading reaches, hence the >=
+    # in `dated_lines_note`. A fraction is taken in integer microseconds and rounded UP, so the
+    # bound is never early even when more than six digits were written.
+    if frac:
+        local += timedelta(microseconds=-(-(int(frac) + 1) * 10 ** 6 // 10 ** len(frac)))
+    elif sec is not None:
+        local += timedelta(seconds=1)
+    else:
+        local += timedelta(minutes=1)
+    if zone in ("Z", "UTC", "GMT"):
+        return local.replace(tzinfo=timezone.utc)
+    if zone:
+        sign = -1 if zone[0] == "-" else 1
+        digits = zone[1:].replace(":", "")
+        off = timedelta(hours=int(digits[:2]), minutes=int(digits[2:]))
+        return (local - sign * off).replace(tzinfo=timezone.utc)
+    return local.replace(tzinfo=timezone.utc) + _LATEST_UNZONED
+
+
+def dated_lines_note(text: str, now: Optional[datetime] = None) -> str:
+    """One bracketed line about the dated lines in `text`, or "" when none is more than a day old.
+
+    A line that starts with a date (optionally after a bullet or checkbox) opens a dated span;
+    undated lines that follow belong to it. Only the window being shown is counted.
+
+    What can be timed (GPT reviews of #270): an explicit zone or numeric offset (Z, UTC, GMT,
+    +hh:mm, -hhmm) is honoured exactly, and so is the written precision: `12:00Z` means some
+    instant in [12:00:00, 12:01:00), `12:00:59Z` one in [12:00:59, 12:01:00). A time with no
+    zone, and a date with no time, are wider intervals still. Every line is counted from the
+    END of its interval, so a line is only ever called old when it is old under every reading. Other zone spellings (PDT, CET)
+    are not parsed and are treated as no zone, which is the conservative direction."""
+    now = now or datetime.now(timezone.utc)
+    current = None
+    zoned_all = True
+    under: dict = {}
+    written: dict = {}
+    for line in text.splitlines():
+        m = _DATED_LINE.match(line)
+        if m:
+            current = _latest_instant(m.group("date"), m.group("hm"), m.group("zone"),
+                                      m.group("sec"), m.group("frac"))
+            if current is not None:
+                written.setdefault(current, m.group("date"))
+                if not (m.group("hm") and m.group("zone")):
+                    zoned_all = False
+        if current is not None and line.strip():
+            under[current] = under.get(current, 0) + 1
+    if not under:
+        return ""
+    # `d` is a supremum no reading attains, so an age of EXACTLY a day from it means every
+    # reading is more than a day old: >= here is the strict "more than a day" of each reading.
+    old = {d: n for d, n in under.items() if (now - d).total_seconds() >= STALE_LINE_SECS}
+    if not old:
+        return ""
+    oldest, newest = min(under), max(under)
+    days = int((now - oldest).total_seconds() // 86400)
+    caveat = "" if zoned_all else (" Lines without a time zone are counted at the latest time "
+                                   "they could mean, so these ages are minimums.")
+    return (f"[dated lines shown here run from {written[oldest]} to {written[newest]}; "
+            f"{sum(old.values())} of {sum(under.values())} dated lines are more than a day old "
+            f"(the oldest at least {days} day{'s' if days != 1 else ''} ago).{caveat} A dated line "
+            f"says what was true on its date; appending to a file does not make its older lines "
+            f"current. For what is up now, the measured lines in your state are from this beat.]\n")
+
 class ReferenceF1aDispatcher:
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
 
@@ -574,6 +677,7 @@ class ReferenceF1aDispatcher:
         # Again 2026-09-29 11:41Z: it read all 443 lines of a scratch .py in three windows, said
         # "appears syntactically correct", and asked the seat to run it; the run stopped at line
         # 135, IndentationError, inside the first window it had been shown (seat thread 4384).
+        dated = dated_lines_note(content)
         status = _python_status(p).strip()
         parse = f"\n[{status}]" if status else ""
         if start == 1 and end >= len(lines):
@@ -581,9 +685,9 @@ class ReferenceF1aDispatcher:
             # would read as the file's last line and could be copied into an edit anchor.
             # Say where the file ends before saying what Python makes of it.
             whole_note = f"\n[end of file: line {len(lines)} is the last line. {status}]" if status else ""
-            return ResultEnvelope(ok=True, result=content + whole_note,
+            return ResultEnvelope(ok=True, result=dated + content + whole_note,
                                   witness_id=self._witness(f"memory_read {p.name}"))
-        head = f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else ""
+        head = dated + (f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else "")
         tail = (f"\n[… truncated: this shows lines {start}-{end} of {len(lines)} "
                 f"({len(whole)} characters in all). Lines {end + 1}-{len(lines)} were NOT shown, so "
                 f"absence here is not evidence of absence in the file. To read on, call "

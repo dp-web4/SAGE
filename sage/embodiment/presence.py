@@ -35,9 +35,13 @@ HEARD_BEAT_GAP_S = 45
 # the consciousness loop had felt nothing at all (SAGE #113). /chat/raw is the path into the
 # loop: the moment is scored by SNARC, moves the metabolism, and comes back voiced.
 DAEMON_CHAT = "http://127.0.0.1:8760/chat/raw"
-DAEMON_STATUS = "http://127.0.0.1:8760/status"
-ENERGY_REFRESH_S = 20.0   # re-read the being's metabolic energy this often
-LOW_ATP = 25.0            # below this (or a resting metabolic state) the being is depleted → less receptive
+# NO ENERGY GATE (SAGE #291). Presence used to raise its bar when the daemon's `atp_percentage`
+# fell below 25 ("noticing costs ATP"). Since #293 that number is the daemon's internal
+# controller, a free-running oscillator ticked every 100 ms that nothing the being does moves,
+# so the gate raised the bar on a clock unrelated to the being. dp: "the state display is an
+# indicator not a control"; the ATP is not even an indicator any more. What stays is what the
+# being or the world actually does: its own closed gaze, the cooldown, the hourly cap, dedup.
+# If presence needs a real depletion signal, it is a new, measured input (open on #291).
 
 POLL_S = 1.0            # check the perceptual state ~1/s
 STALE_S = 10.0         # perception older than this = cortex not live → don't wake on stale data
@@ -91,31 +95,16 @@ class Presence:
         self.wake_times: list[float] = []   # recent wake timestamps (rolling hourly cap)
         self.last_desc = ""
         self._since_trim = 0
-        self._energy = (100.0, "wake")      # (atp_percentage, metabolic_state), refreshed periodically
-        self._energy_ts = 0.0
-
-    def _read_energy(self, now: float):
-        """The being's metabolic energy — noticing costs ATP, so presence honors it (below)."""
-        if now - self._energy_ts < ENERGY_REFRESH_S:
-            return self._energy
-        self._energy_ts = now
-        try:
-            with urllib.request.urlopen(DAEMON_STATUS, timeout=3) as resp:
-                d = json.loads(resp.read())
-            self._energy = (float(d.get("atp_percentage", 100.0)), d.get("metabolic_state", "wake"))
-        except Exception:
-            self._energy = (100.0, "wake")   # daemon unreachable → assume fresh, don't over-suppress
-        return self._energy
 
     def _should_wake(self, sal: dict, gaze: str, descriptor: str, now: float):
-        atp, mstate = self._read_energy(now)
         resting = (gaze == "closed")
-        # a depleted being (low ATP, or a resting metabolic phase) is less receptive — it recovers,
-        # then attends again. This is the metabolic rhythm of attention, not just a rate limit.
-        depleted = atp < LOW_ATP or mstate in ("dream", "rest")
-        threshold = WAKE_TH_REST if (resting or depleted) else WAKE_TH
+        # Neither the daemon's state display nor its ATP is read here (SAGE #291, see the note below
+        # DAEMON_CHAT). The state once read `metabolic_state in ("dream", "rest")` as depletion;
+        # after #293 "rest" means only "no beat is running", most of the day, and would pin
+        # presence at the 0.70 bar. The ATP half was the internal oscillator.
+        threshold = WAKE_TH_REST if resting else WAKE_TH
         # strong enough: high blended salience, OR a reafference conflict while fully receptive.
-        strong = sal.get("salience", 0.0) >= threshold or (sal.get("conflict") == 1 and not (resting or depleted))
+        strong = sal.get("salience", 0.0) >= threshold or (sal.get("conflict") == 1 and not resting)
         if not (strong and descriptor):
             return False, resting
         if now - self.last_wake < COOLDOWN_S:
@@ -243,7 +232,8 @@ class Presence:
                             "salience": sal.get("salience"), "coherence": d.get("coherence"),
                             "snarc": {k: sal.get(k) for k in ("surprise", "novelty", "arousal", "conflict")},
                             "gaze": gaze, "resting": resting, "noticing": noticing,
-                            "metabolic": out.get("metabolic_state"), "atp": out.get("atp_percentage"),
+                            # no "atp": the daemon's internal oscillator is not a reading (#291)
+                            "metabolic": out.get("metabolic_state"),
                         })
                         print(f"[presence] noticed ({'rest' if resting else 'awake'}, "
                               f"sal={sal.get('salience')}): {noticing[:90]}", flush=True)

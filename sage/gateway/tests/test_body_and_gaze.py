@@ -28,7 +28,9 @@ def test_a_live_organ_is_rendered_in_words_and_a_stale_one_says_offline(monkeypa
     r = body.reading()
     out = body.render(r, None)
     assert "I see a clock" in out and "2 of 2 eyes live" in out and "hearing on" in out
-    assert "energy 38%" in out and "felt came from dp" in out
+    assert "felt came from dp" in out
+    # SAGE #291: the ATP is the daemon's internal oscillator, not the being's energy
+    assert "energy" not in out and "38" not in out and "metabolism" not in out.lower()
     assert "gaze stance is **open**" in out and "`gaze`" in out
     # stale: the past must not be presented as the present (legibility 1.3)
     monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp, age=600))
@@ -235,3 +237,43 @@ def test_worktree_verbs_are_offered_to_every_being_and_said_unavailable_without_
     u = toolset.unavailable(None, None, {})
     assert all("no git worktree" in u[v] for v in toolset.WORKTREE_VERBS)
     assert not any(v in toolset.unavailable(None, "/some/worktree", {}) for v in toolset.WORKTREE_VERBS)
+
+
+def test_the_internal_atp_never_reaches_the_being(monkeypatch):
+    """SAGE #291: `atp_percentage` on /status is the daemon's internal oscillator (ticked every
+    100 ms), not a reading of the being's body. It must not be read into the beat record or
+    rendered, however the daemon reports it. Served from an ephemeral port, never :8760."""
+    import http.server
+    import threading
+    status = {"consciousness_loop": True, "metabolic_state": "wake", "metabolic_source": "heartbeat:explore",
+              "metabolic_age_secs": 4, "atp_percentage": 12.3456, "observations_felt": 7,
+              "salience_source": "cortex", "salience": {"total": 0.4}}
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            b = json.dumps(status).encode()
+            self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers()
+            self.wfile.write(b)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    t = threading.Thread(target=srv.handle_request, daemon=True); t.start()
+    try:
+        monkeypatch.setattr(body, "DAEMON_STATUS", f"http://127.0.0.1:{srv.server_address[1]}/status")
+        m = body.metabolism(timeout=2.0)
+    finally:
+        t.join(timeout=3); srv.server_close()
+    assert m["live"] is True and m["felt_source"] == "cortex"
+    assert m["state"] == "wake" and m["state_source"] == "heartbeat:explore" and m["state_age_s"] == 4
+    assert "12.3456" not in json.dumps(m) and not any("atp" in k for k in m), "the oscillator is not recorded"
+    out = body.render({"perception": {}, "metabolism": m, "gaze": {}, "inventory": {}}, None)
+    assert "felt came from cortex" in out
+    assert "energy" not in out and "12" not in out, "the oscillator is not shown"
+    assert "wake" not in out, "the beat's own state is not echoed back to it"
+
+
+def test_a_daemon_that_is_down_is_said_plainly(monkeypatch):
+    out = body.render({"perception": {}, "metabolism": {"live": False}, "gaze": {}, "inventory": {}}, None)
+    assert "daemon's loop is not reporting this beat" in out and "energy" not in out
