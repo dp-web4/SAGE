@@ -906,21 +906,33 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         lines = text.split("\n")
         if key == "digest":
             kept, dropped = [], 0
-            for ln in lines:
-                if ln.startswith("- ") and sum(len(k) + 1 for k in kept) + len(ln) + 1 > keep:
+            for i in range(len(lines)):
+                if not lines[i].startswith("- "):
+                    continue
+                j = i
+                while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
+                    j += 1
+                entry = lines[i:j + 1]
+                if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
                     dropped += 1
                     continue
-                kept.append(ln)
+                kept.extend(entry)
             out[key] = ("\n".join(kept) + ("\n[…trimmed to fit the context window: "
                           + str(dropped) + " older entr" + ("y" if dropped == 1 else "ies")
                           + " dropped…]" if dropped else ""))
         else:
             kept, dropped = [], 0
-            for ln in reversed(lines):
-                if ln.startswith("- ") and sum(len(k) + 1 for k in kept) + len(ln) + 1 > keep:
+            for i in range(len(lines) - 1, -1, -1):
+                if not lines[i].startswith("- "):
+                    continue
+                j = i
+                while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
+                    j += 1
+                entry = lines[i:j + 1]
+                if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
                     dropped += 1
                     continue
-                kept.append(ln)
+                kept.extend(reversed(entry))
             kept.reverse()
             out[key] = (("[…trimmed to fit the context window: " + str(dropped)
                          + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"

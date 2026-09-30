@@ -307,3 +307,34 @@ def test_fit_to_window_no_marker_when_nothing_is_trimmed():
                            blocks={"digest": text}, slack=512)
     assert out["digest"] == text
     assert "trimmed" not in out["digest"]
+
+
+def test_recall_trim_drops_continuation_lines_with_their_entry():
+    """A dropped entry's continuation lines go with it: the old line-by-line trim
+    kept the continuation of a dropped entry, leaving an orphaned line in the
+    output. The trim is now entry-aware, so a "- " line owns its continuation
+    lines (until the next "- ") and they are dropped or kept as one unit."""
+    text = "- entry 1\n  continuation line\n- entry 2\n" + "x" * 20000
+    out, _ = fit_to_window(
+        num_ctx=8192, num_predict=1024, fixed_chars=0, slack=512,
+        blocks={"recall": text},
+    )
+    assert "entry 2" in out["recall"]
+    assert "entry 1" not in out["recall"]
+    assert "continuation line" not in out["recall"]
+    assert "…trimmed to fit the context window: 1 older entries dropped…]" in out["recall"]
+
+
+def test_digest_trim_drops_continuation_lines_with_their_entry():
+    """Same entry-aware rule for the digest branch, which keeps the head
+    (newest-first): the dropped entry's continuation line must not survive as an
+    orphan."""
+    text = "- entry 1\n- entry 2\n  continuation line\n" + "x" * 20000
+    out, _ = fit_to_window(
+        num_ctx=8192, num_predict=1024, fixed_chars=0, slack=512,
+        blocks={"digest": text},
+    )
+    assert "entry 1" in out["digest"]
+    assert "entry 2" not in out["digest"]
+    assert "continuation line" not in out["digest"]
+    assert "…trimmed to fit the context window: 1 older entries dropped…]" in out["digest"]
