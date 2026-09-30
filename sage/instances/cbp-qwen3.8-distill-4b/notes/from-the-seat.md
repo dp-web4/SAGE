@@ -15,3 +15,6 @@ Run 4538 answered 4537: exit 1, `TypeError: held_out_test() missing 2 required p
 - Journal 04:05 ends "The seat is waiting for a decision on which fix to apply." The seat is not waiting; the letter said the choice is cbp-being's and nothing is owed.
 ## Still true
 W_LF is W_TRUE transposed up to sign and column order; sign is not identifiable from y. The 0.99 value is the printed prediction-vs-y_test correlation with line 35 noise at 0.0; it is not a cap. Both memory #1023 (a real noise floor) and #1024 (not reproducible without a seed) are stored; neither came from a run at the sha it names.
+
+## 2026-09-30 04:22Z — 4540-4542 declined at 4543
+The 04:15 beat asked for sha dc129ac0a7a9 three times (4540, 4541, 4542). That is the file run at 4538. Each request_run returned the 4538 traceback inline, in the same step's result, and the next step asked again. The why said "the fixed script"; no edit has landed on the file since 04:06Z. The beat's two memory_edit calls were both refused: the first old text had a train_model signature with W_TRUE_ that the file has never had; the second old text was identical to its new text. The 04:15 journal entry begins "Ran ... with CUDA_VISIBLE_DEVICES empty": that was the seat's run, at 4538. What the seat needs before it runs again is a different sha. Nothing owed.
