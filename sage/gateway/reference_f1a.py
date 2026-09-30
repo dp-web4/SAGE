@@ -78,6 +78,44 @@ def _python_status(p) -> str:
 
 
 
+def _leading_spaces(line: str) -> int:
+    """How many spaces a line starts with: the count both indentation notes below report."""
+    return len(line) - len(line.lstrip(" "))
+
+
+def _indent_only_miss(have: str, old: str, new: str, first_line: int) -> str:
+    """A range edit refused because old differs from the lines only in leading spaces says so,
+    in counts. (_indent_changed covers the edit that LANDS; this covers the refusal.)
+
+    Measured 2026-09-24 on cbp-being: memory_edit start_line=394 with old
+    'model = Model(n_components=10, ...)' was refused twice in one beat, because the file's
+    line 394 starts with 4 spaces. The refusal printed the line WITH its spaces, which the
+    being cannot see, so it read the file's line as its own old. Next it used memory_write,
+    which appended the line at the end of the file (line 864), where it never runs, then
+    asked for a run. Again 2026-09-27 04:58Z (line 144, 4 spaces): it told dp "the file
+    content didn't match exactly" and queued a retry without knowing why. A count is visible
+    where the spaces are not. The note covers new too: a replacement without the spaces
+    would move the crash to an IndentationError. And when new is old verbatim, the edit
+    would change nothing even once the spaces match, so that is said as well."""
+    h = have.rstrip("\n").split("\n")
+    w = old.rstrip("\n").split("\n")
+    if len(h) != len(w) or any(a.strip() != b.strip() for a, b in zip(h, w)):
+        return ""
+    for k, (a, b) in enumerate(zip(h, w)):
+        na, nb = _leading_spaces(a), _leading_spaces(b)
+        if na != nb:
+            note = (f"\nThey differ only in the spaces at the start of the line. Line "
+                    f"{first_line + k} in the file starts with {na} spaces; that line of your "
+                    f"old starts with {nb}. The spaces are part of the text: put {na} in old, "
+                    f"and in new as well, or the replaced line will not line up with the ones "
+                    f"around it.")
+            if new.rstrip("\n") == old.rstrip("\n"):
+                note += (" Your new is also the same text as your old, so even with the spaces "
+                         "matched this edit would change nothing.")
+            return note
+    return ""
+
+
 def _indent_changed(removed: str, new: str, first_line: int) -> str:
     """A range edit whose first line lost or gained leading spaces says so, in counts.
 
@@ -93,7 +131,7 @@ def _indent_changed(removed: str, new: str, first_line: int) -> str:
     a, b = first(removed), first(new)
     if not a or not b:
         return ""
-    na, nb = len(a) - len(a.lstrip(" ")), len(b) - len(b.lstrip(" "))
+    na, nb = _leading_spaces(a), _leading_spaces(b)
     if na == nb:
         return ""
     return (f". Line {first_line} now starts with {nb} spaces; the line it replaced started "
@@ -752,10 +790,29 @@ class ReferenceF1aDispatcher:
             try:
                 s0 = int(str(a.get("start_line", a.get("line", a.get("old_line", "")))).strip())
                 s1 = int(str(a.get("end_line", s0)).strip())
+                # A COUNT IS A RANGE TOO. Measured 2026-09-24 05:57Z: cbp-being sent
+                # `start_line: 180, delete_lines: 5, new: ""` to cut five lines. No key read
+                # the 5, end_line defaulted to start_line, and ONE line went. The receipt said
+                # "replaced lines 180-180" honestly, and the being journaled "removed lines
+                # 180-184 (5 lines)". An explicit argument that is dropped deletes the wrong
+                # amount. This is a correction of an ignored explicit argument (see
+                # RESEARCH_GENERALIZATION_RULE.md), not a new policy: a call that sends
+                # delete_lines now removes the lines it names, where before it removed one.
+                if "delete_lines" in a:
+                    n = int(str(a["delete_lines"]).strip())
+                    if n < 1:
+                        raise ValueError
+                    if "end_line" in a and s1 != s0 + n - 1:
+                        return ResultEnvelope(ok=False, error=(
+                            f"end_line {s1} and delete_lines {n} name different ranges "
+                            f"({s0}-{s1} vs {s0}-{s0 + n - 1}), so nothing was changed. "
+                            f"Send one of them."))
+                    s1 = s0 + n - 1
             except ValueError:
                 return ResultEnvelope(ok=False, error=(
                     "start_line and end_line must be line numbers, like start_line 1610 and "
-                    "end_line 1616. Nothing was changed."))
+                    "end_line 1616 (or a count of lines from start_line, like delete_lines 7). "
+                    "Nothing was changed."))
             rng = (s0, s1)
         if not path or (not old and rng is None):
             got = ", ".join(sorted(a)) or "nothing"
@@ -790,7 +847,8 @@ class ReferenceF1aDispatcher:
                 shown = removed if len(removed) <= 600 else removed[:600] + "..."
                 return ResultEnvelope(ok=False, error=(
                     f"lines {s0}-{s1} of '{path}' are not the text you gave as old, so nothing "
-                    f"was changed. Those lines are now:\n{shown}"))
+                    f"was changed. Those lines are now:\n{shown}"
+                    + _indent_only_miss(removed, old, new, s0)))
             repl = new
             if repl and not repl.endswith("\n") and removed.endswith("\n"):
                 repl += "\n"

@@ -40,6 +40,7 @@ class ToolTurnResult:
     generates: List[dict] = field(default_factory=list)    # per generate, from Ollama's reply: {done_reason, prompt_eval_count, eval_count, retried}
     compacted: List[dict] = field(default_factory=list)    # per step where old tool results were elided: {step, elisions, chars}
     rested: Optional[str] = None                           # the being ended its own turn with `rest`; its stated reason
+    stay_awake: Optional[str] = None                       # the being asked for another beat right after this one; its reason
     looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
 
     @property
@@ -55,6 +56,12 @@ class ToolTurnResult:
 # continue as long as it wishes" — the other half of which is stopping when it wishes, and
 # until 09-13 there was no way to say so except by falling silent.
 REST = "rest"
+
+# The verb by which a being asks for another beat right after this one (SAGE #295). dp, 2026-09-30:
+# "if the being decides to stay awake continously because of environment or curiosity, then so be
+# it." Never dispatched (it touches nothing); recorded on the turn, and the heartbeat arms the next
+# beat at its end. It does not end the turn.
+STAY_AWAKE = "stay_awake"
 
 # Verbs whose identical repetition inside ONE beat is never what was meant: a second
 # identical write, witness or message. Everything else — every verb that reads the world or
@@ -94,6 +101,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     done_ok: set = set()
     duplicates: List[dict] = []
     last_fp, repeats = None, 0
+    stay_awake = None
 
     for step in range(max_steps):
         out = generate(convo)
@@ -101,11 +109,19 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
         intents = out.get("intents") or []
 
         if not intents:                                    # a spoken turn — the being is done
-            return ToolTurnResult(reply=content, trace=trace, steps=step, duplicates=duplicates)
+            return ToolTurnResult(reply=content, trace=trace, steps=step, duplicates=duplicates, stay_awake=stay_awake)
 
         convo.append({"role": "assistant", "content": content, "intents": intents})
         rested = None
         for intent in intents:
+            if intent.effector == STAY_AWAKE:
+                stay_awake = str((intent.args or {}).get("reason") or "").strip() or "(no reason given)"
+                env = ResultEnvelope(ok=True, result=("noted: the next beat starts as soon as this one "
+                                                      "ends. Carry on, or close this beat as usual."),
+                                     note="stay_awake")
+                trace.append((intent, env))
+                convo.append({"role": "tool", "effector": intent.effector, "content": env.to_tool_message()})
+                continue
             if intent.effector == REST:
                 # The being ending its OWN turn. Never dispatched: the gate rules on acts that
                 # touch the world, and stopping touches nothing. Its reason is its closing words.
@@ -133,7 +149,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                           "content": env.to_tool_message()})
         if rested is not None:
             return ToolTurnResult(reply=rested or content, trace=trace, steps=step,
-                                  rested=rested or "(no reason given)", duplicates=duplicates)
+                                  rested=rested or "(no reason given)", duplicates=duplicates, stay_awake=stay_awake)
 
         # A LOOP IS NOT WORK. Named first, so a being that cannot see why its turn ended does not
         # learn nothing from it; ended only if the naming did not change the call.
@@ -156,13 +172,13 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
             out = generate(convo)
             return ToolTurnResult(reply=out.get("content") or "", trace=trace, steps=step + 1,
                                   looped={"effector": intents[0].effector, "times": repeats + 1},
-                                  duplicates=duplicates)
+                                  duplicates=duplicates, stay_awake=stay_awake)
 
     # Cap reached with tools still pending: force one final spoken close — we take its
     # words even if it wants more tools, so the being always ends its turn in language.
     out = generate(convo)
     return ToolTurnResult(reply=out.get("content") or "", trace=trace,
-                          steps=max_steps, capped=True, duplicates=duplicates)
+                          steps=max_steps, capped=True, duplicates=duplicates, stay_awake=stay_awake)
 
 
 _FENCE = re.compile(r"```[A-Za-z0-9_+-]*[ \t]*\n(.*?)```", re.S)
