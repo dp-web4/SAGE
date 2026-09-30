@@ -11,6 +11,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 
@@ -62,3 +64,25 @@ def test_a_post_without_the_form_token_writes_nothing(tmp_path, monkeypatch):
         assert conv.recent(home, "dp", limit=1)[-1]["text"] == "really me"
     finally:
         srv.shutdown()
+
+
+@pytest.mark.parametrize("wake,expected", [
+    ({"engage": True, "start_accepted": True, "started": None}, "beat entry unconfirmed"),
+    ({"engage": True, "start_accepted": None, "started": None}, "wake request outcome unknown"),
+    ({"engage": True, "started": True}, "beat entry unconfirmed"),
+    ({"engage": True, "start_accepted": False, "wake_error": "<b>rejected</b>"},
+     "wake request was not accepted (&lt;b&gt;rejected&lt;/b&gt;)"),
+])
+def test_say_renders_acceptance_without_claiming_entry(tmp_path, monkeypatch, wake, expected):
+    dpc, conv, home, srv = _console(tmp_path, monkeypatch)
+    from sage.gateway import arousal
+    monkeypatch.setattr(arousal, "respond", lambda *a, **k: wake)
+    try:
+        code, body = _post(srv.server_address[1], "/say",
+                           {"to": "dp", "text": "test event", "csrf": dpc.FORM_TOKEN})
+        assert code == 200 and expected in body
+        assert "a beat is starting for this" not in body and "Waking t-being now" not in body
+        assert conv.recent(home, "dp", limit=1)[-1]["text"] == "test event"
+    finally:
+        srv.shutdown()
+        srv.server_close()

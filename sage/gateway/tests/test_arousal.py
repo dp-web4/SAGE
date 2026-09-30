@@ -203,9 +203,7 @@ def test_a_running_beat_does_not_claim_in_flight_delivery(tmp_path):
 
 
 def test_engage_is_not_started_when_the_wake_cannot_launch(tmp_path, monkeypatch):
-    """GPT review of SAGE#81: `started` was True whenever policy said engage, even with no
-    systemctl (McNugget runs launchd) or a unit that failed. Three arms: the tool is absent,
-    the unit fails, the start succeeds. Only the last may say started."""
+    """Absent command, client failure, and acceptance never establish beat entry."""
     import subprocess as _sp
     _quiet()                                   # idle, no beat due: the policy engages
     calls = []
@@ -216,17 +214,55 @@ def test_engage_is_not_started_when_the_wake_cannot_launch(tmp_path, monkeypatch
         return _sp.CompletedProcess(args, 0, "", "")
     monkeypatch.setattr(arousal.subprocess, "run", absent)
     d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
-    assert d["engage"] is True and d["started"] is False
-    assert "no systemctl" in d["wake_error"] and "next scheduled beat" in d["fallback"]
+    assert d["engage"] is True and d["started"] is None and d["start_accepted"] is False
+    assert "no systemctl" in d["wake_error"] and "awaiting a later beat" in d["fallback"]
 
     def failing(args, **kw):
         calls.append(args)
         return _sp.CompletedProcess(args, 5, "", "Unit sage-heartbeat.service not found.")
     monkeypatch.setattr(arousal.subprocess, "run", failing)
     d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
-    assert d["started"] is False and "exit 5" in d["wake_error"] and "not found" in d["wake_error"]
+    assert d["started"] is None and d["start_accepted"] is None
+    assert "exit 5" in d["wake_error"] and "not found" in d["wake_error"]
 
     monkeypatch.setattr(arousal.subprocess, "run",
                         lambda args, **kw: _sp.CompletedProcess(args, 0, "", ""))
     d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
-    assert d["started"] is True and "wake_error" not in d
+    assert d["started"] is None and d["start_accepted"] is True
+    assert d["wake_evidence_version"] == 2 and "wake_error" not in d and "fallback" not in d
+
+
+def test_timeout_does_not_become_rejection_or_trigger_a_retry(tmp_path, monkeypatch):
+    import subprocess
+    calls = []
+    def timeout(args, **kwargs):
+        calls.append(args)
+        raise subprocess.TimeoutExpired(args, 10)
+    monkeypatch.setattr(arousal.subprocess, "run", timeout)
+    d = arousal.respond(tmp_path, "dp_turn", descriptor="test event")
+    assert d["start_accepted"] is None and d["started"] is None
+    assert "TimeoutExpired" in d["wake_error"]
+    assert len(calls) == 1 and "--no-block" in calls[0]
+    assert "outcome unknown" in arousal.delivery_text(d)
+
+
+def test_client_killed_after_submission_leaves_acceptance_unknown(tmp_path, monkeypatch):
+    import subprocess
+    monkeypatch.setattr(arousal.subprocess, "run",
+                        lambda args, **kw: subprocess.CompletedProcess(args, -15, "", ""))
+    d = arousal.respond(tmp_path, "dp_turn", descriptor="test event")
+    assert d["start_accepted"] is None and d["started"] is None
+    assert "exit -15" in d["wake_error"]
+
+
+def test_acceptance_is_serializable_and_still_not_entry_after_later_failure(tmp_path, monkeypatch):
+    import subprocess
+    calls = []
+    def accepted(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "", "")
+    monkeypatch.setattr(arousal.subprocess, "run", accepted)
+    d = json.loads(json.dumps(arousal.respond(tmp_path, "dp_turn", descriptor="test event")))
+    assert d["start_accepted"] is True and d["started"] is None and len(calls) == 1
+    # Nothing in the snapshot claims knowledge of the service's subsequent outcome.
+    assert arousal.delivery_text(d) == "recorded; wake request accepted; beat entry unconfirmed"

@@ -78,27 +78,48 @@ def _sh(*args: str) -> str:
 
 
 def _start_wake() -> dict:
-    """Start the beat unit now, and say whether that actually happened.
+    """Request a beat, reporting scheduler acceptance separately from execution.
 
-    `_sh` discards the exit code and turns every exception into "", so `started` used to be
-    True whenever the POLICY said engage, including on a host with no systemctl (McNugget is
-    launchd-managed), with no such user unit (CBP runs its beats from cron), or with a unit
-    that failed to start (GPT review of SAGE#81). The record and the UI said "waking now"
-    when nothing woke. Now `started` is the observed result, and a failure carries the
-    reason; the turn is still recorded and waits for the ordinary beat."""
+    A successful nonblocking start only verifies/enqueues a job. It may coalesce with an
+    existing job, or the service may subsequently fail. `started` is retained as null for
+    compatibility: this caller has no beat-entry receipt, on success OR failure. A timeout
+    leaves acceptance unknown; it must not cause an automatic retry of an uncertain request.
+    """
+    evidence = {"wake_evidence_version": 2, "started": None}
     try:
         p = subprocess.run(["systemctl", "--user", "start", "--no-block", UNIT],
                            text=True, capture_output=True, timeout=10)
     except FileNotFoundError:
-        return {"started": False,
-                "wake_error": "no systemctl on this host: its beats are not systemd user units "
-                              "(launchd on macOS, or cron); the turn waits for the ordinary beat"}
+        return {**evidence, "start_accepted": False,
+                "wake_error": "no systemctl: wake request could not be submitted"}
     except Exception as e:
-        return {"started": False, "wake_error": f"{type(e).__name__}: {e}"}
+        return {**evidence, "start_accepted": None, "wake_error": f"{type(e).__name__}: {e}"}
     if p.returncode != 0:
         detail = (p.stderr or p.stdout or "").strip()[:300]
-        return {"started": False, "wake_error": f"systemctl exit {p.returncode}: {detail}"}
-    return {"started": True}
+        # A client error can occur after submission (for example, losing the reply).
+        # Without a structured rejection receipt, a nonzero exit is not proof of rejection.
+        return {**evidence, "start_accepted": None,
+                "wake_error": f"systemctl exit {p.returncode}: {detail}"}
+    return {**evidence, "start_accepted": True}
+
+
+def delivery_text(woke: dict) -> str:
+    """Plain-text delivery evidence, shared by the console and contract-tested with Rust.
+
+    Old producers used started=true for scheduler acceptance. Never upgrade that legacy
+    field to observed beat entry. An explicit new field, including null, takes precedence.
+    """
+    accepted = (woke.get("start_accepted") if "start_accepted" in woke
+                else True if woke.get("started") is True else None)
+    if accepted is True:
+        return "recorded; wake request accepted; beat entry unconfirmed"
+    why = woke.get("wake_error")
+    why = why if isinstance(why, str) else "unknown reason"
+    if accepted is False:
+        return f"recorded; wake request was not accepted ({why}); awaiting a later beat"
+    if woke.get("engage") is True:
+        return f"recorded; wake request outcome unknown ({why}); beat entry unconfirmed"
+    return "recorded; awaiting the next beat"
 
 
 def beat_running() -> bool:
@@ -206,8 +227,8 @@ def respond(instance: Path, kind: str, *, descriptor: str) -> dict:
         d["marker_error"] = f"{type(e).__name__}: {e}"
     if d["engage"]:
         d.update(_start_wake())
-        if not d["started"]:
-            d["fallback"] = "recorded; it will be read at the next scheduled beat"
+        if d["start_accepted"] is not True:
+            d["fallback"] = "recorded; awaiting a later beat"
     elif d.get("deferred_s"):
         d.update(_arm_deferred_wake(d["deferred_s"]))
     return d

@@ -78,6 +78,10 @@ verify the idle deadline is rebased after completion.
 
 ## Next slices, in dependency order
 
+The first reader/producer correction is described in the
+[wake acceptance contract](WAKE_ACCEPTANCE_CONTRACT.md). It separates acceptance
+from unknown entry; correlated execution receipts and durable handoff remain below.
+
 1. **Wake evidence contract:** distinguish request, scheduler acceptance, beat entry,
    and consumed event IDs; update Python and Rust readers together. Unknown execution
    is not failed execution. Do not use a no-block return as an entry receipt.
