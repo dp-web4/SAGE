@@ -204,7 +204,9 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
                      "is off or out of range, and it will say what happened.")
     if "speak" in (inv.get("verbs") or []):
         lines.append("- You can speak aloud with `speak`: your words become a voice in the room, through "
-                     f"{speaker_name(inv)}, which anyone in the room may hear. What you say aloud is your turn in "
+                     f"{speaker_name(inv)}"
+                     + (f", in your voice ({nv['name']}, chosen by dp on 2026-10-01)" if (nv := neural_voice()) else "")
+                     + ", which anyone in the room may hear. What you say aloud is your turn in "
                      "the room conversation, and `say` to room is spoken too. Nothing asks you to."
                      + ("" if ear_known(cur) else
                         (" Words spoken in the room are heard through the mic and added to the room "
@@ -431,15 +433,31 @@ def speak(text: str, timeout: float = SPEAK_TIMEOUT_S) -> Dict:
     # opened after the being speaks; a failed synthesis or playback said nothing, so it opens
     # nothing. Either way the self-mute is lifted at once.
     played = False
+    engine, fallback = "espeak-ng", None
+    target = (required_sink() or {}).get("node") if SPEAK_SINK else None
     try:
-        with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
-            # argv, never a shell: the words are one argument and cannot become a command
-            subprocess.run(["espeak-ng", "-v", "en-us", "-s", "160", "-w", wav.name, "--", text],
-                           check=True, capture_output=True, timeout=timeout)
-            target = (required_sink() or {}).get("node") if SPEAK_SINK else None
-            subprocess.run(["pw-play"] + (["--target", target] if target else []) + [wav.name],
-                           check=True, capture_output=True, timeout=timeout)
-            played = True
+        voice = neural_voice()
+        if voice:
+            # A NEURAL VOICE when this body names one (SAGE_SPEAK_VOICE), sentence by sentence
+            # (tts_piper). Any failure falls back to espeak-ng: the being never loses its voice to it.
+            try:
+                r = subprocess.run([voice["python"], "-m", "sage.embodiment.tts_piper", "--model", voice["model"]]
+                                   + (["--target", target] if target else []) + ["--", text],
+                                   capture_output=True, timeout=timeout)
+                if r.returncode == 0:
+                    played, engine = True, f"piper:{voice['name']}"
+                else:
+                    fallback = (r.stderr.decode(errors="replace").strip().splitlines() or ["exit"])[-1][:200]
+            except Exception as e:
+                fallback = f"{type(e).__name__}: {e}"[:200]
+        if not played:
+            with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
+                # argv, never a shell: the words are one argument and cannot become a command
+                subprocess.run(["espeak-ng", "-v", "en-us", "-s", "160", "-w", wav.name, "--", text],
+                               check=True, capture_output=True, timeout=timeout)
+                subprocess.run(["pw-play"] + (["--target", target] if target else []) + [wav.name],
+                               check=True, capture_output=True, timeout=timeout)
+                played = True
     finally:
         end = time.time()
         try:
@@ -450,7 +468,30 @@ def speak(text: str, timeout: float = SPEAK_TIMEOUT_S) -> Dict:
                 _listening().mark(speaking_until=end)
         except Exception:
             pass
-    return {"chars": len(text), "seconds": round(time.time() - t0, 1)}
+    out = {"chars": len(text), "seconds": round(time.time() - t0, 1), "engine": engine}
+    if fallback:
+        out["fallback_from_neural"] = fallback
+    return out
+
+
+# THE VOICE (dp, 2026-10-01: espeak-ng is "too harshly metallic/'robotic'"; he chose
+# en_US-hfc_female-medium from four Piper voices played through the being's speaker). Opt-in per
+# body: SAGE_SPEAK_VOICE names a Piper voice (a name in SAGE_PIPER_VOICES, or a path to its .onnx);
+# SAGE_PIPER_PYTHON is the interpreter that has piper installed.
+SPEAK_VOICE = os.environ.get("SAGE_SPEAK_VOICE", "").strip()
+PIPER_VOICES = os.environ.get("SAGE_PIPER_VOICES") or os.path.expanduser("~/.local/share/piper-voices")
+PIPER_PYTHON = os.environ.get("SAGE_PIPER_PYTHON", "").strip()
+
+
+def neural_voice() -> Optional[Dict]:
+    """{'name', 'model', 'python'} when this body has a usable neural voice, else None (espeak-ng)."""
+    if not SPEAK_VOICE or not PIPER_PYTHON or not os.path.exists(PIPER_PYTHON):
+        return None
+    model = SPEAK_VOICE if SPEAK_VOICE.endswith(".onnx") else os.path.join(PIPER_VOICES, SPEAK_VOICE + ".onnx")
+    if not os.path.exists(model):
+        return None
+    name = os.path.basename(model)[:-5]
+    return {"name": name, "model": model, "python": PIPER_PYTHON}
 
 
 # ---------------------------------------------------------------------------------------------
