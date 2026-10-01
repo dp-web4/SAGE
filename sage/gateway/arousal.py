@@ -261,6 +261,24 @@ def claim_pending(beat_id: str, path: Optional[str] = None) -> list:
     return [dict(v, key=k) for k, v in merged.items()]
 
 
+def claim_keys(beat_id: str, keys, path: Optional[str] = None) -> list:
+    """Claim ONLY these pending events for `beat_id` (merged into its claim file); everything else stays
+    pending for the next beat. GPT on #310: a preemption that answers one person must not consume
+    unrelated late work, or a second person, as if this beat had met it. Returns what was claimed."""
+    p = _pending_path(path)
+    claim = p.with_name(f"{p.name}.claimed.{beat_id}")
+    keys = [k for k in (keys or []) if k]
+    with _locked(p):
+        s = _read_set(p)
+        took = {k: s.pop(k) for k in keys if k in s}
+        if took:
+            c = _read_set(claim)
+            c.update(took)
+            _write_set(claim, c)
+            _write_set(p, s)
+    return [dict(v, key=k) for k, v in took.items()]
+
+
 def release_claim(beat_id: str, path: Optional[str] = None) -> None:
     """The beat's record is written: what it claimed has been met."""
     p = _pending_path(path)

@@ -1,51 +1,64 @@
 """Dry run of hb.main() for PREEMPTION, on a COPY of a being's home (never a live home). No model call, no
-dispatch, no outside effect: tool turns, the account generate and the answer turn are fakes; the pending set,
-wake marker, egress and successor are stubbed. A person "arrives" at a chosen moment of the beat:
+dispatch, no outside effect: tool turns, the account generate and the answer turn are fakes; the wake marker
+and egress are stubbed; the PENDING SET IS REAL but lives in a scratch file; arming a successor is stubbed to
+FAIL, so whatever is still pending at the end is exactly what a successor would have to recover.
 
   none     nobody speaks                                   -> not preempted, reflection runs
-  a        right after the beat's first claim (GPT on #310: before the record's later t0)
-  b        while the account generate is in flight
-  c        while reflection is in flight
+  a        a person speaks right after the beat's first claim (before the record's later t0)
+  b        a person speaks while the account generate is in flight
+  c        a person speaks while reflection is in flight
+  d        during the account: a person AND a sense event  -> answer the person; the sense stays pending
+  e        during the account: two people's lines          -> answer one; the other stays pending
 
 usage: python3 dry_preempt.py <sage checkout> <COPY of a being home> <scenario>"""
-import json, sys, time
+import json, os, sys, tempfile, time
 from pathlib import Path
+
+PENDING = Path(tempfile.mkdtemp(prefix="dry-pending-")) / "pending_events.json"
+os.environ["SAGE_PENDING_EVENTS"] = str(PENDING)          # before arousal is imported
 sys.path.insert(0, sys.argv[1])
-from sage.gateway import heartbeat as hb, arousal, being_join, being_tool_loop, egress_drain, governed_turn, conversations as conv
-from sage.gateway.being_tool_loop import ToolTurnResult
+from sage.gateway import heartbeat as hb, arousal, being_join, being_tool_loop, egress_drain, governed_turn  # noqa
+from sage.gateway import conversations as conv  # noqa: E402
+from sage.gateway.being_tool_loop import ToolTurnResult  # noqa: E402
 
 home, case = Path(sys.argv[2]), sys.argv[3]
-WORDS = "What do you want to remember about today?"
-state = {"arrived": None, "claims": [], "turns": [], "answer": None, "account_calls": 0}
+LINES = ["What do you want to remember about today?", "And what would you forget?"]
+state = {"arrived": False, "turns": [], "answer": None, "account_calls": 0}
+
+
+def speak_in_room(words, n):
+    """A person speaks: presence writes the room turn (#309) and requests a beat (the real pending set)."""
+    t = time.time()
+    conv.append(home, "room", speaker="voice", text=words, via="voice", enforce_write=False,
+                extra={"heard_id": f"dry-{case}-{n}", "mic": "AIRHUG 01"})
+    arousal.add_pending("heard", f'heard a voice: "{words}"', salience=1.0, key=f"heard:{t}:{words[:80]}",
+                        source="presence:heard")
 
 
 def arrive():
-    """A person speaks now: presence writes the room turn (#309) and the pending set holds the event."""
-    if state["arrived"] is None:
-        state["arrived"] = time.time()
-        conv.append(home, "room", speaker="voice", text=WORDS, via="voice", enforce_write=False,
-                    extra={"heard_id": f"dry-{case}", "mic": "AIRHUG 01"})
+    if state["arrived"]:
+        return
+    state["arrived"] = True
+    speak_in_room(LINES[0], 0)
+    if case == "d":
+        arousal.add_pending("sense", "strong motion to the upper left", salience=0.5, source="presence:sense")
+    if case == "e":
+        time.sleep(0.05)
+        speak_in_room(LINES[1], 1)
 
 
-def event():
-    t = state["arrived"]
-    return {"kind": "heard", "descriptor": f'heard a voice: "{WORDS}"', "first_ts": t, "last_ts": t,
-            "count": 1, "salience": 1.0, "source": "presence:heard", "key": f"heard:{t}:{WORDS}"}
+_claim = arousal.claim_pending
 
 
 def claim(beat_id, path=None):
-    state["claims"].append(beat_id)
-    if beat_id.endswith(".preempt"):
-        return [event()] if state["arrived"] else []
-    if case == "a":
+    got = _claim(beat_id, path)
+    if case == "a" and not beat_id.endswith(".preempt"):
         arrive()                      # lands right after the first claim
-    return []
+    return got
 
 
 arousal.claim_pending = claim
-arousal.peek_pending = lambda path=None: [event()] if state["arrived"] else []
-arousal.release_claim = lambda *a, **k: None
-arousal.after_beat = lambda **k: {"continuing": False, "why": "dry run"}
+arousal.after_beat = lambda **k: {"armed": False, "continuing": False, "error": "dry run: arming FAILED"}
 being_join.consume_wake_marker = lambda *a, **k: {"by": "presence", "descriptor": "dry run"}
 hb._phase = lambda *a, **k: None
 egress_drain.drain_once = lambda **k: {"dry_run": True}
@@ -56,9 +69,9 @@ def fake_turn(client, llm, seed, max_steps=2, tools=None, on_generate=None, shou
     names = {t["function"]["name"] for t in (tools or [])}
     phase = "reflect" if names and names <= REFLECT else "explore/posture"
     if phase == "reflect" and case == "c":
-        arrive()                      # lands while reflection is generating
+        arrive()
     why = should_yield() if should_yield else None
-    state["turns"].append({"phase": phase, "yield_checked": should_yield is not None, "yielded": why})
+    state["turns"].append({"phase": phase, "yielded": why})
     return ToolTurnResult(reply="", yielded=why)
 
 
@@ -71,8 +84,8 @@ def build(*a, **k):
 
     def account(messages, tools=None, fmt=None):
         state["account_calls"] += 1
-        if case == "b":
-            arrive()                  # lands while the account generate is in flight
+        if case in ("b", "d", "e"):
+            arrive()
         return {"content": "(dry run account)", "tool_calls": [], "raw": {"done_reason": "stop"}}
     llm.get_chat_response = account
     return client, llm
@@ -96,8 +109,10 @@ hb.main(["--member", "sprout-being", "--model", "qwen3.8-distill:2b", "--instanc
          "--no-hub-drain", "--no-escalate"])
 rec = json.loads((home / "heartbeats.jsonl").read_text().splitlines()[-1])
 pre = rec.get("preempted") or {}
+still = [dict(v, key=k) for k, v in (json.loads(PENDING.read_text()) if PENDING.exists() else {}).items()]
 print(json.dumps({"case": case, "preempted_phase": pre.get("phase"), "selected": pre.get("selected"),
-                  "late_events": len(pre.get("events") or []), "account": {k: v for k, v in (rec.get("account") or {}).items() if k in ("skipped", "error")},
-                  "account_calls": state["account_calls"], "turns": state["turns"],
+                  "claimed_late": [e.get("descriptor") for e in pre.get("events") or []],
+                  "left_pending_count": pre.get("left_pending"),
+                  "still_pending_after_beat": [f'{e["kind"]}: {e["descriptor"]}' for e in still],
                   "reflect_ran": any(t["phase"] == "reflect" for t in state["turns"]),
-                  "answer": state["answer"], "claims": state["claims"]}, default=str))
+                  "answer": state["answer"]}, default=str))

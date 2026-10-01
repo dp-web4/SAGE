@@ -2187,6 +2187,22 @@ def event_class(e: dict) -> str:
     return "P4"
 
 
+def event_answers(e: dict, selected) -> bool:
+    """Does answering `selected` meet this pending P0 event? `turn:<cid>:<seq>` by conversation and seq;
+    `heard` by the room and its words; a daemon dp_turn ("... in conversation '<cid>'") by conversation."""
+    if selected is None:
+        return False
+    kind, key, desc = str(e.get("kind") or ""), str(e.get("key") or ""), str(e.get("descriptor") or "")
+    m = re.match(r"turn:([a-z0-9-]+):(\d+)$", key)
+    if m:
+        return m.group(1) == selected.cid and int(m.group(2)) == int(selected.seq or -1)
+    if kind == "heard":
+        words = key.split(":", 2)[2] if key.count(":") >= 2 else ""
+        return selected.cid == "room" and words.strip() == str(selected.text or "")[:80].strip()
+    m = re.search(r"conversation '([a-z0-9-]+)'", desc)
+    return bool(m) and m.group(1) == selected.cid
+
+
 def preempt_on(instance) -> bool:
     """Opt-in per instance (R2): instance.json "preempt": true."""
     try:
@@ -3246,20 +3262,24 @@ def main(argv=None) -> int:
                 preempted = {"by": _why, "after_s": round(time.time() - _beat_started, 1), "phase": phase}
 
         def _take_late():
-            """Claim what arrived since the beat began, carry heard words into the room, and select the
-            person who spoke. Exactly once per beat; the beat's original claim is absorbed into this one."""
-            try:
-                from sage.gateway import arousal as _arousal_late
-                _late = _arousal_late.claim_pending(f"{host_session_id}.preempt")
-            except Exception as _e:
-                _late = [{"claim_error": f"{type(_e).__name__}: {_e}"}]
-            preempted["events"] = [e for e in _late if float(e.get("first_ts") or 0) >= _beat_started]
+            """Carry heard words into the room, select the person who spoke, and claim ONLY the event that
+            selection answers (GPT on #310): unrelated late events, and any other person, stay pending for
+            the successor, and remain recoverable from the pending set if arming it fails."""
             try:
                 from sage.gateway import room as _room_late
                 _room_late.ingest_heard(instance, args.member, (_body_cur or {}).get("inventory"))
             except Exception as _e:
                 preempted["room_error"] = f"{type(_e).__name__}: {_e}"
-            sel = pending_selection(instance, args.member, person_turns_that_woke(preempted["events"]))
+            p0 = p0_since(_beat_started)
+            sel = pending_selection(instance, args.member, person_turns_that_woke(p0))
+            handled = [e for e in p0 if event_answers(e, sel[4])][:1]
+            try:
+                from sage.gateway import arousal as _arousal_late
+                preempted["events"] = _arousal_late.claim_keys(f"{host_session_id}.preempt",
+                                                               [e.get("key") for e in handled])
+            except Exception as _e:
+                preempted["events"] = [{"claim_error": f"{type(_e).__name__}: {_e}"}]
+            preempted["left_pending"] = len(p0) - len(handled)
             preempted["selected"] = f"{sel[4].cid}:{sel[4].seq}" if sel[4] is not None else None
             return sel
 

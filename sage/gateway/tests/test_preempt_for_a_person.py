@@ -72,6 +72,32 @@ def test_the_beat_wires_the_yield_and_the_preempted_branch():
     i_acc = src.index("aresp = llm.get_chat_response(ask_msgs)")
     assert i_acc < src.index('_check_preempt("account")') < src.index('_check_preempt("reflect")')
     assert src.count("= _take_late()") == 2 and "(preempted or not _said_in(reflect))" in src
-    assert 'claim_pending(f"{host_session_id}.preempt")' in src
+    assert 'claim_keys(f"{host_session_id}.preempt"' in src and 'claim_pending(f"{host_session_id}.preempt")' not in src
     assert 'release_claim(f"{host_session_id}.preempt")' in src
     assert '"preempted": preempted,' in src and 'woke["classes"]' in src
+
+
+def test_a_late_claim_takes_only_the_answered_event(tmp_path):
+    """GPT on #310: answering one person must not consume unrelated late work, or another person."""
+    from sage.gateway import arousal as a
+    p = str(tmp_path / "pending.json")
+    a.add_pending("heard", 'heard a voice: "first"', key="heard:1:first", path=p)
+    a.add_pending("heard", 'heard a voice: "second"', key="heard:2:second", path=p)
+    a.add_pending("sense", "strong motion", path=p)
+    took = a.claim_keys("beat-1.preempt", ["heard:2:second", "not-there"], path=p)
+    assert [e["key"] for e in took] == ["heard:2:second"]
+    left = {e["key"] for e in a.peek_pending(path=p)}
+    assert left == {"heard:1:first", "sense:strong motion"}, "the rest stays pending for the successor"
+    a.release_claim("beat-1.preempt", path=p)
+    assert {e["key"] for e in a.peek_pending(path=p)} == left, "releasing the claim never touches pending"
+
+
+def test_which_event_an_answer_meets():
+    room = hb.SelectedTurn("room", {"seq": 46, "from": "voice", "text": "And what would you forget?"})
+    dp = hb.SelectedTurn("dp", {"seq": 88, "from": "dp", "text": "you construct your reality"})
+    assert hb.event_answers({"kind": "heard", "key": "heard:5.0:And what would you forget?"}, room)
+    assert not hb.event_answers({"kind": "heard", "key": "heard:4.0:What do you want to remember?"}, room)
+    assert hb.event_answers({"kind": "dp_turn", "key": "turn:dp:88"}, dp)
+    assert not hb.event_answers({"kind": "dp_turn", "key": "turn:dp:87"}, dp)
+    assert hb.event_answers({"kind": "dp_turn", "descriptor": "dp spoke in conversation 'dp'"}, dp)
+    assert not hb.event_answers({"kind": "sense", "key": "sense:x"}, room) and not hb.event_answers({}, None)
