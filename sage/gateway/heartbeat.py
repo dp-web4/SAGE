@@ -2291,6 +2291,16 @@ def event_answers(e: dict, selected) -> bool:
     return bool(m) and m.group(1) == selected.cid
 
 
+def explore_turn_mode(instance) -> str:
+    """Opt-in per instance: instance.json "explore_turn": "json" (explore and posture act through
+    closed JSON objects instead of native tool calls; see being_tool_loop._json_act)."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return "json" if instance_config(instance).get("explore_turn") == "json" else "tools"
+    except Exception:
+        return "tools"
+
+
 def preempt_on(instance) -> bool:
     """Opt-in per instance (R2): instance.json "preempt": true."""
     try:
@@ -3337,7 +3347,8 @@ def main(argv=None) -> int:
 
         explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
                                        tools=_explore_specs, on_generate=_on_generate("explore"),
-                                       should_yield=_yield_for_a_person)
+                                       should_yield=_yield_for_a_person,
+                                       act_form=explore_turn_mode(instance))
         convo = _carry(seed, explore)
         after = None
         if posture_turn is not None:
@@ -3345,7 +3356,8 @@ def main(argv=None) -> int:
             _phase("wake", "posture", host_session_id)
             after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
                                          tools=_explore_specs, on_generate=_on_generate("posture"),
-                                         should_yield=_yield_for_a_person)
+                                         should_yield=_yield_for_a_person,
+                                       act_form=explore_turn_mode(instance))
             convo = _carry(convo, after)
         # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
         # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
