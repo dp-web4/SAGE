@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _isolate_hestia  # noqa: E402,F401  -- isolates on import, unconditionally
 from sage.gateway import being_gate_client as B  # noqa: E402
-from sage.gateway.tests._gate_core import requires_gate_core  # noqa: E402
+from sage.gateway.tests._gate_core import requires_gate_core, standalone_skip_reason  # noqa: E402
 
 FAILS = []
 # UNDER PYTEST A FAILED CHECK MUST FAIL THE TEST (GPT, review of SAGE #257: check() only appended
@@ -230,6 +230,10 @@ def main():
                test_without_a_worktree_the_verbs_still_fail_closed,
                test_the_construction_sites_give_both_halves_the_same_tree,
                test_no_other_call_site_builds_a_gate_without_a_worktree):
+        why = standalone_skip_reason(fn)
+        if why:
+            print(f"SKIPPED {fn.__name__}: {why}")
+            continue
         try:
             fn()
         except Exception as e:  # noqa: BLE001

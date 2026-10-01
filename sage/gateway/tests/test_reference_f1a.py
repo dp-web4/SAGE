@@ -162,9 +162,9 @@ def test_a_long_read_names_its_window_and_the_start_line_that_reads_on():
     r = disp(BeingIntent("memory_read", {"path": "notes/big.py", "start_line": 206}), _ALLOW)
     assert r.result.startswith("[lines 206-") and "\nline 0206 " + "x" * 90 + "\n" in r.result
     # a file that fits carries no marker at all
-    Path(root, "notes", "small.py").write_text("a = 1\n")
-    assert disp(BeingIntent("memory_read", {"path": "notes/small.py"}), _ALLOW).result == "a = 1\n"
-    r = disp(BeingIntent("memory_read", {"path": "notes/small.py", "start_line": 9}), _ALLOW)
+    Path(root, "notes", "small.md").write_text("a = 1\n")
+    assert disp(BeingIntent("memory_read", {"path": "notes/small.md"}), _ALLOW).result == "a = 1\n"
+    r = disp(BeingIntent("memory_read", {"path": "notes/small.md", "start_line": 9}), _ALLOW)
     assert r.ok and r.result.startswith("[past the end:")
 
 
@@ -1177,3 +1177,134 @@ def test_an_edit_aimed_at_a_conversation_is_told_to_name_its_file():
     r = disp(BeingIntent("memory_edit", {"path": "conversations/cbp-claude.jsonl",
                                          "old": "x", "new": "y"}), _ALLOW)
     assert not r.ok and "give that file's path" in r.error and "does not change any file" in r.error, r
+
+
+def test_a_py_read_says_whether_python_can_parse_the_file_now():
+    """2026-09-23: cbp-being read lines 1718-1937 of its script -- line 1721 at column 0, the
+    lines under it indented four -- and concluded "syntactically valid"; Python stopped at
+    1722. #162 told it on write and edit, never on the read where the verdict was formed.
+    Again 2026-09-29 11:41Z: it read all 443 lines of scratch/latent-weights-holdout-test-fixed-v2.py
+    in three windows (1-207, 208-427, 428-443), said "appears syntactically correct", and asked
+    the seat to run it; the run (seq 4384) stopped at line 135, IndentationError, inside the
+    first window it had been shown. A whole-file read has no end marker, so the note is
+    prefixed with one: a bare bracket line after the last line reads as the file's last line."""
+    disp, root = _disp()
+    f = Path(root) / "notes" / "s.py"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("p = 1\n    q = 2\n")
+    r = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
+    assert r.ok and r.result.endswith("\n[end of file: line 2 is the last line. Python cannot parse s.py now: "
+                                      "IndentationError at line 2: unexpected indent. It cannot run until that "
+                                      "line is fixed.]"), r.result
+    r = disp(BeingIntent("memory_read", {"path": "notes/s.py", "start_line": 2}), _ALLOW)
+    assert r.ok and r.result.startswith("[lines 2-2 of 2") and "cannot parse s.py now" in r.result, r.result
+    f.write_text("p = 1\nq = 2\n")
+    r = disp(BeingIntent("memory_read", {"path": "notes/s.py"}), _ALLOW)
+    assert r.ok and r.result.endswith("\n[end of file: line 2 is the last line. Python can parse s.py now. "
+                                      "That is not the same as running it.]"), r.result
+    (Path(root) / "journal.md").write_text("a note\n")
+    r = disp(BeingIntent("memory_read", {"path": "journal.md"}), _ALLOW)
+    assert r.ok and r.result == "a note\n", r.result
+
+def test_a_read_says_when_its_dated_lines_are_old_even_if_the_file_was_just_appended():
+    """2026-09-29: cbp-being repeated a fifteen-day-old outage from its own inbox.md as current.
+    The file had been appended that morning, so its mtime said "fresh"; the lines were not."""
+    from datetime import datetime, timedelta, timezone
+    from sage.gateway.reference_f1a import dated_lines_note
+    now = datetime.now(timezone.utc)
+    # Two minutes past fifteen days: a minute-precision stamp stands for the whole minute, so a
+    # stamp written exactly fifteen days ago is only GUARANTEED 14d 23h 59m+ old, and "at least
+    # 15 days" would overstate it (the precision rule, GPT re-review of #270).
+    old = (now - timedelta(days=15, minutes=2)).strftime("%Y-%m-%d %H:%M")
+    today = now.strftime("%Y-%m-%d %H:%M")
+    disp, root = _disp()
+    note = os.path.join(root, "inbox.md")
+    disp(BeingIntent("memory_write", {"path": note, "content":
+        f"{old} UTC — Coordination request #12529 queued. Server offline ~5 hours.\n"
+        f"- [ ] verify the MCP server is running\n"
+        f"{today} UTC — escalated to dp.\n"}), _ALLOW)
+    r = disp(BeingIntent("memory_read", {"path": note}), _ALLOW)
+    assert r.ok and r.result.startswith("[dated lines shown here run from"), r.result[:200]
+    assert "2 of 3 dated lines are more than a day old" in r.result, r.result[:300]
+    assert "the oldest at least 15 days ago" in r.result and "measured lines in your state" in r.result
+    assert "#12529" in r.result, "the content itself is still shown whole"
+
+    # Nothing old, nothing said: a fresh note and a code file read exactly as before.
+    fresh = os.path.join(root, "fresh.md")
+    disp(BeingIntent("memory_write", {"path": fresh, "content": f"{today} UTC — all quiet\n"}), _ALLOW)
+    assert disp(BeingIntent("memory_read", {"path": fresh}), _ALLOW).result == f"{today} UTC — all quiet\n"
+    code = os.path.join(root, "prog.py")
+    disp(BeingIntent("memory_write", {"path": code, "content": "x = 1\nprint(x)\n"}), _ALLOW)
+    code_read = disp(BeingIntent("memory_read", {"path": code}), _ALLOW).result
+    assert code_read.startswith("x = 1\nprint(x)\n") and "dated lines" not in code_read, code_read
+
+    # A windowed read counts only the window it shows.
+    assert dated_lines_note(f"{today} UTC — new\n", now) == ""
+    assert dated_lines_note(f"{old} UTC — old\nplain\n", now).startswith("[dated lines shown here")
+
+
+def test_dated_lines_honour_explicit_zones_and_never_overstate_an_unzoned_age():
+    """GPT review of #270: `2026-09-28 10:00 -0700` at now=2026-09-29T12:00Z is 19 h old, and the
+    first cut called it more than a day old by discarding the offset and assuming UTC."""
+    from datetime import datetime, timezone
+    from sage.gateway.reference_f1a import dated_lines_note as note
+    now = datetime(2026, 9, 29, 12, 0, tzinfo=timezone.utc)
+    # GPT's exact reproduction: 17:00Z on the 28th -> 19 h old -> NOT old.
+    assert note("2026-09-28 10:00 -0700 — check succeeded\n", now) == ""
+    # The same wall time in UTC is 26 h old -> old, exactly.
+    assert note("2026-09-28 10:00 UTC — check succeeded\n", now).startswith("[dated lines")
+    # ISO forms with an offset: 2026-09-28T13:00:00+02:00 = 11:00Z -> 25 h -> old; -05:00 = 18:00Z -> 18 h -> not.
+    assert note("2026-09-28T13:00:00+02:00 did x\n", now).startswith("[dated lines")
+    assert note("2026-09-28T13:00:00-05:00 did x\n", now) == ""
+    # Z suffix, and the exact boundary: 24 h old is not "more than a day".
+    assert note("2026-09-28T12:00Z done\n", now) == ""
+    assert note("2026-09-28T11:59Z done\n", now).startswith("[dated lines")
+    # A time with NO zone is placed at its latest possible instant (UTC-12): 2026-09-28 10:00 ->
+    # 22:00Z at the latest -> 14 h -> not old, even though as UTC it would be 26 h.
+    assert note("2026-09-28 10:00 — unzoned\n", now) == ""
+    # A date with NO time is a calendar day, never midnight UTC: yesterday is not old...
+    assert note("2026-09-28 — yesterday\n", now) == ""
+    # ...three days back is, and the note says its ages are minimums and shows the written date.
+    three = note("2026-09-26 — earlier\n", now)
+    assert three.startswith("[dated lines shown here run from 2026-09-26 to 2026-09-26")
+    assert "counted at the latest time" in three and "at least 2 days" in three, three
+    # Fully zoned lines carry no caveat.
+    assert "latest time" not in note("2026-09-20T10:00Z old\n", now)
+
+
+def test_dated_lines_count_from_the_end_of_their_written_precision():
+    """GPT re-review of #270 (d4ed406): the regex consumed seconds and fractions and discarded
+    them, so `2026-09-28T12:00:59Z` at now=2026-09-29T12:00:30Z (23h59m31s old) was called more
+    than a day old. A written time stands for every instant that truncates to it, and a line is
+    old only when it is old under every such reading."""
+    from datetime import datetime, timezone
+    from sage.gateway.reference_f1a import dated_lines_note as note
+    old = lambda s, now: note(s + " done\n", now).startswith("[dated lines")
+    now = datetime(2026, 9, 29, 12, 0, 30, tzinfo=timezone.utc)
+    # GPT's exact reproduction: 23h59m31s -> not old.
+    assert not old("2026-09-28T12:00:59Z", now)
+    # SECONDS at the boundary. 12:00:30 covers [:30, :31): at worst exactly 24 h -> not old.
+    assert not old("2026-09-28T12:00:31Z", now)     # just under a day
+    assert not old("2026-09-28T12:00:30Z", now)     # exact: some reading is 24 h, not more
+    assert old("2026-09-28T12:00:29Z", now)         # just over: every reading is > 24 h
+    assert old("2026-09-28 12:00:29 UTC", now)      # same, space form
+    assert not old("2026-09-28T14:00:31+02:00", now)  # offset + seconds: = 12:00:31Z
+    assert old("2026-09-28T07:00:29-05:00", now)      # = 12:00:29Z
+    # FRACTIONS at the boundary: .9 covers [.9, 1.0), and fraction digits are honoured.
+    assert old("2026-09-28T12:00:29.9Z", now)       # every reading in (24h, 24h+0.1s]
+    assert not old("2026-09-28T12:00:30.0Z", now)   # exact 24 h is not "more than"
+    assert not old("2026-09-28T12:00:30.000001Z", now)
+    frac_now = datetime(2026, 9, 29, 12, 0, 29, 950000, tzinfo=timezone.utc)
+    assert not old("2026-09-28T12:00:29.9Z", frac_now)    # could be 29.99 -> 23h59m59.96s
+    assert old("2026-09-28T12:00:29.90Z", frac_now)   # two digits: [.90, .91) -> > 24 h, so the
+                                                      # written digits, not just the value, count
+    assert old("2026-09-28T12:00:29.94Z", frac_now)        # every reading < 29.95 -> > 24 h
+    assert not old("2026-09-28T12:00:29.95Z", frac_now)    # exact
+    # More than six fraction digits: the bound rounds UP, never down.
+    assert old("2026-09-28T12:00:29.9999999Z", now)        # sup is exactly :30 -> > 24 h all
+    assert not old("2026-09-28T12:00:30.0000001Z", now)
+    # MINUTE precision covers the whole minute: 12:00 could be 12:00:59.
+    assert not old("2026-09-28T12:00Z", now)        # 23h59m31s at its latest reading
+    at_minute = datetime(2026, 9, 29, 12, 1, tzinfo=timezone.utc)
+    assert old("2026-09-28T12:00Z", at_minute)      # every reading is > 24 h
+    assert not old("2026-09-28T12:00Z", datetime(2026, 9, 29, 12, 0, 59, tzinfo=timezone.utc))

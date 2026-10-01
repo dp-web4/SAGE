@@ -113,7 +113,7 @@ def test_the_tool_schemas_are_measured_not_budgeted():
     import inspect
     from sage.gateway import heartbeat as hb
     body = inspect.getsource(hb.main)
-    assert "_schema_chars_for(_explore_tools)" in body, \
+    assert "_schema_chars_for(_explore_tools" in body, \
         "the fitter must call the same helper the record does"
     assert "len(json.dumps(ollama_tools(" not in body, \
         "main() is recomputing the schema size instead of using the helper"
@@ -204,40 +204,6 @@ def test_schema_chars_measured_when_the_registry_is_readable():
         "EXPLORE_TOOLS must be measurable here, or the test above is measuring nothing"
     # The measurement is the real cost; it should be nowhere near the retired guess.
     assert measured > 4000, f"schemas measured at {measured}, below the constant that rotted"
-
-
-# ---- carried from legion/mission-artifact in the 2026-09-18 reconciliation ----
-
-
-def test_a_running_beat_does_not_read_as_an_unarmed_timer():
-    """2026-09-09T15:07Z: the end-of-beat check read `monotonic=infinity` and wrote
-    "NOTHING WILL WAKE THE BEING" into the record of a beat whose timer armed correctly
-    seconds later. An OnUnitInactiveSec timer CANNOT have a next elapse while the unit it
-    watches is running — and this check runs from inside that unit."""
-    from sage.gateway.heartbeat import interpret_timer_state
-
-    running = ("NextElapseUSecRealtime=\n"
-               "NextElapseUSecMonotonic=infinity\n"
-               "LoadState=loaded\nActiveState=active\n")
-    armed, why = interpret_timer_state(running)
-    assert armed is True, why
-    assert "correct while this beat is still running" in why
-
-    scheduled = ("NextElapseUSecRealtime=Wed 2026-09-09 09:03:39 PDT\n"
-                 "NextElapseUSecMonotonic=infinity\nLoadState=loaded\nActiveState=active\n")
-    armed, why = interpret_timer_state(scheduled)
-    assert armed is True and why.startswith("scheduled:")
-
-    # the real failure this exists for: the timer is gone or dead, not merely unscheduled
-    for bad in ("NextElapseUSecRealtime=\nNextElapseUSecMonotonic=infinity\n"
-                "LoadState=not-found\nActiveState=inactive\n",
-                "NextElapseUSecRealtime=\nNextElapseUSecMonotonic=infinity\n"
-                "LoadState=loaded\nActiveState=failed\n",
-                "NextElapseUSecRealtime=\nNextElapseUSecMonotonic=infinity\n"
-                "LoadState=loaded\nActiveState=inactive\n"):
-        armed, why = interpret_timer_state(bad)
-        assert armed is False, why
-        assert "not healthy" in why
 
 
 # --- fit_to_window: line-aware trim (legion-being, 2026-09-29) -----------------

@@ -1575,6 +1575,8 @@ RESPONSE STYLE:
                  "like to do right now — reach out to a sibling, note something down — you "
                  "may reach for a tool. Or simply say what, if anything, you would do."},
             ]
+            # THE CANONICAL TOOLSET (sage/gateway/toolset.py): the same list every being is
+            # offered, with what this machine cannot do said in each verb's description.
             from sage.gateway import toolset as _toolset
             try:
                 from sage.gateway import body as _body

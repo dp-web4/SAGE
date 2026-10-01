@@ -52,8 +52,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 WORKSPACE = Path(os.environ.get("SAGE_WORKSPACE", Path(__file__).resolve().parents[2]))
-FORUM = Path(os.environ.get("SAGE_FORUM_DIR",
-                            Path.home() / "ai-workspace/shared-context/forum"))
+from sage.gateway.fleet_paths import forum_dir as _forum_dir  # noqa: E402
+FORUM = Path(os.getenv("SAGE_FORUM_DIR") or _forum_dir())
 INSTANCE = Path(os.environ.get("SAGE_INSTANCE",
                                WORKSPACE / "sage/instances/legion-being"))
 BEING = os.environ.get("SAGE_BEING", "legion-being")

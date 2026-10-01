@@ -27,7 +27,7 @@ import json
 import os
 import re
 import textwrap
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -39,6 +39,10 @@ from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEn
 # that could append to either could not later be distinguished from the person who wrote to
 # it, and neither could anyone reading the record.
 SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
+# Files in the being's home itself that the SEAT owns. `entrustment.md` is what the being was
+# GIVEN; if it could append to it, what was extended and what it decided would merge in the
+# record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
+SEAT_OWNED = ("entrustment.md",)
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
@@ -299,6 +303,109 @@ def missing_args(args: dict, required, tool: str, hint: str = "") -> Optional[st
         msg += f". {hint}"
     return msg
 
+
+
+# A DATED LINE SAYS WHAT WAS TRUE ON ITS DATE (2026-09-29). cbp-being escalated to dp that "the MCP
+# server has been offline ~6 hours" and that coordination requests #12529/#12530/#12624/#12638 had
+# gone unanswered, while membot and hestia were both up. Every element of it was in its own
+# inbox.md, written 2026-09-13/14; the being read that file in the beat and repeated it as
+# current. #92 had already put a MEASURED reachability line in every beat's state, and the read
+# still won. The file's mtime could not help: the being had appended to inbox.md at 06:10 that
+# day, so the file was "40 minutes old" while most of its lines were fifteen days old. So the read
+# reports the age of the DATED LINES it shows, not the age of the file.
+_DATED_LINE = re.compile(
+    r"^\s*(?:[-*]\s*(?:\[[ xX]\]\s*)?)?"            # optional bullet / checkbox
+    r"(?P<date>20\d\d-\d\d-\d\d)"
+    r"(?:[ T](?P<hm>\d\d:\d\d)(?::(?P<sec>\d\d)(?:\.(?P<frac>\d+))?)?)?"  # time; seconds, fraction
+    r"\s*(?P<zone>Z\b|UTC\b|GMT\b|[+-]\d\d:?\d\d\b)?")    # optional explicit zone / offset
+STALE_LINE_SECS = 24 * 3600
+# The widest real UTC offsets are -12:00 and +14:00. A time written WITHOUT a zone is placed at
+# its LATEST possible instant (as if UTC-12), so it is never called older than it could be.
+_LATEST_UNZONED = timedelta(hours=12)
+
+
+def _latest_instant(date: str, hm: Optional[str], zone: Optional[str],
+                    sec: Optional[str] = None, frac: Optional[str] = None) -> Optional[datetime]:
+    """The SUPREMUM of the UTC instants this date/time could denote: every reading is strictly
+    earlier. The zone is honoured exactly when given; with no zone the time is placed as if
+    UTC-12. The written precision is honoured too: a time is the whole interval that truncates
+    to it (a minute-precision time covers :00 to :59.999..., seconds cover their fraction, a
+    date with no time its whole calendar day), never its first instant."""
+    try:
+        day = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return None
+    if hm is None:
+        return (day + timedelta(days=1)).replace(tzinfo=timezone.utc) + _LATEST_UNZONED
+    try:
+        local = datetime.strptime(date + " " + hm + ":" + (sec or "00"), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+    # ADD ONE UNIT OF THE LAST WRITTEN PRECISION (GPT re-review of #270: the seconds were parsed
+    # and discarded, so `12:00:59Z` was read as 12:00:00 and called more than a day old at
+    # 23h59m31s). The result is the interval's supremum, which no reading reaches, hence the >=
+    # in `dated_lines_note`. A fraction is taken in integer microseconds and rounded UP, so the
+    # bound is never early even when more than six digits were written.
+    if frac:
+        local += timedelta(microseconds=-(-(int(frac) + 1) * 10 ** 6 // 10 ** len(frac)))
+    elif sec is not None:
+        local += timedelta(seconds=1)
+    else:
+        local += timedelta(minutes=1)
+    if zone in ("Z", "UTC", "GMT"):
+        return local.replace(tzinfo=timezone.utc)
+    if zone:
+        sign = -1 if zone[0] == "-" else 1
+        digits = zone[1:].replace(":", "")
+        off = timedelta(hours=int(digits[:2]), minutes=int(digits[2:]))
+        return (local - sign * off).replace(tzinfo=timezone.utc)
+    return local.replace(tzinfo=timezone.utc) + _LATEST_UNZONED
+
+
+def dated_lines_note(text: str, now: Optional[datetime] = None) -> str:
+    """One bracketed line about the dated lines in `text`, or "" when none is more than a day old.
+
+    A line that starts with a date (optionally after a bullet or checkbox) opens a dated span;
+    undated lines that follow belong to it. Only the window being shown is counted.
+
+    What can be timed (GPT reviews of #270): an explicit zone or numeric offset (Z, UTC, GMT,
+    +hh:mm, -hhmm) is honoured exactly, and so is the written precision: `12:00Z` means some
+    instant in [12:00:00, 12:01:00), `12:00:59Z` one in [12:00:59, 12:01:00). A time with no
+    zone, and a date with no time, are wider intervals still. Every line is counted from the
+    END of its interval, so a line is only ever called old when it is old under every reading. Other zone spellings (PDT, CET)
+    are not parsed and are treated as no zone, which is the conservative direction."""
+    now = now or datetime.now(timezone.utc)
+    current = None
+    zoned_all = True
+    under: dict = {}
+    written: dict = {}
+    for line in text.splitlines():
+        m = _DATED_LINE.match(line)
+        if m:
+            current = _latest_instant(m.group("date"), m.group("hm"), m.group("zone"),
+                                      m.group("sec"), m.group("frac"))
+            if current is not None:
+                written.setdefault(current, m.group("date"))
+                if not (m.group("hm") and m.group("zone")):
+                    zoned_all = False
+        if current is not None and line.strip():
+            under[current] = under.get(current, 0) + 1
+    if not under:
+        return ""
+    # `d` is a supremum no reading attains, so an age of EXACTLY a day from it means every
+    # reading is more than a day old: >= here is the strict "more than a day" of each reading.
+    old = {d: n for d, n in under.items() if (now - d).total_seconds() >= STALE_LINE_SECS}
+    if not old:
+        return ""
+    oldest, newest = min(under), max(under)
+    days = int((now - oldest).total_seconds() // 86400)
+    caveat = "" if zoned_all else (" Lines without a time zone are counted at the latest time "
+                                   "they could mean, so these ages are minimums.")
+    return (f"[dated lines shown here run from {written[oldest]} to {written[newest]}; "
+            f"{sum(old.values())} of {sum(under.values())} dated lines are more than a day old "
+            f"(the oldest at least {days} day{'s' if days != 1 else ''} ago).{caveat} A dated line "
+            f"says what was true on its date; appending to a file does not make its older lines "
+            f"current. For what is up now, the measured lines in your state are from this beat.]\n")
 
 class ReferenceF1aDispatcher:
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
@@ -729,25 +836,43 @@ class ReferenceF1aDispatcher:
             content, end = lines[end][: self.max_read_chars], end + 1
         else:
             content = "".join(lines[start - 1:end])
+        # A READ OF CODE IS WHERE THE VERDICT ON IT IS FORMED. #162 put the parse check on
+        # write and edit receipts only. Measured 2026-09-23 on cbp-being (beat
+        # heartbeat-f4be191ca52d): it read lines 1718-1937 of its script, which showed line
+        # 1721 at column 0 and the lines under it indented four spaces, and concluded "the
+        # file is syntactically valid" -- Python stopped at line 1722 with IndentationError.
+        # Its journal, todo and memory recorded "fix complete and verified", and it told the
+        # seat it had already run the script. Nothing it was shown contradicted the reading.
+        # Again 2026-09-29 11:41Z: it read all 443 lines of a scratch .py in three windows, said
+        # "appears syntactically correct", and asked the seat to run it; the run stopped at line
+        # 135, IndentationError, inside the first window it had been shown (seat thread 4384).
+        dated = dated_lines_note(content)
+        status = _python_status(p).strip()
+        parse = f"\n[{status}]" if status else ""
         if start == 1 and end >= len(lines) and len(content) == len(whole):
             # whole file, nothing withheld. (`end >= len(lines)` alone is not enough: a ONE-line
             # file longer than the window takes the head-only branch above and would return
             # its first max_read_chars with no marker — a silent cut, found by the branch's
             # 74-char test in the 2026-09-22 reconciliation.)
-            return ResultEnvelope(ok=True, result=content, witness_id=self._witness(f"memory_read {p.name}"))
+            # A whole-file read has no end marker, so a bare bracket line after the last line
+            # would read as the file's last line and could be copied into an edit anchor.
+            # Say where the file ends before saying what Python makes of it.
+            whole_note = f"\n[end of file: line {len(lines)} is the last line. {status}]" if status else ""
+            return ResultEnvelope(ok=True, result=dated + content + whole_note,
+                                  witness_id=self._witness(f"memory_read {p.name}"))
         if start == 1 and end >= len(lines):
-            return ResultEnvelope(ok=True, result=content + (
+            return ResultEnvelope(ok=True, result=dated + content + (
                 f"\n[… truncated: this shows the first {len(content)} of {len(whole)} characters of a "
                 f"single line. What you did NOT see is the rest of that line, so absence here is not "
                 f"evidence of absence in the file. Lines were NOT shown beyond this one because there "
-                f"are none.]"), witness_id=self._witness(f"memory_read {p.name} (head)"))
-        head = f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else ""
+                f"are none.]") + parse, witness_id=self._witness(f"memory_read {p.name} (head)"))
+        head = dated + (f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else "")
         tail = (f"\n[… truncated: this shows lines {start}-{end} of {len(lines)} "
                 f"({len(whole)} characters in all). Lines {end + 1}-{len(lines)} were NOT shown, so "
                 f"absence here is not evidence of absence in the file. To read on, call "
                 f"memory_read with path '{shown}' and start_line={end + 1}. …]"
                 if end < len(lines) else f"\n[end of file: line {len(lines)} is the last line.]")
-        return ResultEnvelope(ok=True, result=head + content + tail,
+        return ResultEnvelope(ok=True, result=head + content + tail + parse,
                               witness_id=self._witness(f"memory_read {p.name} (lines {start}-{end})"))
 
     def _do_memory_edit(self, intent: BeingIntent) -> ResultEnvelope:
@@ -1188,7 +1313,9 @@ class ReferenceF1aDispatcher:
 SEAT_OWNED = ("entrustment.md",)
 
 
-SHARED_FORUM = "/ai-workspace/shared-context/forum"
+# Matched as a path SEGMENT, wherever the checkout lives (main #258: shared-context is found beside
+# the SAGE checkout, not assumed under ~/ai-workspace).
+SHARED_FORUM = "/shared-context/forum"
 
 
 def _shared_destination_hint(p) -> str:

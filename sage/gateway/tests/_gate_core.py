@@ -30,3 +30,13 @@ requires_gate_core = pytest.mark.skipif(
     not gate_core_importable(),
     reason="the hestia gate law is not importable here (e.g. inside a sandboxed check); "
            "run outside the sandbox to exercise this")
+
+
+def standalone_skip_reason(fn):
+    """For a plain-script runner (`python test_x.py`), which pytest marks never reach: the reason
+    `fn` must be skipped here, or None. GPT on #266: the script mode should SAY the gate core is
+    missing, not report it as a failure."""
+    for m in getattr(fn, "pytestmark", []):
+        if m.name == "skipif" and m.args and m.args[0]:
+            return m.kwargs.get("reason", "skipped")
+    return None

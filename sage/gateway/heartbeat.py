@@ -26,6 +26,7 @@ reflect. Same words, same tools, different order; a presentation, not a fork (Le
 """
 from __future__ import annotations
 
+from sage.gateway.fleet_paths import forum_dir as _fleet_forum_dir
 import argparse
 import json
 import os
@@ -209,7 +210,8 @@ CARRIER_WORKTREE_VERBS = ("pr_open", "pr_amend")   # Legion carrier: its worktre
 
 def offered_explore_tools(body_reading: Optional[dict], worktree: Optional[str] = None) -> list:
     """SUPERSEDED by the canonical toolset (sage/gateway/toolset.py, 2026-09-29): every being is
-    offered every verb, and availability is said rather than enacted."""
+    offered every verb, and availability is said rather than enacted. Kept so callers that ask
+    "what is offered here" get the true answer."""
     from sage.gateway.toolset import canonical_toolset
     return canonical_toolset()
 
@@ -235,15 +237,36 @@ REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "say"
 # The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
 # Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
 DP_CHANNEL = "notes/from-dp.md"
-# Nothing on this branch replaced these; they are the inbox, service-measurement,
-# appeals, ask-count and conversation-marking work that landed on main while this
-# branch was building the effector layer.
-SEAT_CHANNEL = "notes/from-the-seat.md"   # (this branch called it SEAT_RELAY)
+# The SEAT's channel, beside dp's. Seat-owned too (reference_f1a.SEAT_OWNED_NOTES), and until
+# 2026-09-16 it was written but never rendered: cbp-claude left measured facts in it for
+# cbp-being and the being never saw them, because the beat only listed the file name among
+# notes/. A channel nothing renders is a channel nobody reads.
+SEAT_CHANNEL = "notes/from-the-seat.md"
+# How much of each letter one beat shows (see letter_view). Both were bare numbers at the call
+# site. LETTER_CUT_ROOM is what the cut's own marker may take OUT of that, not on top of it: the
+# seed is already at the edge of the loop's room (#275).
+SEAT_CHANNEL_CHARS = 3000
+DP_CHANNEL_CHARS = 4000
+LETTER_CUT_ROOM = 300
 # Bounds on the conversations block in the being's state (see own_state).
 CONV_PER_CONV = 6
 CONV_TURN_CHARS = 1200
 
 POSTURE_FILE = Path(__file__).with_name("BEING_POSTURE.md")
+
+
+# What this being is entrusted with, if anything. Seat-owned and unwritable by the being
+# (reference_f1a.SEAT_OWNED): what it was GIVEN must stay separable from what it DECIDED, or the
+# record cannot be read later. The being's own reading of it goes in notes/plan.md.
+#
+# `entrustment`, not `mission`, on dp's correction the day it was written (Legion, 2026-09-07):
+# "this is not a 'task i set' for the being, it is an affordance i entrust it with. because i
+# want it to thrive and grow." A task is owed and graded; an entrustment is room extended.
+# Carried to main from legion/mission-artifact, where only Legion's being could receive one:
+# on main the file was named as untrimmable (fit_seed) but nothing read it.
+ENTRUSTMENT_FILE = "entrustment.md"
+
+
 
 
 def posture() -> str:
@@ -640,6 +663,42 @@ def _read(p: Path, limit: int = 4000) -> str:
         return ""
 
 
+def letter_view(p: Path, limit: int, rel: str) -> str:
+    """A letter written FOR the being, as one beat shows it: whole, or its END with the cut SAID.
+
+    It was `_read(p, limit)`: the last `limit` characters, starting wherever that count fell,
+    and nothing in the window said a cut had happened. Measured on cbp-being, 2026-09-30: 8 of
+    the 75 committed versions of notes/from-the-seat.md were over 3,000 characters, the last
+    three in a row. The 04:24Z letter (3,945) offered two fixes for one file. The being's view of
+    it opened on ` end_line 311, new "".`: fix (a) had lost its first words, "memory_edit
+    start_line 238,", and fix (b) arrived whole. The 05:00Z beat chose (b) and sent no
+    line-range edit. One sample, so the cut is not shown to be the cause; it is shown to be what
+    the being was given.
+
+    Now the shown part starts at the start of a line, the being is told how much is above it,
+    and the read that shows the rest is named. A letter that fits is returned untouched.
+    """
+    try:
+        t = p.read_text(errors="replace")
+    except Exception:
+        return ""
+    if len(t) <= limit:
+        return t
+    tail = t[len(t) - max(limit - LETTER_CUT_ROOM, 0):] if limit > LETTER_CUT_ROOM else ""
+    starts = "the line below is not the letter's first line"
+    if tail and t[len(t) - len(tail) - 1] != "\n":
+        nl = tail.find("\n")
+        if 0 <= nl < len(tail) - 1:
+            tail = tail[nl + 1:]
+        else:
+            # one line longer than the window: there is no line start to move to
+            starts = "the text below starts in the middle of a line"
+    hidden = t[:len(t) - len(tail)]
+    return (f"[This letter is {len(t):,} characters and one beat shows the end of it. The first "
+            f"{len(hidden):,} characters ({hidden.count(chr(10))} lines) are NOT shown here: {starts}. "
+            f"memory_read path \"{rel}\" reads it from the start.]\n" + tail)
+
+
 def _run(cmd: list[str], timeout: int = 30) -> str:
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout
@@ -792,6 +851,8 @@ def _schema_chars_for(offered, unavail: Optional[dict] = None) -> Optional[int]:
         return None
     try:
         if unavail is not None:
+            # the canonical toolset as actually offered: availability shortens what cannot work
+            # here, so the cost is measured on THOSE specs, not on the full descriptions
             from sage.gateway import toolset
             names = set(offered)
             return len(json.dumps([t for t in toolset.specs(unavail) if t["function"]["name"] in names]))
@@ -1851,7 +1912,21 @@ def settled_turns_for(cfg: Optional[dict]) -> Optional[int]:
     return v if isinstance(v, int) and not isinstance(v, bool) and v >= 1 else None
 
 
-def own_state(instance: Path, entrusted: str = "", member: str = "",
+DECLINE_CLOSINGS = ("standing_only",)
+
+
+def decline_closing_for(cfg: Optional[dict]) -> Optional[str]:
+    """instance.json `decline_closing`: how a seat's request_run decline ends. PER-INSTANCE
+    (RESEARCH_GENERALIZATION_RULE): absent, or any value not in DECLINE_CLOSINGS, means the
+    default closing, which still offers "If you want it run under different conditions, say which
+    and ask again." `"standing_only"` drops that stock door and ends on the standing line, leaving
+    the way forward to the seat's reason. Measured on cbp-being alone (SAGE #289), so it is
+    recorded in every beat record where it is on, and it is nobody else's default."""
+    v = (cfg or {}).get("decline_closing")
+    return v if v in DECLINE_CLOSINGS else None
+
+
+def own_state(instance: Path, member: str = "", entrusted: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
               services: str = "", mark_conversations: bool = True,
@@ -1878,6 +1953,11 @@ def own_state(instance: Path, entrusted: str = "", member: str = "",
         own_state.last_body = _cur
     except Exception as _e:
         own_state.last_body = {"error": f"{type(_e).__name__}: {_e}"}
+    if entrusted:
+        # After the body (the only thing happening NOW) and ahead of every record: what the being
+        # was extended frames how it reads the rest. Carried from legion/mission-artifact.
+        parts.append("## What you are entrusted with (extended to you; you cannot edit this "
+                     "file. Your own reading of it belongs in notes/plan.md)\n" + entrusted)
     # Its files and runs, measured: also NOW, so beside the body and before every record that
     # narrates them (see files_and_runs). Fail-open: a measurement that errors adds nothing.
     try:
@@ -1920,7 +2000,7 @@ def own_state(instance: Path, entrusted: str = "", member: str = "",
     asks = recent_asks_block(instance)
     if asks:
         parts.append("## Your recent asks to peers\n" + asks)
-    from_seat = _read(instance / SEAT_CHANNEL, 3000)
+    from_seat = letter_view(instance / SEAT_CHANNEL, SEAT_CHANNEL_CHARS, SEAT_CHANNEL)
     if from_seat.strip():
         # WHICH seat. This was the literal "cbp-claude" on every being since #100 (2026-09-15), so
         # legion-being, sprout-being and nomad's being were each told, every beat, that CBP's seat
@@ -1931,7 +2011,7 @@ def own_state(instance: Path, entrusted: str = "", member: str = "",
         _seat = seat_name()
         parts.append(f"## From the seat ({_seat}), directly (notes/from-the-seat.md: what the "
                      "seat measured for you. You read this; you do not write it)\n" + from_seat.strip())
-    from_dp = _read(instance / DP_CHANNEL, 4000)
+    from_dp = letter_view(instance / DP_CHANNEL, DP_CHANNEL_CHARS, DP_CHANNEL)
     if from_dp.strip():
         parts.append("## From dp, the operator, directly (notes/from-dp.md: dp's own words, "
                      "not relayed by a seat. You read this; you do not write it)\n" + from_dp.strip())
@@ -2721,6 +2801,16 @@ def _carry(convo: list, res) -> list:
     return out
 
 
+# The running beat's session id, for the end-of-beat report `run` sends (SAGE #291).
+_BEAT_ID: dict = {}
+
+
+def _phase(state: str, phase: str, beat_id: str) -> None:
+    """Report the phase the beat is entering. Never raises (sage.gateway.activity)."""
+    from sage.gateway import activity as _activity
+    _activity.report(state, f"heartbeat:{phase}", beat_id=beat_id, ttl_secs=_activity.BEAT_TTL_S)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="one heartbeat for a SAGE being")
     ap.add_argument("--member", required=True)
@@ -2756,7 +2846,7 @@ def main(argv=None) -> int:
     ap.add_argument("--reflect-steps", type=int, default=3)
     ap.add_argument("--since-hours", type=float, default=None,
                     help="digest window; default: since the last beat, min 1h, max 48h")
-    ap.add_argument("--forum-dir", default=os.path.expanduser("~/ai-workspace/shared-context/forum"))
+    ap.add_argument("--forum-dir", default=str(_fleet_forum_dir()))
     ap.add_argument("--repos", default="SAGE,hestia,web4")
     ap.add_argument("--temperature", type=float, default=0.4)
     ap.add_argument("--max-tokens", type=int, default=3000,
@@ -2816,6 +2906,10 @@ def main(argv=None) -> int:
     from sage.gateway.being_tool_loop import run_ollama_tool_turn, _sent_budget
     workspace = str(Path(__file__).resolve().parents[2])
     host_session_id = f"heartbeat-{uuid.uuid4().hex[:12]}"
+    # The beat has begun: wake, before anything below reads the daemon's /status into the
+    # being's own body block (SAGE #291).
+    _BEAT_ID["id"] = host_session_id
+    _phase("wake", "start", host_session_id)
     client, llm = build_client(args.member, instance, args.model, workspace, args.forum_dir,
                                host_session_id, args.temperature, args.max_tokens,
                                gate_only=args.gate_only)
@@ -3003,7 +3097,7 @@ def main(argv=None) -> int:
 
     def _build_state(per_conv, turn_chars):
         return ("# Your own state\n\n"
-                + own_state(instance, entrusted, args.member, per_conv=per_conv,
+                + own_state(instance, args.member, entrusted, per_conv=per_conv,
                             turn_chars=turn_chars, services=_services, mark_conversations=False,
                             settled_turns=_settled_turns, body_reading=_body_cur) + _scope_tail)
     # The conversations step down only when the rest cannot fit with digest and recall at
@@ -3113,6 +3207,7 @@ def main(argv=None) -> int:
             from sage.gateway import conversations as _c
             return _c.drain_new_for(instance, args.member)
 
+        _phase("wake", "explore", host_session_id)
         explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
                                        tools=_explore_specs, on_generate=_on_generate("explore"),
                                        deadline=explore_deadline, interject=_interject)
@@ -3120,6 +3215,7 @@ def main(argv=None) -> int:
         after = None
         if posture_turn is not None:
             convo.append({"role": "user", "content": posture_turn})
+            _phase("wake", "posture", host_session_id)
             after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
                                          tools=_explore_specs, on_generate=_on_generate("posture"),
                                          deadline=explore_deadline, interject=_interject)
@@ -3129,6 +3225,7 @@ def main(argv=None) -> int:
         # ask carries the whole explore(+posture) conversation and is usually the beat's
         # largest prompt, and until 2026-09-13 it was invisible to the window census.
         account = {"present": False, "sha256": None, "reply": "", "generates": []}
+        _phase("wake", "account", host_session_id)
         try:
             ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
                        [{"role": "user", "content": ACCOUNT_ASK}]
@@ -3183,6 +3280,8 @@ def main(argv=None) -> int:
         # and showing the being a question with no room to answer it is worse than not
         # showing it (measured 2026-09-18, the first beat after it could finally see one).
         _reflect_steps = args.reflect_steps + (1 if say_first else 0)
+        # The beat's wrap-up: reflection, and the answer turn after it (SAGE #291).
+        _phase("wrap-up", "reflect", host_session_id)
         reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
                                        tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
         # The answer turn (main, SAGE #126): only when someone is still waiting and the being
@@ -3193,6 +3292,7 @@ def main(argv=None) -> int:
         # the being its own unrelated words to send (main #147, 2026-09-21 06:31Z). The
         # expectation is read from the selection made BEFORE reflection, never re-scanned.
         if selected is not None and selected.expects_reply and not _said_in(reflect):
+            _phase("wrap-up", "answer", host_session_id)
             if answer_turn_mode(instance) == "json":
                 # Opt-in (instance.json "answer_turn": "json"). The selected turn and the ask; the
                 # beat's acts only for a seat's question when the beat acted (answer_turn_json).
@@ -3323,6 +3423,9 @@ def main(argv=None) -> int:
         "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "t0": t0, "elapsed_s": round(time.time() - t0, 1),
         **({"killed": killed} if killed else {}),
         "member": args.member, "model": args.model, "window_h": round(hours, 2), "clock": _clock,
+        # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
+        "conversation_settled_turns": _settled_turns,
+        "decline_closing": decline_closing_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         # the window and budget actually sent, so a beat is verifiable from this file alone
         # (beat 46's 8192 wall was reconstructed from stderr; Sprout's review of SAGE #40)
@@ -3528,6 +3631,70 @@ def _fill_headroom(cfg: dict, partial: Path, host_session_id: str) -> dict:
         cfg["headroom_tokens"] = ctx - (best + _ANSWER_RESERVE)
         cfg["context_overcommitted"] = cfg["headroom_tokens"] < 0
     return cfg
+def interpret_timer_state(show_output: str, *, unit_state: str = "") -> tuple:
+    """(armed, detail) from `systemctl show` of the idle timer. Pure, so it can be tested.
+
+    THE SUBTLETY THAT MADE THE FIRST VERSION CRY WOLF. This check runs at the end of a beat,
+    from inside the beat's own process — so the beat unit is still ACTIVE. An
+    OnUnitInactiveSec timer computes its next elapse from when that unit goes INACTIVE, and
+    therefore cannot have one yet. The first version read `monotonic=infinity`, concluded
+    NOTHING WILL WAKE THE BEING, and wrote that into the record of a beat whose timer armed
+    correctly seconds later (2026-09-09T15:07Z). False by construction, which is the same
+    error as a discriminator that is true by construction — and a guard that fires on its own
+    design teaches its reader to ignore it.
+
+    An active timer alone is not that evidence. Verify its target and, when no elapse is
+    computed, both the inactivity directive and the target service's running state.
+    This is a scheduling observation, not proof that a future beat will execute."""
+    vals = dict(l.split("=", 1) for l in show_output.strip().splitlines() if "=" in l)
+    real = (vals.get("NextElapseUSecRealtime") or "").strip()
+    mono = (vals.get("NextElapseUSecMonotonic") or "").strip()
+    load = (vals.get("LoadState") or "").strip()
+    active = (vals.get("ActiveState") or "").strip()
+    target_ok = IDLE_UNIT in vals.get("Triggers", "").split()
+    healthy = load == "loaded" and active == "active" and target_ok
+    absent = ("", "infinity", "0", "n/a", "[not set]")
+    if healthy and (real.lower() not in absent or mono.lower() not in absent):
+        return True, f"scheduled: realtime={real or '-'} monotonic={mono or '-'}"
+    # TimersMonotonic can occur on multiple lines (boot + inactivity); do not collapse
+    # it into the property dict. Match the interval, not the following next_elapse.
+    intervals = re.findall(r"OnUnitInactiveUSec=([^;}\n]+)", show_output)
+    has_inactivity_timer = any(re.search(r"[1-9]", interval) for interval in intervals)
+    if healthy and has_inactivity_timer and unit_state in ("active", "activating"):
+        return True, ("no elapse computed yet; verified OnUnitInactiveSec for the running "
+                      f"target {IDLE_UNIT} (state={unit_state}); expected to arm on deactivation")
+    return False, (f"idle wake not confirmed: timer/target not healthy or scheduling basis absent "
+                   f"(LoadState={load or '?'} ActiveState={active or '?'} "
+                   f"target_matches={target_ok} inactivity_timer={has_inactivity_timer} "
+                   f"unit_state={unit_state or '?'} "
+                   f"realtime={real or 'empty'} monotonic={mono or 'empty'})")
+
+
+def next_wake_is_armed() -> tuple:
+    """(armed, detail) for the idle timer that wakes the being after quiet.
+
+    With OnUnitInactiveSec, the next elapse may await this beat's completion. Other
+    configurations need an actual scheduled elapse. Verify the installed configuration,
+    not the example or our own intended design. Called at beat end only when opted in;
+    this observation cannot guarantee future execution or detect a later service failure."""
+    try:
+        timer = subprocess.run(["systemctl", "--user", "show", IDLE_TIMER,
+                              "-p", "NextElapseUSecRealtime", "-p", "NextElapseUSecMonotonic",
+                              "-p", "LoadState", "-p", "ActiveState",
+                              "-p", "TimersMonotonic", "-p", "Triggers"],
+                             capture_output=True, text=True, timeout=15)
+        if timer.returncode != 0:
+            return False, f"could not inspect idle timer: systemctl exit {timer.returncode}"
+        scheduled = interpret_timer_state(timer.stdout)
+        if scheduled[0]:
+            return scheduled  # A concrete deadline needs no pending-deactivation inference.
+        unit = subprocess.run(["systemctl", "--user", "show", IDLE_UNIT,
+                               "-p", "ActiveState", "--value"],
+                              capture_output=True, text=True, timeout=15)
+    except Exception as e:
+        return False, f"could not ask systemd: {type(e).__name__}: {e}"
+    return interpret_timer_state(timer.stdout,
+                                 unit_state=unit.stdout.strip() if unit.returncode == 0 else "")
 
 
 def arm_next_wake(idle_s: int) -> dict:
@@ -3553,7 +3720,7 @@ def arm_next_wake(idle_s: int) -> dict:
     except Exception as e:
         return {"armed": False, "by": None, "detail": detail,
                 "error": f"{type(e).__name__}: {e}",
-                "why": "NOTHING WILL WAKE THE BEING until a seat or a message does"}
+                "why": "idle wake not confirmed and fallback failed; other wake sources may still fire"}
 
 
 def arm_resume_wake(seconds: int) -> dict:
@@ -3650,7 +3817,12 @@ def harness_revision(workspace: str) -> dict:
 
     def _git(*a):
         try:
-            r = subprocess.run(("git", *a), cwd=workspace, text=True, capture_output=True, timeout=15)
+            # --no-optional-locks: status and diff otherwise take .git/index.lock to refresh the
+            # index as a side effect. When the timeout below kills git mid-refresh, the lock is
+            # left behind and every later git act in this checkout fails until a human removes it.
+            # Measured on nomad 2026-09-28 00:23 and 2026-09-29 18:18: both locks were left by a
+            # beat whose harness_revision overlapped the raising session on a 9p (/mnt/c) checkout.
+            r = subprocess.run(("git", "--no-optional-locks", *a), cwd=workspace, text=True, capture_output=True, timeout=15)
             return r.stdout.strip() if r.returncode == 0 else None
         except Exception:
             return None
@@ -3735,7 +3907,7 @@ def _dirty_digest(workspace: str):
     import subprocess
     spec = ("--", ".", ":(exclude)sage/instances")
     try:
-        d = subprocess.run(("git", "diff", "HEAD", "--binary", "--no-color", "--no-ext-diff", *spec),
+        d = subprocess.run(("git", "--no-optional-locks", "diff", "HEAD", "--binary", "--no-color", "--no-ext-diff", *spec),
                            cwd=workspace, capture_output=True, timeout=30)
         u = subprocess.run(("git", "ls-files", "--others", "--exclude-standard", "-z", *spec),
                            cwd=workspace, capture_output=True, timeout=30)
@@ -3796,52 +3968,25 @@ def beat_rested(*turns) -> bool:
     return any(t is not None and getattr(t, "rested", None) is not None for t in turns)
 
 
-def interpret_timer_state(show_output: str) -> tuple:
-    """(armed, detail) from `systemctl show` of the idle timer. Pure, so it can be tested.
-
-    THE SUBTLETY THAT MADE THE FIRST VERSION CRY WOLF. This check runs at the end of a beat,
-    from inside the beat's own process — so the beat unit is still ACTIVE. An
-    OnUnitInactiveSec timer computes its next elapse from when that unit goes INACTIVE, and
-    therefore cannot have one yet. The first version read `monotonic=infinity`, concluded
-    NOTHING WILL WAKE THE BEING, and wrote that into the record of a beat whose timer armed
-    correctly seconds later (2026-09-09T15:07Z). False by construction, which is the same
-    error as a discriminator that is true by construction — and a guard that fires on its own
-    design teaches its reader to ignore it.
-
-    So there are two ways to be armed: an elapse already computed, or a timer that is loaded
-    and active and will compute one the moment this process exits."""
-    vals = dict(l.split("=", 1) for l in show_output.strip().splitlines() if "=" in l)
-    real = (vals.get("NextElapseUSecRealtime") or "").strip()
-    mono = (vals.get("NextElapseUSecMonotonic") or "").strip()
-    load = (vals.get("LoadState") or "").strip()
-    active = (vals.get("ActiveState") or "").strip()
-    if real or (mono and mono not in ("infinity", "0")):
-        return True, f"scheduled: realtime={real or '-'} monotonic={mono or '-'}"
-    if load == "loaded" and active == "active":
-        return True, ("no elapse computed yet, which is correct while this beat is still "
-                      f"running: {IDLE_TIMER} is loaded+active and OnUnitInactiveSec arms "
-                      "when this process exits")
-    return False, (f"NO NEXT ELAPSE and the timer is not healthy "
-                   f"(LoadState={load or '?'} ActiveState={active or '?'} "
-                   f"realtime={real or 'empty'} monotonic={mono or 'empty'})")
 
 
-def next_wake_is_armed() -> tuple:
-    """(armed, detail) for the idle timer that wakes the being after quiet.
+def run(argv=None) -> int:
+    """One beat, with the daemon's state display told the truth about it (SAGE #291). This is
+    what `python -m sage.gateway.heartbeat` (the unit's ExecStart) runs.
 
-    The beat is no longer a metronome: the timer measures INACTIVITY, so its next elapse is
-    computed from the end of this beat. That makes it exactly the kind of thing that can
-    stop scheduling without anything looking wrong — which happened on 2026-09-09, when a
-    monotonic timer sat `active (running)` with `Trigger: n/a` and the being would never
-    have woken again. Checked at the end of every beat, out loud."""
+    `main` reports wake as soon as the beat has a session id, before the body block reads
+    `/status`, so the being is not told "rest" in its own beat. It also reports each phase as it
+    enters it: wake for explore/posture/account, wrap-up for reflect/answer. This wrapper owns
+    the END: every exit path, including a return before any phase ran, an exception, or
+    BeatKilled, reports rest. It does so only if something else was reported first.
+    Reporting is best-effort (sage.gateway.activity): a daemon that is down never fails a
+    beat, and slows it by at most the reporter's 0.5 s timeout per report."""
+    from sage.gateway import activity as _activity
     try:
-        out = subprocess.run(["systemctl", "--user", "show", IDLE_TIMER,
-                              "-p", "NextElapseUSecRealtime", "-p", "NextElapseUSecMonotonic",
-                              "-p", "LoadState", "-p", "ActiveState"],
-                             capture_output=True, text=True, timeout=15).stdout
-    except Exception as e:
-        return False, f"could not ask systemd: {type(e).__name__}: {e}"
-    return interpret_timer_state(out)
+        return main(argv)
+    finally:
+        _activity.end("heartbeat:end", beat_id=_BEAT_ID.get("id"))
+
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run())

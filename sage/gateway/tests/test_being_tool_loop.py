@@ -1473,3 +1473,118 @@ class _RecClient:
         from sage.gateway.being_gate_client import ResultEnvelope
         self.calls.append((i.effector, dict(i.args or {})))
         return ResultEnvelope(ok=True, result=f"ok {len(self.calls)}")
+
+
+def _stubbed(n_results, body_len=9000):
+    """A long beat: a seed, then n (assistant, tool) pairs, each result big enough to elide."""
+    msgs = [{"role": "system", "content": "S" * 2000}, {"role": "user", "content": "U" * 6000}]
+    for k in range(n_results):
+        msgs += [{"role": "assistant", "content": f"step {k}"},
+                 {"role": "tool", "content": f"read file_{k}.py lines 1-200\n" + "T" * body_len
+                  + f"\nverdict {k}: 3 passed"}]
+    return msgs
+
+
+class _LLMTight:
+    num_ctx = 16384
+
+
+def _compact_like_the_loop(n_results, root, llm=None, check=None):
+    """THE REAL SHAPE (run_ollama_tool_turn): the messages are rebuilt from the UNCOMPACTED
+    conversation every generate and compacted afresh, so each step re-spills what it elides.
+    Returns the prompt as sent after every step."""
+    from sage.gateway.being_tool_loop import compact_convo
+    full, sent = _stubbed(0), []
+    for m in _stubbed(n_results)[2:]:
+        full.append(m)
+        if m["role"] == "tool":
+            out, _ = compact_convo([dict(x) for x in full], llm or _LLMTight(), spill_root=root)
+            if check:
+                check(len(sent), out)          # at the moment this prompt is SENT
+            sent.append(out)
+    return sent
+
+
+def _named_spills(msgs):
+    from sage.gateway.being_tool_loop import _SPILL_REF
+    return [r for m in msgs for r in _SPILL_REF.findall(m.get("content") or "")]
+
+
+def test_past_forty_results_every_pointer_and_stub_names_a_file_that_exists():
+    """GPT on #274: with the 40-file count cap, a 55-result beat left the oldest collapsed
+    pointer naming a file already pruned -- and, since every step re-spills, every stub's
+    'outlives this beat' was false past 40 too. Every file the prompt names must be readable."""
+    import os, tempfile
+    from sage.gateway.being_tool_loop import _COLLAPSED_SIGIL
+    root = tempfile.mkdtemp(prefix="collapse-55-")
+    sent = _compact_like_the_loop(55, root)
+    assert any(_COLLAPSED_SIGIL in (m.get("content") or "") for m in sent[-1]), "it collapsed"
+    # by AGE, so every file ANY step named is still there at the end of the beat -- which is
+    # what "outlives this beat" promises, for a stub and for a pointer alike
+    for step, prompt in enumerate(sent):
+        for ref in _named_spills(prompt):
+            assert os.path.isfile(os.path.join(root, ref)), f"step {step}: {ref} is gone"
+
+
+def test_the_oldest_stubs_become_pointers_that_keep_first_and_last_line_and_the_file():
+    import os, tempfile
+    from sage.gateway.being_tool_loop import COMPACT_STUBS_KEPT, _COLLAPSED_SIGIL, _ELIDED_SIGIL
+    root = tempfile.mkdtemp(prefix="collapse-shape-")
+    last = _compact_like_the_loop(40, root)[-1]
+    tools = [m["content"] for m in last if m["role"] == "tool"]
+    first_stub = next(i for i, t in enumerate(tools) if _ELIDED_SIGIL in t)
+    assert first_stub > 0 and all(_COLLAPSED_SIGIL in t for t in tools[:first_stub]), "oldest first"
+    assert sum(1 for t in tools if _ELIDED_SIGIL in t) >= COMPACT_STUBS_KEPT, "the newest stay stubs"
+    for k, t in enumerate(tools[:first_stub]):
+        assert f"read file_{k}.py" in t and f"verdict {k}: 3 passed" in t, "first and last line kept"
+        ref = _named_spills([{"content": t}])[0]
+        assert f"verdict {k}: 3 passed" in open(os.path.join(root, ref)).read(), "the file is whole"
+        assert len(t) < 500
+
+
+def test_a_stub_whose_file_is_missing_at_collapse_time_keeps_its_head_and_tail(monkeypatch):
+    """The control GPT asked for: a marker that NAMES a file which is not there must not be
+    collapsed -- the stub is then the only copy of what it kept."""
+    import tempfile
+    from sage.gateway import being_tool_loop as L
+    real = L._spill
+    monkeypatch.setattr(L, "_spill", lambda root, body, step, pinned=None:
+                        (lambda p: (os.remove(os.path.join(root, p)), p)[1] if p else p)(real(root, body, step, pinned)))
+    root = tempfile.mkdtemp(prefix="collapse-gone-")
+    last = _compact_like_the_loop(40, root)[-1]
+    assert not any(L._COLLAPSED_SIGIL in (m.get("content") or "") for m in last)
+    assert sum(1 for m in last if L._ELIDED_SIGIL in (m.get("content") or "")) > L.COMPACT_STUBS_KEPT
+
+
+def test_the_byte_cap_never_deletes_a_file_the_prompt_names(monkeypatch):
+    """The backstop prunes oldest first; a pinned file is skipped even when that leaves the
+    directory over the cap for now. Controlled: a cap far below one beat's spills."""
+    import os, tempfile
+    from sage.gateway import being_tool_loop as L
+    monkeypatch.setattr(L, "COMPACT_SPILL_MAX_BYTES", 20_000)
+    root = tempfile.mkdtemp(prefix="collapse-cap-")
+
+    def every_named_file_exists(step, prompt):
+        for ref in _named_spills(prompt):
+            assert os.path.isfile(os.path.join(root, ref)), f"step {step}: pinned {ref} was pruned"
+    sent = _compact_like_the_loop(45, root, check=every_named_file_exists)
+    written = sum(len(_named_spills(p)) for p in sent)
+    d = os.path.join(root, "scratch", "elided")
+    assert len(os.listdir(d)) < written, "and the cap still prunes what no live prompt names"
+
+
+def test_a_collapse_is_reported_with_the_room_it_freed():
+    import tempfile
+    from sage.gateway.being_tool_loop import compact_convo, _ELIDED_SIGIL
+    root = tempfile.mkdtemp(prefix="collapse-rec-")
+    full = _stubbed(30)
+    out, el = compact_convo([dict(x) for x in full], _LLMTight(), spill_root=root)
+    col = [r for r in el if r.get("collapsed")]
+    assert col and len({r["index"] for r in col}) == len(col), "a result is collapsed once"
+    for r in col:
+        stub = next(e for e in el if e["index"] == r["index"] and not e.get("collapsed"))
+        stub_len = len(full[r["index"]]["content"]) - stub["chars"]    # what the stub was
+        assert stub_len > len(out[r["index"]]["content"])
+        # the stub's length is kept + marker, so chars freed == stub length - pointer length
+        assert r["chars"] > 0 and r["spill"] in out[r["index"]]["content"]
+        assert _ELIDED_SIGIL not in out[r["index"]]["content"]
