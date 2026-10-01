@@ -448,6 +448,69 @@ def asks_about_change(text: str) -> bool:
     return bool(_ASKS_ABOUT_CHANGE.search(text or ""))
 
 
+# THE ANSWER TURN IS IN A CONVERSATION (2026-10-01, SA program E13). With always-listening and
+# answer-the-waking-turn, most spoken exchanges go through the JSON answer turn, which (E1) saw only the
+# pending turn: dp heard "Hi there. I'm Sprout, your SAGE being ... Ready to help you today." and asked
+# whether the being had reset. It had not; its voice had become its most context-free channel. Offline on
+# 5 real exchanges x2: pending only, ~1/10 replies referred to what had actually been said; + the last 8
+# turns across its conversations ~6/10; + one identity line and its own last-stated want ~7/10, answered
+# 10/10. Opt-in: instance.json "answer_context": "conversation".
+ANSWER_CONTEXT_TURNS = 8
+
+
+def answer_context_on(instance) -> bool:
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return instance_config(instance).get("answer_context") == "conversation"
+    except Exception:
+        return False
+
+
+def answer_context_block(instance, member: str, selected, n: int = ANSWER_CONTEXT_TURNS) -> str:
+    """Who the being is (one line) and the conversation just before the turn it is answering, across
+    all its conversations, oldest first, each with how long before. Empty when nothing is readable."""
+    from sage.gateway import conversations as conv
+    instance = Path(instance)
+    parts = []
+    try:
+        ident = (json.loads((instance / "identity.json").read_text()).get("identity") or {})
+        want = ""
+        try:
+            want = str(json.loads((instance / "account.json").read_text()).get("want") or "")[:240]
+        except Exception:
+            pass
+        line = (f"You are {ident.get('name') or member}: {ident.get('session_count')} sessions since "
+                f"{ident.get('created')}, now in your '{ident.get('phase')}' phase.")
+        if want:
+            line += f' At your last beat you said you want: "{want}"'
+        parts.append(line)
+    except Exception:
+        pass
+    turns = []
+    for f in sorted((instance / "conversations").glob("*.jsonl")):
+        try:
+            turns += [dict(t, _cid=f.stem) for t in conv.recent(instance, f.stem, limit=40)]
+        except Exception:
+            continue
+    sel_ts = next((t.get("ts") for t in turns if t["_cid"] == selected.cid
+                   and int(t.get("seq") or -1) == int(selected.seq or -2)), None)
+    if sel_ts:
+        before = sorted([t for t in turns if str(t.get("ts", "")) < sel_ts], key=lambda t: t.get("ts", ""))[-n:]
+        if before:
+            ref = _parse_ts(sel_ts)
+            lines = []
+            for t in before:
+                voice = t.get("from") == "voice"
+                who = "you" if t.get("from") == member else ("a voice in the room" if voice else t.get("from"))
+                how = "said" if voice else ("said aloud in the room" if t["_cid"] == "room"
+                                            else f"wrote in '{t['_cid']}'")
+                when = _parse_ts(t.get("ts"))
+                ago = f"{int((ref - when).total_seconds() // 60)} min earlier, " if ref and when else ""
+                lines.append(f'- {ago}{who} {how}: "{" ".join(str(t.get("text", "")).split())[:240]}"')
+            parts.append("The conversation just before this (oldest first):\n" + "\n".join(lines))
+    return "\n\n".join(parts)
+
+
 def answer_changes_on(instance) -> bool:
     """Opt-in per instance, its own key (cbp-claude on #249): instance.json "answer_changes": true."""
     try:
@@ -608,7 +671,7 @@ def _answer_generate(llm, msgs, schema=None):
 
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
-                     on_generate=None, acts: str = "", changes: str = ""):
+                     on_generate=None, acts: str = "", changes: str = "", context: str = ""):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -619,7 +682,7 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     from sage.gateway.being_tool_loop import ToolTurnResult
     from sage.gateway.being_gate_client import BeingIntent
     ask = ANSWER_ASK_JSON.format(pending=selected.render()) + (SPOKEN_ASK if selected.cid == "room" else "")
-    user = "\n\n".join(p for p in (acts, changes, ask) if p)
+    user = "\n\n".join(p for p in (context, acts, changes, ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
             {"role": "user", "content": user}]
     r, retried = _answer_generate(llm, msgs, answer_schema_for(selected.cid))
@@ -3278,7 +3341,9 @@ def main(argv=None) -> int:
                             if answer_changes_on(instance) and asks_about_change(selected.text) else "")
                 answer = answer_turn_json(client, llm, selected, name=name, machine=machine,
                                           member=args.member, on_generate=_on_generate("answer"),
-                                          acts=_acts, changes=_changes)
+                                          acts=_acts, changes=_changes,
+                                          context=(answer_context_block(instance, args.member, selected)
+                                                   if answer_context_on(instance) else ""))
             else:
                 answer = run_ollama_tool_turn(
                     client, llm,
