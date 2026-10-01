@@ -822,9 +822,15 @@ def _sent_budget(llm) -> Optional[int]:
     return int(v) if v is not None else None
 
 
+ACT_ASK_JSON = ("Choose ONE thing to do now, as one of your tools. Reply as JSON: "
+                '{"act": "<tool name>", "why": "one short sentence"}. When you have done what you want '
+                'this turn, choose "done" and say in "why" what you did.')
+
+
 def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[str, Any]],
                          max_steps: int = 2, tools: Optional[List[dict]] = None,
                          should_yield: Optional[Callable[[], Optional[str]]] = None,
+                         act_form: str = "tools",
                          on_generate: Optional[Callable[[dict], None]] = None) -> ToolTurnResult:
     """Run a gated tool turn using an OllamaIRP-like `llm` exposing
     get_chat_response(messages, tools=...) -> {"content", "tool_calls"}.
@@ -846,6 +852,37 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     # (prompt_eval_count, chars at that prompt) from the last generate the server counted.
     # Compaction is anchored on this, so only the DELTA rides a chars-per-token estimate.
     measured = None
+
+    def _json_act(msgs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """One act as two closed JSON objects (act_form="json"), returned in the native reply's shape.
+
+        Measured 2026-10-01 on sprout-being's REAL explore seed (2B, 30 tools, nothing executed): the
+        native tool-call channel made 0/6 acts (all "[Your complete, well-structured response ...]");
+        choosing the act from an enum and then filling THAT tool's own parameter schema made 6/6
+        well-formed acts. "done" ends the turn in words, as a reply without a call does natively."""
+        names = [t["function"]["name"] for t in tools]
+        spec = {t["function"]["name"]: (t["function"].get("parameters") or {"type": "object"}) for t in tools}
+        ask = {"role": "user", "content": ACT_ASK_JSON}
+        r1 = llm.get_chat_response(msgs + [ask], fmt={
+            "type": "object", "required": ["act", "why"],
+            "properties": {"act": {"type": "string", "enum": names + ["done"]}, "why": {"type": "string"}}})
+        c1 = r1.get("content", "") or ""
+        try:
+            j = json.loads(c1)
+        except Exception:
+            return {"content": c1, "tool_calls": [], "raw": r1.get("raw")}
+        act, why = j.get("act"), str(j.get("why") or "")
+        if act not in spec:
+            return {"content": why or c1, "tool_calls": [], "raw": r1.get("raw")}
+        r2 = llm.get_chat_response(msgs + [ask, {"role": "assistant", "content": c1},
+                                          {"role": "user", "content": f"Now the arguments for {act}, as JSON."}],
+                                   fmt=spec[act])
+        try:
+            args = json.loads(r2.get("content", "") or "")
+        except Exception:
+            args = {}
+        return {"content": why, "tool_calls": [{"function": {"name": act, "arguments": args if isinstance(args, dict) else {}}}],
+                "raw": r2.get("raw") or r1.get("raw")}
 
     def generate(convo: List[Dict[str, Any]]) -> Dict[str, Any]:
         nonlocal measured
@@ -887,7 +924,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                               "chars": sum(e["chars"] for e in _elided)})
         retried = 0
         sent = _sent_budget(llm)          # the num_predict of the reply that stands
-        resp = llm.get_chat_response(msgs, tools=tools)
+        resp = _json_act(msgs) if act_form == "json" else llm.get_chat_response(msgs, tools=tools)
         content = resp.get("content", "") or ""
         calls = resp.get("tool_calls", []) or []
         if content.startswith("[OllamaIRP:") and not calls:
