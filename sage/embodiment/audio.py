@@ -147,7 +147,17 @@ class Hearing(threading.Thread):
                 "baseline": round(self.baseline, 3),
                 "ok": live, "trust": 1.0 if live else 0.0,
                 "listening": bool(self._win.get("listening")),
-                "words": self.transcriber.status}
+                "words": self.transcriber.status, **self._ear(live)}
+
+    def _ear(self, live: bool) -> dict:
+        """The ear's state as a fact with its cause, and the transition logged (listening.note_ear)."""
+        try:
+            hearing, reason, key = self._listening.ear_state(live, self.transcriber.status,
+                                                             self._listening.window())
+            self._listening.note_ear(hearing, reason, key)
+            return {"hearing": hearing, "ear": reason, "ear_key": key}
+        except Exception:
+            return {}
 
     def stop(self):
         self.running = False
