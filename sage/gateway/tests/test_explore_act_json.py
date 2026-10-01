@@ -111,3 +111,54 @@ def test_the_argument_ask_carries_the_tools_description():
                          tools=tools, act_form="json")
     ask = llm.calls[1]["messages"][-1]["content"]
     assert "Record an event you witnessed." in ask and "not why you chose it" in ask
+
+
+# --- GPT on #311: arguments that fail are not an act; a grounded subset in the JSON form -------------------
+
+PEER = [{"type": "function", "function": {"name": "peer_ask", "description": "Ask a sibling.", "parameters": {
+            "type": "object", "required": ["to", "body"],
+            "properties": {"to": {"type": "string", "enum": ["legion-being", "cbp-being"]}, "body": {"type": "string"}}}}},
+        {"type": "function", "function": {"name": "pr_open", "parameters": {"type": "object", "properties": {}}}}]
+
+
+def test_bad_arguments_get_one_reask_naming_the_problem_then_act():
+    llm = LLM(json.dumps({"act": "peer_ask", "why": "ask legion"}),
+              json.dumps({"to": "legion-being", "body": "Hey [name], how are you?"}),
+              json.dumps({"to": "legion-being", "body": "How did your last beat go?"}),
+              json.dumps({"act": "done", "why": "asked"}))
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "beat"}],
+                             max_steps=3, tools=PEER, act_form="json")
+    assert "placeholder" in llm.calls[2]["messages"][-1]["content"], "the re-ask says what was wrong"
+    assert r.trace and r.trace[0][0].args == {"to": "legion-being", "body": "How did your last beat go?"}
+    assert not r.json_arg_failures
+
+
+def test_two_failures_end_the_step_with_no_act_never_empty_arguments():
+    llm = LLM(json.dumps({"act": "peer_ask", "why": "ask"}), "not json", json.dumps({"to": "me", "body": "hi"}))
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "beat"}],
+                             max_steps=1, tools=PEER, act_form="json")
+    assert not r.trace, "no intent was dispatched"
+    assert r.json_arg_failures and "must be one of" in r.json_arg_failures[0]["problem"]
+    assert "Nothing was done" in r.reply
+
+
+def test_the_json_form_offers_only_the_grounded_subset():
+    from sage.gateway.being_tool_loop import JSON_ACT_EXCLUDE
+    llm = LLM(json.dumps({"act": "done", "why": "ok"}))
+    run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "beat"}], tools=PEER, act_form="json")
+    assert llm.calls[0]["fmt"]["properties"]["act"]["enum"] == ["peer_ask", "done"]
+    assert {"pr_open", "patch_apply", "channel_egress", "mesh", "request_scope"} <= JSON_ACT_EXCLUDE
+
+
+def test_check_args():
+    from sage.gateway.being_tool_loop import _check_args
+    sch = PEER[0]["function"]["parameters"]
+    assert _check_args('{"to": "cbp-being", "body": "hi"}', sch) == ({"to": "cbp-being", "body": "hi"}, None)
+    assert "required" in _check_args('{"to": "cbp-being", "body": ""}', sch)[1]
+    assert "placeholder" in _check_args('{"to": "cbp-being", "body": "[topic]"}', sch)[1]
+    assert "JSON" in _check_args("nope", sch)[1]
+
+
+def test_say_is_closed_over_writable_conversations_in_the_beat():
+    src = Path(hb.__file__).read_text()
+    assert '_enums[("say", "to")] = _writable' in src and '"kind": "json_arg_failure"' in src

@@ -43,6 +43,7 @@ class ToolTurnResult:
     stay_awake: Optional[str] = None                       # the being asked for another beat right after this one; its reason
     looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
     yielded: Optional[str] = None                          # the harness ended the turn for a higher-priority event: what
+    json_arg_failures: List[dict] = field(default_factory=list)  # act_form="json": chosen acts whose arguments failed (no act)
 
     @property
     def acted(self) -> bool:
@@ -822,6 +823,34 @@ def _sent_budget(llm) -> Optional[int]:
     return int(v) if v is not None else None
 
 
+# Outward acts whose slots a JSON turn cannot ground in this turn's state (GPT on #311): not offered there.
+JSON_ACT_EXCLUDE = frozenset({"channel_egress", "mesh", "pr_review", "pr_open", "pr_amend", "patch_apply",
+                              "request_scope", "appeal", "request_run", "git_restore"})
+_PLACEHOLDER = re.compile(r"^\s*[\[<{].*[\]>}]\s*$|\[(name|topic|path|id|line[^\]]*)\]|placeholder", re.I)
+
+
+def _check_args(content: str, schema: dict) -> tuple:
+    """(args, None) when the arguments are usable, else (None, what is wrong): parse, required slots present
+    and non-empty, enum membership, and no placeholder text ("[name]", "<path>")."""
+    try:
+        args = json.loads(content)
+    except Exception:
+        return None, "they are not valid JSON"
+    if not isinstance(args, dict):
+        return None, "they are not a JSON object"
+    props = (schema or {}).get("properties") or {}
+    for k in (schema or {}).get("required") or []:
+        if not str(args.get(k, "")).strip():
+            return None, f"'{k}' is required and was empty"
+    for k, v in args.items():
+        allowed = (props.get(k) or {}).get("enum")
+        if allowed and v not in allowed:
+            return None, f"'{k}' must be one of {', '.join(map(str, allowed))}"
+        if isinstance(v, str) and _PLACEHOLDER.search(v):
+            return None, f"'{k}' is a placeholder ({v[:40]!r}), not a real value"
+    return args, None
+
+
 ACT_ASK_JSON = ("Choose ONE thing to do now, as one of your tools. Reply as JSON: "
                 '{"act": "<tool name>", "why": "one short sentence"}. When you have done what you want '
                 'this turn, choose "done" and say in "why" what you did.')
@@ -849,6 +878,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     salvaged: List[dict] = []
     generates: List[dict] = []
     compacted: List[dict] = []
+    json_arg_failures: List[dict] = []     # act_form="json": arguments that could not be formed (no act)
     # (prompt_eval_count, chars at that prompt) from the last generate the server counted.
     # Compaction is anchored on this, so only the DELTA rides a chars-per-token estimate.
     measured = None
@@ -860,8 +890,11 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         native tool-call channel made 0/6 acts (all "[Your complete, well-structured response ...]");
         choosing the act from an enum and then filling THAT tool's own parameter schema made 6/6
         well-formed acts. "done" ends the turn in words, as a reply without a call does natively."""
-        names = [t["function"]["name"] for t in tools]
-        spec = {t["function"]["name"]: (t["function"].get("parameters") or {"type": "object"}) for t in tools}
+        # A GROUNDED SUBSET (GPT on #311): an outward act whose slots this turn cannot ground (a repo, a PR,
+        # a patch, a scope path, an egress channel) is not offered in the JSON form; the native form keeps it.
+        offered = [t for t in tools if t["function"]["name"] not in JSON_ACT_EXCLUDE]
+        names = [t["function"]["name"] for t in offered]
+        spec = {t["function"]["name"]: (t["function"].get("parameters") or {"type": "object"}) for t in offered}
         # WHAT IT HAS ALREADY DONE THIS TURN, beside the choice (2026-10-01): told nothing, three of three
         # offline turns ran to the step cap repeating gaze and never chose "done".
         done_so_far = [c["function"]["name"] for m in msgs if m.get("role") == "assistant"
@@ -882,17 +915,28 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # THE ARGUMENTS ARE THE ACT, NOT A NOTE ABOUT IT (2026-10-01): asked only "Now the arguments", a
         # memory_write's content came back as "I am choosing to use memory_write because ..." and check's
         # target as "check". The tool's own description rides with the ask.
-        desc = next((t["function"].get("description") or "" for t in tools if t["function"]["name"] == act), "")
-        r2 = llm.get_chat_response(msgs + [ask, {"role": "assistant", "content": c1},
-                                          {"role": "user", "content": (
-                                              f"{act}: {desc[:600]}\n\nNow the arguments for {act}, as JSON. "
-                                              "Write the actual values the tool needs, not why you chose it.")}],
-                                   fmt=spec[act])
-        try:
-            args = json.loads(r2.get("content", "") or "")
-        except Exception:
-            args = {}
-        return {"content": why, "tool_calls": [{"function": {"name": act, "arguments": args if isinstance(args, dict) else {}}}],
+        desc = next((t["function"].get("description") or "" for t in offered if t["function"]["name"] == act), "")
+        arg_msgs = msgs + [ask, {"role": "assistant", "content": c1},
+                           {"role": "user", "content": (f"{act}: {desc[:600]}\n\nNow the arguments for {act}, as JSON. "
+                                                        "Write the actual values the tool needs, not why you chose it.")}]
+        # ARGUMENTS THAT FAIL ARE NOT AN ACT (GPT on #311): a parse or structural failure gets ONE re-ask
+        # naming what was wrong; a second failure ends the step visibly with no act, never as an intent with
+        # empty arguments whose meaning would depend on each effector's missing-argument behaviour.
+        problem, r2, args = None, None, None
+        for attempt in range(2):
+            if problem:
+                arg_msgs = arg_msgs + [{"role": "assistant", "content": (r2 or {}).get("content", "") or ""},
+                                       {"role": "user", "content": f"Those arguments cannot be used: {problem}. "
+                                                                   f"Give the arguments for {act} again, as JSON."}]
+            r2 = llm.get_chat_response(arg_msgs, fmt=spec[act])
+            args, problem = _check_args(r2.get("content", "") or "", spec[act])
+            if problem is None:
+                break
+        if problem is not None:
+            json_arg_failures.append({"step": len(thoughts), "act": act, "problem": problem})
+            return {"content": f"(I chose {act} but could not form its arguments: {problem}. Nothing was done.)",
+                    "tool_calls": [], "raw": (r2 or {}).get("raw") or r1.get("raw")}
+        return {"content": why, "tool_calls": [{"function": {"name": act, "arguments": args}}],
                 "raw": r2.get("raw") or r1.get("raw")}
 
     def generate(convo: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1058,5 +1102,6 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     # exactly what my first attempt did. Copied here so the intervention is observable in
     # the beat record (GPT review of #82: a list nobody returns is not an instrument).
     result.compacted = list(compacted)
+    result.json_arg_failures = list(json_arg_failures)
 
     return result
