@@ -500,6 +500,12 @@ def answer_context_block(instance, member: str, selected, n: int = ANSWER_CONTEX
                 f"{ident.get('created')}, now in your '{ident.get('phase')}' phase.")
         if want:
             line += f' At your last beat you said you want: "{want}"'
+        try:
+            from sage.gateway import peers as _peers_ctx
+            if (_sib := _peers_ctx.sibling_line(member)):
+                line += " " + _sib
+        except Exception:
+            pass
         parts.append(line)
     except Exception:
         pass
@@ -944,7 +950,7 @@ _SCHEMA_CHARS_PER_VERB = 700   # above the 651 measured, so the bound stays cons
 _SCHEMA_CHARS_FLOOR = 12_000   # at least the 18-verb measurement, for when the verb count is unknown too
 
 
-def _schema_chars_for(offered, unavail: Optional[dict] = None) -> Optional[int]:
+def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[dict] = None) -> Optional[int]:
     """Chars the offered verbs' schemas actually cost. None rather than a guess if it
     cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
     13 verbs to 18. Callers must route None through _schema_chars_fallback, never `or`
@@ -958,7 +964,7 @@ def _schema_chars_for(offered, unavail: Optional[dict] = None) -> Optional[int]:
             # here, so the cost is measured on THOSE specs, not on the full descriptions
             from sage.gateway import toolset
             names = set(offered)
-            return len(json.dumps([t for t in toolset.specs(unavail) if t["function"]["name"] in names]))
+            return len(json.dumps([t for t in toolset.specs(unavail, enums) if t["function"]["name"] in names]))
         from sage.gateway.being_gate_client import ollama_tools
         return len(json.dumps(ollama_tools(list(offered))))
     except Exception:
@@ -3069,6 +3075,13 @@ def main(argv=None) -> int:
     if disp is not None and hasattr(disp, "drain_inbox"):
         env = disp.drain_inbox(peek=True)
         inbox = render_inbox((env.result or {}).get("notices") or []) if env.ok else f"({env.error})"
+    # who could be writing here: its siblings, by the names it uses, beside the inbox their answers reach
+    try:
+        from sage.gateway import peers as _peers_inbox
+        if (_sib := _peers_inbox.sibling_line(args.member)):
+            inbox = _sib + "\n" + inbox
+    except Exception:
+        pass
     # what reach the being holds and has already asked for, so it does not re-file
     scope = "(scope status unavailable)"
     if disp is not None and hasattr(disp, "_call"):
@@ -3194,12 +3207,16 @@ def main(argv=None) -> int:
     # leaving the verb out.
     from sage.gateway import toolset as _toolset
     _unavail = _toolset.unavailable(_body_cur, _wt, instance_config(instance))
-    _explore_specs = _toolset.specs(_unavail)
+    # WHO IT CAN REACH (peer-to-peer P2, 2026-10-01): peer_ask's `to` is closed over real names
+    from sage.gateway import peers as _peers
+    _reach = _peers.reachable(args.member)
+    _enums = {("peer_ask", "to"): _reach} if _reach else None
+    _explore_specs = _toolset.specs(_unavail, _enums)
     # the names are DERIVED from the specs offered, never kept beside them: the seed's tool list
     # and the window's schema measurement must describe exactly what the model is handed
     _explore_tools = [t["function"]["name"] for t in _explore_specs]
     entrusted = entrustment(instance)
-    _schema_measured = _schema_chars_for(_explore_tools, _unavail)
+    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums)
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
     _state_head = f"# Your own state\n\n"
