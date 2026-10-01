@@ -6,7 +6,9 @@
 # the daemon so the being notices near-real-time. Rate-limited (cooldown, hourly
 # cap) so a sustained moment wakes it once.
 #
-# INSTALL: same marker substitution as cortex.service.template.
+# INSTALL: same marker substitution as cortex.service.template, plus @INSTANCE@ = the being's home
+# (e.g. -e "s|@INSTANCE@|$PWD/sage/instances/sprout-being|"). Presence writes heard words into that
+# home's `room` conversation as they arrive; without it they reach the room only at the next beat.
 ################################################################################
 [Unit]
 Description=@MACHINE@ presence — resident feeder; genuinely salient moments wake the being to notice near-real-time
@@ -24,6 +26,7 @@ WorkingDirectory=@ROOT@
 StandardOutput=append:@ROOT@/@MACHINE@-presence.log
 StandardError=append:@ROOT@/@MACHINE@-presence.log
 Environment=SAGE_MACHINE=@MACHINE@
+Environment=SAGE_INSTANCE=@INSTANCE@
 ExecStart=@VENV@/bin/python -m sage.embodiment.presence
 Restart=on-failure
 RestartSec=15

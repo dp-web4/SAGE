@@ -116,6 +116,10 @@ def _request_beat(kind: str, descriptor: str, salience=None, key=None) -> dict:
 class Presence:
     def __init__(self):
         self.heard_seen = self._heard_size()   # start at the end: old words never wake anything
+        if not os.environ.get("SAGE_INSTANCE"):
+            # Say it where the operator looks, once: the fail-open path is otherwise invisible.
+            print("[presence] SAGE_INSTANCE is not set: heard words wake the being but reach the room "
+                  "only at the next beat (set @INSTANCE@ in presence.service.template)", flush=True)
         self.last_key = ""                     # the last sense event: a persisting one is the same moment
         self._since_trim = 0
 

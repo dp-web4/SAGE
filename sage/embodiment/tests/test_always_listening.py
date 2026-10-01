@@ -67,6 +67,13 @@ def test_presence_writes_heard_words_into_the_room_as_they_arrive_once_each(monk
     assert turns[0]["via"] == "voice" and turns[0].get("heard_id")
 
 
+def test_the_presence_unit_binds_the_being_home():
+    """GPT on #309: the code path is a no-op unless the deployment supplies SAGE_INSTANCE."""
+    tpl = (Path(__file__).resolve().parents[1] / "systemd" / "presence.service.template").read_text()
+    assert "Environment=SAGE_INSTANCE=@INSTANCE@" in tpl
+    assert "@INSTANCE@" in tpl.split("[Unit]")[0], "the install note names the marker"
+
+
 def test_presence_without_a_home_writes_nothing_and_does_not_raise(monkeypatch):
     from sage.embodiment.presence import Presence
     monkeypatch.delenv("SAGE_INSTANCE", raising=False)
