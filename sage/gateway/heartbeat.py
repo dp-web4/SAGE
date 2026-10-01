@@ -2109,9 +2109,9 @@ class SelectedTurn:
     frozen when rendered. Anything that arrives mid-beat waits for the next beat; it must never
     change who an already-rendered context is addressed to.
     """
-    __slots__ = ("cid", "seq", "speaker", "text", "asks", "answers_ask", "expects_reply")
+    __slots__ = ("cid", "seq", "speaker", "text", "asks", "answers_ask", "expects_reply", "woke")
 
-    def __init__(self, cid: str, turn: dict, answers_ask: bool = False):
+    def __init__(self, cid: str, turn: dict, answers_ask: bool = False, woke: bool = False):
         self.cid = cid
         self.seq = int(turn.get("seq") or 0)
         self.speaker = turn.get("from")
@@ -2119,7 +2119,13 @@ class SelectedTurn:
         self.asks = turn_expects_reply(self.text)
         self.answers_ask = bool(answers_ask)
         # The answer-phase gate. Deliberately NOT `asks or answers_ask`: see answers_the_being.
-        self.expects_reply = self.asks
+        self.expects_reply = self.asks or woke
+        # A PERSON'S TURN THAT WOKE THE BEAT IS OFFERED AN ANSWER, question or not (2026-09-30, SA
+        # program E6/E7). dp's text woke two beats that evening and neither replied: one spent the answer
+        # turn on another conversation's older question, the other had none because dp's turn was a
+        # statement. Offline on dp's six most recent statements, offered the JSON answer turn the being
+        # replied 11/12 and chose silence 1/12, 0 echoes; silence stays a real choice.
+        self.woke = woke
 
     def render(self) -> str:
         """Only THIS turn — for the answer phase, which sends to exactly one conversation. It
@@ -2164,7 +2170,37 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
     return pending_selection(instance, member)[:4]
 
 
-def pending_selection(instance: Path, member: str) -> tuple:
+def answer_woke_on(instance) -> bool:
+    """Opt-in per instance, its own key: instance.json "answer_woke": true."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return bool(instance_config(instance).get("answer_woke"))
+    except Exception:
+        return False
+
+
+def person_turns_that_woke(events) -> list:
+    """[(conversation id, seq or None)] for the person turns among a beat's claimed wake events:
+    `turn:<cid>:<seq>` (a turn that arrived mid-beat), "... spoke in conversation '<cid>'" (the
+    daemon's dp_turn), and `heard` (a voice, so the room; the newest voice turn there)."""
+    out = []
+    for e in events or []:
+        kind, key, desc = str(e.get("kind") or ""), str(e.get("key") or ""), str(e.get("descriptor") or "")
+        if kind not in ("dp_turn", "heard"):
+            continue
+        m = re.match(r"turn:([a-z0-9-]+):(\d+)$", key)
+        if m:
+            out.append((m.group(1), int(m.group(2))))
+            continue
+        m = re.search(r"conversation '([a-z0-9-]+)'", desc)
+        if m:
+            out.append((m.group(1), None))
+        elif kind == "heard":
+            out.append(("room", None))
+    return out
+
+
+def pending_selection(instance: Path, member: str, woke: Optional[list] = None) -> tuple:
     """(say_line, pending_block, say_first, target, selected) for the reflect turn: what is
     waiting on the being, the instruction naming who to answer, and the ONE turn selected to be
     answered (a SelectedTurn, or None). All five come from a single scan, so the answer phase
@@ -2214,6 +2250,15 @@ def pending_selection(instance: Path, member: str) -> tuple:
             # leaves `pend`, so the next beat reaches the older one; nothing is starved.
             asking = [ct for ct in pend if turn_expects_reply(ct[1].get("text"))]
             cid, t = (asking or pend)[-1]
+            # The turn that WOKE this beat comes first, ahead of the newest question elsewhere: the
+            # being was woken to answer it (SelectedTurn.woke).
+            woke_hit = False
+            for wcid, wseq in (woke or []):
+                hits = [ct for ct in pend if ct[0] == wcid and ct[1].get("from") != member
+                        and (wseq is None or int(ct[1].get("seq") or 0) == wseq)]
+                if hits:
+                    cid, t = hits[-1]
+                    woke_hit = True
             # FIRST in the list, not appended after the bookkeeping. The routine three
             # (journal, todo, remember) fill the step budget exactly, so anything after them
             # is unreachable however willing the being is — measured 2026-09-18.
@@ -2227,8 +2272,13 @@ def pending_selection(instance: Path, member: str) -> tuple:
             # back to dp (91% verbatim). Before `say` refused placeholders the same slot was
             # filled with ".." (seq 52, 56, 58). A turn that asks nothing is not a debt.
             who = t.get("from")
-            sel = SelectedTurn(cid, t, answers_the_being(instance, cid, member, t))
-            if sel.expects_reply:
+            sel = SelectedTurn(cid, t, answers_the_being(instance, cid, member, t), woke=woke_hit)
+            if sel.woke and not sel.asks:
+                first = (f'FIRST, before the numbered writes below: {who} just wrote to you, and that is '
+                         f'what woke you. If you have something to say back, call say with to set to '
+                         f'{cid} and your message as the text. Replying is not required; the writes '
+                         f'below happen either way.\n')
+            elif sel.expects_reply:
                 first = (f'FIRST, before the numbered writes below: {who} asked you something '
                          f'and has no answer yet. If you have something to say, call say with '
                          f'to set to {cid} and your message as the text. Answering is not '
@@ -3190,7 +3240,8 @@ def main(argv=None) -> int:
         # about, which is not a property anyone chose.
         # ONE selection for the whole beat (see SelectedTurn): the reflect prompt and the answer
         # phase must act on the same turn, and nothing arriving mid-beat may re-address it.
-        say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member)
+        _woke = person_turns_that_woke(_claimed) if answer_woke_on(instance) else []
+        say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member, _woke)
         # Immediately before the instruction, so the smallest model does not have to hold it
         # across a turn boundary to use it.
         if pending_block:
@@ -3265,6 +3316,7 @@ def main(argv=None) -> int:
         interventions.append({"kind": "act_first", "suppressed": "posture-first presentation (the model narrates under it)"})
     if answer is not None and getattr(answer, "answer_form", None) is not None:
         interventions.append({"kind": "answer_json", "to": selected.cid if selected else None,
+                              "woke_by_turn": bool(selected and selected.woke),
                               **answer.answer_form})
     for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer)):
         if res is None:
