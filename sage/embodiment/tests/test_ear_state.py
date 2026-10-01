@@ -86,3 +86,29 @@ def test_the_cli_mutes_and_unmutes(monkeypatch, capsys):
     assert listening.window(path=p)["muted"]["by"] == "dp"
     listening.main(["on"])
     assert listening.window(path=p)["muted"] is None
+
+
+def test_since_belongs_to_the_cause_shown_not_just_the_state(monkeypatch):
+    """GPT on #313: muted for an hour, then the headset drops: never "not connected since an hour ago"."""
+    log = str(Path(tempfile.mkdtemp(prefix="ear-")) / "ear.jsonl")
+    monkeypatch.setattr(listening, "EAR_LOG", log)
+    monkeypatch.setattr(body, "_heard_since", lambda ts: [])
+    hour_ago = time.time() - 3600
+    listening.note_ear(False, "muted by dp until 07:00", "muted", path=log, now=hour_ago)
+    stamp = time.strftime("%H:%M", time.localtime(hour_ago))
+    muted = body.ear_line(_cur(audio_hearing=False, audio_ear="muted by dp until 07:00", audio_ear_key="muted"), {})
+    assert f"since {stamp}" in muted, "same state, same cause: the logged time is right"
+    inv = {"audio_device": {"name": "AIRHUG 01", "connected": False}}
+    dropped = body.ear_line(_cur(audio_hearing=False, audio_ear="muted by dp until 07:00", audio_ear_key="muted"), inv)
+    assert "headset is not connected" in dropped and f"since {stamp}" not in dropped and " since " not in dropped
+    recog = body.ear_line(_cur(audio_hearing=False, audio_ear="word recognition is not available",
+                               audio_ear_key="recognizer"), {})
+    assert " since " not in recog, "a different cause than the one logged: no since"
+
+
+def test_one_authoritative_line_about_the_ear_when_the_headset_is_gone():
+    cur = _cur(audio_hearing=False, audio_ear="the headset is not connected", audio_ear_key="device")
+    cur["perception"]["descriptor"] = "a still room"
+    txt = body.render(dict(cur, inventory={"audio_device": {"name": "AIRHUG 01", "connected": False},
+                                           "verbs": ["speak"]}), None)
+    assert txt.count("cannot be heard") == 0 and "NOT hearing" in txt and "`speak` is not available" in txt

@@ -155,7 +155,7 @@ class Hearing(threading.Thread):
             hearing, reason, key = self._listening.ear_state(live, self.transcriber.status,
                                                              self._listening.window())
             self._listening.note_ear(hearing, reason, key)
-            return {"hearing": hearing, "ear": reason}
+            return {"hearing": hearing, "ear": reason, "ear_key": key}
         except Exception:
             return {}
 

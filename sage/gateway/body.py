@@ -100,6 +100,7 @@ def perception(now: Optional[float] = None, path: Optional[str] = None) -> Dict:
         "audio_words": (d.get("audio") or {}).get("words"),   # listener status (listening.py)
         "audio_hearing": (d.get("audio") or {}).get("hearing"),   # the ear's state, with its cause
         "audio_ear": (d.get("audio") or {}).get("ear"),
+        "audio_ear_key": (d.get("audio") or {}).get("ear_key"),
         "self_motion": (d.get("proprioception") or {}).get("self_motion"),
         "imu_ok": bool((d.get("proprioception") or {}).get("ok")),
     }
@@ -197,8 +198,9 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
     dev = inv.get("audio_device") or {}
     if dev and not dev.get("connected"):
         lines.append(f"- Your headset {dev.get('name') or 'for voice'} (your speaker and your ear for words) is "
-                     "NOT connected right now, so `speak` is not available and words said to you cannot be "
-                     "heard. You can try to reconnect it with `pair_audio`; it may not succeed if the headset "
+                     "NOT connected right now, so `speak` is not available"
+                     + ("" if ear_known(cur) else " and words said to you cannot be heard")
+                     + ". You can try to reconnect it with `pair_audio`; it may not succeed if the headset "
                      "is off or out of range, and it will say what happened.")
     if "speak" in (inv.get("verbs") or []):
         lines.append("- You can speak aloud with `speak`: your words become a voice in the room, through "
@@ -498,15 +500,18 @@ def ear_line(cur: Dict, inv: Optional[Dict] = None, now: Optional[float] = None)
     if not p.get("live"):
         return ("- Your ear for words: unknown this beat (your senses are not reporting). Silence from it is "
                 "not evidence that nobody spoke.")
-    hearing, reason = bool(p.get("audio_hearing")), str(p.get("audio_ear") or "")
+    hearing, reason, key = bool(p.get("audio_hearing")), str(p.get("audio_ear") or ""), p.get("audio_ear_key")
     if dev and not dev.get("connected"):
-        hearing, reason = False, "the headset is not connected"
+        hearing, reason, key = False, "the headset is not connected", "device"
     try:
         since = _listening().ear_since()
     except Exception:
         since = None
     since_s = (f" since {time.strftime('%H:%M', time.localtime(float(since['ts'])))}"
-               if since and bool(since.get("hearing")) == hearing and since.get("ts") else "")
+               # SINCE BELONGS TO THE CAUSE SHOWN (GPT on #313): an hour muted, then the headset drops, must
+               # not read "headset not connected since an hour ago". Same state AND same cause, or no since.
+               if since and bool(since.get("hearing")) == hearing and key and since.get("key") == key
+               and since.get("ts") else "")
     try:
         last = max([float(h.get("ts", 0)) for h in _heard_since(now - 7 * 86400)] or [0.0])
     except Exception:
