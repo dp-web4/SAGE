@@ -571,14 +571,39 @@ def answer_turn_mode(instance) -> str:
         return "tool"
 
 
-def _answer_generate(llm, msgs):
+# SPOKEN ANSWERS FIT (2026-09-30). An answer to the `room` is spoken, and `speak` takes one utterance
+# of up to 400 characters (body.SPEAK_MAX_CHARS). On Sprout 20:55-23:19Z the JSON answer turn composed
+# replies to the room's voice questions 11 times at 451-2,196 chars; every one was refused and, the turn
+# being single-shot, the being never saw why: 37 minutes of silence while it was answering. Offline on its
+# own model and those exact questions (nothing sent):
+#   C0 today                         2/6 speakable, median 531 chars
+#   S1 "this will be spoken ..."     6/6, median 186, max 396
+#   S2 schema maxLength 400 only     5/6, but cut mid-sentence at 400 and one empty reply
+#   S1 + S2 (shipped)                6/6, median 221, max 291: the cap never reached, a safety net only
+# The prompt does the work; the cap only guarantees the gate is never the thing that says no.
+SPOKEN_ASK = ("\nThis answer will be spoken aloud in the room, so keep it to what you would say out loud: "
+              "one to three sentences, under 400 characters.")
+
+
+def answer_schema_for(cid: str) -> dict:
+    """The JSON answer schema, with `message` capped at speak's limit when the answer is spoken."""
+    if cid != "room":
+        return ANSWER_SCHEMA
+    from sage.gateway import body as _body
+    s = json.loads(json.dumps(ANSWER_SCHEMA))
+    s["properties"]["message"]["maxLength"] = _body.SPEAK_MAX_CHARS
+    return s
+
+
+def _answer_generate(llm, msgs, schema=None):
     """One constrained generate, retried once on the shapes the tool loop also retries: empty
     content (think-only), a length cut, or a transport error. Returns (r, retried)."""
-    r = llm.get_chat_response(msgs, fmt=ANSWER_SCHEMA)
+    schema = schema or ANSWER_SCHEMA
+    r = llm.get_chat_response(msgs, fmt=schema)
     raw = (r or {}).get("raw") or {}
     content = ((r or {}).get("content") or "").strip()
     if not content or raw.get("done_reason") == "length" or content.startswith("[OllamaIRP"):
-        return llm.get_chat_response(msgs, fmt=ANSWER_SCHEMA), 1
+        return llm.get_chat_response(msgs, fmt=schema), 1
     return r, 0
 
 
@@ -593,11 +618,11 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     ("You called no tools this beat") sitting beside a person's question."""
     from sage.gateway.being_tool_loop import ToolTurnResult
     from sage.gateway.being_gate_client import BeingIntent
-    ask = ANSWER_ASK_JSON.format(pending=selected.render())
+    ask = ANSWER_ASK_JSON.format(pending=selected.render()) + (SPOKEN_ASK if selected.cid == "room" else "")
     user = "\n\n".join(p for p in (acts, changes, ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
             {"role": "user", "content": user}]
-    r, retried = _answer_generate(llm, msgs)
+    r, retried = _answer_generate(llm, msgs, answer_schema_for(selected.cid))
     raw = (r or {}).get("raw") or {}
     content = ((r or {}).get("content") or "").strip()
     thinking = ((raw.get("message") or {}).get("thinking") or "").strip()
