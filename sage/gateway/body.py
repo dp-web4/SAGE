@@ -98,6 +98,9 @@ def perception(now: Optional[float] = None, path: Optional[str] = None) -> Dict:
         "audio_ok": bool((d.get("audio") or {}).get("ok")),
         "audio_level": (d.get("audio") or {}).get("level"),
         "audio_words": (d.get("audio") or {}).get("words"),   # listener status (listening.py)
+        "audio_hearing": (d.get("audio") or {}).get("hearing"),   # the ear's state, with its cause
+        "audio_ear": (d.get("audio") or {}).get("ear"),
+        "audio_ear_key": (d.get("audio") or {}).get("ear_key"),
         "self_motion": (d.get("proprioception") or {}).get("self_motion"),
         "imu_ok": bool((d.get("proprioception") or {}).get("ok")),
     }
@@ -195,17 +198,21 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
     dev = inv.get("audio_device") or {}
     if dev and not dev.get("connected"):
         lines.append(f"- Your headset {dev.get('name') or 'for voice'} (your speaker and your ear for words) is "
-                     "NOT connected right now, so `speak` is not available and words said to you cannot be "
-                     "heard. You can try to reconnect it with `pair_audio`; it may not succeed if the headset "
+                     "NOT connected right now, so `speak` is not available"
+                     + ("" if ear_known(cur) else " and words said to you cannot be heard")
+                     + ". You can try to reconnect it with `pair_audio`; it may not succeed if the headset "
                      "is off or out of range, and it will say what happened.")
     if "speak" in (inv.get("verbs") or []):
         lines.append("- You can speak aloud with `speak`: your words become a voice in the room, through "
                      f"{speaker_name(inv)}, which anyone in the room may hear. What you say aloud is your turn in "
                      "the room conversation, and `say` to room is spoken too. Nothing asks you to."
-                     + ((" Words spoken in the room are heard through the mic and added to the room "
+                     + ("" if ear_known(cur) else
+                        (" Words spoken in the room are heard through the mic and added to the room "
                          "conversation as they arrive." if hears_always() else
                          f" For {LISTEN_WINDOW_S // 60} minutes after you speak, words spoken to you through the mic "
                          "are added to the room conversation.") if can_hear_words(cur) else ""))
+    if (ear := ear_line(cur, inv)):
+        lines.append(ear)
     if "gaze" in (inv.get("verbs") or []):
         lines.append("- You can change your gaze with `gaze` (open, avert, dwell, closed) and say why in "
                      "your own words. Your eyes will follow within seconds; you will see the difference "
@@ -467,6 +474,53 @@ def _heard_since(ts: float) -> list:
         return _listening().since(ts)
     except Exception:
         return []
+
+
+def ear_known(cur: Dict) -> bool:
+    """A cortex that reports the ear's state (hearing + cause)."""
+    return ((cur or {}).get("perception") or {}).get("audio_hearing") is not None
+
+
+def _ago(seconds: float) -> str:
+    m = int(seconds // 60)
+    return "just now" if m < 1 else f"{m} min ago" if m < 120 else f"{m // 60} h ago"
+
+
+def ear_line(cur: Dict, inv: Optional[Dict] = None, now: Optional[float] = None) -> str:
+    """ONE line: is the ear hearing words, why not if not, since when, and when words last arrived.
+
+    dp, 2026-10-01: audio may be offline "for any number of reasons - mute, bt disconnect, power off, or
+    just me not being there. that's part of the world and its uncertain nature." So "could not listen" is
+    said as such, with the cause when one is known, and is never presented as "nothing was said"."""
+    now = time.time() if now is None else now
+    p = (cur or {}).get("perception") or {}
+    dev = (inv or {}).get("audio_device") or {}
+    if not ear_known(cur) and not (dev and not dev.get("connected")):
+        return ""
+    if not p.get("live"):
+        return ("- Your ear for words: unknown this beat (your senses are not reporting). Silence from it is "
+                "not evidence that nobody spoke.")
+    hearing, reason, key = bool(p.get("audio_hearing")), str(p.get("audio_ear") or ""), p.get("audio_ear_key")
+    if dev and not dev.get("connected"):
+        hearing, reason, key = False, "the headset is not connected", "device"
+    try:
+        since = _listening().ear_since()
+    except Exception:
+        since = None
+    since_s = (f" since {time.strftime('%H:%M', time.localtime(float(since['ts'])))}"
+               # SINCE BELONGS TO THE CAUSE SHOWN (GPT on #313): an hour muted, then the headset drops, must
+               # not read "headset not connected since an hour ago". Same state AND same cause, or no since.
+               if since and bool(since.get("hearing")) == hearing and key and since.get("key") == key
+               and since.get("ts") else "")
+    try:
+        last = max([float(h.get("ts", 0)) for h in _heard_since(now - 7 * 86400)] or [0.0])
+    except Exception:
+        last = 0.0
+    heard = f"; the last words it heard arrived {_ago(now - last)}" if last else "; it has heard no words yet"
+    if hearing:
+        return f"- Your ear for words is open ({reason}){since_s}{heard}."
+    return (f"- Your ear for words is NOT hearing{since_s}: {reason}{heard}. Silence from it now is not "
+            f"evidence that nobody spoke.")
 
 
 def hears_always() -> bool:
