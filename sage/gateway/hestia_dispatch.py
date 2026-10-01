@@ -491,8 +491,7 @@ class HestiaF1aDispatcher:
     def _address(self, to: str) -> str:
         """`peer/member` routes via the forwarding plane; a bare id stays on this local mesh.
         The being names a member ('legion'); the seat says whether that is local or remote."""
-        to = (to or "").strip()
-        to = self.peer_aliases.get(to, to)
+        to = self.resolve_peer(to)
         if "/" in to or to in self.local_members:
             return to
         return f"{to}/{self.remote_member_default}"
@@ -545,18 +544,50 @@ class HestiaF1aDispatcher:
         roster this seat last read (hub-notify's cache; names compared case-insensitively).
         Empty when no roster is readable — then nothing is refused, since a stale absence
         must not silence the being."""
-        names = {n.lower() for n in self.local_members} | {a.lower() for a in self.peer_aliases}
-        roster = os.path.expanduser(os.environ.get("HUB_MESH_STATE", "~/.local/state/hub-mesh")) + "/members.json"
-        try:
-            m = json.load(open(roster))
-            ms = m.get("members", m) if isinstance(m, dict) else m
-            for x in ms:
-                n = str(x.get("name") or "").strip().lower()
-                if n:
-                    names.add(n)
-        except Exception:
+        roster = self._roster()
+        if not roster:
             return set()
+        names = {n.lower() for n in self.local_members} | {a.lower() for a in self.peer_aliases} | set(roster)
+        # the being-names a sibling is called by, wherever the hub knows it as <machine>-sage
+        names |= {n[:-len("-sage")] + "-being" for n in roster if n.endswith("-sage")}
         return names
+
+    def _roster(self) -> Dict[str, str]:
+        """{lowercased name: name as the roster spells it} from hub-notify's cache; {} if unreadable."""
+        path = os.path.expanduser(os.environ.get("HUB_MESH_STATE", "~/.local/state/hub-mesh")) + "/members.json"
+        try:
+            m = json.load(open(path))
+            ms = m.get("members", m) if isinstance(m, dict) else m
+            return {str(x.get("name")).strip().lower(): str(x.get("name")).strip()
+                    for x in ms if str(x.get("name") or "").strip()}
+        except Exception:
+            return {}
+
+    def resolve_peer(self, to: str) -> str:
+        """The roster name a being's name for a peer reaches, the same before and after a hub rename.
+
+        dp, 2026-10-01: "on hub the beings are 'sprout-SAGE' not 'sprout-being' ... or i could rename them in
+        hub manually." Beings and seats say `<machine>-being`; the hub joined them as `<machine>-sage`, and the
+        mapping lived in per-machine SAGE_PEER_ALIASES, so no sender reached sprout-being (inbox: 0 in 1,430
+        drains). Order: (1) the name as written, if the roster has it (after a rename); (2) an explicit alias,
+        only if its target is still on the roster (a stale alias never wins); (3) `<machine>-being` ->
+        `<machine>-sage` when that member exists. Anything else is returned as written (the alias if one is
+        set), for _unknown_peer to refuse with the list. An unreadable roster keeps the old behavior."""
+        to = (to or "").strip()
+        base, sep, rest = to.partition("/")
+        roster = self._roster()
+        alias = self.peer_aliases.get(base)
+        if not roster:
+            return (alias or base) + sep + rest
+        low = base.lower()
+        if low in roster:
+            return roster[low] + sep + rest
+        if alias and alias.lower() in roster:
+            return roster[alias.lower()] + sep + rest
+        derived = low[:-len("-being")] + "-sage" if low.endswith("-being") else None
+        if derived and derived in roster:
+            return roster[derived] + sep + rest
+        return (alias or base) + sep + rest
 
     def _unknown_peer(self, to: str) -> Optional[str]:
         """The refusal text when `to` names no peer this seat can reach, else None."""
@@ -564,7 +595,7 @@ class HestiaF1aDispatcher:
         if not peers:
             return None
         base = (to or "").split("/", 1)[0].strip().lower()
-        if base in peers:
+        if base in peers or self.resolve_peer(to).split("/", 1)[0].lower() in peers:
             return None
         listed = ", ".join(sorted(p for p in peers if p not in ("dp", "sovereign")))
         # A REFUSAL OWES A WAY FORWARD. Measured 2026-09-16: cbp-being tried peer_ask to
