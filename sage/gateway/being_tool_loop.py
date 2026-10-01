@@ -42,6 +42,7 @@ class ToolTurnResult:
     rested: Optional[str] = None                           # the being ended its own turn with `rest`; its stated reason
     stay_awake: Optional[str] = None                       # the being asked for another beat right after this one; its reason
     looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
+    yielded: Optional[str] = None                          # the harness ended the turn for a higher-priority event: what
 
     @property
     def acted(self) -> bool:
@@ -83,7 +84,8 @@ def _fingerprint(intents) -> Optional[str]:
 
 
 def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
-                  messages: List[Dict[str, Any]], max_steps: int = 3) -> ToolTurnResult:
+                  messages: List[Dict[str, Any]], max_steps: int = 3,
+                  should_yield: Optional[Callable[[], Optional[str]]] = None) -> ToolTurnResult:
     """Run one being turn that may reach for tools, gated end to end.
 
     Loop invariant: the being never sees a fabricated result — each tool message is a
@@ -104,6 +106,16 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     stay_awake = None
 
     for step in range(max_steps):
+        # A YIELD POINT before every generate (the RTOS note's R2): a person speaking to the being
+        # outranks the rest of a routine turn. The harness asks; nothing executed is undone.
+        if should_yield is not None:
+            try:
+                why = should_yield()
+            except Exception:
+                why = None
+            if why:
+                return ToolTurnResult(reply="", trace=trace, steps=step, duplicates=duplicates,
+                                      stay_awake=stay_awake, yielded=str(why))
         out = generate(convo)
         content = out.get("content") or ""
         intents = out.get("intents") or []
@@ -812,6 +824,7 @@ def _sent_budget(llm) -> Optional[int]:
 
 def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[str, Any]],
                          max_steps: int = 2, tools: Optional[List[dict]] = None,
+                         should_yield: Optional[Callable[[], Optional[str]]] = None,
                          on_generate: Optional[Callable[[dict], None]] = None) -> ToolTurnResult:
     """Run a gated tool turn using an OllamaIRP-like `llm` exposing
     get_chat_response(messages, tools=...) -> {"content", "tool_calls"}.
@@ -988,7 +1001,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                              "form": c["_salvaged"]} for c in calls)
         return {"content": content, "intents": parse_tool_calls(calls)}
 
-    result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps)
+    result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps, should_yield=should_yield)
     result.thinking = thoughts
     result.salvaged = salvaged
     result.generates = generates
