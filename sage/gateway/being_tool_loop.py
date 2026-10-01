@@ -565,6 +565,17 @@ def _spill(root: Optional[str], body: str, step: int,
 _SPILL_REF = re.compile(re.escape(COMPACT_SPILL_DIR) + r"/[0-9]{8}-[0-9]{6}-[0-9]{3}-[0-9]{3}\.txt")
 
 
+HEADLINE_KEEP_MAX = 1600   # a headline longer than this is not a headline; it is cut like any body
+_HEADLINE_RE = re.compile(r'^\{"headline": "(?:[^"\\]|\\.)*"')
+
+
+def _headline_prefix_len(body: str) -> int:
+    """Length of a JSON result's leading `"headline"` field (the opening brace through its
+    closing quote), or 0 if the body does not lead with one or it exceeds HEADLINE_KEEP_MAX."""
+    m = _HEADLINE_RE.match(body or "")
+    return m.end() if m and m.end() <= HEADLINE_KEEP_MAX else 0
+
+
 def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
                   measured=None, spill_root: Optional[str] = None) -> tuple:
     """Shrink the OLDEST tool results until the prompt leaves room for an answer.
@@ -634,8 +645,12 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         # output was truncated in my view before the failure line reached me". True, and
         # the harness's doing. Half and half of the same constant; the accounting holds.
         h = COMPACT_KEEP_CHARS // 2
-        kept_head, kept_tail = body[:h], body[-(COMPACT_KEEP_CHARS - h):]
-        elided_n = len(body) - COMPACT_KEEP_CHARS
+        # A RESULT'S HEADLINE IS KEPT WHOLE. A verb that leads with a `headline` (check: the
+        # verdict and, on FAIL, which tests failed and why) has put its answer there; cutting it
+        # at 200 characters kept "FAIL -- 1 failed" and elided the names (legion-being, #272).
+        h = max(h, _headline_prefix_len(body))
+        kept_head, kept_tail = body[:h], body[-(COMPACT_KEEP_CHARS - COMPACT_KEEP_CHARS // 2):]
+        elided_n = len(body) - len(kept_head) - len(kept_tail)
         # THE MARKER USED TO SAY "read the source again", AND THAT INSTRUCTION IS THE
         # THRASH. Measured across all beats 2026-09-13: 86.7% of memory_read calls are
         # re-reads and 48.5% are duplicates within a SINGLE beat; heartbeat.py has been
@@ -655,7 +670,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
                              f"\n[… {elided_n} {_ELIDED_SIGIL} to leave room for your answer. "
                              f"{where} …]\n"
                              + kept_tail)
-        rec = {"index": i, "chars": elided_n, "kept": COMPACT_KEEP_CHARS}
+        rec = {"index": i, "chars": elided_n, "kept": len(kept_head) + len(kept_tail)}
         if saved:
             rec["spill"] = saved
         elided.append(rec)
