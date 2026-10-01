@@ -10,7 +10,7 @@ sys.path.insert(0, "/home/dp/ai-workspace/sage")
 from pathlib import Path
 from sage.gateway import heartbeat as hb
 
-I = Path(sys.argv[3] if len(sys.argv) > 3 else "/home/dp/ai-workspace/sage/sage/instances/sprout-being")  # outputs are private
+I = Path(sys.argv[4] if len(sys.argv) > 4 else "/home/dp/ai-workspace/sage/sage/instances/sprout-being")  # outputs are private
 ME = "sprout-being"
 
 
@@ -34,8 +34,8 @@ for want in TARGETS:
         picks.append(hit[-1])
 
 
-def history(t, n=8):
-    before = [x for x in turns if x["t"] < t["t"]][-n:]
+def history(t, n=8, same_only=False):
+    before = [x for x in turns if x["t"] < t["t"] and (not same_only or x["cid"] == t["cid"])][-n:]
     out = []
     for x in before:
         who = "you" if x["from"] == ME else ("a voice in the room" if x["from"] == "voice" else x["from"])
@@ -52,13 +52,15 @@ SELF = (f"You are sprout: {ident.get('session_count')} sessions since {ident.get
 SYSTEM = hb.ANSWER_SYSTEM.format(name="sprout", machine="sprout", member=ME)
 GENERIC = re.compile(r"ready to help|how can i (help|assist)|i'?m sprout, your sage|helpful assistant|"
                      r"what can i do for you", re.I)
+ARMS = sys.argv[3].split(",") if len(sys.argv) > 3 else ["C0", "H", "HA"]
 out = open(sys.argv[1], "a")
 for rep in range(int(sys.argv[2]) if len(sys.argv) > 2 else 2):
     for t in picks:
         sel = hb.SelectedTurn(t["cid"], t)
         ask = hb.ANSWER_ASK_JSON.format(pending=sel.render()) + (hb.SPOKEN_ASK if t["cid"] == "room" else "")
-        for arm in ("C0", "H", "HA"):
-            user = {"C0": ask, "H": history(t) + "\n\n" + ask, "HA": SELF + "\n\n" + history(t) + "\n\n" + ask}[arm]
+        for arm in ARMS:
+            user = {"C0": ask, "H": history(t) + "\n\n" + ask, "HA": SELF + "\n\n" + history(t) + "\n\n" + ask,
+                    "HS": SELF + "\n\n" + history(t, same_only=True) + "\n\n" + ask}[arm]
             fmt = hb.answer_schema_for(t["cid"])
             p = {"model": "qwen3.8-distill:2b", "stream": False, "think": True, "keep_alive": "5m", "format": fmt,
                  "options": {"num_predict": 6000, "temperature": 0.4, "num_ctx": 16384},

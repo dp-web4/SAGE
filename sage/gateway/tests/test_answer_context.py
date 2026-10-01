@@ -30,8 +30,9 @@ def _home():
     return h, t
 
 
-def test_the_block_says_who_it_is_and_the_conversation_before_the_turn_across_channels():
+def test_the_block_says_who_it_is_and_the_conversation_before_the_turn_across_allowed_channels():
     h, t = _home()
+    (h / "instance.json").write_text(json.dumps({"answer_context_from": {"room": ["dp"]}}))
     sel = hb.SelectedTurn("room", t)
     block = hb.answer_context_block(h, ME, sel)
     assert block.startswith("You are sprout: 715 sessions since 2026-03-06, now in your 'creating' phase.")
@@ -61,3 +62,23 @@ def test_it_rides_ahead_of_the_ask_and_is_opt_in():
 def test_nothing_readable_means_no_block():
     h = Path(tempfile.mkdtemp(prefix="actx-empty-"))
     assert hb.answer_context_block(h, ME, hb.SelectedTurn("dp", {"seq": 1, "from": "dp", "text": "hi"})) == ""
+
+
+def test_a_private_turn_never_reaches_an_answer_to_the_room_by_default():
+    """GPT on #316: a voice in the room is not authenticated; dp's private thread must not condition the
+    answer to it unless the operator explicitly allows that flow for that recipient."""
+    h, t = _home()
+    conv.append(h, "dp", speaker="dp", text="PRIVATE: the door code is 4417", ts="2026-10-01T06:19:00Z",
+                enforce_write=False)
+    block = hb.answer_context_block(h, ME, hb.SelectedTurn("room", t))
+    assert "PRIVATE" not in block and "whirlpool" not in block, "nothing from 'dp' in an answer to 'room'"
+    assert "The room doesn't need words to be real." in block, "the room's own history still rides"
+    assert block.startswith("You are sprout:"), "its own continuity rides every answer"
+
+
+def test_an_allowance_is_per_recipient_and_one_way(tmp_path):
+    h, t = _home()
+    (h / "instance.json").write_text(json.dumps({"answer_context_from": {"dp": ["room"]}}))
+    assert hb.answer_context_sources(h, "dp") == ["dp", "room"]
+    assert hb.answer_context_sources(h, "room") == ["room"], "dp may see the room; the room does not see dp"
+    assert "whirlpool" not in hb.answer_context_block(h, ME, hb.SelectedTurn("room", t))

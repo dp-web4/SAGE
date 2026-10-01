@@ -466,9 +466,26 @@ def answer_context_on(instance) -> bool:
         return False
 
 
+def answer_context_sources(instance, cid: str) -> list:
+    """Which conversations' history may condition an answer to `cid`. THE SELECTED CONVERSATION ONLY,
+    unless instance.json "answer_context_from" lists more FOR THIS RECIPIENT, e.g. {"dp": ["room"]}.
+
+    GPT on #316: history across all conversations crossed an audience boundary. A voice in `room` is not
+    authenticated (room.py), so anyone near the mic could get an answer conditioned on dp's or a seat's
+    private thread; the same holds between authenticated recipients. Recency is not a visibility rule."""
+    extra = []
+    try:
+        from sage.gateway.governed_turn import instance_config
+        extra = list((instance_config(instance).get("answer_context_from") or {}).get(cid) or [])
+    except Exception:
+        pass
+    return [cid] + [c for c in extra if isinstance(c, str) and c and c != cid]
+
+
 def answer_context_block(instance, member: str, selected, n: int = ANSWER_CONTEXT_TURNS) -> str:
-    """Who the being is (one line) and the conversation just before the turn it is answering, across
-    all its conversations, oldest first, each with how long before. Empty when nothing is readable."""
+    """Who the being is (one line: its own continuity) and the conversation just before the turn it is
+    answering, from the conversations answer_context_sources() allows for that recipient, oldest first,
+    each with how long before. Empty when nothing is readable."""
     from sage.gateway import conversations as conv
     instance = Path(instance)
     parts = []
@@ -487,9 +504,11 @@ def answer_context_block(instance, member: str, selected, n: int = ANSWER_CONTEX
     except Exception:
         pass
     turns = []
-    for f in sorted((instance / "conversations").glob("*.jsonl")):
+    for cid in answer_context_sources(instance, selected.cid):
+        if not (instance / "conversations" / f"{cid}.jsonl").exists():
+            continue
         try:
-            turns += [dict(t, _cid=f.stem) for t in conv.recent(instance, f.stem, limit=40)]
+            turns += [dict(t, _cid=cid) for t in conv.recent(instance, cid, limit=40)]
         except Exception:
             continue
     sel_ts = next((t.get("ts") for t in turns if t["_cid"] == selected.cid
