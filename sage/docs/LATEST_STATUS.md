@@ -1,7 +1,7 @@
 # SAGE Current Status
 
-**As of:** 2026-09-26  
-**Snapshot basis:** public `main` through documentation refresh `a8461d5`
+**As of:** 2026-09-27
+**Snapshot basis:** public `main` through `587b401e9`; inheritance research additions on this branch (not deployed)
 
 This is the **current-status landing page**, not a session chronicle. It is intentionally short, dated, and falsifiable. Detailed raising histories, experiment analyses, instance records, PRs/issues, and git history remain the evidence of record.
 
@@ -47,6 +47,8 @@ As of this snapshot, the active edge is less about adding conceptual modules and
 8. **Premise fidelity.** Source-checkable claims about what a being saw, heard, read, or received should remain bound to recoverable evidence before they are promoted into durable facts. The current refinement is relation-first and reconstructible: preserve the explicit source→claim support relation, uncertainty/falsifier where material, and enough provenance that a later substrate can reconstruct why the premise was licensed. Semantic Closure Horizon (SCH) is a useful progressive-evidence research lens; vector similarity/confidence is not a support verdict. See `PREMISE_FIDELITY.md` and `PRD_SOURCE_GROUNDED_PREMISES.md`.
 9. **State-conditioned agency.** Persistent beings may carry endogenous/metabolic state across interactions, including suffering-like, failure-related or self-evaluative states that alter later policy. Phenomenology is treated as a first-class observation under substrate-symmetric evidence standards; neither automatic promotion nor automatic dismissal is acceptable. See `STATE_CONDITIONED_AGENCY.md`.
 10. **External SWE ablation.** `SWE-SAGE` is the private Gemma 4 software-engineering-agent competition workspace. It separates the contribution of post-training, persistent state, source-grounded premises and governed execution on a common task distribution. General findings are promoted into public SAGE deliberately; competition implementation is not live-published.
+
+11. **Inheritance boundaries.** [Analysis](INHERITANCE_WITHOUT_WEIGHT_UPDATES.md) and [PRD](PRD_INHERITANCE_BOUNDARIES.md) extend premise fidelity through handoff/restart: distinguish witnessed history, admitted interpretation and current authority. The [IH-01 synthetic runner](../../research/inheritance/README.md) compares handoff writers and evidence replay, including correction/revocation fixtures. Instrument tests pass; live-model runs, real-path integration and any selection/evolution claim remain pending.
 
 The large `legion/mission-artifact` PR remains a reconciliation/nursery branch; narrow independently reviewable slices continue to be preferred for canonical main.
 

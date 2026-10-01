@@ -106,6 +106,8 @@ Multiple memory paths coexist because they solve different problems:
 
 A recurring lesson from the research is that **lossy summaries can destroy exactly the evidence a later decision needs**, while unstructured verbatim memory alone is too expensive to reason over. The current direction is model-legible external artifacts plus learned policies for when and how to inspect them.
 
+The [inheritance-boundary program](sage/docs/PRD_INHERITANCE_BOUNDARIES.md) extends this to repeated handoffs: preserve source relations, corrections and role scope while keeping authority external to remembered state. Its [IH-01 pilot](research/inheritance/README.md) is executable synthetic instrumentation; live-model benefits and runtime integration remain unmeasured.
+
 ### Tools and effectors
 
 SAGE can invoke tools and dispatch effects through explicit interfaces rather than treating model text as an action. Governance is intended to sit on the action boundary so that capability and authority remain distinct.
