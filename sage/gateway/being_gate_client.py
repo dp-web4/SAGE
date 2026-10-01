@@ -1893,18 +1893,28 @@ _TOOL_SCHEMAS = {
 }
 
 
+# CLOSED VALUE SETS, as enums in the spec (2026-10-01). A slot described in prose ("one of: open, avert,
+# dwell, closed") is free text to a grammar-bound generate: on sprout-being's real explore seed the JSON
+# act form filled gaze's mode with "tool_call" on 21 of 24 gaze acts. The prose stays as the description.
+def _param_enums() -> Dict[tuple, List[str]]:
+    return {("gaze", "mode"): ["open", "avert", "dwell", "closed"], ("git_read", "op"): list(GIT_OPS)}
+
+
 def ollama_tools(only: Optional[List[str]] = None) -> List[dict]:
     """Ollama native-tool specs for the bounded gateway-member registry (nothing else).
     `only` narrows what the being is OFFERED for a task (e.g. a review turn offers
     pr_review + witness); it never widens: a name outside the registry is ignored."""
     out = []
+    enums = _param_enums()
     for name, (desc, props, required) in _TOOL_SCHEMAS.items():
         if only is not None and name not in only:
             continue
         out.append({"type": "function", "function": {
             "name": name, "description": desc,
             "parameters": {"type": "object",
-                           "properties": {k: {"type": "string", "description": v} for k, v in props.items()},
+                           "properties": {k: dict({"type": "string", "description": v},
+                                                  **({"enum": enums[(name, k)]} if (name, k) in enums else {}))
+                                          for k, v in props.items()},
                            "required": required}}})
     return out
 
