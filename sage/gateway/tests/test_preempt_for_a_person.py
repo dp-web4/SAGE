@@ -65,9 +65,13 @@ def test_preemption_is_opt_in(tmp_path):
 
 def test_the_beat_wires_the_yield_and_the_preempted_branch():
     src = Path(hb.__file__).read_text()
-    assert src.count("should_yield=_yield_for_a_person") == 2, "explore and posture"
-    i_pre, i_reflect = src.index("        if preempted:\n"), src.index("reflect = run_ollama_tool_turn(")
-    assert i_pre < i_reflect, "the preempted branch comes before reflection"
+    assert src.count("should_yield=_yield_for_a_person") == 3, "explore, posture and reflection"
+    # GPT on #310: the clock starts before the first claim, and every generate boundary is rechecked
+    assert src.index("_beat_started = time.time()") < src.index("_claimed = _arousal_claim.claim_pending(")
+    assert "p0_since(_beat_started)" in src and "p0_since(t0)" not in src
+    i_acc = src.index("aresp = llm.get_chat_response(ask_msgs)")
+    assert i_acc < src.index('_check_preempt("account")') < src.index('_check_preempt("reflect")')
+    assert src.count("= _take_late()") == 2 and "(preempted or not _said_in(reflect))" in src
     assert 'claim_pending(f"{host_session_id}.preempt")' in src
     assert 'release_claim(f"{host_session_id}.preempt")' in src
     assert '"preempted": preempted,' in src and 'woke["classes"]' in src

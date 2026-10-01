@@ -2941,6 +2941,9 @@ def main(argv=None) -> int:
     _phase("wake", "start", host_session_id)
     # WHAT WOKE THIS BEAT (SAGE #295): claim every pending event now, before anything is composed,
     # so an event arriving from here on is pending for the NEXT beat rather than lost in this one.
+    # THE BEAT STARTS HERE for preemption (GPT on #310): an event that lands after this claim and before
+    # the record's later `t0` is an arrival during this beat, and must count as one.
+    _beat_started = time.time()
     try:
         from sage.gateway import arousal as _arousal_claim
         _claimed = _arousal_claim.claim_pending(host_session_id)
@@ -3214,7 +3217,7 @@ def main(argv=None) -> int:
         _preempt = preempt_on(instance)
 
         def _yield_for_a_person():
-            got = p0_since(t0) if _preempt else []
+            got = p0_since(_beat_started) if _preempt else []
             return got[0].get("descriptor") or got[0].get("kind") if got else None
 
         explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
@@ -3235,10 +3238,33 @@ def main(argv=None) -> int:
         # prompt, and until 2026-09-13 it was invisible to the window census (CBP, 09-12).
         # PREEMPTED FOR A PERSON (R2): someone spoke after this beat began. The account and the
         # reflection wait for the next beat; the answer turn goes to them now.
-        if _preempt and (_why := _yield_for_a_person()):
-            preempted = {"by": _why, "after_s": round(time.time() - t0, 1),
-                         "phase": ("explore" if explore is not None and explore.yielded else
-                                   "posture" if after is not None and after.yielded else "before account")}
+        def _check_preempt(phase: str) -> None:
+            """A PHASE-BOUNDARY INVARIANT (GPT on #310): after every generate that cannot be cancelled,
+            look again before starting lower-priority work."""
+            nonlocal preempted
+            if preempted is None and _preempt and (_why := _yield_for_a_person()):
+                preempted = {"by": _why, "after_s": round(time.time() - _beat_started, 1), "phase": phase}
+
+        def _take_late():
+            """Claim what arrived since the beat began, carry heard words into the room, and select the
+            person who spoke. Exactly once per beat; the beat's original claim is absorbed into this one."""
+            try:
+                from sage.gateway import arousal as _arousal_late
+                _late = _arousal_late.claim_pending(f"{host_session_id}.preempt")
+            except Exception as _e:
+                _late = [{"claim_error": f"{type(_e).__name__}: {_e}"}]
+            preempted["events"] = [e for e in _late if float(e.get("first_ts") or 0) >= _beat_started]
+            try:
+                from sage.gateway import room as _room_late
+                _room_late.ingest_heard(instance, args.member, (_body_cur or {}).get("inventory"))
+            except Exception as _e:
+                preempted["room_error"] = f"{type(_e).__name__}: {_e}"
+            sel = pending_selection(instance, args.member, person_turns_that_woke(preempted["events"]))
+            preempted["selected"] = f"{sel[4].cid}:{sel[4].seq}" if sel[4] is not None else None
+            return sel
+
+        _check_preempt("explore" if explore is not None and explore.yielded else
+                       "posture" if after is not None and after.yielded else "before account")
         _phase("wake", "account", host_session_id)
         try:
             if preempted:
@@ -3264,23 +3290,9 @@ def main(argv=None) -> int:
             convo.append({"role": "assistant", "content": areply or "(no answer)"})
         except Exception as e:
             account["skipped" if preempted else "error"] = (str(e) if preempted else f"{type(e).__name__}: {e}")
+        _check_preempt("account")
         if preempted:
-            # R2: claim what arrived since the beat began, carry heard words into the room, and select
-            # the person who spoke. The beat's original claim is absorbed into this one (claim_pending).
-            try:
-                from sage.gateway import arousal as _arousal_late
-                _late = _arousal_late.claim_pending(f"{host_session_id}.preempt")
-            except Exception as _e:
-                _late = [{"claim_error": f"{type(_e).__name__}: {_e}"}]
-            preempted["events"] = [e for e in _late if float(e.get("first_ts") or 0) >= t0]
-            try:
-                from sage.gateway import room as _room_late
-                _room_late.ingest_heard(instance, args.member, (_body_cur or {}).get("inventory"))
-            except Exception as _e:
-                preempted["room_error"] = f"{type(_e).__name__}: {_e}"
-            say_line, pending_block, say_first, target, selected = pending_selection(
-                instance, args.member, person_turns_that_woke(preempted["events"]))
-            preempted["selected"] = f"{selected.cid}:{selected.seq}" if selected is not None else None
+            say_line, pending_block, say_first, target, selected = _take_late()
         else:
             # Reflect gets its OWN compact context, not the whole beat. Carrying the seed (posture,
             # fleet digest, inbox, scope, recall) into the reflect turn pushed the prompt to 8171 of
@@ -3330,7 +3342,11 @@ def main(argv=None) -> int:
             # The beat's wrap-up: reflection, and the answer turn after it (SAGE #291).
             _phase("wrap-up", "reflect", host_session_id)
             reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
-                                           tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
+                                           tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"),
+                                           should_yield=_yield_for_a_person)
+            _check_preempt("reflect")
+            if preempted:
+                say_line, pending_block, say_first, target, selected = _take_late()
 
         # The answer turn: only when someone is still waiting, the being has not already spoken, AND
         # the waiting turn actually asked something. Without the last condition, a statement that
@@ -3338,7 +3354,8 @@ def main(argv=None) -> int:
         # unrelated words to send — see `_prior_words` and `SelectedTurn`, 2026-09-21 06:31Z. The
         # expectation is read from the selection made BEFORE reflection, never re-scanned.
         answer = None
-        if selected is not None and selected.expects_reply and not _said_in(reflect):
+        # Preempted: the person who spoke is answered even if reflection said something elsewhere.
+        if selected is not None and selected.expects_reply and (preempted or not _said_in(reflect)):
             _phase("wrap-up", "answer", host_session_id)
             if answer_turn_mode(instance) == "json":
                 # Opt-in (instance.json "answer_turn": "json"). The selected turn and the ask; the
