@@ -49,6 +49,10 @@ class Hearing(threading.Thread):
         self.transcriber = _listening.Transcriber(source=SOURCE)
         self._win = {"listening": False, "speaking": False}
         self._win_checked = 0.0
+        try:   # what this ear does, in the body's own file, so the being is told (body.hears_always)
+            _listening.mark(always=_listening.always_listening())
+        except Exception:
+            pass
 
     def _spawn(self) -> bool:
         try:

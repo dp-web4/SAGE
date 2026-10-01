@@ -202,8 +202,10 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
         lines.append("- You can speak aloud with `speak`: your words become a voice in the room, through "
                      f"{speaker_name(inv)}, which anyone in the room may hear. What you say aloud is your turn in "
                      "the room conversation, and `say` to room is spoken too. Nothing asks you to."
-                     + (f" For {LISTEN_WINDOW_S // 60} minutes after you speak, words spoken to you through the mic "
-                        "are added to the room conversation." if can_hear_words(cur) else ""))
+                     + ((" Words spoken in the room are heard through the mic and added to the room "
+                         "conversation as they arrive." if hears_always() else
+                         f" For {LISTEN_WINDOW_S // 60} minutes after you speak, words spoken to you through the mic "
+                         "are added to the room conversation.") if can_hear_words(cur) else ""))
     if "gaze" in (inv.get("verbs") or []):
         lines.append("- You can change your gaze with `gaze` (open, avert, dwell, closed) and say why in "
                      "your own words. Your eyes will follow within seconds; you will see the difference "
@@ -465,6 +467,14 @@ def _heard_since(ts: float) -> list:
         return _listening().since(ts)
     except Exception:
         return []
+
+
+def hears_always() -> bool:
+    """The ear is always open: listen.json "always", which the cortex sets from SAGE_LISTEN=always."""
+    try:
+        return bool(_listening().window().get("always"))
+    except Exception:
+        return False
 
 
 def can_hear_words(cur: Dict) -> bool:

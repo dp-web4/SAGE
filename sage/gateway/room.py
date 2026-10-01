@@ -14,7 +14,9 @@ Its own conversation, because:
 So heard words become turns `from: "voice"`, `via: "voice"`, stamped when they were HEARD; what the
 being says aloud becomes its own turn `via: "speak"`; and `say to: "room"` is spoken, not written,
 so answering aloud is the verb the being already uses. The room exists only on a body that can
-speak (the listening window opens only after speaking, so there is nothing to hear without it).
+speak. By default the mic transcribes only in the minutes after the being speaks; a body with
+SAGE_LISTEN=always hears the room at any time, and presence writes each heard line here as it
+arrives (2026-10-01).
 """
 from __future__ import annotations
 
@@ -38,8 +40,8 @@ def ensure(instance: Path, member: str) -> dict:
     return conv.create(
         Path(instance), ROOM, title="the room: spoken aloud and heard",
         participants=[member, VOICE], writable_by=[member, VOICE],
-        summary=("What you said aloud (speak, or say to room) and what the mic heard in the "
-                 "minutes after. A line from 'voice' is whoever was in the room; it does not say "
+        summary=("What you said aloud (speak, or say to room) and what the mic heard: in the "
+                 "minutes after you speak, or at any time if your ear is always open. A line from 'voice' is whoever was in the room; it does not say "
                  "who unless the words do. Anything you say to room is spoken aloud, not written."))
 
 
