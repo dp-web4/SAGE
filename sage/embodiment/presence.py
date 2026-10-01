@@ -192,6 +192,7 @@ class Presence:
                     except Exception:
                         continue
                     ts, text = h.get("ts"), str(h.get("text", ""))[:80]
+                    self._into_room(h)
                     w = _request_beat("heard", f'heard a voice: "{text}"', salience=1.0,
                                       key=f"heard:{ts}:{text}")
                     woke.append(w)
@@ -203,6 +204,23 @@ class Presence:
                           flush=True)
             self.heard_seen = size
         return woke
+
+    @staticmethod
+    def _into_room(h: dict) -> None:
+        """Heard words enter the room conversation AS THEY ARRIVE, not at the next beat's start.
+        dp 2026-10-01: "any recognized voice input should be logged in the voice chat as it arrives."
+        Needs SAGE_INSTANCE (the being's home). The beat's own ingest stays; the room's heard_id keeps
+        each utterance once, whichever lands first. Fails open: the wake below happens regardless."""
+        inst = os.environ.get("SAGE_INSTANCE")
+        if not inst:
+            return
+        try:
+            from pathlib import Path
+            from sage.gateway import room
+            home = Path(inst)
+            room.ingest_heard(home, os.environ.get("SAGE_MEMBER") or home.name, None, heard=[h])
+        except Exception as e:
+            print(f"[presence] heard words not written to the room: {type(e).__name__}: {e}", flush=True)
 
     def _log(self, ev: dict):
         os.makedirs(os.path.dirname(PRESENCE_LOG), exist_ok=True)

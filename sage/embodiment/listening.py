@@ -10,6 +10,12 @@ three bounds chosen so the ear is a reply channel and not a room recorder:
      nothing is written. The room is not transcribed while the being is silent.
   2. NEVER ITS OWN VOICE. speak() marks speaking_until before playback; while it holds, the
      segmenter drops audio, so the being is not handed its own words back as someone else's.
+  ALWAYS LISTENING (opt-in per body, dp 2026-10-01): with SAGE_LISTEN=always in the cortex's environment
+     the window is always open. dp asked aloud "what do you want to remember about today" long after the
+     being last spoke; nothing was transcribed and nothing reached the being. dp: "any recognized voice
+     input should be logged in the voice chat as it arrives. and hopefully presented to the being also."
+     Bound 2 (never its own voice) and bound 3 (no speaker identity) still hold. The cortex records the
+     mode in listen.json ("always"), so the being is told what its ear does (body.hears_always).
   3. NO SPEAKER IDENTITY. A voice is not authenticated. heard.jsonl records words, time and the
      mic — never who. The beat says "a voice in the room", not "dp said".
 
@@ -42,16 +48,24 @@ NO_SPEECH_MAX = 0.6
 LOGPROB_MIN = -1.0
 
 
+def always_listening() -> bool:
+    """This body's opt-in: SAGE_LISTEN=always in this process's environment."""
+    return os.environ.get("SAGE_LISTEN", "").strip().lower() == "always"
+
+
 def window(now: Optional[float] = None, path: Optional[str] = None) -> dict:
-    """{'listening': bool, 'speaking': bool} from listen.json. Absent/unreadable → neither."""
+    """{'listening', 'speaking', 'always'} from listen.json, plus this process's opt-in.
+    Absent/unreadable file → closed unless the opt-in is set."""
     now = time.time() if now is None else now
     path = path or LISTEN_PATH
     try:
         d = json.load(open(path))
     except Exception:
-        return {"listening": False, "speaking": False}
-    return {"listening": now < float(d.get("listen_until", 0)),
-            "speaking": now < float(d.get("speaking_until", 0))}
+        d = {}
+    always = always_listening() or bool(d.get("always"))
+    return {"listening": always or now < float(d.get("listen_until", 0)),
+            "speaking": now < float(d.get("speaking_until", 0)),
+            "always": always}
 
 
 def mark(path: Optional[str] = None, **fields) -> None:
