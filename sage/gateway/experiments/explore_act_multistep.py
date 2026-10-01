@@ -9,6 +9,8 @@ from sage.gateway.being_gate_client import ResultEnvelope
 from sage.gateway.tests.test_being_tool_loop import _client
 
 d = json.load(open(sys.argv[2]))
+from sage.gateway.being_gate_client import ollama_tools
+d["tools"] = ollama_tools([t["function"]["name"] for t in d["tools"]])   # the checkout's own specs
 runs = int(sys.argv[4]) if len(sys.argv) > 4 else 3
 
 
@@ -35,7 +37,7 @@ NOT_RUN = lambda intent, v: ResultEnvelope(ok=True, result="(not executed: offli
 out = open(sys.argv[3], "a")
 for i in range(runs):
     t = time.time()
-    r = run_ollama_tool_turn(_client(NOT_RUN), LLM(), d["seed"], max_steps=8, tools=d["tools"], act_form="json")
+    r = run_ollama_tool_turn(_client(NOT_RUN), LLM(), d["seed"], max_steps=3, tools=d["tools"], act_form="json")
     acts = [(it.effector, dict(it.args or {})) for it, _ in r.trace]
     end = "rest" if r.rested is not None else "cap" if r.capped else "done"
     rec = {"run": i, "secs": round(time.time() - t, 1), "acts": acts, "end": end, "reply": (r.reply or "")[:300],

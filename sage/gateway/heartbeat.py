@@ -2197,6 +2197,17 @@ def explore_turn_mode(instance) -> str:
         return "tools"
 
 
+def explore_json_steps(instance, default: int) -> int:
+    """Acts per explore/posture turn in the JSON act form (instance.json "explore_json_steps", default 3).
+    Each act is two generates, and offline turns never chose "done" by themselves: 6 of 6 ran to an
+    8-step cap (2.5-7 min). Native turns rarely reach the cap because they end in prose."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return max(1, min(default, int(instance_config(instance).get("explore_json_steps", 3))))
+    except Exception:
+        return min(default, 3)
+
+
 def preempt_on(instance) -> bool:
     """Opt-in per instance (R2): instance.json "preempt": true."""
     try:
@@ -3222,12 +3233,14 @@ def main(argv=None) -> int:
     try:
         _phase("wake", "explore", host_session_id)
         _preempt = preempt_on(instance)
+        _explore_steps = (explore_json_steps(instance, args.max_steps)
+                          if explore_turn_mode(instance) == "json" else args.max_steps)
 
         def _yield_for_a_person():
             got = p0_since(t0) if _preempt else []
             return got[0].get("descriptor") or got[0].get("kind") if got else None
 
-        explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
+        explore = run_ollama_tool_turn(client, llm, seed, max_steps=_explore_steps,
                                        tools=_explore_specs, on_generate=_on_generate("explore"),
                                        should_yield=_yield_for_a_person,
                                        act_form=explore_turn_mode(instance))
@@ -3236,7 +3249,7 @@ def main(argv=None) -> int:
         if posture_turn is not None:
             convo.append({"role": "user", "content": posture_turn})
             _phase("wake", "posture", host_session_id)
-            after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
+            after = run_ollama_tool_turn(client, llm, convo, max_steps=_explore_steps,
                                          tools=_explore_specs, on_generate=_on_generate("posture"),
                                          should_yield=_yield_for_a_person,
                                        act_form=explore_turn_mode(instance))

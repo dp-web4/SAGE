@@ -862,7 +862,12 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         well-formed acts. "done" ends the turn in words, as a reply without a call does natively."""
         names = [t["function"]["name"] for t in tools]
         spec = {t["function"]["name"]: (t["function"].get("parameters") or {"type": "object"}) for t in tools}
-        ask = {"role": "user", "content": ACT_ASK_JSON}
+        # WHAT IT HAS ALREADY DONE THIS TURN, beside the choice (2026-10-01): told nothing, three of three
+        # offline turns ran to the step cap repeating gaze and never chose "done".
+        done_so_far = [c["function"]["name"] for m in msgs if m.get("role") == "assistant"
+                       for c in (m.get("tool_calls") or [])]
+        ask = {"role": "user", "content": ACT_ASK_JSON + (
+            f" This turn you have already done: {', '.join(done_so_far)}." if done_so_far else "")}
         r1 = llm.get_chat_response(msgs + [ask], fmt={
             "type": "object", "required": ["act", "why"],
             "properties": {"act": {"type": "string", "enum": names + ["done"]}, "why": {"type": "string"}}})
@@ -874,8 +879,14 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         act, why = j.get("act"), str(j.get("why") or "")
         if act not in spec:
             return {"content": why or c1, "tool_calls": [], "raw": r1.get("raw")}
+        # THE ARGUMENTS ARE THE ACT, NOT A NOTE ABOUT IT (2026-10-01): asked only "Now the arguments", a
+        # memory_write's content came back as "I am choosing to use memory_write because ..." and check's
+        # target as "check". The tool's own description rides with the ask.
+        desc = next((t["function"].get("description") or "" for t in tools if t["function"]["name"] == act), "")
         r2 = llm.get_chat_response(msgs + [ask, {"role": "assistant", "content": c1},
-                                          {"role": "user", "content": f"Now the arguments for {act}, as JSON."}],
+                                          {"role": "user", "content": (
+                                              f"{act}: {desc[:600]}\n\nNow the arguments for {act}, as JSON. "
+                                              "Write the actual values the tool needs, not why you chose it.")}],
                                    fmt=spec[act])
         try:
             args = json.loads(r2.get("content", "") or "")
