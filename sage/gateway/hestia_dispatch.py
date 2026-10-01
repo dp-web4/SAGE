@@ -211,11 +211,30 @@ def check_failures(raw_out: str) -> list:
     its saved spills, for a day, and edited code that was already right to satisfy a test it
     could not read. A verdict that cannot say what failed is half a verdict."""
     import re
+    lines = (raw_out or "").splitlines()
+    # THE SUMMARY LINE IS CUT TO THE TERMINAL WIDTH. Not on a tty that is 80 columns, and with
+    # a long test id pytest drops the " - <message>" part entirely: the first live use
+    # (legion-being, 2026-10-01 21:04Z) headlined "... :: test_elision_marker_count_matches_
+    # saved_file — failed". So the message also comes from that test's own failure section:
+    # the first `E ` line under its `____ name ____` header.
+    first_e, current = {}, None
+    for line in lines:
+        # one underscore each side once the name is wider than the terminal; many otherwise
+        h = re.match(r"^_+ (?:ERROR (?:at \S+ of |collecting ))?(\S+?) _+$", line.strip())
+        if h:
+            current = h.group(1)
+            continue
+        if current and current not in first_e and line.startswith("E "):
+            first_e[current] = line[1:].strip()
     out = []
-    for line in (raw_out or "").splitlines():
+    for line in lines:
         m = re.match(r"^(FAILED|ERROR) (\S+)(?: - (.*))?$", line.strip())
         if m:
-            out.append((m.group(2), (m.group(3) or m.group(1).lower()).strip()))
+            tid = m.group(2)
+            name = tid.split("::")[-1]
+            msg = (m.group(3) or "").strip() or first_e.get(name) or first_e.get(tid) \
+                or m.group(1).lower()
+            out.append((tid, msg))
     return out
 
 

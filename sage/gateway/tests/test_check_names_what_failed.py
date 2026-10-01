@@ -108,3 +108,22 @@ def test_an_overlong_headline_is_cut_like_any_body():
              {"role": "assistant", "content": "A"}, {"role": "tool", "content": "last" * 10}])
     out, el = compact_convo(msgs, _LLM16k())
     assert el and el[0]["kept"] == COMPACT_KEEP_CHARS, "no unbounded protected prefix"
+
+
+def test_a_long_test_id_still_carries_its_error_line():
+    """pytest cuts the summary line to 80 columns off a tty and drops the message for a long id
+    (live, 2026-10-01 21:04Z: the headline said only "— failed"). The error comes from the test's
+    own failure section instead."""
+    d = tempfile.mkdtemp(prefix="check-long-")
+    name = "test_" + "a_rather_long_descriptive_name_" * 3 + "end"
+    open(os.path.join(d, "test_long_module_name_for_width.py"), "w").write(
+        f"def {name}():\n    assert 1 == 2, 'the long one broke'\n")
+    env = dict(getattr(os, "environ"), COLUMNS="80")
+    p = subprocess.run([sys.executable, "-m", "pytest", "-q", "-c", "/dev/null", "-p",
+                        "no:cacheprovider", f"--rootdir={d}", "test_long_module_name_for_width.py"],
+                       cwd=d, capture_output=True, text=True, env=env)
+    out = p.stdout + p.stderr
+    summary = [ln for ln in out.splitlines() if ln.startswith("FAILED ")]
+    assert summary and " - " not in summary[0], "the precondition: pytest really dropped it"
+    f = check_failures(out)
+    assert f[0][0].endswith(name) and "the long one broke" in f[0][1], f
