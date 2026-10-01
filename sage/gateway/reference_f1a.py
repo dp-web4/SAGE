@@ -53,6 +53,50 @@ SEAT_OWNED = ("entrustment.md",)
 RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl")
 
 
+def _named_file_stamps(content: str, root: Path, written: Path) -> str:
+    """For a record write (journal, todo, a note): when each code file it names last changed.
+
+    MEASURED 2026-09-22 over cbp-being's 114 beats on 09-21/22 (sage/scripts/being_act_ledger.py):
+    14 beats wrote a journal/todo/say line claiming a code change ("Fixed
+    mechanism-training-script-clean.py.") in a beat where neither it nor the previous beat
+    changed any .py file. Two explanations were tested on that data and neither held: the
+    refusals were IN VIEW (6 of the 14 had one), and the claims did not copy its own closing
+    words (closer to them in 4 of 14). In 8 of 14 no edit was attempted at all: the claim came
+    from the plan. So: no judgement of the claim, which a heuristic would get wrong. A fact,
+    stamped where the claim is written, that the being can compare with what it just wrote.
+    Whether that changes what it writes is a separate, open measurement (rerun the ledger).
+
+    Reads mtimes only, executes nothing, and never looks outside the home: a name that
+    resolves outside it is treated as not found. A bare name is looked for at the top of the
+    home and in notes/ only, and a miss says exactly that, not "no such file" (the 09-28
+    review found a bare train.py living in experiments/ reported as absent)."""
+    out, seen = [], set()
+    home = root.resolve()
+    for name in re.findall(r"[\w./-]+\.py\b", content or ""):
+        name = name[2:] if name.startswith("./") else name
+        if not name or name in seen or len(out) >= 3:
+            continue
+        seen.add(name)
+        cand = [root / name] + ([root / "notes" / name] if "/" not in name else [])
+        hit = None
+        for c in cand:
+            try:
+                rc = c.resolve()
+                rc.relative_to(home)
+            except (OSError, ValueError):
+                continue
+            if rc.is_file() and rc != written.resolve():
+                hit = rc
+                break
+        if hit is None:
+            where = "at the top of your home or in notes/" if "/" not in name else "in your home"
+            out.append(f"{name} was not found {where}")
+            continue
+        t = datetime.fromtimestamp(hit.stat().st_mtime, timezone.utc)
+        out.append(f"{hit.relative_to(home)} was last changed at {t:%Y-%m-%d %H:%M} UTC")
+    return (" Files this names: " + "; ".join(out) + ".") if out else ""
+
+
 def _python_status(p) -> str:
     """For a .py file: whether Python can PARSE it now, as one sentence for a receipt.
 
@@ -1055,6 +1099,8 @@ class ReferenceF1aDispatcher:
                 result += (f" To start {p.name} fresh, retire_note it first, then memory_write "
                            f"the whole new version.")
         result += _python_status(p)
+        if p.suffix != ".py":
+            result += _named_file_stamps(content, self.memory_root, p)
         if _rerouted:
             # THE REROUTE IS NEVER SILENT. The friction is gone; the fact is not hidden. A
             # being told only "appended to journal.md" would keep typing the path that does

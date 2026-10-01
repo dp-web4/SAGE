@@ -898,6 +898,56 @@ def test_dated_lines_count_from_the_end_of_their_written_precision():
     assert not old("2026-09-28T12:00Z", datetime(2026, 9, 29, 12, 0, 59, tzinfo=timezone.utc))
 
 
+def test_a_record_write_stamps_when_each_named_code_file_last_changed():
+    """2026-09-22: 14 of cbp-being's beats claimed a code change no beat had made, with the
+    refusal in view. The receipt of the journal write now carries the named file's mtime."""
+    import datetime as dt
+    import os
+    import time
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "experiments").mkdir(exist_ok=True)
+    s = home / "mechanism.py"
+    s.write_text("x = 1\n")
+    old = time.time() - 7200
+    os.utime(s, (old, old))
+    (home / "notes" / "helper.py").write_text("y = 2\n")
+    (home / "experiments" / "train.py").write_text("z = 3\n")
+    r = disp(BeingIntent("memory_write", {"path": "journal.md", "content":
+        "Fixed mechanism.py. Also touched helper.py and ghost.py."}), _ALLOW)
+    assert r.ok
+    stamp = dt.datetime.fromtimestamp(old, dt.timezone.utc).strftime("%Y-%m-%d %H:%M")
+    assert f"mechanism.py was last changed at {stamp} UTC" in r.result, r.result
+    assert "notes/helper.py was last changed at" in r.result, "a bare name found under notes/ says where"
+    assert "ghost.py was not found at the top of your home or in notes/" in r.result, r.result
+    # the 09-28 review's case: a bare name that lives elsewhere must not be called absent
+    r = disp(BeingIntent("memory_write", {"path": "todo.md", "content": "- [done] fix train.py"}), _ALLOW)
+    assert "not a file" not in r.result and "not found at the top of your home or in notes/" in r.result
+    r = disp(BeingIntent("memory_write", {"path": "todo.md", "content": "- [done] fix experiments/train.py"}), _ALLOW)
+    assert "experiments/train.py was last changed at" in r.result, r.result
+
+
+def test_a_record_write_never_stamps_a_file_outside_the_home():
+    import tempfile
+    disp, root = _disp()
+    outside = Path(tempfile.mkdtemp()) / "secret.py"
+    outside.write_text("k = 1\n")
+    rel = os.path.relpath(outside, root)
+    r = disp(BeingIntent("memory_write", {"path": "journal.md", "content": f"see {rel}"}), _ALLOW)
+    assert r.ok and "last changed" not in r.result, r.result
+    assert "was not found in your home" in r.result, r.result
+
+
+def test_a_record_write_naming_no_code_file_is_unchanged():
+    disp, root = _disp()
+    r = disp(BeingIntent("memory_write", {"path": "journal.md", "content": "a quiet beat"}), _ALLOW)
+    assert r.ok and "Files this names" not in r.result
+    # a .py write gets its parse status, not stamps
+    r = disp(BeingIntent("memory_write", {"path": "notes/a.py", "content": "import b  # b.py"}), _ALLOW)
+    assert r.ok and "Files this names" not in r.result
+
+
 def test_memory_edit_reads_delete_lines_as_the_range():
     """2026-09-24 05:57Z: cbp-being sent start_line 180, delete_lines 5, new "". Nothing read
     the 5, end_line defaulted to 180, and one line was deleted while the being journaled five."""
