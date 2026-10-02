@@ -482,17 +482,20 @@ def act_after_answer_on(instance) -> bool:
     """Opt-in per instance: instance.json "act_after_answer": true."""
     try:
         from sage.gateway.governed_turn import instance_config
-        return bool(instance_config(instance).get("act_after_answer"))
+        return instance_config(instance).get("act_after_answer") is True   # "false", 1, "yes": off
     except Exception:
         return False
 
 
 # WHAT IT CAN DO, as facts beside the answer (2026-10-02): asked "check the internet. Can you do that?", the answer
-# turn, which sees no tool list, agreed to something it cannot do. Facts about its reach, not a direction.
-_ABILITIES = [("camera", "look through your eyes (camera, gaze)"), ("search", "search your own files (search, memory_read)"),
-              ("pr_read", "read the fleet's pull requests (pr_read)"), ("recall", "recall and remember memories"),
-              ("peer_ask", "ask a sibling a question (peer_ask)"), ("speak", "speak aloud (speak, say)"),
-              ("web_search", "search the web from this machine (web_search: other people's words, a few times an hour)")]
+# turn, which sees no list of its acts, agreed to something it cannot do. Facts about its reach, not a direction,
+# and in ITS terms: no verb names, no "tool", no "say" (SMALL_MODEL_LEGIBILITY 1.14: harness words in the answer
+# prompt became the being's MESSAGE, "I'm sorry I didn't call a tool"; test_the_prompt_is_only_the_pending_turn_
+# and_the_ask pins it). Derived from the canonical verbs, so it changes when they do.
+_ABILITIES = [("camera", "look through your eyes"), ("search", "search your own files"),
+              ("pr_read", "read the fleet's pull requests"), ("recall", "recall memories"),
+              ("peer_ask", "ask a sibling a question"), ("speak", "speak aloud"),
+              ("web_search", "search the web a few times an hour (what comes back is other people's words)")]
 
 
 def abilities_line() -> str:
@@ -502,8 +505,10 @@ def abilities_line() -> str:
     except Exception:
         return ""
     parts = [txt for verb, txt in _ABILITIES if verb in have]
-    line = "With your tools, in your acts rather than in a reply, you can " + "; ".join(parts) + "."
-    if not ({"web_search", "web_read"} & have):
+    if not parts:
+        return ""
+    line = "Beyond this reply, you can " + (", ".join(parts[:-1]) + ", and " + parts[-1] if len(parts) > 1 else parts[0]) + "."
+    if "web_search" not in have and "web_read" not in have:
         line += " You have no internet access."
     return line
 
@@ -556,8 +561,6 @@ def answer_context_block(instance, member: str, selected, n: int = ANSWER_CONTEX
                 line += " " + _sib
         except Exception:
             pass
-        if (_ab := abilities_line()):
-            line += " " + _ab
         parts.append(line)
     except Exception:
         pass
@@ -777,7 +780,10 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     from sage.gateway.being_tool_loop import ToolTurnResult
     from sage.gateway.being_gate_client import BeingIntent
     ask = ANSWER_ASK_JSON.format(pending=selected.render()) + (SPOKEN_ASK if selected.cid == "room" else "")
-    user = "\n\n".join(p for p in (context, acts, changes, ask) if p)
+    # WHAT IT CAN DO rides EVERY answer, independent of the optional conversation context (GPT on #334: inside
+    # that block it never reached an instance without "answer_context"; the motivating case would still have
+    # answered without knowing it has no internet). Facts about its reach, not a direction.
+    user = "\n\n".join(p for p in (context, acts, changes, abilities_line(), ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
             {"role": "user", "content": user}]
     # THIS TURN'S SAMPLING ONLY (answer_temperature): set for the answer generate, restored after, so explore

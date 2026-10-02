@@ -110,14 +110,29 @@ def test_the_answer_temperature_samples_the_answer_turn_alone_and_is_restored(tm
 
 def test_the_answer_turn_is_told_what_it_can_do_and_that_it_has_no_internet():
     line = hb.abilities_line()
-    assert "camera" in line and "peer_ask" in line and "search your own files" in line
+    assert "look through your eyes" in line and "ask a sibling" in line and "search your own files" in line
+    for plumbing in ("tool", "say", "peer_ask", "camera"):
+        assert plumbing not in line, f"harness word {plumbing!r} in the being's facts (LEGIBILITY 1.14)"
     assert line.endswith("You have no internet access."), "true while no web verb is in the toolset"
     h, t = _home()
-    assert "You have no internet access." in hb.answer_context_block(h, ME, hb.SelectedTurn("room", t))
+    assert "no internet" not in hb.answer_context_block(h, ME, hb.SelectedTurn("room", t)), "not tied to the option"
+
+
+def test_every_answer_prompt_carries_what_it_can_do_even_without_answer_context():
+    """GPT on #334: an instance with NO answer_context (Sprout's checked-in config) must still be told."""
+    h, t = _home()
+    assert hb.answer_context_on(h) is False
+    llm = LLM(json.dumps({"answer": False, "message": ""}))
+    hb.answer_turn_json(Client(), llm, hb.SelectedTurn("room", t), name="s", machine="s", member=ME)
+    user = llm.calls[0]["messages"][-1]["content"]
+    assert hb.abilities_line() in user and user.index(hb.abilities_line()) < user.index("You have not answered yet")
 
 
 def test_answer_then_act_is_opt_in_and_wired_without_say_or_speak(tmp_path):
     assert hb.act_after_answer_on(tmp_path) is False
+    for v in ('"false"', "1", '"yes"', "null"):
+        (tmp_path / "instance.json").write_text('{"act_after_answer": %s}' % v)
+        assert hb.act_after_answer_on(tmp_path) is False, f"{v} is not a literal true: off"
     (tmp_path / "instance.json").write_text('{"act_after_answer": true}')
     assert hb.act_after_answer_on(tmp_path) is True
     src = Path(hb.__file__).read_text()
@@ -133,4 +148,4 @@ def test_once_a_web_verb_exists_the_line_names_it_and_stops_saying_no_internet(m
     from sage.gateway import toolset
     monkeypatch.setattr(toolset, "canonical_toolset", lambda: ["camera", "search", "peer_ask", "web_search", "rest"])
     line = hb.abilities_line()
-    assert "search the web from this machine (web_search" in line and "no internet" not in line
+    assert "search the web a few times an hour" in line and "no internet" not in line
