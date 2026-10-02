@@ -79,3 +79,20 @@ def test_the_pause_is_configurable_and_defaults_to_today(monkeypatch):
     assert importlib.reload(listening).END_SILENCE_S == 1.2
     monkeypatch.delenv("SAGE_LISTEN_PAUSE_S")
     importlib.reload(listening)
+
+
+def test_a_transcriber_failure_is_measured_not_silent(monkeypatch):
+    """GPT on #325: transcribe() raising consumed the utterance with no heard and no unheard row."""
+    d = Path(tempfile.mkdtemp(prefix="ear-"))
+    monkeypatch.setattr(listening, "UNHEARD_PATH", str(d / "unheard.jsonl"))
+    t = listening.Transcriber(source="mic", heard_path=str(d / "heard.jsonl"))
+
+    def boom(audio):
+        raise RuntimeError("CUDA out of memory at /secret/path")
+    monkeypatch.setattr(t, "transcribe", boom)
+    t._handle(b"\x00\x00" * 3200)
+    assert not (d / "heard.jsonl").exists(), "no room speech"
+    rows = [json.loads(x) for x in (d / "unheard.jsonl").read_text().splitlines()]
+    assert len(rows) == 1 and rows[0]["why"] == "transcribe_error" and rows[0]["error"] == "RuntimeError"
+    assert "secret" not in json.dumps(rows[0]), "the class only, never the error text"
+    assert rows[0]["seconds"] == 0.2 and t.transcribe_errors == 1

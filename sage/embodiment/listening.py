@@ -247,8 +247,14 @@ class Transcriber(threading.Thread):
     def _handle(self, audio: bytes) -> None:
         try:
             rec = self.transcribe(audio)
-        except Exception:
-            rec = None
+        except Exception as e:
+            # A TRANSCRIBER FAILURE IS NOT SILENCE (GPT on #325): measured, never shown as speech. The error's
+            # class only, never its text (it can carry paths or audio-derived content).
+            self.transcribe_errors = getattr(self, "transcribe_errors", 0) + 1
+            _append(UNHEARD_PATH, {"ts": round(time.time(), 2), "why": "transcribe_error",
+                                   "error": type(e).__name__, "seconds": round(len(audio) / 2 / RATE, 1),
+                                   "source": self.source})
+            return
         if rec and rec.get("text"):
             _append(self.heard_path, rec)
         elif rec:
