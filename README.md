@@ -22,6 +22,8 @@ SAGE is the cognition/embodiment research layer in the broader Web4 stack:
 
 The long-term goal is an embodied, sovereign agent stack with its own identity, memory, tools, sensors, effectors and eventually stronger A2+ isolation. That destination is not claimed as current capability.
 
+For the participant-side question — whether the surrounding identity/governance substrate is useful to the acting entity itself — see Web4's [participant self-assessment](https://github.com/dp-web4/web4/blob/main/docs/ENTITY_START_HERE.md).
+
 ## The research question
 
 A modern model can reason impressively in one turn and still fail as an organism because the surrounding system does not reliably preserve:

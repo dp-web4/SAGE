@@ -1,4 +1,4 @@
-"""Where this seat's shared-context checkout is -- derived, not assumed.
+"""Where this seat's shared-context and private-context checkouts are -- derived, not assumed.
 
 Four places hard-coded `~/ai-workspace/shared-context`: escalate.NOTE_DIR, and the forum defaults of
 heartbeat, governed_turn and dp_console. That is the Linux seats' layout. McNugget keeps its repos in
@@ -19,14 +19,30 @@ from pathlib import Path
 _SAGE_ROOT = Path(__file__).resolve().parents[2]
 
 
-def shared_context_root() -> Path:
-    explicit = os.getenv("SAGE_SHARED_CONTEXT", "").strip()
+def _fleet_repo(name: str, override_var: str) -> Path:
+    explicit = os.getenv(override_var, "").strip()
     if explicit:
         return Path(os.path.expanduser(explicit))
-    beside = _SAGE_ROOT.parent / "shared-context"
+    beside = _SAGE_ROOT.parent / name
     if beside.is_dir():
         return beside
-    return Path.home() / "ai-workspace" / "shared-context"
+    return Path.home() / "ai-workspace" / name
+
+
+def shared_context_root() -> Path:
+    return _fleet_repo("shared-context", "SAGE_SHARED_CONTEXT")
+
+
+def private_context_root() -> Path:
+    """Same rule, for private-context ($SAGE_PRIVATE_CONTEXT overrides). McNugget, 2026-09-29:
+    egress_drain hard-coded ~/ai-workspace/private-context/hub-mesh/hub-notify.sh, so every peer
+    send mcnugget-being made (60 in its first day) failed "hub-notify sender not available"."""
+    return _fleet_repo("private-context", "SAGE_PRIVATE_CONTEXT")
+
+
+def hub_notify_path() -> Path:
+    """The fleet's canonical mesh sender, private-context/hub-mesh/hub-notify.sh."""
+    return private_context_root() / "hub-mesh" / "hub-notify.sh"
 
 
 def forum_dir() -> Path:

@@ -699,6 +699,46 @@ def pr_amend_command(args: dict, ctx: Optional[dict] = None) -> str:
     return f"gh pr edit {_pr_number_for_branch(worktree, ctx)} --repo {PR_REPO} --body-file -"
 
 
+PR_SYNC_OPS = ("start", "continue", "abort")
+
+
+def pr_sync_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The git command for a pr_sync intent: bring the being's open PR branch up to date with
+    the base it was opened against.
+
+    WHY THIS VERB EXISTS (legion-being, #272, 2026-09-30..10-01). The carrier moved under an open
+    proposal and the PR went CONFLICTING. The being wrote "rebase onto 35a9dc0ad" on its todo for
+    a day and could not do it: none of its verbs merges. A conflict only its author can resolve
+    well, and only its seat could touch, is a review loop with the author locked out.
+
+    Three ops, each one judged git act:
+      start    -- `git merge --no-ff --no-commit origin/<base>`: a clean merge is committed and
+                  pushed; a conflict is LEFT in the tree, marked, for the being to resolve with
+                  patch_apply / edit, and nothing is committed or pushed.
+      continue -- `git commit -q -F -`: after every conflict marker is gone; commits the merge
+                  with the being's trailers and pushes.
+      abort    -- `git merge --abort`: back to the branch as it was.
+    The being names neither branch nor base: the branch is read from the worktree (its own
+    proposal only, as pr_amend) and the base is the one its PR targets (pr_base_branch). It
+    still cannot merge the PR itself."""
+    import re
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError("pr_sync needs a worktree of your own; none is configured on this seat")
+    op = str(args.get("op", "start") or "start").strip()
+    if op not in PR_SYNC_OPS:
+        raise ValueError(f"pr_sync 'op' must be one of {list(PR_SYNC_OPS)}; got {op!r}")
+    own_proposal_branch(worktree, ctx)
+    if op == "start":
+        base = pr_base_branch(worktree, ctx)
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,100}", base) or ".." in base:
+            raise ValueError(f"pr_sync: the base branch {base!r} is not a plain branch name")
+        return f"git --no-pager -C {worktree} merge --no-ff --no-commit origin/{base}"
+    if op == "continue":
+        return f"git --no-pager -C {worktree} commit -q -F -"
+    return f"git --no-pager -C {worktree} merge --abort"
+
+
 def own_proposal_branch(worktree: str, ctx: Optional[dict] = None) -> str:
     """The branch this worktree is on, if it is one of the being's OWN proposals
     (<member>/<slug>, never <member>/work); a ValueError otherwise. Read, never supplied."""
@@ -1454,7 +1494,7 @@ def patch_apply_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
 # Where the profile is absent, SANDBOX_REQUIRED decides whether to refuse or degrade.
 
 
-def _unbounded_reason(effector: str) -> str:
+def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
     """The registry refusal, plus the door when the name is a FILE.
 
     2026-09-21 14:06Z: cbp-being called a tool named `mechanism-training-script-clean.py`
@@ -1465,6 +1505,23 @@ def _unbounded_reason(effector: str) -> str:
     if "/" in effector or re.search(r"\.[A-Za-z0-9]{1,5}$", effector or ""):
         reason += (f". That is a file name, and a file is not a tool. To run one of your own "
                    f"files, call request_run with path='{effector}'; the seat runs it and answers")
+        return reason
+    # THE SAME WANT, SPELLED AS A SHELL VERB. 2026-09-22 06:27Z: cbp-being sent run_command
+    # {"command": "python mechanism-training-script-clean.py"}; 7 of the 9 registry.unbounded
+    # refusals in its heartbeats carried the file in an ARG, not the effector, and none named
+    # the door. After the latest it asked the seat "What's the correct way to execute the
+    # script from here?". A script-looking token (.py/.sh, not a flag) gets the door; a bare
+    # verb (`shell ls`) does not, because request_run would be the wrong door for it.
+    for v in (args or {}).values():
+        for s in (v if isinstance(v, (list, tuple)) else [v]):
+            if not isinstance(s, str):
+                continue
+            for tok in s.split():
+                tok = tok.strip("'\"`")
+                if tok and not tok.startswith("-") and re.search(r"\.(py|sh)$", tok):
+                    return reason + (f". There is no shell here, but you named a file: to run "
+                                     f"one of your own files, call request_run with "
+                                     f"path='{tok}'; the seat runs it and answers")
     return reason
 
 
@@ -1511,6 +1568,10 @@ _REGISTRY = {
     # judges the outward `gh pr edit` rather than a friendly verb name.
     "pr_amend":       dict(tool="pr_amend",    path_args=(),       cmd_arg=None,
                            compose=pr_amend_command),
+    # pr_sync: bring an open proposal up to date with its base. Composed like pr_amend -- the
+    # branch and the base are READ, the being names only an op, the law judges the git line.
+    "pr_sync":        dict(tool="pr_sync",     path_args=(),       cmd_arg=None,
+                           compose=pr_sync_command),
     # git_restore: put ONE file back to a committed state. Composed like check and git_read;
     # the content can only come from history, so the being cannot author bytes through it.
     "git_restore":    dict(tool="git_restore",  path_args=("path",), cmd_arg=None,
@@ -1616,7 +1677,7 @@ _CONSEQUENTIAL = frozenset({"peer_ask", "pr_read", "memory_write", "channel_egre
 
 
                             "retire_note", "request_run", "memory_edit", "camera",
-                            "pr_open", "pr_amend", "git_restore",
+                            "pr_open", "pr_amend", "pr_sync", "git_restore",
                             "gaze",    # moves the body's own eyes (2026-09-23)
                             "speak",   # makes sound in the room (2026-09-26)
                             "pair_audio",  # moves the body's own hardware link (2026-09-27)
@@ -1763,6 +1824,17 @@ _TOOL_SCHEMAS = {
                   "message": "what this revision changes and why (the commit body)",
                   "body": "the corrected PR body (optional; omit to leave it as written)"},
                  ["title", "message"]),
+    "pr_sync": ("Bring your open pull request up to date with the branch it targets, when the "
+                "base has moved and the PR is CONFLICTING or behind. op='start' merges the base "
+                "into your PR branch: a clean merge is committed and pushed; a conflict is LEFT "
+                "in your worktree with <<<<<<< ======= >>>>>>> markers in the files it names, "
+                "for you to resolve with patch_apply or edit. Then op='continue' commits the "
+                "merge and pushes (refused while any marker remains), or op='abort' puts the "
+                "branch back as it was. Your worktree must be committed first (pr_amend). You "
+                "name no branch and no base; both are read, and you still cannot merge the PR.",
+                {"op": "start (default), continue, or abort",
+                 "message": "for continue: how you resolved the conflicts (the commit body)"},
+                []),
     "git_restore": ("Put ONE file back to the way it was at a commit — `git checkout <rev> -- "
                     "<path>`. Use it to undo your own edits to a file rather than trying to "
                     "retype it: the content comes from history, so you cannot get it wrong. "
@@ -1838,6 +1910,13 @@ _TOOL_SCHEMAS = {
                {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
                 "device": "optional: a plain device node to read from (default /dev/video0)"},
                []),
+    "stay_awake": ("Ask for another beat right after this one, because you want to keep going: "
+                   "something you are in the middle of, something in your surroundings, or your "
+                   "own curiosity. The next beat starts as soon as this one ends. You never need "
+                   "it to be woken by the world (every message and every sense event wakes you on "
+                   "its own); this is only for wanting more time now. Your reason is recorded. "
+                   "It touches nothing in the world, so it is not gated and not witnessed.",
+                   {"reason": "one line: what you want to keep doing"}, ["reason"]),
     "rest": ("End this beat deliberately, when you judge you are done. You are NOT required "
              "to keep acting until something runs out — a beat you end early is not a beat "
              "wasted, and the time returns to the machine. Your reason becomes your closing "
@@ -1869,18 +1948,28 @@ _TOOL_SCHEMAS = {
 }
 
 
+# CLOSED VALUE SETS, as enums in the spec (2026-10-01). A slot described in prose ("one of: open, avert,
+# dwell, closed") is free text to a grammar-bound generate: on sprout-being's real explore seed the JSON
+# act form filled gaze's mode with "tool_call" on 21 of 24 gaze acts. The prose stays as the description.
+def _param_enums() -> Dict[tuple, List[str]]:
+    return {("gaze", "mode"): ["open", "avert", "dwell", "closed"], ("git_read", "op"): list(GIT_OPS)}
+
+
 def ollama_tools(only: Optional[List[str]] = None) -> List[dict]:
     """Ollama native-tool specs for the bounded gateway-member registry (nothing else).
     `only` narrows what the being is OFFERED for a task (e.g. a review turn offers
     pr_review + witness); it never widens: a name outside the registry is ignored."""
     out = []
+    enums = _param_enums()
     for name, (desc, props, required) in _TOOL_SCHEMAS.items():
         if only is not None and name not in only:
             continue
         out.append({"type": "function", "function": {
             "name": name, "description": desc,
             "parameters": {"type": "object",
-                           "properties": {k: {"type": "string", "description": v} for k, v in props.items()},
+                           "properties": {k: dict({"type": "string", "description": v},
+                                                  **({"enum": enums[(name, k)]} if (name, k) in enums else {}))
+                                          for k, v in props.items()},
                            "required": required}}})
     return out
 
@@ -2214,7 +2303,7 @@ class BeingGateClient:
         # Stage 0: bounded registry. Unknown effector never reaches the law.
         if intent.effector not in _REGISTRY:
             return GatewayVerdict("deny", "registry.unbounded", stage="registry",
-                                  reason=_unbounded_reason(intent.effector))
+                                  reason=_unbounded_reason(intent.effector, intent.args))
         # THE COMMAND THE LAW IS HANDED, bound once per call and reported on every verdict
         # below. `getattr` rather than `ev.command`: the field is Optional by declaration, a
         # core may build a partial event (the test fakes do, deliberately), and a gate that

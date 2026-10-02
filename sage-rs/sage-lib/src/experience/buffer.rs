@@ -12,9 +12,21 @@ pub struct ExperienceEntry {
     pub response: String,
     pub salience: SalienceScore,
     pub metabolic_state: String,
-    pub atp_percentage: f64,
-    pub cycle: u64,
+    /// The daemon's INTERNAL ATP controller at the moment of the exchange: a free-running
+    /// oscillator ticked every 100 ms for the shadow-metabolism experiment, which nothing the
+    /// being does moves (SAGE #291). Written as `internal_atp` since SAGE #295 so no reader
+    /// takes it for the being's energy; older lines named it `atp_percentage` and still read.
+    #[serde(rename = "internal_atp", alias = "atp_percentage")]
+    pub internal_atp: f64,
+    /// The consciousness loop's tick count (100 ms idle ticks: uptime x 10), not a beat or a
+    /// cycle of anything the being did. Older lines named it `cycle` and still read.
+    #[serde(rename = "tick", alias = "cycle")]
+    pub tick: u64,
     pub timestamp: f64,
+    /// The heartbeat beat that was running when this exchange happened, from the activity
+    /// reports (SAGE #295). Absent when no beat was running (a presence noticing between beats).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub machine: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -35,8 +47,8 @@ impl ExperienceEntry {
         response: String,
         salience: SalienceScore,
         metabolic_state: &str,
-        atp_percentage: f64,
-        cycle: u64,
+        internal_atp: f64,
+        tick: u64,
     ) -> Self {
         let id = Self::compute_id(&prompt, &response);
         let timestamp = crate::snarc::temporal::now_secs();
@@ -46,37 +58,63 @@ impl ExperienceEntry {
             response,
             salience,
             metabolic_state: metabolic_state.to_string(),
-            atp_percentage,
-            cycle,
+            internal_atp,
+            tick,
             timestamp,
+            beat_id: None,
             machine: None,
             model: None,
         }
     }
 }
 
+/// Rotate the experience record past this size, keeping one prior generation (`.jsonl.1`),
+/// the same shape as the shadow-metabolism log's bound. Recording every exchange (SAGE #291)
+/// removes the salience gate that used to thin it. The largest record in the fleet was
+/// 540 KB after months (sprout-qwen3.8-distill-2b, 696 rows, measured 2026-09-30), so this is
+/// ~30x headroom. It only has to be a bound, not a tight one.
+pub const EXPERIENCE_MAX_BYTES: u64 = 16 * 1024 * 1024;
+
+/// The being's record of what it generated.
+///
+/// SNARC IS AN INDICATOR, NOT A CONTROL (dp, 2026-09-30; SAGE #291). `record` used to drop
+/// every exchange whose `salience.total` was under 0.5, so SNARC decided what the being
+/// remembered. That is the "capture gate" of #24/#58. Now every exchange is recorded, with
+/// its SNARC score as an annotation. A reader that wants the salient ones selects them
+/// (ollama_raising_session.py already sorts by `salience.total`; prepare_training_data.py
+/// takes a `min_salience`).
+///
+/// The repetition filter stays. It does not read salience: it drops near-duplicate text
+/// (word-Jaccard >= 0.85 against the last 10 responses). It is still a filter on memory,
+/// and #291 flags it for dp rather than changing it.
 pub struct ExperienceBuffer {
     path: PathBuf,
-    salience_threshold: f64,
     recent_responses: Vec<String>,
     repetition_window: usize,
     count: u64,
+    max_bytes: u64,
 }
 
 impl ExperienceBuffer {
-    pub fn new(path: &Path, salience_threshold: f64) -> Self {
+    pub fn new(path: &Path) -> Self {
         let count = Self::count_lines(path);
         Self {
             path: path.to_path_buf(),
-            salience_threshold,
             recent_responses: Vec::new(),
             repetition_window: 10,
             count,
+            max_bytes: EXPERIENCE_MAX_BYTES,
         }
     }
 
     pub fn with_defaults(path: &Path) -> Self {
-        Self::new(path, 0.5)
+        Self::new(path)
+    }
+
+    /// A smaller bound, for tests of the rotation.
+    pub fn with_max_bytes(mut self, max_bytes: u64) -> Self {
+        self.max_bytes = max_bytes;
+        self
     }
 
     fn count_lines(path: &Path) -> u64 {
@@ -106,15 +144,24 @@ impl ExperienceBuffer {
     }
 
     pub fn record(&mut self, entry: ExperienceEntry) -> bool {
-        if entry.salience.total < self.salience_threshold {
-            return false;
-        }
+        // No salience gate (SAGE #291): the score is recorded on the entry, not used to
+        // decide whether there is an entry.
         if self.is_repetitive(&entry.response) {
             return false;
         }
 
         if let Some(parent) = self.path.parent() {
             let _ = fs::create_dir_all(parent);
+        }
+
+        // Bounded, like the shadow log: past the cap the file becomes `.jsonl.1` (replacing
+        // any older one) and a fresh file starts. `count` is this file's rows.
+        if let Ok(md) = fs::metadata(&self.path) {
+            if md.len() > self.max_bytes
+                && fs::rename(&self.path, self.path.with_extension("jsonl.1")).is_ok()
+            {
+                self.count = 0;
+            }
         }
 
         let line = match serde_json::to_string(&entry) {
@@ -191,14 +238,37 @@ mod tests {
         let _ = fs::remove_file(&path);
     }
 
+    /// SAGE #291: SNARC is an indicator, not a control. A low-salience exchange is still
+    /// remembered, and its score travels with it for a reader to select on. This was
+    /// `rejects_low_salience`, the test that pinned the gate.
     #[test]
-    fn rejects_low_salience() {
+    fn a_low_salience_exchange_is_still_recorded_with_its_score() {
         let path = temp_path();
         let mut buf = ExperienceBuffer::with_defaults(&path);
-        let entry = make_entry("hello", "world", 0.2);
-        assert!(!buf.record(entry));
-        assert_eq!(buf.count(), 0);
+        assert!(buf.record(make_entry("hello", "world", 0.2)));
+        assert!(buf.record(make_entry("quiet", "nothing much stood out here", 0.0)));
+        assert_eq!(buf.count(), 2);
+        let got = buf.load_recent(10);
+        assert!((got[0].salience.total - 0.2).abs() < 1e-9, "the score is kept as an annotation");
+        assert_eq!(got[1].salience.total, 0.0);
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn the_record_is_bounded_and_keeps_one_prior_generation() {
+        let path = temp_path();
+        let rotated = path.with_extension("jsonl.1");
+        let mut buf = ExperienceBuffer::with_defaults(&path).with_max_bytes(600);
+        for i in 0..12 {
+            assert!(buf.record(make_entry(&format!("q{i}"),
+                &format!("answer number {i} with its own distinct words {}", "x".repeat(i)), 0.1)));
+        }
+        let live = fs::metadata(&path).unwrap().len();
+        assert!(live <= 600 + 400, "the live file stays near its bound: {live}");
+        assert!(rotated.exists(), "the prior generation is kept");
+        assert_eq!(buf.count() as usize, buf.load_recent(100).len(), "count is this file's rows");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&rotated);
     }
 
     #[test]
@@ -236,5 +306,25 @@ mod tests {
         let e1 = make_entry("hello", "world", 0.8);
         let e2 = make_entry("hello", "world", 0.5);
         assert_eq!(e1.id, e2.id);
+    }
+
+    /// SAGE #295: the internal ATP and the loop tick are written under names no reader takes for
+    /// the being's energy or its beats, the beat is stamped when known, and older lines still read.
+    #[test]
+    fn records_name_the_internal_atp_and_the_tick_and_carry_the_beat() {
+        let mut e = make_entry("hi", "there", 0.4);
+        e.beat_id = Some("heartbeat-abc".into());
+        let v: serde_json::Value = serde_json::to_value(&e).unwrap();
+        assert!(v.get("atp_percentage").is_none() && v.get("cycle").is_none(), "{v}");
+        assert_eq!(v["internal_atp"], 100.0);
+        assert_eq!(v["tick"], 0);
+        assert_eq!(v["beat_id"], "heartbeat-abc");
+
+        let unbeaten = serde_json::to_value(make_entry("a", "b", 0.1)).unwrap();
+        assert!(unbeaten.get("beat_id").is_none(), "no beat running: no beat_id key");
+
+        let old = r#"{"id":"x","prompt":"p","response":"r","salience":{"surprise":0.1,"novelty":0.1,"arousal":0.1,"reward":0.1,"conflict":0.1,"total":0.1},"metabolic_state":"wake","atp_percentage":42.5,"cycle":1593000,"timestamp":1.0}"#;
+        let o: ExperienceEntry = serde_json::from_str(old).unwrap();
+        assert_eq!((o.internal_atp, o.tick, o.beat_id), (42.5, 1_593_000, None));
     }
 }

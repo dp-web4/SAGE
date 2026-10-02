@@ -256,7 +256,9 @@ def presence_block(since_ts: float, log_path: str = PRESENCE_LOG, keep: int = 4)
                 e = json.loads(line)
             except Exception:
                 continue
-            if e.get("kind") == "noticed" and float(e.get("ts", 0)) >= since_ts:
+            # "sensed": an event that woke (or queued) a beat with no in-the-moment noticing,
+            # because a beat was running (SAGE #295). The being meets it here.
+            if e.get("kind") in ("noticed", "sensed") and float(e.get("ts", 0)) >= since_ts:
                 evs.append(e)
     except Exception:
         return "", {"count": 0, "kept": 0, "chars": 0}
@@ -271,7 +273,7 @@ def presence_block(since_ts: float, log_path: str = PRESENCE_LOG, keep: int = 4)
         line = f"- {when}: {desc}" + (f" — you said: {said}" if said else "")
         lines.append(line)
     text = (f"[presence:{len(evs)}] Since your last beat your senses broke through {len(evs)} time(s) "
-            f"and the presence feeder woke you for each; the last {len(kept)}, in your own words at the time:\n"
+            f"and each woke you; the last {len(kept)}, with your own words where you said any:\n"
             + "\n".join(lines))
     return text, {"count": len(evs), "kept": len(kept), "chars": len(text)}
 
