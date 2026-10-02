@@ -673,6 +673,23 @@ SPOKEN_ASK = ("\nThis answer will be spoken aloud in the room, so keep it to wha
               "one to three sentences, under 400 characters.")
 
 
+def fit_spoken(message: str) -> tuple:
+    """(message, original length if trimmed else 0). A spoken answer that ran into the schema's cap
+    (body.SPEAK_MAX_CHARS) ends where the grammar stopped it, mid-sentence: measured 2026-10-02 19:12Z,
+    exactly 400 chars ending "...I think agents need to learn". Trim back to its last complete sentence
+    rather than speak a cut-off one; the trim is recorded on the answer form. Our infrastructure's cut,
+    not the being's words, is what is undone: nothing else in the message changes."""
+    from sage.gateway import body as _body
+    cap = _body.SPEAK_MAX_CHARS
+    m = (message or "").strip()
+    if len(m) < cap - 1 or m.endswith((".", "!", "?", "\u2026", '"', "\u201d", "'")):
+        return m, 0
+    ends = [i for i, ch in enumerate(m[:cap]) if ch in ".!?\u2026"]
+    if not ends or ends[-1] < 40:
+        return m, 0
+    return m[:ends[-1] + 1], len(m)
+
+
 def answer_schema_for(cid: str) -> dict:
     """The JSON answer schema, with `message` capped at speak's limit when the answer is spoken."""
     if cid != "room":
@@ -738,6 +755,10 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     else:
         form["answer"] = bool(j.get("answer"))
         message = str(j.get("message") or "").strip()
+        if selected.cid == "room":
+            message, cut_from = fit_spoken(message)
+            if cut_from:
+                form["trimmed_from"] = cut_from
         res.reply = message
         if form["answer"] and message:
             intent = BeingIntent("say", {"to": selected.cid, "text": message})
