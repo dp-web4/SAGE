@@ -120,9 +120,13 @@ def test_whisper_near_silence_hallucinations_are_dropped_and_no_speaker_is_recor
                            "avg_logprob": -0.2}])
     rec = t.transcribe(b"\0\0" * 16000)
     assert rec["text"] == "Hi Sprout, it's good to hear you."
-    assert set(rec) == {"ts", "text", "seconds", "source"}, "words, time, mic — never who"
+    # words, time, mic, and what was left out (2026-10-01: nothing dropped silently) — never who
+    assert set(rec) <= {"ts", "text", "seconds", "source", "dropped", "unclear"}
+    assert not {"speaker", "who", "from"} & set(rec)
+    assert rec["dropped"][0]["why"] == "silence" and "unclear" not in rec, "a hallucination is not unclear speech"
     t.model = _FakeModel([{"text": " you", "no_speech_prob": 0.1, "avg_logprob": -1.6}])
-    assert t.transcribe(b"\0\0" * 1600) is None
+    gone = t.transcribe(b"\0\0" * 1600)
+    assert gone["text"] == "" and gone["dropped"][0]["at"] == "all", "no words: measured, never a heard line"
 
 
 def test_a_missing_whisper_fails_open(monkeypatch):

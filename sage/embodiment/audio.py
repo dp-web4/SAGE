@@ -147,7 +147,8 @@ class Hearing(threading.Thread):
                 "baseline": round(self.baseline, 3),
                 "ok": live, "trust": 1.0 if live else 0.0,
                 "listening": bool(self._win.get("listening")),
-                "words": self.transcriber.status, **self._ear(live)}
+                "words": self.transcriber.status, "backlog_drops": self.transcriber.backlog_drops,
+                **self._ear(live)}
 
     def _ear(self, live: bool) -> dict:
         """The ear's state as a fact with its cause, and the transition logged (listening.note_ear)."""
