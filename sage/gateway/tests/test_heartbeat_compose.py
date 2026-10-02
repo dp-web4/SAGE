@@ -107,28 +107,83 @@ def test_inbox_renders_newest_first_with_replies_ahead_of_stale_dispositions():
     assert len(text) < 600 and render_inbox([]) == "(empty)"
 
 
-def test_a_notice_from_before_the_last_beat_is_not_rendered_as_mail():
-    """2026-09-22: the beat only peeks, so a 14:15 review_done whose pointer read
-    '...seat-ran-it-14:13Z;epochs-10-ok...;use-request_run' topped cbp-being's inbox for 11 h,
-    and at 01:10 it acted on that over the seat's answer from 3 minutes before."""
-    from sage.gateway.heartbeat import render_inbox
-    from datetime import datetime
-    stale = {"id": 13840, "kind": "review_done", "from_plugin": "claude-code",
-             "queued_at": "2026-09-21T14:15:02.1Z",
-             "pointer_uri": "hestia://appeal/8285#ruled-deny-stands;seat-ran-it-14:13Z;use-request_run"}
-    fresh = {"id": 13905, "kind": "reply", "from_plugin": "claude-code",
-             "queued_at": "2026-09-22T01:12:00.123456789Z", "pointer_uri": "sage://conversation/cbp-claude#seq=3082"}
-    last_t0 = datetime.fromisoformat("2026-09-22T01:09:36+00:00").timestamp()
-    text = render_inbox([stale, fresh], since=last_t0)
-    assert "use-request_run" not in text and "seq=3082" in text.splitlines()[0]
-    assert text.splitlines()[-1].startswith("- 1 earlier notice(s)")
-    only_old = render_inbox([stale], since=last_t0)
-    assert only_old.startswith("- 1 earlier notice(s)") and "hestia://" not in only_old
-    assert "use-request_run" in render_inbox([stale]), "no last beat: everything is shown, as before"
-    from sage.gateway.heartbeat import _queued_epoch
-    assert _queued_epoch({"queued_at": "2026-09-22T01:10:06.747074300Z"}), "hestia's nanosecond stamp parses"
-    undated = dict(fresh, queued_at=None)
-    assert "seq=3082" in render_inbox([undated], since=last_t0), "an undated notice is never folded"
+def _beat(effector=None, path=None, ok=True):
+    """A stand-in for one phase's result: a trace of (intent, envelope) pairs."""
+    from types import SimpleNamespace as NS
+    trace = [] if effector is None else [(NS(effector=effector, args={"path": path}), NS(ok=ok))]
+    return NS(trace=trace)
+
+
+def _run_beats(notices, beats):
+    """Drive render_inbox + inbox_ledger the way main() does, beat after beat. Each beat is
+    (explore_acted, [phase results]). Returns the rendered inbox of every beat."""
+    from sage.gateway.heartbeat import inbox_handled, inbox_ledger, render_inbox
+    last, seen = {}, []
+    for acted, results in beats:
+        shown = []
+        seen.append(render_inbox(notices, handled=inbox_handled(last), shown=shown))
+        last = {"inbox": inbox_ledger(last, notices, results, acted, shown)}
+    seen.append(render_inbox(notices, handled=inbox_handled(last)))
+    return seen
+
+
+OLD_REPLY = {"id": 100, "kind": "reply", "from_plugin": "claude-code", "queued_at": "2026-09-21T10:00:00Z",
+             "pointer_uri": "sage://conversation/cbp-claude#seq=3000"}
+OLD_HANDOFF = {"id": 101, "kind": "handoff", "from_plugin": "legion", "queued_at": "2026-09-21T10:05:00Z",
+               "pointer_uri": "shared-context/handoff/h.md"}
+OLD_RULING = {"id": 102, "kind": "disposition", "from_plugin": "hestia", "queued_at": "2026-09-21T10:06:00Z",
+              "pointer_uri": "hestia://appeal/abc123def456#ruled"}
+STALE_REVIEW = {"id": 13840, "kind": "review_done", "from_plugin": "claude-code",
+                "queued_at": "2026-09-21T14:15:02.1Z",
+                "pointer_uri": "hestia://appeal/8285#ruled-deny-stands;seat-ran-it-14:13Z;use-request_run"}
+
+
+def test_old_actionable_mail_stays_until_it_is_opened_not_until_it_is_old():
+    """GPT HOLD on #164: age is not acknowledgement. The first cut folded every notice queued
+    before the last beat began, so an unopened reply, handoff or appeal ruling vanished after
+    exactly one beat -- including when that beat crashed before reading it. Pin the negative
+    arm: several beats that act but never open them, and all three are still mail."""
+    notices = [OLD_REPLY, OLD_HANDOFF, OLD_RULING]
+    seen = _run_beats(notices, [(True, [_beat("say", "x")])] * 4)
+    for text in seen:
+        assert "seq=3000" in text and "shared-context/handoff/h.md" in text, text
+        assert "abc123def456" in text, text
+        assert "already handled" not in text, text
+
+
+def test_an_opened_notice_folds_and_only_that_one():
+    """The acknowledgement is an act: a successful memory_read of the notice's pointer. The
+    reply opened in beat 1 folds from beat 2; the handoff nobody opened stays; a failed read
+    acknowledges nothing."""
+    notices = [OLD_REPLY, OLD_HANDOFF]
+    seen = _run_beats(notices, [(True, [_beat("memory_read", "sage://conversation/cbp-claude"),
+                                        _beat("memory_read", "shared-context/handoff/h.md", ok=False)])])
+    assert "seq=3000" in seen[0] and "seq=3000" not in seen[1], seen
+    assert "shared-context/handoff/h.md" in seen[1], seen[1]
+    assert "1 notice(s) already handled" in seen[1], seen[1]
+
+
+def test_a_finished_review_folds_after_one_beat_that_acted_on_it_not_one_that_crashed():
+    """The measured case, 2026-09-22: a 14:15 review_done whose pointer read
+    '...seat-ran-it-14:13Z;...;use-request_run' topped cbp-being's inbox for 11 h, and at 01:10
+    it acted on that over the seat's answer from 3 minutes before. A finished review carries no
+    obligation, so once shown to a beat whose explore turn acted it folds -- but a beat that
+    never got to act (crashed, killed) has not been shown anything."""
+    crashed = _run_beats([STALE_REVIEW], [(None, []), (False, [])])
+    assert all("use-request_run" in t for t in crashed), crashed
+    acted = _run_beats([STALE_REVIEW], [(True, [_beat("say", "x")])])
+    assert "use-request_run" in acted[0] and "use-request_run" not in acted[1], acted
+    assert acted[1].startswith("- 1 notice(s) already handled"), acted[1]
+
+
+def test_the_ledger_is_pruned_to_the_inbox_and_an_id_less_notice_never_folds():
+    from sage.gateway.heartbeat import inbox_ledger, render_inbox
+    last = {"inbox": {"opened": [1, 2, 100], "presented": [13840, 7]}}
+    led = inbox_ledger(last, [OLD_REPLY, STALE_REVIEW], [], True, [])
+    assert led["opened"] == [100] and led["presented"] == [13840], led
+    assert inbox_ledger(last, [], [], True, [])["opened"] == [1, 2, 100], "an unread inbox prunes nothing"
+    no_id = dict(OLD_REPLY); no_id.pop("id")
+    assert "seq=3000" in render_inbox([no_id], handled={None, 100})
 
 
 def test_the_inbox_rides_the_turn_the_being_acts_in():

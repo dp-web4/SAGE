@@ -1188,37 +1188,82 @@ def appeals_block(disp, last: dict) -> tuple:
     return "\n".join(parts), record
 
 
-def _queued_epoch(n: dict):
-    try:
-        return datetime.fromisoformat(str(n.get("queued_at")).replace("Z", "+00:00")[:32]).timestamp()
-    except Exception:
-        return None
+# NOTICE KINDS THAT CARRY NO OUTSTANDING OBLIGATION. A finished review, a forum post, a
+# coordination note and an ack report something that already happened; once a beat that could
+# act has been shown one, showing it again adds nothing. Every other kind -- reply, handoff,
+# review_request, unreachable, a ruling or other disposition, and any kind not named here --
+# may still be owed something, so it stays as mail until the being OPENS it.
+INBOX_INFORMATIONAL = ("review_done", "forum-note", "coordination", "ack")
 
 
-def render_inbox(notices: list, limit: int = 8, since: float = None) -> str:
+def _notice_target(uri) -> str:
+    return str(uri or "").strip().split("#", 1)[0]
+
+
+def inbox_ledger(last: dict, notices: list, results: list, explore_acted, presented_now) -> dict:
+    """WHICH NOTICES ARE HANDLED, by what the being did -- never by how old they are.
+
+    The beat only peeks at the inbox (nothing drains it), so without a ledger every notice is
+    mail forever: measured 2026-09-22, a 14:15 review_done topped cbp-being's inbox for 11 h of
+    beats and at 01:10 it acted on that over the seat's 3-minute-old answer. #164's first cut
+    folded everything queued before the last beat began. GPT's HOLD: age is not acknowledgement
+    -- an unopened reply, handoff or appeal ruling vanished after one beat, including when that
+    beat crashed before reading it. So a notice is handled only when:
+      - "opened": the being memory_read its pointer and the read succeeded (any kind), or
+      - "presented": it is an INBOX_INFORMATIONAL kind and was rendered to a beat whose explore
+        turn acted (the rule mark_conversations_after_beat uses for conversation turns).
+    Both sets carry forward from the last beat's record and are pruned to ids still in the
+    inbox, so the ledger is bounded by the inbox. A notice with no id is never handled."""
+    prev = (last or {}).get("inbox") or {}
+    if not notices:
+        # An inbox that could not be read this beat (or is empty) proves nothing was handled
+        # or retired; carry the ledger as it was rather than prune it to nothing.
+        return {"opened": list(prev.get("opened") or []),
+                "presented": list(prev.get("presented") or []), "opened_this_beat": []}
+    live = {n.get("id") for n in notices if isinstance(n, dict) and n.get("id") is not None}
+    opened = {i for i in (prev.get("opened") or []) if i in live}
+    presented = {i for i in (prev.get("presented") or []) if i in live}
+    by_target = {}
+    for n in notices:
+        if isinstance(n, dict) and n.get("id") is not None and _notice_target(n.get("pointer_uri")):
+            by_target.setdefault(_notice_target(n.get("pointer_uri")), set()).add(n.get("id"))
+    newly = set()
+    for res in results:
+        for it, env in (getattr(res, "trace", None) or []):
+            if it.effector == "memory_read" and env.ok:
+                newly |= by_target.get(_notice_target((it.args or {}).get("path")), set())
+    opened |= newly
+    if explore_acted:
+        presented |= {i for i in (presented_now or []) if i in live}
+    return {"opened": sorted(opened, key=str), "presented": sorted(presented, key=str),
+            "opened_this_beat": sorted(newly, key=str)}
+
+
+def inbox_handled(last: dict) -> set:
+    """The ids the last beat's ledger says are handled (opened, or informational and shown)."""
+    prev = (last or {}).get("inbox") or {}
+    return set(prev.get("opened") or []) | set(prev.get("presented") or [])
+
+
+def render_inbox(notices: list, limit: int = 8, handled=None, shown: list = None) -> str:
     """The being's hestia inbox as it should read it: newest first, one line each, the kinds
     that want its attention (reply, review, handoff, unreachable) ahead of bookkeeping, and
     the scope dispositions it has already been told about (note_resolutions writes them into
     its own notes) collapsed to one line. Until 2026-09-14 this was a JSON dump cut at 1500
     chars: 13 notices, and the being saw the five OLDEST — all stale dispositions — while a
     peer's reply (id 54) and an unreachable-peer receipt (id 52) sat beyond the cut, unseen
-    for 90 beats."""
+    for 90 beats.
+
+    `handled`: ids inbox_ledger says are handled; they fold to one count line, whatever their
+    age. `shown`, if given, receives the ids of the informational notices rendered as mail."""
     if not notices:
         return "(empty)"
-    # NOT NEW IS NOT NEWS. The beat only peeks, so nothing ever leaves this inbox: measured
-    # 2026-09-22, all 50 notices ever sent to cbp-being were undrained, and a 14:15 review_done
-    # whose pointer read "seat-ran-it-14:13Z;epochs-10-ok…;use-request_run" topped the inbox for
-    # 11 hours of beats. At 01:00 the being told the seat "the first program runs successfully"
-    # and asked to run the file again; at 01:10 it opened that notice as "the seat's inbox shows
-    # a ruling" and filed request_run over the seat's answer 3 min old, which said the opposite.
-    # A notice queued before the last beat began was in the inbox that beat; it is folded to a
-    # count, and only what arrived since is rendered as mail.
-    older = []
-    if since is not None:
-        older = [n for n in notices if isinstance(n, dict) and (_queued_epoch(n) or since) < since]
-        notices = [n for n in notices if not any(n is o for o in older)]
-    fold = (f"- {len(older)} earlier notice(s), queued before your last beat began: not new, and "
-            f"none of them is an answer to anything you asked since.") if older else ""
+    handled = set(handled or ())
+    done = [n for n in notices if isinstance(n, dict) and n.get("id") is not None
+            and n.get("id") in handled]
+    notices = [n for n in notices if not any(n is d for d in done)]
+    fold = (f"- {len(done)} notice(s) already handled -- opened by you, or a finished review / "
+            f"forum / coordination note already shown to you -- not repeated here.") if done else ""
     if not notices:
         return fold or "(empty)"
     front = ("reply", "review_request", "review_done", "handoff", "unreachable", "forum-note", "coordination")
@@ -1272,6 +1317,9 @@ def render_inbox(notices: list, limit: int = 8, since: float = None) -> str:
         lines.append(f"- … and {len(rest) - limit} older notice(s).")
     if fold:
         lines.append(fold)
+    if shown is not None:
+        shown.extend(n.get("id") for n in rest[:limit]
+                     if str(n.get("kind")) in INBOX_INFORMATIONAL and n.get("id") is not None)
     return "\n".join(lines)
 
 
@@ -3117,10 +3165,12 @@ def main(argv=None) -> int:
             hub_inbox = {"error": f"{type(_e).__name__}: {_e}"}
     # inbox (peek) and long-term recall, seat-side, so the being starts oriented
     inbox = "(inbox unavailable)"
+    _inbox_notices, _inbox_shown = [], []
     disp = getattr(client, "_dispatcher", None)
     if disp is not None and hasattr(disp, "drain_inbox"):
         env = disp.drain_inbox(peek=True)
-        inbox = (render_inbox((env.result or {}).get("notices") or [], since=last.get("t0"))
+        _inbox_notices = (env.result or {}).get("notices") or [] if env.ok else []
+        inbox = (render_inbox(_inbox_notices, handled=inbox_handled(last), shown=_inbox_shown)
                  if env.ok else f"({env.error})")
     # who could be writing here: its siblings, by the names it uses, beside the inbox their answers reach
     try:
@@ -3589,6 +3639,11 @@ def main(argv=None) -> int:
     # files the being's own scope request + a note and wakes the seat's auto session; a
     conversations_marked = mark_conversations_after_beat(
         instance, args.member, _shown_upto, explore, [after, reflect, answer])
+    try:
+        _inbox_record = inbox_ledger(last, _inbox_notices, [explore, after, reflect, answer],
+                                     conversations_marked.get("explore_acted"), _inbox_shown)
+    except Exception as _e:
+        _inbox_record = {**((last or {}).get("inbox") or {}), "error": f"{type(_e).__name__}: {_e}"}
     # governance escalation wakes it to arbitrate. The beat is where refusals actually
     # happen (Legion: nine consecutive beats of home-scope write refusals, and the being's
     # requests had died with a daemon restart), so the heartbeat must route, not just log.
@@ -3662,6 +3717,9 @@ def main(argv=None) -> int:
         "think": getattr(llm, "think", None),
         "scope": scope_record,
         "appeals": appeals_record,
+        # what the being has opened or been shown of its peek-only inbox (inbox_ledger); the
+        # next beat folds those, and nothing else, so an unopened reply never ages out.
+        "inbox": _inbox_record,
         # WHETHER THE BEING SAW, and when it did not, why not. Without this a beat with no
         # frame is indistinguishable from a beat where the pipe is broken — the state the
         # whole vision arc was in until 2026-09-15: both ends present, nothing joining them,
