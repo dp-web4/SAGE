@@ -196,6 +196,61 @@ def _worktree_env() -> dict:
     return env
 
 
+CHECK_FAILURES_SHOWN = 6        # failing tests named in the headline; the rest are counted
+CHECK_FAILURE_MSG_CHARS = 160   # each one's first error line
+
+
+def check_failures(raw_out: str) -> list:
+    """The failing tests in a pytest run, as [(test_id, first error line)], from pytest's own
+    short summary (`FAILED path::test - Error: ...`, `ERROR path::test - ...`). Pure.
+
+    WHY THE HEADLINE NAMES THEM (legion-being, #272, 2026-09-30..10-01). The headline said
+    "FAIL -- 1 failed, 13 passed" and nothing else; which test, and why, lived in the middle of
+    `output`. Compaction keeps a result's first and last 200 characters, so on a long beat the
+    one fact the being needed was the part elided: it wrote scripts to dig failure lines out of
+    its saved spills, for a day, and edited code that was already right to satisfy a test it
+    could not read. A verdict that cannot say what failed is half a verdict."""
+    import re
+    lines = (raw_out or "").splitlines()
+    # THE SUMMARY LINE IS CUT TO THE TERMINAL WIDTH. Not on a tty that is 80 columns, and with
+    # a long test id pytest drops the " - <message>" part entirely: the first live use
+    # (legion-being, 2026-10-01 21:04Z) headlined "... :: test_elision_marker_count_matches_
+    # saved_file — failed". So the message also comes from that test's own failure section:
+    # the first `E ` line under its `____ name ____` header.
+    first_e, current = {}, None
+    for line in lines:
+        # one underscore each side once the name is wider than the terminal; many otherwise
+        h = re.match(r"^_+ (?:ERROR (?:at \S+ of |collecting ))?(\S+?) _+$", line.strip())
+        if h:
+            current = h.group(1)
+            continue
+        if current and current not in first_e and line.startswith("E "):
+            first_e[current] = line[1:].strip()
+    out = []
+    for line in lines:
+        m = re.match(r"^(FAILED|ERROR) (\S+)(?: - (.*))?$", line.strip())
+        if m:
+            tid = m.group(2)
+            name = tid.split("::")[-1]
+            msg = (m.group(3) or "").strip() or first_e.get(name) or first_e.get(tid) \
+                or m.group(1).lower()
+            out.append((tid, msg))
+    return out
+
+
+def check_headline(passed: bool, summary: str, failures: list) -> str:
+    """The sentence a check result leads with. On FAIL it names the failing tests (up to
+    CHECK_FAILURES_SHOWN, each with its first error line) so the verdict survives elision."""
+    head = f"{'PASS' if passed else 'FAIL'} — {summary}."
+    if not passed and failures:
+        shown = [f"{t} — {m[:CHECK_FAILURE_MSG_CHARS]}" for t, m in failures[:CHECK_FAILURES_SHOWN]]
+        more = len(failures) - len(shown)
+        head += (f" Failing ({len(failures)}): " + "; ".join(shown)
+                 + (f"; and {more} more (see `failures`)" if more > 0 else "") + ".")
+    return (head + " This is the answer. A check that RAN and FAILED still returns "
+            "successfully as an act: 'the call worked' is not 'the tests passed'.")
+
+
 class HestiaF1aDispatcher:
     # A lost session arrives in TWO shapes and only one of them was handled.
     _SESSION_LOST = ("session not found", "session_not_found", "session expired", "no session")
@@ -1904,9 +1959,8 @@ class HestiaF1aDispatcher:
         # else, and it says what `ok` does NOT mean.
         tail = (detail or "").strip().splitlines()
         summary = tail[-1][:120] if tail else ""
-        headline = (f"{'PASS' if passed else 'FAIL'} — {summary}. "
-                    f"This is the answer. A check that RAN and FAILED still returns "
-                    f"successfully as an act: 'the call worked' is not 'the tests passed'.")
+        failures = check_failures(raw_out)
+        headline = check_headline(passed, summary, failures)
         # THE EVIDENCE CONTRACT (GPT on SAGE#60, carried forward from the #62 slice that
         # never landed). A verdict is only as transferable as what it can name: which
         # command ran, against which bytes, producing how much output, exiting how — and
@@ -1962,6 +2016,7 @@ class HestiaF1aDispatcher:
                               result={"headline": headline,
                                       "target": target, "passed": passed,
                                       "verdict": "PASS" if passed else "FAIL",
+                                      "failures": [{"test": t, "error": m} for t, m in failures],
                                       "output": detail, "worktree": self.worktree,
                                       "tree": tree_before,
                                       "evidence": {
@@ -2865,6 +2920,176 @@ class HestiaF1aDispatcher:
                                       "steps": steps, "action_id": action_id,
                                       "note": "the reviewer sees the revision; they decide. "
                                               "You still cannot merge it."})
+
+    _CONFLICT_MARKER = re.compile(r"^(<<<<<<< |=======$|>>>>>>> )", re.M)
+
+    def _do_pr_sync(self, intent: BeingIntent) -> ResultEnvelope:
+        """Bring the being's open PR branch up to date with its base (pr_sync_command).
+
+        Same witnessed shape as pr_amend: the branch is the being's own proposal, read from the
+        worktree; the law judged the exact git line this runs; every seat-run git has hooks off.
+        A CONFLICT IS A RESULT, not an error: the act ran, the answer is "these files need you",
+        and the being resolves them with the verbs it already has."""
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import (own_proposal_branch, pr_attribution,
+                                                    pr_base_branch, pr_sync_command)
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="pr_sync needs a worktree of your own; none is configured")
+        try:
+            cmd = pr_sync_command(intent.args, self._git_ctx())
+            branch = own_proposal_branch(self.worktree, self._git_ctx())
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "pr_sync refused: the command the law judged is not the command this "
+                "dispatcher would execute."))
+        op = str(intent.args.get("op", "start") or "start").strip()
+
+        def git(*a, inp=None, timeout=120):
+            return subprocess.run(["git", *a], cwd=self.worktree, env=_worktree_env(), text=True,
+                                  input=inp, capture_output=True, timeout=timeout)
+
+        merging = git("rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
+        unmerged = lambda: [f for f in git("diff", "--name-only", "--diff-filter=U").stdout.split("\n") if f]  # noqa: E731
+
+        def markers(paths):
+            found = {}
+            for f in paths:
+                try:
+                    text = open(os.path.join(self.worktree, f), encoding="utf-8", errors="replace").read()
+                except OSError:
+                    continue
+                lines = [n for n, ln in enumerate(text.splitlines(), 1) if self._CONFLICT_MARKER.match(ln)]
+                if lines:
+                    found[f] = lines
+            return found
+
+        if op == "start":
+            if merging:
+                return ResultEnvelope(ok=False, error=(
+                    "pr_sync: a merge is already in progress in your worktree. Resolve the "
+                    "conflicts and pr_sync op='continue', or pr_sync op='abort'"))
+            dirty = git("status", "--porcelain", "--untracked-files=no").stdout.strip()
+            if dirty:
+                return ResultEnvelope(ok=False, error=(
+                    "pr_sync: your worktree has uncommitted changes. Commit them with pr_amend "
+                    "(or git_restore what you do not want) first, so the merge only carries the "
+                    "base's changes:\n" + dirty[:600]))
+        elif not merging:
+            return ResultEnvelope(ok=False, error=(
+                f"pr_sync op='{op}': no merge is in progress. Start one with pr_sync op='start'"))
+        if op == "continue":
+            left = markers(sorted(set(unmerged()) | set(
+                f for f in git("diff", "--name-only", "HEAD").stdout.split("\n") if f)))
+            if left:
+                where = "; ".join(f"{f} (line {', '.join(map(str, ls[:6]))})" for f, ls in left.items())
+                return ResultEnvelope(ok=False, error=(
+                    "pr_sync: conflict markers remain, so nothing was committed: " + where
+                    + ". Each <<<<<<< ... ======= ... >>>>>>> block must become the text you want"))
+
+        target = f"{branch} <- origin/{pr_base_branch(self.worktree, self._git_ctx())}" \
+            if op == "start" else branch
+        begin = self._call("hestia_begin_action", {"tool_name": "pr_sync", "target": target})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
+        action_id = begin.get("actionId")
+
+        def outcome(ok, error=""):
+            try:
+                self._call("hestia_record_outcome", {"action_id": action_id, "success": ok,
+                                                     "magnitude": 0.0, **({"error": error} if error else {})})
+            except Exception:
+                pass
+
+        def commit_and_push(message):
+            trailers = pr_attribution(self.plugin_id, action_id, self.being_lct)
+            # for `continue` this IS the judged command; for a clean `start` it is the commit that
+            # completes the judged merge, as pr_amend's commit completes its judged act
+            commit_cmd = pr_sync_command({"op": "continue"}, self._git_ctx())
+            r = subprocess.run(shlex.split(commit_cmd), input=f"{message}\n\n{trailers}\n",
+                               cwd=self.worktree, env=_worktree_env(), text=True,
+                               capture_output=True, timeout=120)
+            if r.returncode != 0:
+                return None, f"commit: {(r.stderr or r.stdout).strip()[:300]}"
+            sha = git("rev-parse", "--short=9", "HEAD").stdout.strip()
+            p = git("push", "-q", "origin", branch)
+            if p.returncode != 0:
+                return sha, f"push: {(p.stderr or p.stdout).strip()[:300]}"
+            return sha, ""
+
+        if op == "abort":
+            r = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(),
+                               text=True, capture_output=True, timeout=120)
+            outcome(r.returncode == 0, (r.stderr or "")[:200])
+            if r.returncode != 0:
+                return ResultEnvelope(ok=False, witness_id=action_id,
+                                      error=f"pr_sync abort failed: {(r.stderr or r.stdout).strip()[:300]}")
+            return ResultEnvelope(ok=True, witness_id=action_id, result={
+                "state": "aborted", "branch": branch,
+                "note": "the merge was abandoned; your branch is as it was before pr_sync start"})
+
+        if op == "continue":
+            files = [f for f in git("diff", "--name-only", "--diff-filter=U").stdout.split("\n") if f]
+            if files:
+                a = git("add", "--", *files)
+                if a.returncode != 0:
+                    outcome(False, "add")
+                    return ResultEnvelope(ok=False, witness_id=action_id,
+                                          error=f"pr_sync: could not stage {files}: {a.stderr[:200]}")
+            msg = str(intent.args.get("message", "") or "").strip() or "resolved the merge conflicts"
+            sha, ferr = commit_and_push(f"Merge the base into {branch} (pr_sync)\n\n{msg}")
+            outcome(not ferr, ferr)
+            if ferr:
+                return ResultEnvelope(ok=False, witness_id=action_id,
+                                      error=f"pr_sync failed at {ferr}", result={"commit": sha})
+            return ResultEnvelope(ok=True, witness_id=action_id, result={
+                "state": "merged", "branch": branch, "commit": sha, "pushed": True,
+                "note": "your PR now contains its base; re-run check, then ask for review"})
+
+        # op == start
+        base = pr_base_branch(self.worktree, self._git_ctx())
+        f = git("fetch", "-q", "origin", base, timeout=300)
+        if f.returncode != 0:
+            outcome(False, "fetch")
+            return ResultEnvelope(ok=False, witness_id=action_id,
+                                  error=f"pr_sync: could not fetch origin/{base}: {f.stderr[:300]}")
+        if git("merge-base", "--is-ancestor", f"origin/{base}", "HEAD").returncode == 0:
+            outcome(True)
+            return ResultEnvelope(ok=True, witness_id=action_id, result={
+                "state": "up_to_date", "branch": branch, "base": base,
+                "note": f"your branch already contains origin/{base}; nothing to merge"})
+        r = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(),
+                           text=True, capture_output=True, timeout=300)
+        conflicted = unmerged()
+        if r.returncode != 0 and conflicted:
+            found = markers(conflicted)
+            outcome(True)
+            return ResultEnvelope(ok=True, witness_id=action_id, result={
+                "headline": (f"CONFLICTED: merging origin/{base} into {branch} stopped in "
+                             f"{len(conflicted)} file(s): {', '.join(conflicted)}. Nothing is "
+                             f"committed or pushed. Resolve each <<<<<<< block, then pr_sync "
+                             f"op='continue'; or pr_sync op='abort'."),
+                "state": "conflicted", "branch": branch, "base": base,
+                "files": [{"path": p, "marker_lines": found.get(p, [])} for p in conflicted]})
+        if r.returncode != 0:
+            git("merge", "--abort")
+            outcome(False, (r.stderr or r.stdout)[:200])
+            return ResultEnvelope(ok=False, witness_id=action_id, error=(
+                f"pr_sync: the merge failed without a conflict and was abandoned: "
+                f"{(r.stderr or r.stdout).strip()[:300]}"))
+        sha, ferr = commit_and_push(f"Merge origin/{base} into {branch} (pr_sync)")
+        outcome(not ferr, ferr)
+        if ferr:
+            return ResultEnvelope(ok=False, witness_id=action_id,
+                                  error=f"pr_sync failed at {ferr}", result={"commit": sha})
+        return ResultEnvelope(ok=True, witness_id=action_id, result={
+            "state": "merged", "branch": branch, "base": base, "commit": sha, "pushed": True,
+            "note": "clean merge, committed and pushed; re-run check before asking for review"})
 
     def _do_pr_open(self, intent: BeingIntent) -> ResultEnvelope:
         """The being's worktree changes become a pull request, attributed to it.
