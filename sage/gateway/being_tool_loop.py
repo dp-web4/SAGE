@@ -829,31 +829,59 @@ JSON_ACT_EXCLUDE = frozenset({"channel_egress", "mesh", "pr_review", "pr_open", 
 _PLACEHOLDER = re.compile(r"^\s*[\[<{].*[\]>}]\s*$|\[(name|topic|path|id|line[^\]]*)\]|placeholder", re.I)
 
 
+_JSON_TYPES = {"string": str, "integer": int, "number": (int, float), "boolean": bool, "array": list, "object": dict}
+
+
+def _violation(value, schema: dict, where: str) -> Optional[str]:
+    """What is wrong with `value` against the subset of JSON Schema the tool specs use (type, enum, required,
+    properties, additionalProperties, items), recursively; None when it fits. GPT on #322: a required string slot
+    must not be satisfied by [] just because str([]) is non-empty, and an unexpected key is not an argument."""
+    schema = schema or {}
+    t = schema.get("type")
+    if t in _JSON_TYPES:
+        ok = isinstance(value, _JSON_TYPES[t]) and not (t in ("integer", "number") and isinstance(value, bool))
+        if not ok:
+            return f"'{where}' must be a {t}, not {type(value).__name__}"
+    if schema.get("enum") and value not in schema["enum"]:
+        return f"'{where}' must be one of {', '.join(map(str, schema['enum']))}"
+    if isinstance(value, str) and _PLACEHOLDER.search(value):
+        return f"'{where}' is a placeholder ({value[:40]!r}), not a real value"
+    if isinstance(value, dict):
+        props = schema.get("properties") or {}
+        for k in schema.get("required") or []:
+            if k not in value or (isinstance(value[k], str) and not value[k].strip()):
+                return f"'{k}' is required and was empty"
+        if props and schema.get("additionalProperties", False) is False:
+            extra = [k for k in value if k not in props]
+            if extra:
+                return f"'{extra[0]}' is not an argument of this tool"
+        for k, v in value.items():
+            if k in props and (bad := _violation(v, props[k], k)):
+                return bad
+    if isinstance(value, list) and schema.get("items"):
+        for i, v in enumerate(value):
+            if (bad := _violation(v, schema["items"], f"{where}[{i}]")):
+                return bad
+    return None
+
+
 def _check_args(content: str, schema: dict) -> tuple:
-    """(args, None) when the arguments are usable, else (None, what is wrong): parse, required slots present
-    and non-empty, enum membership, and no placeholder text ("[name]", "<path>")."""
+    """(args, None) when the arguments satisfy the tool's own schema, else (None, what is wrong)."""
     try:
         args = json.loads(content)
     except Exception:
         return None, "they are not valid JSON"
     if not isinstance(args, dict):
         return None, "they are not a JSON object"
-    props = (schema or {}).get("properties") or {}
-    for k in (schema or {}).get("required") or []:
-        if not str(args.get(k, "")).strip():
-            return None, f"'{k}' is required and was empty"
-    for k, v in args.items():
-        allowed = (props.get(k) or {}).get("enum")
-        if allowed and v not in allowed:
-            return None, f"'{k}' must be one of {', '.join(map(str, allowed))}"
-        if isinstance(v, str) and _PLACEHOLDER.search(v):
-            return None, f"'{k}' is a placeholder ({v[:40]!r}), not a real value"
-    return args, None
+    bad = _violation(args, dict(schema or {}, type="object"), "arguments")
+    return (None, bad) if bad else (args, None)
 
 
-ACT_ASK_JSON = ("Choose ONE thing to do now, as one of your tools. Reply as JSON: "
-                '{"act": "<tool name>", "why": "one short sentence"}. When you have done what you want '
-                'this turn, choose "done" and say in "why" what you did.')
+# NEUTRAL BY DESIGN (GPT on #322): this is a FORMAT, not an invitation to act. "done" comes first and is as
+# complete an answer as any tool; the same sentence is the native arm's matched control, so a rise in acts is
+# measured against the same prompt, not against no prompt.
+ACT_ASK_JSON = ('Reply as JSON: {"act": ..., "why": "one short sentence"}. "act" is "done" if you are finished '
+                'or there is nothing you want to do, or the name of one of your tools if there is.')
 
 
 def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[str, Any]],
@@ -903,7 +931,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             f" This turn you have already done: {', '.join(done_so_far)}." if done_so_far else "")}
         r1 = llm.get_chat_response(msgs + [ask], fmt={
             "type": "object", "required": ["act", "why"],
-            "properties": {"act": {"type": "string", "enum": names + ["done"]}, "why": {"type": "string"}}})
+            "properties": {"act": {"type": "string", "enum": ["done"] + names}, "why": {"type": "string"}}})
         c1 = r1.get("content", "") or ""
         try:
             j = json.loads(c1)

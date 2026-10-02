@@ -43,7 +43,7 @@ def test_an_act_is_chosen_from_the_tools_then_its_arguments_fill_that_tools_sche
     assert r.trace[0][1].ok, "dispatched through the gate like any intent"
     assert r.reply == "I noted the chair."
     first, second = llm.calls[0], llm.calls[1]
-    assert first["tools"] is None and first["fmt"]["properties"]["act"]["enum"] == ["witness", "rest", "done"]
+    assert first["tools"] is None and first["fmt"]["properties"]["act"]["enum"] == ["done", "witness", "rest"]
     assert first["messages"][-1]["content"] == ACT_ASK_JSON
     assert second["fmt"] == TOOLS[0]["function"]["parameters"], "the chosen tool's own schema"
 
@@ -146,7 +146,7 @@ def test_the_json_form_offers_only_the_grounded_subset():
     from sage.gateway.being_tool_loop import JSON_ACT_EXCLUDE
     llm = LLM(json.dumps({"act": "done", "why": "ok"}))
     run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "beat"}], tools=PEER, act_form="json")
-    assert llm.calls[0]["fmt"]["properties"]["act"]["enum"] == ["peer_ask", "done"]
+    assert llm.calls[0]["fmt"]["properties"]["act"]["enum"] == ["done", "peer_ask"]
     assert {"pr_open", "patch_apply", "channel_egress", "mesh", "request_scope"} <= JSON_ACT_EXCLUDE
 
 
@@ -162,3 +162,25 @@ def test_check_args():
 def test_say_is_closed_over_writable_conversations_in_the_beat():
     src = Path(hb.__file__).read_text()
     assert '_enums[("say", "to")] = _writable' in src and '"kind": "json_arg_failure"' in src
+
+
+
+def test_the_validator_checks_types_unexpected_keys_and_nesting():
+    """GPT on #322: a required string slot satisfied by [] passed (str([]) is non-empty)."""
+    from sage.gateway.being_tool_loop import _check_args
+    sch = PEER[0]["function"]["parameters"]
+    assert "must be a string" in _check_args('{"to": "cbp-being", "body": []}', sch)[1]
+    assert "must be a string" in _check_args('{"to": "cbp-being", "body": {"a": 1}}', sch)[1]
+    assert "not an argument" in _check_args('{"to": "cbp-being", "body": "hi", "extra": 1}', sch)[1]
+    nested = {"type": "object", "required": ["items"], "properties": {"items": {"type": "array", "items": {
+        "type": "object", "required": ["n"], "properties": {"n": {"type": "integer"}}}}}}
+    assert _check_args('{"items": [{"n": 1}, {"n": 2}]}', nested)[1] is None
+    assert "must be a integer" in _check_args('{"items": [{"n": 1}, {"n": "two"}]}', nested)[1]
+    assert "required" in _check_args('{"items": [{}]}', nested)[1]
+    assert "must be a integer" in _check_args('{"items": [{"n": true}]}', nested)[1], "a bool is not an integer"
+
+
+def test_the_ask_is_a_format_with_done_first():
+    from sage.gateway.being_tool_loop import ACT_ASK_JSON
+    assert ACT_ASK_JSON.startswith("Reply as JSON") and '"done"' in ACT_ASK_JSON
+    assert "Choose ONE thing to do now" not in ACT_ASK_JSON
