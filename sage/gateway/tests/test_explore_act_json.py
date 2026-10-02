@@ -4,6 +4,8 @@ On sprout-being's REAL explore seed (2B, 30 tools, nothing executed) the native 
 (all "[Your complete, well-structured response ...]"); act-from-an-enum, then that tool's own parameter schema,
 made 6/6 well-formed acts. The act still goes through the gate as a normal intent."""
 import json
+
+import pytest
 import os
 import sys
 from pathlib import Path
@@ -184,3 +186,45 @@ def test_the_ask_is_a_format_with_done_first():
     from sage.gateway.being_tool_loop import ACT_ASK_JSON
     assert ACT_ASK_JSON.startswith("Reply as JSON") and '"done"' in ACT_ASK_JSON
     assert "Choose ONE thing to do now" not in ACT_ASK_JSON
+
+
+class RetryLLM:
+    """First reply is a transport error or a think-only empty turn; then JSON. Records every call's form."""
+    num_predict_override = None
+    num_ctx = 16384
+
+    def __init__(self, first):
+        self.first, self.calls = first, []
+
+    def resolve_num_predict(self):
+        return 3000
+
+    def get_chat_response(self, messages, tools=None, fmt=None):
+        self.calls.append({"tools": tools, "fmt": fmt})
+        if len(self.calls) == 1:
+            return self.first
+        if fmt and "act" in (fmt.get("properties") or {}):
+            return {"content": json.dumps({"act": "done", "why": "nothing more"}), "tool_calls": [],
+                    "raw": {"done_reason": "stop", "message": {}}}
+        return {"content": "native words", "tool_calls": [], "raw": {"done_reason": "stop", "message": {}}}
+
+
+@pytest.mark.parametrize("first", [
+    {"content": "[OllamaIRP: HTTP 500 invalid tool call arguments]", "tool_calls": [], "raw": {}},
+    {"content": "", "tool_calls": [], "raw": {"done_reason": "stop", "eval_count": 300,
+                                              "message": {"thinking": "I should gaze at the room", "content": ""}}},
+], ids=["transport-error", "think-only"])
+def test_a_json_turns_retry_stays_json(first):
+    """GPT on #322: both retries fell back to native tool calling, switching the trial's arm mid-step."""
+    llm = RetryLLM(first)
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "beat"}], max_steps=1,
+                             tools=TOOLS, act_form="json")
+    assert len(llm.calls) >= 2, "there was a retry"
+    assert all(c["tools"] is None and c["fmt"] for c in llm.calls), "every attempt, retries included, was JSON"
+    assert r.reply == "nothing more"
+
+
+def test_native_retries_stay_native():
+    llm = RetryLLM({"content": "[OllamaIRP: HTTP 500]", "tool_calls": [], "raw": {}})
+    run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "beat"}], max_steps=1, tools=TOOLS)
+    assert len(llm.calls) == 2 and all(c["tools"] == TOOLS and c["fmt"] is None for c in llm.calls)

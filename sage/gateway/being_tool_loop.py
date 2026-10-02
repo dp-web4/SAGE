@@ -982,6 +982,12 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         return {"content": why, "tool_calls": [{"function": {"name": act, "arguments": args}}],
                 "raw": r2.get("raw") or r1.get("raw")}
 
+    def _once(msgs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """ONE attempt in this turn's act form, for the first try AND every retry (GPT on #322: both retries
+        fell back to native tool calling, so a JSON-mode step could switch arms mid-step after a transport
+        error or a think-only reply). The retries' budget and think handling still wrap this call."""
+        return _json_act(msgs) if act_form == "json" else llm.get_chat_response(msgs, tools=tools)
+
     def generate(convo: List[Dict[str, Any]]) -> Dict[str, Any]:
         nonlocal measured
         # Flatten the loop's convo (carries extra keys) to chat messages. An assistant
@@ -1022,7 +1028,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                               "chars": sum(e["chars"] for e in _elided)})
         retried = 0
         sent = _sent_budget(llm)          # the num_predict of the reply that stands
-        resp = _json_act(msgs) if act_form == "json" else llm.get_chat_response(msgs, tools=tools)
+        resp = _once(msgs)
         content = resp.get("content", "") or ""
         calls = resp.get("tool_calls", []) or []
         if content.startswith("[OllamaIRP:") and not calls:
@@ -1035,7 +1041,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # no raw reply here, so no prompt_eval_count: the retry gets the think budget
             # (for a no-think model that is still more than its variant num_predict)
             with _retry_room(llm, _retry_budget(llm, None)) as budget:
-                resp = llm.get_chat_response(msgs, tools=tools)
+                resp = _once(msgs)
                 retried += 1
                 sent = budget
             content = resp.get("content", "") or ""
@@ -1103,7 +1109,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                           f"{' , thinking OFF and a nudge' if unthought else ''} "
                           f"(num_ctx={getattr(llm, 'num_ctx', None)} prompt_eval={raw.get('prompt_eval_count')})",
                           file=_sys.stderr)
-                    resp = llm.get_chat_response(msgs, tools=tools)
+                    resp = _once(msgs)
                     retried += 1
                     sent = budget
                     content = resp.get("content", "") or ""
