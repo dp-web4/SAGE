@@ -259,6 +259,41 @@ def _file_state(src: str) -> tuple:
     return "complete", None
 
 
+def _fresh_name(p):
+    """A sibling name for `p` that does not exist yet: <stem>-new.py, then -new2, -new3, ...
+    A hint that names a fresh start must never name a file that is already there: that "door"
+    is one more append (cbp-claude's review of #197, 2026-09-28)."""
+    fresh, n = p.with_name(f"{p.stem}-new{p.suffix}"), 2
+    while fresh.exists():
+        fresh, n = p.with_name(f"{p.stem}-new{n}{p.suffix}"), n + 1
+    return fresh
+
+
+_MAIN_GUARD = re.compile(r"""^if\s+__name__\s*==\s*['"]__main__['"]\s*:""", re.M)
+
+
+def _is_second_program(content: str, before: str) -> bool:
+    """Whether `content`, appended to the .py `before`, is a whole program of its own landing
+    below another one -- not the next part of a program written in parts.
+
+    It must be a complete program by itself (#240's rule: it compiles alone and has a def,
+    class or import), AND it must collide with what is already there: it redefines a top-level
+    def/class the file already has, or both carry a __main__ guard. A later part of one program
+    adds new names below the old ones and at most one guard, so it never qualifies (cbp-claude's
+    review of #197: the first cut hinted on every append to a top-level .py)."""
+    import ast
+    if _file_state(content)[0] != "complete" or not re.search(r"^(def|class|import|from) ", content, re.M):
+        return False
+    def names(src):
+        return {n.name for n in ast.parse(src).body
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+    try:
+        clash = names(content) & names(before)
+    except (SyntaxError, ValueError):
+        clash = set()
+    return bool(clash) or bool(_MAIN_GUARD.search(content) and _MAIN_GUARD.search(before))
+
+
 def _append_must_advance(content: str, before: str) -> str:
     """Why appending `content` to a .py file would move it backwards, and so is refused, or "".
 
@@ -1047,9 +1082,12 @@ class ReferenceF1aDispatcher:
         # was not created by this write (GPT review on #141).
         existed = p.exists()
         before = 0
+        _before_text = ""
         if existed:
             with open(p, errors="replace") as f:
                 before = sum(1 for _ in f)
+            if p.suffix == ".py":
+                _before_text = p.read_text(errors="replace")
         if existed and before and p.suffix == ".py":
             _before = p.read_text(errors="replace")
             # The monotonic rule first (GPT review of #186): no append may move a .py file
@@ -1068,9 +1106,7 @@ class ReferenceF1aDispatcher:
                 # the append receipt; this refusal fires first on a broken file).
                 if (_file_state(content)[0] == "complete"
                         and re.search(r"^(def|class|import|from) ", content, re.M)):
-                    fresh, n = p.with_name(f"{p.stem}-new{p.suffix}"), 2
-                    while fresh.exists():
-                        fresh, n = p.with_name(f"{p.stem}-new{n}{p.suffix}"), n + 1
+                    fresh = _fresh_name(p)
                     why += (f" Your text is a whole program by itself: to start fresh with it, "
                             f"memory_write it to a name that does not exist yet (for example "
                             f"{fresh.name}), and that file will hold only your text. {p.name} "
@@ -1098,14 +1134,16 @@ class ReferenceF1aDispatcher:
             if p.parent.name in ("notes", "scratch") and p.parent.parent == self.memory_root:
                 result += (f" To start {p.name} fresh, retire_note it first, then memory_write "
                            f"the whole new version.")
-            elif p.suffix == ".py":
+            elif p.suffix == ".py" and _is_second_program(content, _before_text):
                 # 2026-09-24 15:19Z: cbp-being decided on "a new file", then memory_write-d the new
                 # program twice to the OLD file's name. Both landed below 3666 broken lines, and
                 # retire_note refused the path (not in notes/ or scratch/). Outside those folders
-                # the only way to a fresh file is a fresh name, and no receipt said so.
-                result += (f" To start a new file instead, memory_write to a name that does not "
-                           f"exist yet (for example {p.stem}-new{p.suffix}); that receipt says "
-                           f"\"created\".")
+                # the only way to a fresh file is a fresh name, and no receipt said so. Only for a
+                # whole second program (not the next part of one), and only a name not taken.
+                result += (f" Your text is a whole program of its own, now below the one already "
+                           f"in {p.name}. To start a new file instead, memory_write to a name that "
+                           f"does not exist yet (for example {_fresh_name(p).name}); that receipt "
+                           f"says \"created\".")
         result += _python_status(p)
         if p.suffix != ".py":
             result += _named_file_stamps(content, self.memory_root, p)
