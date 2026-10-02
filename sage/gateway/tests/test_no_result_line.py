@@ -106,3 +106,18 @@ def test_reader_and_beat_record():
     assert '"no_result_line": no_result_line_for(instance_config(instance))' in src
     # only the reflect turn reads it; the answer turn's records are unchanged
     assert src.count("no_result=bool(no_result_line_for(instance_config(instance)))") == 1
+
+
+def test_cbp_being_is_the_only_instance_that_opted_in():
+    """The measured being carries the opt-in; no other checked-in instance.json does."""
+    from sage.gateway.heartbeat import no_result_line_for
+    repo = Path(__file__).resolve().parents[3]
+    on = []
+    for cfg_path in sorted((repo / "sage/instances").glob("*/instance.json")):
+        try:
+            cfg = json.loads(cfg_path.read_text())
+        except Exception:
+            continue
+        if no_result_line_for(cfg):
+            on.append(cfg_path.parent.name)
+    assert on == ["cbp-qwen3.8-distill-4b"]
