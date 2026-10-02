@@ -458,6 +458,22 @@ def asks_about_change(text: str) -> bool:
 ANSWER_CONTEXT_TURNS = 8
 
 
+def answer_temperature(instance) -> Optional[float]:
+    """Opt-in per instance: instance.json "answer_temperature" (0..1.5) samples the answer turn alone.
+
+    dp, 2026-10-02, on sprout-being's recurring themes: "that isn't 'wrong' but i'm thinking about how to get it
+    to 'diversify' a bit without explicitly rewriting things." A sampling dial, nothing about what to say.
+    After #316 began showing the answer turn its own recent lines, verbatim self-echo (a 6-word phrase from its
+    previous 3 replies) rose 7% -> 21%. Offline, today's room exchanges x3: at 0.4 echo 3/15 and 1.40 motifs per
+    reply; at 0.7 echo 0/14 and 0.86, answering 14/15 and picking up the person's words 7/14 (vs 8/15)."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        v = instance_config(instance).get("answer_temperature")
+        return None if v is None else max(0.0, min(1.5, float(v)))
+    except Exception:
+        return None
+
+
 def answer_context_on(instance) -> bool:
     try:
         from sage.gateway.governed_turn import instance_config
@@ -713,7 +729,8 @@ def _answer_generate(llm, msgs, schema=None):
 
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
-                     on_generate=None, acts: str = "", changes: str = "", context: str = ""):
+                     on_generate=None, acts: str = "", changes: str = "", context: str = "",
+                     temperature: Optional[float] = None):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -727,7 +744,16 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     user = "\n\n".join(p for p in (context, acts, changes, ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
             {"role": "user", "content": user}]
-    r, retried = _answer_generate(llm, msgs, answer_schema_for(selected.cid))
+    # THIS TURN'S SAMPLING ONLY (answer_temperature): set for the answer generate, restored after, so explore
+    # and reflect keep the beat's temperature.
+    _prior_t = getattr(llm, "temperature", None)
+    if temperature is not None and _prior_t is not None:
+        llm.temperature = float(temperature)
+    try:
+        r, retried = _answer_generate(llm, msgs, answer_schema_for(selected.cid))
+    finally:
+        if temperature is not None and _prior_t is not None:
+            llm.temperature = _prior_t
     raw = (r or {}).get("raw") or {}
     content = ((r or {}).get("content") or "").strip()
     thinking = ((raw.get("message") or {}).get("thinking") or "").strip()
@@ -773,6 +799,8 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
             form["why"] = "chose to answer but wrote no message"
         else:
             form["why"] = "chose silence"
+    if temperature is not None:
+        form["temperature"] = float(temperature)
     res.answer_form = form
     return res
 
@@ -3510,7 +3538,8 @@ def main(argv=None) -> int:
                                           member=args.member, on_generate=_on_generate("answer"),
                                           acts=_acts, changes=_changes,
                                           context=(answer_context_block(instance, args.member, selected)
-                                                   if answer_context_on(instance) else ""))
+                                                   if answer_context_on(instance) else ""),
+                                          temperature=answer_temperature(instance))
             else:
                 answer = run_ollama_tool_turn(
                     client, llm,
