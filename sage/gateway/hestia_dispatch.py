@@ -191,6 +191,61 @@ def _worktree_env() -> dict:
     return env
 
 
+CHECK_FAILURES_SHOWN = 6        # failing tests named in the headline; the rest are counted
+CHECK_FAILURE_MSG_CHARS = 160   # each one's first error line
+
+
+def check_failures(raw_out: str) -> list:
+    """The failing tests in a pytest run, as [(test_id, first error line)], from pytest's own
+    short summary (`FAILED path::test - Error: ...`, `ERROR path::test - ...`). Pure.
+
+    WHY THE HEADLINE NAMES THEM (legion-being, #272, 2026-09-30..10-01). The headline said
+    "FAIL -- 1 failed, 13 passed" and nothing else; which test, and why, lived in the middle of
+    `output`. Compaction keeps a result's first and last 200 characters, so on a long beat the
+    one fact the being needed was the part elided: it wrote scripts to dig failure lines out of
+    its saved spills, for a day, and edited code that was already right to satisfy a test it
+    could not read. A verdict that cannot say what failed is half a verdict."""
+    import re
+    lines = (raw_out or "").splitlines()
+    # THE SUMMARY LINE IS CUT TO THE TERMINAL WIDTH. Not on a tty that is 80 columns, and with
+    # a long test id pytest drops the " - <message>" part entirely: the first live use
+    # (legion-being, 2026-10-01 21:04Z) headlined "... :: test_elision_marker_count_matches_
+    # saved_file — failed". So the message also comes from that test's own failure section:
+    # the first `E ` line under its `____ name ____` header.
+    first_e, current = {}, None
+    for line in lines:
+        # one underscore each side once the name is wider than the terminal; many otherwise
+        h = re.match(r"^_+ (?:ERROR (?:at \S+ of |collecting ))?(\S+?) _+$", line.strip())
+        if h:
+            current = h.group(1)
+            continue
+        if current and current not in first_e and line.startswith("E "):
+            first_e[current] = line[1:].strip()
+    out = []
+    for line in lines:
+        m = re.match(r"^(FAILED|ERROR) (\S+)(?: - (.*))?$", line.strip())
+        if m:
+            tid = m.group(2)
+            name = tid.split("::")[-1]
+            msg = (m.group(3) or "").strip() or first_e.get(name) or first_e.get(tid) \
+                or m.group(1).lower()
+            out.append((tid, msg))
+    return out
+
+
+def check_headline(passed: bool, summary: str, failures: list) -> str:
+    """The sentence a check result leads with. On FAIL it names the failing tests (up to
+    CHECK_FAILURES_SHOWN, each with its first error line) so the verdict survives elision."""
+    head = f"{'PASS' if passed else 'FAIL'} — {summary}."
+    if not passed and failures:
+        shown = [f"{t} — {m[:CHECK_FAILURE_MSG_CHARS]}" for t, m in failures[:CHECK_FAILURES_SHOWN]]
+        more = len(failures) - len(shown)
+        head += (f" Failing ({len(failures)}): " + "; ".join(shown)
+                 + (f"; and {more} more (see `failures`)" if more > 0 else "") + ".")
+    return (head + " This is the answer. A check that RAN and FAILED still returns "
+            "successfully as an act: 'the call worked' is not 'the tests passed'.")
+
+
 class HestiaF1aDispatcher:
     """A Dispatcher (being_gate_client.Dispatcher) that runs the bounded registry against the
     live daemon. Wraps ReferenceF1aDispatcher for the local verbs (witness / memory)."""
@@ -2240,9 +2295,8 @@ class HestiaF1aDispatcher:
         # else, and it says what `ok` does NOT mean.
         tail = (detail or "").strip().splitlines()
         summary = tail[-1][:120] if tail else ""
-        headline = (f"{'PASS' if passed else 'FAIL'} — {summary}. "
-                    f"This is the answer. A check that RAN and FAILED still returns "
-                    f"successfully as an act: 'the call worked' is not 'the tests passed'.")
+        failures = check_failures(raw_out)
+        headline = check_headline(passed, summary, failures)
         # THE EVIDENCE CONTRACT (GPT on SAGE#60, carried forward from the #62 slice that
         # never landed). A verdict is only as transferable as what it can name: which
         # command ran, against which bytes, producing how much output, exiting how — and
@@ -2298,6 +2352,7 @@ class HestiaF1aDispatcher:
                               result={"headline": headline,
                                       "target": target, "passed": passed,
                                       "verdict": "PASS" if passed else "FAIL",
+                                      "failures": [{"test": t, "error": m} for t, m in failures],
                                       "output": detail, "worktree": self.worktree,
                                       "tree": tree_before,
                                       "evidence": {
