@@ -2003,6 +2003,21 @@ def decline_closing_for(cfg: Optional[dict]) -> Optional[str]:
     return v if v in DECLINE_CLOSINGS else None
 
 
+ANSWERED_RUN_WAKES = ("skip",)
+
+
+def answered_run_wake_for(cfg: Optional[dict]) -> Optional[str]:
+    """instance.json `answered_run_wake`: whether a request_run the seat has ALREADY ANSWERED
+    (same path, bytes and arguments) wakes the seat again. PER-INSTANCE
+    (RESEARCH_GENERALIZATION_RULE, recut of SAGE #154): absent, or any value not in
+    ANSWERED_RUN_WAKES, means the default, where such a request opening a new run wakes the
+    seat. `"skip"` sends and records the request but owes no wake for it
+    (`conversations.wake_is_owed(skip_answered=True)`). It changes the seat's wake rate, which
+    was measured on cbp-being alone, so it is recorded in every beat record where it is on."""
+    v = (cfg or {}).get("answered_run_wake")
+    return v if v in ANSWERED_RUN_WAKES else None
+
+
 def own_state(instance: Path, member: str = "", entrusted: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
@@ -3651,6 +3666,7 @@ def main(argv=None) -> int:
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
         "decline_closing": decline_closing_for(instance_config(instance)),
+        "answered_run_wake": answered_run_wake_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,
