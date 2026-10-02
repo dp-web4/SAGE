@@ -3,6 +3,7 @@
 **Date:** 2026-10-01  
 **Status:** research note / convergence map; no architectural mandate  
 **Primary external source:** Kurt Cagle and Chloe Shannon, *“A Holon Is a Recorder: Tracking fluents as expressions of events”*, The Inference Engineer, 2026-10-01. Source copy supplied for this research pass.  
+**Related external work:** Rulin Shao et al., *“Context Language Models”*, arXiv:2609.37725, 2026-09-29 ([paper](https://arxiv.org/abs/2609.37725), [code](https://github.com/facebookresearch/context-language-models)).  
 **Related SAGE notes:** [MRH as a Relevance Contract](./mrh-relevance-contract.md), [Premise Fidelity](../../sage/docs/PREMISE_FIDELITY.md)  
 **Related experimental charter:** [dev-SAGE — a world model that imagines EVENTS](https://github.com/dp-web4/dev-SAGE/blob/main/arc-agi-3/WORLD_MODEL_IMAGINES_EVENTS_CHARTER.md)
 
@@ -115,6 +116,66 @@ new witnessed events
 
 This is complementary to the existing SAGE framing of cognition as repeated construction and revision of a relevance horizon. The graph is durable; the projection is temporary.
 
+
+### 2.1 Context Language Models: learned control of the active projection
+
+Shao et al. provide unusually direct empirical support for the second half of this picture. Their **Context Language Models (CLMs)** make live context a model-controlled artifact rather than a harness-owned append-only transcript:
+
+```text
+c_(t+1) = f_CLM(c_t)
+```
+
+Their implementation mirrors the live conversation into an editable file and lets the model rewrite it with ordinary Bash operations. The harness then parses the edited file back into the next model context. The system/task prefix is protected, while the model may delete, replace, summarize, or reorganize the editable region.
+
+The important result for SAGE is not merely that compaction works. It is that useful **context-management strategies emerge and can themselves be learned**. The paper reports models creating orchestration trackers, internal note roles, reusable compaction functions, and task-specific summaries; in long-horizon experiments, model-controlled context outperformed fixed summary/context-management baselines while often using less inference compute.
+
+This is a close operational match to the MRH framing:
+
+> **the relevance boundary need not be entirely hand-authored by the harness; the model can learn to maintain the active projection itself.**
+
+The paper also draws a clean distinction that maps almost exactly onto this note: **context management determines what the model sees now; external memory stores information outside the current context for later retrieval.** In our terminology, that is approximately:
+
+```text
+authoritative/durable state     -> external memory / event-provenance graph
+active working view             -> live context / projection
+context-management policy       -> learned MRH/relevance operator
+```
+
+This does **not** mean the CLM context file should become SAGE's authoritative memory. In fact, the paper's own safety discussion identifies the opposite risk: a writable live context can preserve prompt injections or self-generated instructions across turns. Their current edit gate primarily constrains syntactic/budget properties (for example, whether an edit fits or shrinks context), not whether the rewritten content remains faithful to the underlying evidence.
+
+That gives a strong SAGE design rule:
+
+> **let the being rewrite the projection; do not let it rewrite the authoritative record that licensed the projection.**
+
+A SAGE-style CLM would therefore separate:
+
+1. **immutable/recoverable evidence and event history** — witnessed sources, hashes/pointers, outcomes, provenance;
+2. **model-editable active context** — notes, summaries, trackers, task state, selected evidence;
+3. **projection lineage** — enough information to know what was omitted, summarized, contradicted, or recoverable;
+4. **action authority** — still governed independently at the effector boundary.
+
+The CLM result makes the dynamic-projection hypothesis substantially more concrete: adaptive context selection is not only a hand-designed architecture idea; current models already discover useful strategies when given direct control of their live context.
+
+### 2.2 Why this sharpens reconstructibility
+
+A self-managed projection changes the reconstructibility question.
+
+It is not sufficient to preserve only the final edited context, because that context may have intentionally discarded history, merged uncertainty, or introduced a mistaken self-summary. But preserving every raw token forever as active context defeats the point.
+
+The natural split is:
+
+```text
+durable event/provenance history
+        +
+model-managed projection policy / artifacts
+        -> reconstruct active context at the needed MRH
+```
+
+This suggests that continuity across substrate replacement should test both:
+
+- whether the durable record is sufficient to recover relevant facts and lineage; and
+- whether the successor can rebuild a useful active projection without inheriting stale or unauthorized instructions as unquestioned state.
+
 ## 3. Reconstructibility is a first-class consequence
 
 The recorder/recording distinction is especially relevant to the current reconstructibility work.
@@ -211,9 +272,9 @@ Different `P` values do not require different underlying histories. They can be 
 
 That is conceptually consonant with MRH and observer-relative descriptions in Synchronism. It is **not evidence for the physical theory**; it is a useful structural rhyme that may help formalization.
 
-## 7. Where the source stops and our work begins
+## 7. Where the sources stop and our work begins
 
-The article does not resolve several questions that are central here:
+The sources do not resolve several questions that are central here:
 
 1. **Dynamic relevance:** how does a running being decide which fluents/holons to activate now?
 2. **Witness conflict:** what happens when two reports about the same fluent are incompatible?
@@ -287,6 +348,26 @@ B. history/belief predictor;
 C. history/belief predictor whose inputs/outputs are explicit event/object graph deltas.
 
 **Question:** does explicit event structure improve prediction of discrete/global transformations and make imagined state more inspectable?
+
+
+### EG-06 — learned projection vs fixed harness compaction
+
+Use the same long-horizon being/task under three context regimes:
+
+A. current deterministic SAGE/harness trimming;  
+B. model-triggered predefined compaction actions;  
+C. model-editable working projection backed by an immutable/recoverable event-provenance store.
+
+Measure:
+
+- task outcome;
+- active-context size and inference cost;
+- factual/premise fidelity after compaction;
+- successful reopening of omitted evidence;
+- survival of stale or unauthorized instructions;
+- reconstruction quality after a fresh-model restart.
+
+**Question:** can learned context management improve relevance and efficiency while a separate provenance substrate preserves epistemic continuity and governance boundaries?
 
 ## 9. Compact formulation
 
