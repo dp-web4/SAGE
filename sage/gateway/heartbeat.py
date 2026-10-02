@@ -232,7 +232,9 @@ def _offered_explore_tools_before_the_canonical_toolset(body_reading: Optional[d
 # spent every explore step reading its own source, then closed the beat. A verb in the
 # registry and not in the offered set is a verb the being does not have, and from outside
 # that is indistinguishable from choosing not to answer.
-REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "say"]
+# `stay_awake` is offered here because reflection is where the being says what it wants next;
+# asking for another beat right away is one answer to that (SAGE #295).
+REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "say", "stay_awake"]
 
 # The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
 # Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
@@ -452,6 +454,110 @@ def asks_about_change(text: str) -> bool:
     return bool(_ASKS_ABOUT_CHANGE.search(text or ""))
 
 
+# THE ANSWER TURN IS IN A CONVERSATION (2026-10-01, SA program E13). With always-listening and
+# answer-the-waking-turn, most spoken exchanges go through the JSON answer turn, which (E1) saw only the
+# pending turn: dp heard "Hi there. I'm Sprout, your SAGE being ... Ready to help you today." and asked
+# whether the being had reset. It had not; its voice had become its most context-free channel. Offline on
+# 5 real exchanges x2: pending only, ~1/10 replies referred to what had actually been said; + the last 8
+# turns across its conversations ~6/10; + one identity line and its own last-stated want ~7/10, answered
+# 10/10. Opt-in: instance.json "answer_context": "conversation".
+ANSWER_CONTEXT_TURNS = 8
+
+
+def answer_temperature(instance) -> Optional[float]:
+    """Opt-in per instance: instance.json "answer_temperature" (0..1.5) samples the answer turn alone.
+
+    dp, 2026-10-02, on sprout-being's recurring themes: "that isn't 'wrong' but i'm thinking about how to get it
+    to 'diversify' a bit without explicitly rewriting things." A sampling dial, nothing about what to say.
+    After #316 began showing the answer turn its own recent lines, verbatim self-echo (a 6-word phrase from its
+    previous 3 replies) rose 7% -> 21%. Offline, today's room exchanges x3: at 0.4 echo 3/15 and 1.40 motifs per
+    reply; at 0.7 echo 0/14 and 0.86, answering 14/15 and picking up the person's words 7/14 (vs 8/15)."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        v = instance_config(instance).get("answer_temperature")
+        return None if v is None else max(0.0, min(1.5, float(v)))
+    except Exception:
+        return None
+
+
+def answer_context_on(instance) -> bool:
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return instance_config(instance).get("answer_context") == "conversation"
+    except Exception:
+        return False
+
+
+def answer_context_sources(instance, cid: str) -> list:
+    """Which conversations' history may condition an answer to `cid`. THE SELECTED CONVERSATION ONLY,
+    unless instance.json "answer_context_from" lists more FOR THIS RECIPIENT, e.g. {"dp": ["room"]}.
+
+    GPT on #316: history across all conversations crossed an audience boundary. A voice in `room` is not
+    authenticated (room.py), so anyone near the mic could get an answer conditioned on dp's or a seat's
+    private thread; the same holds between authenticated recipients. Recency is not a visibility rule."""
+    extra = []
+    try:
+        from sage.gateway.governed_turn import instance_config
+        extra = list((instance_config(instance).get("answer_context_from") or {}).get(cid) or [])
+    except Exception:
+        pass
+    return [cid] + [c for c in extra if isinstance(c, str) and c and c != cid]
+
+
+def answer_context_block(instance, member: str, selected, n: int = ANSWER_CONTEXT_TURNS) -> str:
+    """Who the being is (one line: its own continuity) and the conversation just before the turn it is
+    answering, from the conversations answer_context_sources() allows for that recipient, oldest first,
+    each with how long before. Empty when nothing is readable."""
+    from sage.gateway import conversations as conv
+    instance = Path(instance)
+    parts = []
+    try:
+        ident = (json.loads((instance / "identity.json").read_text()).get("identity") or {})
+        want = ""
+        try:
+            want = str(json.loads((instance / "account.json").read_text()).get("want") or "")[:240]
+        except Exception:
+            pass
+        line = (f"You are {ident.get('name') or member}: {ident.get('session_count')} sessions since "
+                f"{ident.get('created')}, now in your '{ident.get('phase')}' phase.")
+        if want:
+            line += f' At your last beat you said you want: "{want}"'
+        try:
+            from sage.gateway import peers as _peers_ctx
+            if (_sib := _peers_ctx.sibling_line(member)):
+                line += " " + _sib
+        except Exception:
+            pass
+        parts.append(line)
+    except Exception:
+        pass
+    turns = []
+    for cid in answer_context_sources(instance, selected.cid):
+        if not (instance / "conversations" / f"{cid}.jsonl").exists():
+            continue
+        try:
+            turns += [dict(t, _cid=cid) for t in conv.recent(instance, cid, limit=40)]
+        except Exception:
+            continue
+    sel_ts = next((t.get("ts") for t in turns if t["_cid"] == selected.cid
+                   and int(t.get("seq") or -1) == int(selected.seq or -2)), None)
+    if sel_ts:
+        before = sorted([t for t in turns if str(t.get("ts", "")) < sel_ts], key=lambda t: t.get("ts", ""))[-n:]
+        if before:
+            ref = _parse_ts(sel_ts)
+            lines = []
+            for t in before:
+                voice = t.get("from") == "voice"
+                who = "you" if t.get("from") == member else ("a voice in the room" if voice else t.get("from"))
+                how = "said" if voice else ("said aloud in the room" if t["_cid"] == "room"
+                                            else f"wrote in '{t['_cid']}'")
+                when = _parse_ts(t.get("ts"))
+                ago = f"{int((ref - when).total_seconds() // 60)} min earlier, " if ref and when else ""
+                lines.append(f'- {ago}{who} {how}: "{" ".join(str(t.get("text", "")).split())[:240]}"')
+            parts.append("The conversation just before this (oldest first):\n" + "\n".join(lines))
+    return "\n\n".join(parts)
+
+
 def answer_changes_on(instance) -> bool:
     """Opt-in per instance, its own key (cbp-claude on #249): instance.json "answer_changes": true."""
     try:
@@ -575,19 +681,62 @@ def answer_turn_mode(instance) -> str:
         return "tool"
 
 
-def _answer_generate(llm, msgs):
+# SPOKEN ANSWERS FIT (2026-09-30). An answer to the `room` is spoken, and `speak` takes one utterance
+# of up to 400 characters (body.SPEAK_MAX_CHARS). On Sprout 20:55-23:19Z the JSON answer turn composed
+# replies to the room's voice questions 11 times at 451-2,196 chars; every one was refused and, the turn
+# being single-shot, the being never saw why: 37 minutes of silence while it was answering. Offline on its
+# own model and those exact questions (nothing sent):
+#   C0 today                         2/6 speakable, median 531 chars
+#   S1 "this will be spoken ..."     6/6, median 186, max 396
+#   S2 schema maxLength 400 only     5/6, but cut mid-sentence at 400 and one empty reply
+#   S1 + S2 (shipped)                6/6, median 221, max 291: the cap never reached, a safety net only
+# The prompt does the work; the cap only guarantees the gate is never the thing that says no.
+SPOKEN_ASK = ("\nThis answer will be spoken aloud in the room, so keep it to what you would say out loud: "
+              "one to three sentences, under 400 characters.")
+
+
+def fit_spoken(message: str) -> tuple:
+    """(message, original length if trimmed else 0). A spoken answer that ran into the schema's cap
+    (body.SPEAK_MAX_CHARS) ends where the grammar stopped it, mid-sentence: measured 2026-10-02 19:12Z,
+    exactly 400 chars ending "...I think agents need to learn". Trim back to its last complete sentence
+    rather than speak a cut-off one; the trim is recorded on the answer form. Our infrastructure's cut,
+    not the being's words, is what is undone: nothing else in the message changes."""
+    from sage.gateway import body as _body
+    cap = _body.SPEAK_MAX_CHARS
+    m = (message or "").strip()
+    if len(m) < cap - 1 or m.endswith((".", "!", "?", "\u2026", '"', "\u201d", "'")):
+        return m, 0
+    ends = [i for i, ch in enumerate(m[:cap]) if ch in ".!?\u2026"]
+    if not ends or ends[-1] < 40:
+        return m, 0
+    return m[:ends[-1] + 1], len(m)
+
+
+def answer_schema_for(cid: str) -> dict:
+    """The JSON answer schema, with `message` capped at speak's limit when the answer is spoken."""
+    if cid != "room":
+        return ANSWER_SCHEMA
+    from sage.gateway import body as _body
+    s = json.loads(json.dumps(ANSWER_SCHEMA))
+    s["properties"]["message"]["maxLength"] = _body.SPEAK_MAX_CHARS
+    return s
+
+
+def _answer_generate(llm, msgs, schema=None):
     """One constrained generate, retried once on the shapes the tool loop also retries: empty
     content (think-only), a length cut, or a transport error. Returns (r, retried)."""
-    r = llm.get_chat_response(msgs, fmt=ANSWER_SCHEMA)
+    schema = schema or ANSWER_SCHEMA
+    r = llm.get_chat_response(msgs, fmt=schema)
     raw = (r or {}).get("raw") or {}
     content = ((r or {}).get("content") or "").strip()
     if not content or raw.get("done_reason") == "length" or content.startswith("[OllamaIRP"):
-        return llm.get_chat_response(msgs, fmt=ANSWER_SCHEMA), 1
+        return llm.get_chat_response(msgs, fmt=schema), 1
     return r, 0
 
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
-                     on_generate=None, acts: str = "", changes: str = ""):
+                     on_generate=None, acts: str = "", changes: str = "", context: str = "",
+                     temperature: Optional[float] = None):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -597,11 +746,20 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     ("You called no tools this beat") sitting beside a person's question."""
     from sage.gateway.being_tool_loop import ToolTurnResult
     from sage.gateway.being_gate_client import BeingIntent
-    ask = ANSWER_ASK_JSON.format(pending=selected.render())
-    user = "\n\n".join(p for p in (acts, changes, ask) if p)
+    ask = ANSWER_ASK_JSON.format(pending=selected.render()) + (SPOKEN_ASK if selected.cid == "room" else "")
+    user = "\n\n".join(p for p in (context, acts, changes, ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
             {"role": "user", "content": user}]
-    r, retried = _answer_generate(llm, msgs)
+    # THIS TURN'S SAMPLING ONLY (answer_temperature): set for the answer generate, restored after, so explore
+    # and reflect keep the beat's temperature.
+    _prior_t = getattr(llm, "temperature", None)
+    if temperature is not None and _prior_t is not None:
+        llm.temperature = float(temperature)
+    try:
+        r, retried = _answer_generate(llm, msgs, answer_schema_for(selected.cid))
+    finally:
+        if temperature is not None and _prior_t is not None:
+            llm.temperature = _prior_t
     raw = (r or {}).get("raw") or {}
     content = ((r or {}).get("content") or "").strip()
     thinking = ((raw.get("message") or {}).get("thinking") or "").strip()
@@ -629,6 +787,10 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     else:
         form["answer"] = bool(j.get("answer"))
         message = str(j.get("message") or "").strip()
+        if selected.cid == "room":
+            message, cut_from = fit_spoken(message)
+            if cut_from:
+                form["trimmed_from"] = cut_from
         res.reply = message
         if form["answer"] and message:
             intent = BeingIntent("say", {"to": selected.cid, "text": message})
@@ -643,6 +805,8 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
             form["why"] = "chose to answer but wrote no message"
         else:
             form["why"] = "chose silence"
+    if temperature is not None:
+        form["temperature"] = float(temperature)
     res.answer_form = form
     return res
 
@@ -841,7 +1005,7 @@ _SCHEMA_CHARS_PER_VERB = 700   # above the 651 measured, so the bound stays cons
 _SCHEMA_CHARS_FLOOR = 12_000   # at least the 18-verb measurement, for when the verb count is unknown too
 
 
-def _schema_chars_for(offered, unavail: Optional[dict] = None) -> Optional[int]:
+def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[dict] = None) -> Optional[int]:
     """Chars the offered verbs' schemas actually cost. None rather than a guess if it
     cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
     13 verbs to 18. Callers must route None through _schema_chars_fallback, never `or`
@@ -855,7 +1019,7 @@ def _schema_chars_for(offered, unavail: Optional[dict] = None) -> Optional[int]:
             # here, so the cost is measured on THOSE specs, not on the full descriptions
             from sage.gateway import toolset
             names = set(offered)
-            return len(json.dumps([t for t in toolset.specs(unavail) if t["function"]["name"] in names]))
+            return len(json.dumps([t for t in toolset.specs(unavail, enums) if t["function"]["name"] in names]))
         from sage.gateway.being_gate_client import ollama_tools
         return len(json.dumps(ollama_tools(list(offered))))
     except Exception:
@@ -1889,6 +2053,21 @@ def decline_closing_for(cfg: Optional[dict]) -> Optional[str]:
     return v if v in DECLINE_CLOSINGS else None
 
 
+ANSWERED_RUN_WAKES = ("skip",)
+
+
+def answered_run_wake_for(cfg: Optional[dict]) -> Optional[str]:
+    """instance.json `answered_run_wake`: whether a request_run the seat has ALREADY ANSWERED
+    (same path, bytes and arguments) wakes the seat again. PER-INSTANCE
+    (RESEARCH_GENERALIZATION_RULE, recut of SAGE #154): absent, or any value not in
+    ANSWERED_RUN_WAKES, means the default, where such a request opening a new run wakes the
+    seat. `"skip"` sends and records the request but owes no wake for it
+    (`conversations.wake_is_owed(skip_answered=True)`). It changes the seat's wake rate, which
+    was measured on cbp-being alone, so it is recorded in every beat record where it is on."""
+    v = (cfg or {}).get("answered_run_wake")
+    return v if v in ANSWERED_RUN_WAKES else None
+
+
 def own_state(instance: Path, member: str = "", entrusted: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
@@ -2138,9 +2317,9 @@ class SelectedTurn:
     frozen when rendered. Anything that arrives mid-beat waits for the next beat; it must never
     change who an already-rendered context is addressed to.
     """
-    __slots__ = ("cid", "seq", "speaker", "text", "asks", "answers_ask", "expects_reply")
+    __slots__ = ("cid", "seq", "speaker", "text", "asks", "answers_ask", "expects_reply", "woke")
 
-    def __init__(self, cid: str, turn: dict, answers_ask: bool = False):
+    def __init__(self, cid: str, turn: dict, answers_ask: bool = False, woke: bool = False):
         self.cid = cid
         self.seq = int(turn.get("seq") or 0)
         self.speaker = turn.get("from")
@@ -2148,7 +2327,13 @@ class SelectedTurn:
         self.asks = turn_expects_reply(self.text)
         self.answers_ask = bool(answers_ask)
         # The answer-phase gate. Deliberately NOT `asks or answers_ask`: see answers_the_being.
-        self.expects_reply = self.asks
+        self.expects_reply = self.asks or woke
+        # A PERSON'S TURN THAT WOKE THE BEAT IS OFFERED AN ANSWER, question or not (2026-09-30, SA
+        # program E6/E7). dp's text woke two beats that evening and neither replied: one spent the answer
+        # turn on another conversation's older question, the other had none because dp's turn was a
+        # statement. Offline on dp's six most recent statements, offered the JSON answer turn the being
+        # replied 11/12 and chose silence 1/12, 0 echoes; silence stays a real choice.
+        self.woke = woke
 
     def render(self) -> str:
         """Only THIS turn — for the answer phase, which sends to exactly one conversation. It
@@ -2166,7 +2351,90 @@ def pending_and_say_line(instance: Path, member: str) -> tuple:
     return pending_selection(instance, member)[:4]
 
 
-def pending_selection(instance: Path, member: str) -> tuple:
+# PRIORITY CLASSES (the RTOS note, R1). From the pending-set kinds that already exist; the beat record
+# says which classes woke it, so latency and engagement can be measured per class.
+#   P0 addressed: a person's words (heard, a turn)   P1 body   P3 routine sense   P4 the being's own / timer
+P0_KINDS = ("heard", "dp_turn", "seat_turn", "peer_turn")
+
+
+def event_class(e: dict) -> str:
+    kind, key = str(e.get("kind") or ""), str(e.get("key") or "")
+    if kind in P0_KINDS or key.startswith("turn:"):
+        return "P0"
+    if kind in ("body", "audio_device", "power", "fault"):
+        return "P1"
+    if kind in ("sense", "presence"):
+        return "P3"
+    return "P4"
+
+
+def event_answers(e: dict, selected) -> bool:
+    """Does answering `selected` meet this pending P0 event? `turn:<cid>:<seq>` by conversation and seq;
+    `heard` by the room and its words; a daemon dp_turn ("... in conversation '<cid>'") by conversation."""
+    if selected is None:
+        return False
+    kind, key, desc = str(e.get("kind") or ""), str(e.get("key") or ""), str(e.get("descriptor") or "")
+    m = re.match(r"turn:([a-z0-9-]+):(\d+)$", key)
+    if m:
+        return m.group(1) == selected.cid and int(m.group(2)) == int(selected.seq or -1)
+    if kind == "heard":
+        words = key.split(":", 2)[2] if key.count(":") >= 2 else ""
+        return selected.cid == "room" and words.strip() == str(selected.text or "")[:80].strip()
+    m = re.search(r"conversation '([a-z0-9-]+)'", desc)
+    return bool(m) and m.group(1) == selected.cid
+
+
+def preempt_on(instance) -> bool:
+    """Opt-in per instance (R2): instance.json "preempt": true."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return bool(instance_config(instance).get("preempt"))
+    except Exception:
+        return False
+
+
+def p0_since(t0: float, pending: Optional[list] = None) -> list:
+    """P0 events now pending that arrived after `t0` (this beat's start)."""
+    if pending is None:
+        try:
+            from sage.gateway import arousal as _a
+            pending = _a.peek_pending()
+        except Exception:
+            return []
+    return [e for e in pending if event_class(e) == "P0" and float(e.get("first_ts") or 0) >= t0]
+
+
+def answer_woke_on(instance) -> bool:
+    """Opt-in per instance, its own key: instance.json "answer_woke": true."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return bool(instance_config(instance).get("answer_woke"))
+    except Exception:
+        return False
+
+
+def person_turns_that_woke(events) -> list:
+    """[(conversation id, seq or None)] for the person turns among a beat's claimed wake events:
+    `turn:<cid>:<seq>` (a turn that arrived mid-beat), "... spoke in conversation '<cid>'" (the
+    daemon's dp_turn), and `heard` (a voice, so the room; the newest voice turn there)."""
+    out = []
+    for e in events or []:
+        kind, key, desc = str(e.get("kind") or ""), str(e.get("key") or ""), str(e.get("descriptor") or "")
+        if kind not in ("dp_turn", "heard"):
+            continue
+        m = re.match(r"turn:([a-z0-9-]+):(\d+)$", key)
+        if m:
+            out.append((m.group(1), int(m.group(2))))
+            continue
+        m = re.search(r"conversation '([a-z0-9-]+)'", desc)
+        if m:
+            out.append((m.group(1), None))
+        elif kind == "heard":
+            out.append(("room", None))
+    return out
+
+
+def pending_selection(instance: Path, member: str, woke: Optional[list] = None) -> tuple:
     """(say_line, pending_block, say_first, target, selected) for the reflect turn: what is
     waiting on the being, the instruction naming who to answer, and the ONE turn selected to be
     answered (a SelectedTurn, or None). All five come from a single scan, so the answer phase
@@ -2216,6 +2484,15 @@ def pending_selection(instance: Path, member: str) -> tuple:
             # leaves `pend`, so the next beat reaches the older one; nothing is starved.
             asking = [ct for ct in pend if turn_expects_reply(ct[1].get("text"))]
             cid, t = (asking or pend)[-1]
+            # The turn that WOKE this beat comes first, ahead of the newest question elsewhere: the
+            # being was woken to answer it (SelectedTurn.woke).
+            woke_hit = False
+            for wcid, wseq in (woke or []):
+                hits = [ct for ct in pend if ct[0] == wcid and ct[1].get("from") != member
+                        and (wseq is None or int(ct[1].get("seq") or 0) == wseq)]
+                if hits:
+                    cid, t = hits[-1]
+                    woke_hit = True
             # FIRST in the list, not appended after the bookkeeping. The routine three
             # (journal, todo, remember) fill the step budget exactly, so anything after them
             # is unreachable however willing the being is — measured 2026-09-18.
@@ -2229,8 +2506,13 @@ def pending_selection(instance: Path, member: str) -> tuple:
             # back to dp (91% verbatim). Before `say` refused placeholders the same slot was
             # filled with ".." (seq 52, 56, 58). A turn that asks nothing is not a debt.
             who = t.get("from")
-            sel = SelectedTurn(cid, t, answers_the_being(instance, cid, member, t))
-            if sel.expects_reply:
+            sel = SelectedTurn(cid, t, answers_the_being(instance, cid, member, t), woke=woke_hit)
+            if sel.woke and not sel.asks:
+                first = (f'FIRST, before the numbered writes below: {who} just wrote to you, and that is '
+                         f'what woke you. If you have something to say back, call say with to set to '
+                         f'{cid} and your message as the text. Replying is not required; the writes '
+                         f'below happen either way.\n')
+            elif sel.expects_reply:
                 first = (f'FIRST, before the numbered writes below: {who} asked you something '
                          f'and has no answer yet. If you have something to say, call say with '
                          f'to set to {cid} and your message as the text. Answering is not '
@@ -2872,7 +3154,18 @@ def main(argv=None) -> int:
     # The beat has begun: wake, before anything below reads the daemon's /status into the
     # being's own body block (SAGE #291).
     _BEAT_ID["id"] = host_session_id
+    _BEAT_ID["continuing"] = False
     _phase("wake", "start", host_session_id)
+    # WHAT WOKE THIS BEAT (SAGE #295): claim every pending event now, before anything is composed,
+    # so an event arriving from here on is pending for the NEXT beat rather than lost in this one.
+    # THE BEAT STARTS HERE for preemption (GPT on #310): an event that lands after this claim and before
+    # the record's later `t0` is an arrival during this beat, and must count as one.
+    _beat_started = time.time()
+    try:
+        from sage.gateway import arousal as _arousal_claim
+        _claimed = _arousal_claim.claim_pending(host_session_id)
+    except Exception as _e:
+        _claimed = [{"claim_error": f"{type(_e).__name__}: {_e}"}]
     client, llm = build_client(args.member, instance, args.model, workspace, args.forum_dir,
                                host_session_id, args.temperature, args.max_tokens,
                                gate_only=args.gate_only)
@@ -2895,6 +3188,13 @@ def main(argv=None) -> int:
     if disp is not None and hasattr(disp, "drain_inbox"):
         env = disp.drain_inbox(peek=True)
         inbox = render_inbox((env.result or {}).get("notices") or []) if env.ok else f"({env.error})"
+    # who could be writing here: its siblings, by the names it uses, beside the inbox their answers reach
+    try:
+        from sage.gateway import peers as _peers_inbox
+        if (_sib := _peers_inbox.sibling_line(args.member)):
+            inbox = _sib + "\n" + inbox
+    except Exception:
+        pass
     # what reach the being holds and has already asked for, so it does not re-file
     scope = "(scope status unavailable)"
     if disp is not None and hasattr(disp, "_call"):
@@ -2973,13 +3273,18 @@ def main(argv=None) -> int:
     if pres_text:
         digest = "# What you sensed since your last beat\n\n" + pres_text + "\n\n" + digest
     woke = consume_wake_marker()
-    # NO `/no_think` SUFFIX RIDES ANY TURN (retired fleet-wide 2026-09-12, kept in this
-    # reconciliation). The request's `think` field is the only control surface on this
-    # stack: measured on Sprout at ollama 0.30.8 and on CBP at 0.20.7, the suffix leaves the
-    # think block intact (qwen3.5:0.8b 1428 -> 1441 chars, qwen3.8-distill:2b 275 -> 405,
-    # both still thinking) while `think=False` zeroes it. No fleet template parses the
-    # string: the think branches that exist key on the API field (`enable_thinking` in the
-    # distill's Jinja, `$.IsThinkSet` in qwen3's Go template), never on prompt text.
+    woke["events"] = _claimed
+    woke["classes"] = sorted({event_class(e) for e in _claimed if "claim_error" not in e})
+    if _claimed and woke.get("by") == "timer" and not any("claim_error" in e for e in _claimed):
+        woke["by"] = "event"
+    # No `/no_think` suffix rides any turn. The request's `think` field is the only control
+    # surface on this stack: measured on Sprout at ollama 0.30.8 and on CBP at 0.20.7, the
+    # suffix leaves the think block intact (qwen3.5:0.8b 1428 -> 1441 chars, qwen3.8-distill:2b
+    # 275 -> 405, both still thinking) while `think=False` zeroes it. No fleet template parses
+    # the string: the think branches that exist key on the API field (`enable_thinking` in the
+    # distill's Jinja, `$.IsThinkSet` in qwen3's Go template), never on prompt text. Thinking
+    # stays declared per model in the config (governed_turn.is_reasoning_model ->
+    # ModelCapabilities.resolve_think) and is sent on every request (irp/plugins/ollama_irp.py:165).
     from sage.gateway.governed_turn import acts_under_posture
     act_first = not acts_under_posture(args.model)
     # The museum, where there is one: a form the being may use, or not (dp 2026-09-09).
@@ -3021,9 +3326,15 @@ def main(argv=None) -> int:
     # leaving the verb out. The names are DERIVED from the offered specs.
     from sage.gateway import toolset as _toolset
     _unavail = _toolset.unavailable(_body_cur, _wt, instance_config(instance))
-    _explore_specs = _toolset.specs(_unavail)
+    # WHO IT CAN REACH (peer-to-peer P2, 2026-10-01): peer_ask's `to` is closed over real names
+    from sage.gateway import peers as _peers
+    _reach = _peers.reachable(args.member)
+    _enums = {("peer_ask", "to"): _reach} if _reach else None
+    _explore_specs = _toolset.specs(_unavail, _enums)
+    # the names are DERIVED from the specs offered, never kept beside them: the seed's tool list
+    # and the window's schema measurement must describe exactly what the model is handed
     _explore_tools = [t["function"]["name"] for t in _explore_specs]
-    _schema_measured = _schema_chars_for(_explore_tools, _unavail)
+    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums)
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
     _state_head = f"# Your own state\n\n"
@@ -3161,7 +3472,8 @@ def main(argv=None) -> int:
     # phases that completed. Explore and the posture turn share one wall-clock deadline.
     explore_deadline = t0 + args.explore_budget_s
     explore = after = reflect = answer = None
-    account = {"present": False, "sha256": None, "reply": ""}
+    preempted = None
+    account = {"present": False, "sha256": None, "reply": "", "generates": []}
     killed = None
     try:
         def _interject() -> str:
@@ -3171,9 +3483,16 @@ def main(argv=None) -> int:
             return _c.drain_new_for(instance, args.member)
 
         _phase("wake", "explore", host_session_id)
+        _preempt = preempt_on(instance)
+
+        def _yield_for_a_person():
+            got = p0_since(_beat_started) if _preempt else []
+            return got[0].get("descriptor") or got[0].get("kind") if got else None
+
         explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
                                        tools=_explore_specs, on_generate=_on_generate("explore"),
-                                       deadline=explore_deadline, interject=_interject)
+                                       deadline=explore_deadline, interject=_interject,
+                                       should_yield=_yield_for_a_person)
         convo = _carry(seed, explore)
         after = None
         if posture_turn is not None:
@@ -3181,15 +3500,50 @@ def main(argv=None) -> int:
             _phase("wake", "posture", host_session_id)
             after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
                                          tools=_explore_specs, on_generate=_on_generate("posture"),
-                                         deadline=explore_deadline, interject=_interject)
+                                         deadline=explore_deadline, interject=_interject,
+                                         should_yield=_yield_for_a_person)
             convo = _carry(convo, after)
         # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
-        # generates: the same per-generate entry the tool turns record, because the ACCOUNT
-        # ask carries the whole explore(+posture) conversation and is usually the beat's
-        # largest prompt, and until 2026-09-13 it was invisible to the window census.
-        account = {"present": False, "sha256": None, "reply": "", "generates": []}
+        # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
+        # carries the whole explore(+posture) conversation and is usually the beat's largest
+        # prompt, and until 2026-09-13 it was invisible to the window census (CBP, 09-12).
+        # PREEMPTED FOR A PERSON (R2): someone spoke after this beat began. The account and the
+        # reflection wait for the next beat; the answer turn goes to them now.
+        def _check_preempt(phase: str) -> None:
+            """A PHASE-BOUNDARY INVARIANT (GPT on #310): after every generate that cannot be cancelled,
+            look again before starting lower-priority work."""
+            nonlocal preempted
+            if preempted is None and _preempt and (_why := _yield_for_a_person()):
+                preempted = {"by": _why, "after_s": round(time.time() - _beat_started, 1), "phase": phase}
+
+        def _take_late():
+            """Carry heard words into the room, select the person who spoke, and claim ONLY the event that
+            selection answers (GPT on #310): unrelated late events, and any other person, stay pending for
+            the successor, and remain recoverable from the pending set if arming it fails."""
+            try:
+                from sage.gateway import room as _room_late
+                _room_late.ingest_heard(instance, args.member, (_body_cur or {}).get("inventory"))
+            except Exception as _e:
+                preempted["room_error"] = f"{type(_e).__name__}: {_e}"
+            p0 = p0_since(_beat_started)
+            sel = pending_selection(instance, args.member, person_turns_that_woke(p0))
+            handled = [e for e in p0 if event_answers(e, sel[4])][:1]
+            try:
+                from sage.gateway import arousal as _arousal_late
+                preempted["events"] = _arousal_late.claim_keys(f"{host_session_id}.preempt",
+                                                               [e.get("key") for e in handled])
+            except Exception as _e:
+                preempted["events"] = [{"claim_error": f"{type(_e).__name__}: {_e}"}]
+            preempted["left_pending"] = len(p0) - len(handled)
+            preempted["selected"] = f"{sel[4].cid}:{sel[4].seq}" if sel[4] is not None else None
+            return sel
+
+        _check_preempt("explore" if explore is not None and explore.yielded else
+                       "posture" if after is not None and after.yielded else "before account")
         _phase("wake", "account", host_session_id)
         try:
+            if preempted:
+                raise RuntimeError("preempted for a person: the account waits for the next beat")
             ask_msgs = [{"role": m["role"], "content": m["content"]} for m in convo] + \
                        [{"role": "user", "content": ACCOUNT_ASK}]
             aresp = llm.get_chat_response(ask_msgs)
@@ -3212,49 +3566,73 @@ def main(argv=None) -> int:
             convo.append({"role": "user", "content": ACCOUNT_ASK})
             convo.append({"role": "assistant", "content": areply or "(no answer)"})
         except Exception as e:
-            account["error"] = f"{type(e).__name__}: {e}"
-        # Reflect gets its OWN compact context, not the whole beat. Carrying the seed
-        # (posture, fleet digest, inbox, scope, recall) into the reflect turn pushed the
-        # prompt to 8171 of 8192 tokens with 21 left to answer in: 5 `length` stops in 54
-        # beats, every one of them a reflect turn (measured 2026-09-09). What reflection
-        # needs is what it just did and what it said about it, and those are short.
-        convo = [
-            {"role": "system", "content": REFLECT_SYSTEM.format(name=name, machine=machine, member=args.member)},
-            {"role": "user", "content": (f"Your beat at {now:%Y-%m-%d %H:%M} UTC is ending.\n\n"
-                                         + _beat_record_text(explore, after)
-                                         + "\n\nYour own words this beat:\n"
-                                         + ((explore.reply or "").strip()[:600]
-                                            or "(you acted without closing words)"))},
-        ]
-        # Ask it to answer someone ONLY when there is someone to answer, and show it WHAT it
-        # is answering: the reflect context is deliberately compact, so a turn addressed to
-        # the being lived only in the explore state block, one turn earlier. Measured on
-        # Sprout 2026-09-17: 596 beats, 31 `say` attempts, ZERO successes, every one naming
-        # an invented id.
-        # ONE selection for the whole beat (SelectedTurn, main #147): the reflect prompt and
-        # the answer phase must act on the same turn, and nothing arriving mid-beat may
-        # re-address it.
-        say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member)
-        if pending_block:
-            convo.append({"role": "user", "content": pending_block})
-        convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
-                                                                say_line=say_line, say_first=say_first)})
-        # One extra step when someone is waiting: the routine three fill the budget exactly,
-        # and showing the being a question with no room to answer it is worse than not
-        # showing it (measured 2026-09-18, the first beat after it could finally see one).
-        _reflect_steps = args.reflect_steps + (1 if say_first else 0)
-        # The beat's wrap-up: reflection, and the answer turn after it (SAGE #291).
-        _phase("wrap-up", "reflect", host_session_id)
-        reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
-                                       tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"))
-        # The answer turn (main, SAGE #126): only when someone is still waiting and the being
-        # has not already spoken. Inside the kill handler with the rest: a SIGTERM here still
-        # writes the record, with `answer` None.
-        # ...and only when the waiting turn actually ASKED something. Without that, a
-        # statement that asked nothing ("keep going!") still opened an answer turn and handed
-        # the being its own unrelated words to send (main #147, 2026-09-21 06:31Z). The
+            account["skipped" if preempted else "error"] = (str(e) if preempted else f"{type(e).__name__}: {e}")
+        _check_preempt("account")
+        if preempted:
+            say_line, pending_block, say_first, target, selected = _take_late()
+        else:
+            # Reflect gets its OWN compact context, not the whole beat. Carrying the seed (posture,
+            # fleet digest, inbox, scope, recall) into the reflect turn pushed the prompt to 8171 of
+            # 8192 tokens with 21 left to answer in: 5 `length` stops in 54 beats, every one of them a
+            # reflect turn (measured 2026-09-09). What reflection needs is what it just did and what it
+            # said about it, and those are short.
+            reflect_convo = [
+                {"role": "system", "content": REFLECT_SYSTEM.format(name=name, machine=machine, member=args.member)},
+                {"role": "user", "content": (f"Your beat at {now:%Y-%m-%d %H:%M} UTC is ending.\n\n"
+                                             + _beat_record_text(explore, after)
+                                             + "\n\nYour own words this beat:\n"
+                                             + ((explore.reply or "").strip()[:600] or "(you acted without closing words)"))},
+            ]
+            convo = reflect_convo
+            # Ask it to answer someone ONLY when there is someone to answer. Measured 2026-09-17: in no
+            # conversation at all it filled the id slot three beats running with "speaker",
+            # "conversation_id_placeholder" and "1234567890" — the same shape as a mis-rooted home path
+            # or an echoed example filename. An ask with no valid target invents one.
+            #
+            # And when there IS someone, show the being WHAT IT IS ANSWERING. The reflect turn's
+            # context is deliberately compact — the record of its acts plus 600 chars of its own
+            # closing words — so a turn addressed to it lived only in the explore state block, one
+            # turn earlier. The instruction to answer and the words to answer had never been in the
+            # same context. Measured on Sprout 2026-09-17: 596 beats, 31 `say` attempts, ZERO
+            # successes, every one naming an invented id, and four beats after a real channel finally
+            # existed the being wrote its journal three times and never answered. The only bridge was
+            # the 600-char echo: a model that happened to discuss the turn in explore carried enough
+            # forward to reply (cbp-being, 4B, 83 successful says); one that free-associated carried
+            # nothing. That made answering a person contingent on what the being happened to muse
+            # about, which is not a property anyone chose.
+            # ONE selection for the whole beat (see SelectedTurn): the reflect prompt and the answer
+            # phase must act on the same turn, and nothing arriving mid-beat may re-address it.
+            _woke = person_turns_that_woke(_claimed) if answer_woke_on(instance) else []
+            say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member, _woke)
+            # Immediately before the instruction, so the smallest model does not have to hold it
+            # across a turn boundary to use it.
+            if pending_block:
+                convo.append({"role": "user", "content": pending_block})
+            convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
+                                                                    say_line=say_line, say_first=say_first)})
+            # One extra step when someone is waiting, because the routine three fill the budget exactly.
+            # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
+            # asked: reflect spent all three steps on journal, todo and remember, and there was no
+            # fourth for `say`. Showing it the question and then giving it no way to answer is worse
+            # than not showing it.
+            _reflect_steps = args.reflect_steps + (1 if say_first else 0)
+            # The beat's wrap-up: reflection, and the answer turn after it (SAGE #291).
+            _phase("wrap-up", "reflect", host_session_id)
+            reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
+                                           tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"),
+                                           should_yield=_yield_for_a_person)
+            _check_preempt("reflect")
+            if preempted:
+                say_line, pending_block, say_first, target, selected = _take_late()
+
+        # The answer turn: only when someone is still waiting, the being has not already spoken, AND
+        # the waiting turn actually asked something. Without the last condition, a statement that
+        # asked nothing ("keep going!") still opened an answer turn and handed the being its own
+        # unrelated words to send — see `_prior_words` and `SelectedTurn`, 2026-09-21 06:31Z. The
         # expectation is read from the selection made BEFORE reflection, never re-scanned.
-        if selected is not None and selected.expects_reply and not _said_in(reflect):
+        answer = None
+        # Preempted: the person who spoke is answered even if reflection said something elsewhere.
+        if selected is not None and selected.expects_reply and (preempted or not _said_in(reflect)):
             _phase("wrap-up", "answer", host_session_id)
             if answer_turn_mode(instance) == "json":
                 # Opt-in (instance.json "answer_turn": "json"). The selected turn and the ask; the
@@ -3267,7 +3645,10 @@ def main(argv=None) -> int:
                             if answer_changes_on(instance) and asks_about_change(selected.text) else "")
                 answer = answer_turn_json(client, llm, selected, name=name, machine=machine,
                                           member=args.member, on_generate=_on_generate("answer"),
-                                          acts=_acts, changes=_changes)
+                                          acts=_acts, changes=_changes,
+                                          context=(answer_context_block(instance, args.member, selected)
+                                                   if answer_context_on(instance) else ""),
+                                          temperature=answer_temperature(instance))
             else:
                 answer = run_ollama_tool_turn(
                     client, llm,
@@ -3308,6 +3689,7 @@ def main(argv=None) -> int:
         interventions.append({"kind": "act_first", "suppressed": "posture-first presentation (the model narrates under it)"})
     if answer is not None and getattr(answer, "answer_form", None) is not None:
         interventions.append({"kind": "answer_json", "to": selected.cid if selected else None,
+                              "woke_by_turn": bool(selected and selected.woke),
                               **answer.answer_form})
     for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer)):
         if res is None:
@@ -3389,6 +3771,7 @@ def main(argv=None) -> int:
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
         "decline_closing": decline_closing_for(instance_config(instance)),
+        "answered_run_wake": answered_run_wake_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         # the window and budget actually sent, so a beat is verifiable from this file alone
         # (beat 46's 8192 wall was reconstructed from stderr; Sprout's review of SAGE #40)
@@ -3430,6 +3813,7 @@ def main(argv=None) -> int:
         "join": {"session": sess_meta, "presence": pres_meta},
         "hub_inbox": hub_inbox,
         "wake": woke,
+        "preempted": preempted,
         # every harness intervention, with the prior it suppressed (dev-sage 804f1849, by
         # principle): a guard that silences without saying what it silenced trades a
         # confident wrong for a confident silence.
@@ -3487,16 +3871,32 @@ def main(argv=None) -> int:
     if args.idle_wake_s > 0 and not record.get("next_wake", {}).get("armed"):
         print(f"[heartbeat] NO NEXT WAKE ARMED: {record.get('next_wake')}", file=sys.stderr)
 
-    # THE HELD WAKE: turns that arrived while this beat ran, which it never showed the being,
-    # get a wake of their own instead of waiting for the idle timer (arousal.wake_for_late_turns).
+    # WAKE CONTINUES WHILE THERE IS WORK (SAGE #295). Turns that arrived while this beat ran join
+    # the pending set (most are there already: the daemon's arousal call queued them); then, if
+    # anything is pending or the being asked to stay awake, the next beat is armed to start the
+    # moment this one ends, and `run` reports no rest in between. Nothing pending: the being rests,
+    # and the watchdog timer counts its 30 quiet minutes from this beat's end.
     try:
         from sage.gateway import arousal as _arousal
         record["late_turns"] = _arousal.wake_for_late_turns(instance, args.member, since=t0)
     except Exception as _e:
         record["late_turns"] = {"error": f"{type(_e).__name__}: {_e}"}
+    record["stay_awake"] = stay_awake_reason(explore, after, reflect, answer)
+    try:
+        from sage.gateway import arousal as _arousal
+        record["next_beat"] = _arousal.after_beat(stay_awake=record["stay_awake"])
+    except Exception as _e:
+        record["next_beat"] = {"continuing": False, "error": f"{type(_e).__name__}: {_e}"}
+    _BEAT_ID["continuing"] = bool(record["next_beat"].get("continuing"))
 
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+    try:
+        from sage.gateway import arousal as _arousal
+        _arousal.release_claim(host_session_id)   # what this beat claimed is in its record
+        _arousal.release_claim(f"{host_session_id}.preempt")
+    except Exception:
+        pass
     print(json.dumps(record, indent=2, ensure_ascii=False, default=str))
     signal.signal(signal.SIGTERM, _term_before_record)   # the record is written
     return 0
@@ -3559,6 +3959,25 @@ def _config_check(instance: Path, model: str, llm, offered) -> dict:
         "headroom_tokens": None,     # num_ctx - (largest prompt + num_predict)
         "context_overcommitted": None,
     }
+
+
+def stay_awake_reason(*turns) -> Optional[str]:
+    """The being's own ask for another beat right after this one (`stay_awake`, SAGE #295), from
+    any of its turns: the first reason given, or None when it did not ask."""
+    for t in turns:
+        r = getattr(t, "stay_awake", None) if t is not None else None
+        if r:
+            return r
+    return None
+
+
+def beat_rested(*turns) -> bool:
+    """Whether the being ended this beat with `rest`, in any of its turns.
+
+    `rested` is the stated REASON, and a rest with no reason is "" — still a rest. bool() read it
+    as not-rested and armed the resume wake dp ruled out (sprout on #216). And with a posture
+    turn, `after` is the being's last word, so a rest there counts as much as one in explore."""
+    return any(t is not None and getattr(t, "rested", None) is not None for t in turns)
 
 
 def _fill_headroom(cfg: dict, partial: Path, host_session_id: str) -> dict:
@@ -3924,11 +4343,6 @@ def install_kill_handler() -> None:
     signal.signal(signal.SIGTERM, _on_term)
 
 
-def beat_rested(*turns) -> bool:
-    """Whether the being ended this beat with `rest`, in any turn. `rested` is the stated
-    reason, and "" (a rest with no reason) is still a rest: bool() armed the resume wake after
-    it, which dp ruled out (sprout on SAGE #216)."""
-    return any(t is not None and getattr(t, "rested", None) is not None for t in turns)
 
 
 
@@ -3948,7 +4362,11 @@ def run(argv=None) -> int:
     try:
         return main(argv)
     finally:
-        _activity.end("heartbeat:end", beat_id=_BEAT_ID.get("id"))
+        # Back-to-back beats (SAGE #295): when the next beat is already armed, this beat hands
+        # off in `wake` instead of reporting rest, so the display never blips to rest between
+        # them. Rest only when nothing is left.
+        _activity.end("heartbeat:end", beat_id=_BEAT_ID.get("id"),
+                      continuing=bool(_BEAT_ID.get("continuing")))
 
 
 if __name__ == "__main__":

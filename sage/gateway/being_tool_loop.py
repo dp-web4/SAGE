@@ -44,6 +44,8 @@ class ToolTurnResult:
     rested: Optional[str] = None                           # the being ended its own turn; its stated reason
     looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
     duplicates: List[dict] = field(default_factory=list)   # identical calls answered without re-executing: {step, effector}
+    stay_awake: Optional[str] = None                       # the being asked for another beat right after this one; its reason
+    yielded: Optional[str] = None                          # the harness ended the turn for a higher-priority event: what
 
     @property
     def acted(self) -> bool:
@@ -54,10 +56,18 @@ class ToolTurnResult:
         return [(i, e) for i, e in self.trace if e.refused]
 
 
+# The verb by which a being asks for another beat right after this one (SAGE #295). dp, 2026-09-30:
+# "if the being decides to stay awake continously because of environment or curiosity, then so be
+# it." Never dispatched (it touches nothing); recorded on the turn, and the heartbeat arms the next
+# beat at its end. It does not end the turn.
+STAY_AWAKE = "stay_awake"
+
+
 def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                   messages: List[Dict[str, Any]], max_steps: int = 3,
                   deadline: Optional[float] = None,
-                  interject: "Optional[Callable[[], str]]" = None) -> ToolTurnResult:
+                  interject: "Optional[Callable[[], str]]" = None,
+                  should_yield: Optional[Callable[[], Optional[str]]] = None) -> ToolTurnResult:
     """Run one being turn that may reach for tools, gated end to end.
 
     Loop invariant: the being never sees a fabricated result — each tool message is a
@@ -94,6 +104,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                                     f"applied a safety ceiling of {max_steps} steps"})
     step = 0
     last_fp, repeats = None, 0
+    stay_awake = None
     warned = False
     reads_this_turn: Dict[str, List[int]] = {}
 
@@ -101,6 +112,16 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
         if deadline is not None and step > 0 and time.time() >= deadline:
             hit = True
             break
+        # A YIELD POINT before every generate (main #296, the RTOS note's R2): a person speaking to
+        # the being outranks the rest of a routine turn. The harness asks; nothing executed is undone.
+        if should_yield is not None:
+            try:
+                why = should_yield()
+            except Exception:
+                why = None
+            if why:
+                return ToolTurnResult(reply="", trace=trace, steps=step, interjected=interjected,
+                                      duplicates=duplicates, stay_awake=stay_awake, yielded=str(why))
         if step > 0 and interject is not None:
             try:
                 arrived = interject()
@@ -140,11 +161,19 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
 
         if not intents:                                    # a spoken turn — the being is done
             return ToolTurnResult(reply=content, trace=trace, steps=step,
-                                  interjected=interjected, duplicates=duplicates)
+                                  interjected=interjected, duplicates=duplicates, stay_awake=stay_awake)
 
         convo.append({"role": "assistant", "content": content, "intents": intents})
         rested = None
         for intent in intents:
+            if intent.effector == STAY_AWAKE:
+                stay_awake = str((intent.args or {}).get("reason") or "").strip() or "(no reason given)"
+                env = ResultEnvelope(ok=True, result=("noted: the next beat starts as soon as this one "
+                                                      "ends. Carry on, or close this beat as usual."),
+                                     note="stay_awake")
+                trace.append((intent, env))
+                convo.append({"role": "tool", "effector": intent.effector, "content": env.to_tool_message()})
+                continue
             _note = _repeat_read_note(intent, reads_this_turn, step)
             if intent.effector == REST:
                 # The being ending its OWN turn. Never dispatched: the gate rules on acts
@@ -210,7 +239,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
         if rested is not None:
             return ToolTurnResult(reply=rested or content, trace=trace, steps=step,
                                   interjected=interjected, rested=rested or "(no reason given)",
-                                  duplicates=duplicates)
+                                  duplicates=duplicates, stay_awake=stay_awake)
         step += 1
 
         # A LOOP IS NOT WORK. Measured 2026-09-13T10:19Z: legion-being finished its beat and
@@ -240,7 +269,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                 f"did this beat, and what you want next beat.")})
             out = generate(convo)
             return ToolTurnResult(reply=out.get("content") or "", trace=trace, steps=step,
-                                  interjected=interjected, looped=looped, duplicates=duplicates)
+                                  interjected=interjected, looped=looped, duplicates=duplicates, stay_awake=stay_awake)
 
     # Cap reached with tools still pending: force one final spoken close — we take its
     # words even if it wants more tools, so the being always ends its turn in language.
@@ -251,7 +280,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     out = generate(convo)
     return ToolTurnResult(reply=out.get("content") or "", trace=trace,
                           steps=step, capped=True, deadline_hit=hit,
-                          interjected=interjected, duplicates=duplicates)
+                          interjected=interjected, duplicates=duplicates, stay_awake=stay_awake)
 
 
 _FENCE = re.compile(r"```[A-Za-z0-9_+-]*[ \t]*\n(.*?)```", re.S)
@@ -1040,7 +1069,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                          max_steps: int = 2, tools: Optional[List[dict]] = None,
                          on_generate: Optional[Callable[[dict], None]] = None,
                          deadline: Optional[float] = None,
-                         interject: "Optional[Callable[[], str]]" = None) -> ToolTurnResult:
+                         interject: "Optional[Callable[[], str]]" = None,
+                         should_yield: Optional[Callable[[], Optional[str]]] = None) -> ToolTurnResult:
     """Run a gated tool turn using an OllamaIRP-like `llm` exposing
     get_chat_response(messages, tools=...) -> {"content", "tool_calls"}.
 
@@ -1258,7 +1288,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         return {"content": content, "intents": parse_tool_calls(calls), "window": window}
 
     result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps,
-                           deadline=deadline, interject=interject)
+                           deadline=deadline, interject=interject,
+                           should_yield=should_yield)
     result.thinking = thoughts
     result.salvaged = salvaged
     result.generates = generates

@@ -614,8 +614,7 @@ class HestiaF1aDispatcher:
     def _address(self, to: str) -> str:
         """`peer/member` routes via the forwarding plane; a bare id stays on this local mesh.
         The being names a member ('legion'); the seat says whether that is local or remote."""
-        to = (to or "").strip()
-        to = self.peer_aliases.get(to, to)
+        to = self.resolve_peer(to)
         if "/" in to or to in self.local_members:
             return to
         return f"{to}/{self.remote_member_default}"
@@ -648,6 +647,13 @@ class HestiaF1aDispatcher:
             for m in _conv.listing(self.memory_root):
                 if self.member not in m.get("participants", []):
                     continue
+                if base == str(m.get("id", "")).lower() and base not in {
+                        str(x).strip().lower() for x in m.get("participants", []) + list(m.get("also_known_as", []))}:
+                    # A CONVERSATION'S ID, not a member (2026-10-02: peer_ask to="room" was told only
+                    # "'room' is not on the hub roster"). The door is say to that conversation.
+                    return (f"'{to}' is one of your conversations, not a being on the hub, so nothing "
+                            f"was sent. To speak there, use say with to=\"{m['id']}\""
+                            + (" (it is spoken aloud in the room)." if m["id"] == "room" else "."))
                 names = [x for x in m.get("participants", []) if x != self.member]
                 names += list(m.get("also_known_as", []))
                 if base in {str(n).strip().lower() for n in names}:
@@ -668,18 +674,50 @@ class HestiaF1aDispatcher:
         roster this seat last read (hub-notify's cache; names compared case-insensitively).
         Empty when no roster is readable — then nothing is refused, since a stale absence
         must not silence the being."""
-        names = {n.lower() for n in self.local_members} | {a.lower() for a in self.peer_aliases}
-        roster = os.path.expanduser(os.environ.get("HUB_MESH_STATE", "~/.local/state/hub-mesh")) + "/members.json"
-        try:
-            m = json.load(open(roster))
-            ms = m.get("members", m) if isinstance(m, dict) else m
-            for x in ms:
-                n = str(x.get("name") or "").strip().lower()
-                if n:
-                    names.add(n)
-        except Exception:
+        roster = self._roster()
+        if not roster:
             return set()
+        names = {n.lower() for n in self.local_members} | {a.lower() for a in self.peer_aliases} | set(roster)
+        # the being-names a sibling is called by, wherever the hub knows it as <machine>-sage
+        names |= {n[:-len("-sage")] + "-being" for n in roster if n.endswith("-sage")}
         return names
+
+    def _roster(self) -> Dict[str, str]:
+        """{lowercased name: name as the roster spells it} from hub-notify's cache; {} if unreadable."""
+        path = os.path.expanduser(os.environ.get("HUB_MESH_STATE", "~/.local/state/hub-mesh")) + "/members.json"
+        try:
+            m = json.load(open(path))
+            ms = m.get("members", m) if isinstance(m, dict) else m
+            return {str(x.get("name")).strip().lower(): str(x.get("name")).strip()
+                    for x in ms if str(x.get("name") or "").strip()}
+        except Exception:
+            return {}
+
+    def resolve_peer(self, to: str) -> str:
+        """The roster name a being's name for a peer reaches, the same before and after a hub rename.
+
+        dp, 2026-10-01: "on hub the beings are 'sprout-SAGE' not 'sprout-being' ... or i could rename them in
+        hub manually." Beings and seats say `<machine>-being`; the hub joined them as `<machine>-sage`, and the
+        mapping lived in per-machine SAGE_PEER_ALIASES, so no sender reached sprout-being (inbox: 0 in 1,430
+        drains). Order: (1) the name as written, if the roster has it (after a rename); (2) an explicit alias,
+        only if its target is still on the roster (a stale alias never wins); (3) `<machine>-being` ->
+        `<machine>-sage` when that member exists. Anything else is returned as written (the alias if one is
+        set), for _unknown_peer to refuse with the list. An unreadable roster keeps the old behavior."""
+        to = (to or "").strip()
+        base, sep, rest = to.partition("/")
+        roster = self._roster()
+        alias = self.peer_aliases.get(base)
+        if not roster:
+            return (alias or base) + sep + rest
+        low = base.lower()
+        if low in roster:
+            return roster[low] + sep + rest
+        if alias and alias.lower() in roster:
+            return roster[alias.lower()] + sep + rest
+        derived = low[:-len("-being")] + "-sage" if low.endswith("-being") else None
+        if derived and derived in roster:
+            return roster[derived] + sep + rest
+        return (alias or base) + sep + rest
 
     def _unknown_peer(self, to: str) -> Optional[str]:
         """The refusal text when `to` names no peer this seat can reach, else None."""
@@ -687,7 +725,7 @@ class HestiaF1aDispatcher:
         if not peers:
             return None
         base = (to or "").split("/", 1)[0].strip().lower()
-        if base in peers:
+        if base in peers or self.resolve_peer(to).split("/", 1)[0].lower() in peers:
             return None
         listed = ", ".join(sorted(p for p in peers if p not in ("dp", "sovereign")))
         # A REFUSAL OWES A WAY FORWARD. Measured 2026-09-16: cbp-being tried peer_ask to
@@ -867,7 +905,12 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=redirect)
         # the limit is checked before publishing: a refused ask must leave no forum file behind
         unknown = self._unknown_peer(to)
-        limited = None if unknown else self._ask_limit(to)
+        if unknown:
+            # REFUSED BEFORE PUBLISHING (2026-10-02): an unknown name only skipped the rate limit, so the
+            # question was written to the forum and THEN refused by the mesh step: "sprout-being-asks-room"
+            # sat in the fleet forum for an ask that went nowhere.
+            return ResultEnvelope(ok=False, error=unknown)
+        limited = self._ask_limit(to)
         if limited:
             return ResultEnvelope(ok=False, error=limited)
         pointer = self._publish(to, body)
@@ -2570,6 +2613,18 @@ class HestiaF1aDispatcher:
         lines = [f"[request_run] {rel}",
                  f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
                  f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it and answers here)"]
+        # EVERY ARGUMENT THE BEING GAVE REACHES THE SEAT. Measured 2026-09-22 08:3xZ: cbp-being
+        # put its flags in 'body' ("Run ... with --input-dim 10 --output-dim 1 ...") and the
+        # seat was shown "why: (none given)" and no flags. Across its first 66 request_runs,
+        # 20 carried their content in a key read nowhere: 'arguments' 9, 'command' 6, 'body'
+        # 5. Aliasing each word as it turns up (as 'reason' was) chases the next one; carrying
+        # whatever is left, under the being's own key, cannot miss. 'to' names the addressee,
+        # which is always this conversation. The seat passes flags it chooses to accept after
+        # `--` (seat_run_requests.py, #175); this is how it sees them. The first line stays
+        # "[request_run] <rel>", which the unchanged check above and the seat's reader key on.
+        for k, v in intent.args.items():
+            if k not in ("path", "why", "reason", "to") and str(v).strip():
+                lines.append(f"{k}: {str(v).strip()}")
         if unchanged:
             lines.append(f"UNCHANGED since the request at seq {unchanged[0]}; the seat answered "
                          f"at seq {unchanged[1]}.")
@@ -2593,15 +2648,35 @@ class HestiaF1aDispatcher:
                 f"--- seq {unchanged[1]} ---\n{carried}\n--- end ---\n"
                 f"To change what runs: memory_edit the lines, or retire_note the file and then "
                 f"memory_write it anew.")
+        note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
+                "a result. The seat may run it or decline, and either way it answers in "
+                f"'{seat_conv}'. Nothing is owed by you in the meantime.")
+        if unchanged and not (said.result or {}).get("woke") and self._skips_answered_run_wake():
+            # THE RECEIPT SAYS WHAT HAPPENED. Under answered_run_wake "skip" (per-instance,
+            # recut of #154) an already-answered request is sent but wakes nobody; "asked and
+            # woken" would be false. Only this instance's receipts change.
+            note = ("The request was recorded in "
+                    f"'{seat_conv}', but the seat was NOT woken for it: it already answered this "
+                    "same file, unchanged, and that answer is above. NOTHING HAS RUN. To have it "
+                    "run again anyway, call request_run with rerun=true.")
         return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
             **result,
             "requested": rel,
             "asked": seat_conv,
             "ran": False,
-            "note": ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
-                     "a result. The seat may run it or decline, and either way it answers in "
-                     f"'{seat_conv}'. Nothing is owed by you in the meantime."),
+            "note": note,
         })
+
+    def _skips_answered_run_wake(self) -> bool:
+        """instance.json `answered_run_wake: "skip"` (per-instance; heartbeat.answered_run_wake_for).
+        Read on each call, like the other per-instance policies, so flipping it needs no restart.
+        Any failure to read it is the default: wake."""
+        try:
+            from sage.gateway.governed_turn import instance_config
+            from sage.gateway.heartbeat import answered_run_wake_for
+            return answered_run_wake_for(instance_config(Path(self.memory_root))) == "skip"
+        except Exception:
+            return False
 
     def _wake_addressee(self, to: str, meta: dict, turn: dict) -> Optional[str]:
         """A turn wakes whoever it is addressed to — the mirror of the seat's own door.
@@ -2669,7 +2744,8 @@ class HestiaF1aDispatcher:
         targets = deduped
         if not targets:
             return None
-        run_start = conv.wake_is_owed(self.memory_root, to, self.member)
+        run_start = conv.wake_is_owed(self.memory_root, to, self.member,
+                                      skip_answered=self._skips_answered_run_wake())
         if run_start is None:
             return None            # already woke them about this run; saying more is not new mail
         pointer = f"sage://conversation/{to}#seq={run_start}-{turn['seq']}"

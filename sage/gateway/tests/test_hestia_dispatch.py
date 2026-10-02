@@ -2413,6 +2413,112 @@ def test_request_run_says_when_the_file_is_unchanged_since_the_seat_answered():
     assert r.ok and "unchanged" not in r.result, r.result
 
 
+def _seat_conv_with_answered_request(opt_in):
+    """A seat conversation where request_run asked about notes/train.py and the seat RAN it
+    (a result naming the request's seq), with instance.json opting in or not."""
+    import json as _json
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    if opt_in is not None:
+        (home / "instance.json").write_text(_json.dumps(opt_in))
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print('a')\n")
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "first"}), _ALLOW)
+    assert r.ok and r.result.get("ran") is False
+    asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/train.py with no arguments. exit code 0.\n\n"
+                     f"stdout:\na\n\nAnswers your request seq {asked}.")
+    return d, home
+
+
+def _notifies():
+    return [a for n, a in FakeMcp.calls if n == "hestia_member_notify"]
+
+
+def test_an_answered_unchanged_request_wakes_nobody_where_the_instance_opts_in():
+    """Recut of #154, behind instance.json `answered_run_wake: "skip"`. Measured on cbp-being
+    (2026-09-24, seq 3557): a byte-identical re-request 7 minutes after the seat's answer woke
+    a seat session whose only possible act was to decline with the same result. The answer
+    already comes back in-beat (#178); here the request is still sent and recorded, but no
+    wake goes out, and the receipt says so rather than "asked and woken". Fails on main."""
+    from sage.gateway import conversations as conv
+    d, home = _seat_conv_with_answered_request({"answered_run_wake": "skip"})
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "verify my fix"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False
+    assert "unchanged" in r.result and "--- seq" in r.result["unchanged"], "the answer is carried"
+    assert not _notifies(), "an already-answered unchanged request must not wake the seat"
+    assert "NOT woken" in r.result["note"] and "woken." not in r.result["note"].split("NOT")[0]
+    assert "rerun=true" in r.result["note"]
+    last = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert last.startswith("[request_run] notes/train.py") and "UNCHANGED since" in last, \
+        "the request is still sent and recorded"
+    # rerun=true still wakes
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "force", "rerun": "true"}), _ALLOW)
+    assert r.ok and len(_notifies()) == 1, "rerun=true must still wake the seat"
+    assert "asked and woken" in r.result["note"]
+
+
+def test_an_answered_unchanged_request_still_wakes_by_default():
+    """Every instance without the key keeps the old behaviour: the wake goes out."""
+    for cfg in (None, {}, {"answered_run_wake": "nonsense"}):
+        d, home = _seat_conv_with_answered_request(cfg)
+        FakeMcp.calls.clear()
+        r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
+        assert r.ok and "unchanged" in r.result
+        assert len(_notifies()) == 1, cfg
+        assert r.result["note"].startswith("The seat has been asked and woken."), cfg
+
+
+def test_an_edited_file_wakes_the_seat_even_where_the_instance_opts_in():
+    d, home = _seat_conv_with_answered_request({"answered_run_wake": "skip"})
+    (home / "notes" / "train.py").write_text("print('b')\n")
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "after edit"}), _ALLOW)
+    assert r.ok and "unchanged" not in r.result
+    assert len(_notifies()) == 1
+
+
+def test_answered_run_wake_reader_and_beat_record():
+    """The one reader, and the beat record names the policy where it is on (the generalization
+    rule's "activation is visible in the runtime record")."""
+    import inspect
+    from sage.gateway import heartbeat
+    from sage.gateway.heartbeat import answered_run_wake_for
+    assert answered_run_wake_for(None) is None
+    assert answered_run_wake_for({}) is None
+    assert answered_run_wake_for({"answered_run_wake": "nonsense"}) is None
+    assert answered_run_wake_for({"answered_run_wake": True}) is None
+    assert answered_run_wake_for({"answered_run_wake": "skip"}) == "skip"
+    src = inspect.getsource(heartbeat)
+    assert '"answered_run_wake": answered_run_wake_for(instance_config(instance))' in src
+
+
+def test_cbp_being_is_the_only_instance_that_skips_answered_run_wakes():
+    """The measured being carries the opt-in; no other checked-in instance.json does."""
+    import json as _json
+    from pathlib import Path
+    from sage.gateway.heartbeat import answered_run_wake_for
+    repo = Path(__file__).resolve().parents[3]
+    on = []
+    for cfg_path in sorted((repo / "sage/instances").glob("*/instance.json")):
+        try:
+            cfg = _json.loads(cfg_path.read_text())
+        except Exception:
+            continue
+        if answered_run_wake_for(cfg):
+            on.append(cfg_path.parent.name)
+    assert on == ["cbp-qwen3.8-distill-4b"]
+
+
 def test_an_unchanged_receipt_carries_the_seat_answer_not_a_pointer_to_it():
     """Measured 2026-09-22 over cbp-being's 556 beats: an edit receipt naming the defect in
     its own return value is followed by another edit 39/46 = 0.85 of the time, against a
@@ -2606,6 +2712,40 @@ def test_request_run_carries_reason_as_the_why():
     turn = conv.recent(home, "seat", limit=1)[-1]["text"]
     assert "why: verify the fixes" in turn, turn
     assert "none given" not in turn, "the seat must not be told the being said nothing"
+
+
+def test_request_run_carries_every_argument_it_does_not_read():
+    """Measured 2026-09-22: cbp-being put its flags in 'body' and the seat saw no reason and
+    no flags; 20 of its first 66 request_runs used a key read nowhere ('arguments', 'command',
+    'body'). Whatever it passes must reach the seat under its own name."""
+    import importlib.util
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print(1)\n")
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "to": "seat",
+                                      "body": "run with --input-dim 10",
+                                      "arguments": "--epochs 3", "command": "  "}), _ALLOW)
+    assert r.ok, r.error
+    last = conv.recent(home, "seat", limit=1)[-1]
+    turn = last["text"]
+    assert "body: run with --input-dim 10" in turn, turn
+    assert "arguments: --epochs 3" in turn, turn
+    assert "to: seat" not in turn, turn
+    assert "command:" not in turn, "an empty argument is not carried"
+    assert turn.startswith("[request_run] notes/train.py\n"), "unchanged-detection keys on this prefix"
+    # and the seat's reader still finds the path on the first line
+    src = Path(__file__).resolve().parents[2] / "scripts" / "seat_run_requests.py"
+    spec = importlib.util.spec_from_file_location("seat_run_requests", src)
+    srr = importlib.util.module_from_spec(spec); spec.loader.exec_module(srr)
+    assert srr.request_path(last) == "notes/train.py"
 
 
 def test_request_run_reports_an_absent_file_as_an_absence_not_a_refusal():

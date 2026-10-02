@@ -14,7 +14,9 @@ Its own conversation, because:
 So heard words become turns `from: "voice"`, `via: "voice"`, stamped when they were HEARD; what the
 being says aloud becomes its own turn `via: "speak"`; and `say to: "room"` is spoken, not written,
 so answering aloud is the verb the being already uses. The room exists only on a body that can
-speak (the listening window opens only after speaking, so there is nothing to hear without it).
+speak. By default the mic transcribes only in the minutes after the being speaks; a body with
+SAGE_LISTEN=always hears the room at any time, and presence writes each heard line here as it
+arrives (2026-10-01).
 """
 from __future__ import annotations
 
@@ -38,8 +40,8 @@ def ensure(instance: Path, member: str) -> dict:
     return conv.create(
         Path(instance), ROOM, title="the room: spoken aloud and heard",
         participants=[member, VOICE], writable_by=[member, VOICE],
-        summary=("What you said aloud (speak, or say to room) and what the mic heard in the "
-                 "minutes after. A line from 'voice' is whoever was in the room; it does not say "
+        summary=("What you said aloud (speak, or say to room) and what the mic heard: in the "
+                 "minutes after you speak, or at any time if your ear is always open. A line from 'voice' is whoever was in the room; it does not say "
                  "who unless the words do. Anything you say to room is spoken aloud, not written."))
 
 
@@ -56,6 +58,18 @@ def heard_id(h: dict) -> str:
     import hashlib
     key = f"{float(h.get('ts', 0)):.3f}|{h.get('source') or ''}|{str(h.get('text') or '').strip()}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+UNCLEAR_MARK = {"tail": "{t} [the rest was unclear]", "head": "[the start was unclear] {t}",
+                "middle": "{t} [part of it was unclear]"}
+
+
+def heard_text(h: dict) -> str:
+    """The heard words, saying where unclear speech was left out (listening.judge_segments), so a sentence the
+    transcriber gave up on is not presented as a sentence that ended there."""
+    t = str(h.get("text", "")).strip()
+    mark = UNCLEAR_MARK.get(str(h.get("unclear") or ""))
+    return mark.format(t=t) if mark and t else t
 
 
 def ingest_heard(instance: Path, member: str, inventory: Optional[dict] = None,
@@ -87,7 +101,7 @@ def ingest_heard(instance: Path, member: str, inventory: Optional[dict] = None,
         if hid in have:
             continue
         mic = body._heard_mic([h], inventory)
-        t = conv.append(instance, ROOM, speaker=VOICE, text=str(h["text"]).strip(), via="voice",
+        t = conv.append(instance, ROOM, speaker=VOICE, text=heard_text(h), via="voice",
                         ts=_iso(h["ts"]), enforce_write=False, extra={"heard_id": hid, "mic": mic})
         have.add(hid)
         out.append(t)
