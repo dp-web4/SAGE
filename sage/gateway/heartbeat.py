@@ -2355,6 +2355,27 @@ def event_answers(e: dict, selected) -> bool:
     return bool(m) and m.group(1) == selected.cid
 
 
+def explore_turn_mode(instance) -> str:
+    """Opt-in per instance: instance.json "explore_turn": "json" (explore and posture act through
+    closed JSON objects instead of native tool calls; see being_tool_loop._json_act)."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return "json" if instance_config(instance).get("explore_turn") == "json" else "tools"
+    except Exception:
+        return "tools"
+
+
+def explore_json_steps(instance, default: int) -> int:
+    """Acts per explore/posture turn in the JSON act form (instance.json "explore_json_steps", default 3).
+    Each act is two generates, and offline turns never chose "done" by themselves: 6 of 6 ran to an
+    8-step cap (2.5-7 min). Native turns rarely reach the cap because they end in prose."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return max(1, min(default, int(instance_config(instance).get("explore_json_steps", 3))))
+    except Exception:
+        return min(default, 3)
+
+
 def preempt_on(instance) -> bool:
     """Opt-in per instance (R2): instance.json "preempt": true."""
     try:
@@ -3274,7 +3295,17 @@ def main(argv=None) -> int:
     # WHO IT CAN REACH (peer-to-peer P2, 2026-10-01): peer_ask's `to` is closed over real names
     from sage.gateway import peers as _peers
     _reach = _peers.reachable(args.member)
-    _enums = {("peer_ask", "to"): _reach} if _reach else None
+    _enums = {("peer_ask", "to"): _reach} if _reach else {}
+    # and `say` only to a conversation it can write in (GPT on #311: the recipient was still free text)
+    try:
+        from sage.gateway import conversations as _conv_say
+        _writable = sorted(m["id"] for m in _conv_say.listing(instance)
+                           if args.member in (m.get("writable_by") or m.get("participants") or []))
+        if _writable:
+            _enums[("say", "to")] = _writable
+    except Exception:
+        pass
+    _enums = _enums or None
     _explore_specs = _toolset.specs(_unavail, _enums)
     # the names are DERIVED from the specs offered, never kept beside them: the seed's tool list
     # and the window's schema measurement must describe exactly what the model is handed
@@ -3394,22 +3425,26 @@ def main(argv=None) -> int:
     try:
         _phase("wake", "explore", host_session_id)
         _preempt = preempt_on(instance)
+        _explore_steps = (explore_json_steps(instance, args.max_steps)
+                          if explore_turn_mode(instance) == "json" else args.max_steps)
 
         def _yield_for_a_person():
             got = p0_since(_beat_started) if _preempt else []
             return got[0].get("descriptor") or got[0].get("kind") if got else None
 
-        explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
+        explore = run_ollama_tool_turn(client, llm, seed, max_steps=_explore_steps,
                                        tools=_explore_specs, on_generate=_on_generate("explore"),
-                                       should_yield=_yield_for_a_person)
+                                       should_yield=_yield_for_a_person,
+                                       act_form=explore_turn_mode(instance))
         convo = _carry(seed, explore)
         after = None
         if posture_turn is not None:
             convo.append({"role": "user", "content": posture_turn})
             _phase("wake", "posture", host_session_id)
-            after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
+            after = run_ollama_tool_turn(client, llm, convo, max_steps=_explore_steps,
                                          tools=_explore_specs, on_generate=_on_generate("posture"),
-                                         should_yield=_yield_for_a_person)
+                                         should_yield=_yield_for_a_person,
+                                       act_form=explore_turn_mode(instance))
             convo = _carry(convo, after)
         # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
         # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
@@ -3600,6 +3635,9 @@ def main(argv=None) -> int:
         for dup in (getattr(res, "duplicates", None) or []):
             interventions.append({"kind": "duplicate", "phase": ph, "effector": dup.get("effector"),
                                   "suppressed": "a second execution of an identical call in the same turn"})
+        for jf in (getattr(res, "json_arg_failures", None) or []):
+            interventions.append({"kind": "json_arg_failure", "phase": ph, **jf,
+                                  "suppressed": "an act whose arguments could not be formed (no act; not empty args)"})
         for sv in (getattr(res, "salvaged", None) or []):
             interventions.append({"kind": "salvage", "phase": ph, "effector": sv.get("effector"), "form": sv.get("form"),
                                   "suppressed": "text-channel narration in place of a native tool call"})
