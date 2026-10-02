@@ -178,6 +178,16 @@ PR_READ_LAST_MAX = 30
 WEB_SEARCH_MAX = 5
 
 
+# Verbs whose arguments are text that LEAVES the machine: swept by the innate denylist before any law path,
+# never path- or command-scoped (BeingGateClient.gate; hestia #1201 would make this a shared NormalizedEvent field).
+_EGRESS_ARGS = {"web_search": ("query",)}
+
+
+def _egress_text(intent) -> list:
+    return [str(intent.args.get(k)) for k in _EGRESS_ARGS.get(getattr(intent, "effector", ""), ())
+            if intent.args.get(k)]
+
+
 def web_search_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The command the seat runs for a web_search intent, ON THE BEING'S OWN MACHINE (sage/gateway/web_search.py).
 
@@ -2336,6 +2346,31 @@ class BeingGateClient:
         if intent.effector not in _REGISTRY:
             return GatewayVerdict("deny", "registry.unbounded", stage="registry",
                                   reason=_unbounded_reason(intent.effector, intent.args))
+        # EGRESS TEXT IS SWEPT BEFORE ANY LAW PATH (GPT on #335). Text that leaves the machine (web_search's
+        # query) is natural language: composing it as a command made mrh.command read its words as paths, and
+        # uncomposed it rides only in `raw`, which hestia's Gate 1a does not scan. Measured on Sprout's live gate
+        # 2026-10-02: a query naming an ssh private key was ALLOWED. Until hestia carries a shared `egress`
+        # field (hestia #1201), the innate sweep runs here with hestia's own forbidden_tokens(), read-only,
+        # as the gemini shim does for its web tools. No core or no token list -> refused, never unswept.
+        egress = _egress_text(intent)
+        if egress:
+            core = getattr(self, "_core", None)
+            toks = None
+            try:
+                toks = core.forbidden_tokens(self._profile) if core is not None else None
+            except Exception:
+                toks = None
+            if not toks:
+                return GatewayVerdict("deny", "egress.unswept", innate=True, stage="egress",
+                                      reason=f"'{intent.effector}' sends text off this machine and the innate "
+                                             f"sweep is not available here, so nothing was sent")
+            for blob in egress:
+                low = blob.lower()
+                for f in toks:
+                    if f in low:
+                        return GatewayVerdict("deny", "egress.secret", innate=True, stage="egress",
+                                              reason=f"'{intent.effector}' would send a forbidden token off this "
+                                                     f"machine (a credential or private-repo name): '{f}'")
         # THE COMMAND THE LAW IS HANDED, bound once per call and reported on every verdict
         # below. `getattr` rather than `ev.command`: the field is Optional by declaration, a
         # core may build a partial event (the test fakes do, deliberately), and a gate that

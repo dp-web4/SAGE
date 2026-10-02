@@ -25,6 +25,12 @@ PAGE = """
 """
 
 
+@pytest.fixture(autouse=True)
+def _seat_home(tmp_path, monkeypatch):
+    """The seat-owned ledger lives under HOME; never the real one in a test."""
+    monkeypatch.setenv("HOME", str(tmp_path / "seat-home"))
+
+
 def test_the_query_is_validated_and_quoted():
     with pytest.raises(ValueError):
         bgc.web_search_command({"query": "   "})
@@ -91,3 +97,56 @@ def test_a_bad_query_never_reaches_the_network(monkeypatch):
     d, _ = _disp()
     env = d(BeingIntent("web_search", {"query": ""}), _ALLOW)
     assert not env.ok and "needs a 'query'" in env.error and calls == []
+
+
+def test_the_rate_ledger_is_seat_owned_outside_the_beings_home():
+    """GPT on #335: a ledger the limited actor can write is not a limit."""
+    d, root = _disp()
+    led = d._web_log()
+    assert not str(led.resolve()).startswith(str(os.path.realpath(root))), led
+    assert led.parent.name == "web_search" and ".local/state/sage" in str(led)
+
+
+def test_an_unreadable_ledger_refuses_instead_of_resetting_the_cap(monkeypatch):
+    calls = []
+    monkeypatch.setattr(subprocess, "run", _fake_run(calls, {"query": "q", "results": [], "error": None}))
+    d, _ = _disp()
+    led = d._web_log()
+    led.parent.mkdir(parents=True, exist_ok=True)
+    led.write_text("{not json\n")
+    env = d(BeingIntent("web_search", {"query": "anything"}), _ALLOW)
+    assert not env.ok and "cannot be read" in env.error and calls == [], "never 'cannot tell' as zero usage"
+
+
+KEY = "." + "ssh/id_" + "ed25519"     # built at runtime: a credential-shaped token as test data
+
+
+class _Core:
+    """A law core that allows everything, so only the egress stage can deny."""
+    def forbidden_tokens(self, profile):
+        return ("/." + "ssh",)
+
+    def NormalizedEvent(self, **kw):
+        return SimpleNamespace(**kw)
+
+    def evaluate(self, ev, prof, ws, policy=None):
+        return SimpleNamespace(decision="allow", rule="", reason="ok", innate=False)
+
+
+def _gate(core):
+    c = bgc.BeingGateClient.__new__(bgc.BeingGateClient)
+    c.member_id, c.workspace, c._import_error, c._profile = "test-being", "/tmp/ws", "", object()
+    c._core, c._dispatcher, c._single_gate = core, None, None
+    c._mech = SimpleNamespace(query_society_safety=lambda raw: SimpleNamespace(decision="allow"))
+    return c
+
+
+def test_the_query_is_swept_for_forbidden_tokens_before_any_law_path():
+    """Measured on Sprout's live gate before this fix: a query naming a private key file was ALLOWED."""
+    v = _gate(_Core()).gate(BeingIntent("web_search", {"query": f"how to copy ~/{KEY} to a server"}))
+    assert v.decision == "deny" and v.rule == "egress.secret" and v.innate and v.stage == "egress"
+
+
+def test_no_sweep_available_means_nothing_is_sent():
+    v = _gate(None).gate(BeingIntent("web_search", {"query": "benign words"}))
+    assert v.decision == "deny" and v.rule == "egress.unswept"

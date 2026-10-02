@@ -633,7 +633,9 @@ def test_the_verdict_actually_carries_the_command_now():
                else len(src)]
     built_from_ev = [ln for ln in gate.splitlines()
                      if "GatewayVerdict(" in ln and "gate.raised" not in ln
-                     and "gate.unreachable" not in ln and "registry.unbounded" not in ln]
+                     and "gate.unreachable" not in ln and "registry.unbounded" not in ln
+                     # the egress stage (SAGE #335) runs BEFORE any event is normalized: no command exists yet
+                     and "egress.unswept" not in ln and '"egress.secret", innate=True, stage="egress"' not in ln]
     check("gate() builds verdicts from the event in more than one place", len(built_from_ev) >= 3)
     check("...and EVERY such verdict reports the command the law ruled on",
           gate.count("command=judged_command"), len(built_from_ev))

@@ -1468,15 +1468,32 @@ class HestiaF1aDispatcher:
     WEB_SEARCH_WINDOW_S = 3600
 
     def _web_log(self) -> Path:
-        return Path(self.memory_root) / "notes" / ".web_search_log.jsonl"
+        """SEAT-OWNED rate state, outside the being's writable home (GPT on #335: a ledger the limited actor can
+        write is not a limit). Per member, under the seat's own local state."""
+        safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in str(self.plugin_id))
+        return Path(os.path.expanduser("~/.local/state/sage/web_search")) / f"{safe}.jsonl"
+
+    def _web_recent(self, now: float) -> Optional[list]:
+        """Searches in the window, or None when the ledger exists but cannot be read: never 'cannot tell' as zero."""
+        log = self._web_log()
+        if not log.exists():
+            return []
+        try:
+            rows = [json.loads(x) for x in log.read_text(encoding="utf-8").splitlines() if x.strip()]
+            return [r for r in rows if now - float(r["t"]) < self.WEB_SEARCH_WINDOW_S]
+        except Exception:
+            return None
 
     def _do_web_search(self, intent: BeingIntent) -> ResultEnvelope:
         """Search the web from this machine (sage/gateway/web_search.py), judged and witnessed like any act.
 
         dp, 2026-10-02: "keep it local to the machine, gated through hestia like all other tools. it should be
-        treated like any other agent's web search." Only reached on an intent the gate ALLOWED as the exact
-        command web_search_command composes; rebuilt here from the same function and refused on any mismatch.
-        The cap is checked before anything leaves the machine; results come back labelled as other people's words."""
+        treated like any other agent's web search." What governs it (GPT on #335): the gate judged the VERB with
+        the query as data, after sweeping the query with the innate denylist (BeingGateClient.gate, egress stage);
+        there is no composed command for the law to judge, so verdict.command is normally None. This handler
+        builds a FIXED command from the validated query (web_search_command) and runs it on this machine. The
+        seat-owned hourly cap is checked before anything leaves, and fails closed when its ledger cannot be read;
+        results come back labelled as other people's words."""
         import json as _json
         import shlex
         import subprocess
@@ -1488,16 +1505,16 @@ class HestiaF1aDispatcher:
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         judged = getattr(getattr(self, "_verdict", None), "command", None)
-        if judged is not None and judged != cmd:
-            return ResultEnvelope(ok=False, error=("web_search refused: the command the law judged is not the "
-                                                   "command this dispatcher would execute."))
+        if judged is not None and judged != cmd:   # defensive only: this verb is judged uncomposed
+            return ResultEnvelope(ok=False, error=("web_search refused: the law judged a command this dispatcher "
+                                                   "would not execute."))
         now = self._now()
         log = self._web_log()
-        try:
-            recent = [r for r in (_json.loads(x) for x in log.read_text().splitlines() if x.strip())
-                      if now - float(r.get("t", 0)) < self.WEB_SEARCH_WINDOW_S]
-        except Exception:
-            recent = []
+        recent = self._web_recent(now)
+        if recent is None:
+            return ResultEnvelope(ok=False, error=(
+                "not searched: this seat's record of your recent searches cannot be read, so the hourly limit "
+                "cannot be checked. Nothing was sent. This is the seat's to repair, not yours."))
         if len(recent) >= self.WEB_SEARCH_CAP:
             frees = int((float(recent[0]["t"]) + self.WEB_SEARCH_WINDOW_S - now) / 60) + 1
             return ResultEnvelope(ok=False, error=(
