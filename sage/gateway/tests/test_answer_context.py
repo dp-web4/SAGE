@@ -106,3 +106,24 @@ def test_the_answer_temperature_samples_the_answer_turn_alone_and_is_restored(tm
     assert hb.answer_temperature(tmp_path) == 1.5, "clamped"
     src = Path(hb.__file__).read_text()
     assert "temperature=answer_temperature(instance)" in src
+
+
+def test_the_answer_turn_is_told_what_it_can_do_and_that_it_has_no_internet():
+    line = hb.abilities_line()
+    assert "camera" in line and "peer_ask" in line and "search your own files" in line
+    assert line.endswith("You have no internet access."), "true while no web verb is in the toolset"
+    h, t = _home()
+    assert "You have no internet access." in hb.answer_context_block(h, ME, hb.SelectedTurn("room", t))
+
+
+def test_answer_then_act_is_opt_in_and_wired_without_say_or_speak(tmp_path):
+    assert hb.act_after_answer_on(tmp_path) is False
+    (tmp_path / "instance.json").write_text('{"act_after_answer": true}')
+    assert hb.act_after_answer_on(tmp_path) is True
+    src = Path(hb.__file__).read_text()
+    i = src.index("ANSWER, THEN ACT (2026-10-02)")
+    block = src[i:i + 2200]
+    assert 'not in ("say", "speak")' in block and "should_yield=_yield_for_a_person" in block
+    assert "act_form=explore_turn_mode(instance)" in block and 'get("sent")' in block and "preempted" in block
+    assert '"act_after_answer": _turn(act_after)' in src
+    assert "if not, rest." in hb.AFTER_ANSWER, "a format with rest as a full answer, not an instruction to act"

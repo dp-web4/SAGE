@@ -65,7 +65,7 @@ def test_preemption_is_opt_in(tmp_path):
 
 def test_the_beat_wires_the_yield_and_the_preempted_branch():
     src = Path(hb.__file__).read_text()
-    assert src.count("should_yield=_yield_for_a_person") == 3, "explore, posture and reflection"
+    assert src.count("should_yield=_yield_for_a_person") == 4, "explore, posture, reflection and the act after an answer"
     # GPT on #310: the clock starts before the first claim, and every generate boundary is rechecked
     assert src.index("_beat_started = time.time()") < src.index("_claimed = _arousal_claim.claim_pending(")
     assert "p0_since(_beat_started)" in src and "p0_since(t0)" not in src

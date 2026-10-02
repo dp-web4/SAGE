@@ -474,6 +474,39 @@ def answer_temperature(instance) -> Optional[float]:
         return None
 
 
+AFTER_ANSWER = ("{pending}\n\nYou answered aloud: \"{reply}\"\n\nThat answer is spoken. Your tools are here "
+                "if there is something you want to do now; if not, rest.")
+
+
+def act_after_answer_on(instance) -> bool:
+    """Opt-in per instance: instance.json "act_after_answer": true."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return bool(instance_config(instance).get("act_after_answer"))
+    except Exception:
+        return False
+
+
+# WHAT IT CAN DO, as facts beside the answer (2026-10-02): asked "check the internet. Can you do that?", the answer
+# turn, which sees no tool list, agreed to something it cannot do. Facts about its reach, not a direction.
+_ABILITIES = [("camera", "look through your eyes (camera, gaze)"), ("search", "search your own files (search, memory_read)"),
+              ("pr_read", "read the fleet's pull requests (pr_read)"), ("recall", "recall and remember memories"),
+              ("peer_ask", "ask a sibling a question (peer_ask)"), ("speak", "speak aloud (speak, say)")]
+
+
+def abilities_line() -> str:
+    try:
+        from sage.gateway import toolset as _ts
+        have = set(_ts.canonical_toolset())
+    except Exception:
+        return ""
+    parts = [txt for verb, txt in _ABILITIES if verb in have]
+    line = "With your tools, in your acts rather than in a reply, you can " + "; ".join(parts) + "."
+    if not ({"web_search", "web_read"} & have):
+        line += " You have no internet access."
+    return line
+
+
 def answer_context_on(instance) -> bool:
     try:
         from sage.gateway.governed_turn import instance_config
@@ -522,6 +555,8 @@ def answer_context_block(instance, member: str, selected, n: int = ANSWER_CONTEX
                 line += " " + _sib
         except Exception:
             pass
+        if (_ab := abilities_line()):
+            line += " " + _ab
         parts.append(line)
     except Exception:
         pass
@@ -3419,6 +3454,7 @@ def main(argv=None) -> int:
     # nothing in heartbeats.jsonl and no monitor knew it had happened. BeatKilled was defined
     # on main with no producer; install_kill_handler() is that producer.
     explore = after = reflect = answer = None
+    act_after = None
     preempted = None
     account = {"present": False, "sha256": None, "reply": "", "generates": []}
     killed = None
@@ -3613,6 +3649,23 @@ def main(argv=None) -> int:
             # unmarked, and the NEXT beat sees it still owed. That is the honest record, and it is
             # what the reflect phase — where `say` actually works — gets to act on.
 
+
+        # ANSWER, THEN ACT (2026-10-02). A beat preempted for a person goes straight to the answer turn, which
+        # has no tools; dp said "try it… pick something and let me know what you learned" three times and every
+        # reply could only agree ("That sounds wonderful. I'd love to try it together…"). After the answer is
+        # spoken, a short act step: the person's words and its own reply in view, its tools (not say/speak: it
+        # has just answered), yielding to a newer person like any turn. Opt-in: "act_after_answer": true.
+        if (preempted and act_after_answer_on(instance) and answer is not None
+                and (getattr(answer, "answer_form", None) or {}).get("sent") and selected is not None):
+            _phase("wrap-up", "act-after-answer", host_session_id)
+            _aa_tools = [t for t in _explore_specs if t["function"]["name"] not in ("say", "speak")]
+            _aa_seed = [seed[0], {"role": "user", "content": AFTER_ANSWER.format(
+                pending=selected.render(), reply=(answer.reply or "").strip()[:400])}]
+            act_after = run_ollama_tool_turn(client, llm, _aa_seed, max_steps=2, tools=_aa_tools,
+                                             on_generate=_on_generate("act_after_answer"),
+                                             should_yield=_yield_for_a_person,
+                                             act_form=explore_turn_mode(instance))
+
     except BeatKilled as _k:
         killed = str(_k)
         print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed",
@@ -3629,7 +3682,8 @@ def main(argv=None) -> int:
         interventions.append({"kind": "answer_json", "to": selected.cid if selected else None,
                               "woke_by_turn": bool(selected and selected.woke),
                               **answer.answer_form})
-    for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer)):
+    for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer),
+                    ("act_after_answer", act_after)):
         if res is None:
             continue
         for dup in (getattr(res, "duplicates", None) or []):
@@ -3748,6 +3802,7 @@ def main(argv=None) -> int:
         # present only when the beat was killed: a record that says which phases it has
         **({"killed": killed} if killed else {}),
         "answer": _turn(answer) if answer is not None else None,
+        "act_after_answer": _turn(act_after) if act_after is not None else None,
         "escalations": escalations, "egress": egress,
     }
     # THE LAST THING A BEAT DOES IS MAKE SURE THERE WILL BE ANOTHER ONE (opt-in; Legion since

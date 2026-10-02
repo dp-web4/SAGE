@@ -161,7 +161,7 @@ def _fake_beat(phases, raise_at=None):
 
 
 BEAT = [("wake", "start"), ("wake", "explore"), ("wake", "posture"), ("wake", "account"),
-        ("wrap-up", "reflect"), ("wrap-up", "answer")]
+        ("wrap-up", "reflect"), ("wrap-up", "answer"), ("wrap-up", "act-after-answer")]
 
 
 def test_a_beat_reports_wake_then_wrap_up_then_rest(daemon, monkeypatch):
@@ -170,7 +170,7 @@ def test_a_beat_reports_wake_then_wrap_up_then_rest(daemon, monkeypatch):
     assert daemon.states() == [("wake", "heartbeat:start"), ("wake", "heartbeat:explore"),
                                ("wake", "heartbeat:posture"), ("wake", "heartbeat:account"),
                                ("wrap-up", "heartbeat:reflect"), ("wrap-up", "heartbeat:answer"),
-                               ("rest", "heartbeat:end")]
+                               ("wrap-up", "heartbeat:act-after-answer"), ("rest", "heartbeat:end")]
     assert all(b.get("beat_id") == "heartbeat-test" for _, b in daemon.reports)
     assert all(b.get("ttl_secs") == activity.BEAT_TTL_S for _, b in daemon.reports[:-1])
 
