@@ -1,10 +1,14 @@
 # Copy to ~/.config/systemd/user/sage-heartbeat.timer next to the service.
 [Unit]
-Description=SAGE being heartbeat every 30 minutes
+Description=SAGE being heartbeat after 30 minutes of inactivity
 
 [Timer]
 OnBootSec=10min
-OnUnitActiveSec=30min
+# A WATCHDOG, not a clock (SAGE #295): events start the same service (directly, or through the
+# sage-heartbeat-next successor when a beat is running), and every beat that runs as this unit
+# rebases the countdown when it ends. So this fires only after 30 quiet minutes since the last
+# beat ended. OnUnitActiveSec would count from a beat's START instead; do not use it here.
+OnUnitInactiveSec=30min
 RandomizedDelaySec=2min
 Persistent=false
 Unit=sage-heartbeat.service

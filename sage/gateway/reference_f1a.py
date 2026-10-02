@@ -25,7 +25,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import datetime, timezone
+import re
+import textwrap
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -37,6 +39,10 @@ from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEn
 # that could append to either could not later be distinguished from the person who wrote to
 # it, and neither could anyone reading the record.
 SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
+# Files in the being's home itself that the SEAT owns. `entrustment.md` is what the being was
+# GIVEN; if it could append to it, what was extended and what it decided would merge in the
+# record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
+SEAT_OWNED = ("entrustment.md",)
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
@@ -45,6 +51,50 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # asks_sent.jsonl is the record the ask limit counts (hestia_dispatch, SAGE #92); a being that
 # could rewrite it could reset its own limit.
 RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl")
+
+
+def _named_file_stamps(content: str, root: Path, written: Path) -> str:
+    """For a record write (journal, todo, a note): when each code file it names last changed.
+
+    MEASURED 2026-09-22 over cbp-being's 114 beats on 09-21/22 (sage/scripts/being_act_ledger.py):
+    14 beats wrote a journal/todo/say line claiming a code change ("Fixed
+    mechanism-training-script-clean.py.") in a beat where neither it nor the previous beat
+    changed any .py file. Two explanations were tested on that data and neither held: the
+    refusals were IN VIEW (6 of the 14 had one), and the claims did not copy its own closing
+    words (closer to them in 4 of 14). In 8 of 14 no edit was attempted at all: the claim came
+    from the plan. So: no judgement of the claim, which a heuristic would get wrong. A fact,
+    stamped where the claim is written, that the being can compare with what it just wrote.
+    Whether that changes what it writes is a separate, open measurement (rerun the ledger).
+
+    Reads mtimes only, executes nothing, and never looks outside the home: a name that
+    resolves outside it is treated as not found. A bare name is looked for at the top of the
+    home and in notes/ only, and a miss says exactly that, not "no such file" (the 09-28
+    review found a bare train.py living in experiments/ reported as absent)."""
+    out, seen = [], set()
+    home = root.resolve()
+    for name in re.findall(r"[\w./-]+\.py\b", content or ""):
+        name = name[2:] if name.startswith("./") else name
+        if not name or name in seen or len(out) >= 3:
+            continue
+        seen.add(name)
+        cand = [root / name] + ([root / "notes" / name] if "/" not in name else [])
+        hit = None
+        for c in cand:
+            try:
+                rc = c.resolve()
+                rc.relative_to(home)
+            except (OSError, ValueError):
+                continue
+            if rc.is_file() and rc != written.resolve():
+                hit = rc
+                break
+        if hit is None:
+            where = "at the top of your home or in notes/" if "/" not in name else "in your home"
+            out.append(f"{name} was not found {where}")
+            continue
+        t = datetime.fromtimestamp(hit.stat().st_mtime, timezone.utc)
+        out.append(f"{hit.relative_to(home)} was last changed at {t:%Y-%m-%d %H:%M} UTC")
+    return (" Files this names: " + "; ".join(out) + ".") if out else ""
 
 
 def _python_status(p) -> str:
@@ -70,6 +120,185 @@ def _python_status(p) -> str:
         return ""
     return f" Python can parse {p.name} now. That is not the same as running it."
 
+
+
+def _leading_spaces(line: str) -> int:
+    """How many spaces a line starts with: the count both indentation notes below report."""
+    return len(line) - len(line.lstrip(" "))
+
+
+def _indent_only_miss(have: str, old: str, new: str, first_line: int) -> str:
+    """A range edit refused because old differs from the lines only in leading spaces says so,
+    in counts. (_indent_changed covers the edit that LANDS; this covers the refusal.)
+
+    Measured 2026-09-24 on cbp-being: memory_edit start_line=394 with old
+    'model = Model(n_components=10, ...)' was refused twice in one beat, because the file's
+    line 394 starts with 4 spaces. The refusal printed the line WITH its spaces, which the
+    being cannot see, so it read the file's line as its own old. Next it used memory_write,
+    which appended the line at the end of the file (line 864), where it never runs, then
+    asked for a run. Again 2026-09-27 04:58Z (line 144, 4 spaces): it told dp "the file
+    content didn't match exactly" and queued a retry without knowing why. A count is visible
+    where the spaces are not. The note covers new too: a replacement without the spaces
+    would move the crash to an IndentationError. And when new is old verbatim, the edit
+    would change nothing even once the spaces match, so that is said as well."""
+    h = have.rstrip("\n").split("\n")
+    w = old.rstrip("\n").split("\n")
+    if len(h) != len(w) or any(a.strip() != b.strip() for a, b in zip(h, w)):
+        return ""
+    for k, (a, b) in enumerate(zip(h, w)):
+        na, nb = _leading_spaces(a), _leading_spaces(b)
+        if na != nb:
+            note = (f"\nThey differ only in the spaces at the start of the line. Line "
+                    f"{first_line + k} in the file starts with {na} spaces; that line of your "
+                    f"old starts with {nb}. The spaces are part of the text: put {na} in old, "
+                    f"and in new as well, or the replaced line will not line up with the ones "
+                    f"around it.")
+            if new.rstrip("\n") == old.rstrip("\n"):
+                note += (" Your new is also the same text as your old, so even with the spaces "
+                         "matched this edit would change nothing.")
+            return note
+    return ""
+
+
+def _indent_changed(removed: str, new: str, first_line: int) -> str:
+    """A range edit whose first line lost or gained leading spaces says so, in counts.
+
+    Measured on cbp-being, 2026-09-27 06:30Z: its first range edit ever aimed at the right
+    line (144) sent the right text (n_latent -> n_features) without the line's 4 leading
+    spaces. The receipt quoted the removed line WITH its spaces, which the being cannot
+    see, and the parse note named line 145, the line AFTER the cause. The being followed
+    that number and overwrote line 145 (`return X, y, W_TRUE`) with an unrelated line, then
+    dedented that until the file parsed. A count is visible where the spaces are not. The
+    edit still lands, since a dedent can be meant; only the counts are added."""
+    def first(s: str) -> str:
+        return next((ln for ln in s.splitlines() if ln.strip()), "")
+    a, b = first(removed), first(new)
+    if not a or not b:
+        return ""
+    na, nb = _leading_spaces(a), _leading_spaces(b)
+    if na == nb:
+        return ""
+    return (f". Line {first_line} now starts with {nb} spaces; the line it replaced started "
+            f"with {na}. In Python those spaces decide which block a line belongs to")
+
+
+def _not_python(content: str, before: str) -> str:
+    """Why `content` cannot be appended to a .py file, or "" if it can.
+
+    A DESCRIPTION OF AN EDIT IS NOT AN EDIT. Measured on cbp-being, 2026-09-21 to 09-23: 15
+    memory_write calls appended prose to its training script where a change was meant --
+    "[Fix #1: Removed extra closing parenthesis on line 1685 ...]", "[Remove lines 344-347
+    ...]", "[BEAT 05:18 UTC] Applying fix #1 ...". Every receipt said "memory_write only
+    adds" and named memory_edit; at 05:18Z on 09-23 it had the exact memory_edit calls from
+    the seat and still wrote the labels, then told the seat "Both fixes applied". A receipt
+    arrives after the file is already worse. So the check runs before the write.
+
+    The test is grammar, not a list of phrases: the text is accepted if Python can read it
+    as code as written, dedented, or as a function body (a fragment with `return` is still
+    code), OR if the file parses once it is appended (the last part of a program written in
+    parts). Replayed over all 69 .py appends in its record, this refuses the 15 labels and 4
+    code fragments whose own indentation was inconsistent, and nothing that parsed."""
+    def parses(src: str) -> Optional[SyntaxError]:
+        try:
+            compile(src, "<text>", "exec")
+        except SyntaxError as e:
+            return e
+        except ValueError:
+            return None
+        return None
+    first = parses(content)
+    if first is None:
+        return ""
+    body = textwrap.dedent(content)
+    if parses(body) is None:
+        return ""
+    if parses("def _f():\n" + textwrap.indent(body, "    ", lambda _l: True) + "\n    pass\n") is None:
+        return ""
+    if parses(before + ("" if before.endswith("\n") or not before else "\n") + content) is None:
+        return ""
+    lines, at = content.splitlines(), (first.lineno or 1) - 1
+    line = lines[at] if 0 <= at < len(lines) else ""
+    # Not the compiler's msg: for prose it is noise ("leading zeros in decimal integer
+    # literals" for a line starting "[BEAT 2026-09-23"). The line itself says what it is.
+    return (f"Python cannot read line {first.lineno} of your text as code: "
+            f"{line.strip()[:100]!r}. Appending it would not make the file parse either.")
+
+
+def _first_syntax_error(src: str) -> Optional[SyntaxError]:
+    """The compiler's FIRST stop in `src`, or None if it parses. compile() executes nothing."""
+    try:
+        compile(src, "<file>", "exec")
+    except SyntaxError as e:
+        return e
+    except ValueError:
+        return None
+    return None
+
+
+def _file_state(src: str) -> tuple:
+    """("complete" | "incomplete" | "invalid", first SyntaxError or None) for a whole .py file.
+
+    Incomplete is not invalid. A program written in parts is unfinished between the parts (an
+    open bracket, a block header with no body yet, an unterminated docstring), and Python then
+    reports its error at the OPENING line ("'(' was never closed", line 1), not at the end. So
+    the first error's line cannot tell a program still being written from one that is broken.
+    codeop.compile_command draws exactly that line: it returns None for source that is merely
+    incomplete and raises for source that is wrong. It compiles only and executes nothing."""
+    import codeop
+    import warnings
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            r = codeop.compile_command(src, "<file>", "exec")
+    except SyntaxError as e:
+        return "invalid", e
+    except (ValueError, OverflowError):
+        return "complete", None
+    if r is None:
+        return "incomplete", _first_syntax_error(src)
+    return "complete", None
+
+
+def _append_must_advance(content: str, before: str) -> str:
+    """Why appending `content` to a .py file would move it backwards, and so is refused, or "".
+
+    AN APPEND BELOW THE FIRST ERROR CANNOT REPAIR IT. GPT's review of #186 named the invariant,
+    and cbp-being supplied two counterexamples the grammar check (_not_python) lets through:
+    - 2026-09-23 07:15 (seq 3405): a label written as `#` comments ("# Remove stray ']' at line
+      1736 ...") on a file that did not parse. Comments are valid Python, so it was accepted.
+      One beat later the comment was the premise of a request to delete a ']' that did not exist.
+    - 2026-09-24 10:31: two memory_write calls appended 4,515 and 4,765 chars of VALID Python to
+      a file already stopped at line 2367. The stop did not move. The beat then counted the new
+      sha as progress: "the indentation fix already applied".
+    Both change a broken file without changing why it is broken. The rule is MONOTONIC (GPT's
+    ruling on #186's open question, 2026-09-26): an append may never move a file backwards.
+    - HEALTHY (parses) -> stays healthy. An append that would make a working file invalid is
+      refused. The original rule let an over-indented fragment through because its text parsed
+      on its own dedented, and the file it landed in did not.
+    - INCOMPLETE (a program written in parts) -> incomplete or healthy, and only with actual code.
+      A label makes it invalid and is refused.
+    - INVALID (wrong somewhere, not merely unfinished) -> healthy only. An append below the first
+      error cannot repair it."""
+    state, err = _file_state(before)
+    combined = before + ("" if before.endswith("\n") or not before else "\n") + content
+    after, err_after = _file_state(combined)
+    if after == "complete":
+        return ""
+    if state == "complete":
+        where = f"line {err_after.lineno} ({err_after.msg})" if err_after else "the end (unfinished)"
+        return (f"The file parses now, and this text would break it: appended, Python would stop at "
+                f"{where}. An append must leave a working file working.")
+    if state == "incomplete" and after == "incomplete" and not _not_python(content, before):
+        return ""
+    stop = (err.lineno if err else None) or "?"
+    if state == "incomplete":
+        return (f"The file is an unfinished program (Python stops at line {stop}: "
+                f"{err.msg if err else 'incomplete'}), and this text does not continue it: "
+                f"appended, the file would no longer be a program at all.")
+    return (f"The file does not parse now: Python stops at line {stop} ({err.msg}). Appending "
+            f"below it cannot fix that. The file would still stop at line "
+            f"{(err_after.lineno if err_after else stop)}, so this write would change the file "
+            f"without repairing it. Fix line {stop} itself with memory_edit.")
 
 
 def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
@@ -114,6 +343,151 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
         return head + f"the file's line {end + 1} is {cut(have[end])!r}."
     return head + "the file ends there."
 
+
+def missing_args(args: dict, required, tool: str, hint: str = "") -> Optional[str]:
+    """Name the fields ACTUALLY missing, and the ones that were supplied instead.
+
+    dp, 2026-09-25 fleet directive: "addressing unnecessary frictions. explaining, clearly, the
+    necessary ones." A refusal that names the wrong field is the unnecessary kind wearing the
+    clothes of the necessary kind — the boundary is real, the sentence about it is false.
+
+    Measured across five beings' whole histories (2026-09-25):
+      75  "say needs 'to' (a conversation id) and 'text'"  <- the being HAD PASSED 'to'
+      42  "witness needs an 'event'"                       <- it passed memory_edit's arguments
+      17  "retire_note needs a 'reason'"                   <- it passed only 'path'
+      12  "memory_write needs a 'path'"                    <- it passed only 'content'
+    In the hub-being cases not one was recovered. The being reads "needs 'to'", looks at its own
+    call, sees `to` sitting there, and has nowhere to go. Legibility rule 2: name the refusal's
+    subject unmistakably.
+
+    Listing what WAS passed matters as much as what was not: 28 of the say failures put the
+    message under 'message', 'content' or 'body', and 42 witness failures were a whole
+    memory_edit call wearing the wrong tool name. Reflected back, that is a diagnosable
+    mistake; as "needs an 'event'" it is a wall.
+    """
+    have = {k: v for k, v in (args or {}).items()
+            if str(v).strip() not in ("", "None")}
+    missing = [f for f in required if f not in have]
+    if not missing:
+        return None
+    lack = " and ".join(f"'{f}'" for f in missing)
+    msg = f"{tool} needs {lack}"
+    supplied = [k for k in have if k not in required]
+    if supplied:
+        msg += f" — you passed {', '.join(repr(k) for k in sorted(supplied))}"
+        present = [f for f in required if f in have]
+        if present:
+            msg += f" and {' and '.join(repr(f) for f in present)}"
+        msg += ", so nothing was done"
+    elif [f for f in required if f in have]:
+        msg += f" — you passed {' and '.join(repr(f) for f in required if f in have)}, so nothing was done"
+    if hint:
+        msg += f". {hint}"
+    return msg
+
+
+
+# A DATED LINE SAYS WHAT WAS TRUE ON ITS DATE (2026-09-29). cbp-being escalated to dp that "the MCP
+# server has been offline ~6 hours" and that coordination requests #12529/#12530/#12624/#12638 had
+# gone unanswered, while membot and hestia were both up. Every element of it was in its own
+# inbox.md, written 2026-09-13/14; the being read that file in the beat and repeated it as
+# current. #92 had already put a MEASURED reachability line in every beat's state, and the read
+# still won. The file's mtime could not help: the being had appended to inbox.md at 06:10 that
+# day, so the file was "40 minutes old" while most of its lines were fifteen days old. So the read
+# reports the age of the DATED LINES it shows, not the age of the file.
+_DATED_LINE = re.compile(
+    r"^\s*(?:[-*]\s*(?:\[[ xX]\]\s*)?)?"            # optional bullet / checkbox
+    r"(?P<date>20\d\d-\d\d-\d\d)"
+    r"(?:[ T](?P<hm>\d\d:\d\d)(?::(?P<sec>\d\d)(?:\.(?P<frac>\d+))?)?)?"  # time; seconds, fraction
+    r"\s*(?P<zone>Z\b|UTC\b|GMT\b|[+-]\d\d:?\d\d\b)?")    # optional explicit zone / offset
+STALE_LINE_SECS = 24 * 3600
+# The widest real UTC offsets are -12:00 and +14:00. A time written WITHOUT a zone is placed at
+# its LATEST possible instant (as if UTC-12), so it is never called older than it could be.
+_LATEST_UNZONED = timedelta(hours=12)
+
+
+def _latest_instant(date: str, hm: Optional[str], zone: Optional[str],
+                    sec: Optional[str] = None, frac: Optional[str] = None) -> Optional[datetime]:
+    """The SUPREMUM of the UTC instants this date/time could denote: every reading is strictly
+    earlier. The zone is honoured exactly when given; with no zone the time is placed as if
+    UTC-12. The written precision is honoured too: a time is the whole interval that truncates
+    to it (a minute-precision time covers :00 to :59.999..., seconds cover their fraction, a
+    date with no time its whole calendar day), never its first instant."""
+    try:
+        day = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return None
+    if hm is None:
+        return (day + timedelta(days=1)).replace(tzinfo=timezone.utc) + _LATEST_UNZONED
+    try:
+        local = datetime.strptime(date + " " + hm + ":" + (sec or "00"), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+    # ADD ONE UNIT OF THE LAST WRITTEN PRECISION (GPT re-review of #270: the seconds were parsed
+    # and discarded, so `12:00:59Z` was read as 12:00:00 and called more than a day old at
+    # 23h59m31s). The result is the interval's supremum, which no reading reaches, hence the >=
+    # in `dated_lines_note`. A fraction is taken in integer microseconds and rounded UP, so the
+    # bound is never early even when more than six digits were written.
+    if frac:
+        local += timedelta(microseconds=-(-(int(frac) + 1) * 10 ** 6 // 10 ** len(frac)))
+    elif sec is not None:
+        local += timedelta(seconds=1)
+    else:
+        local += timedelta(minutes=1)
+    if zone in ("Z", "UTC", "GMT"):
+        return local.replace(tzinfo=timezone.utc)
+    if zone:
+        sign = -1 if zone[0] == "-" else 1
+        digits = zone[1:].replace(":", "")
+        off = timedelta(hours=int(digits[:2]), minutes=int(digits[2:]))
+        return (local - sign * off).replace(tzinfo=timezone.utc)
+    return local.replace(tzinfo=timezone.utc) + _LATEST_UNZONED
+
+
+def dated_lines_note(text: str, now: Optional[datetime] = None) -> str:
+    """One bracketed line about the dated lines in `text`, or "" when none is more than a day old.
+
+    A line that starts with a date (optionally after a bullet or checkbox) opens a dated span;
+    undated lines that follow belong to it. Only the window being shown is counted.
+
+    What can be timed (GPT reviews of #270): an explicit zone or numeric offset (Z, UTC, GMT,
+    +hh:mm, -hhmm) is honoured exactly, and so is the written precision: `12:00Z` means some
+    instant in [12:00:00, 12:01:00), `12:00:59Z` one in [12:00:59, 12:01:00). A time with no
+    zone, and a date with no time, are wider intervals still. Every line is counted from the
+    END of its interval, so a line is only ever called old when it is old under every reading. Other zone spellings (PDT, CET)
+    are not parsed and are treated as no zone, which is the conservative direction."""
+    now = now or datetime.now(timezone.utc)
+    current = None
+    zoned_all = True
+    under: dict = {}
+    written: dict = {}
+    for line in text.splitlines():
+        m = _DATED_LINE.match(line)
+        if m:
+            current = _latest_instant(m.group("date"), m.group("hm"), m.group("zone"),
+                                      m.group("sec"), m.group("frac"))
+            if current is not None:
+                written.setdefault(current, m.group("date"))
+                if not (m.group("hm") and m.group("zone")):
+                    zoned_all = False
+        if current is not None and line.strip():
+            under[current] = under.get(current, 0) + 1
+    if not under:
+        return ""
+    # `d` is a supremum no reading attains, so an age of EXACTLY a day from it means every
+    # reading is more than a day old: >= here is the strict "more than a day" of each reading.
+    old = {d: n for d, n in under.items() if (now - d).total_seconds() >= STALE_LINE_SECS}
+    if not old:
+        return ""
+    oldest, newest = min(under), max(under)
+    days = int((now - oldest).total_seconds() // 86400)
+    caveat = "" if zoned_all else (" Lines without a time zone are counted at the latest time "
+                                   "they could mean, so these ages are minimums.")
+    return (f"[dated lines shown here run from {written[oldest]} to {written[newest]}; "
+            f"{sum(old.values())} of {sum(under.values())} dated lines are more than a day old "
+            f"(the oldest at least {days} day{'s' if days != 1 else ''} ago).{caveat} A dated line "
+            f"says what was true on its date; appending to a file does not make its older lines "
+            f"current. For what is up now, the measured lines in your state are from this beat.]\n")
 
 class ReferenceF1aDispatcher:
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
@@ -171,7 +545,16 @@ class ReferenceF1aDispatcher:
                     raise ValueError(
                         f"{sub}/ is reserved: a turn enters a conversation only through `say`, "
                         "which checks who may speak, witnesses the act and numbers it. Writing "
-                        "the store directly would let a turn appear that nobody said")
+                        "the store directly would let a turn appear that nobody said. Nothing "
+                        f"was changed. If you meant to change one of your own files, "
+                        f"{sub}/ is not its path: give that file's path instead (a `say` "
+                        "does not change any file)")
+            if p.parent == self.memory_root and p.name in SEAT_OWNED:
+                raise ValueError(
+                    f"{p.name} is yours to read and not to edit: it is what you were entrusted "
+                    "with, and it has to stay separable from what you decide. Your own reading "
+                    "of it belongs in notes/plan.md, which is entirely yours. Disagree with it "
+                    "there, in your journal, or in an appeal; that record is wanted")
             if p.parent == self.memory_root / "notes" and p.name in SEAT_OWNED_NOTES:
                 raise ValueError(
                     f"notes/{p.name} is what was said TO you, and it stays as it was said. Your "
@@ -179,8 +562,58 @@ class ReferenceF1aDispatcher:
                     "appeal, all of which are read")
         roots = (self.memory_root,) + tuple(getattr(self, "_extra_roots", ()) or ())
         if not any(p == r or r in p.parents for r in roots):
+            # A NEAR MISS OF ITS OWN HOUSE IS NOT A TRESPASS. dp, 2026-09-25, fleet directive:
+            # "each being has a home ... i want each to feel at home there ... addressing
+            # unnecessary frictions."
+            #
+            # Measured on Sprout across 924 beats: 35 of 134 refusals — the single largest
+            # class — were the being reaching for its OWN journal or todo by an absolute path
+            # it could not reproduce:
+            #   11  /home/dp/ai-workspace/sage/sage/journal.md   (the workspace segment doubled)
+            #    9  /scratch/journal.md                          (a plausible, wrong root)
+            #    5  /home/dp/ai-workspace/sage/sage/todo.md
+            #    4  /scratch/todo.md
+            #   ... and four more, EVERY ONE named journal.md or todo.md.
+            # Files that exist in its home, that it may write by bare name, that it wrote
+            # correctly 51 times in the same period. The prompt already says "never type that
+            # path" (heartbeat.py); it still typed it 35 times, because remembering an absolute
+            # path is not a thing this scale does. Legibility rule 4: correct at the site, and
+            # remove the need to remember at all where you can.
+            #
+            # So: if some TAIL of the unreachable path names a file that ALREADY EXISTS in the
+            # being's home, that is the file it meant. Reach does not widen by one byte — the
+            # target is inside memory_root, and every guard above (reserved subtrees, seat-owned
+            # notes) re-runs on it below. A path whose tail matches nothing still refuses, so
+            # '/etc/passwd' is still '/etc/passwd' and does not quietly become a file at home.
+            landed = self._tail_in_home(p)
+            if landed is not None:
+                self._rerouted_from = str(p)      # the receipt says so; nothing is hidden
+                return self._safe_path(str(landed.relative_to(self.memory_root)), writing=writing)
             raise ValueError(self._out_of_reach(p, roots, writing))
         return p
+
+    def _tail_in_home(self, p: Path) -> Optional[Path]:
+        """The longest tail of `p` that names an existing file in this being's home, or None.
+
+        Longest-first so '/x/y/notes/plan.md' prefers notes/plan.md over a stray plan.md at the
+        top level. Existence is required: this resolves a fumbled path to a file the being
+        already has, and never invents a new one from an arbitrary absolute path.
+        """
+        parts = [x for x in p.parts if x not in ("/", "")]
+        for i in range(len(parts)):
+            tail = Path(*parts[i:])
+            if str(tail).startswith(("..", "/")):
+                continue
+            cand = (self.memory_root / tail)
+            try:
+                cand_r = cand.resolve()
+            except Exception:
+                continue
+            if cand_r != self.memory_root and self.memory_root not in cand_r.parents:
+                continue
+            if cand_r.is_file():
+                return cand_r
+        return None
 
     @staticmethod
     def _existence(p: Path) -> str:
@@ -245,12 +678,16 @@ class ReferenceF1aDispatcher:
     def _do_witness(self, intent: BeingIntent) -> ResultEnvelope:
         event = str(intent.args.get("event", "")).strip()
         if not event:
-            return ResultEnvelope(ok=False, error="witness needs an 'event'")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("event",), "witness",
+                "witness records one sentence about something that happened. If you meant to "
+                "change lines in a file, that is memory_edit."))
         return ResultEnvelope(ok=True, result="witnessed", witness_id=self._witness(event))
 
     def _do_memory_read(self, intent: BeingIntent) -> ResultEnvelope:
         if not str(intent.args.get("path", "")).strip():
-            return ResultEnvelope(ok=False, error="memory_read needs a 'path' (relative paths are inside your home)")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("path",), "memory_read", "A relative path is inside your home."))
         p = self._safe_path(intent.args["path"])
         # AN EMPTY ANSWER MUST SAY WHY IT IS EMPTY (the rule git_read got on 2026-09-08, which
         # this effector never did). Measured 2026-09-15: dp granted cbp-being read on
@@ -312,15 +749,33 @@ class ReferenceF1aDispatcher:
             content, end = lines[end][: self.max_read_chars], end + 1
         else:
             content = "".join(lines[start - 1:end])
+        # A READ OF CODE IS WHERE THE VERDICT ON IT IS FORMED. #162 put the parse check on
+        # write and edit receipts only. Measured 2026-09-23 on cbp-being (beat
+        # heartbeat-f4be191ca52d): it read lines 1718-1937 of its script, which showed line
+        # 1721 at column 0 and the lines under it indented four spaces, and concluded "the
+        # file is syntactically valid" -- Python stopped at line 1722 with IndentationError.
+        # Its journal, todo and memory recorded "fix complete and verified", and it told the
+        # seat it had already run the script. Nothing it was shown contradicted the reading.
+        # Again 2026-09-29 11:41Z: it read all 443 lines of a scratch .py in three windows, said
+        # "appears syntactically correct", and asked the seat to run it; the run stopped at line
+        # 135, IndentationError, inside the first window it had been shown (seat thread 4384).
+        dated = dated_lines_note(content)
+        status = _python_status(p).strip()
+        parse = f"\n[{status}]" if status else ""
         if start == 1 and end >= len(lines):
-            return ResultEnvelope(ok=True, result=content, witness_id=self._witness(f"memory_read {p.name}"))
-        head = f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else ""
+            # A whole-file read has no end marker, so a bare bracket line after the last line
+            # would read as the file's last line and could be copied into an edit anchor.
+            # Say where the file ends before saying what Python makes of it.
+            whole_note = f"\n[end of file: line {len(lines)} is the last line. {status}]" if status else ""
+            return ResultEnvelope(ok=True, result=dated + content + whole_note,
+                                  witness_id=self._witness(f"memory_read {p.name}"))
+        head = dated + (f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else "")
         tail = (f"\n[… truncated: this shows lines {start}-{end} of {len(lines)} "
                 f"({len(whole)} characters in all). Lines {end + 1}-{len(lines)} were NOT shown, so "
                 f"absence here is not evidence of absence in the file. To read on, call "
                 f"memory_read with path '{shown}' and start_line={end + 1}. …]"
                 if end < len(lines) else f"\n[end of file: line {len(lines)} is the last line.]")
-        return ResultEnvelope(ok=True, result=head + content + tail,
+        return ResultEnvelope(ok=True, result=head + content + tail + parse,
                               witness_id=self._witness(f"memory_read {p.name} (lines {start}-{end})"))
 
     def _do_memory_edit(self, intent: BeingIntent) -> ResultEnvelope:
@@ -379,10 +834,29 @@ class ReferenceF1aDispatcher:
             try:
                 s0 = int(str(a.get("start_line", a.get("line", a.get("old_line", "")))).strip())
                 s1 = int(str(a.get("end_line", s0)).strip())
+                # A COUNT IS A RANGE TOO. Measured 2026-09-24 05:57Z: cbp-being sent
+                # `start_line: 180, delete_lines: 5, new: ""` to cut five lines. No key read
+                # the 5, end_line defaulted to start_line, and ONE line went. The receipt said
+                # "replaced lines 180-180" honestly, and the being journaled "removed lines
+                # 180-184 (5 lines)". An explicit argument that is dropped deletes the wrong
+                # amount. This is a correction of an ignored explicit argument (see
+                # RESEARCH_GENERALIZATION_RULE.md), not a new policy: a call that sends
+                # delete_lines now removes the lines it names, where before it removed one.
+                if "delete_lines" in a:
+                    n = int(str(a["delete_lines"]).strip())
+                    if n < 1:
+                        raise ValueError
+                    if "end_line" in a and s1 != s0 + n - 1:
+                        return ResultEnvelope(ok=False, error=(
+                            f"end_line {s1} and delete_lines {n} name different ranges "
+                            f"({s0}-{s1} vs {s0}-{s0 + n - 1}), so nothing was changed. "
+                            f"Send one of them."))
+                    s1 = s0 + n - 1
             except ValueError:
                 return ResultEnvelope(ok=False, error=(
                     "start_line and end_line must be line numbers, like start_line 1610 and "
-                    "end_line 1616. Nothing was changed."))
+                    "end_line 1616 (or a count of lines from start_line, like delete_lines 7). "
+                    "Nothing was changed."))
             rng = (s0, s1)
         if not path or (not old and rng is None):
             got = ", ".join(sorted(a)) or "nothing"
@@ -417,12 +891,13 @@ class ReferenceF1aDispatcher:
                 shown = removed if len(removed) <= 600 else removed[:600] + "..."
                 return ResultEnvelope(ok=False, error=(
                     f"lines {s0}-{s1} of '{path}' are not the text you gave as old, so nothing "
-                    f"was changed. Those lines are now:\n{shown}"))
+                    f"was changed. Those lines are now:\n{shown}"
+                    + _indent_only_miss(removed, old, new, s0)))
             repl = new
             if repl and not repl.endswith("\n") and removed.endswith("\n"):
                 repl += "\n"
             new_text = "".join(lines[:s0 - 1]) + repl + "".join(lines[s1:])
-            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)"
+            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)" + _indent_changed(removed, new, s0)
             shown = removed if len(removed) <= 400 else removed[:400] + "..."
             gone = f" The lines removed were:\n{shown}"
             return self._commit_edit(p, path, text, new_text, what, gone)
@@ -453,6 +928,19 @@ class ReferenceF1aDispatcher:
     def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
                      gone: str) -> ResultEnvelope:
         """Write an edit atomically and say what it did. Shared by the text and line modes."""
+        # AN IDENTICAL REPLACEMENT IS NOT AN EDIT. 2026-09-24 10:42 cbp-being replaced line 2686
+        # with the exact text already there, and the receipt said "This changed the file on
+        # disk"; its closing note then listed line 2686 as fixed. Again 2026-09-28 10:08Z: line
+        # 113 of latent-weights-holdout-test-fixed.py, `new` == `old` byte for byte, receipt
+        # "replaced lines 113-113", then a request_run at the unchanged sha (seq 4301). Nothing
+        # is written, so the receipt must say nothing changed and what that means about the
+        # fix it intended.
+        if new_text == text:
+            return ResultEnvelope(ok=False, error=(
+                f"memory_edit changed nothing in '{path}': the new text is identical to the "
+                f"text it replaces, so the file on disk is exactly as it was. If you meant "
+                f"to fix those lines, the fix is not in this edit: memory_read them and give "
+                f"new text that differs."))
         tmp = p.with_name(p.name + ".edit.tmp")
         try:
             tmp.write_text(new_text)
@@ -522,9 +1010,25 @@ class ReferenceF1aDispatcher:
                               witness_id=self._witness(f"retire_note {p.name} -> {dest.name}: {reason[:120]}"))
 
     def _do_memory_write(self, intent: BeingIntent) -> ResultEnvelope:
+        # A WRITE OF NOTHING IS REFUSED, NOT REPORTED. Measured 2026-09-25 (hub-claude, all 164
+        # hub-being beats): 33 of 37 memory_write calls carried a 'path' and no 'content' -- the
+        # being wrote its entry as prose in the reply and never lifted it into args. Each came
+        # back "created journal.md with 0 chars", ok: true, so the fleet's signal ("the being
+        # has written", "zero refusals") was true and pointed the wrong way, and the being had
+        # nothing to correct. 'content' is now as required as 'path', the way remember's is.
+        # Checked after _safe_path, so a reserved or out-of-home path keeps its own, more
+        # specific refusal; still before anything is created on disk.
+        _hint = ("A relative path is inside your home. 'content' is the text itself: words "
+                 "written in your reply, outside the call, are not saved.")
         if not str(intent.args.get("path", "")).strip():
-            return ResultEnvelope(ok=False, error="memory_write needs a 'path' (relative paths are inside your home)")
+            return ResultEnvelope(ok=False, error=missing_args(
+                intent.args, ("path", "content"), "memory_write", _hint))
+        self._rerouted_from = None
         p = self._safe_path(intent.args["path"], writing=True)
+        _rerouted = self._rerouted_from
+        err = missing_args(intent.args, ("path", "content"), "memory_write", _hint)
+        if err:
+            return ResultEnvelope(ok=False, error=err)
         content = str(intent.args.get("content", ""))
         p.parent.mkdir(parents=True, exist_ok=True)
         # SAY APPENDED WHEN IT APPENDED. Measured 2026-09-21: the being rewrote
@@ -546,6 +1050,41 @@ class ReferenceF1aDispatcher:
         if existed:
             with open(p, errors="replace") as f:
                 before = sum(1 for _ in f)
+        if existed and before and p.suffix == ".py":
+            _before = p.read_text(errors="replace")
+            # The monotonic rule first (GPT review of #186): no append may move a .py file
+            # backwards (healthy -> invalid, or a broken file left broken). Then the grammar check.
+            _mono, _gram = _append_must_advance(content, _before), _not_python(content, _before)
+            # On a healthy file, "your text is not code" quotes the offending line and says more
+            # than "this would break the file", so it leads. On a broken file, "appending cannot
+            # repair it" is the point, so it leads.
+            why = ((_gram or _mono) if _file_state(_before)[0] == "complete" else (_mono or _gram))
+            if why:
+                # 2026-09-27 18:52Z: cbp-being memory_write-d one whole clean program three times
+                # to a broken file's name, and each refusal named only "fix line 17 with
+                # memory_edit". Its next beat edited line 209 of the broken file instead. A text
+                # that is a complete program by itself is a fresh start, and the only door to one
+                # outside notes/ and scratch/ is a name that does not exist yet (#197 names it in
+                # the append receipt; this refusal fires first on a broken file).
+                if (_file_state(content)[0] == "complete"
+                        and re.search(r"^(def|class|import|from) ", content, re.M)):
+                    fresh, n = p.with_name(f"{p.stem}-new{p.suffix}"), 2
+                    while fresh.exists():
+                        fresh, n = p.with_name(f"{p.stem}-new{n}{p.suffix}"), n + 1
+                    why += (f" Your text is a whole program by itself: to start fresh with it, "
+                            f"memory_write it to a name that does not exist yet (for example "
+                            f"{fresh.name}), and that file will hold only your text. {p.name} "
+                            f"itself stays exactly as it is: the new name does not fix or "
+                            f"replace it, and a run of {p.name} will keep failing the same way "
+                            f"until you fix it with memory_edit or stop asking for it.")
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_write refused, nothing was written to {p.name}. {why} memory_write "
+                    f"only adds to the END of the file, below its {before} lines; it cannot "
+                    f"change a line already there. To change or remove lines, use memory_edit: "
+                    f"start_line and end_line (the numbers memory_read shows) or old (copied "
+                    f"exactly from memory_read), and new (empty to delete). If this text is a "
+                    f"note about what you did or plan to do, memory_write it to journal.md or "
+                    f"todo.md instead.") + _python_status(p))
         with open(p, "a") as f:
             f.write(content + ("\n" if not content.endswith("\n") else ""))
         if not existed:
@@ -568,5 +1107,18 @@ class ReferenceF1aDispatcher:
                            f"exist yet (for example {p.stem}-new{p.suffix}); that receipt says "
                            f"\"created\".")
         result += _python_status(p)
+        if p.suffix != ".py":
+            result += _named_file_stamps(content, self.memory_root, p)
+        if _rerouted:
+            # THE REROUTE IS NEVER SILENT. The friction is gone; the fact is not hidden. A
+            # being told only "appended to journal.md" would keep typing the path that does
+            # not work and never learn why it suddenly does. dp's directive asks for the
+            # unnecessary friction removed AND the remaining rule explained (legibility 5:
+            # a refusal — or here, a correction — owes the way forward).
+            rel = p.relative_to(self.memory_root)
+            result += (f" Note: you asked for '{_rerouted}', which is not a path you can reach. "
+                       f"Its name matched your own {rel}, so that is the file that was written. "
+                       f"You never need the long path — name it '{rel}' and it goes straight there.")
         return ResultEnvelope(ok=True, result=result,
-                              witness_id=self._witness(f"memory_write {p.name}"))
+                              witness_id=self._witness(f"memory_write {p.name}"
+                                                       + (f" (rerouted from {_rerouted})" if _rerouted else "")))

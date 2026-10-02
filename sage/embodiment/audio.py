@@ -41,6 +41,18 @@ class Hearing(threading.Thread):
         self._warmed = False
         self._live_ts = 0.0        # last time we got a window of audio (liveness)
         self._last_respawn = 0.0
+        # WORDS, only in a listening window after the being speaks (listening.py). The ear keeps
+        # its level/onset job unchanged; this rides the same windows and fails open.
+        from sage.embodiment import listening as _listening
+        self._listening = _listening
+        self.segmenter = _listening.Segmenter(win_s=WIN / RATE)
+        self.transcriber = _listening.Transcriber(source=SOURCE)
+        self._win = {"listening": False, "speaking": False}
+        self._win_checked = 0.0
+        try:   # what this ear does, in the body's own file, so the being is told (body.hears_always)
+            _listening.mark(always=_listening.always_listening())
+        except Exception:
+            pass
 
     def _spawn(self) -> bool:
         try:
@@ -69,9 +81,26 @@ class Hearing(threading.Thread):
             buf += chunk
         return buf
 
+    def _listen(self, chunk: bytes, level: float, baseline: float):
+        """Hand voiced audio to the transcriber, only inside a window and never while speaking."""
+        now = time.time()
+        if now - self._win_checked > 0.5:
+            self._win = self._listening.window(now)
+            self._win_checked = now
+        if not self._win["listening"] or self._win["speaking"]:
+            self.segmenter.reset()
+            return
+        utt = self.segmenter.feed(chunk, level, baseline)
+        if utt:
+            self.transcriber.submit(utt)
+
     def run(self):
         leftover = b""
         header_done = False
+        try:
+            self.transcriber.start()
+        except Exception:
+            pass
         while self.running:
             # (re)spawn the capture if it's dead — the self-heal, on a cooldown
             if self.proc is None or self.proc.poll() is not None:
@@ -102,6 +131,11 @@ class Hearing(threading.Thread):
             level = min(1.0, rms / FULL_SCALE)
             self._warmed = self._warmed or level > 0.0   # HFP link warms up (level 0) for ~0.5s
             self.onset = self._warmed and level > self.baseline + ONSET_JUMP and level > ONSET_FLOOR
+            if self._warmed:
+                try:
+                    self._listen(buf[:n * 2], level, self.baseline)
+                except Exception:
+                    pass   # the ear's level/onset must never depend on the listener
             self.level = round(level, 3)
             self.baseline = 0.95 * self.baseline + 0.05 * level
             self._live_ts = time.time()
@@ -111,10 +145,23 @@ class Hearing(threading.Thread):
         return {"level": round(self.level, 3) if live else 0.0,
                 "onset": bool(self.onset) if live else False,
                 "baseline": round(self.baseline, 3),
-                "ok": live, "trust": 1.0 if live else 0.0}
+                "ok": live, "trust": 1.0 if live else 0.0,
+                "listening": bool(self._win.get("listening")),
+                "words": self.transcriber.status, **self._ear(live)}
+
+    def _ear(self, live: bool) -> dict:
+        """The ear's state as a fact with its cause, and the transition logged (listening.note_ear)."""
+        try:
+            hearing, reason, key = self._listening.ear_state(live, self.transcriber.status,
+                                                             self._listening.window())
+            self._listening.note_ear(hearing, reason, key)
+            return {"hearing": hearing, "ear": reason, "ear_key": key}
+        except Exception:
+            return {}
 
     def stop(self):
         self.running = False
+        self.transcriber.running = False
         time.sleep(0.05)
         try:
             self.proc.terminate()

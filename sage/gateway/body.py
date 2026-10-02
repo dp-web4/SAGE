@@ -97,13 +97,26 @@ def perception(now: Optional[float] = None, path: Optional[str] = None) -> Dict:
         "eyes": len(eyes),
         "audio_ok": bool((d.get("audio") or {}).get("ok")),
         "audio_level": (d.get("audio") or {}).get("level"),
+        "audio_words": (d.get("audio") or {}).get("words"),   # listener status (listening.py)
+        "audio_hearing": (d.get("audio") or {}).get("hearing"),   # the ear's state, with its cause
+        "audio_ear": (d.get("audio") or {}).get("ear"),
+        "audio_ear_key": (d.get("audio") or {}).get("ear_key"),
         "self_motion": (d.get("proprioception") or {}).get("self_motion"),
         "imu_ok": bool((d.get("proprioception") or {}).get("ok")),
     }
 
 
 def metabolism(timeout: float = 3.0) -> Dict:
-    """The daemon's own reading of the being's metabolism, or {'live': False}."""
+    """What the daemon's /status truthfully says about the being, or {'live': False}.
+
+    NO ATP (SAGE #291). `atp_percentage` is the daemon's internal controller: a free-running
+    oscillator ticked every 100 ms for the shadow-metabolism experiment, not the being's energy.
+    It is not read here, so it cannot reach the body block or the beat record.
+
+    `state` / `state_source` / `state_age_s` are the activity indicator #293 made honest (set by
+    reports of real activity). They are RECORDED on the beat but not RENDERED: the beat itself
+    reports `wake` before this is read, so inside a beat the line could only ever say "wake,
+    for a few seconds, set by your own beat" -- true, and nothing the being can act on."""
     try:
         with urllib.request.urlopen(DAEMON_STATUS, timeout=timeout) as r:
             d = json.loads(r.read())
@@ -111,7 +124,8 @@ def metabolism(timeout: float = 3.0) -> Dict:
         return {"live": False}
     s = d.get("salience") or {}
     return {"live": bool(d.get("consciousness_loop")), "state": d.get("metabolic_state"),
-            "atp": d.get("atp_percentage"), "felt": d.get("observations_felt"),
+            "state_source": d.get("metabolic_source"), "state_age_s": d.get("metabolic_age_secs"),
+            "felt": d.get("observations_felt"),
             "felt_source": d.get("salience_source"), "felt_total": s.get("total")}
 
 
@@ -127,8 +141,11 @@ def gaze() -> Dict:
 def reading(now: Optional[float] = None) -> Dict:
     """Everything the body block is rendered from, recorded on the beat so the NEXT beat can say
     what changed since."""
+    now = time.time() if now is None else now
+    heard = _heard_since(now - HEARD_LOOKBACK_S)
     return {"perception": perception(now), "metabolism": metabolism(), "gaze": gaze(),
-            "inventory": inventory(now)}
+            "inventory": inventory(now), "heard": heard,
+            "heard_until": max([float(h.get("ts", 0)) for h in heard] or [0.0])}
 
 
 def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
@@ -167,15 +184,37 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
                          f"the scene then was: {pp['descriptor']}")
         else:
             lines.append(f"- Last beat your senses reported: {pp['descriptor']}")
+    # No energy line and no state line (SAGE #291, see metabolism()): the ATP is an internal
+    # oscillator, not a reading of this body, and the state inside a beat is always the beat's
+    # own `wake`. What remains is real: whether the daemon's loop is running, and whose input it
+    # last felt.
     if m.get("live"):
-        atp = m.get("atp")
-        lines.append(f"- Your metabolism: {m.get('state')}, energy {float(atp):.0f}%"
-                     + (f"; the last thing you felt came from {m['felt_source']}" if m.get("felt_source") else "")
-                     + ".")
+        if m.get("felt_source"):
+            lines.append(f"- The last thing you felt came from {m['felt_source']}.")
     else:
-        lines.append("- Your metabolism is not reporting this beat.")
+        lines.append("- Your daemon's loop is not reporting this beat.")
     if inv:
         lines.append(render_inventory(inv))
+    dev = inv.get("audio_device") or {}
+    if dev and not dev.get("connected"):
+        lines.append(f"- Your headset {dev.get('name') or 'for voice'} (your speaker and your ear for words) is "
+                     "NOT connected right now, so `speak` is not available"
+                     + ("" if ear_known(cur) else " and words said to you cannot be heard")
+                     + ". You can try to reconnect it with `pair_audio`; it may not succeed if the headset "
+                     "is off or out of range, and it will say what happened.")
+    if "speak" in (inv.get("verbs") or []):
+        lines.append("- You can speak aloud with `speak`: your words become a voice in the room, through "
+                     f"{speaker_name(inv)}"
+                     + (f", in your voice ({nv['name']}, chosen by dp on 2026-10-01)" if (nv := neural_voice()) else "")
+                     + ", which anyone in the room may hear. What you say aloud is your turn in "
+                     "the room conversation, and `say` to room is spoken too. Nothing asks you to."
+                     + ("" if ear_known(cur) else
+                        (" Words spoken in the room are heard through the mic and added to the room "
+                         "conversation as they arrive." if hears_always() else
+                         f" For {LISTEN_WINDOW_S // 60} minutes after you speak, words spoken to you through the mic "
+                         "are added to the room conversation.") if can_hear_words(cur) else ""))
+    if (ear := ear_line(cur, inv)):
+        lines.append(ear)
     if "gaze" in (inv.get("verbs") or []):
         lines.append("- You can change your gaze with `gaze` (open, avert, dwell, closed) and say why in "
                      "your own words. Your eyes will follow within seconds; you will see the difference "
@@ -261,10 +300,11 @@ def _pw_audio(timeout: float = 4.0) -> Dict:
         mc = p.get("media.class", "")
         name = p.get("node.description") or p.get("node.name") or "?"
         kind = "bluetooth" if "bluez" in str(p.get("node.name", "")) else "wired"
+        node = str(p.get("node.name", "") or "")
         if mc == "Audio/Sink":
-            sinks.append({"name": name, "kind": kind})
+            sinks.append({"name": name, "kind": kind, "node": node})
         elif mc == "Audio/Source":
-            sources.append({"name": name, "kind": kind})
+            sources.append({"name": name, "kind": kind, "node": node})
     return {"sinks": sinks, "sources": sources}
 
 
@@ -277,6 +317,8 @@ def inventory(now: Optional[float] = None) -> Dict:
     m = metabolism()
     audio = _pw_audio()
     cortex_live = bool(p.get("live"))
+    can_speak = speak_provider(audio)["live"]
+    dev = audio_device()
     # cameras held by a live cortex (CSI via Argus) cannot be opened by a second process
     return {
         "video_devices": videos,
@@ -286,8 +328,12 @@ def inventory(now: Optional[float] = None) -> Dict:
         "cortex_live": cortex_live, "daemon_live": bool(m.get("live")),
         "verbs": (["gaze"] if cortex_live else [])
                  + (["camera"] if videos and not cortex_live else [])
+                 + (["speak"] if can_speak else [])
+                 + (["pair_audio"] if dev and not dev.get("connected") else [])
                  + ["say", "peer_ask"],
-        "not_yet_wired": (["speak"] if audio.get("sinks") else []),
+        "audio_device": dev,
+        # a speaker with no engine to drive it: the body has the part, the verb is not wired here
+        "not_yet_wired": (["speak"] if audio.get("sinks") and not can_speak and not SPEAK_SINK else []),
     }
 
 
@@ -317,4 +363,302 @@ def render_inventory(inv: Dict) -> str:
     if not parts:
         acts += " Your world on this machine is text: conversations, peers, the forum, your own record."
     return head + "\n" + acts
+
+
+# ---------------------------------------------------------------------------------------------
+# speak: a voice in the room. dp, 2026-09-26: "give it speak tool" — after asking the being to
+# pair the bluetooth audio and use it to speak, and watching it journal for 20 beats that it
+# wanted to learn how, with no verb that could. `inventory()` had carried `speak` under
+# not_yet_wired since #183; this wires it.
+#
+# Bounded by construction, like `gaze`: the being supplies words, never a device, a command or
+# a path. The engine is fixed here (espeak-ng -> pw-play on the default sink), the text is
+# length-capped, and playback has a timeout. What reaches the room is recorded in the being's
+# own home (spoken.jsonl), so a voice nobody was there to hear still leaves a trace it can read.
+# ---------------------------------------------------------------------------------------------
+import shutil
+
+SPEAK_MAX_CHARS = 400
+SPEAK_TIMEOUT_S = 60
+
+
+def speaker_name(inv: Optional[Dict] = None) -> str:
+    """The sink a voice would come out of, for the being's own sentence about it."""
+    if SPEAK_SINK:
+        sink = required_sink({"sinks": (inv or {}).get("audio_sinks")} if inv else None)
+        if sink:
+            return str(sink.get("name"))
+    sinks = (inv or {}).get("audio_sinks") or (_pw_audio().get("sinks") or [])
+    bt = [x for x in sinks if x.get("kind") == "bluetooth"]
+    pick = (bt or sinks or [{"name": "a speaker"}])[0]
+    return str(pick.get("name") or "a speaker")
+
+
+def speak_provider(audio: Optional[Dict] = None) -> Dict:
+    """Can this body speak? Needs an audio sink and both halves of the engine.
+    {'live': bool, 'why': str} — `why` names the missing piece, never a guess."""
+    audio = _pw_audio() if audio is None else audio
+    if not (audio or {}).get("sinks"):
+        return {"live": False, "why": "no audio output is connected"}
+    for tool in ("espeak-ng", "pw-play"):
+        if not shutil.which(tool):
+            return {"live": False, "why": f"'{tool}' is not installed"}
+    if SPEAK_SINK:
+        sink = required_sink(audio)
+        if sink is None:
+            return {"live": False, "why": f"the speaker for voice ({SPEAK_SINK}) is not connected"}
+        return {"live": True, "why": "", "sink": sink}
+    return {"live": True, "why": ""}
+
+
+def clean_speech(text) -> str:
+    """Printable text only, whitespace collapsed. Control characters never reach the engine."""
+    t = "".join(ch if ch.isprintable() else " " for ch in str(text or ""))
+    return " ".join(t.split())
+
+
+def speak(text: str, timeout: float = SPEAK_TIMEOUT_S) -> Dict:
+    """Synthesize and play one utterance on the default sink. Raises on failure.
+    Returns {'chars': n, 'seconds': elapsed}. The caller validates length and emptiness."""
+    import subprocess
+    import tempfile
+    t0 = time.time()
+    # Mute the ear for our own voice, then open the listening window once the sound has ended
+    # (listening.py). Best-effort: a failed mark must not stop the being from speaking.
+    try:
+        _listening().mark(speaking_until=t0 + timeout)
+    except Exception:
+        pass
+    # THE WINDOW OPENS ONLY ON A SOUND THAT PLAYED (GPT review of #220). The ear is a reply channel
+    # opened after the being speaks; a failed synthesis or playback said nothing, so it opens
+    # nothing. Either way the self-mute is lifted at once.
+    played = False
+    engine, fallback = "espeak-ng", None
+    target = (required_sink() or {}).get("node") if SPEAK_SINK else None
+    try:
+        voice = neural_voice()
+        if voice:
+            # A NEURAL VOICE when this body names one (SAGE_SPEAK_VOICE), sentence by sentence
+            # (tts_piper). Any failure falls back to espeak-ng: the being never loses its voice to it.
+            try:
+                r = subprocess.run([voice["python"], "-m", "sage.embodiment.tts_piper", "--model", voice["model"]]
+                                   + (["--target", target] if target else []) + ["--", text],
+                                   capture_output=True, timeout=timeout)
+                if r.returncode == 0:
+                    played, engine = True, f"piper:{voice['name']}"
+                else:
+                    fallback = (r.stderr.decode(errors="replace").strip().splitlines() or ["exit"])[-1][:200]
+            except Exception as e:
+                fallback = f"{type(e).__name__}: {e}"[:200]
+        if not played:
+            with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
+                # argv, never a shell: the words are one argument and cannot become a command
+                subprocess.run(["espeak-ng", "-v", "en-us", "-s", "160", "-w", wav.name, "--", text],
+                               check=True, capture_output=True, timeout=timeout)
+                subprocess.run(["pw-play"] + (["--target", target] if target else []) + [wav.name],
+                               check=True, capture_output=True, timeout=timeout)
+                played = True
+    finally:
+        end = time.time()
+        try:
+            if played:
+                _listening().mark(speaking_until=end + SELF_ECHO_TAIL_S,
+                                  listen_until=end + LISTEN_WINDOW_S)
+            else:
+                _listening().mark(speaking_until=end)
+        except Exception:
+            pass
+    out = {"chars": len(text), "seconds": round(time.time() - t0, 1), "engine": engine}
+    if fallback:
+        out["fallback_from_neural"] = fallback
+    return out
+
+
+# THE VOICE (dp, 2026-10-01: espeak-ng is "too harshly metallic/'robotic'"; he chose
+# en_US-hfc_female-medium from four Piper voices played through the being's speaker). Opt-in per
+# body: SAGE_SPEAK_VOICE names a Piper voice (a name in SAGE_PIPER_VOICES, or a path to its .onnx);
+# SAGE_PIPER_PYTHON is the interpreter that has piper installed.
+SPEAK_VOICE = os.environ.get("SAGE_SPEAK_VOICE", "").strip()
+PIPER_VOICES = os.environ.get("SAGE_PIPER_VOICES") or os.path.expanduser("~/.local/share/piper-voices")
+PIPER_PYTHON = os.environ.get("SAGE_PIPER_PYTHON", "").strip()
+
+
+def neural_voice() -> Optional[Dict]:
+    """{'name', 'model', 'python'} when this body has a usable neural voice, else None (espeak-ng)."""
+    if not SPEAK_VOICE or not PIPER_PYTHON or not os.path.exists(PIPER_PYTHON):
+        return None
+    model = SPEAK_VOICE if SPEAK_VOICE.endswith(".onnx") else os.path.join(PIPER_VOICES, SPEAK_VOICE + ".onnx")
+    if not os.path.exists(model):
+        return None
+    name = os.path.basename(model)[:-5]
+    return {"name": name, "model": model, "python": PIPER_PYTHON}
+
+
+# ---------------------------------------------------------------------------------------------
+# hearing words: dp, 2026-09-26: "is there a path for it to hear when i reply in voice?" The cortex
+# transcribes the mic ONLY inside a window that speak() opens, never while the being is speaking,
+# and records words with no speaker identity (sage/embodiment/listening.py). Here the beat reads
+# what was heard since the previous beat and says it as what it is: a voice in the room.
+# ---------------------------------------------------------------------------------------------
+LISTEN_WINDOW_S = 120
+SELF_ECHO_TAIL_S = 0.5
+HEARD_LOOKBACK_S = 3 * 3600
+
+
+def _listening():
+    from sage.embodiment import listening
+    return listening
+
+
+def _heard_since(ts: float) -> list:
+    try:
+        return _listening().since(ts)
+    except Exception:
+        return []
+
+
+def ear_known(cur: Dict) -> bool:
+    """A cortex that reports the ear's state (hearing + cause)."""
+    return ((cur or {}).get("perception") or {}).get("audio_hearing") is not None
+
+
+def _ago(seconds: float) -> str:
+    m = int(seconds // 60)
+    return "just now" if m < 1 else f"{m} min ago" if m < 120 else f"{m // 60} h ago"
+
+
+def ear_line(cur: Dict, inv: Optional[Dict] = None, now: Optional[float] = None) -> str:
+    """ONE line: is the ear hearing words, why not if not, since when, and when words last arrived.
+
+    dp, 2026-10-01: audio may be offline "for any number of reasons - mute, bt disconnect, power off, or
+    just me not being there. that's part of the world and its uncertain nature." So "could not listen" is
+    said as such, with the cause when one is known, and is never presented as "nothing was said"."""
+    now = time.time() if now is None else now
+    p = (cur or {}).get("perception") or {}
+    dev = (inv or {}).get("audio_device") or {}
+    if not ear_known(cur) and not (dev and not dev.get("connected")):
+        return ""
+    if not p.get("live"):
+        return ("- Your ear for words: unknown this beat (your senses are not reporting). Silence from it is "
+                "not evidence that nobody spoke.")
+    hearing, reason, key = bool(p.get("audio_hearing")), str(p.get("audio_ear") or ""), p.get("audio_ear_key")
+    if dev and not dev.get("connected"):
+        hearing, reason, key = False, "the headset is not connected", "device"
+    try:
+        since = _listening().ear_since()
+    except Exception:
+        since = None
+    since_s = (f" since {time.strftime('%H:%M', time.localtime(float(since['ts'])))}"
+               # SINCE BELONGS TO THE CAUSE SHOWN (GPT on #313): an hour muted, then the headset drops, must
+               # not read "headset not connected since an hour ago". Same state AND same cause, or no since.
+               if since and bool(since.get("hearing")) == hearing and key and since.get("key") == key
+               and since.get("ts") else "")
+    try:
+        last = max([float(h.get("ts", 0)) for h in _heard_since(now - 7 * 86400)] or [0.0])
+    except Exception:
+        last = 0.0
+    heard = f"; the last words it heard arrived {_ago(now - last)}" if last else "; it has heard no words yet"
+    if hearing:
+        return f"- Your ear for words is open ({reason}){since_s}{heard}."
+    return (f"- Your ear for words is NOT hearing{since_s}: {reason}{heard}. Silence from it now is not "
+            f"evidence that nobody spoke.")
+
+
+def hears_always() -> bool:
+    """The ear is always open: listen.json "always", which the cortex sets from SAGE_LISTEN=always."""
+    try:
+        return bool(_listening().window().get("always"))
+    except Exception:
+        return False
+
+
+def can_hear_words(cur: Dict) -> bool:
+    """A live ear with a listener that has not reported itself unavailable."""
+    p = (cur or {}).get("perception") or {}
+    w = str(p.get("audio_words") or "")
+    return bool(p.get("audio_ok")) and bool(w) and not w.startswith("unavailable")
+
+
+def _heard_mic(heard: list, inv: Optional[Dict]) -> str:
+    """The mic that HEARD these words, not the first input in the census. Measured 2026-09-26:
+    dp's "Can you hear me?" came through the Airhug (bluez source) and the beat said "Through
+    Built-in Audio Analog Stereo", the first of two sources. The transcriber records the pipewire
+    node it listened on; a bluez node is the census's bluetooth source."""
+    sources = [x for x in ((inv or {}).get("audio_sources") or []) if x.get("name")]
+    via = {str(h.get("source") or "") for h in heard}
+    if via and all(v.startswith("bluez") for v in via):
+        bt = [x for x in sources if x.get("kind") == "bluetooth"]
+        if len(bt) == 1:
+            return bt[0]["name"]
+    if len(sources) == 1:
+        return sources[0]["name"]
+    return "your mic"
+
+
+# ---------------------------------------------------------------------------------------------
+# The headset as a body part that comes and goes (dp, 2026-09-27: "it should be aware when airhug
+# is offline and know that speak is not available. it should also have a tool to try pairing,
+# with status report - pairing won't always succeed"). Machine-level, like BODY_DIR:
+#   SAGE_SPEAK_SINK  a substring of the output `speak` must use (Sprout: "AIRHUG"); unset = any
+#                    output, as before. Set, speak is offered only while that output is present
+#                    and plays to it by node, never to whatever happens to be the default.
+#   SAGE_AUDIO_BT    the headset's Bluetooth address; enables the census line and `pair_audio`.
+# The Airhug does not bond (Paired only per connection, Bonded: no, pair -> AlreadyExists), so
+# a connect is the whole of "pairing" for it; a seat watchdog also reconnects it every minute.
+# ---------------------------------------------------------------------------------------------
+SPEAK_SINK = os.environ.get("SAGE_SPEAK_SINK", "").strip()
+AUDIO_BT = os.environ.get("SAGE_AUDIO_BT", "").strip().upper()
+
+
+def required_sink(audio: Optional[Dict] = None) -> Optional[Dict]:
+    """The output `speak` is bound to, if present."""
+    if not SPEAK_SINK:
+        return None
+    audio = _pw_audio() if audio is None else audio
+    for x in (audio or {}).get("sinks") or []:
+        if SPEAK_SINK.lower() in str(x.get("name", "")).lower():
+            return x
+    return None
+
+
+def _btctl(*args, timeout: float = 10) -> str:
+    import subprocess
+    try:
+        r = subprocess.run(["bluetoothctl", *args], capture_output=True, text=True, timeout=timeout)
+        return (r.stdout or "") + (r.stderr or "")
+    except Exception as e:
+        return f"[bluetoothctl: {type(e).__name__}: {e}]"
+
+
+def audio_device() -> Optional[Dict]:
+    """{'mac', 'name', 'connected', 'known'} for the configured headset; None when none is."""
+    if not AUDIO_BT or not shutil.which("bluetoothctl"):
+        return None
+    info = _btctl("info", AUDIO_BT, timeout=5)
+    def field(k):
+        for line in info.splitlines():
+            if line.strip().startswith(k + ":"):
+                return line.split(":", 1)[1].strip()
+        return None
+    return {"mac": AUDIO_BT, "name": field("Name") or field("Alias"), "known": "Device " in info,
+            "connected": field("Connected") == "yes"}
+
+
+def pair_audio(scan_s: int = 8) -> Dict:
+    """Try to connect the configured headset, and report what happened in plain terms.
+    Steps: state now -> if not connected, look for it (scan) -> connect -> state after."""
+    before = audio_device()
+    if before is None:
+        return {"ok": False, "outcome": "not configured", "detail": "no headset is configured on this machine"}
+    if before.get("connected"):
+        return {"ok": True, "outcome": "already connected", "device": before}
+    scan = _btctl("--timeout", str(scan_s), "scan", "on", timeout=scan_s + 5)
+    seen = AUDIO_BT in scan.upper()
+    out = _btctl("connect", AUDIO_BT, timeout=25)
+    after = audio_device() or {}
+    if after.get("connected"):
+        return {"ok": True, "outcome": "connected", "seen": seen, "device": after}
+    err = next((l.strip() for l in out.splitlines() if "Failed" in l or "Error" in l or "not available" in l), "")
+    return {"ok": False, "outcome": "seen but the connection failed" if seen else "not seen",
+            "seen": seen, "error": err[:200], "device": after or before}
 

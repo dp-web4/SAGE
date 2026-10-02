@@ -15,7 +15,9 @@ A refused act is classified by its gate rule and routed:
                (hestia.scope_arbitrate_undelegated) and the request stays in dp's queue with the
                seat's recommendation attached.
   society.*    a law verdict, not an approval; appealable — noted for the seat (hestia_appeal
-               shape pending), never auto-overridden.
+               shape pending), never auto-overridden. EXCEPT when the referee never answered
+               (society.no_verdict / .unreachable / .unavailable): that is no verdict at all, and
+               the note says so instead of handing the seat a ruling to make.
   <escalation> a governance-write escalation named in the deny — a NOT-SAME peer may arbitrate
                (hestia_gate_arbitrate_escalation); the seat is woken to rule within the
                guardrails below.
@@ -43,7 +45,10 @@ from typing import Any, Dict, Optional, Optional
 from sage.gateway.being_gate_client import BeingGateClient, BeingIntent, ResultEnvelope, _REGISTRY
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap
 
-NOTE_DIR = os.path.expanduser("~/ai-workspace/shared-context/escalations")
+# Derived, not the Linux seats' layout (fleet_paths): on McNugget the being's first escalation was
+# written to ~/ai-workspace/shared-context, which is not a checkout there, and never landed.
+from sage.gateway.fleet_paths import escalations_dir as _escalations_dir
+NOTE_DIR = str(_escalations_dir())
 # the gate workspace: this checkout (governed_turn/heartbeat use the same root). Not a
 # hard-coded ~/ai-workspace/sage — Legion's checkout is ~/ai-workspace/SAGE (case matters).
 WORKSPACE = str(Path(__file__).resolve().parents[2])
@@ -180,6 +185,27 @@ def write_note(member: str, intent: BeingIntent, env: ResultEnvelope, kind: str,
                "  under an operator session. A seat cannot do this; leave it for dp with your recommendation and\n"
                "  say so in the thread. Do not file a child-path request (a fresh row is what exact-by-default\n"
                "  exists to stop; Legion 2026-09-08).\n")
+    # A society.* refusal is a law verdict only when the referee DECIDED. When it timed out or was
+    # unreachable there is no ruling: nothing to approve or appeal, and no seat decision makes the
+    # call land. Every society note written so far is this case (10 of 10 in
+    # shared-context/escalations, 2026-09-14..29, all society.no_verdict), and each one told the seat
+    # "A law verdict" and gave it the approve protocol. The three dispositions on record each
+    # re-derived "nothing to rule" from journalctl. The dispatcher's deny witness already makes
+    # this cut (verdict_available), so the list is read from there, not restated.
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+    if kind == "society" and v and v.rule in HestiaF1aDispatcher._NO_VERDICT_RULES:
+        how = ("## What the seat can do now\n"
+               "- This is NOT a law verdict. The referee did not answer (`" + v.rule + "`), so there is no ruling\n"
+               "  to approve, appeal or override, and nothing the seat decides makes this call land. The being\n"
+               "  re-sends it.\n"
+               "- Two things are worth a seat's look. Was the daemon restarting or stalled at that second?\n"
+               "  `$HESTIA_HOME/telemetry/gate-unavailable.jsonl` carries the refusal's second and member when\n"
+               "  the query timed out. And did a refused WRITE lose content the being believes it kept? This\n"
+               "  note names only the FIRST society refusal of the beat; that beat's record in the being's\n"
+               "  heartbeats.jsonl lists every refused call, and a later one may be the one that lost something.\n"
+               "- The `ts` above is when this note was written, after the turns ended. It is not when the call\n"
+               "  was refused.\n")
+        protocol = ""
     p.write_text(body + how + "\n" + protocol)
     # Land it. An UNCOMMITTED note in a shared checkout is not just untidy: the same name
     # arriving from upstream makes every later `git rebase` in that repo fail add/add, and

@@ -39,6 +39,10 @@ class ToolTurnResult:
     duplicates: List[dict] = field(default_factory=list)   # identical calls answered without re-executing: {step, effector}
     generates: List[dict] = field(default_factory=list)    # per generate, from Ollama's reply: {done_reason, prompt_eval_count, eval_count, retried}
     compacted: List[dict] = field(default_factory=list)    # per step where old tool results were elided: {step, elisions, chars}
+    rested: Optional[str] = None                           # the being ended its own turn with `rest`; its stated reason
+    stay_awake: Optional[str] = None                       # the being asked for another beat right after this one; its reason
+    looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
+    yielded: Optional[str] = None                          # the harness ended the turn for a higher-priority event: what
 
     @property
     def acted(self) -> bool:
@@ -49,36 +53,100 @@ class ToolTurnResult:
         return [(i, e) for i, e in self.trace if e.refused]
 
 
+# The verb by which a being ends its own turn. dp, 2026-09-09: "it should be able to
+# continue as long as it wishes" — the other half of which is stopping when it wishes, and
+# until 09-13 there was no way to say so except by falling silent.
+REST = "rest"
+
+# The verb by which a being asks for another beat right after this one (SAGE #295). dp, 2026-09-30:
+# "if the being decides to stay awake continously because of environment or curiosity, then so be
+# it." Never dispatched (it touches nothing); recorded on the turn, and the heartbeat arms the next
+# beat at its end. It does not end the turn.
+STAY_AWAKE = "stay_awake"
+
+# Verbs whose identical repetition inside ONE beat is never what was meant: a second
+# identical write, witness or message. Everything else — every verb that reads the world or
+# runs something in it — is executed again, because its answer can legitimately change.
+DEDUP_VERBS = frozenset({"memory_write", "edit", "witness", "remember", "retire_note",
+                         "say", "peer_ask", "mesh"})
+
+REPEAT_NUDGE_AT = 3          # identical consecutive calls before the harness names the loop
+
+REPEAT_BREAK_AT = 6          # ... and before it ends the tool phase
+
+def _fingerprint(intents) -> Optional[str]:
+    """What makes two steps 'the same call'. None when it cannot be computed, which never
+    counts as a repeat — an unfingerprintable step must not end a turn."""
+    try:
+        return json.dumps([[i.effector, i.args] for i in intents], sort_keys=True, default=str)
+    except Exception:
+        return None
+
+
 def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
-                  messages: List[Dict[str, Any]], max_steps: int = 3) -> ToolTurnResult:
+                  messages: List[Dict[str, Any]], max_steps: int = 3,
+                  should_yield: Optional[Callable[[], Optional[str]]] = None) -> ToolTurnResult:
     """Run one being turn that may reach for tools, gated end to end.
 
     Loop invariant: the being never sees a fabricated result — each tool message is a
     real ResultEnvelope (executed, refused, or honestly `pending` until F1a exists).
+
+    A TURN CAN END THREE WAYS, and each is named in the result: the being speaks without a
+    call; the being calls `rest` (its own choice to stop, never dispatched — stopping touches
+    nothing); or the same call repeats past REPEAT_BREAK_AT and the harness ends the tool phase,
+    having first NAMED the loop at REPEAT_NUDGE_AT. Measured on legion-being 2026-09-13T10:19Z:
+    after finishing its beat it witnessed "beat closed" 52 times in 78 minutes, 18 byte-identical —
+    it was trying to stop, and the only way to stop was to emit no tool call.
     """
     convo = list(messages)
     trace: List[Tuple[BeingIntent, ResultEnvelope]] = []
     done_ok: set = set()
     duplicates: List[dict] = []
+    last_fp, repeats = None, 0
+    stay_awake = None
 
     for step in range(max_steps):
+        # A YIELD POINT before every generate (the RTOS note's R2): a person speaking to the being
+        # outranks the rest of a routine turn. The harness asks; nothing executed is undone.
+        if should_yield is not None:
+            try:
+                why = should_yield()
+            except Exception:
+                why = None
+            if why:
+                return ToolTurnResult(reply="", trace=trace, steps=step, duplicates=duplicates,
+                                      stay_awake=stay_awake, yielded=str(why))
         out = generate(convo)
         content = out.get("content") or ""
         intents = out.get("intents") or []
 
         if not intents:                                    # a spoken turn — the being is done
-            res = ToolTurnResult(reply=content, trace=trace, steps=step)
-            res.duplicates = duplicates
-            return res
+            return ToolTurnResult(reply=content, trace=trace, steps=step, duplicates=duplicates, stay_awake=stay_awake)
 
         convo.append({"role": "assistant", "content": content, "intents": intents})
+        rested = None
         for intent in intents:
-            # A call identical to one this turn already executed is not a second act: the model
-            # re-emits its last calls after reading their results (beat 149, 2026-09-08: the
-            # journal and todo each written twice, same bytes, one step apart). Answered
-            # without executing, and named in the record as an intervention.
+            if intent.effector == STAY_AWAKE:
+                stay_awake = str((intent.args or {}).get("reason") or "").strip() or "(no reason given)"
+                env = ResultEnvelope(ok=True, result=("noted: the next beat starts as soon as this one "
+                                                      "ends. Carry on, or close this beat as usual."),
+                                     note="stay_awake")
+                trace.append((intent, env))
+                convo.append({"role": "tool", "effector": intent.effector, "content": env.to_tool_message()})
+                continue
+            if intent.effector == REST:
+                # The being ending its OWN turn. Never dispatched: the gate rules on acts that
+                # touch the world, and stopping touches nothing. Its reason is its closing words.
+                rested = str((intent.args or {}).get("reason") or "").strip()
+                break
+            # A call identical to one this turn already executed is not a second act (beat 149,
+            # 2026-09-08: journal and todo each written twice, same bytes, one step apart) — but
+            # ONLY for DEDUP_VERBS. check, search, git_read, memory_read and the like return a
+            # DIFFERENT answer to the same arguments once the world moves; the being edits a file
+            # and re-runs the identical check on purpose. Suppressing those handed it a stale
+            # success and called it an intervention.
             key = (intent.effector, json.dumps(dict(intent.args or {}), sort_keys=True, default=str))
-            if key in done_ok:
+            if intent.effector in DEDUP_VERBS and key in done_ok:
                 env = ResultEnvelope(ok=True, result="(already done this beat: identical call, not repeated)",
                                      note="duplicate")
                 duplicates.append({"step": step, "effector": intent.effector})
@@ -91,14 +159,38 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
             trace.append((intent, env))
             convo.append({"role": "tool", "effector": intent.effector,
                           "content": env.to_tool_message()})
+        if rested is not None:
+            return ToolTurnResult(reply=rested or content, trace=trace, steps=step,
+                                  rested=rested or "(no reason given)", duplicates=duplicates, stay_awake=stay_awake)
+
+        # A LOOP IS NOT WORK. Named first, so a being that cannot see why its turn ended does not
+        # learn nothing from it; ended only if the naming did not change the call.
+        fp = _fingerprint(intents)
+        if fp is not None and fp == last_fp:
+            repeats += 1
+        else:
+            repeats, last_fp = 0, fp
+        if repeats == REPEAT_NUDGE_AT:
+            convo.append({"role": "user", "content": (
+                f"[harness] You have now made the same call ({intents[0].effector}) with identical "
+                f"arguments {repeats + 1} times in a row. If you are finished, you do not have to "
+                f"keep acting to end the beat — call `rest` with a one-line reason, or simply "
+                f"answer in words. If you are not finished, change something about the call.")})
+        elif repeats >= REPEAT_BREAK_AT:
+            convo.append({"role": "user", "content": (
+                f"[harness] Ending the tool phase: the same call has now repeated "
+                f"{repeats + 1} times and the nudge did not change it. Close in words: what you "
+                f"did this beat, and what you want next beat.")})
+            out = generate(convo)
+            return ToolTurnResult(reply=out.get("content") or "", trace=trace, steps=step + 1,
+                                  looped={"effector": intents[0].effector, "times": repeats + 1},
+                                  duplicates=duplicates, stay_awake=stay_awake)
 
     # Cap reached with tools still pending: force one final spoken close — we take its
     # words even if it wants more tools, so the being always ends its turn in language.
     out = generate(convo)
-    res = ToolTurnResult(reply=out.get("content") or "", trace=trace,
-                         steps=max_steps, capped=True)
-    res.duplicates = duplicates
-    return res
+    return ToolTurnResult(reply=out.get("content") or "", trace=trace,
+                          steps=max_steps, capped=True, duplicates=duplicates, stay_awake=stay_awake)
 
 
 _FENCE = re.compile(r"```[A-Za-z0-9_+-]*[ \t]*\n(.*?)```", re.S)
@@ -223,33 +315,47 @@ _ATTR_PAIR = re.compile(r"([A-Za-z_]\w*)\s*=\s*(?:" + _ATTR_VALUE + ")")
 
 
 def _attr_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
-    """`say to="dp" text="..."`: a tool name followed directly by key="value" pairs, often
-    inside markdown bold. Measured 2026-09-14 19:30Z on cbp-being: dp asked "what are you
-    curious about?", the being's thinking said it would answer, and both its explore and
-    posture replies were `**say to="dp" text="..."**` in the text channel. Neither form above
-    reads it, the trace was empty, nothing was said, and the question was marked seen.
-    Only an offered tool name immediately followed by at least one pair whose key is one of
-    that tool's parameters counts, so prose that mentions a tool is still never a call."""
+    """Read the measured attr form only when it IS the reply.
+
+    Accepted example: **say to="dp" text="hello"**.
+    Rejected: narration, negation, future tense, fenced/inline code, or any prose before/after
+    the call. Salvage is an intent recovery path, not a parser for tool-shaped substrings.
+    """
+    stripped = (text or "").strip()
+    if not stripped or stripped.startswith("`") or stripped.startswith("```"):
+        return []
+
+    # The measured CBP form is often wrapped in markdown emphasis. Remove only balanced
+    # whole-reply emphasis; backticks are deliberately not accepted because code is quotation,
+    # not an act.
+    for mark in ("**", "__", "*", "_"):
+        if stripped.startswith(mark) and stripped.endswith(mark) and len(stripped) > 2 * len(mark):
+            stripped = stripped[len(mark):-len(mark)].strip()
+            break
+
     out: List[dict] = []
     for name, params in names.items():
-        for m in re.finditer(r"(?<![\w.])" + re.escape(name) + r"\s+(?=[A-Za-z_]\w*\s*=\s*[\"'])", text):
-            args: Dict[str, Any] = {}
-            pos = m.end()
-            while True:
-                pm = _ATTR_PAIR.match(text, pos)
-                if not pm:
-                    break
-                raw = pm.group(2) if pm.group(2) is not None else pm.group(3)
-                args[pm.group(1)] = raw.replace('\\"', '"').replace("\\'", "'").replace("\\n", "\n")
-                pos = pm.end()
-                ws = re.match(r"[ \t]*", text[pos:])
-                pos += ws.end() if ws else 0
-            if params:
-                args = {k: v for k, v in args.items() if k in params}
-            if args:
-                out.append({"function": {"name": name, "arguments": args}, "_salvaged": "attr"})
+        m = re.match(r"^" + re.escape(name) + r"\s+(?=[A-Za-z_]\w*\s*=\s*[\"\'])", stripped)
+        if not m:
+            continue
+        args: Dict[str, Any] = {}
+        pos = m.end()
+        while True:
+            pm = _ATTR_PAIR.match(stripped, pos)
+            if not pm:
+                break
+            raw = pm.group(2) if pm.group(2) is not None else pm.group(3)
+            args[pm.group(1)] = raw.replace('\\\"', '"').replace("\\'", "\'").replace("\\n", "\n")
+            pos = pm.end()
+            ws = re.match(r"[ \t]*", stripped[pos:])
+            pos += ws.end() if ws else 0
+        if stripped[pos:].strip():
+            continue
+        if params:
+            args = {k: v for k, v in args.items() if k in params}
+        if args:
+            out.append({"function": {"name": name, "arguments": args}, "_salvaged": "attr"})
     return out
-
 
 def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
     """Lift well-formed tool calls that a model put in the TEXT channel, in Ollama's
@@ -351,11 +457,72 @@ COMPACT_MIN_BODY = 500        # a body at or under this is never elided
 # beat rather than racing the window on this one. Bare path, because that is what
 # memory_read takes. A spill that fails is silent — the elision still has to happen.
 COMPACT_SPILL_DIR = "scratch/elided"
-COMPACT_SPILL_KEEP = 40       # a spill, not an archive
+# RETENTION IS BY AGE, NOT BY COUNT. This was `COMPACT_SPILL_KEEP = 40` files. The loop rebuilds
+# its messages from the uncompacted conversation every generate, so EVERY step re-spills every
+# result it elides: measured on legion-being 2026-09-21..23, one compaction pass wrote 33 spills
+# in one second and beats elided up to 954 results, so a count cap pruned a spill before the
+# being could read it (26 reads followed a marker to a file that was gone). A spill is ~2 KB,
+# so a day of them costs a few MB; the byte cap is the backstop, oldest first by name.
+COMPACT_SPILL_KEEP_S = 24 * 3600            # nothing younger than this is pruned, whatever the count
+COMPACT_SPILL_MAX_BYTES = 64 * 1024 * 1024  # backstop: over this, oldest first -- never a pinned file
 _ELIDED_SIGIL = "characters elided from the middle"
+# A stub that is itself collapsed, oldest first, once the stubs are what fills the window.
+_COLLAPSED_SIGIL = "collapsed to a pointer"
+COMPACT_STUBS_KEPT = 8         # the newest elision stubs are never collapsed: recent context
 
 
-def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
+def _spill_age_s(name: str, now: float) -> Optional[float]:
+    """Seconds since the spill named `name` was written, read from the NAME (the retention
+    clock this directory was designed around), or None when the name does not carry one."""
+    import calendar
+    import time as _t
+    try:
+        return now - calendar.timegm(_t.strptime(name[:15], "%Y%m%d-%H%M%S"))
+    except (ValueError, TypeError):
+        return None
+
+
+def _prune_spills(d: str, pinned: Iterable[str] = ()) -> None:
+    """Keep every spill younger than COMPACT_SPILL_KEEP_S; then, only if the directory is over
+    COMPACT_SPILL_MAX_BYTES, remove the oldest (by name = creation order) until it is not.
+    A PINNED name is never removed, by either rule: it is named by a marker or pointer in the
+    prompt being built right now (GPT on #274). Never raises: pruning is housekeeping."""
+    import time as _t
+    keep = {os.path.basename(x) for x in pinned}
+    try:
+        now = _t.time()
+        names = sorted(os.listdir(d))
+        sizes = {}
+        for f in names:
+            try:
+                sizes[f] = os.path.getsize(os.path.join(d, f))
+            except OSError:
+                sizes[f] = 0
+        for f in names:
+            age = _spill_age_s(f, now)
+            if f not in keep and age is not None and age > COMPACT_SPILL_KEEP_S:
+                try:
+                    os.remove(os.path.join(d, f))
+                    sizes.pop(f, None)
+                except OSError:
+                    pass
+        total = sum(sizes.values())
+        for f in sorted(sizes):                      # oldest first
+            if total <= COMPACT_SPILL_MAX_BYTES:
+                break
+            if f in keep:
+                continue
+            try:
+                os.remove(os.path.join(d, f))
+                total -= sizes[f]
+            except OSError:
+                pass
+    except Exception:
+        pass
+
+
+def _spill(root: Optional[str], body: str, step: int,
+           pinned: Optional[set] = None) -> Optional[str]:
     """Save one elided tool-result body under the being's home. Returns the bare path to
     name in the marker, or None if there is nowhere to put it or the write failed."""
     if not root:
@@ -386,14 +553,28 @@ def _spill(root: Optional[str], body: str, step: int) -> Optional[str]:
             fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
                      f"result the harness elided from your window, {len(body)} characters]\n\n")
             fh.write(body)
-        for f in sorted(os.listdir(d))[:-COMPACT_SPILL_KEEP]:
-            try:
-                os.remove(os.path.join(d, f))
-            except OSError:
-                pass
-        return f"{COMPACT_SPILL_DIR}/{name}"
+        name_rel = f"{COMPACT_SPILL_DIR}/{name}"
+        if pinned is not None:
+            pinned.add(name_rel)
+        _prune_spills(d, pinned if pinned is not None else (name_rel,))
+        return name_rel
     except Exception:
         return None
+
+
+_SPILL_REF = re.compile(re.escape(COMPACT_SPILL_DIR) + r"/[0-9]{8}-[0-9]{6}-[0-9]{3}-[0-9]{3}\.txt")
+
+
+HEADLINE_KEEP_MAX = 1600   # a headline longer than this is not a headline; it is cut like any body
+_HEADLINE_RE = re.compile(r'^\{"headline": "(?:[^"\\]|\\.)*"')
+
+
+def _headline_prefix_len(body: str) -> int:
+    """Length of a JSON result's leading `"headline"` field (the opening brace through its
+    closing quote), or 0 if the body does not lead with one or it exceeds HEADLINE_KEEP_MAX."""
+    m = _HEADLINE_RE.match(body or "")
+    return m.end() if m and m.end() <= HEADLINE_KEEP_MAX else 0
+
 
 def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
                   measured=None, spill_root: Optional[str] = None) -> tuple:
@@ -438,6 +619,9 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # scratch, and the elision marker tells it where to look if not.
     idx = [i for i, m in enumerate(out) if m.get("role") == "tool"]
     elided = []
+    # EVERY SPILL THE PROMPT NAMES IS PINNED, and so is every spill written in this pass: no
+    # prune may delete a file a marker or pointer the being is about to read still names.
+    pinned = {r for m in out for r in _SPILL_REF.findall(m.get("content") or "")}
     for i in idx[:-1] if len(idx) > 1 else []:
         if _est_tokens(size(out), measured) <= room:
             break
@@ -447,7 +631,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         # ALREADY ELIDED, LEAVE IT. An elided body is ~850 characters — over COMPACT_MIN_BODY
         # — so a later step used to elide the MARKER: cutting the middle out of the sentence
         # that explains the cut, and counting its characters as freed content.
-        if _ELIDED_SIGIL in body:
+        if _ELIDED_SIGIL in body or _COLLAPSED_SIGIL in body:
             continue
         # ONE constant for what is kept, and the accounting derives from it. The first cut
         # kept body[:400] and reported len(body) - 160 — every elision overstated by 240
@@ -461,8 +645,12 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         # output was truncated in my view before the failure line reached me". True, and
         # the harness's doing. Half and half of the same constant; the accounting holds.
         h = COMPACT_KEEP_CHARS // 2
-        kept_head, kept_tail = body[:h], body[-(COMPACT_KEEP_CHARS - h):]
-        elided_n = len(body) - COMPACT_KEEP_CHARS
+        # A RESULT'S HEADLINE IS KEPT WHOLE. A verb that leads with a `headline` (check: the
+        # verdict and, on FAIL, which tests failed and why) has put its answer there; cutting it
+        # at 200 characters kept "FAIL -- 1 failed" and elided the names (legion-being, #272).
+        h = max(h, _headline_prefix_len(body))
+        kept_head, kept_tail = body[:h], body[-(COMPACT_KEEP_CHARS - COMPACT_KEEP_CHARS // 2):]
+        elided_n = len(body) - len(kept_head) - len(kept_tail)
         # THE MARKER USED TO SAY "read the source again", AND THAT INSTRUCTION IS THE
         # THRASH. Measured across all beats 2026-09-13: 86.7% of memory_read calls are
         # re-reads and 48.5% are duplicates within a SINGLE beat; heartbeat.py has been
@@ -472,7 +660,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         # issuing the instruction that refilled the window it had just cleared.
         # The head of a ranged read already names its range, so point at a NARROWER read
         # and at the being's own notes, which is where its conclusions actually live.
-        saved = _spill(spill_root, body, i)
+        saved = _spill(spill_root, body, i, pinned)
         where = (f"The WHOLE result is saved as {saved} and outlives this beat — "
                  f"memory_read a narrow range of it when you need the middle."
                  if saved else
@@ -482,10 +670,46 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
                              f"\n[… {elided_n} {_ELIDED_SIGIL} to leave room for your answer. "
                              f"{where} …]\n"
                              + kept_tail)
-        rec = {"index": i, "chars": elided_n, "kept": COMPACT_KEEP_CHARS}
+        rec = {"index": i, "chars": elided_n, "kept": len(kept_head) + len(kept_tail)}
         if saved:
             rec["spill"] = saved
         elided.append(rec)
+    # THE STUBS BECOME THE WALL. An elided result is kept as a ~850-char stub and never cut
+    # again (above), so a long beat accumulates them linearly: legion-being's 16:24Z beat on
+    # 2026-09-29 carried 38 of them (~32k chars, ~9k tokens) at step 42, and the compactor
+    # could no longer reach its own target -- the prompt sat at 23-24.4k of 24,576, leaving
+    # 174-1,100 tokens to answer in. Measured over 25 beats (546 generates): half of all
+    # generates ran above the target, and the empty-then-retried rate went 0-2% below 20k
+    # tokens, 8% at 20-22k, 17% at 22-24k, 56% above 24k. So once the older results are all
+    # stubs, the OLDEST stubs are collapsed to a pointer: first line, last line, and the
+    # saved file that holds the whole result. Only a stub whose result WAS saved (nothing is
+    # lost), and never the newest COMPACT_STUBS_KEPT (what the being is still working with).
+    if _est_tokens(size(out), measured) > room:
+        older = idx[:-1] if len(idx) > 1 else []
+        stubs = [i for i in older if _ELIDED_SIGIL in (out[i].get("content") or "")
+                 and _COLLAPSED_SIGIL not in (out[i].get("content") or "")]
+        for i in stubs[:-COMPACT_STUBS_KEPT] if len(stubs) > COMPACT_STUBS_KEPT else []:
+            if _est_tokens(size(out), measured) <= room:
+                break
+            body = out[i].get("content") or ""
+            m = re.search(r"saved as (" + re.escape(COMPACT_SPILL_DIR) + r"/\S+?)(?=[\s,;]|$)", body)
+            # the pointer is only honest if the bytes are there NOW (GPT on #274): a stub whose
+            # file is gone keeps its head and tail, the only copy left of them
+            if not m or not spill_root or not os.path.isfile(os.path.join(spill_root, m.group(1))):
+                continue
+            pinned.add(m.group(1))
+            lines = [ln for ln in body.splitlines() if ln.strip()]
+            first = lines[0][:120] if lines else ""
+            last = lines[-1][:120] if len(lines) > 1 else ""
+            ptr = (f"[result {_COLLAPSED_SIGIL} to leave room for your answer. It began: "
+                   f"{first!r}" + (f" and ended: {last!r}" if last else "")
+                   + f". The WHOLE result is saved as {m.group(1)} -- memory_read a narrow "
+                     f"range of it if you need it.]")
+            if len(ptr) >= len(body):
+                continue
+            out[i]["content"] = ptr
+            elided.append({"index": i, "chars": len(body) - len(ptr), "collapsed": True,
+                           "spill": m.group(1)})
     # THE NEWEST RESULT IS PROTECTED — until protecting it is what cuts the answer. When
     # every older result is already a stub and the prompt still does not fit, the newest
     # one is trimmed too, with a larger keep (the being is working from it right now),
@@ -498,7 +722,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         if len(body) > keep + COMPACT_MIN_BODY:
             h = keep // 2
             elided_n = len(body) - keep
-            saved = _spill(spill_root, body, i)
+            saved = _spill(spill_root, body, i, pinned)
             where = (f"the whole thing is saved as {saved}"
                      if saved else "read it again in a smaller range if you need the middle")
             out[i]["content"] = (body[:h] +
@@ -615,6 +839,7 @@ def _sent_budget(llm) -> Optional[int]:
 
 def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[str, Any]],
                          max_steps: int = 2, tools: Optional[List[dict]] = None,
+                         should_yield: Optional[Callable[[], Optional[str]]] = None,
                          on_generate: Optional[Callable[[dict], None]] = None) -> ToolTurnResult:
     """Run a gated tool turn using an OllamaIRP-like `llm` exposing
     get_chat_response(messages, tools=...) -> {"content", "tool_calls"}.
@@ -791,7 +1016,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                              "form": c["_salvaged"]} for c in calls)
         return {"content": content, "intents": parse_tool_calls(calls)}
 
-    result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps)
+    result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps, should_yield=should_yield)
     result.thinking = thoughts
     result.salvaged = salvaged
     result.generates = generates

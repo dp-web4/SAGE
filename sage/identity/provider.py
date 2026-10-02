@@ -78,6 +78,10 @@ class SigningContext:
         return time.time() - self.authorized_at
 
 
+#: Where a system tool may be found, in order. NOT PATH -- see `_system_tool`. Same list, same
+#: order, as the rust provider's SYSTEM_TOOL_DIRS.
+SYSTEM_TOOL_DIRS = ('/usr/sbin', '/sbin', '/usr/bin', '/bin')
+
 SEAL_V2 = b'SAGE_SEALED_v2'
 
 
@@ -457,6 +461,41 @@ class IdentityProvider:
             print(f"[Identity] v1 seal verified with '{label}' but could not be rewritten as v2: {e}")
 
     @staticmethod
+    def _system_tool(name: str) -> Optional[str]:
+        """Absolute path of a system tool, WITHOUT consulting PATH. None when not found.
+
+        NONE, NOT THE BARE NAME. The first cut returned `name`, and the very next
+        `subprocess.run([name])` consults PATH again -- so on any machine where the fixed
+        directories miss, the original defect came straight back and the test that pinned the
+        bare-name fallback was pinning the escape hatch rather than the property (GPT seat,
+        SAGE #130). A miss now skips the probe and falls through to the next anchor source,
+        identically in every process on the machine, which is the only property that matters:
+        the anchor is an input to the sealing key, so two processes must never disagree.
+
+        Measured on McNugget (macOS, 2026-09-20): `ioreg` is /usr/sbin/ioreg and `ifconfig` is
+        /sbin/ifconfig, and a launchd agent with no PATH key runs with `/usr/bin:/bin`. Looked
+        up by bare name, both were found from a shell and NOT from the daemon's unit -- so one
+        machine produced two anchors (IOPlatformUUID vs `host:<name>`), i.e. two v2 keys, and a
+        seal written by either process was unreadable to the other. The failure was silent in
+        both directions: the fallback is a valid anchor, just a different one."""
+        return IdentityProvider._system_tool_in(name, SYSTEM_TOOL_DIRS)
+
+    @staticmethod
+    def _system_tool_in(name: str, dirs) -> Optional[str]:
+        """`_system_tool` with the directory list passed in -- the seam the tests need.
+
+        Without it a test can only assert against the real /usr/sbin, so the acceptance
+        predicate is unreachable from a fixture and the non-executable test could only assert a
+        property of its own fixture. Measured 2026-09-21: dropping `os.access(..., X_OK)` left
+        the whole python suite green. The rust side had this seam (`system_tool_in`) and caught
+        it. One derivation, one sealing key, so both suites must be able to ask one question."""
+        for d in dirs:
+            cand = os.path.join(d, name)
+            if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                return cand
+        return None
+
+    @staticmethod
     def _machine_anchor() -> str:
         """A per-install identifier that does not move: /etc/machine-id (Linux, WSL),
         IOPlatformUUID (macOS), else the hostname. NOT a MAC: `uuid.getnode()` returns
@@ -469,15 +508,17 @@ class IdentityProvider:
                     return v
             except OSError:
                 pass
-        try:
-            import subprocess
-            out = subprocess.run(['ioreg', '-rd1', '-c', 'IOPlatformExpertDevice'],
-                                 capture_output=True, text=True, timeout=5).stdout
-            for line in out.splitlines():
-                if 'IOPlatformUUID' in line:
-                    return line.split('"')[-2]
-        except Exception:
-            pass
+        ioreg = IdentityProvider._system_tool('ioreg')
+        if ioreg:
+            try:
+                import subprocess
+                out = subprocess.run([ioreg, '-rd1', '-c', 'IOPlatformExpertDevice'],
+                                     capture_output=True, text=True, timeout=5).stdout
+                for line in out.splitlines():
+                    if 'IOPlatformUUID' in line:
+                        return line.split('"')[-2]
+            except Exception:
+                pass
         import socket
         return 'host:' + socket.gethostname()
 
@@ -522,10 +563,11 @@ class IdentityProvider:
                         out.append(m)
             except (OSError, ValueError):
                 pass
-        if not out:
+        ifconfig = self._system_tool('ifconfig') if not out else None
+        if ifconfig:
             try:
                 import subprocess
-                txt = subprocess.run(['ifconfig', '-a'], capture_output=True, text=True, timeout=5).stdout
+                txt = subprocess.run([ifconfig, '-a'], capture_output=True, text=True, timeout=5).stdout
                 out = self._parse_ether_lines(txt)
             except Exception:
                 pass

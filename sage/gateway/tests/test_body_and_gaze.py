@@ -28,7 +28,9 @@ def test_a_live_organ_is_rendered_in_words_and_a_stale_one_says_offline(monkeypa
     r = body.reading()
     out = body.render(r, None)
     assert "I see a clock" in out and "2 of 2 eyes live" in out and "hearing on" in out
-    assert "energy 38%" in out and "felt came from dp" in out
+    assert "felt came from dp" in out
+    # SAGE #291: the ATP is the daemon's internal oscillator, not the being's energy
+    assert "energy" not in out and "38" not in out and "metabolism" not in out.lower()
     assert "gaze stance is **open**" in out and "`gaze`" in out
     # stale: the past must not be presented as the present (legibility 1.3)
     monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp, age=600))
@@ -97,6 +99,7 @@ def test_inventory_finds_a_laptop_body(monkeypatch):
     monkeypatch.setattr(body.glob, "glob", lambda pat: ["/dev/video0"] if "video" in pat else [])
     monkeypatch.setattr(body, "_pw_audio", lambda **k: {"sinks": [{"name": "Built-in Speaker", "kind": "wired"}],
                                                           "sources": [{"name": "Built-in Mic", "kind": "wired"}]})
+    monkeypatch.setattr(body.shutil, "which", lambda t: None)   # a speaker, but no speech engine
     inv = body.inventory()
     assert inv["verbs"] == ["camera", "say", "peer_ask"] and inv["not_yet_wired"] == ["speak"]
     out = body.render_inventory(inv)
@@ -108,21 +111,25 @@ def test_inventory_finds_a_laptop_body(monkeypatch):
 # as the body described, and a headless being that calls `gaze` anyway is refused before any
 # hestia action opens and leaves no Sprout-shaped file on its machine.
 
-def test_headless_beat_is_not_offered_gaze_and_a_live_cortex_beat_is(monkeypatch):
-    from sage.gateway.heartbeat import offered_explore_tools, EXPLORE_TOOLS
+def test_a_headless_beat_is_offered_gaze_and_told_it_cannot_work_here(monkeypatch):
+    """THE CANONICAL TOOLSET (dp 2026-09-29): every being is offered every verb. What used to be
+    enacted by omission ("gaze not offered to a headless being", GPT on #183) is now SAID: the
+    verb is offered with the reason it cannot work on this body."""
+    from sage.gateway import toolset
+    from sage.gateway.heartbeat import offered_explore_tools
     tmp = tempfile.mkdtemp()
     monkeypatch.setattr(body, "PERCEPTION_PATH", os.path.join(tmp, "absent.json"))
     monkeypatch.setattr(body, "GAZE_PATH", os.path.join(tmp, "gaze.json"))
     monkeypatch.setattr(body, "metabolism", lambda **k: {"live": True, "state": "wake", "atp": 50.0})
     monkeypatch.setattr(body.glob, "glob", lambda pat: [])
     monkeypatch.setattr(body, "_pw_audio", lambda **k: {})
-    headless = offered_explore_tools(body.reading())
-    assert "gaze" not in headless and "camera" not in headless
-    assert [t for t in EXPLORE_TOOLS if t not in ("gaze", "camera")] == headless, "text verbs untouched"
-    assert "gaze" not in offered_explore_tools(None) and "say" in offered_explore_tools(None), \
-        "an unmeasurable body offers no body verb"
+    headless = body.reading()
+    assert "gaze" in offered_explore_tools(headless) and "camera" in offered_explore_tools(headless)
+    u = toolset.unavailable(headless, "/wt", {})
+    assert "gaze" in u and "camera" in u and "measured" in u["gaze"]
+    assert "unknown" in toolset.unavailable(None, "/wt", {})["gaze"], "unmeasured is not absent"
     monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp))
-    assert "gaze" in offered_explore_tools(body.reading())
+    assert "gaze" not in toolset.unavailable(body.reading(), "/wt", {}), "a live cortex can gaze"
 
 
 def test_headless_gaze_is_refused_and_creates_nothing(monkeypatch):
@@ -212,3 +219,61 @@ def test_coord_pair_is_total_over_anything_a_being_can_write():
         assert body._coord_pair(bad) is None, f"{bad!r} must not reach arithmetic"
     assert body._coord_pair([0.1, 0.9]) == [0.1, 0.9]
     assert body._coord_pair((0, 1)) == [0.0, 1.0]
+
+
+def test_worktree_verbs_are_offered_to_every_being_and_said_unavailable_without_a_worktree():
+    """nomad-being, 2026-09-27: a declared worktree changed nothing, because explore never
+    offered the verbs that act on it. Now they are offered to every being; without a worktree
+    each says so."""
+    from sage.gateway import toolset
+    from sage.gateway.heartbeat import offered_explore_tools
+    from sage.gateway.being_gate_client import _REGISTRY
+    assert all(v in _REGISTRY for v in toolset.WORKTREE_VERBS), "an offered verb must exist"
+    for wt in (None, "/some/worktree"):
+        offered = offered_explore_tools(None, wt)
+        assert all(v in offered for v in toolset.WORKTREE_VERBS)
+        assert offered[-1] == "rest", "rest stays the last choice"
+        assert len(offered) == len(set(offered)), "no verb offered twice"
+    u = toolset.unavailable(None, None, {})
+    assert all("no git worktree" in u[v] for v in toolset.WORKTREE_VERBS)
+    assert not any(v in toolset.unavailable(None, "/some/worktree", {}) for v in toolset.WORKTREE_VERBS)
+
+
+def test_the_internal_atp_never_reaches_the_being(monkeypatch):
+    """SAGE #291: `atp_percentage` on /status is the daemon's internal oscillator (ticked every
+    100 ms), not a reading of the being's body. It must not be read into the beat record or
+    rendered, however the daemon reports it. Served from an ephemeral port, never :8760."""
+    import http.server
+    import threading
+    status = {"consciousness_loop": True, "metabolic_state": "wake", "metabolic_source": "heartbeat:explore",
+              "metabolic_age_secs": 4, "atp_percentage": 12.3456, "observations_felt": 7,
+              "salience_source": "cortex", "salience": {"total": 0.4}}
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            b = json.dumps(status).encode()
+            self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers()
+            self.wfile.write(b)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    t = threading.Thread(target=srv.handle_request, daemon=True); t.start()
+    try:
+        monkeypatch.setattr(body, "DAEMON_STATUS", f"http://127.0.0.1:{srv.server_address[1]}/status")
+        m = body.metabolism(timeout=2.0)
+    finally:
+        t.join(timeout=3); srv.server_close()
+    assert m["live"] is True and m["felt_source"] == "cortex"
+    assert m["state"] == "wake" and m["state_source"] == "heartbeat:explore" and m["state_age_s"] == 4
+    assert "12.3456" not in json.dumps(m) and not any("atp" in k for k in m), "the oscillator is not recorded"
+    out = body.render({"perception": {}, "metabolism": m, "gaze": {}, "inventory": {}}, None)
+    assert "felt came from cortex" in out
+    assert "energy" not in out and "12" not in out, "the oscillator is not shown"
+    assert "wake" not in out, "the beat's own state is not echoed back to it"
+
+
+def test_a_daemon_that_is_down_is_said_plainly(monkeypatch):
+    out = body.render({"perception": {}, "metabolism": {"live": False}, "gaze": {}, "inventory": {}}, None)
+    assert "daemon's loop is not reporting this beat" in out and "energy" not in out

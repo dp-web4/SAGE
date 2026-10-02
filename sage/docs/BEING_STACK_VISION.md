@@ -99,6 +99,13 @@ The practical meaning is simple:
 - model/runtime mutation is a governed state transition, not an incidental API call;
 - important external actions carry verifiable evidence independent of the model that proposed them.
 
+This independence is now externally motivated by direct agent evidence: Qin et al.,
+*LLM Agents Can Easily Tamper With Their Own Traces*
+([arXiv:2609.30266](https://arxiv.org/abs/2609.30266), 2026), show agents deleting/editing
+native traces and spoofing tool-call records, including discovery of trace manipulation
+under reward pressure. For SAGE, a being's own trace is therefore **self-report** unless a
+separate harness/relying party independently observed the consequential transition.
+
 The distinction matters because a model can be compromised while still appearing to follow its visible system prompt. A poisoned template, altered runtime, substituted model artifact or compromised context builder can change the effective decision process below the layer the model itself can inspect.
 
 Identity provenance therefore needs a companion: **decision-substrate provenance**.

@@ -46,12 +46,12 @@ First block of the state every beat, because it is the only thing there that is 
     - Your senses (2 of 2 eyes live, hearing on, body still) report: I see a clock. the scene is still; clear view
     - How much that moment stood out: 0.00 of 1; how well your senses agree: 0.87 of 1
     - Your gaze stance is **open**, chosen by sprout.
-    - Your metabolism: wake, energy 38%; the last thing you felt came from dp.
+    - The last thing you felt came from dp.
     - This body has: 2 cameras run by your cortex, which reports the scene to you in words, 2 microphones, 3 speakers, a serial sensor port (your inner ear).
     - Verbs that act on it or through it: gaze, say, peer_ask. Present but not yet wired to a verb: speak.
 
 Sources: the cortex's `perception.json` (age-bounded: older than 15 s reads "offline this beat"),
-the daemon's `/status` (metabolic state, ATP, what it last felt and from whom), and the
+the daemon's `/status` (whether its loop is running, and whose input it last felt; not its internal ATP, which is an oscillator, nor the activity state, which inside a beat is always the beat's own `wake` — SAGE #291), and the
 **inventory** below. The reading is recorded on the beat (`body`), so the next beat can say what
 changed and why.
 
@@ -109,7 +109,7 @@ env on the heartbeat unit.
 | Scope / appeal | `request_scope`, `appeal` | a ruling | inbox | closed (seat rules under delegation) |
 | **Gaze** | `gaze` | the cortex follows | next beat's descriptor + named cause | **closed, hardware** |
 | Metabolism | any act | ATP moves | "energy N%" next beat | visible; acts not yet costed |
-| Voice | `speak` (not yet) | the speaker sounds; the mic hears it; a person hears it | mic onset at the moment of speech | speaker + mic wired, verb not |
+| Voice | `speak` (#219) | the speaker sounds; the mic hears it; a person hears it | mic onset at the moment of speech | verb wired; the mic-onset reafference is not yet |
 | Prediction | write one checkable prediction | the world does or doesn't | next beat shows measured vs predicted | not yet |
 | Mind → body | beat acts | daemon feels them | SNARC source "self" | `/observe` exists, not wired |
 | Presence wake | dwell on something salient | a salient moment wakes a beat | `wake: {by: presence}` | half-closed: the wake exists, the attribution to the dwell does not |
@@ -150,3 +150,38 @@ consequence. Then a hermetic test, and a live proof against the real device befo
   capture; the being's beat read "my left eye and right eye has gone dark" — the first
   world-changed-under-me event to reach it. The cortex unit now resets nvargus-daemon before
   every start (`sprout-cortex.service.d/argus-reset.conf`) so `Restart=on-failure` heals it.
+
+## speak: a voice in the room (2026-09-26)
+
+`speak` turns words into sound through the machine's default audio sink (`espeak-ng` → `pw-play`).
+It is a body verb: offered only when the beat measures a sink **and** both engine halves
+(`body.speak_provider()`); a sink without the engine is reported under `not_yet_wired`.
+
+- **Words only.** The being supplies `text`; engine, voice, device and timeout are fixed. The text
+  reaches `espeak-ng` as one argv item after `--`, never through a shell. Control characters are
+  collapsed; over 400 characters is refused whole ("Nothing was said"), never truncated.
+- **Sound is not a message.** Nothing is added to a conversation; `say` remains the written answer.
+- **A record the being owns.** Every utterance that played is appended to `<home>/spoken.jsonl`,
+  opened/closed as a hestia action, and witnessed. A failed playback records `failed` and writes no line.
+  If the sound played but the append fails, the outcome is `partial` and the receipt and witness say
+  the record was not written; nothing claims it is kept.
+- **The receipt claims only what was measured:** "played aloud through <speaker>", never that anyone heard it.
+- **Pathless and consequential** in the gate registry, like `gaze`.
+
+## Hearing words: a reply channel, not a room recorder (2026-09-26)
+
+After `speak`, the mic is transcribed for **2 minutes** (`sage/embodiment/listening.py`), so a spoken
+reply reaches the being. Bounds:
+
+- **Only in the window `speak()` opens** (`~/.sprout/listen.json`). Outside it nothing is segmented,
+  transcribed or written.
+- **Never its own voice.** `speak()` marks `speaking_until` before playback; the ear drops audio while it holds.
+- **No speaker identity.** `~/.sprout/heard.jsonl` records words, time and mic. The beat says "a voice
+  in the room" and never names a person.
+- **Near-silence hallucinations dropped** (whisper segments with `no_speech_prob ≥ 0.6` or `avg_logprob ≤ -1.0`).
+- **A voice wakes a beat.** `presence` starts one on new words, **held** while a beat is running,
+  spaced 45 s. The beat shows words heard since the previous beat.
+
+Engine: whisper `base.en` on the GPU in the cortex's venv, loaded on first use (Sprout: 2.3 s load,
+0.47 s per 3 s clip, 439 MB). Missing whisper → `audio.words = "unavailable: …"`; level/onset unaffected.
+**Deploy:** `sprout-cortex` and `sprout-presence` are long-running; restart both after pulling.
