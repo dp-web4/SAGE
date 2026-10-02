@@ -1,33 +1,73 @@
-"""being_hub_env.sh writes a being's hub drain env from the seat's settings, the being's published identity and its
-own seed: DUMMY values in a throwaway HOME, no real key anywhere (2026-10-02: every admitted being except sprout
-and mcnugget skipped its inbox drain, "no being hub env")."""
-import json, os, stat, subprocess, tempfile
+"""being_hub_env.sh writes a being's hub drain file only for a seed that provably IS the published identity, with
+values that source back exactly (GPT on #327). A generated dummy Ed25519 pair in a throwaway HOME; no real key."""
+import json
+import os
+import stat
+import subprocess
+import tempfile
 from pathlib import Path
 
+import pytest
 
-def test_being_hub_env_writes_once_with_the_published_id_and_refuses_without_a_seed():
-    wt = Path(__file__).resolve().parents[3]
+crypto = pytest.importorskip("cryptography.hazmat.primitives.asymmetric.ed25519")
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "being_hub_env.sh"
 
-    script = wt / "sage/scripts/being_hub_env.sh"
-    home = Path(tempfile.mkdtemp(prefix="hubenv-home-"))
+
+def _world(hub_url="http://hub.example:8770/a b", flip=False, seed=True):
+    home, sage = Path(tempfile.mkdtemp(prefix="hubenv-home-")), Path(tempfile.mkdtemp(prefix="hubenv-sage-"))
+    key = crypto.Ed25519PrivateKey.generate()
+    raw = key.private_bytes_raw()
+    pub = key.public_key().public_bytes_raw().hex()
+    if flip:
+        pub = ("0" if pub[0] != "0" else "1") + pub[1:]
+    (sage / "sage/gateway/hub").mkdir(parents=True)
+    (sage / "sage/gateway/hub/test-being.lct_publish.json").write_text(json.dumps(
+        {"document": {"id": "11111111-2222-3333-4444-555555555555", "public_key": {"key": pub}}}))
     (home / ".config").mkdir()
-    (home / ".config" / "hub-mesh.env").write_text('CHANNEL_CLIENT=$HOME/bin/channel_client\nHUB_URL="http://hub.example:8770"\nMY_LCT=seat\n')
-    (home / ".web4" / "cbp-being").mkdir(parents=True)
-    (home / ".web4" / "cbp-being" / "channel_key.bin").write_bytes(b"dummy")
+    (home / ".config" / "hub-mesh.env").write_text(
+        f'CHANNEL_CLIENT="$HOME/bin/channel client"\nHUB_URL="{hub_url}"\nMY_LCT=seat\n')
+    if seed:
+        (home / ".web4/test-being").mkdir(parents=True)
+        (home / ".web4/test-being/channel_key.bin").write_bytes(raw)
     env = dict(os.environ, HOME=str(home))
     env.pop("HUB_MESH_ENV", None)
+    run = lambda: subprocess.run([str(SCRIPT), "test-being", "--sage", str(sage)],  # noqa: E731
+                                 capture_output=True, text=True, env=env)
+    return home, run
 
-    r = subprocess.run([str(script), "cbp-being"], capture_output=True, text=True, env=env)
+
+def test_a_matching_seed_writes_once_and_the_values_source_back_exactly():
+    from sage.gateway.being_inbox_drain import _env_from_file
+    home, run = _world()
+    r = run()
     assert r.returncode == 0, r.stderr
-    out = home / ".config" / "hub-mesh-cbp-being.env"
-    body = out.read_text()
-    doc = json.load(open(wt / "sage/gateway/hub/cbp-being.lct_publish.json"))
-    assert f"MY_LCT={doc['document']['id']}" in body, body
-    assert f"CHANNEL_CLIENT={home}/bin/channel_client" in body and "HUB_URL=http://hub.example:8770" in body
-    assert f"MY_KEYPAIR={home}/.web4/cbp-being/channel_key.bin" in body
+    out = home / ".config" / "hub-mesh-test-being.env"
     assert stat.S_IMODE(out.stat().st_mode) == 0o600
-    r2 = subprocess.run([str(script), "cbp-being"], capture_output=True, text=True, env=env)
-    assert r2.returncode == 1 and "not overwriting" in r2.stderr, r2.stderr
-    r3 = subprocess.run([str(script), "legion-being"], capture_output=True, text=True, env=env)
-    assert r3.returncode == 1 and "no seed" in r3.stderr, r3.stderr
+    sourced = subprocess.run(["bash", "-c", 'set -a; source "$1"; printf "%s|%s|%s|%s" "$CHANNEL_CLIENT" '
+                              '"$HUB_URL" "$MY_LCT" "$MY_KEYPAIR"', "_", str(out)], capture_output=True, text=True).stdout
+    assert sourced == (f"{home}/bin/channel client|http://hub.example:8770/a b|11111111-2222-3333-4444-555555555555|"
+                       f"{home}/.web4/test-being/channel_key.bin"), "exact values, spaces kept"
+    parsed = _env_from_file(str(out))
+    assert parsed["HUB_URL"] == "http://hub.example:8770/a b" and parsed["CHANNEL_CLIENT"] == f"{home}/bin/channel client"
+    again = run()
+    assert again.returncode == 1 and "not overwriting" in again.stderr
 
+
+def test_a_seed_that_is_not_the_published_identity_writes_nothing():
+    home, run = _world(flip=True)
+    r = run()
+    assert r.returncode == 1 and "does NOT derive the key" in r.stderr
+    assert not (home / ".config" / "hub-mesh-test-being.env").exists()
+
+
+def test_a_value_that_cannot_be_quoted_safely_writes_nothing():
+    home, run = _world(hub_url="http://hub.example:8770/it's")
+    r = run()
+    assert r.returncode == 1 and "quote or newline" in r.stderr
+    assert not (home / ".config" / "hub-mesh-test-being.env").exists()
+
+
+def test_no_seed_is_refused_with_the_next_step():
+    _, run = _world(seed=False)
+    r = run()
+    assert r.returncode == 1 and "no seed" in r.stderr
