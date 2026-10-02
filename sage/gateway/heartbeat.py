@@ -968,33 +968,60 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         if key == "digest":
             kept, dropped = [], 0
             for i in range(len(lines)):
-                if not lines[i].startswith("- "):
-                    continue
-                j = i
-                while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
-                    j += 1
-                entry = lines[i:j + 1]
-                if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
-                    break
-                kept.extend(entry)
-            dropped = sum(1 for k in lines if k.startswith("- ")) - sum(1 for k in kept if k.startswith("- "))
+                if lines[i].startswith("- "):
+                    j = i
+                    while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
+                        j += 1
+                    entry = lines[i:j + 1]
+                    if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
+                        break
+                    kept.extend(entry)
+                    i = j
+                else:
+                    j = i
+                    while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
+                        j += 1
+                    entry = lines[i:j + 1]
+                    if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
+                        break
+                    kept.extend(entry)
+                    i = j
+            total_entries = sum(1 for k in lines if k.startswith("- "))
+            kept_entries = sum(1 for k in kept if k.startswith("- "))
+            dropped = total_entries - kept_entries
             out[key] = ("\n".join(kept) + ("\n[…trimmed to fit the context window: "
                           + str(dropped) + " older entr" + ("y" if dropped == 1 else "ies")
                           + " dropped…]" if dropped else ""))
         else:
             kept, dropped = [], 0
-            for i in range(len(lines) - 1, -1, -1):
-                if not lines[i].startswith("- "):
-                    continue
-                j = i
-                while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
-                    j += 1
-                entry = lines[i:j + 1]
-                if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
-                    break
-                kept.extend(reversed(entry))
+            i = len(lines) - 1
+            while i >= 0:
+                if lines[i].startswith("- "):
+                    j = i
+                    while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
+                        j += 1
+                    entry = lines[i:j + 1]
+                    if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
+                        dropped += 1
+                    else:
+                        kept.extend(reversed(entry))
+                    i = j - 1
+                else:
+                    end = i
+                    i -= 1
+                    j = i
+                    while j - 1 >= 0 and not lines[j - 1].startswith("- "):
+                        j -= 1
+                    entry = lines[j:end + 1]
+                    if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
+                        dropped += 1
+                    else:
+                        kept.extend(reversed(entry))
+                    i = j - 1
             kept.reverse()
-            dropped = sum(1 for k in lines if k.startswith("- ")) - sum(1 for k in kept if k.startswith("- "))
+            total_entries = sum(1 for k in lines if k.startswith("- "))
+            kept_entries = sum(1 for k in kept if k.startswith("- "))
+            dropped = total_entries - kept_entries
             out[key] = (("[…trimmed to fit the context window: " + str(dropped)
                          + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
                         if dropped else "") + "\n".join(kept))
