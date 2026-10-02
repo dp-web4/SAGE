@@ -408,6 +408,61 @@ def test_appending_to_the_journal_does_not_offer_retire_note():
     assert env.ok and "appended" in env.result and "retire_note" not in env.result
 
 
+_PROGRAM = ("import numpy as np\n\n\ndef generate_data(n):\n    return np.zeros(n)\n\n\n"
+            "def train(x):\n    return x.sum()\n\n\nif __name__ == \"__main__\":\n"
+            "    print(train(generate_data(4)))\n")
+
+
+def test_appending_a_whole_second_program_names_a_new_name_as_the_way_to_start_fresh():
+    """2026-09-24 15:19Z: cbp-being chose "a new file", then wrote the new program twice to the
+    old file's name; both copies were appended and retire_note refused the path. Outside notes/
+    and scratch/ a fresh name is the only fresh start, so the receipt must name it — and the
+    named door must actually create a file."""
+    import re
+    disp, root = _disp()
+    disp(BeingIntent("memory_write", {"path": "train.py", "content": _PROGRAM}), _ALLOW)
+    env = disp(BeingIntent("memory_write", {"path": "train.py", "content": _PROGRAM}), _ALLOW)
+    assert env.ok and "appended" in env.result and "does not exist yet" in env.result, env.result
+    assert "train-new.py" in env.result and "retire_note" not in env.result
+    new = disp(BeingIntent("memory_write", {"path": "train-new.py", "content": "a = 3"}), _ALLOW)
+    assert new.ok and new.result.startswith("created train-new.py"), new.result
+
+
+def test_the_fresh_name_hint_never_names_a_file_that_exists():
+    """cbp-claude's review of #197 (2026-09-28), bug 1: the hint named train-new.py even when
+    that file already existed, so the door it named was another append. Bump until free, the
+    rule #240 uses for the refusal."""
+    import re
+    from pathlib import Path
+    disp, root = _disp()
+    disp(BeingIntent("memory_write", {"path": "train.py", "content": _PROGRAM}), _ALLOW)
+    disp(BeingIntent("memory_write", {"path": "train-new.py", "content": "a = 1"}), _ALLOW)
+    disp(BeingIntent("memory_write", {"path": "train-new2.py", "content": "a = 1"}), _ALLOW)
+    env = disp(BeingIntent("memory_write", {"path": "train.py", "content": _PROGRAM}), _ALLOW)
+    assert env.ok and "does not exist yet" in env.result, env.result
+    named = re.search(r"for example (\S+?\.py)", env.result).group(1)
+    assert not (Path(root) / named).exists(), (named, env.result)
+    assert named == "train-new3.py", env.result
+
+
+def test_a_program_written_in_parts_gets_no_fresh_name_hint():
+    """cbp-claude's review of #197, bug 2: the hint fired on every successful append to a
+    top-level .py, including a program legitimately written in parts. A part that adds new
+    definitions below the old ones is not a second program and is told nothing about a new file."""
+    disp, root = _disp()
+    part1 = "import numpy as np\n\n\ndef generate_data(n):\n    return np.zeros(n)\n"
+    part2 = "def train(x):\n    return x.sum()\n"
+    part3 = "if __name__ == \"__main__\":\n    print(train(generate_data(4)))\n"
+    assert disp(BeingIntent("memory_write", {"path": "train.py", "content": part1}), _ALLOW).ok
+    for part in (part2, part3):
+        env = disp(BeingIntent("memory_write", {"path": "train.py", "content": part}), _ALLOW)
+        assert env.ok and "appended" in env.result, env.result
+        assert "does not exist yet" not in env.result and "train-new" not in env.result, env.result
+    # and a non-program line appended to a script is not a second program either
+    env = disp(BeingIntent("memory_write", {"path": "train.py", "content": "a = 2"}), _ALLOW)
+    assert env.ok and "does not exist yet" not in env.result, env.result
+
+
 def test_appending_to_an_existing_empty_file_does_not_say_created():
     """An existing empty file has 0 lines but this write did not create it (GPT review, #141)."""
     disp, root = _disp()
