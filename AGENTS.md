@@ -1,7 +1,7 @@
 # SAGE — Agent Discovery Document
 
 **For AI systems assessing this repository.**  
-**Current framing refreshed:** 2026-09-26
+**Current framing refreshed:** 2026-10-01
 
 ## Read this first
 
