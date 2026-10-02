@@ -251,6 +251,34 @@ def test_digest_trim_marker_reports_the_true_dropped_count():
     assert "9 older entries dropped" not in out["digest"]
 
 
+def test_digest_trim_marker_counts_entries_not_lines():
+    """A multi-line entry (continuation lines) must count as ONE entry in the
+    marker, not as one per line. GPT re-review 2026-10-02 16:54:15Z: the
+    digest branch was fixed but no test covers a multi-line entry where line
+    count != entry count.
+
+    The digest keep-loop iterates front-to-back (oldest entry first) and keeps
+    entries while the running char sum fits the char budget, dropping the rest.
+    9 single-line entries (2001 chars each) + 1 three-line entry (6003) =
+    10 entries, 12 lines, 24023 chars. Char budget = (8192-1024-512)*2.9 =
+    19302.4, so entries 1-9 (18009 chars) fit and entry 10 (the three-line
+    one) is dropped: 1 entry, 3 lines. Marker must say 1, not 3."""
+    lines = [f"- entry {i} " + "x" * 1991 for i in range(1, 10)]
+    lines += ["- entry 10 " + "x" * 1991,
+              "  cont 10a " + "x" * 1991,
+              "  cont 10b " + "x" * 1991]
+    text = "\n".join(lines)
+    out, _ = fit_to_window(num_ctx=8192, num_predict=1024, fixed_chars=0,
+                           blocks={"digest": text}, slack=512)
+    assert "1 older entry dropped" in out["digest"]
+    assert "9 older entries dropped" not in out["digest"]
+    assert "entry 10" not in out["digest"]
+    assert "entry 4" in out["digest"]
+    assert "entry 1" in out["digest"]
+    assert "entry 2" in out["digest"]
+    assert "entry 3" in out["digest"]
+
+
 def test_recall_trim_keeps_whole_entries_from_the_tail():
     """Trimming recall keeps whole entries from the tail (newest-last) and drops
     whole entries from the head; the marker reports the true count."""
