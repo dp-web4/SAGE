@@ -14,6 +14,17 @@ use sage_lib::snarc::surprise::SurpriseDetector;
 
 use crate::ollama::client::OllamaClient;
 
+// --- What the ATP controller is now (SAGE #291) ---------------------------------------
+// dp, 2026-09-30: "the state display is an indicator not a control", and "the snarc is
+// likewise an indicator not a control." The `MetabolicController` below still ticks every
+// 100 ms, but it is an INTERNAL number now. It is not what `/status` or the dashboard call
+// the being's state; that is the activity indicator (`crate::activity`), which only reports
+// of real activity set. Its ATP is a free-running oscillator whose "day" is 10 s. Nothing
+// the being experiences moves it: SNARC salience no longer feeds `update`, so no score
+// steers it, and nothing reads its state to decide anything. It keeps running because the
+// shadow-metabolism experiment below is measured against it, and `atp_percentage` is still
+// published (labelled internal) for the readers that parse it.
+//
 // --- Non-forcing shadow metabolism (experiment, dp 2026-07-19) ------------------
 // The real ATP is driven ONLY by metabolic state (fixed per-state rates + circadian);
 // nothing about the being's experience touches it. To learn how valence→metabolism
@@ -43,7 +54,7 @@ pub struct ConsciousnessResponse {
     pub salience: SalienceScore,
     pub metabolic_state: String,
     pub atp_percentage: f64,
-    pub cycle: u64,
+    pub tick: u64,
 }
 
 /// What the loop knows about itself, published where the HTTP layer can read it.
@@ -57,11 +68,18 @@ pub struct ConsciousnessResponse {
 /// The loop is the only writer. Readers get a clone; nobody else may mutate it.
 #[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct LoopSnapshot {
-    pub total_cycles: u64,
+    /// Loop ticks: one per 100 ms idle timer or message (uptime x 10). Named `ticks` since
+    /// SAGE #295: as `total_cycles` it was read as a count of something the being did. Beats are
+    /// counted from the heartbeat's reports (`crate::activity::BeatsView`).
+    pub ticks: u64,
     pub messages_processed: u64,
     pub experiences_recorded: u64,
+    /// Transitions of the INTERNAL ATP controller, which is not the displayed state (#291).
     pub state_transitions: u64,
-    pub metabolic_state: String,
+    // No `metabolic_state` here any more (SAGE #291). The displayed state is the activity
+    // indicator, read by the HTTP layer directly from `crate::activity`; publishing a second
+    // copy from the loop would be the parallel-state bug of #111 over again.
+    /// The internal ATP number (see the note at the top of this file). Not an activity.
     pub atp_current: f64,
     pub atp_percentage: f64,
     /// The SNARC of the last message the being actually processed. `None` until one arrives —
@@ -81,7 +99,8 @@ pub struct LoopSnapshot {
 }
 
 pub struct LoopStats {
-    pub total_cycles: u64,
+    /// 100 ms loop ticks (uptime x 10). Not beats, not cycles of anything the being did (#295).
+    pub ticks: u64,
     pub messages_processed: u64,
     pub observations_felt: u64,
     pub experiences_recorded: u64,
@@ -98,7 +117,8 @@ pub struct ConsciousnessLoop {
     ollama: OllamaClient,
     experience: ExperienceBuffer,
     message_rx: mpsc::Receiver<PendingMessage>,
-    cycle: u64,
+    /// 100 ms loop ticks (SAGE #295: was `cycle`).
+    tick: u64,
     stats: LoopStats,
     machine_name: String,
     model_name: String,
@@ -108,6 +128,9 @@ pub struct ConsciousnessLoop {
     shadow_log: Option<std::path::PathBuf>,
     /// Published state (SAGE #111). The loop writes; the HTTP layer reads a clone.
     snapshot: Option<std::sync::Arc<tokio::sync::Mutex<LoopSnapshot>>>,
+    /// The activity indicator (SAGE #291). The loop marks its own generations on it (wake
+    /// while it generates); it never sets the indicator from the ATP controller.
+    activity: Option<crate::activity::SharedActivity>,
     /// Distinct SNARC sensor ids seen so far, bounded by `MAX_SENSOR_IDS`. The detectors
     /// keep per-sensor predictors and memories for the life of the process, so an id taken
     /// from a request would otherwise be an unbounded map.
@@ -118,6 +141,9 @@ pub struct ConsciousnessLoop {
 /// Generous for the real population (dp, the seat, the cortex, the fleet's peers) and small
 /// enough that the detector maps cannot be grown without limit by whoever reaches a route.
 const MAX_SENSOR_IDS: usize = 24;
+
+/// Rotate the shadow-metabolism log past this size; one prior generation is kept.
+const SHADOW_LOG_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Normalise a speaker into a SNARC sensor id: lowercase, `[a-z0-9_-]`, bounded length.
 /// Anything else collapses to `other`, which is a real stream too — it just does not get a
@@ -155,9 +181,9 @@ impl ConsciousnessLoop {
             message_rx,
             ollama,
             experience,
-            cycle: 0,
+            tick: 0,
             stats: LoopStats {
-                total_cycles: 0,
+                ticks: 0,
                 messages_processed: 0,
                 observations_felt: 0,
                 experiences_recorded: 0,
@@ -169,6 +195,7 @@ impl ConsciousnessLoop {
             shadow_atp_max: 100.0,
             shadow_log,
             snapshot: None,
+            activity: None,
             sensor_ids: std::collections::HashSet::new(),
         }
     }
@@ -181,16 +208,30 @@ impl ConsciousnessLoop {
         self
     }
 
+    /// Give the loop the activity indicator the HTTP layer reads (SAGE #291), so its own
+    /// generations show as wake. Optional like the snapshot: without it nothing is shown.
+    pub fn with_activity(mut self, cell: crate::activity::SharedActivity) -> Self {
+        self.activity = Some(cell);
+        self
+    }
+
+    /// The displayed state right now: the indicator's, or "rest" when the loop has none.
+    fn shown_state(&self) -> String {
+        match self.activity.as_ref() {
+            Some(c) => crate::activity::read(c, crate::activity::now_secs()).state.to_string(),
+            None => crate::activity::Activity::Rest.as_str().to_string(),
+        }
+    }
+
     /// The loop's own reading of itself, for publishing.
     fn snapshot_now(&self, salience: Option<sage_lib::consciousness::observation::SalienceScore>,
                     salience_source: Option<String>) -> LoopSnapshot {
         LoopSnapshot {
-            total_cycles: self.stats.total_cycles,
+            ticks: self.stats.ticks,
             messages_processed: self.stats.messages_processed,
             observations_felt: self.stats.observations_felt,
             experiences_recorded: self.stats.experiences_recorded,
             state_transitions: self.stats.state_transitions,
-            metabolic_state: self.metabolic.current_state.as_str().to_string(),
             atp_current: self.metabolic.atp_current,
             atp_percentage: self.metabolic.atp_percentage(),
             salience,
@@ -237,12 +278,26 @@ impl ConsciousnessLoop {
             Some(c) => format!("{:.3}", c),
             None => "null".to_string(),
         };
+        // `real_state` is the internal controller's state, kept under its old key so the
+        // experiment's existing rows and readers stay comparable. It is not the being's
+        // displayed state (SAGE #291). Likewise the `cycle` key: it is the loop tick (#295), kept
+        // under its old name so the shadow log's rows stay comparable across the rename.
         let line = format!(
             "{{\"cycle\":{},\"event\":\"{}\",\"real_atp\":{:.3},\"real_state\":\"{}\",\"coherence\":{},\"valence_delta\":{:.3},\"shadow_atp\":{:.3},\"divergence\":{:.3}}}",
-            self.cycle, event, real_atp, self.metabolic.current_state.as_str(),
+            self.tick, event, real_atp, self.metabolic.current_state.as_str(),
             coh, valence_delta, self.shadow_atp, self.shadow_atp - real_atp,
         );
         use std::io::Write;
+        // Bounded. This log is an INSTRUMENT (observation only, never read back by the loop or
+        // by anything in the Python tree) and it grew one row per noticing — 92k rows / 14 MB in
+        // five days on Sprout, 1 GB/year, in every being's home, and over private-context's
+        // 9 MB mirror guard on the first run (2026-09-22). One rotation keeps the recent
+        // trajectory legible offline, which is all it was ever for.
+        if let Ok(md) = std::fs::metadata(path) {
+            if md.len() > SHADOW_LOG_MAX_BYTES {
+                let _ = std::fs::rename(path, path.with_extension("jsonl.1"));
+            }
+        }
         if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
             let _ = writeln!(f, "{}", line);
         }
@@ -273,16 +328,16 @@ impl ConsciousnessLoop {
                 }
             }
 
-            self.cycle += 1;
-            self.stats.total_cycles = self.cycle;
+            self.tick += 1;
+            self.stats.ticks = self.tick;
             // Publish what this loop knows, every cycle. Ten writes a second of a small struct
             // behind a try_lock; a contended tick simply skips and the next one wins.
             self.publish(None, None).await;
 
-            if self.cycle % 100 == 0 {
+            if self.tick % 100 == 0 {
                 info!(
-                    "cycle={} state={} ATP={:.1} msgs={} felt={} exp={}",
-                    self.cycle,
+                    "tick={} internal_state={} internal_ATP={:.1} msgs={} felt={} exp={}",
+                    self.tick,
                     self.metabolic.current_state.as_str(),
                     self.metabolic.atp_current,
                     self.stats.messages_processed,
@@ -292,7 +347,7 @@ impl ConsciousnessLoop {
             }
             // Shadow-metabolism baseline heartbeat (~every 60s) — samples the trajectory
             // shape between noticings so the divergence curve is legible offline.
-            if self.cycle % 600 == 0 {
+            if self.tick % 600 == 0 {
                 self.shadow_log_line("heartbeat", None, 0.0);
             }
         }
@@ -313,9 +368,13 @@ impl ConsciousnessLoop {
     /// keep per-sensor predictors and habituation, so collapsing every stream into one id
     /// meant dp's first words in a week were measured against the cortex's 4 Hz chatter and
     /// scored as unremarkable. Each source now habituates on its own curve.
+    ///
+    /// SNARC IS AN INDICATOR, NOT A CONTROL (dp, 2026-09-30; SAGE #291). What is felt is
+    /// scored, published and recorded. It no longer moves the metabolic controller: salience
+    /// above 0.45 used to flip it to `focus` and change its ATP rates. It no longer decides
+    /// what is remembered either (see `ExperienceBuffer::record`).
     async fn feel(&mut self, content: &str, supplied_salience: Option<f64>,
-                  coherence: Option<f64>, sender: &str)
-                  -> (SalienceScore, sage_lib::metabolic::controller::MetabolicState) {
+                  coherence: Option<f64>, sender: &str) -> SalienceScore {
         let obs = derive_observation(content);
 
         let id = sensor_id(sender);
@@ -355,28 +414,19 @@ impl ConsciousnessLoop {
             salience.total = s.clamp(0.0, 1.0);
         }
 
-        let prev_state = self.metabolic.current_state;
-        let data = CycleData {
-            max_salience: salience.total,
-            crisis_detected: false,
-            ..Default::default()
-        };
-        let atp_before = self.metabolic.atp_current;
-        let new_state = self.metabolic.update(&data);
-        if new_state != prev_state {
-            self.stats.state_transitions += 1;
-        }
+        // No controller update here (SAGE #291): the salience used to be fed in as
+        // `max_salience`, which let SNARC steer the state and the ATP rates. The real ATP now
+        // moves only on the idle tick, so its base delta for this noticing is zero.
         // Non-forcing shadow metabolism: observe how coherence-as-valence WOULD move ATP.
         // Uses the coherence the cortex supplied (same value now driving the reward axis).
-        let base_delta = self.metabolic.atp_current - atp_before;
-        let valence_delta = self.shadow_step(base_delta, coherence);
+        let valence_delta = self.shadow_step(0.0, coherence);
         self.shadow_log_line("noticing", coherence, valence_delta);
 
         // Publish what was just felt, before any generation (SAGE #111). The salience is real
         // whether or not a model answers, generation takes up to a minute on this hardware,
         // and a reader watching the being react should not wait on the reply to see it.
         self.publish(Some(salience.clone()), Some(id)).await;
-        (salience, new_state)
+        salience
     }
 
     async fn process_message(&mut self, pending: PendingMessage) {
@@ -384,8 +434,7 @@ impl ConsciousnessLoop {
                              coherence, sender, response_tx } = pending;
 
         // Felt first, always. Whether the being also ANSWERS here is a separate question.
-        let (salience, new_state) =
-            self.feel(&content, supplied_salience, coherence, &sender).await;
+        let salience = self.feel(&content, supplied_salience, coherence, &sender).await;
 
         let Some(response_tx) = response_tx else {
             // An observation: felt, not answered. dp's turn in a conversation, the seat
@@ -401,18 +450,27 @@ impl ConsciousnessLoop {
                 None => "Sage".to_string(),
             }
         };
+        // The being is acting from here until the reply is back: wake, shown for exactly as
+        // long as the generation lasts (SAGE #291). The guard ends it on every path out.
+        let generating = crate::activity::GenerationGuard::begin(
+            self.activity.as_ref(), crate::activity::now_secs());
+        let shown = self.shown_state();
+
+        // The state named here is the one the display shows while this reply is generated.
+        // The internal ATP is no longer quoted to the model: it is a free-running number, not
+        // the being's energy (SAGE #291).
         let system_prompt = format!(
-            "You are {}, a learning AI on {}. Metabolic state: {} (ATP: {:.0}%). Salience: {:.2}. Be concise.",
+            "You are {}, a learning AI on {}. Metabolic state: {}. Salience: {:.2}. Be concise.",
             display_name,
             self.machine_name,
-            new_state.as_str(),
-            self.metabolic.atp_percentage(),
+            shown,
             salience.total,
         );
 
         let system = supplied_system.unwrap_or(system_prompt);
 
         let result = self.ollama.generate(&content, Some(&system)).await;
+        drop(generating);
 
         match result {
             Ok(text) => {
@@ -420,12 +478,16 @@ impl ConsciousnessLoop {
                     content.clone(),
                     text.clone(),
                     salience.clone(),
-                    new_state.as_str(),
+                    &shown,
                     self.metabolic.atp_percentage(),
-                    self.cycle,
+                    self.tick,
                 );
                 entry.machine = Some(self.machine_name.clone());
                 entry.model = Some(self.model_name.clone());
+                // The beat this exchange happened in, when one is running (SAGE #295).
+                entry.beat_id = self.activity.as_ref().and_then(|c| {
+                    crate::activity::read_beats(c, crate::activity::now_secs()).current.map(|b| b.beat_id)
+                });
 
                 if self.experience.record(entry) {
                     self.stats.experiences_recorded += 1;
@@ -436,9 +498,9 @@ impl ConsciousnessLoop {
                 let response = ConsciousnessResponse {
                     text,
                     salience,
-                    metabolic_state: new_state.as_str().to_string(),
+                    metabolic_state: shown.clone(),
                     atp_percentage: self.metabolic.atp_percentage(),
-                    cycle: self.cycle,
+                    tick: self.tick,
                 };
                 let _ = response_tx.send(Ok(response));
             }
@@ -449,14 +511,22 @@ impl ConsciousnessLoop {
         }
     }
 
+    /// Advance the INTERNAL ATP controller one 100 ms cycle. This never touches what is
+    /// displayed (SAGE #291): the controller's state is its own, and the activity indicator
+    /// is set only by reports of real activity. `crisis_detected` is always false: nothing
+    /// real reports a crisis to this tick, and the fake ATP must not manufacture one.
     fn idle_tick(&mut self) {
         let data = CycleData {
             max_salience: 0.0,
             crisis_detected: false,
             ..Default::default()
         };
+        let prev_state = self.metabolic.current_state;
         let atp_before = self.metabolic.atp_current;
         self.metabolic.update(&data);
+        if self.metabolic.current_state != prev_state {
+            self.stats.state_transitions += 1;
+        }
         // Shadow tracks the real base dynamics on idle too (no valence — no experience this tick).
         let base_delta = self.metabolic.atp_current - atp_before;
         self.shadow_step(base_delta, None);
@@ -464,7 +534,7 @@ impl ConsciousnessLoop {
 
     fn print_summary(&self) {
         info!("=== Consciousness Loop Summary ===");
-        info!("  total cycles: {}", self.stats.total_cycles);
+        info!("  loop ticks: {}", self.stats.ticks);
         info!("  messages processed: {}", self.stats.messages_processed);
         info!("  experiences recorded: {}", self.stats.experiences_recorded);
         info!("  state transitions: {}", self.stats.state_transitions);
@@ -548,7 +618,7 @@ mod snapshot_tests {
         let (_tx, rx) = mpsc::channel(4);
         ConsciousnessLoop::new(
             OllamaClient::default_local("test-model"),
-            ExperienceBuffer::new(&std::path::PathBuf::from("/dev/null"), 0.5),
+            ExperienceBuffer::new(&std::path::PathBuf::from("/dev/null")),
             rx,
             "testmachine",
             "test-model",
@@ -565,8 +635,8 @@ mod snapshot_tests {
         let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
         let mut l = loop_with(cell.clone());
 
-        let (salience, _state) = l.feel("dp asked a long and unexpected question about the museum",
-                                        None, None, "dp").await;
+        let salience = l.feel("dp asked a long and unexpected question about the museum",
+                              None, None, "dp").await;
         l.stats.observations_felt += 1;
 
         assert!(salience.total > 0.0, "something that arrived was felt");
@@ -587,16 +657,16 @@ mod snapshot_tests {
         // The cortex reports at 4 Hz, and its own stream grows familiar with what it keeps
         // seeing — novelty is memory-based, so this is the axis that wears down.
         let same = "the scene is still; clear view";
-        let first_cortex = l.feel(same, None, None, "cortex").await.0.novelty;
+        let first_cortex = l.feel(same, None, None, "cortex").await.novelty;
         for _ in 0..12 {
             l.feel(same, None, None, "cortex").await;
         }
-        let worn = l.feel(same, None, None, "cortex").await.0.novelty;
+        let worn = l.feel(same, None, None, "cortex").await.novelty;
         assert!(worn < first_cortex,
                 "the cortex's own stream grows familiar: {first_cortex} -> {worn}");
 
         // The very same words arriving from dp are a stream that has heard nothing yet.
-        let from_dp = l.feel(same, None, None, "dp").await.0.novelty;
+        let from_dp = l.feel(same, None, None, "dp").await.novelty;
         assert!(from_dp > worn,
                 "dp's stream is not worn down by the cortex's: dp {from_dp} vs cortex {worn}");
         assert!((from_dp - first_cortex).abs() < 1e-9,
@@ -635,18 +705,18 @@ mod snapshot_tests {
         let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
         let mut l = loop_with(cell.clone());
 
-        assert_eq!(cell.lock().await.total_cycles, 0, "nothing published yet");
+        assert_eq!(cell.lock().await.ticks, 0, "nothing published yet");
         assert_eq!(cell.lock().await.published_at, 0, "and it says so");
 
-        l.cycle = 1_593_000;
-        l.stats.total_cycles = l.cycle;
+        l.tick = 1_593_000;
+        l.stats.ticks = l.tick;
         l.stats.messages_processed = 12;
         l.publish(None, None).await;
 
         let s = cell.lock().await.clone();
-        assert_eq!(s.total_cycles, 1_593_000);
+        assert_eq!(s.ticks, 1_593_000);
         assert_eq!(s.messages_processed, 12);
-        assert_eq!(s.metabolic_state, l.metabolic.current_state.as_str());
+        assert!((s.atp_current - l.metabolic.atp_current).abs() < 1e-12, "the loop's own ATP");
         assert!(s.published_at > 0, "a publish stamps its time; staleness is the liveness signal");
     }
 
@@ -671,13 +741,125 @@ mod snapshot_tests {
         assert!(cell.lock().await.salience.is_some(), "an idle cycle is not a forgetting");
     }
 
+    /// SAGE #291. THE REGRESSION TEST FOR THE FREE-RUNNING DISPLAY. The idle tick still drives
+    /// the internal ATP oscillator (it must, for the shadow experiment), and the oscillator
+    /// still transitions. What is SHOWN must not move with it. 20,000 ticks is 33 simulated
+    /// minutes and 200 of the controller's 10-second "days". If idle_tick ever writes the
+    /// indicator again, or the display is re-pointed at the controller, this fails.
+    #[tokio::test]
+    async fn the_idle_tick_never_changes_what_is_shown() {
+        let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
+        let act: crate::activity::SharedActivity = std::sync::Arc::new(std::sync::Mutex::new(
+            crate::activity::ActivityIndicator::new(crate::activity::now_secs())));
+        let mut l = loop_with(cell.clone()).with_activity(act.clone());
+
+        let mut controller_states = std::collections::HashSet::new();
+        for _ in 0..20_000 {
+            l.idle_tick();
+            controller_states.insert(l.metabolic.current_state.as_str());
+            assert_eq!(l.shown_state(), "rest", "an idle tick moved the display");
+        }
+        assert!(controller_states.len() >= 3,
+                "the internal oscillator still runs (the test would be vacuous otherwise): {controller_states:?}");
+        assert!(l.stats.state_transitions > 100, "and it transitioned {} times", l.stats.state_transitions);
+
+        // A report moves it, and the ticks that follow do not move it back.
+        act.lock().unwrap().report(crate::activity::Activity::WrapUp, "heartbeat:reflect", None, None,
+                                   crate::activity::now_secs());
+        for _ in 0..2_000 {
+            l.idle_tick();
+            assert_eq!(l.shown_state(), "wrap-up");
+        }
+    }
+
+    /// SAGE #291: SNARC is an indicator, not a control. Feeling something, however salient,
+    /// is scored and published and leaves the controller where it was. Salience above 0.45
+    /// used to flip it to `focus`.
+    #[tokio::test]
+    async fn salience_steers_nothing() {
+        let cell = std::sync::Arc::new(tokio::sync::Mutex::new(LoopSnapshot::default()));
+        let mut l = loop_with(cell.clone());
+        let (state0, atp0, cycles0) = (l.metabolic.current_state, l.metabolic.atp_current, l.metabolic.total_cycles);
+        for i in 0..50 {
+            let s = l.feel(&format!("an urgent, surprising thing number {i}!"), Some(0.99), Some(0.9), "cortex").await;
+            assert!((s.total - 0.99).abs() < 1e-9, "the score is still computed and carried");
+        }
+        assert_eq!(l.metabolic.current_state, state0, "no salience moved the state");
+        assert_eq!(l.metabolic.atp_current, atp0, "or the ATP");
+        assert_eq!(l.metabolic.total_cycles, cycles0, "feeling is not a controller cycle");
+        assert!(cell.lock().await.salience.is_some(), "and it was published");
+    }
+
+    /// SAGE #291: the loop's own generation (a `/chat/raw` reply) IS the being acting, so the
+    /// display shows wake for exactly as long as it lasts and then returns to rest. The
+    /// exchange is recorded whatever its salience, with the state it was generated in.
+    /// Against a fake Ollama on an ephemeral port: this test must never reach the live one.
+    #[tokio::test]
+    async fn a_generation_shows_wake_while_it_runs_and_is_recorded_whatever_its_salience() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (release_tx, release_rx) = oneshot::channel::<()>();
+        let server = tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut buf = vec![0u8; 65536];
+            let _ = sock.read(&mut buf).await;
+            let _ = release_rx.await;   // hold the "generation" open until the test has looked
+            let body = r#"{"response":"a quiet reply"}"#;
+            let resp = format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                               body.len(), body);
+            let _ = sock.write_all(resp.as_bytes()).await;
+        });
+
+        let dir = tempfile::tempdir().unwrap();
+        let exp = dir.path().join("experience_buffer_rs.jsonl");
+        let act: crate::activity::SharedActivity = std::sync::Arc::new(std::sync::Mutex::new(
+            crate::activity::ActivityIndicator::new(crate::activity::now_secs())));
+        let (_tx, rx) = mpsc::channel(4);
+        let mut l = ConsciousnessLoop::new(
+            OllamaClient::new(&format!("http://{addr}"), "test-model"),
+            ExperienceBuffer::new(&exp), rx, "testmachine", "test-model", None,
+        ).with_activity(act.clone());
+
+        let (resp_tx, resp_rx) = oneshot::channel();
+        let run = tokio::spawn(async move {
+            l.process_message(PendingMessage {
+                content: "ok".to_string(), system: None, salience: Some(0.05), coherence: None,
+                sender: "presence".to_string(), response_tx: Some(resp_tx),
+            }).await;
+            l
+        });
+
+        let mut saw_wake = false;
+        for _ in 0..200 {
+            if crate::activity::read(&act, crate::activity::now_secs()).state == "wake" { saw_wake = true; break; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(saw_wake, "the display showed wake while the being generated");
+        assert_eq!(crate::activity::read(&act, crate::activity::now_secs()).source, "daemon:generate");
+        release_tx.send(()).unwrap();
+
+        let resp = tokio::time::timeout(std::time::Duration::from_secs(10), resp_rx).await
+            .expect("bounded").expect("answered").expect("generated");
+        let l = run.await.unwrap();
+        server.await.unwrap();
+        assert_eq!(resp.text, "a quiet reply");
+        assert_eq!(resp.metabolic_state, "wake", "the reply names the state it was generated in");
+        assert_eq!(crate::activity::read(&act, crate::activity::now_secs()).state, "rest", "and it ends");
+
+        assert_eq!(l.stats.experiences_recorded, 1, "salience 0.05 is still remembered");
+        let rec = std::fs::read_to_string(&exp).unwrap();
+        assert!(rec.contains(r#""metabolic_state":"wake""#), "{rec}");
+        assert!(rec.contains(r#""total":0.05"#), "with its score as an annotation: {rec}");
+    }
+
     /// A loop with no cell runs exactly as before and publishes nothing.
     #[tokio::test]
     async fn publishing_is_optional() {
         let (_tx, rx) = mpsc::channel(4);
         let l = ConsciousnessLoop::new(
             OllamaClient::default_local("test-model"),
-            ExperienceBuffer::new(&std::path::PathBuf::from("/dev/null"), 0.5),
+            ExperienceBuffer::new(&std::path::PathBuf::from("/dev/null")),
             rx,
             "testmachine",
             "test-model",

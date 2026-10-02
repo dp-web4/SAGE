@@ -64,6 +64,7 @@ class _Mcp:
         self.plugin_id = plugin_id
         self.sid: Optional[str] = None
         self._n = 0
+        self.timeout = _TIMEOUT      # per client: membot needs longer than hestia (hestia_dispatch)
 
     def _id(self) -> int:
         self._n += 1
@@ -77,7 +78,7 @@ class _Mcp:
         req = urllib.request.Request(self.endpoint, data=json.dumps(body).encode(),
                                      headers=headers, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
                 if not self.sid:
                     sid = r.headers.get("mcp-session-id")
                     if sid:

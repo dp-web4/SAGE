@@ -18,6 +18,7 @@ id the daemon returned. A refused act is a first-class outcome, not an error.
 """
 from __future__ import annotations
 
+from sage.gateway.fleet_paths import forum_dir as _fleet_forum_dir
 import argparse
 import json
 import os
@@ -140,8 +141,11 @@ def acts_under_posture(model: str) -> bool:
     then the posture and the digest as a second tool turn, then reflect. The words are
     BEING_POSTURE.md verbatim either way; only the order of presentation is per model.
     qwen2.5:1.5b is deliberately not here: under a short prompt it emits the tool call as
-    text, so a different order would not move it (a parser question, Legion 09-05)."""
-    return not any(k in model.lower() for k in ("distill",))
+    text, so a different order would not move it (a parser question, Legion 09-05).
+    gemma4:e2b narrates under the posture (nomad-being, 2026-09-26..29: 0 explore tool calls in
+    100+ beats, replies "Resting." or "I am Gemma 4 ... How may I assist you?") while calling
+    tools natively in reflect every beat, where the ask is short and concrete."""
+    return not any(k in model.lower() for k in ("distill", "gemma4:e2b"))
 
 
 def instance_config(instance: Path) -> dict:
@@ -156,6 +160,60 @@ def instance_config(instance: Path) -> dict:
         return {}
 
 
+def worktree_for(instance: Path | str) -> str | None:
+    """THE being's own git worktree, read from `instance.json`. ONE resolver, every seat.
+
+    Neither half of a being used to receive it (McNugget, 2026-09-24). `HestiaF1aDispatcher`'s
+    `worktree` argument was never passed by any caller in the tree, and `BeingGateClient` had
+    no such argument, so the composed worktree verbs -- git_read, search, check, all landed
+    2026-09-13 -- raised inside the gate and were denied before the law ever ran.
+
+    #208 fixed that in `build_client`. THE BEING ON SPROUT DOES NOT GO THROUGH `build_client`
+    (sprout's review of #208, measured): `autonomous-sprout-sage.service` runs the raising
+    session, whose tool turn constructs both halves itself and read no config at all. So a
+    seat that did exactly what #208 asked -- declare `worktree` in `instance.json` -- still
+    got "none is configured on this seat". That refusal had been true and precise, which is
+    the property the fix was built on; pointing it at a cause the seat has ALREADY FIXED is
+    worse than the bug, because the seat's correct response becomes to distrust the message.
+    Hence a named resolver rather than a second lookup: a third construction site imports
+    this, and `test_worktree_reaches_the_gate` fails on one that does not.
+
+    None is still a valid answer. A being with no worktree declared gets the composers'
+    fail-closed refusal naming what is missing, which is correct and is not this function's
+    business to paper over. The shared checkout is NOT a substitute: a being reasons about
+    the code that constitutes it, and the shared tree is a different one that drifts (PRD M1).
+
+    DECLARING A WORKTREE ALSO TURNS ON THE CAMERA. It is four composed verbs, not three:
+    camera_command requires a worktree context too, so it was unreachable at the gate for the
+    same reason (CBP and sprout, both on #208). It does not USE the tree -- frames land under
+    memory_root -- but the requirement is what holds it to the same condition as a git log.
+    So `"worktree": ...` in an instance.json is not only a read grant: from that beat on, the
+    law is the only thing between the being and a frame. Decide that deliberately.
+    """
+    return instance_config(instance).get("worktree") or None
+
+
+def offered_tools(tools_arg, instance):
+    """The tool specs a governed turn offers: --tools' cut of the registry, or the registry.
+
+    Without --tools this used to be None (= every registered verb), so a seat with no ARC
+    stepper offered `game`, whose only possible answer there is "no game is set up on this
+    seat" (sprout on #218). A verb certain to be refused is a false affordance; it costs the
+    being ~650 characters of window and a call to learn it."""
+    from sage.gateway.being_gate_client import ollama_tools
+    if tools_arg:
+        return ollama_tools([t.strip() for t in tools_arg.split(",")])
+    # THE CANONICAL TOOLSET (sage/gateway/toolset.py): every verb, availability said. This used
+    # to drop `game` where no stepper was set up; now `game` is offered with that reason instead.
+    from sage.gateway import toolset
+    try:
+        from sage.gateway import body as _body
+        reading = _body.reading()
+    except Exception:
+        reading = None
+    return toolset.specs(toolset.unavailable(reading, worktree_for(instance), instance_config(instance)))
+
+
 def build_client(member: str, instance: Path, model: str, workspace: str,
                  forum_dir: str | None, host_session_id: str, temperature: float,
                  max_tokens: int, gate_only: bool = False, num_ctx: int = 8192):
@@ -168,14 +226,24 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
         publish_fn = make_forum_publisher(forum_dir, member)
     # gate_only: the law still judges every intent; an allowed one comes back
     # `pending` instead of executing. For seeing verdicts before anything leaves.
+    # THE BEING'S WORKTREE, resolved ONCE and given to both halves from ONE variable, so the
+    # tree the law judges cannot drift from the tree the dispatcher touches. The resolution
+    # itself, and why None is a real answer, live in `worktree_for` -- this is not the only
+    # place a being is constructed, which is the whole of sprout's review of #208.
+    worktree = worktree_for(instance)
+    # the seat's ARC stepper, the same way and for the same reason: one read, both halves.
+    # Absent, `game` refuses at composition with "no game is set up on this seat".
+    game_stepper = instance_config(instance).get("game_stepper") or None
     dispatcher = None if gate_only else HestiaF1aDispatcher(
         member, memory_root=str(instance), publish_fn=publish_fn,
         host_session_id=host_session_id, being_lct=being_lct_for(member, workspace),
-        peer_aliases=instance_config(instance).get("peer_aliases") or None)
+        peer_aliases=instance_config(instance).get("peer_aliases") or None,
+        worktree=worktree, game_stepper=game_stepper)
     client = BeingGateClient(member_id=member,
                              identity_path=str(instance / "identity.json"),
                              workspace=workspace, dispatcher=dispatcher,
-                             host_session_id=host_session_id)
+                             host_session_id=host_session_id,
+                             worktree=worktree, game_stepper=game_stepper)
     # Reasoning models (empero Qwen3.8 distills etc.) only emit structured tool calls
     # with `think` on — off, they narrate a bracketed placeholder instead of acting
     # (measured on Sprout 2026-08-28 and again on the first governed turn, 2026-09-03:
@@ -206,7 +274,7 @@ def main(argv=None) -> int:
                     help="judge every intent by the law but execute nothing (allowed -> pending)")
     ap.add_argument("--system-file", help="system turn; default is the gateway seed")
     ap.add_argument("--workspace", default=None, help="gate workspace root (default: repo root)")
-    ap.add_argument("--forum-dir", default=os.path.expanduser("~/ai-workspace/shared-context/forum"))
+    ap.add_argument("--forum-dir", default=str(_fleet_forum_dir()))
     ap.add_argument("--max-steps", type=int, default=2)
     ap.add_argument("--no-escalate", action="store_true",
                     help="do not route refusals to the seat's auto session (default: route)")
@@ -242,7 +310,7 @@ def main(argv=None) -> int:
 
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
-    tools = ollama_tools([t.strip() for t in args.tools.split(",")]) if args.tools else None
+    tools = offered_tools(args.tools, instance)
     # the prompt names exactly the verbs offered this turn (the registry, or --tools' cut of
     # it), so it never lists six while the specs carry ten
     offered = ", ".join(t["function"]["name"] for t in (tools or ollama_tools()))

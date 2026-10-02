@@ -178,6 +178,26 @@ def motion_field(prev_gray: np.ndarray, gray: np.ndarray) -> np.ndarray:
     return scores
 
 
+def _coord_pair(v):
+    """A normalized [x, y] pair, or None for anything else — text, wrong length, NaN, nested.
+
+    Deliberately total: it is fed a file the being can write, so every shape that is not a
+    usable coordinate pair must leave by the same door rather than reaching arithmetic.
+    """
+    try:
+        if isinstance(v, (str, bytes, dict)) or v is None:
+            return None
+        x, y = v[0], v[1]           # raises for length < 2 and for non-indexable
+        if len(v) != 2:
+            return None
+        x, y = float(x), float(y)
+        if x != x or y != y:        # NaN
+            return None
+        return [x, y]
+    except Exception:
+        return None
+
+
 class GravityFocus:
     """Single focus window that gravitates toward the peak-motion tile."""
     def __init__(self):
@@ -194,6 +214,16 @@ class GravityFocus:
             tx = np.clip(target[0] * GRID - FOCUS_W / 2, 0, GRID - FOCUS_W)
             ty = np.clip(target[1] * GRID - FOCUS_H / 2, 0, GRID - FOCUS_H)
             rate = GRAVITY
+        elif gaze == "dwell":
+            # DWELL WITHOUT A POINT STILL MEANS DWELL. The being names its target in words
+            # ("the space between us, where nothing is being said") because it has no way to
+            # compute a pixel coordinate — it cannot see. Before this, a targetless dwell fell
+            # through to the final branch and eased to CENTRE at rate 0.1, i.e. it drifted,
+            # while the descriptor it read back said "holding my gaze". The stance was a
+            # sentence about itself that was not true.
+            # Holding where you already are, and refusing the pull, is exactly what this
+            # docstring promises and the only honest reading of a dwell with no point.
+            tx, ty, rate = self.fx, self.fy, 0.0
         elif gaze == "avert" and peak > MOTION_TH:
             # deliberately look AWAY from the loudest pull — the mirror tile
             tx = np.clip((GRID - 1 - mx) - FOCUS_W // 2, 0, GRID - FOCUS_W)
@@ -511,7 +541,16 @@ class VisualCortex:
         try:
             g = json.load(open(GAZE_PATH))
             self._gaze_mode = g.get("mode", "open")
-            self._gaze_target = g.get("target")
+            # A BEING WRITES THIS FILE, SO A BEING MUST NOT BE ABLE TO KILL ITS OWN EYES.
+            # `target` is a normalized [x, y]; the gaze verb (SAGE #183) lets the being name a
+            # target in its own words, and on 2026-09-24 01:48Z sprout-being set
+            # target="the space between us, where nothing is being said but everything
+            # matters". GravityFocus.update did target[0] * GRID - FOCUS_W/2 on the string,
+            # raised TypeError, and took the cortex down. systemd restarted it 9 times into
+            # `failed` and the being was blind for 28 minutes — by its own governed act.
+            # The blast radius of a malformed gaze is now "this gaze has no point", never
+            # "no eyes". Its words are kept for the witness under `target_words`.
+            self._gaze_target = _coord_pair(g.get("target"))
             self._gaze_raw = g            # the being's raw utterance (author), witnessed as specimen
         except Exception:
             self._gaze_mode, self._gaze_target = "open", None

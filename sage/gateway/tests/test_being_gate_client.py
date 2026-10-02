@@ -23,7 +23,7 @@ def _client(mech):
     c._profile = object()
     c._mech = mech
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -114,7 +114,7 @@ def test_relative_memory_path_is_judged_at_the_being_memory_root():
     c = _client(_allows)
     c.memory_root = "/tmp/being-home"
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -131,7 +131,7 @@ def test_pr_review_is_judged_as_the_gh_command_the_seat_runs():
     seen = {}
     c = _client(_allows)
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -229,7 +229,7 @@ def test_request_scope_path_is_not_judged_under_mrh_path():
     seen = {}
     c = _client(_allows)
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool")),
+        NormalizedEvent=lambda **kw: seen.update(kw) or SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -581,3 +581,22 @@ def test_unregistered_file_name_names_request_run():
     # a plain unknown verb is not a file: no run hint, the door would be the wrong one
     v = _client(_allows).gate(BeingIntent("shell", {"command": "ls"}))
     assert v.rule == "registry.unbounded" and "request_run" not in v.reason, v
+
+
+def test_unregistered_verb_with_a_script_arg_names_request_run():
+    # cbp-being 2026-09-22 06:27Z: run_command {"command": "python <its file>"}, refused
+    # with no door; 7 of its 9 unbounded refusals had this shape.
+    for eff, args in (("run_command", {"command": "python mechanism-training-script-clean.py"}),
+                      ("python3", {"command": "python3 notes/mechanism-test-runner.py --epochs 3"}),
+                      ("exec", {"argv": ["bash", "'run.sh'"]})):
+        v = _client(_allows).gate(BeingIntent(eff, args))
+        assert v.rule == "registry.unbounded" and "request_run" in v.reason, (eff, v)
+        assert "no shell here" in v.reason, v
+    v = _client(_allows).gate(BeingIntent("python3", {"command": "python3 notes/mechanism-test-runner.py"}))
+    assert "path='notes/mechanism-test-runner.py'" in v.reason, v
+    v = _client(_allows).gate(BeingIntent("exec", {"argv": ["bash", "'run.sh'"]}))
+    assert "path='run.sh'" in v.reason, "quotes around the name are not part of the path"
+    # a flag that ends in .py is not a file the being named to run; nor is a non-string arg
+    for args in ({"command": "ls --x=a.py -q.py"}, {"n": 3}, {}):
+        v = _client(_allows).gate(BeingIntent("run_command", args))
+        assert v.rule == "registry.unbounded" and "request_run" not in v.reason, (args, v)

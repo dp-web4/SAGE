@@ -1,10 +1,38 @@
 # Directory Map — repo responsibilities
 
-Four repos, four visibilities, four purposes. Artifacts land in exactly one. Cross-contamination is a bug.
+Repositories have explicit roles and visibility boundaries. Artifacts land in exactly one canonical home. Cross-contamination is a bug.
 
-## ARC-SAGE (public, MIT-0) — competition face
+## SWE-SAGE (private during competition, MIT-0) — software-engineering competition / research workspace
 
-**What it is**: The competition deliverable. Public repo. Consumers: ARC-AGI-3 organizers, external researchers, submission pipeline.
+**What it is**: Private working implementation and experiment record for the Gemma 4 Developer Agent Competition. It is designed so selected results can later be promoted into public SAGE or released as a reproducibility artifact without requiring the working repository to be public during active competition.
+
+**What goes here**:
+- Competition agent runtime and adapters
+- Competition post-training recipes/configs and team-private training work that is legal for the intended use
+- SWE-specific persistent-state and premise-fidelity implementations
+- Competition ablation configs, team-private traces, metrics, and results
+- Kaggle submission packaging
+- Paper-track manuscript/assets
+- SWE-specific findings and failure analyses
+
+**What does NOT go here**:
+- General SAGE kernel mechanisms that are not SWE-specific
+- Unrelated private fleet traces; training data whose competition legality/provenance is unresolved for the intended use
+- Credentials or machine-specific operational state
+- Exploratory mechanisms whose provenance/publication status is not clean
+
+**Rule**: private SWE-SAGE may depend on competition/team-private work during development, but any later public claim/release must be reproducible without hidden dependencies on `dev-SAGE`, `shared-context`, `private-context`, or unreleased SWE-SAGE evidence.
+
+**Canonical on-disk**:
+- WSL: `/mnt/c/exe/projects/ai-agents/SWE-SAGE/`
+- Linux: `/home/dp/ai-workspace/SWE-SAGE/`
+- macOS: `~/ai-agents/SWE-SAGE/` or `~/repos/SWE-SAGE/`
+
+---
+
+## ARC-SAGE (public, MIT-0) — historical ARC-AGI-3 benchmark artifact
+
+**What it is**: Historical/public ARC-AGI-3 research artifact. Consumers: ARC-AGI-3 researchers and anyone auditing the spring-2026 work. It is not the canonical home for the Gemma 4 developer-agent competition.
 
 **What goes here**:
 - Solvers (`solvers/{game}.py`)
@@ -117,7 +145,8 @@ Four repos, four visibilities, four purposes. Artifacts land in exactly one. Cro
 | Artifact type | Repo |
 |---|---|
 | New PRD / training plan | shared-context |
-| Solver code | ARC-SAGE |
+| SWE competition agent / submission code | SWE-SAGE |
+| ARC-AGI-3 historical solver code | ARC-SAGE |
 | New SAGE test | SAGE |
 | World model for game X | shared-context |
 | Per-machine capture data | private-context |
@@ -126,7 +155,8 @@ Four repos, four visibilities, four purposes. Artifacts land in exactly one. Cro
 | Game mechanics analysis | shared-context |
 | Fleet ping | shared-context |
 | Operational runbook | private-context |
-| Public solver documentation | ARC-SAGE |
+| Private SWE competition documentation | SWE-SAGE |
+| Public ARC-AGI-3 historical solver documentation | ARC-SAGE |
 | Insight on consciousness framing | shared-context (forum/) or SAGE (forum/) |
 | Membot cartridge | shared-context (fleet-learning) |
 | SAGE adapter binary | SAGE or private-context depending on visibility |
@@ -139,7 +169,8 @@ Four repos, four visibilities, four purposes. Artifacts land in exactly one. Cro
 Ask: "who needs to read this?"
 - Other machines' runtime code → SAGE
 - Other machines' knowledge → shared-context
-- External researchers → ARC-SAGE
+- Internal Gemma competition work → SWE-SAGE; external researchers receive only deliberately released artifacts
+- ARC-AGI-3 researchers → ARC-SAGE
 - Operators (humans or supervisor scripts) → private-context
 
-If multiple, pick the most public one and cross-reference from the others.
+If multiple, pick the canonical home for the artifact's current visibility and cross-reference from the others.

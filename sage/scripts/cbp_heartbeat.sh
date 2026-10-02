@@ -15,6 +15,24 @@ export HOME=/home/dp
 export PATH="/home/dp/.local/bin:/usr/local/bin:/usr/bin:/bin"
 export PYTHONUNBUFFERED=1
 cd "$SAGE_DIR" || exit 1
+
+# GPU courtesy windows (scheme: shared-context/machines/cbp-gpu-windows.md). A bounded,
+# self-expiring suspension: if a requester holds the window, this beat rests and says so.
+# The window defers beats; it does not keep the being's model resident (measured 2026-09-30:
+# a window's run and the being's model do not fit together, so the holder has the GPU and the
+# being's model reloads at its next beat). An expired or malformed window is ignored, so a
+# forgotten window cannot strand the being.
+# sage.gateway.gpu_window does the check (exit 3 = held). While resting it reports
+# rest/heartbeat:gpu-window:<holder> to the daemon and, if events are pending (SAGE #295), arms
+# a beat for the window's end. Any other exit, a crash included, runs the beat (fails open).
+# The installed unit runs heartbeat.py directly (since 2026-09-28), not this script; the same
+# check goes in the unit as an ExecCondition (sage-heartbeat.service.example).
+WINDOW="/home/dp/.local/state/cbp-gpu-window"
+python3 -m sage.gateway.gpu_window check --window "$WINDOW" >> "$LOG" 2>&1
+if [ $? -eq 3 ]; then
+    exit 0
+fi
+
 if ! curl -s -m 5 http://localhost:11434/api/tags >/dev/null; then
     echo "[cbp-heartbeat] $(date -u +'%Y-%m-%dT%H:%MZ') ollama not responding; skipping beat" >> "$LOG"
     exit 0
