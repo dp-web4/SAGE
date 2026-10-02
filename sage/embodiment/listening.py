@@ -40,7 +40,10 @@ EAR_LOG = os.path.join(BODY_DIR, "ear.jsonl")      # transitions of the ear's st
 RATE = 16000
 SPEECH_JUMP = 0.03         # a window this far above ambient baseline counts as voiced
 SPEECH_FLOOR = 0.03        # ...and above this absolute level
-END_SILENCE_S = 0.8        # this much unvoiced audio ends an utterance
+# this much unvoiced audio ends an utterance. Per body (SAGE_LISTEN_PAUSE_S): at 0.8 s, dp's sentences
+# arrived as several turns a second apart wherever he paused for breath (2026-10-01).
+END_SILENCE_S = float(os.environ.get("SAGE_LISTEN_PAUSE_S") or 0.8)
+UNHEARD_PATH = os.path.join(BODY_DIR, "unheard.jsonl")   # audio that produced no kept words, for measurement
 MIN_VOICED_S = 0.4         # shorter than this is a knock or a cough, not words
 MAX_UTTERANCE_S = 20.0     # cut and transcribe rather than buffer forever
 PRE_ROLL_S = 0.3           # keep a little audio from before the onset so first syllables survive
@@ -197,13 +200,18 @@ class Transcriber(threading.Thread):
         self.model = None
         self.status = "idle"          # idle | loading | ready | unavailable: <why>
         self.running = True
+        self.backlog_drops = 0        # utterances dropped because transcription fell behind (counted, logged)
 
     def submit(self, audio: bytes) -> bool:
         try:
             self.q.put_nowait(audio)
             return True
         except queue.Full:
-            return False              # a backlog means we are behind; drop rather than lag forever
+            # a backlog means we are behind; drop rather than lag forever, but never silently
+            self.backlog_drops += 1
+            _append(UNHEARD_PATH, {"ts": round(time.time(), 2), "why": "backlog", "seconds":
+                                   round(len(audio) / 2 / RATE, 1), "source": self.source})
+            return False
 
     def _load(self):
         self.status = "loading"
@@ -222,14 +230,7 @@ class Transcriber(threading.Thread):
         import numpy as np
         a = np.frombuffer(audio, np.int16).astype(np.float32) / 32768.0
         r = self.model.transcribe(a, fp16=self._fp16, language="en", condition_on_previous_text=False)
-        segs = r.get("segments") or []
-        keep = [s for s in segs if s.get("no_speech_prob", 0) < NO_SPEECH_MAX
-                and s.get("avg_logprob", 0) > LOGPROB_MIN]
-        text = " ".join(s.get("text", "").strip() for s in keep).strip()
-        if not text:
-            return None
-        return {"ts": round(time.time(), 2), "text": text, "seconds": round(len(a) / RATE, 1),
-                "source": self.source}
+        return judge_segments(r.get("segments") or [], seconds=round(len(a) / RATE, 1), source=self.source)
 
     def run(self):
         while self.running:
@@ -241,14 +242,60 @@ class Transcriber(threading.Thread):
                 self._load()
             if self.model is None:
                 continue
-            try:
-                rec = self.transcribe(audio)
-            except Exception:
-                rec = None
-            if rec:
-                os.makedirs(os.path.dirname(self.heard_path), exist_ok=True)
-                with open(self.heard_path, "a") as f:
-                    f.write(json.dumps(rec) + "\n")
+            self._handle(audio)
+
+    def _handle(self, audio: bytes) -> None:
+        try:
+            rec = self.transcribe(audio)
+        except Exception as e:
+            # A TRANSCRIBER FAILURE IS NOT SILENCE (GPT on #325): measured, never shown as speech. The error's
+            # class only, never its text (it can carry paths or audio-derived content).
+            self.transcribe_errors = getattr(self, "transcribe_errors", 0) + 1
+            _append(UNHEARD_PATH, {"ts": round(time.time(), 2), "why": "transcribe_error",
+                                   "error": type(e).__name__, "seconds": round(len(audio) / 2 / RATE, 1),
+                                   "source": self.source})
+            return
+        if rec and rec.get("text"):
+            _append(self.heard_path, rec)
+        elif rec:
+            _append(UNHEARD_PATH, dict(rec, why="no kept words"))   # measured, never shown as speech
+
+
+def _append(path: str, rec: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except Exception:
+        pass
+
+
+def judge_segments(segs: list, seconds: float = 0.0, source: str = "", now: Optional[float] = None) -> dict:
+    """Whisper's segments -> one heard record. NOTHING IS DROPPED SILENTLY (dp, 2026-10-01: "voice transcription
+    now cuts off what i said"). A segment is still left out of the words when it is probably silence
+    (no_speech_prob >= NO_SPEECH_MAX, where whisper hallucinates stock phrases) or unclear speech
+    (avg_logprob <= LOGPROB_MIN). But each left-out segment is kept in `dropped` with its reason, confidences
+    and place, and `unclear` says where UNCLEAR speech was left out (head / middle / tail), so the room can
+    say "the rest was unclear" instead of ending the sentence where the transcriber gave up."""
+    kept_i, dropped = [], []
+    for i, s in enumerate(segs):
+        ns, lp = float(s.get("no_speech_prob", 0) or 0), float(s.get("avg_logprob", 0) or 0)
+        if ns < NO_SPEECH_MAX and lp > LOGPROB_MIN:
+            kept_i.append(i)
+        else:
+            dropped.append({"i": i, "text": str(s.get("text", "")).strip()[:200], "no_speech_prob": round(ns, 3),
+                            "avg_logprob": round(lp, 3), "why": "silence" if ns >= NO_SPEECH_MAX else "unclear"})
+    text = " ".join(str(segs[i].get("text", "")).strip() for i in kept_i).strip()
+    rec = {"ts": round(time.time() if now is None else now, 2), "text": text, "seconds": seconds, "source": source}
+    if dropped:
+        for d in dropped:
+            d["at"] = ("head" if kept_i and d["i"] < kept_i[0] else "tail" if kept_i and d["i"] > kept_i[-1]
+                       else "middle" if kept_i else "all")
+        rec["dropped"] = dropped
+        places = [d["at"] for d in dropped if d["why"] == "unclear" and d["at"] != "all"]
+        if places:
+            rec["unclear"] = "tail" if "tail" in places else "head" if "head" in places else "middle"
+    return rec
 
 
 def since(ts: float, path: Optional[str] = None, limit: int = 10) -> list:

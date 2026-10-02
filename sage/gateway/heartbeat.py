@@ -458,6 +458,22 @@ def asks_about_change(text: str) -> bool:
 ANSWER_CONTEXT_TURNS = 8
 
 
+def answer_temperature(instance) -> Optional[float]:
+    """Opt-in per instance: instance.json "answer_temperature" (0..1.5) samples the answer turn alone.
+
+    dp, 2026-10-02, on sprout-being's recurring themes: "that isn't 'wrong' but i'm thinking about how to get it
+    to 'diversify' a bit without explicitly rewriting things." A sampling dial, nothing about what to say.
+    After #316 began showing the answer turn its own recent lines, verbatim self-echo (a 6-word phrase from its
+    previous 3 replies) rose 7% -> 21%. Offline, today's room exchanges x3: at 0.4 echo 3/15 and 1.40 motifs per
+    reply; at 0.7 echo 0/14 and 0.86, answering 14/15 and picking up the person's words 7/14 (vs 8/15)."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        v = instance_config(instance).get("answer_temperature")
+        return None if v is None else max(0.0, min(1.5, float(v)))
+    except Exception:
+        return None
+
+
 def answer_context_on(instance) -> bool:
     try:
         from sage.gateway.governed_turn import instance_config
@@ -673,6 +689,23 @@ SPOKEN_ASK = ("\nThis answer will be spoken aloud in the room, so keep it to wha
               "one to three sentences, under 400 characters.")
 
 
+def fit_spoken(message: str) -> tuple:
+    """(message, original length if trimmed else 0). A spoken answer that ran into the schema's cap
+    (body.SPEAK_MAX_CHARS) ends where the grammar stopped it, mid-sentence: measured 2026-10-02 19:12Z,
+    exactly 400 chars ending "...I think agents need to learn". Trim back to its last complete sentence
+    rather than speak a cut-off one; the trim is recorded on the answer form. Our infrastructure's cut,
+    not the being's words, is what is undone: nothing else in the message changes."""
+    from sage.gateway import body as _body
+    cap = _body.SPEAK_MAX_CHARS
+    m = (message or "").strip()
+    if len(m) < cap - 1 or m.endswith((".", "!", "?", "\u2026", '"', "\u201d", "'")):
+        return m, 0
+    ends = [i for i, ch in enumerate(m[:cap]) if ch in ".!?\u2026"]
+    if not ends or ends[-1] < 40:
+        return m, 0
+    return m[:ends[-1] + 1], len(m)
+
+
 def answer_schema_for(cid: str) -> dict:
     """The JSON answer schema, with `message` capped at speak's limit when the answer is spoken."""
     if cid != "room":
@@ -696,7 +729,8 @@ def _answer_generate(llm, msgs, schema=None):
 
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
-                     on_generate=None, acts: str = "", changes: str = "", context: str = ""):
+                     on_generate=None, acts: str = "", changes: str = "", context: str = "",
+                     temperature: Optional[float] = None):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -710,7 +744,16 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     user = "\n\n".join(p for p in (context, acts, changes, ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
             {"role": "user", "content": user}]
-    r, retried = _answer_generate(llm, msgs, answer_schema_for(selected.cid))
+    # THIS TURN'S SAMPLING ONLY (answer_temperature): set for the answer generate, restored after, so explore
+    # and reflect keep the beat's temperature.
+    _prior_t = getattr(llm, "temperature", None)
+    if temperature is not None and _prior_t is not None:
+        llm.temperature = float(temperature)
+    try:
+        r, retried = _answer_generate(llm, msgs, answer_schema_for(selected.cid))
+    finally:
+        if temperature is not None and _prior_t is not None:
+            llm.temperature = _prior_t
     raw = (r or {}).get("raw") or {}
     content = ((r or {}).get("content") or "").strip()
     thinking = ((raw.get("message") or {}).get("thinking") or "").strip()
@@ -738,6 +781,10 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     else:
         form["answer"] = bool(j.get("answer"))
         message = str(j.get("message") or "").strip()
+        if selected.cid == "room":
+            message, cut_from = fit_spoken(message)
+            if cut_from:
+                form["trimmed_from"] = cut_from
         res.reply = message
         if form["answer"] and message:
             intent = BeingIntent("say", {"to": selected.cid, "text": message})
@@ -752,6 +799,8 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
             form["why"] = "chose to answer but wrote no message"
         else:
             form["why"] = "chose silence"
+    if temperature is not None:
+        form["temperature"] = float(temperature)
     res.answer_form = form
     return res
 
@@ -1952,6 +2001,21 @@ def decline_closing_for(cfg: Optional[dict]) -> Optional[str]:
     recorded in every beat record where it is on, and it is nobody else's default."""
     v = (cfg or {}).get("decline_closing")
     return v if v in DECLINE_CLOSINGS else None
+
+
+ANSWERED_RUN_WAKES = ("skip",)
+
+
+def answered_run_wake_for(cfg: Optional[dict]) -> Optional[str]:
+    """instance.json `answered_run_wake`: whether a request_run the seat has ALREADY ANSWERED
+    (same path, bytes and arguments) wakes the seat again. PER-INSTANCE
+    (RESEARCH_GENERALIZATION_RULE, recut of SAGE #154): absent, or any value not in
+    ANSWERED_RUN_WAKES, means the default, where such a request opening a new run wakes the
+    seat. `"skip"` sends and records the request but owes no wake for it
+    (`conversations.wake_is_owed(skip_answered=True)`). It changes the seat's wake rate, which
+    was measured on cbp-being alone, so it is recorded in every beat record where it is on."""
+    v = (cfg or {}).get("answered_run_wake")
+    return v if v in ANSWERED_RUN_WAKES else None
 
 
 def own_state(instance: Path, member: str = "", entrusted: str = "",
@@ -3524,7 +3588,8 @@ def main(argv=None) -> int:
                                           member=args.member, on_generate=_on_generate("answer"),
                                           acts=_acts, changes=_changes,
                                           context=(answer_context_block(instance, args.member, selected)
-                                                   if answer_context_on(instance) else ""))
+                                                   if answer_context_on(instance) else ""),
+                                          temperature=answer_temperature(instance))
             else:
                 answer = run_ollama_tool_turn(
                     client, llm,
@@ -3639,6 +3704,7 @@ def main(argv=None) -> int:
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
         "decline_closing": decline_closing_for(instance_config(instance)),
+        "answered_run_wake": answered_run_wake_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,
