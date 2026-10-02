@@ -1699,6 +1699,80 @@ def test_an_unchanged_receipt_sees_a_seat_run_the_being_never_asked_for():
     assert r.ok and "unchanged" not in r.result, r.result
 
 
+def _seat_conv_with_train(content="print(__file__)\n"):
+    import hashlib
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "other.py").write_text(content)
+    (home / "notes" / "new.py").write_text(content)
+    sha = hashlib.sha256(content.encode()).hexdigest()[:12]
+    return d, home, sha
+
+
+def test_an_unsolicited_seat_run_of_the_same_bytes_at_another_path_does_not_count():
+    """GPT HOLD on #276 at 6d7e98d5: the unsolicited match keyed only on the 12-char digest.
+    notes/new.py holding print(__file__), byte-identical to notes/other.py which the seat had
+    run, came back 'running it again will give the same result' with other.py's output --
+    though new.py never ran and necessarily prints a different path. Relative imports and
+    data make it more than a cosmetic difference. A seat run counts only for the PATH it ran."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/other.py (sha {sha}) with no arguments (the "
+                     "script's defaults), hidden from the GPU. exit code 0.\n\nstdout:\n"
+                     "/home/x/notes/other.py\n")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "see where I am"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False
+    assert "unchanged" not in r.result, r.result
+    assert "UNCHANGED" not in conv.recent(home, "seat", limit=1)[-1]["text"]
+    # the positive arm at the path it actually ran still holds
+    r = d(BeingIntent("request_run", {"path": "notes/other.py", "why": "again"}), _ALLOW)
+    assert "notes/other.py" in r.result.get("unchanged", ""), r.result
+
+
+def test_an_unsolicited_seat_run_with_other_arguments_does_not_count():
+    """The seat's run line states exactly which arguments went in (ran_line). A run with
+    arguments is not the run a request with none, or with different ones, would get; and a
+    request carrying its own flags is not answered by a default-argument run."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/new.py (sha {sha}) with arguments: --epochs 1, "
+                     "hidden from the GPU. exit code 0.\n\nstdout:\nok\n")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "defaults this time"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/other.py (sha {sha}) with no arguments (the "
+                     "script's defaults), hidden from the GPU. exit code 0.\n\nstdout:\nok\n")
+    r = d(BeingIntent("request_run", {"path": "notes/other.py", "why": "x",
+                                      "arguments": "--epochs 50"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+    # same path, same bytes, no arguments either side: counts, as prior evidence not a promise
+    r = d(BeingIntent("request_run", {"path": "notes/other.py", "why": "x"}), _ALLOW)
+    got = r.result.get("unchanged", "")
+    assert got and "will give the same result" not in got, got
+
+
+def test_a_seat_answer_for_another_path_is_not_the_answer_to_this_request():
+    """The solicited arm had the same hole: after the being asked about notes/new.py, ANY seat
+    turn counted as the answer, including a run receipt naming a different file."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    d(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/other.py (sha {sha}) with no arguments (the "
+                     "script's defaults), hidden from the GPU. exit code 0.\n")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+
+
 def test_an_unchanged_receipt_caps_what_it_carries():
     """A seat answer is capped at both ends by the seat, but a decline can be prose of any
     length. The tail is what carries the exception line, so the cap keeps the tail."""

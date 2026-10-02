@@ -49,6 +49,8 @@ from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 
 # The marker the seat's run-request reader keys on (sage/scripts/seat_run_requests.py).
 _RUN_MARKER = "[request_run]"
+# The first line of a seat run/decline receipt (seat_run_requests.py): the verb and the path.
+_SEAT_RUN_LINE = re.compile(r"\[request_run\] I (ran|did not run) (\S+)")
 # A say that ASKS for a run, and the runnable names it could mean. Kept narrow on purpose:
 # a false match reroutes a turn, so it must name a .py/.sh AND ask with the verb. The bare
 # verb matched seq 2893, "Waiting for dp's confirmation of a full successful run" — a
@@ -3026,21 +3028,51 @@ class HestiaF1aDispatcher:
         unchanged = None  # (seq it asked at, seq the seat answered at)
         answer_text = ""   # what that answer SAID, to hand back rather than point at
         asked_at = None
+        # WHAT RAN IS (PATH, BYTES, ARGUMENTS), NOT BYTES ALONE. GPT HOLD on #276 at 6d7e98d5:
+        # the unsolicited match keyed on the 12-char digest only, so notes/new.py holding
+        # print(__file__) was told "running it again will give the same result" with the
+        # output of a byte-identical notes/other.py -- a file that prints a different path,
+        # and whose relative imports and data are not new.py's. A prior run is evidence for
+        # this request only when it ran this path, these bytes, and these arguments.
+        arg_lines = [f"{k}: {str(v).strip()}" for k, v in intent.args.items()
+                     if k not in ("path", "why", "reason", "to") and str(v).strip()]
+
+        def _seat_names(text: str):
+            """(verb, path, argument phrase) of a seat run/decline receipt's first line."""
+            first = text.split("\n", 1)[0]
+            m = _SEAT_RUN_LINE.match(first)
+            if not m:
+                return None
+            return m.group(1), m.group(2).rstrip("."), first
+
         for t in conv.recent(self.memory_root, seat_conv, limit=80):
             text = str(t.get("text", ""))
             if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
-                asked_at = t.get("seq") if f"sha256:{digest}" in text else None
-            elif t.get("from") != self.member and text.startswith(_RUN_MARKER) \
-                    and f"(sha {digest})" in text:
-                # THE SEAT RAN THIS SHA WITHOUT BEING ASKED. Measured 2026-09-29 17:50Z:
-                # the seat ran a copy of f355443e29b4 on its own and said so (seq 4437);
-                # cbp-being then asked for a run of that sha (4438, 4439) and neither
-                # receipt said UNCHANGED, because this scan keyed only on the being's
-                # own prior request. The seat's run answer names the sha it ran
-                # (seat_run_requests.py writes "(sha <12>)"), so key on that too.
+                # The prior request counts only if it asked for these bytes WITH THESE
+                # ARGUMENTS: a request carrying other flags was answered for other flags.
+                prior_args = [ln for ln in text.split("\n")[3:] if not ln.startswith("UNCHANGED")]
+                asked_at = (t.get("seq") if f"sha256:{digest}" in text and prior_args == arg_lines
+                            else None)
+                continue
+            if t.get("from") == self.member:
+                continue
+            named = _seat_names(text) if text.startswith(_RUN_MARKER) else None
+            if named and named[1] != rel:
+                # A seat receipt for ANOTHER file answers nothing about this one, solicited
+                # or not.
+                continue
+            if named and named[0] == "ran" and f"(sha {digest})" in text \
+                    and "with arguments:" not in named[2] and not arg_lines:
+                # THE SEAT RAN THIS FILE, AT THIS SHA, WITHOUT BEING ASKED. Measured
+                # 2026-09-29 17:50Z: the seat ran a copy of f355443e29b4 on its own and said
+                # so (seq 4437); cbp-being then asked for a run of that sha (4438, 4439) and
+                # neither receipt said UNCHANGED, because this scan keyed only on the being's
+                # own prior request. seat_run_requests.py writes "I ran <rel> (sha <12>)" and
+                # states its arguments (ran_line); a run with arguments, or a request that
+                # carries its own, is not the same run, so neither counts here.
                 unchanged = (asked_at, t.get("seq"))
                 answer_text = text
-            elif asked_at is not None and t.get("from") != self.member:
+            elif asked_at is not None:
                 # The seat's ANSWER carries the marker (seat_run_requests.py writes it for
                 # both a run and a decline). A later remark about that answer does not, and
                 # must not displace it: on 2026-09-22 this pointed at seq 3300, a seat aside,
@@ -3091,8 +3123,10 @@ class HestiaF1aDispatcher:
                          f"the seat answered that at seq {unchanged[1]}. ")
             result["unchanged"] = (
                 since +
-                f"Nothing in it has changed since, "
-                f"so running it again will give the same result — which was:\n"
+                f"Nothing in it has changed since. That run is evidence of what this file does, "
+                f"not a promise: the same bytes at the same path with the same arguments will "
+                f"most likely say the same again, unless something it reads, the clock or "
+                f"chance differs. What it said:\n"
                 f"--- seq {unchanged[1]} ---\n{carried}\n--- end ---\n"
                 f"To change what runs: memory_edit the lines, or retire_note the file and then "
                 f"memory_write it anew.")
