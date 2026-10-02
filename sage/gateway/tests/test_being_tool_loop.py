@@ -1588,3 +1588,33 @@ def test_a_collapse_is_reported_with_the_room_it_freed():
         # the stub's length is kept + marker, so chars freed == stub length - pointer length
         assert r["chars"] > 0 and r["spill"] in out[r["index"]]["content"]
         assert _ELIDED_SIGIL not in out[r["index"]]["content"]
+
+
+def test_elision_marker_count_matches_saved_file():
+    """The marker's 'it is N lines long' must equal the saved file's real line count.
+    GPT review of #272 (2026-09-29): the label counted the in-memory body (len(body))
+    while the file on disk is a 2-line provenance header plus the body, so the marker
+    under-reported by 2. The count must be measured on the serialized file, via
+    splitlines, so a trailing newline in the body adds no phantom line."""
+    import os, tempfile
+    from sage.gateway.being_tool_loop import compact_convo
+    tmpdir = tempfile.mkdtemp(prefix="elision-lines-")
+    body = "\n".join(f"line {i}" for i in range(2000))
+    out, el = compact_convo(_elidable(body), _LLM16k(), spill_root=tmpdir)
+    rec = next(r for r in el if r.get("spill"))
+    saved = rec["spill"]
+    # the marker names a bare home-relative path (memory_read resolves it under home);
+    # the file physically lands under spill_root
+    assert saved.startswith("scratch/elided/"), saved
+    assert os.path.isfile(os.path.join(tmpdir, saved)), "the named file must exist under spill_root"
+    file_lines = len(open(os.path.join(tmpdir, saved)).read().splitlines())
+    assert f"it is {file_lines} lines long" in out[3]["content"], \
+        "the marker's line count must equal the saved file's real line count"
+    assert file_lines == 2002, "2-line provenance header plus the 2000-line body"
+    # a trailing newline in the body must not add a phantom line to the count
+    body_nl = body + "\n"
+    out2, el2 = compact_convo(_elidable(body_nl), _LLM16k(), spill_root=tmpdir)
+    rec2 = next(r for r in el2 if r.get("spill"))
+    file_lines2 = len(open(os.path.join(tmpdir, rec2["spill"])).read().splitlines())
+    assert file_lines2 == 2002, "a trailing newline adds no line to the count"
+    assert f"it is {file_lines2} lines long" in out2[3]["content"]

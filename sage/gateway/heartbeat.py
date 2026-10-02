@@ -975,9 +975,9 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
                     j += 1
                 entry = lines[i:j + 1]
                 if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
-                    dropped += 1
-                    continue
+                    break
                 kept.extend(entry)
+            dropped = sum(1 for k in lines if k.startswith("- ")) - sum(1 for k in kept if k.startswith("- "))
             out[key] = ("\n".join(kept) + ("\n[…trimmed to fit the context window: "
                           + str(dropped) + " older entr" + ("y" if dropped == 1 else "ies")
                           + " dropped…]" if dropped else ""))
@@ -991,10 +991,10 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
                     j += 1
                 entry = lines[i:j + 1]
                 if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
-                    dropped += 1
-                    continue
+                    break
                 kept.extend(reversed(entry))
             kept.reverse()
+            dropped = sum(1 for k in lines if k.startswith("- ")) - sum(1 for k in kept if k.startswith("- "))
             out[key] = (("[…trimmed to fit the context window: " + str(dropped)
                          + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
                         if dropped else "") + "\n".join(kept))
