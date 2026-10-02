@@ -491,7 +491,8 @@ def act_after_answer_on(instance) -> bool:
 # turn, which sees no tool list, agreed to something it cannot do. Facts about its reach, not a direction.
 _ABILITIES = [("camera", "look through your eyes (camera, gaze)"), ("search", "search your own files (search, memory_read)"),
               ("pr_read", "read the fleet's pull requests (pr_read)"), ("recall", "recall and remember memories"),
-              ("peer_ask", "ask a sibling a question (peer_ask)"), ("speak", "speak aloud (speak, say)")]
+              ("peer_ask", "ask a sibling a question (peer_ask)"), ("speak", "speak aloud (speak, say)"),
+              ("web_search", "search the web from this machine (web_search: other people's words, a few times an hour)")]
 
 
 def abilities_line() -> str:

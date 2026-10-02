@@ -127,3 +127,10 @@ def test_answer_then_act_is_opt_in_and_wired_without_say_or_speak(tmp_path):
     assert "act_form=explore_turn_mode(instance)" in block and 'get("sent")' in block and "preempted" in block
     assert '"act_after_answer": _turn(act_after)' in src
     assert "if not, rest." in hb.AFTER_ANSWER, "a format with rest as a full answer, not an instruction to act"
+
+
+def test_once_a_web_verb_exists_the_line_names_it_and_stops_saying_no_internet(monkeypatch):
+    from sage.gateway import toolset
+    monkeypatch.setattr(toolset, "canonical_toolset", lambda: ["camera", "search", "peer_ask", "web_search", "rest"])
+    line = hb.abilities_line()
+    assert "search the web from this machine (web_search" in line and "no internet" not in line
