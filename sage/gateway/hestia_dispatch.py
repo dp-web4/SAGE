@@ -1464,6 +1464,78 @@ class HestiaF1aDispatcher:
                                                  f"{carry['behind_main']} commits behind main — only your newest "
                                                  f"commit is yours, and the PR body says so.")})
 
+    WEB_SEARCH_CAP = 6               # searches per hour per being: "a few times an hour"
+    WEB_SEARCH_WINDOW_S = 3600
+
+    def _web_log(self) -> Path:
+        return Path(self.memory_root) / "notes" / ".web_search_log.jsonl"
+
+    def _do_web_search(self, intent: BeingIntent) -> ResultEnvelope:
+        """Search the web from this machine (sage/gateway/web_search.py), judged and witnessed like any act.
+
+        dp, 2026-10-02: "keep it local to the machine, gated through hestia like all other tools. it should be
+        treated like any other agent's web search." Only reached on an intent the gate ALLOWED as the exact
+        command web_search_command composes; rebuilt here from the same function and refused on any mismatch.
+        The cap is checked before anything leaves the machine; results come back labelled as other people's words."""
+        import json as _json
+        import shlex
+        import subprocess
+        import sys as _sys
+        from sage.gateway.being_gate_client import web_search_command
+        from sage.gateway.web_search import render
+        try:
+            cmd = web_search_command(intent.args)
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=("web_search refused: the command the law judged is not the "
+                                                   "command this dispatcher would execute."))
+        now = self._now()
+        log = self._web_log()
+        try:
+            recent = [r for r in (_json.loads(x) for x in log.read_text().splitlines() if x.strip())
+                      if now - float(r.get("t", 0)) < self.WEB_SEARCH_WINDOW_S]
+        except Exception:
+            recent = []
+        if len(recent) >= self.WEB_SEARCH_CAP:
+            frees = int((float(recent[0]["t"]) + self.WEB_SEARCH_WINDOW_S - now) / 60) + 1
+            return ResultEnvelope(ok=False, error=(
+                f"not searched: you have searched {len(recent)} times in the last hour. You can search again in "
+                f"about {frees} min. What you already found is in your earlier results."))
+        argv = shlex.split(cmd)
+        argv[0] = _sys.executable        # the seat's own interpreter, the module from this checkout
+        query = argv[argv.index("--") + 1]
+        begin = self._call("hestia_begin_action", {"tool_name": "web_search", "target": f"web:{query[:120]}"})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=f"web_search UNVERIFIED: the witness substrate is "
+                                                  f"unreachable ({str(err)[:160]})")
+        action_id = begin.get("actionId")
+        found = {"query": query, "results": [], "error": None}
+        try:
+            proc = subprocess.run(argv, text=True, capture_output=True, timeout=60,
+                                  cwd=str(Path(__file__).resolve().parents[2]))
+            found = _json.loads(proc.stdout or "{}") if proc.returncode == 0 else \
+                {"query": query, "results": [], "error": "the search tool failed on this machine"}
+        except Exception as e:
+            found = {"query": query, "results": [], "error": f"{type(e).__name__}: the search did not finish"}
+        ok = not found.get("error")
+        try:
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with open(log, "a", encoding="utf-8") as f:
+                f.write(_json.dumps({"t": now, "query": query[:200], "n": len(found.get("results") or []),
+                                     "ok": ok}) + "\n")
+        except Exception:
+            pass
+        try:
+            self._call("hestia_record_outcome", {"action_id": action_id, "success": ok, "magnitude": 0.0,
+                                                 **({} if ok else {"error": str(found.get("error"))[:300]})})
+        except Exception:
+            pass
+        return ResultEnvelope(ok=ok, result=render(found) if ok else None,
+                              error=None if ok else render(found), witness_id=action_id)
+
     def _do_pr_read(self, intent: BeingIntent) -> ResultEnvelope:
         """Read a fleet PR through the seat's gh: state, body, reviews and comments, rendered to
         fit a small window. Only reached on an intent the gate ALLOWED as the exact `gh pr view`
