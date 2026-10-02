@@ -49,6 +49,49 @@ def test_memory_read_says_missing_empty_or_directory_never_a_silent_zero():
     assert r.ok and r.result.startswith("[directory:") and "- a.md" in r.result
 
 
+def test_a_miss_one_directory_away_names_where_the_file_is():
+    """cbp-being, 2026-09-21: read `mechanism-training-script.py` from its root, was told it
+    did not exist while it sat in notes/, and wrote a "verified" note about it. 28 of 76 of
+    its misses were this shape. The answer must point at the file, and a true absence must
+    still read as one."""
+    disp, root = _disp()
+    os.makedirs(os.path.join(root, "notes"), exist_ok=True)
+    open(os.path.join(root, "notes", "script.py"), "w").write("print(1)")
+    r = disp(BeingIntent("memory_read", {"path": "script.py"}), _ALLOW)
+    assert r.ok and r.result.startswith("[no such path:")
+    assert "'notes/script.py'" in r.result and "Nothing was read" in r.result
+    open(os.path.join(root, "top.md"), "w").write("x")
+    r = disp(BeingIntent("memory_read", {"path": "notes/top.md"}), _ALLOW)
+    assert "'top.md'" in r.result, "the reverse direction: notes/ asked, root holds it"
+    r = disp(BeingIntent("memory_read", {"path": "never.md"}), _ALLOW)
+    assert "not an empty file" in r.result and "DOES exist" not in r.result
+
+
+def test_a_miss_with_several_same_named_files_lists_them_all_and_prefers_none():
+    """GPT review on #140: with notes/script.py AND scratch/script.py, the old answer listed
+    both and then called the first in sort order the one the being "probably meant". Nothing
+    supports that ranking, and this repair exists to stop invention after a miss. Every match
+    is named the same way, none is preferred, and a count beyond the shown ones is stated."""
+    disp, root = _disp()
+    for d in ("notes", "scratch"):
+        os.makedirs(os.path.join(root, d), exist_ok=True)
+        open(os.path.join(root, d, "script.py"), "w").write("print(1)")
+    r = disp(BeingIntent("memory_read", {"path": "script.py"}), _ALLOW)
+    assert r.ok and r.result.startswith("[no such path:"), r.result
+    assert "'notes/script.py'" in r.result and "'scratch/script.py'" in r.result, r.result
+    assert "2 files with that name" in r.result, r.result
+    assert "probably" not in r.result and "meant that one" not in r.result, r.result
+    # no command pre-filled for either one: that would be the same preference by other means
+    assert '"path": "notes/script.py"' not in r.result, r.result
+    assert "Nothing was read" in r.result
+    # more than the shown cap: the rest are counted, not dropped
+    for d in ("a1", "a2", "a3", "a4", "a5"):
+        os.makedirs(os.path.join(root, d), exist_ok=True)
+        open(os.path.join(root, d, "script.py"), "w").write("x")
+    r = disp(BeingIntent("memory_read", {"path": "script.py"}), _ALLOW)
+    assert "7 files with that name" in r.result and "and 2 more" in r.result, r.result
+
+
 def test_path_escape_is_error():
     disp, _ = _disp()
     env = disp(BeingIntent("memory_write", {"path": "/etc/cron.d/x", "content": "x"}), _ALLOW)

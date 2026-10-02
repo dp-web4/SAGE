@@ -51,6 +51,9 @@ SEAT_OWNED = ("entrustment.md",)
 # asks_sent.jsonl is the record the ask limit counts (hestia_dispatch, SAGE #92); a being that
 # could rewrite it could reset its own limit.
 RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl")
+# A memory_read miss names same-named files one directory away; past this many it names the
+# first ones and says how many more there are, rather than dropping them silently.
+_SAME_NAME_SHOWN = 5
 
 
 def _named_file_stamps(content: str, root: Path, written: Path) -> str:
@@ -641,6 +644,27 @@ class ReferenceF1aDispatcher:
                 return cand_r
         return None
 
+    def _same_name_elsewhere(self, p: Path) -> list:
+        """Home-relative paths of EVERY file named like `p` in the home root or one directory
+        below it, in sorted order. Bounded to that depth on purpose: every measured near-miss
+        was a notes/ vs root confusion, and a deep walk of a home with backups/ in it costs a
+        beat. All matches are returned (one level is small) so the caller can say how many
+        there are rather than silently keeping the first few."""
+        root = self.memory_root
+        try:
+            dirs = [root] + sorted(d for d in root.iterdir() if d.is_dir() and not d.name.startswith("."))
+        except OSError:
+            return []
+        out = []
+        for d in dirs:
+            c = d / p.name
+            try:
+                if c != p and c.is_file():
+                    out.append(str(c.relative_to(root)))
+            except OSError:
+                continue
+        return out
+
     @staticmethod
     def _existence(p: Path) -> str:
         """'absent' | 'present' | 'unknown'. Never guesses.
@@ -724,6 +748,40 @@ class ReferenceF1aDispatcher:
         # facts, and each now says which it is.
         shown = str(intent.args["path"]).strip()
         if not p.exists():
+            near = self._same_name_elsewhere(p)
+            if near:
+                # A MISS ONE DIRECTORY AWAY IS NOT AN ABSENCE. Measured 2026-09-21 on cbp-being:
+                # 28 of its 76 "no such path" reads named a file that existed under the same
+                # name one directory over (it writes into notes/ and reads from the root, or
+                # the reverse). Two beats that day read `mechanism-training-script.py`, got
+                # "does not exist" for a script sitting in notes/, and wrote "verified" notes
+                # about it anyway. The answer names where the file is, so the next step is a
+                # read rather than an invention.
+                #
+                # SEVERAL MATCHES ARE LISTED NEUTRALLY (GPT review on #140). Nothing ranks
+                # notes/x.py over scratch/x.py, and this repair exists to stop invention after a
+                # miss, so it must not add a guess of its own: every match is named in the same
+                # way, none is called the one it meant, and the choice stays with the being.
+                nothing = ("Nothing was read this time, so nothing about its contents is "
+                           "known yet.")
+                if len(near) == 1:
+                    msg = (f"[no such path: '{shown}' does not exist, but a file with that name "
+                           f"DOES exist at '{near[0]}'. To read it: "
+                           f"memory_read {{\"path\": \"{near[0]}\"}}. {nothing}]")
+                else:
+                    shown_near = near[:_SAME_NAME_SHOWN]
+                    where = ", ".join(f"'{n}'" for n in shown_near)
+                    more = (f" and {len(near) - len(shown_near)} more"
+                            if len(near) > len(shown_near) else "")
+                    msg = (f"[no such path: '{shown}' does not exist, but {len(near)} files with "
+                           f"that name exist: {where}{more}. Nothing tells which of them you "
+                           f"mean; read the one your task is about with memory_read and its "
+                           f"path. Nothing was read this time, so nothing about any of their "
+                           f"contents is known yet.]")
+                return ResultEnvelope(
+                    ok=True, result=msg,
+                    witness_id=self._witness(
+                        f"memory_read {p.name} (does not exist; same name at {', '.join(near)})"))
             return ResultEnvelope(
                 ok=True,
                 result=(f"[no such path: '{shown}' does not exist. This is not an empty file: there is "
