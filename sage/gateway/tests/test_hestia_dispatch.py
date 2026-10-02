@@ -1715,6 +1715,23 @@ def test_answered_run_wake_reader_and_beat_record():
     assert '"answered_run_wake": answered_run_wake_for(instance_config(instance))' in src
 
 
+def test_cbp_being_is_the_only_instance_that_skips_answered_run_wakes():
+    """The measured being carries the opt-in; no other checked-in instance.json does."""
+    import json as _json
+    from pathlib import Path
+    from sage.gateway.heartbeat import answered_run_wake_for
+    repo = Path(__file__).resolve().parents[3]
+    on = []
+    for cfg_path in sorted((repo / "sage/instances").glob("*/instance.json")):
+        try:
+            cfg = _json.loads(cfg_path.read_text())
+        except Exception:
+            continue
+        if answered_run_wake_for(cfg):
+            on.append(cfg_path.parent.name)
+    assert on == ["cbp-qwen3.8-distill-4b"]
+
+
 def test_an_unchanged_receipt_carries_the_seat_answer_not_a_pointer_to_it():
     """Measured 2026-09-22 over cbp-being's 556 beats: an edit receipt naming the defect in
     its own return value is followed by another edit 39/46 = 0.85 of the time, against a
