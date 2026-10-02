@@ -579,6 +579,13 @@ class HestiaF1aDispatcher:
             for m in _conv.listing(self.memory_root):
                 if self.member not in m.get("participants", []):
                     continue
+                if base == str(m.get("id", "")).lower() and base not in {
+                        str(x).strip().lower() for x in m.get("participants", []) + list(m.get("also_known_as", []))}:
+                    # A CONVERSATION'S ID, not a member (2026-10-02: peer_ask to="room" was told only
+                    # "'room' is not on the hub roster"). The door is say to that conversation.
+                    return (f"'{to}' is one of your conversations, not a being on the hub, so nothing "
+                            f"was sent. To speak there, use say with to=\"{m['id']}\""
+                            + (" (it is spoken aloud in the room)." if m["id"] == "room" else "."))
                 names = [x for x in m.get("participants", []) if x != self.member]
                 names += list(m.get("also_known_as", []))
                 if base in {str(n).strip().lower() for n in names}:
@@ -830,7 +837,12 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=redirect)
         # the limit is checked before publishing: a refused ask must leave no forum file behind
         unknown = self._unknown_peer(to)
-        limited = None if unknown else self._ask_limit(to)
+        if unknown:
+            # REFUSED BEFORE PUBLISHING (2026-10-02): an unknown name only skipped the rate limit, so the
+            # question was written to the forum and THEN refused by the mesh step: "sprout-being-asks-room"
+            # sat in the fleet forum for an ask that went nowhere.
+            return ResultEnvelope(ok=False, error=unknown)
+        limited = self._ask_limit(to)
         if limited:
             return ResultEnvelope(ok=False, error=limited)
         pointer = self._publish(to, body)
