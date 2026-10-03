@@ -3153,15 +3153,35 @@ class HestiaF1aDispatcher:
                 f"--- seq {unchanged[1]} ---\n{carried}\n--- end ---\n"
                 f"To change what runs: memory_edit the lines, or retire_note the file and then "
                 f"memory_write it anew.")
+        note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
+                "a result. The seat may run it or decline, and either way it answers in "
+                f"'{seat_conv}'. Nothing is owed by you in the meantime.")
+        if unchanged and not (said.result or {}).get("woke") and self._skips_answered_run_wake():
+            # THE RECEIPT SAYS WHAT HAPPENED. Under answered_run_wake "skip" (per-instance,
+            # recut of #154) an already-answered request is sent but wakes nobody; "asked and
+            # woken" would be false. Only this instance's receipts change.
+            note = ("The request was recorded in "
+                    f"'{seat_conv}', but the seat was NOT woken for it: it already answered this "
+                    "same file, unchanged, and that answer is above. NOTHING HAS RUN. To have it "
+                    "run again anyway, call request_run with rerun=true.")
         return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
             **result,
             "requested": rel,
             "asked": seat_conv,
             "ran": False,
-            "note": ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
-                     "a result. The seat may run it or decline, and either way it answers in "
-                     f"'{seat_conv}'. Nothing is owed by you in the meantime."),
+            "note": note,
         })
+
+    def _skips_answered_run_wake(self) -> bool:
+        """instance.json `answered_run_wake: "skip"` (per-instance; heartbeat.answered_run_wake_for).
+        Read on each call, like the other per-instance policies, so flipping it needs no restart.
+        Any failure to read it is the default: wake."""
+        try:
+            from sage.gateway.governed_turn import instance_config
+            from sage.gateway.heartbeat import answered_run_wake_for
+            return answered_run_wake_for(instance_config(Path(self.memory_root))) == "skip"
+        except Exception:
+            return False
 
     def _wake_addressee(self, to: str, meta: dict, turn: dict) -> Optional[str]:
         """A turn wakes whoever it is addressed to — the mirror of the seat's own door.
@@ -3229,7 +3249,8 @@ class HestiaF1aDispatcher:
         targets = deduped
         if not targets:
             return None
-        run_start = conv.wake_is_owed(self.memory_root, to, self.member)
+        run_start = conv.wake_is_owed(self.memory_root, to, self.member,
+                                      skip_answered=self._skips_answered_run_wake())
         if run_start is None:
             return None            # already woke them about this run; saying more is not new mail
         pointer = f"sage://conversation/{to}#seq={run_start}-{turn['seq']}"
