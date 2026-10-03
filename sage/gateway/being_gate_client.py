@@ -1910,6 +1910,10 @@ _TOOL_SCHEMAS = {
                {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
                 "device": "optional: a plain device node to read from (default /dev/video0)"},
                []),
+    "describe": ("The full description of one verb and its parameters, when the short form you were "
+                 "given is not enough to use it well. Touches nothing; answered at once.",
+                 {"verb": "the verb's name, e.g. memory_edit"},
+                 ["verb"]),
     "stay_awake": ("Ask for another beat right after this one, because you want to keep going: "
                    "something you are in the middle of, something in your surroundings, or your "
                    "own curiosity. The next beat starts as soon as this one ends. You never need "
