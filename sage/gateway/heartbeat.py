@@ -1183,8 +1183,9 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
             out[key] = (("[…trimmed to fit the context window: " + str(dropped)
                          + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
                         if dropped else "") + "\n".join(kept))
+        removed = sum(len(k) + 1 for k in lines[i:]) if i < len(lines) else 0
         interventions.append({"kind": "context_fit", "block": key,
-                              "suppressed": f"{len(text) - keep} chars of {key}",
+                              "suppressed": f"{removed} chars of {key}",
                               "reason": f"prompt + a p99 answer ({reserve} tok) would not fit "
                                         f"num_ctx ({num_ctx}); the generation would be cut "
                                         f"mid-answer (27/506 generates already were)"})
