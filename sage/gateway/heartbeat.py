@@ -458,6 +458,14 @@ def asks_about_change(text: str) -> bool:
 ANSWER_CONTEXT_TURNS = 8
 
 
+def _trial_name(instance) -> Optional[str]:
+    try:
+        from sage.gateway.governed_turn import trial_name
+        return trial_name(instance)
+    except Exception:
+        return None
+
+
 def answer_temperature(instance) -> Optional[float]:
     """Opt-in per instance: instance.json "answer_temperature" (0..1.5) samples the answer turn alone.
 
@@ -3985,6 +3993,8 @@ def main(argv=None) -> int:
         # principle): a guard that silences without saying what it silenced trades a
         # confident wrong for a confident silence.
         "interventions": interventions,
+        # a live trial labels the beat, so its outputs can be told from the being's ordinary ones
+        "trial": _trial_name(instance),
         "account": account,
         "explore": _turn(explore),
         # act-first only: the posture+digest turn, after the short one; None otherwise
