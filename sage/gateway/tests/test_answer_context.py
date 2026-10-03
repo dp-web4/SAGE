@@ -109,7 +109,8 @@ def test_the_answer_temperature_samples_the_answer_turn_alone_and_is_restored(tm
 
 
 def test_the_answer_turn_is_told_what_it_can_do_and_that_it_has_no_internet():
-    line = hb.abilities_line()
+    from sage.gateway import toolset as ts
+    line = hb.abilities_line(ts.unavailable({"inventory": {"verbs": ["camera", "gaze", "speak"]}}, "/tmp/wt", {}))
     assert "look through your eyes" in line and "ask a sibling" in line and "search your own files" in line
     for plumbing in ("tool", "say", "peer_ask", "camera"):
         assert plumbing not in line, f"harness word {plumbing!r} in the being's facts (LEGIBILITY 1.14)"
@@ -149,3 +150,19 @@ def test_once_a_web_verb_exists_the_line_names_it_and_stops_saying_no_internet(m
     monkeypatch.setattr(toolset, "canonical_toolset", lambda: ["camera", "search", "peer_ask", "web_search", "rest"])
     line = hb.abilities_line()
     assert "search the web a few times an hour" in line and "no internet" not in line
+
+
+def test_the_line_claims_only_what_is_measured_on_this_machine():
+    """GPT on #334: canonical_toolset() has every fleet verb; a headless being must not be told it can see."""
+    from sage.gateway import toolset as ts
+    body = lambda verbs: {"inventory": {"verbs": verbs}}  # noqa: E731
+    sprout = hb.abilities_line(ts.unavailable(body(["camera", "gaze", "speak", "pair_audio"]), "/tmp/wt", {}))
+    assert "look through your eyes" in sprout and "speak aloud" in sprout
+    headless = hb.abilities_line(ts.unavailable(body([]), "/tmp/wt", {}))
+    assert "look through your eyes" not in headless and "speak aloud" not in headless
+    no_speaker = hb.abilities_line(ts.unavailable(body(["camera", "gaze"]), "/tmp/wt", {}))
+    assert "look through your eyes" in no_speaker and "speak aloud" not in no_speaker
+    unmeasured = hb.abilities_line()
+    assert "eyes" not in unmeasured and "speak" not in unmeasured, "not measured: not claimed"
+    src = Path(hb.__file__).read_text()
+    assert "abilities=abilities_line(_unavail)" in src, "the beat passes what it measured"

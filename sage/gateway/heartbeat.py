@@ -498,13 +498,19 @@ _ABILITIES = [("camera", "look through your eyes"), ("search", "search your own 
               ("web_search", "search the web a few times an hour (what comes back is other people's words)")]
 
 
-def abilities_line() -> str:
+def abilities_line(unavail: Optional[dict] = None) -> str:
+    """Only what works ON THIS MACHINE (GPT on #334): canonical_toolset() lists every fleet verb whether or not it
+    works here, so a headless being would have been told it can look through its eyes. `unavail` is the measured
+    toolset.unavailable() the beat already uses to label verbs; unmeasured (None) means body and worktree
+    abilities are unknown and are not claimed. Never a capability that is not measured present."""
     try:
         from sage.gateway import toolset as _ts
         have = set(_ts.canonical_toolset())
+        if unavail is None:
+            unavail = _ts.unavailable(None, None, None)
     except Exception:
         return ""
-    parts = [txt for verb, txt in _ABILITIES if verb in have]
+    parts = [txt for verb, txt in _ABILITIES if verb in have and verb not in unavail]
     if not parts:
         return ""
     line = "Beyond this reply, you can " + (", ".join(parts[:-1]) + ", and " + parts[-1] if len(parts) > 1 else parts[0]) + "."
@@ -769,7 +775,7 @@ def _answer_generate(llm, msgs, schema=None):
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
                      on_generate=None, acts: str = "", changes: str = "", context: str = "",
-                     temperature: Optional[float] = None):
+                     temperature: Optional[float] = None, abilities: Optional[str] = None):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -783,7 +789,8 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     # WHAT IT CAN DO rides EVERY answer, independent of the optional conversation context (GPT on #334: inside
     # that block it never reached an instance without "answer_context"; the motivating case would still have
     # answered without knowing it has no internet). Facts about its reach, not a direction.
-    user = "\n\n".join(p for p in (context, acts, changes, abilities_line(), ask) if p)
+    user = "\n\n".join(p for p in (context, acts, changes,
+                                     abilities if abilities is not None else abilities_line(), ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
             {"role": "user", "content": user}]
     # THIS TURN'S SAMPLING ONLY (answer_temperature): set for the answer generate, restored after, so explore
@@ -3632,7 +3639,8 @@ def main(argv=None) -> int:
                                           acts=_acts, changes=_changes,
                                           context=(answer_context_block(instance, args.member, selected)
                                                    if answer_context_on(instance) else ""),
-                                          temperature=answer_temperature(instance))
+                                          temperature=answer_temperature(instance),
+                                          abilities=abilities_line(_unavail))
             else:
                 answer = run_ollama_tool_turn(
                     client, llm,
