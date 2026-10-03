@@ -2892,6 +2892,59 @@ class HestiaF1aDispatcher:
                     f"had made to this one file are gone; nothing else was touched."),
             witness_id=self._local._witness(f"git_restore {os.path.basename(target)} @ {rev}"))
 
+    def _do_git_clean(self, intent: BeingIntent) -> ResultEnvelope:
+        """Delete ONE untracked file from the being's worktree (git_clean_command).
+
+        The law judged `git clean -f -- <path>`; this runs exactly that, after asking git that the
+        path is a file it does not track and does not ignore -- so a refusal says which, and a
+        success means the file was the being's own addition and is now gone."""
+        import shlex
+        import subprocess
+        from sage.gateway.being_gate_client import git_clean_command
+        if not self.worktree or not os.path.isdir(self.worktree):
+            return ResultEnvelope(ok=False, pending=True,
+                                  note="git_clean needs a worktree of your own; none is configured")
+        try:
+            cmd = git_clean_command(intent.args, self._git_ctx())
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:
+            return ResultEnvelope(ok=False, error=(
+                "git_clean refused: the command the law judged is not the command this "
+                "dispatcher would execute."))
+        target = os.path.realpath(os.path.join(self.worktree, str(intent.args["path"])))
+        rel = os.path.relpath(target, os.path.realpath(self.worktree))
+        if not os.path.isfile(target):
+            return ResultEnvelope(ok=False, error=f"git_clean: {rel!r} does not exist in your worktree; nothing to delete")
+
+        def git(*a):
+            return subprocess.run(["git", *a], cwd=self.worktree, env=_worktree_env(), text=True,
+                                  capture_output=True, timeout=30)
+        if git("ls-files", "--error-unmatch", "--", rel).returncode == 0:
+            return ResultEnvelope(ok=False, error=(
+                f"git_clean: {rel!r} is TRACKED by git, so it is not yours to delete here. To undo "
+                f"your edits to it, git_restore it; removing a tracked file is a change to propose, "
+                f"not to clean"))
+        if git("check-ignore", "-q", "--", rel).returncode == 0:
+            return ResultEnvelope(ok=False, error=(
+                f"git_clean: {rel!r} is IGNORED by git, so `git clean` will not remove it and "
+                f"pr_amend will not stage it; it does not reach your pull request"))
+        size = os.path.getsize(target)
+        try:
+            proc = subprocess.run(shlex.split(cmd), cwd=self.worktree, env=_worktree_env(), text=True,
+                                  capture_output=True, timeout=60)
+        except Exception as e:
+            return ResultEnvelope(ok=False, error=f"git_clean could not run: {type(e).__name__}: {e}")
+        if proc.returncode != 0 or os.path.exists(target):
+            return ResultEnvelope(ok=False, error=(
+                f"git_clean did not remove {rel!r}: {(proc.stderr or proc.stdout).strip()[:300] or 'still present'}"))
+        return ResultEnvelope(
+            ok=True,
+            result=(f"DELETED {rel} ({size} bytes), an untracked file. It is gone from your worktree "
+                    f"and will not be in your next pr_amend; nothing else was touched."),
+            witness_id=self._local._witness(f"git_clean {rel}"))
+
     def _do_pr_amend(self, intent: BeingIntent) -> ResultEnvelope:
         """Revise a proposal already open: commit onto the same branch, push, optionally
         replace the PR body. Same witnessed shape as pr_open.

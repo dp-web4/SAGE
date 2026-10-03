@@ -33,7 +33,7 @@ from sage.gateway.being_gate_client import _TOOL_SCHEMAS
 # Verbs that act on a BODY part, and the part the measured inventory must carry for them.
 BODY_VERBS = ("camera", "gaze", "speak", "pair_audio")
 # Verbs that act in the being's own git worktree.
-WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "pr_open", "pr_amend", "pr_sync")
+WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "pr_open", "pr_amend", "pr_sync", "git_clean")
 
 
 def canonical_toolset() -> List[str]:
