@@ -1121,6 +1121,7 @@ def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):
         "pr_amend": {"title": "amend the camera verb", "message": "a one line commit message"},
         # op=continue: start reads the PR base from <member>/work's upstream, which this repo lacks
         "pr_sync": {"op": "continue"},
+        "git_clean": {"path": "probe_test.py"},
         "pr_review": {"repo": "dp-web4/SAGE", "number": 1, "body": "b"},
         "pr_read": {"number": 1},
         "patch_apply": {"diff": "--- a/f.py\n+++ b/f.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n",
