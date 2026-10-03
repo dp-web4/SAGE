@@ -2080,6 +2080,19 @@ def decline_closing_for(cfg: Optional[dict]) -> Optional[str]:
     return v if v in DECLINE_CLOSINGS else None
 
 
+NO_RESULT_LINES = ("on",)
+
+
+def no_result_line_for(cfg: Optional[dict]) -> Optional[str]:
+    """instance.json `no_result_line`: whether the reflect turn's record ends with the line that
+    states what follows from acts that produced nothing (`_no_result_line`: refused effectors and
+    request_run's `ran: false`). PER-INSTANCE (RESEARCH_GENERALIZATION_RULE, recut of SAGE #133):
+    "say that it is unknown" is an instruction to the being, measured on cbp-being alone, so it is
+    off unless the value is in NO_RESULT_LINES, and it is recorded in every beat record where on."""
+    v = (cfg or {}).get("no_result_line")
+    return v if v in NO_RESULT_LINES else None
+
+
 ANSWERED_RUN_WAKES = ("skip",)
 
 
@@ -3083,15 +3096,84 @@ and they resolve inside it. Acting means calling a tool; a reply in words alone 
 """
 
 
-def _beat_record_text(*results) -> str:
+def _ran_nothing(e) -> bool:
+    """An ok return that says, in its own fields, that nothing ran: request_run's `ran: false`
+    (the request was handed to the seat; NOTHING HAS RUN YET). Read from the structured result
+    only, never from prose."""
+    res = getattr(e, "result", None)
+    return isinstance(res, dict) and res.get("ran") is False
+
+
+def _no_result_line(*results) -> str:
+    """The effectors tried this beat that NEVER once produced a result, stated as the conclusion
+    rather than left to be drawn (SAGE#132; recut of #133, PER-INSTANCE: instance.json
+    `no_result_line: "on"`, see no_result_line_for).
+
+    WHY THE PER-CALL VERDICTS ARE NOT ENOUGH. Measured on cbp-being, beat 2026-09-20 22:51:39Z:
+    `python3` was refused six times and succeeded zero times; the record carried all six
+    `-> REFUSED` lines into the reflect turn; the being reproduced them correctly in its journal
+    and then wrote "After appeal, the script ran successfully and passed all tests", marked
+    `[x] Confirm test suite passes`, and committed the same to long-term memory. The suite
+    scores 1 of 5. Every slot the reflect turn offers asks what was accomplished, and a beat that
+    ends unresolved has nowhere to go but an invented ending. This line is that missing place.
+
+    TODAY'S SHAPE (review of #133, 2026-09-28). The refused-effector form is rare now (4 beats in
+    6 days on CBP). The common one is `request_run` returning ok with `ran: false`: an ok verdict
+    in the record, and nothing ran. So "produced a result" means ok AND not `ran: false`. A
+    request_run that carried the seat's earlier answer (`unchanged`) still ran nothing this beat;
+    the line says that the earlier answer is the result for those unchanged bytes, because it is.
+
+    Derived from the trace only: an effector name, counts, and the `ran`/`unchanged` fields. No
+    prose is inspected and no claim is classified. Its standing caveat (from #133's own thread):
+    the later occurrences on 2026-09-21 had no refusal in them and the refusal-only version
+    returned "" for them, so this is a narrow instrument, not a fix for invented results."""
+    refused, unrun, carried, won = {}, {}, set(), set()
+    for res in results:
+        for i, e in ((res.trace if res is not None else []) or []):
+            if e.ok and not _ran_nothing(e):
+                won.add(i.effector)
+            elif e.ok:
+                unrun[i.effector] = unrun.get(i.effector, 0) + 1
+                if e.result.get("unchanged"):
+                    carried.add(i.effector)
+            elif e.refused:
+                refused[i.effector] = refused.get(i.effector, 0) + 1
+    parts = []
+    for k in sorted(set(refused) | set(unrun)):
+        if k in won:
+            continue
+        bits = []
+        if refused.get(k):
+            n = refused[k]
+            bits.append(f"{n} refusal{'s' if n != 1 else ''}")
+        if unrun.get(k):
+            n = unrun[k]
+            bits.append(f"{n} call{'s' if n != 1 else ''} that returned ran: false")
+        parts.append(f"{k} ({', '.join(bits)})")
+    if not parts:
+        return ""
+    line = (f"\n\nNothing you tried with these ran this beat: {'; '.join(parts)}. You have no "
+            f"result from them this beat, so anything you would have learned by running them is "
+            f"still unknown — say that it is unknown rather than what it might have shown.")
+    shown = sorted(c for c in carried if c not in won)
+    if shown:
+        line += (f" ({', '.join(shown)} returned the seat's EARLIER answer for a file that has "
+                 f"not changed since; that earlier answer is still the result for it.)")
+    return line
+
+
+def _beat_record_text(*results, no_result: bool = False) -> str:
     """What the being did this beat, for the reflect turn: the acts and their verdicts, nothing
-    else. Short by construction — this replaces carrying the whole beat forward."""
+    else. Short by construction — this replaces carrying the whole beat forward. `no_result`
+    (per-instance, no_result_line_for) appends `_no_result_line`; off, the text is unchanged."""
     lines = []
     for res in results:
         for i, e in ((res.trace if res is not None else []) or []):
             lines.append(_record_line(i, e))
-    return ("Record of what you did this beat:\n" + "\n".join(lines)) if lines else \
-        "You called no tools this beat."
+    if not lines:
+        return "You called no tools this beat."
+    return ("Record of what you did this beat:\n" + "\n".join(lines)
+            + (_no_result_line(*results) if no_result else ""))
 
 
 def _carry(convo: list, res) -> list:
@@ -3600,7 +3682,9 @@ def main(argv=None) -> int:
             reflect_convo = [
                 {"role": "system", "content": REFLECT_SYSTEM.format(name=name, machine=machine, member=args.member)},
                 {"role": "user", "content": (f"Your beat at {now:%Y-%m-%d %H:%M} UTC is ending.\n\n"
-                                             + _beat_record_text(explore, after)
+                                             + _beat_record_text(
+                                                 explore, after,
+                                                 no_result=bool(no_result_line_for(instance_config(instance))))
                                              + "\n\nYour own words this beat:\n"
                                              + ((explore.reply or "").strip()[:600] or "(you acted without closing words)"))},
             ]
@@ -3793,6 +3877,7 @@ def main(argv=None) -> int:
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
         "decline_closing": decline_closing_for(instance_config(instance)),
+        "no_result_line": no_result_line_for(instance_config(instance)),
         "answered_run_wake": answered_run_wake_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",

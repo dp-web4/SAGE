@@ -13,6 +13,7 @@
   "encryption_enabled": false,
   "think": true,
   "decline_closing": "standing_only",
+  "no_result_line": "on",
   "answered_run_wake": "skip",
   "upgraded_from": "cbp-gemma3-4b",
   "upgraded_on": "2026-09-12",
