@@ -1836,9 +1836,11 @@ class HestiaF1aDispatcher:
         speaker = _body.speaker_name()
         record_err = None
         try:
+            from sage.gateway.governed_turn import trial_name
+            trial = trial_name(self.memory_root)
             with open(os.path.join(self.memory_root, "spoken.jsonl"), "a") as f:
                 f.write(json.dumps({"ts": time.time(), "text": text, "speaker": speaker,
-                                    "seconds": done["seconds"]}) + "\n")
+                                    "seconds": done["seconds"], **({"trial": trial} if trial else {})}) + "\n")
         except Exception as e:
             record_err = f"{type(e).__name__}: {e}"[:200]
         self._call("hestia_record_outcome", {
@@ -2876,8 +2878,11 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=err)
         action_id = begin.get("actionId")
         try:
+            from sage.gateway.governed_turn import trial_name
+            trial = trial_name(self.memory_root)
             turn = conv.append(self.memory_root, to, speaker=self.member, text=text, via="say",
-                               witness=action_id, beat=self.host_session_id)
+                               witness=action_id, beat=self.host_session_id,
+                               extra={"trial": trial} if trial else None)
         except ValueError as e:
             self._call("hestia_record_outcome",
                        {"action_id": action_id, "success": False, "magnitude": 0.0})

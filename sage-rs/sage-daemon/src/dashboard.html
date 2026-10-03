@@ -161,6 +161,10 @@
     font-weight: 700; font-size: 11px; margin-bottom: 2px;
     text-transform: uppercase; letter-spacing: 0.5px;
   }
+  .chat-msg .trial-tag {
+    font-weight: 600; font-size: 10px; margin-left: 6px; padding: 0 5px; border-radius: 3px;
+    background: #3a2f10; color: #e8c060; border: 1px solid #6a5420; text-transform: none;
+  }
   .chat-msg.user .sender { color: var(--accent); }
   .chat-msg.sage .sender { color: var(--state-color); }
   .chat-msg .time { font-size: 9px; color: var(--text-dim); float: right; margin-left: 8px; }
@@ -459,11 +463,13 @@ const chatInput = document.getElementById('chat-input');
 const chatSend = document.getElementById('chat-send');
 const chatLog = document.getElementById('chat-log');
 
-function appendChat(sender, text, cssClass, timestamp) {
+function appendChat(sender, text, cssClass, timestamp, trial) {
   const div = document.createElement('div');
   div.className = 'chat-msg ' + (cssClass || 'sage');
   const timeStr = timestamp ? '<span class="time">' + formatTime(timestamp) + '</span>' : '';
-  div.innerHTML = '<div class="sender">' + timeStr + escapeHtml(sender) + '</div>' +
+  // a live trial's label, beside the words and never in them (SAGE #337)
+  const trialStr = trial ? ' <span class="trial-tag">' + 'TEST · ' + escapeHtml(trial) + '</span>' : '';
+  div.innerHTML = '<div class="sender">' + timeStr + escapeHtml(sender) + trialStr + '</div>' +
                   '<div>' + escapeHtml(text) + '</div>';
   chatLog.appendChild(div);
   chatLog.scrollTop = chatLog.scrollHeight;
@@ -562,7 +568,7 @@ async function loadConversation(id) {
                       ' turns. Nothing is ever deleted.';
       chatLog.appendChild(n);
     }
-    (d.turns || []).forEach(t => appendChat(t.from, t.text, kindOf(t.from), t.ts));
+    (d.turns || []).forEach(t => appendChat(t.from, t.text, kindOf(t.from), t.ts, t.trial));
     const waiting = (c && c.awaiting_being) || 0;
     convState.textContent = writable
       ? (waiting ? waiting + ' awaiting the being' : 'up to date')
