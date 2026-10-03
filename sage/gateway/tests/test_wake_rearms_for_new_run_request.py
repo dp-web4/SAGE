@@ -87,3 +87,109 @@ def test_a_new_run_is_owed_as_before(inst):
     say(inst, SEAT, "answer 2")
     s2 = say(inst, BEING, "q2")
     assert wake(inst) == s2
+
+
+# ---------------------------------------------------------------------------------------------
+# answered_run_wake "skip" (per-instance; recut of SAGE #154). A request the seat has ALREADY
+# ANSWERED, for the same path, bytes and arguments, owes no wake even when it opens a new run.
+# The answer must be bound to the request (GPT's hold on #154), never "someone spoke since".
+
+def ran(inst, seq, digest="aaaaaaaaaaaa"):
+    return say(inst, SEAT, f"[request_run] I ran notes/x.py (sha {digest}) with no arguments, "
+                           f"in a sandbox. exit code 1.\n\nstderr:\nboom\n\nAnswers your request seq {seq}.")
+
+
+def test_default_still_wakes_for_an_answered_repeat(inst):
+    """The default is unchanged: this is what every instance without the key keeps."""
+    a = request(inst, "aaaaaaaaaaaa")
+    assert wake(inst) == a
+    ran(inst, a)
+    b = request(inst, "aaaaaaaaaaaa")
+    assert conv.wake_is_owed(inst, CID, BEING) == b
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=False) == b
+
+
+def test_skip_answered_owes_no_wake_for_a_repeat_the_seat_ran(inst):
+    a = request(inst, "aaaaaaaaaaaa")
+    assert wake(inst) == a
+    ran(inst, a)
+    request(inst, "aaaaaaaaaaaa")
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) is None
+    # ...and a third identical ask in the same run still owes nothing
+    request(inst, "aaaaaaaaaaaa")
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) is None
+
+
+def test_skip_answered_counts_a_decline_as_the_answer(inst):
+    a = request(inst, "aaaaaaaaaaaa")
+    wake(inst)
+    say(inst, SEAT, f"[request_run] I did not run notes/x.py. The sha is unchanged.\n\n"
+                    f"Answers your request seq {a}.")
+    request(inst, "aaaaaaaaaaaa")
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) is None
+
+
+def test_an_unrelated_seat_message_is_not_the_answer(inst):
+    """GPT's control on #154: request A -> unrelated seat message -> same-byte A must still
+    wake. Only a turn naming A's seq, or a run/decline result for the same file, answers it."""
+    a = request(inst, "aaaaaaaaaaaa")
+    wake(inst)
+    say(inst, SEAT, "Unrelated: the hub was restarted at 10:00Z.")
+    b = request(inst, "aaaaaaaaaaaa")
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) == b
+    # a result for ANOTHER file is not an answer either
+    wake(inst)
+    say(inst, SEAT, "[request_run] I ran notes/other.py (sha aaaaaaaaaaaa). exit code 0.")
+    c = request(inst, "aaaaaaaaaaaa")
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) == c
+
+
+def test_new_bytes_new_arguments_rerun_and_prose_still_wake(inst):
+    a = request(inst, "aaaaaaaaaaaa")
+    wake(inst)
+    ran(inst, a)
+    # changed bytes: new work
+    b = request(inst, "bbbbbbbbbbbb")
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) == b
+    wake(inst)
+    ran(inst, b, "bbbbbbbbbbbb")
+    # same bytes, different arguments: new work
+    c = say(inst, BEING, "[request_run] notes/x.py\nwhy: check\n(10 bytes, sha256:bbbbbbbbbbbb; "
+                         "the seat decides)\nargs: --epochs 3")
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) == c
+    wake(inst)
+    say(inst, SEAT, f"[request_run] I ran notes/x.py (sha bbbbbbbbbbbb) with --epochs 3. exit 0.\n\n"
+                    f"Answers your request seq {c}.")
+    # an explicit rerun always wakes
+    d = say(inst, BEING, "[request_run] notes/x.py\nwhy: again\n(10 bytes, sha256:bbbbbbbbbbbb; "
+                         "the seat decides)\nrerun: true")
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) == d
+    wake(inst)
+    say(inst, SEAT, f"[request_run] I ran notes/x.py (sha bbbbbbbbbbbb). exit 0.\n\n"
+                    f"Answers your request seq {d}.")
+    # a skipped repeat followed by prose in the same run: the prose is new mail
+    e = request(inst, "bbbbbbbbbbbb")
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) is None
+    say(inst, BEING, "Why does it still fail at line 12?")
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) == e
+
+
+def test_a_result_naming_only_older_requests_does_not_answer_a_newer_one(inst):
+    """seat_run_requests.pending()'s exception, kept here: a decline of an older seq as
+    superseded must not close the newer request it was superseded by."""
+    a = request(inst, "aaaaaaaaaaaa")
+    wake(inst)
+    b = request(inst, "aaaaaaaaaaaa")   # same run, same bytes
+    say(inst, SEAT, f"[request_run] I did not run notes/x.py. Superseded.\n\nAnswers your request seq {a - 1}.")
+    c = request(inst, "aaaaaaaaaaaa")
+    # b is an identical request that was never named; but a (also identical) was asked before
+    # the result and the result names only an older seq, so neither counts as answered
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) == c, (a, b, c)
+
+
+def test_a_result_for_other_bytes_does_not_answer_these(inst):
+    a = request(inst, "aaaaaaaaaaaa")
+    wake(inst)
+    say(inst, SEAT, "[request_run] I ran notes/x.py (sha cccccccccccc). exit code 0.")
+    b = request(inst, "aaaaaaaaaaaa")
+    assert conv.wake_is_owed(inst, CID, BEING, skip_answered=True) == b, a

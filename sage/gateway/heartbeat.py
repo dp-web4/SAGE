@@ -458,6 +458,22 @@ def asks_about_change(text: str) -> bool:
 ANSWER_CONTEXT_TURNS = 8
 
 
+def answer_temperature(instance) -> Optional[float]:
+    """Opt-in per instance: instance.json "answer_temperature" (0..1.5) samples the answer turn alone.
+
+    dp, 2026-10-02, on sprout-being's recurring themes: "that isn't 'wrong' but i'm thinking about how to get it
+    to 'diversify' a bit without explicitly rewriting things." A sampling dial, nothing about what to say.
+    After #316 began showing the answer turn its own recent lines, verbatim self-echo (a 6-word phrase from its
+    previous 3 replies) rose 7% -> 21%. Offline, today's room exchanges x3: at 0.4 echo 3/15 and 1.40 motifs per
+    reply; at 0.7 echo 0/14 and 0.86, answering 14/15 and picking up the person's words 7/14 (vs 8/15)."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        v = instance_config(instance).get("answer_temperature")
+        return None if v is None else max(0.0, min(1.5, float(v)))
+    except Exception:
+        return None
+
+
 def answer_context_on(instance) -> bool:
     try:
         from sage.gateway.governed_turn import instance_config
@@ -713,7 +729,8 @@ def _answer_generate(llm, msgs, schema=None):
 
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
-                     on_generate=None, acts: str = "", changes: str = "", context: str = ""):
+                     on_generate=None, acts: str = "", changes: str = "", context: str = "",
+                     temperature: Optional[float] = None):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -727,7 +744,16 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     user = "\n\n".join(p for p in (context, acts, changes, ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
             {"role": "user", "content": user}]
-    r, retried = _answer_generate(llm, msgs, answer_schema_for(selected.cid))
+    # THIS TURN'S SAMPLING ONLY (answer_temperature): set for the answer generate, restored after, so explore
+    # and reflect keep the beat's temperature.
+    _prior_t = getattr(llm, "temperature", None)
+    if temperature is not None and _prior_t is not None:
+        llm.temperature = float(temperature)
+    try:
+        r, retried = _answer_generate(llm, msgs, answer_schema_for(selected.cid))
+    finally:
+        if temperature is not None and _prior_t is not None:
+            llm.temperature = _prior_t
     raw = (r or {}).get("raw") or {}
     content = ((r or {}).get("content") or "").strip()
     thinking = ((raw.get("message") or {}).get("thinking") or "").strip()
@@ -773,6 +799,8 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
             form["why"] = "chose to answer but wrote no message"
         else:
             form["why"] = "chose silence"
+    if temperature is not None:
+        form["temperature"] = float(temperature)
     res.answer_form = form
     return res
 
@@ -2052,6 +2080,21 @@ def decline_closing_for(cfg: Optional[dict]) -> Optional[str]:
     return v if v in DECLINE_CLOSINGS else None
 
 
+ANSWERED_RUN_WAKES = ("skip",)
+
+
+def answered_run_wake_for(cfg: Optional[dict]) -> Optional[str]:
+    """instance.json `answered_run_wake`: whether a request_run the seat has ALREADY ANSWERED
+    (same path, bytes and arguments) wakes the seat again. PER-INSTANCE
+    (RESEARCH_GENERALIZATION_RULE, recut of SAGE #154): absent, or any value not in
+    ANSWERED_RUN_WAKES, means the default, where such a request opening a new run wakes the
+    seat. `"skip"` sends and records the request but owes no wake for it
+    (`conversations.wake_is_owed(skip_answered=True)`). It changes the seat's wake rate, which
+    was measured on cbp-being alone, so it is recorded in every beat record where it is on."""
+    v = (cfg or {}).get("answered_run_wake")
+    return v if v in ANSWERED_RUN_WAKES else None
+
+
 def own_state(instance: Path, member: str = "", entrusted: str = "",
               per_conv: int = CONV_PER_CONV,
               turn_chars: Optional[int] = CONV_TURN_CHARS,
@@ -2387,6 +2430,27 @@ def event_answers(e: dict, selected) -> bool:
         return selected.cid == "room" and words.strip() == str(selected.text or "")[:80].strip()
     m = re.search(r"conversation '([a-z0-9-]+)'", desc)
     return bool(m) and m.group(1) == selected.cid
+
+
+def explore_turn_mode(instance) -> str:
+    """Opt-in per instance: instance.json "explore_turn": "json" (explore and posture act through
+    closed JSON objects instead of native tool calls; see being_tool_loop._json_act)."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return "json" if instance_config(instance).get("explore_turn") == "json" else "tools"
+    except Exception:
+        return "tools"
+
+
+def explore_json_steps(instance, default: int) -> int:
+    """Acts per explore/posture turn in the JSON act form (instance.json "explore_json_steps", default 3).
+    Each act is two generates, and offline turns never chose "done" by themselves: 6 of 6 ran to an
+    8-step cap (2.5-7 min). Native turns rarely reach the cap because they end in prose."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return max(1, min(default, int(instance_config(instance).get("explore_json_steps", 3))))
+    except Exception:
+        return min(default, 3)
 
 
 def preempt_on(instance) -> bool:
@@ -3311,7 +3375,17 @@ def main(argv=None) -> int:
     # WHO IT CAN REACH (peer-to-peer P2, 2026-10-01): peer_ask's `to` is closed over real names
     from sage.gateway import peers as _peers
     _reach = _peers.reachable(args.member)
-    _enums = {("peer_ask", "to"): _reach} if _reach else None
+    _enums = {("peer_ask", "to"): _reach} if _reach else {}
+    # and `say` only to a conversation it can write in (GPT on #311: the recipient was still free text)
+    try:
+        from sage.gateway import conversations as _conv_say
+        _writable = sorted(m["id"] for m in _conv_say.listing(instance)
+                           if args.member in (m.get("writable_by") or m.get("participants") or []))
+        if _writable:
+            _enums[("say", "to")] = _writable
+    except Exception:
+        pass
+    _enums = _enums or None
     _explore_specs = _toolset.specs(_unavail, _enums)
     # the names are DERIVED from the specs offered, never kept beside them: the seed's tool list
     # and the window's schema measurement must describe exactly what the model is handed
@@ -3431,22 +3505,26 @@ def main(argv=None) -> int:
     try:
         _phase("wake", "explore", host_session_id)
         _preempt = preempt_on(instance)
+        _explore_steps = (explore_json_steps(instance, args.max_steps)
+                          if explore_turn_mode(instance) == "json" else args.max_steps)
 
         def _yield_for_a_person():
             got = p0_since(_beat_started) if _preempt else []
             return got[0].get("descriptor") or got[0].get("kind") if got else None
 
-        explore = run_ollama_tool_turn(client, llm, seed, max_steps=args.max_steps,
+        explore = run_ollama_tool_turn(client, llm, seed, max_steps=_explore_steps,
                                        tools=_explore_specs, on_generate=_on_generate("explore"),
-                                       should_yield=_yield_for_a_person)
+                                       should_yield=_yield_for_a_person,
+                                       act_form=explore_turn_mode(instance))
         convo = _carry(seed, explore)
         after = None
         if posture_turn is not None:
             convo.append({"role": "user", "content": posture_turn})
             _phase("wake", "posture", host_session_id)
-            after = run_ollama_tool_turn(client, llm, convo, max_steps=args.max_steps,
+            after = run_ollama_tool_turn(client, llm, convo, max_steps=_explore_steps,
                                          tools=_explore_specs, on_generate=_on_generate("posture"),
-                                         should_yield=_yield_for_a_person)
+                                         should_yield=_yield_for_a_person,
+                                       act_form=explore_turn_mode(instance))
             convo = _carry(convo, after)
         # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
         # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
@@ -3590,7 +3668,8 @@ def main(argv=None) -> int:
                                           member=args.member, on_generate=_on_generate("answer"),
                                           acts=_acts, changes=_changes,
                                           context=(answer_context_block(instance, args.member, selected)
-                                                   if answer_context_on(instance) else ""))
+                                                   if answer_context_on(instance) else ""),
+                                          temperature=answer_temperature(instance))
             else:
                 answer = run_ollama_tool_turn(
                     client, llm,
@@ -3636,6 +3715,9 @@ def main(argv=None) -> int:
         for dup in (getattr(res, "duplicates", None) or []):
             interventions.append({"kind": "duplicate", "phase": ph, "effector": dup.get("effector"),
                                   "suppressed": "a second execution of an identical call in the same turn"})
+        for jf in (getattr(res, "json_arg_failures", None) or []):
+            interventions.append({"kind": "json_arg_failure", "phase": ph, **jf,
+                                  "suppressed": "an act whose arguments could not be formed (no act; not empty args)"})
         for sv in (getattr(res, "salvaged", None) or []):
             interventions.append({"kind": "salvage", "phase": ph, "effector": sv.get("effector"), "form": sv.get("form"),
                                   "suppressed": "text-channel narration in place of a native tool call"})
@@ -3711,6 +3793,7 @@ def main(argv=None) -> int:
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
         "decline_closing": decline_closing_for(instance_config(instance)),
+        "answered_run_wake": answered_run_wake_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,

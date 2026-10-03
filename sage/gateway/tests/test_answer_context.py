@@ -82,3 +82,27 @@ def test_an_allowance_is_per_recipient_and_one_way(tmp_path):
     assert hb.answer_context_sources(h, "dp") == ["dp", "room"]
     assert hb.answer_context_sources(h, "room") == ["room"], "dp may see the room; the room does not see dp"
     assert "whirlpool" not in hb.answer_context_block(h, ME, hb.SelectedTurn("room", t))
+
+
+def test_the_answer_temperature_samples_the_answer_turn_alone_and_is_restored(tmp_path):
+    seen = []
+
+    class TLLM(LLM):
+        temperature = 0.4
+
+        def get_chat_response(self, messages, tools=None, fmt=None):
+            seen.append(self.temperature)
+            return super().get_chat_response(messages, tools, fmt)
+    h, t = _home()
+    llm = TLLM(json.dumps({"answer": False, "message": ""}))
+    res = hb.answer_turn_json(Client(), llm, hb.SelectedTurn("room", t), name="s", machine="s", member=ME,
+                              temperature=0.7)
+    assert seen == [0.7] and llm.temperature == 0.4, "this turn only; the beat's temperature is restored"
+    assert res.answer_form["temperature"] == 0.7
+    hb.answer_turn_json(Client(), llm, hb.SelectedTurn("room", t), name="s", machine="s", member=ME)
+    assert seen[-1] == 0.4, "unset: unchanged"
+    assert hb.answer_temperature(tmp_path) is None
+    (tmp_path / "instance.json").write_text('{"answer_temperature": 9}')
+    assert hb.answer_temperature(tmp_path) == 1.5, "clamped"
+    src = Path(hb.__file__).read_text()
+    assert "temperature=answer_temperature(instance)" in src

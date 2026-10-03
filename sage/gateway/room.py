@@ -60,6 +60,18 @@ def heard_id(h: dict) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
+UNCLEAR_MARK = {"tail": "{t} [the rest was unclear]", "head": "[the start was unclear] {t}",
+                "middle": "{t} [part of it was unclear]"}
+
+
+def heard_text(h: dict) -> str:
+    """The heard words, saying where unclear speech was left out (listening.judge_segments), so a sentence the
+    transcriber gave up on is not presented as a sentence that ended there."""
+    t = str(h.get("text", "")).strip()
+    mark = UNCLEAR_MARK.get(str(h.get("unclear") or ""))
+    return mark.format(t=t) if mark and t else t
+
+
 def ingest_heard(instance: Path, member: str, inventory: Optional[dict] = None,
                  heard: Optional[list] = None) -> list:
     """Carry heard words into the room as `voice` turns, each exactly once.
@@ -89,7 +101,7 @@ def ingest_heard(instance: Path, member: str, inventory: Optional[dict] = None,
         if hid in have:
             continue
         mic = body._heard_mic([h], inventory)
-        t = conv.append(instance, ROOM, speaker=VOICE, text=str(h["text"]).strip(), via="voice",
+        t = conv.append(instance, ROOM, speaker=VOICE, text=heard_text(h), via="voice",
                         ts=_iso(h["ts"]), enforce_write=False, extra={"heard_id": hid, "mic": mic})
         have.add(hid)
         out.append(t)
