@@ -30,9 +30,12 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 
+from sage.gateway.fleet_paths import hub_notify_path
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap
 
-HUB_NOTIFY = os.path.expanduser("~/ai-workspace/private-context/hub-mesh/hub-notify.sh")
+# Derived, not the Linux seats' layout (fleet_paths): on McNugget private-context is ~/repos/private-context,
+# and the hard-coded ~/ai-workspace path failed every peer send the being made.
+HUB_NOTIFY = str(hub_notify_path())
 
 
 def _row_id(r: Dict[str, Any]) -> Optional[int]:

@@ -49,6 +49,49 @@ def test_memory_read_says_missing_empty_or_directory_never_a_silent_zero():
     assert r.ok and r.result.startswith("[directory:") and "- a.md" in r.result
 
 
+def test_a_miss_one_directory_away_names_where_the_file_is():
+    """cbp-being, 2026-09-21: read `mechanism-training-script.py` from its root, was told it
+    did not exist while it sat in notes/, and wrote a "verified" note about it. 28 of 76 of
+    its misses were this shape. The answer must point at the file, and a true absence must
+    still read as one."""
+    disp, root = _disp()
+    os.makedirs(os.path.join(root, "notes"), exist_ok=True)
+    open(os.path.join(root, "notes", "script.py"), "w").write("print(1)")
+    r = disp(BeingIntent("memory_read", {"path": "script.py"}), _ALLOW)
+    assert r.ok and r.result.startswith("[no such path:")
+    assert "'notes/script.py'" in r.result and "Nothing was read" in r.result
+    open(os.path.join(root, "top.md"), "w").write("x")
+    r = disp(BeingIntent("memory_read", {"path": "notes/top.md"}), _ALLOW)
+    assert "'top.md'" in r.result, "the reverse direction: notes/ asked, root holds it"
+    r = disp(BeingIntent("memory_read", {"path": "never.md"}), _ALLOW)
+    assert "not an empty file" in r.result and "DOES exist" not in r.result
+
+
+def test_a_miss_with_several_same_named_files_lists_them_all_and_prefers_none():
+    """GPT review on #140: with notes/script.py AND scratch/script.py, the old answer listed
+    both and then called the first in sort order the one the being "probably meant". Nothing
+    supports that ranking, and this repair exists to stop invention after a miss. Every match
+    is named the same way, none is preferred, and a count beyond the shown ones is stated."""
+    disp, root = _disp()
+    for d in ("notes", "scratch"):
+        os.makedirs(os.path.join(root, d), exist_ok=True)
+        open(os.path.join(root, d, "script.py"), "w").write("print(1)")
+    r = disp(BeingIntent("memory_read", {"path": "script.py"}), _ALLOW)
+    assert r.ok and r.result.startswith("[no such path:"), r.result
+    assert "'notes/script.py'" in r.result and "'scratch/script.py'" in r.result, r.result
+    assert "2 files with that name" in r.result, r.result
+    assert "probably" not in r.result and "meant that one" not in r.result, r.result
+    # no command pre-filled for either one: that would be the same preference by other means
+    assert '"path": "notes/script.py"' not in r.result, r.result
+    assert "Nothing was read" in r.result
+    # more than the shown cap: the rest are counted, not dropped
+    for d in ("a1", "a2", "a3", "a4", "a5"):
+        os.makedirs(os.path.join(root, d), exist_ok=True)
+        open(os.path.join(root, d, "script.py"), "w").write("x")
+    r = disp(BeingIntent("memory_read", {"path": "script.py"}), _ALLOW)
+    assert "7 files with that name" in r.result and "and 2 more" in r.result, r.result
+
+
 def test_path_escape_is_error():
     disp, _ = _disp()
     env = disp(BeingIntent("memory_write", {"path": "/etc/cron.d/x", "content": "x"}), _ALLOW)
@@ -395,6 +438,61 @@ def test_appending_to_the_journal_does_not_offer_retire_note():
     assert env.ok and "appended" in env.result and "retire_note" not in env.result
 
 
+_PROGRAM = ("import numpy as np\n\n\ndef generate_data(n):\n    return np.zeros(n)\n\n\n"
+            "def train(x):\n    return x.sum()\n\n\nif __name__ == \"__main__\":\n"
+            "    print(train(generate_data(4)))\n")
+
+
+def test_appending_a_whole_second_program_names_a_new_name_as_the_way_to_start_fresh():
+    """2026-09-24 15:19Z: cbp-being chose "a new file", then wrote the new program twice to the
+    old file's name; both copies were appended and retire_note refused the path. Outside notes/
+    and scratch/ a fresh name is the only fresh start, so the receipt must name it — and the
+    named door must actually create a file."""
+    import re
+    disp, root = _disp()
+    disp(BeingIntent("memory_write", {"path": "train.py", "content": _PROGRAM}), _ALLOW)
+    env = disp(BeingIntent("memory_write", {"path": "train.py", "content": _PROGRAM}), _ALLOW)
+    assert env.ok and "appended" in env.result and "does not exist yet" in env.result, env.result
+    assert "train-new.py" in env.result and "retire_note" not in env.result
+    new = disp(BeingIntent("memory_write", {"path": "train-new.py", "content": "a = 3"}), _ALLOW)
+    assert new.ok and new.result.startswith("created train-new.py"), new.result
+
+
+def test_the_fresh_name_hint_never_names_a_file_that_exists():
+    """cbp-claude's review of #197 (2026-09-28), bug 1: the hint named train-new.py even when
+    that file already existed, so the door it named was another append. Bump until free, the
+    rule #240 uses for the refusal."""
+    import re
+    from pathlib import Path
+    disp, root = _disp()
+    disp(BeingIntent("memory_write", {"path": "train.py", "content": _PROGRAM}), _ALLOW)
+    disp(BeingIntent("memory_write", {"path": "train-new.py", "content": "a = 1"}), _ALLOW)
+    disp(BeingIntent("memory_write", {"path": "train-new2.py", "content": "a = 1"}), _ALLOW)
+    env = disp(BeingIntent("memory_write", {"path": "train.py", "content": _PROGRAM}), _ALLOW)
+    assert env.ok and "does not exist yet" in env.result, env.result
+    named = re.search(r"for example (\S+?\.py)", env.result).group(1)
+    assert not (Path(root) / named).exists(), (named, env.result)
+    assert named == "train-new3.py", env.result
+
+
+def test_a_program_written_in_parts_gets_no_fresh_name_hint():
+    """cbp-claude's review of #197, bug 2: the hint fired on every successful append to a
+    top-level .py, including a program legitimately written in parts. A part that adds new
+    definitions below the old ones is not a second program and is told nothing about a new file."""
+    disp, root = _disp()
+    part1 = "import numpy as np\n\n\ndef generate_data(n):\n    return np.zeros(n)\n"
+    part2 = "def train(x):\n    return x.sum()\n"
+    part3 = "if __name__ == \"__main__\":\n    print(train(generate_data(4)))\n"
+    assert disp(BeingIntent("memory_write", {"path": "train.py", "content": part1}), _ALLOW).ok
+    for part in (part2, part3):
+        env = disp(BeingIntent("memory_write", {"path": "train.py", "content": part}), _ALLOW)
+        assert env.ok and "appended" in env.result, env.result
+        assert "does not exist yet" not in env.result and "train-new" not in env.result, env.result
+    # and a non-program line appended to a script is not a second program either
+    env = disp(BeingIntent("memory_write", {"path": "train.py", "content": "a = 2"}), _ALLOW)
+    assert env.ok and "does not exist yet" not in env.result, env.result
+
+
 def test_appending_to_an_existing_empty_file_does_not_say_created():
     """An existing empty file has 0 lines but this write did not create it (GPT review, #141)."""
     disp, root = _disp()
@@ -515,6 +613,41 @@ def test_memory_edit_by_line_refuses_lines_that_do_not_exist_and_changes_nothing
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": "line 2", "new": ""}), _ALLOW)
     assert not r.ok and "must be line numbers" in r.error
     assert (home / "notes" / "s.py").read_text() == "a\nb\n"
+
+
+def test_a_range_edit_missed_only_by_indentation_names_the_space_counts():
+    """cbp-being 2026-09-24: old without the line's 4 leading spaces, refused twice with the
+    line shown, then appended with memory_write instead. The refusal now gives the counts."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    before = "def main():\n    m = M(10)\n    run(m)\n"
+    f.write_text(before)
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 2,
+                                         "old": "m = M(10)", "new": "m = M(50)"}), _ALLOW)
+    assert not r.ok
+    assert "Line 2 in the file starts with 4 spaces; that line of your old starts with 0" in r.error, r.error
+    assert "change nothing" not in r.error
+    assert f.read_text() == before
+    # multi-line: the count names the first line that differs
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 1, "end_line": 3,
+                                         "old": "def main():\n    m = M(10)\nrun(m)", "new": "x"}), _ALLOW)
+    assert not r.ok and "Line 3 in the file starts with 4 spaces" in r.error, r.error
+    # A real content miss gets no indentation note: the note must not explain a wrong line.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3,
+                                         "old": "m = M(10)", "new": "m = M(50)"}), _ALLOW)
+    assert not r.ok and "spaces at the start" not in r.error
+    assert f.read_text() == before
+    # 2026-09-27 04:58Z: the same miss with new identical to old would be a no-op even fixed
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 2,
+                                         "old": "m = M(10)", "new": "m = M(10)"}), _ALLOW)
+    assert not r.ok and "Line 2 in the file starts with 4 spaces" in r.error
+    assert "would change nothing" in r.error, r.error
+    # with the spaces, it lands
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2,
+                                         "old": "    m = M(10)", "new": "    m = M(50)"}), _ALLOW)
+    assert r.ok and f.read_text() == "def main():\n    m = M(50)\n    run(m)\n"
 
 
 def test_memory_edit_with_lines_and_old_is_a_checked_edit():
@@ -1308,3 +1441,109 @@ def test_dated_lines_count_from_the_end_of_their_written_precision():
     at_minute = datetime(2026, 9, 29, 12, 1, tzinfo=timezone.utc)
     assert old("2026-09-28T12:00Z", at_minute)      # every reading is > 24 h
     assert not old("2026-09-28T12:00Z", datetime(2026, 9, 29, 12, 0, 59, tzinfo=timezone.utc))
+
+
+def test_a_record_write_stamps_when_each_named_code_file_last_changed():
+    """2026-09-22: 14 of cbp-being's beats claimed a code change no beat had made, with the
+    refusal in view. The receipt of the journal write now carries the named file's mtime."""
+    import datetime as dt
+    import os
+    import time
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "experiments").mkdir(exist_ok=True)
+    s = home / "mechanism.py"
+    s.write_text("x = 1\n")
+    old = time.time() - 7200
+    os.utime(s, (old, old))
+    (home / "notes" / "helper.py").write_text("y = 2\n")
+    (home / "experiments" / "train.py").write_text("z = 3\n")
+    r = disp(BeingIntent("memory_write", {"path": "journal.md", "content":
+        "Fixed mechanism.py. Also touched helper.py and ghost.py."}), _ALLOW)
+    assert r.ok
+    stamp = dt.datetime.fromtimestamp(old, dt.timezone.utc).strftime("%Y-%m-%d %H:%M")
+    assert f"mechanism.py was last changed at {stamp} UTC" in r.result, r.result
+    assert "notes/helper.py was last changed at" in r.result, "a bare name found under notes/ says where"
+    assert "ghost.py was not found at the top of your home or in notes/" in r.result, r.result
+    # the 09-28 review's case: a bare name that lives elsewhere must not be called absent
+    r = disp(BeingIntent("memory_write", {"path": "todo.md", "content": "- [done] fix train.py"}), _ALLOW)
+    assert "not a file" not in r.result and "not found at the top of your home or in notes/" in r.result
+    r = disp(BeingIntent("memory_write", {"path": "todo.md", "content": "- [done] fix experiments/train.py"}), _ALLOW)
+    assert "experiments/train.py was last changed at" in r.result, r.result
+
+
+def test_a_record_write_never_stamps_a_file_outside_the_home():
+    import tempfile
+    disp, root = _disp()
+    outside = Path(tempfile.mkdtemp()) / "secret.py"
+    outside.write_text("k = 1\n")
+    rel = os.path.relpath(outside, root)
+    r = disp(BeingIntent("memory_write", {"path": "journal.md", "content": f"see {rel}"}), _ALLOW)
+    assert r.ok and "last changed" not in r.result, r.result
+    assert "was not found in your home" in r.result, r.result
+
+
+def test_a_record_write_naming_no_code_file_is_unchanged():
+    disp, root = _disp()
+    r = disp(BeingIntent("memory_write", {"path": "journal.md", "content": "a quiet beat"}), _ALLOW)
+    assert r.ok and "Files this names" not in r.result
+    # a .py write gets its parse status, not stamps
+    r = disp(BeingIntent("memory_write", {"path": "notes/a.py", "content": "import b  # b.py"}), _ALLOW)
+    assert r.ok and "Files this names" not in r.result
+
+
+def test_memory_edit_reads_delete_lines_as_the_range():
+    """2026-09-24 05:57Z: cbp-being sent start_line 180, delete_lines 5, new "". Nothing read
+    the 5, end_line defaulted to 180, and one line was deleted while the being journaled five."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("a\nb\nc\nd\ne\nf\ng\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": "2", "delete_lines": "5", "new": ""}), _ALLOW)
+    assert r.ok, r.error
+    assert f.read_text() == "a\ng\n"
+    assert "replaced lines 2-6 (5 lines)" in r.result, r.result
+
+
+def test_memory_edit_delete_lines_agrees_with_end_line_or_refuses():
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    f.write_text("a\nb\nc\nd\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 2, "delete_lines": 3, "new": ""}), _ALLOW)
+    assert not r.ok and "name different ranges" in r.error, r.error
+    for bad in (0, -1, "five"):
+        r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "delete_lines": bad, "new": ""}), _ALLOW)
+        assert not r.ok and "Nothing was changed" in r.error and "delete_lines 7" in r.error, (bad, r.error)
+    # a count that runs past the end is refused by the existing range check, not truncated
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 3, "delete_lines": 5, "new": ""}), _ALLOW)
+    assert not r.ok and "are not all in" in r.error, r.error
+    # agreeing end_line and delete_lines is fine
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": 3, "delete_lines": 2, "new": ""}), _ALLOW)
+    assert r.ok and f.read_text() == "a\nd\n", r.error
+
+
+def test_a_missed_anchor_whose_prefix_repeats_names_every_place():
+    """2026-09-21: cbp-being's refused `old` began with 3 lines of a stray block (1610-1612)
+    that also occur at 330-332, the working branch. Naming only the first match says "your
+    lines are at 330"; a 4B acting on that deletes code that works. Every place is named, at
+    the first line where the places differ (the line right after the prefix was shared)."""
+    from sage.gateway.reference_f1a import _where_it_diverged
+    block = ["            noise=0.1,", "        )", "        print('gen')", "    else:"]
+    have = (["# top"] + block + ["        print('Loading')", "        X, y = load()"]
+            + ["# middle", "main()"] + block + ["        X = load()", "        y = load2()"])
+    text = "\n".join(have)
+    msg = _where_it_diverged(text, "\n".join(block[:3] + ["        print('X shape')"]))
+    assert "in 2 places" in msg
+    assert "lines 2-4" in msg and "lines 10-12" in msg
+    assert "print('Loading')" in msg and "X = load()" in msg, "each place shown where they differ"
+
+
+def test_a_missed_anchor_with_one_match_reads_as_before():
+    from sage.gateway.reference_f1a import _where_it_diverged
+    text = "a\nb\nc\nd"
+    msg = _where_it_diverged(text, "b\nc\nX")
+    assert "match lines 2-3 of the file exactly" in msg and "places" not in msg

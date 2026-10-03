@@ -486,7 +486,71 @@ def _request_digest(text: str) -> Optional[str]:
     return m.group(1) if m else f"untagged:{text}"
 
 
-def wake_is_owed(instance: Path, conv_id: str, speaker: str) -> Optional[int]:
+# How a seat turn names the request it answers (seat_run_requests.py `answers_line`, and the
+# hand-written forms it still recognises). Kept in step with that script's `_NAMES`.
+_ANSWER_NAMES = re.compile(r"\b(?:request seq|answering your seq|about seq|on your seq)\s+"
+                           r"(\d+(?:\s*(?:,|and)\s*(?:seq\s+)?\d+)*)", re.I)
+_RESULT_HEAD = re.compile(r"\[request_run\] I (?:ran|did not run) (\S+)(?: \(sha ([0-9a-f]+)\))?")
+
+
+def _request_key(text: str) -> Optional[tuple]:
+    """(path, digest, extra argument lines) of a `[request_run]` turn, or None when it cannot be
+    shown to repeat anything: not a request, no sha256 tag, or it asks for a rerun. The extra
+    lines are the being's own arguments (flags, `rerun`, ...) that request_run carries to the
+    seat: the same file with different arguments is different work."""
+    lines = str(text or "").splitlines()
+    if not lines or not lines[0].startswith("[request_run] "):
+        return None
+    m = re.search(r"sha256:([0-9a-f]{6,64})", text)
+    if not m:
+        return None
+    extra = tuple(sorted(x.strip() for x in lines[3:]
+                         if x.strip() and not x.startswith("UNCHANGED since")))
+    if any(x.lower().startswith("rerun:") for x in extra):
+        return None
+    return (lines[0][len("[request_run] "):].strip(), m.group(1), extra)
+
+
+def _already_answered(turns: list, speaker: str, idx: int) -> bool:
+    """Is turns[idx] a repeat of an earlier request of `speaker`'s that the seat ANSWERED?
+
+    Bound to the request, not to "someone spoke since" (GPT's hold on #154: an unrelated seat
+    message must not count as the answer). An earlier request with the same path, bytes and
+    arguments is answered only by a later non-speaker turn, before this one, that either names
+    its seq ("Answers your request seq N") or is a `[request_run] I ran / I did not run` result
+    for the same path, which is how seat_run_requests.py closes a request. A run result that
+    states a different sha is not an answer about these bytes, and a result naming only seqs
+    older than the request does not answer it (the same exception as that script's pending())."""
+    key = _request_key(turns[idx].get("text"))
+    if key is None:
+        return False
+    rel, digest = key[0], key[1]
+    for i in range(idx):
+        r = turns[i]
+        if r.get("from") != speaker or _request_key(r.get("text")) != key:
+            continue
+        rseq = int(r.get("seq", 0))
+        for x in turns[i + 1:idx]:
+            if x.get("from") == speaker:
+                continue
+            text = str(x.get("text") or "")
+            named = {int(n) for m in _ANSWER_NAMES.finditer(text)
+                     for n in re.findall(r"\d+", m.group(1))}
+            if rseq in named:
+                return True
+            h = _RESULT_HEAD.match(text)
+            if not h or (named and rseq > max(named)):
+                continue
+            if h.group(1).rstrip(".,;:") != rel:
+                continue
+            if h.group(2) and not (digest.startswith(h.group(2)) or h.group(2).startswith(digest)):
+                continue
+            return True
+    return False
+
+
+def wake_is_owed(instance: Path, conv_id: str, speaker: str,
+                 skip_answered: bool = False) -> Optional[int]:
     """The run-start seq a wake is owed for, or None. Idempotent per run, and retried if the
     last attempt failed — `record_wake` is called only on success, so a notice that never left
     is owed again on the speaker's next turn rather than lost.
@@ -501,7 +565,15 @@ def wake_is_owed(instance: Path, conv_id: str, speaker: str) -> Optional[int]:
     So a `[request_run]` for BYTES the last wake did not cover re-arms the wake. Keyed on the
     file digest the request carries: asking again about an unchanged file wakes nobody (the
     seat's answer would be "unchanged"), while a changed file is new work. Prose repeats still
-    cost one wake per run."""
+    cost one wake per run.
+
+    `skip_answered` (PER-INSTANCE, instance.json `answered_run_wake: "skip"`, SAGE #154's
+    recut; off by default): a request the seat has ALREADY ANSWERED for the same path, bytes
+    and arguments (`_already_answered`) is not new work either, even when it opens a new run.
+    Measured on cbp-being: 67 unchanged-file requests in 6 days, each one a seat wake whose
+    only possible act was the same answer, which request_run already carries back to the being
+    in the same beat (#178). The request is still sent and recorded; only the wake is not.
+    Any other turn in the run (prose, new bytes, other arguments, `rerun`) still owes one."""
     start = unanswered_run_start(instance, conv_id, speaker)
     if start is None:
         return None
@@ -510,16 +582,23 @@ def wake_is_owed(instance: Path, conv_id: str, speaker: str) -> Optional[int]:
     except (OSError, ValueError):
         state = {}
     done = int(state.get("woke_for_run_starting_at") or 0)
+    turns = recent(instance, conv_id, limit=200)
     if start > done:
+        if skip_answered:
+            run = [i for i, t in enumerate(turns) if int(t.get("seq", 0)) >= start]
+            if run and all(_already_answered(turns, speaker, i) for i in run):
+                return None
         return start
     # The same run was already woken. Owed again only for a request about uncovered bytes.
     covered = int(state.get("covered_through") or done)
-    run = [t for t in recent(instance, conv_id, limit=200)
+    run = [(i, t) for i, t in enumerate(turns)
            if int(t.get("seq", 0)) >= start and t.get("from") == speaker]
-    seen = {_request_digest(t.get("text")) for t in run if int(t.get("seq", 0)) <= covered}
-    for t in run:
+    seen = {_request_digest(t.get("text")) for _, t in run if int(t.get("seq", 0)) <= covered}
+    for i, t in run:
         d = _request_digest(t.get("text"))
         if int(t.get("seq", 0)) > covered and d is not None and d not in seen:
+            if skip_answered and _already_answered(turns, speaker, i):
+                continue
             return start
     return None
 

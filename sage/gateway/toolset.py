@@ -70,10 +70,15 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
     return out
 
 
-def specs(unavail: Optional[Dict[str, str]] = None) -> List[dict]:
+def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, list]] = None) -> List[dict]:
     """The Ollama tool specs for the whole canonical toolset. Available verbs carry their full
     description; an unavailable one carries one line and the reason, parameters intact."""
     unavail = unavail or {}
+    # CLOSED VALUE SETS reach the explore turn too (2026-10-01): SAGE #312 put gaze.mode / git_read.op enums
+    # in ollama_tools(), but explore is built here, so they never reached the turn where gaze is used.
+    # `enums` adds per-beat sets, e.g. {("peer_ask", "to"): the siblings and seats this being can reach}.
+    from sage.gateway.being_gate_client import _param_enums
+    closed = {**_param_enums(), **(enums or {})}
     out = []
     for name in canonical_toolset():
         desc, props, required = _TOOL_SCHEMAS[name]
@@ -85,7 +90,9 @@ def specs(unavail: Optional[Dict[str, str]] = None) -> List[dict]:
             # long descriptions go, since they are what made an unusable verb cost ~700 chars
             properties = {k: {"type": "string"} for k in props}
         else:
-            properties = {k: {"type": "string", "description": v} for k, v in props.items()}
+            properties = {k: dict({"type": "string", "description": v},
+                                  **({"enum": list(closed[(name, k)])} if closed.get((name, k)) else {}))
+                          for k, v in props.items()}
         out.append({"type": "function", "function": {
             "name": name, "description": desc,
             "parameters": {"type": "object", "properties": properties, "required": required}}})

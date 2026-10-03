@@ -10,6 +10,12 @@ three bounds chosen so the ear is a reply channel and not a room recorder:
      nothing is written. The room is not transcribed while the being is silent.
   2. NEVER ITS OWN VOICE. speak() marks speaking_until before playback; while it holds, the
      segmenter drops audio, so the being is not handed its own words back as someone else's.
+  ALWAYS LISTENING (opt-in per body, dp 2026-10-01): with SAGE_LISTEN=always in the cortex's environment
+     the window is always open. dp asked aloud "what do you want to remember about today" long after the
+     being last spoke; nothing was transcribed and nothing reached the being. dp: "any recognized voice
+     input should be logged in the voice chat as it arrives. and hopefully presented to the being also."
+     Bound 2 (never its own voice) and bound 3 (no speaker identity) still hold. The cortex records the
+     mode in listen.json ("always"), so the being is told what its ear does (body.hears_always).
   3. NO SPEAKER IDENTITY. A voice is not authenticated. heard.jsonl records words, time and the
      mic — never who. The beat says "a voice in the room", not "dp said".
 
@@ -29,11 +35,15 @@ from typing import Optional
 BODY_DIR = os.environ.get("SAGE_BODY_DIR") or os.path.expanduser("~/.sprout")
 LISTEN_PATH = os.path.join(BODY_DIR, "listen.json")
 HEARD_PATH = os.path.join(BODY_DIR, "heard.jsonl")
+EAR_LOG = os.path.join(BODY_DIR, "ear.jsonl")      # transitions of the ear's state, so "since when" is known
 
 RATE = 16000
 SPEECH_JUMP = 0.03         # a window this far above ambient baseline counts as voiced
 SPEECH_FLOOR = 0.03        # ...and above this absolute level
-END_SILENCE_S = 0.8        # this much unvoiced audio ends an utterance
+# this much unvoiced audio ends an utterance. Per body (SAGE_LISTEN_PAUSE_S): at 0.8 s, dp's sentences
+# arrived as several turns a second apart wherever he paused for breath (2026-10-01).
+END_SILENCE_S = float(os.environ.get("SAGE_LISTEN_PAUSE_S") or 0.8)
+UNHEARD_PATH = os.path.join(BODY_DIR, "unheard.jsonl")   # audio that produced no kept words, for measurement
 MIN_VOICED_S = 0.4         # shorter than this is a knock or a cough, not words
 MAX_UTTERANCE_S = 20.0     # cut and transcribe rather than buffer forever
 PRE_ROLL_S = 0.3           # keep a little audio from before the onset so first syllables survive
@@ -42,16 +52,90 @@ NO_SPEECH_MAX = 0.6
 LOGPROB_MIN = -1.0
 
 
+def always_listening() -> bool:
+    """This body's opt-in: SAGE_LISTEN=always in this process's environment."""
+    return os.environ.get("SAGE_LISTEN", "").strip().lower() == "always"
+
+
 def window(now: Optional[float] = None, path: Optional[str] = None) -> dict:
-    """{'listening': bool, 'speaking': bool} from listen.json. Absent/unreadable → neither."""
+    """{'listening', 'speaking', 'always'} from listen.json, plus this process's opt-in.
+    Absent/unreadable file → closed unless the opt-in is set."""
     now = time.time() if now is None else now
     path = path or LISTEN_PATH
     try:
         d = json.load(open(path))
     except Exception:
-        return {"listening": False, "speaking": False}
-    return {"listening": now < float(d.get("listen_until", 0)),
-            "speaking": now < float(d.get("speaking_until", 0))}
+        d = {}
+    always = always_listening() or bool(d.get("always"))
+    muted_until = float(d.get("muted_until", 0) or 0)
+    muted = {"until": muted_until, "by": str(d.get("muted_by") or "")} if now < muted_until else None
+    return {"listening": (always or now < float(d.get("listen_until", 0))) and not muted,
+            "speaking": now < float(d.get("speaking_until", 0)),
+            "always": always, "muted": muted}
+
+
+# THE EAR CAN BE OFF FOR ANY REASON (dp, 2026-10-01): "it should be resilient to audio being offline for
+# any number of reasons - mute, bt disconnect, power off, or just me not being there. that's part of the
+# world and its uncertain nature." So the ear's state is itself a sensed fact, with the cause when one is
+# known, and "could not listen" is never presented as "heard nothing".
+MUTE_MAX_MIN = 240          # a forgotten mute must not leave the being deaf for a day
+
+
+def mute(minutes: float, by: str = "", path: Optional[str] = None) -> float:
+    """Stop transcribing for `minutes` (capped); the being is told who and until when. Returns the end."""
+    until = time.time() + max(0.0, min(float(minutes), MUTE_MAX_MIN)) * 60
+    mark(path, muted_until=until, muted_by=by)
+    return until
+
+
+def unmute(path: Optional[str] = None) -> None:
+    mark(path, muted_until=0, muted_by="")
+
+
+def ear_state(ok: bool, words, win: dict, device_connected: Optional[bool] = None) -> tuple:
+    """(hearing words?, reason in words, reason key). The first known cause wins, most physical first."""
+    if device_connected is False:
+        return False, "the headset is not connected", "device"
+    if not ok:
+        return False, "no sound is reaching the mic (the audio stream is down)", "stream"
+    if str(words or "").startswith("unavailable"):
+        return False, "word recognition is not available", "recognizer"
+    m = (win or {}).get("muted")
+    if m:
+        return False, (f"muted by {m.get('by') or 'someone'} until "
+                       f"{time.strftime('%H:%M', time.localtime(m['until']))}"), "muted"
+    if not (win or {}).get("listening"):
+        return False, "it only listens in the minutes after you speak", "window"
+    return True, ("always open" if (win or {}).get("always") else "open since you spoke"), \
+        ("always" if (win or {}).get("always") else "window")
+
+
+def note_ear(hearing: bool, reason: str, key: str, path: Optional[str] = None,
+             now: Optional[float] = None) -> Optional[dict]:
+    """Append a line to ear.jsonl when the ear's state CHANGES (by hearing + key). Fails open."""
+    path, now = path or EAR_LOG, time.time() if now is None else now
+    try:
+        last = ear_since(path)
+        if last and bool(last.get("hearing")) == bool(hearing) and last.get("key") == key:
+            return None
+        line = {"ts": round(now, 2), "hearing": bool(hearing), "key": key, "reason": reason}
+        with open(path, "a") as f:
+            f.write(json.dumps(line) + "\n")
+        return line
+    except Exception:
+        return None
+
+
+def ear_since(path: Optional[str] = None) -> Optional[dict]:
+    """The last ear transition (its ts is "since when"), or None."""
+    try:
+        with open(path or EAR_LOG, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 4096))
+            lines = f.read().decode(errors="replace").splitlines()
+        return json.loads(lines[-1]) if lines else None
+    except Exception:
+        return None
 
 
 def mark(path: Optional[str] = None, **fields) -> None:
@@ -116,13 +200,18 @@ class Transcriber(threading.Thread):
         self.model = None
         self.status = "idle"          # idle | loading | ready | unavailable: <why>
         self.running = True
+        self.backlog_drops = 0        # utterances dropped because transcription fell behind (counted, logged)
 
     def submit(self, audio: bytes) -> bool:
         try:
             self.q.put_nowait(audio)
             return True
         except queue.Full:
-            return False              # a backlog means we are behind; drop rather than lag forever
+            # a backlog means we are behind; drop rather than lag forever, but never silently
+            self.backlog_drops += 1
+            _append(UNHEARD_PATH, {"ts": round(time.time(), 2), "why": "backlog", "seconds":
+                                   round(len(audio) / 2 / RATE, 1), "source": self.source})
+            return False
 
     def _load(self):
         self.status = "loading"
@@ -141,14 +230,7 @@ class Transcriber(threading.Thread):
         import numpy as np
         a = np.frombuffer(audio, np.int16).astype(np.float32) / 32768.0
         r = self.model.transcribe(a, fp16=self._fp16, language="en", condition_on_previous_text=False)
-        segs = r.get("segments") or []
-        keep = [s for s in segs if s.get("no_speech_prob", 0) < NO_SPEECH_MAX
-                and s.get("avg_logprob", 0) > LOGPROB_MIN]
-        text = " ".join(s.get("text", "").strip() for s in keep).strip()
-        if not text:
-            return None
-        return {"ts": round(time.time(), 2), "text": text, "seconds": round(len(a) / RATE, 1),
-                "source": self.source}
+        return judge_segments(r.get("segments") or [], seconds=round(len(a) / RATE, 1), source=self.source)
 
     def run(self):
         while self.running:
@@ -160,14 +242,60 @@ class Transcriber(threading.Thread):
                 self._load()
             if self.model is None:
                 continue
-            try:
-                rec = self.transcribe(audio)
-            except Exception:
-                rec = None
-            if rec:
-                os.makedirs(os.path.dirname(self.heard_path), exist_ok=True)
-                with open(self.heard_path, "a") as f:
-                    f.write(json.dumps(rec) + "\n")
+            self._handle(audio)
+
+    def _handle(self, audio: bytes) -> None:
+        try:
+            rec = self.transcribe(audio)
+        except Exception as e:
+            # A TRANSCRIBER FAILURE IS NOT SILENCE (GPT on #325): measured, never shown as speech. The error's
+            # class only, never its text (it can carry paths or audio-derived content).
+            self.transcribe_errors = getattr(self, "transcribe_errors", 0) + 1
+            _append(UNHEARD_PATH, {"ts": round(time.time(), 2), "why": "transcribe_error",
+                                   "error": type(e).__name__, "seconds": round(len(audio) / 2 / RATE, 1),
+                                   "source": self.source})
+            return
+        if rec and rec.get("text"):
+            _append(self.heard_path, rec)
+        elif rec:
+            _append(UNHEARD_PATH, dict(rec, why="no kept words"))   # measured, never shown as speech
+
+
+def _append(path: str, rec: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except Exception:
+        pass
+
+
+def judge_segments(segs: list, seconds: float = 0.0, source: str = "", now: Optional[float] = None) -> dict:
+    """Whisper's segments -> one heard record. NOTHING IS DROPPED SILENTLY (dp, 2026-10-01: "voice transcription
+    now cuts off what i said"). A segment is still left out of the words when it is probably silence
+    (no_speech_prob >= NO_SPEECH_MAX, where whisper hallucinates stock phrases) or unclear speech
+    (avg_logprob <= LOGPROB_MIN). But each left-out segment is kept in `dropped` with its reason, confidences
+    and place, and `unclear` says where UNCLEAR speech was left out (head / middle / tail), so the room can
+    say "the rest was unclear" instead of ending the sentence where the transcriber gave up."""
+    kept_i, dropped = [], []
+    for i, s in enumerate(segs):
+        ns, lp = float(s.get("no_speech_prob", 0) or 0), float(s.get("avg_logprob", 0) or 0)
+        if ns < NO_SPEECH_MAX and lp > LOGPROB_MIN:
+            kept_i.append(i)
+        else:
+            dropped.append({"i": i, "text": str(s.get("text", "")).strip()[:200], "no_speech_prob": round(ns, 3),
+                            "avg_logprob": round(lp, 3), "why": "silence" if ns >= NO_SPEECH_MAX else "unclear"})
+    text = " ".join(str(segs[i].get("text", "")).strip() for i in kept_i).strip()
+    rec = {"ts": round(time.time() if now is None else now, 2), "text": text, "seconds": seconds, "source": source}
+    if dropped:
+        for d in dropped:
+            d["at"] = ("head" if kept_i and d["i"] < kept_i[0] else "tail" if kept_i and d["i"] > kept_i[-1]
+                       else "middle" if kept_i else "all")
+        rec["dropped"] = dropped
+        places = [d["at"] for d in dropped if d["why"] == "unclear" and d["at"] != "all"]
+        if places:
+            rec["unclear"] = "tail" if "tail" in places else "head" if "head" in places else "middle"
+    return rec
 
 
 def since(ts: float, path: Optional[str] = None, limit: int = 10) -> list:
@@ -185,3 +313,24 @@ def since(ts: float, path: Optional[str] = None, limit: int = 10) -> list:
     except FileNotFoundError:
         return []
     return out[-limit:]
+
+
+def main(argv=None) -> int:
+    """sprout's ear, by hand:  python -m sage.embodiment.listening mute 45 [--by dp]  |  on  |  status"""
+    import argparse
+    ap = argparse.ArgumentParser(prog="python -m sage.embodiment.listening")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    m = sub.add_parser("mute"); m.add_argument("minutes", type=float); m.add_argument("--by", default="")
+    sub.add_parser("on"); sub.add_parser("status")
+    a = ap.parse_args(argv)
+    if a.cmd == "mute":
+        until = mute(a.minutes, a.by)
+        print(f"ear muted until {time.strftime('%H:%M', time.localtime(until))} (max {MUTE_MAX_MIN} min)")
+    elif a.cmd == "on":
+        unmute(); print("ear unmuted")
+    print(json.dumps({"window": window(), "since": ear_since()}, default=str))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

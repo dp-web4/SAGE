@@ -34,7 +34,8 @@
         "2b": {
             "num_predict": 1024,
             "num_predict_think": 6000,
-            "think_default": true
+            "think_default": true,
+            "num_ctx": 16384
         },
         "4b": {
             "num_predict": 1024,

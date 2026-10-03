@@ -12,9 +12,21 @@ pub struct ExperienceEntry {
     pub response: String,
     pub salience: SalienceScore,
     pub metabolic_state: String,
-    pub atp_percentage: f64,
-    pub cycle: u64,
+    /// The daemon's INTERNAL ATP controller at the moment of the exchange: a free-running
+    /// oscillator ticked every 100 ms for the shadow-metabolism experiment, which nothing the
+    /// being does moves (SAGE #291). Written as `internal_atp` since SAGE #295 so no reader
+    /// takes it for the being's energy; older lines named it `atp_percentage` and still read.
+    #[serde(rename = "internal_atp", alias = "atp_percentage")]
+    pub internal_atp: f64,
+    /// The consciousness loop's tick count (100 ms idle ticks: uptime x 10), not a beat or a
+    /// cycle of anything the being did. Older lines named it `cycle` and still read.
+    #[serde(rename = "tick", alias = "cycle")]
+    pub tick: u64,
     pub timestamp: f64,
+    /// The heartbeat beat that was running when this exchange happened, from the activity
+    /// reports (SAGE #295). Absent when no beat was running (a presence noticing between beats).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub machine: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -35,8 +47,8 @@ impl ExperienceEntry {
         response: String,
         salience: SalienceScore,
         metabolic_state: &str,
-        atp_percentage: f64,
-        cycle: u64,
+        internal_atp: f64,
+        tick: u64,
     ) -> Self {
         let id = Self::compute_id(&prompt, &response);
         let timestamp = crate::snarc::temporal::now_secs();
@@ -46,9 +58,10 @@ impl ExperienceEntry {
             response,
             salience,
             metabolic_state: metabolic_state.to_string(),
-            atp_percentage,
-            cycle,
+            internal_atp,
+            tick,
             timestamp,
+            beat_id: None,
             machine: None,
             model: None,
         }
@@ -293,5 +306,25 @@ mod tests {
         let e1 = make_entry("hello", "world", 0.8);
         let e2 = make_entry("hello", "world", 0.5);
         assert_eq!(e1.id, e2.id);
+    }
+
+    /// SAGE #295: the internal ATP and the loop tick are written under names no reader takes for
+    /// the being's energy or its beats, the beat is stamped when known, and older lines still read.
+    #[test]
+    fn records_name_the_internal_atp_and_the_tick_and_carry_the_beat() {
+        let mut e = make_entry("hi", "there", 0.4);
+        e.beat_id = Some("heartbeat-abc".into());
+        let v: serde_json::Value = serde_json::to_value(&e).unwrap();
+        assert!(v.get("atp_percentage").is_none() && v.get("cycle").is_none(), "{v}");
+        assert_eq!(v["internal_atp"], 100.0);
+        assert_eq!(v["tick"], 0);
+        assert_eq!(v["beat_id"], "heartbeat-abc");
+
+        let unbeaten = serde_json::to_value(make_entry("a", "b", 0.1)).unwrap();
+        assert!(unbeaten.get("beat_id").is_none(), "no beat running: no beat_id key");
+
+        let old = r#"{"id":"x","prompt":"p","response":"r","salience":{"surprise":0.1,"novelty":0.1,"arousal":0.1,"reward":0.1,"conflict":0.1,"total":0.1},"metabolic_state":"wake","atp_percentage":42.5,"cycle":1593000,"timestamp":1.0}"#;
+        let o: ExperienceEntry = serde_json::from_str(old).unwrap();
+        assert_eq!((o.internal_atp, o.tick, o.beat_id), (42.5, 1_593_000, None));
     }
 }

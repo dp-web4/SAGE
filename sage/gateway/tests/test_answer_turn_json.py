@@ -122,3 +122,33 @@ def test_the_heartbeat_gates_it_and_keeps_the_tool_path():
     assert src.index("answer = answer_turn_json(client, llm, selected", i) > i
     assert src.index("answer = run_ollama_tool_turn(", i) > i, "the tool path stays the default"
     assert 'endswith("-claude")' in src[i:i + 900], "acts only for a seat's question"
+
+
+def test_an_answer_to_the_room_is_asked_short_and_capped_at_speak_length():
+    """2026-09-30: 11 room answers at 451-2,196 chars were refused by speak's 400 cap, unseen by the
+    being. Offline: telling it the answer is spoken gave 6/6 speakable; the cap alone cut mid-sentence."""
+    from sage.gateway import body
+    room_turn = {"ts": "2026-09-30T22:38:05Z", "seq": 7, "from": "voice", "via": "voice",
+                 "text": "What do you think is behind your consciousness?"}
+    llm = LLM(json.dumps({"answer": False, "message": ""}))
+    hb.answer_turn_json(Client(), llm, hb.SelectedTurn("room", room_turn), name="s", machine="s", member="s")
+    call = llm.calls[0]
+    assert "spoken aloud" in call["messages"][-1]["content"] and "under 400 characters" in call["messages"][-1]["content"]
+    assert call["fmt"]["properties"]["message"]["maxLength"] == body.SPEAK_MAX_CHARS
+    assert "maxLength" not in hb.ANSWER_SCHEMA["properties"]["message"], "the shared schema is not mutated"
+
+
+def test_a_written_answer_is_not_shortened():
+    llm = LLM(json.dumps({"answer": False, "message": ""}))
+    hb.answer_turn_json(Client(), llm, hb.SelectedTurn("dp", TURN), name="s", machine="s", member="s")
+    call = llm.calls[0]
+    assert "spoken aloud" not in call["messages"][-1]["content"]
+    assert call["fmt"] == hb.ANSWER_SCHEMA
+
+
+def test_the_retry_keeps_the_spoken_cap():
+    from sage.gateway import body
+    room_turn = {"ts": "2026-09-30T22:38:05Z", "seq": 7, "from": "voice", "text": "Can you hear me?"}
+    llm = LLM("", json.dumps({"answer": False, "message": ""}))
+    hb.answer_turn_json(Client(), llm, hb.SelectedTurn("room", room_turn), name="s", machine="s", member="s")
+    assert len(llm.calls) == 2 and llm.calls[1]["fmt"]["properties"]["message"]["maxLength"] == body.SPEAK_MAX_CHARS

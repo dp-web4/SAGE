@@ -53,7 +53,8 @@ def test_num_ctx_is_a_floor_the_config_can_raise_not_lower():
     c = load_capabilities("qwen38-heretic:q3km")
     assert c.resolve_num_ctx("qwen38-heretic:q3km", 8192) == declared   # Modelfile value, declared per size
     assert c.resolve_num_ctx("qwen38-heretic:q3km", 65536) == 65536     # a caller asking for more keeps it
-    assert c.resolve_num_ctx("qwen3.8-distill:2b", 8192) == 8192        # 2B declares nothing: floor unchanged
+    assert c.resolve_num_ctx("qwen3.8-distill:2b", 8192) == 16384       # declared since #284 (measured on the Orin)
+    assert c.resolve_num_ctx("hf.co/empero-ai/Qwen3.8-2B-Distill-GGUF:Q8_0", 8192) == 8192   # declares nothing: floor unchanged
     assert resolve_num_ctx("qwen38-heretic:q3km", 8192) == declared
     assert resolve_num_ctx("no-such-model:1b", 8192) == 8192
     # the bound that actually protects the being: past this the model leaves the GPU

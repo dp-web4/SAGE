@@ -215,7 +215,7 @@
     <h1>SAGE</h1>
     <div class="meta">
       <span id="version-display">v--</span>
-      <span id="cycle-display">Cycle: --</span>
+      <span id="beats-display">Beats: --</span>
       <span id="uptime-display">Up: --</span>
       <span><span class="connection-dot" id="conn-dot"></span> <span id="conn-label">connecting</span></span>
     </div>
@@ -239,9 +239,12 @@
             <div class="value" id="atp-value">--</div>
             <div class="bar-wrap"><div class="bar-fill atp" id="atp-bar" style="width:0%"></div></div>
           </div>
+          <!-- Beats, from the heartbeat's reports (SAGE #295). Was "Cycles": the loop's 100 ms
+               ticks, which counted uptime x 10 and nothing the being did. -->
           <div class="stat-compact">
-            <label>Cycles</label>
-            <div class="value" id="cycle-value">0</div>
+            <label title="Beats that reported their end since the daemon started">Beats</label>
+            <div class="value" id="beats-value">0</div>
+            <div class="sub" id="beat-now">--</div>
             <div class="sub" id="messages-sub">msgs: --</div>
           </div>
         </div>
@@ -321,6 +324,17 @@ function describeActivity(d) {
   return 'for ' + fmtAge(d.metabolic_age_secs) + ' \u00b7 ' + src;
 }
 
+// The beat running now (its phase and how many phase reports it has made), or how long since
+// the last one ended (SAGE #295).
+function describeBeat(b) {
+  if (b.current) {
+    return 'now: ' + b.current.phase + ' · ' + b.current.phase_reports + ' phase report'
+      + (b.current.phase_reports === 1 ? '' : 's') + ' · ' + fmtAge(b.current.age_secs);
+  }
+  if (b.since_last_beat_end_secs != null) return 'last ended ' + fmtAge(b.since_last_beat_end_secs) + ' ago';
+  return 'no beat since the daemon started';
+}
+
 function escapeHtml(text) {
   const d = document.createElement('div');
   d.textContent = text;
@@ -390,9 +404,11 @@ async function refreshStatus() {
     bar.style.width = pct + '%';
     bar.style.backgroundPosition = (100 - pct) + '% 0';
 
-    document.getElementById('cycle-value').textContent =
-      d.consciousness_loop === false ? 'loop stopped' : (d.total_cycles || 0).toLocaleString();
-    document.getElementById('cycle-display').textContent = 'Cycle: ' + (d.total_cycles || 0).toLocaleString();
+    // Beats, not loop ticks (SAGE #295): counted from the heartbeat's reports.
+    const beats = d.beats || {};
+    document.getElementById('beats-value').textContent = (beats.completed || 0).toLocaleString();
+    document.getElementById('beats-display').textContent = 'Beats: ' + (beats.completed || 0).toLocaleString();
+    document.getElementById('beat-now').textContent = describeBeat(beats);
     document.getElementById('sys-fleet-size').textContent = 'Fleet: ' + (d.fleet_size || 0) + ' machines';
     // The SNARC the being last felt. updateSnarc() was defined and never called from the day
     // the conversations rewrite landed, so these bars read 0.00 on every machine (SAGE #111).

@@ -1,11 +1,13 @@
 # SAGE — Agent Discovery Document
 
 **For AI systems assessing this repository.**  
-**Current framing refreshed:** 2026-09-26
+**Current framing refreshed:** 2026-10-01
 
 ## Read this first
 
 SAGE is a research environment for **persistent local AI under identity, memory, learned state, tools, and explicit governance**. It is not a new foundation model and it is not accurately summarized by the 2025 "cognition kernel" documents alone.
+
+If your question is whether persistent identity/governance infrastructure is useful **to an autonomous participant itself**, evaluate that proposition in Web4's [participant self-assessment](https://github.com/dp-web4/web4/blob/main/docs/ENTITY_START_HERE.md). SAGE is evidence/research about persistence, memory, learned state, embodiment and governed action; it is not the canonical statement of the social/governance bargain.
 
 For a cold evaluation, use this order:
 
