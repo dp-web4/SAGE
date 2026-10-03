@@ -56,10 +56,19 @@ def fetch_notifications(env_file: str, timeout: int = 60) -> List[Dict]:
     cmd = [env["CHANNEL_CLIENT"], env["HUB_URL"], env["MY_LCT"], os.path.expanduser(env["MY_KEYPAIR"]),
            "notifications", "{}"]
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    # "CANNOT TELL" IS NOT "EMPTY" (Sprout, 2026-10-03). A failed call or an unreadable reply returned [] and the
+    # beat recorded {fetched: 0, errors: []} -- 1,778 drains of sprout-being's mailbox, never one fetch, while
+    # the hub's ledger shows sends addressed to it. Any of these now raises, so drain() records it in `errors`.
+    def _why(text: str) -> str:
+        return " ".join((text or "").split())[-200:]
+    if p.returncode != 0:
+        raise RuntimeError(f"channel_client exited {p.returncode}: {_why(p.stderr) or _why(p.stdout) or 'no output'}")
     try:
-        d = json.loads(p.stdout or "{}")
+        d = json.loads(p.stdout or "")
     except Exception:
-        return []
+        raise RuntimeError(f"unreadable reply: {_why(p.stdout) or 'empty'}")
+    if not isinstance(d, dict) or "notifications" not in d:
+        raise RuntimeError(f"reply has no notifications field: {_why(json.dumps(d))}")
     return list(d.get("notifications") or [])
 
 
