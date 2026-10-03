@@ -129,14 +129,16 @@ PEER = [{"type": "function", "function": {"name": "peer_ask", "description": "As
         {"type": "function", "function": {"name": "pr_open", "parameters": {"type": "object", "properties": {}}}}]
 
 
-def test_bad_arguments_get_one_reask_naming_the_problem_then_act():
+def test_bad_arguments_get_one_more_identical_draw_then_act():
+    """GPT on #336: the retry must not carry the validator's words into the message-producing prompt."""
     llm = LLM(json.dumps({"act": "peer_ask", "why": "ask legion"}),
               json.dumps({"to": "legion-being", "body": "Hey [name], how are you?"}),
               json.dumps({"to": "legion-being", "body": "How did your last beat go?"}),
               json.dumps({"act": "done", "why": "asked"}))
     r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "beat"}],
                              max_steps=3, tools=PEER, act_form="json")
-    assert "placeholder" in llm.calls[2]["messages"][-1]["content"], "the re-ask says what was wrong"
+    assert llm.calls[2]["messages"][-1]["content"] == "peer_ask. As JSON.", "the identical minimal prompt"
+    assert llm.calls[2]["messages"] == llm.calls[1]["messages"], "no validator prose, no failed draw in view"
     assert r.trace and r.trace[0][0].args == {"to": "legion-being", "body": "How did your last beat go?"}
     assert not r.json_arg_failures
 
@@ -234,3 +236,18 @@ def test_native_retries_stay_native():
     llm = RetryLLM({"content": "[OllamaIRP: HTTP 500]", "tool_calls": [], "raw": {}})
     run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "beat"}], max_steps=1, tools=TOOLS)
     assert len(llm.calls) == 2 and all(c["tools"] == TOOLS and c["fmt"] is None for c in llm.calls)
+
+
+def test_a_say_retry_prompt_is_still_exactly_the_act_and_json():
+    """GPT's pin on #336: first args invalid for say; the second generate's final user message is exactly
+    "say. As JSON." and contains neither the validator error nor schema/slot prose."""
+    say = {"type": "function", "function": {"name": "say", "description": "Add a turn to your conversation.",
+           "parameters": {"type": "object", "required": ["to", "text"], "properties": {
+               "to": {"type": "string", "enum": ["dp"], "description": "the conversation id"},
+               "text": {"type": "string", "description": "what you want to say"}}}}}
+    llm = LLM(json.dumps({"act": "say", "why": "x"}), json.dumps({"to": "nowhere", "text": "hi"}),
+              json.dumps({"to": "dp", "text": "hello"}))
+    run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "beat"}], max_steps=1,
+                         tools=[say], act_form="json")
+    second = llm.calls[2]["messages"][-1]["content"]
+    assert second == "say. As JSON.", second

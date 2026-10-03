@@ -969,12 +969,11 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # ARGUMENTS THAT FAIL ARE NOT AN ACT (GPT on #311): a parse or structural failure gets ONE re-ask
         # naming what was wrong; a second failure ends the step visibly with no act, never as an intent with
         # empty arguments whose meaning would depend on each effector's missing-argument behaviour.
+        # THE RETRY OBEYS THE SAME NO-PROSE RULE (GPT on #336): the validator's words never enter the
+        # message-producing prompt. One more draw with the IDENTICAL minimal prompt (the schema still rides in
+        # `fmt`); `problem` goes only to telemetry (json_arg_failures) if that draw fails too.
         problem, r2, args = None, None, None
         for attempt in range(2):
-            if problem:
-                arg_msgs = arg_msgs + [{"role": "assistant", "content": (r2 or {}).get("content", "") or ""},
-                                       {"role": "user", "content": f"Those arguments cannot be used: {problem}. "
-                                                                   f"Give the arguments for {act} again, as JSON."}]
             r2 = llm.get_chat_response(arg_msgs, fmt=spec[act])
             args, problem = _check_args(r2.get("content", "") or "", spec[act])
             if problem is None:
