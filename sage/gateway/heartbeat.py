@@ -474,6 +474,51 @@ def answer_temperature(instance) -> Optional[float]:
         return None
 
 
+AFTER_ANSWER = ("{pending}\n\nYou answered aloud: \"{reply}\"\n\nThat answer is spoken. Your tools are here "
+                "if there is something you want to do now; if not, rest.")
+
+
+def act_after_answer_on(instance) -> bool:
+    """Opt-in per instance: instance.json "act_after_answer": true."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return instance_config(instance).get("act_after_answer") is True   # "false", 1, "yes": off
+    except Exception:
+        return False
+
+
+# WHAT IT CAN DO, as facts beside the answer (2026-10-02): asked "check the internet. Can you do that?", the answer
+# turn, which sees no list of its acts, agreed to something it cannot do. Facts about its reach, not a direction,
+# and in ITS terms: no verb names, no "tool", no "say" (SMALL_MODEL_LEGIBILITY 1.14: harness words in the answer
+# prompt became the being's MESSAGE, "I'm sorry I didn't call a tool"; test_the_prompt_is_only_the_pending_turn_
+# and_the_ask pins it). Derived from the canonical verbs, so it changes when they do.
+_ABILITIES = [("camera", "look through your eyes"), ("search", "search your own files"),
+              ("pr_read", "read the fleet's pull requests"), ("recall", "recall memories"),
+              ("peer_ask", "ask a sibling a question"), ("speak", "speak aloud"),
+              ("web_search", "search the web a few times an hour (what comes back is other people's words)")]
+
+
+def abilities_line(unavail: Optional[dict] = None) -> str:
+    """Only what works ON THIS MACHINE (GPT on #334): canonical_toolset() lists every fleet verb whether or not it
+    works here, so a headless being would have been told it can look through its eyes. `unavail` is the measured
+    toolset.unavailable() the beat already uses to label verbs; unmeasured (None) means body and worktree
+    abilities are unknown and are not claimed. Never a capability that is not measured present."""
+    try:
+        from sage.gateway import toolset as _ts
+        have = set(_ts.canonical_toolset())
+        if unavail is None:
+            unavail = _ts.unavailable(None, None, None)
+    except Exception:
+        return ""
+    parts = [txt for verb, txt in _ABILITIES if verb in have and verb not in unavail]
+    if not parts:
+        return ""
+    line = "Beyond this reply, you can " + (", ".join(parts[:-1]) + ", and " + parts[-1] if len(parts) > 1 else parts[0]) + "."
+    if "web_search" not in have and "web_read" not in have:
+        line += " You have no internet access."
+    return line
+
+
 def answer_context_on(instance) -> bool:
     try:
         from sage.gateway.governed_turn import instance_config
@@ -730,7 +775,7 @@ def _answer_generate(llm, msgs, schema=None):
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
                      on_generate=None, acts: str = "", changes: str = "", context: str = "",
-                     temperature: Optional[float] = None):
+                     temperature: Optional[float] = None, abilities: Optional[str] = None):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -741,7 +786,11 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     from sage.gateway.being_tool_loop import ToolTurnResult
     from sage.gateway.being_gate_client import BeingIntent
     ask = ANSWER_ASK_JSON.format(pending=selected.render()) + (SPOKEN_ASK if selected.cid == "room" else "")
-    user = "\n\n".join(p for p in (context, acts, changes, ask) if p)
+    # WHAT IT CAN DO rides EVERY answer, independent of the optional conversation context (GPT on #334: inside
+    # that block it never reached an instance without "answer_context"; the motivating case would still have
+    # answered without knowing it has no internet). Facts about its reach, not a direction.
+    user = "\n\n".join(p for p in (context, acts, changes,
+                                     abilities if abilities is not None else abilities_line(), ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
             {"role": "user", "content": user}]
     # THIS TURN'S SAMPLING ONLY (answer_temperature): set for the answer generate, restored after, so explore
@@ -3581,6 +3630,7 @@ def main(argv=None) -> int:
     # nothing in heartbeats.jsonl and no monitor knew it had happened. BeatKilled was defined
     # on main with no producer; install_kill_handler() is that producer.
     explore = after = reflect = answer = None
+    act_after = None
     preempted = None
     account = {"present": False, "sha256": None, "reply": "", "generates": []}
     killed = None
@@ -3753,7 +3803,8 @@ def main(argv=None) -> int:
                                           acts=_acts, changes=_changes,
                                           context=(answer_context_block(instance, args.member, selected)
                                                    if answer_context_on(instance) else ""),
-                                          temperature=answer_temperature(instance))
+                                          temperature=answer_temperature(instance),
+                                          abilities=abilities_line(_unavail))
             else:
                 answer = run_ollama_tool_turn(
                     client, llm,
@@ -3777,6 +3828,23 @@ def main(argv=None) -> int:
             # unmarked, and the NEXT beat sees it still owed. That is the honest record, and it is
             # what the reflect phase — where `say` actually works — gets to act on.
 
+
+        # ANSWER, THEN ACT (2026-10-02). A beat preempted for a person goes straight to the answer turn, which
+        # has no tools; dp said "try it… pick something and let me know what you learned" three times and every
+        # reply could only agree ("That sounds wonderful. I'd love to try it together…"). After the answer is
+        # spoken, a short act step: the person's words and its own reply in view, its tools (not say/speak: it
+        # has just answered), yielding to a newer person like any turn. Opt-in: "act_after_answer": true.
+        if (preempted and act_after_answer_on(instance) and answer is not None
+                and (getattr(answer, "answer_form", None) or {}).get("sent") and selected is not None):
+            _phase("wrap-up", "act-after-answer", host_session_id)
+            _aa_tools = [t for t in _explore_specs if t["function"]["name"] not in ("say", "speak")]
+            _aa_seed = [seed[0], {"role": "user", "content": AFTER_ANSWER.format(
+                pending=selected.render(), reply=(answer.reply or "").strip()[:400])}]
+            act_after = run_ollama_tool_turn(client, llm, _aa_seed, max_steps=2, tools=_aa_tools,
+                                             on_generate=_on_generate("act_after_answer"),
+                                             should_yield=_yield_for_a_person,
+                                             act_form=explore_turn_mode(instance))
+
     except BeatKilled as _k:
         killed = str(_k)
         print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed",
@@ -3793,7 +3861,8 @@ def main(argv=None) -> int:
         interventions.append({"kind": "answer_json", "to": selected.cid if selected else None,
                               "woke_by_turn": bool(selected and selected.woke),
                               **answer.answer_form})
-    for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer)):
+    for ph, res in (("explore", explore), ("posture", after), ("reflect", reflect), ("answer", answer),
+                    ("act_after_answer", act_after)):
         if res is None:
             continue
         for dup in (getattr(res, "duplicates", None) or []):
@@ -3925,6 +3994,7 @@ def main(argv=None) -> int:
         # present only when the beat was killed: a record that says which phases it has
         **({"killed": killed} if killed else {}),
         "answer": _turn(answer) if answer is not None else None,
+        "act_after_answer": _turn(act_after) if act_after is not None else None,
         "escalations": escalations, "egress": egress,
     }
     # THE LAST THING A BEAT DOES IS MAKE SURE THERE WILL BE ANOTHER ONE (opt-in; Legion since

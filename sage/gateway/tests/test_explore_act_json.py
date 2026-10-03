@@ -77,7 +77,7 @@ def test_the_explore_turn_mode_is_opt_in_and_wired(tmp_path):
     (tmp_path / "instance.json").write_text('{"explore_turn": "json"}')
     assert hb.explore_turn_mode(tmp_path) == "json"
     src = Path(hb.__file__).read_text()
-    assert src.count("act_form=explore_turn_mode(instance)") == 2, "explore and posture"
+    assert src.count("act_form=explore_turn_mode(instance)") == 3, "explore, posture and the act after an answer"
 
 
 def test_closed_value_sets_are_enums_in_the_spec():
