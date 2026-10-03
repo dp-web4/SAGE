@@ -1150,9 +1150,10 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
             total_entries = sum(1 for k in lines if k.startswith("- "))
             kept_entries = sum(1 for k in kept if k.startswith("- "))
             dropped = total_entries - kept_entries
+            removed = max(0, len(text) - sum(len(k) + 1 for k in kept))
             out[key] = ("\n".join(kept) + ("\n[…trimmed to fit the context window: "
                           + str(dropped) + " older entr" + ("y" if dropped == 1 else "ies")
-                          + " dropped…]" if dropped else ""))
+                          + " dropped…]" if removed > 0 else ""))
         else:
             kept, dropped = [], 0
             i = len(lines) - 1
@@ -1180,10 +1181,11 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
                         kept.extend(reversed(entry))
                     i = j - 1 - 1
             kept.reverse()
+            removed = max(0, len(text) - sum(len(k) + 1 for k in kept))
             out[key] = (("[…trimmed to fit the context window: " + str(dropped)
                          + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
-                        if dropped else "") + "\n".join(kept))
-        removed = sum(len(k) + 1 for k in lines[i:]) if i < len(lines) else 0
+                        if removed > 0 else "") + "\n".join(kept))
+        removed = max(0, len(text) - sum(len(k) + 1 for k in kept))
         interventions.append({"kind": "context_fit", "block": key,
                               "suppressed": f"{removed} chars of {key}",
                               "reason": f"prompt + a p99 answer ({reserve} tok) would not fit "
