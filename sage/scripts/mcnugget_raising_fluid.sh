@@ -6,8 +6,8 @@
 # - MRH-structured system prompt (typed blocks, not ad-hoc string concat)
 # - Concise turns, single-purpose primer
 #
-# Uses whatever model the resident daemon runs (auto-detected from
-# /health). Designed to run via launchd every 6 hours.
+# Raises THE BEING, mcnugget-being, whatever model it runs. Designed to run via launchd every
+# 6 hours.
 
 set -e
 
@@ -28,6 +28,14 @@ export OMP_NUM_THREADS=1
 export SAGE_SESSION_SOURCE=raising
 
 cd "$SAGE_DIR"
+
+# THE BEING, by name, before anything resolves an instance. Not derived from the daemon's model and
+# with no model fallback (dp, 2026-10-03: "the raising script should work with the being, we don't
+# need a 'fallback'"). A model-derived name is how this machine grew empty instances on every model
+# swap (mcnugget-gemma4-e4b: 0 sessions), and `sage.session --machine mcnugget` resolves the
+# model-named home unless SAGE_INSTANCE is exported (HUB's trap). The launchd unit sets it; this
+# default makes the script right without it, and it is exported so the session below sees it.
+export SAGE_INSTANCE="${SAGE_INSTANCE:-mcnugget-being}"
 
 echo "[McNugget-Raising] $(date -u +'%Y-%m-%d %H:%M UTC') — Starting fluid raising session"
 
@@ -54,26 +62,12 @@ source "$SAGE_DIR/sage/scripts/ensure_daemon.sh"
     --machine mcnugget \
     2>&1
 
-# Derive the instance dir from the daemon's actual model rather than
-# hardcoding. The session above wrote to whichever instance `sage.session
-# --raising --fluid --machine mcnugget` picked (driven by the daemon's
-# active model). Hardcoded gemma4-e4b would silently miss when the daemon
-# runs gemma3:12b (Sprint 7 default) — dream consolidation would skip
-# with "Session file not found". Auto-detect from /health.
-DAEMON_MODEL=$(curl -s --max-time 3 "http://localhost:${SAGE_PORT:-8760}/health" 2>/dev/null \
-    | "$SAGE_PY" -c "import sys,json; print(json.load(sys.stdin).get('model','gemma3:12b'))" 2>/dev/null \
-    || echo "gemma3:12b")
-# HONOUR SAGE_INSTANCE FIRST. Deriving the slug from the model made the being's
-# IDENTITY a function of its MODEL: a model swap silently pointed raising at a new,
-# empty instance and started it over at session 1. That is not hypothetical — this
-# fleet already carries the wreckage (mcnugget-gemma4-e4b: 0 sessions; legion has
-# four such dirs; cbp has three). The resolver has always supported SAGE_INSTANCE as
-# priority 1; nothing was using it. Renaming the dir to match a new model is NOT the
-# fix: the sealed identity's key derivation includes the instance path, so a rename
-# breaks the seal (loudly now, since authorize() verifies the fingerprint).
-INSTANCE_SLUG="${SAGE_INSTANCE:-mcnugget-${DAEMON_MODEL//:/-}}"
+INSTANCE_SLUG="$SAGE_INSTANCE"
 INSTANCE_DIR="sage/instances/$INSTANCE_SLUG"
-echo "[McNugget-Raising] Active instance: $INSTANCE_SLUG (daemon model: $DAEMON_MODEL)"
+# The model is a fact ABOUT the being, read from its own record -- reported, never used to choose it.
+BEING_MODEL=$("$SAGE_PY" -c "import json,sys; print(json.load(open(sys.argv[1])).get('model','?'))" \
+    "$SAGE_DIR/$INSTANCE_DIR/instance.json" 2>/dev/null || echo "?")
+echo "[McNugget-Raising] Active instance: $INSTANCE_SLUG (model: $BEING_MODEL)"
 
 # Snapshot state
 echo "[McNugget-Raising] Snapshotting state..."
