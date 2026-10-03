@@ -1005,7 +1005,7 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
                         dropped += 1
                     else:
                         kept.extend(reversed(entry))
-                    i = j - 1
+                    i = j
                 else:
                     end = i
                     i -= 1
@@ -1019,9 +1019,6 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
                         kept.extend(reversed(entry))
                     i = j - 1
             kept.reverse()
-            total_entries = sum(1 for k in lines if k.startswith("- "))
-            kept_entries = sum(1 for k in kept if k.startswith("- "))
-            dropped = total_entries - kept_entries
             out[key] = (("[…trimmed to fit the context window: " + str(dropped)
                          + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
                         if dropped else "") + "\n".join(kept))
