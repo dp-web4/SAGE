@@ -712,6 +712,22 @@ def test_an_elided_result_is_saved_where_the_being_can_still_read_it():
     assert "outlives this beat" in out[3]["content"], "and says why that matters"
 
 
+def test_the_elision_marker_says_how_many_lines_the_saved_file_is():
+    """The marker tells the being how long the saved file is, so it can pick a narrow
+    range that fits instead of guessing (legion-being, 2026-09-29): a being that was
+    told only 'read a narrow range' had to guess the range, and a guess that is too
+    wide elides again — the recursive elision this exists to break."""
+    from sage.gateway.being_tool_loop import compact_convo, _ELIDED_SIGIL
+    body = "\n".join(f"line {i:03d} " + "x" * 40 for i in range(200))
+    out, elided = compact_convo(_elidable(body), _LLM16k(), spill_root="/proc/definitely-not-writable")
+    assert len(elided) == 1, elided
+    # compact_convo elides the second-to-last tool message, not necessarily index 3 —
+    # locate the elided one by its sigil instead of assuming a position.
+    elided_msgs = [m for m in out if _ELIDED_SIGIL in (m.get("content") or "")]
+    assert len(elided_msgs) == 1, "exactly one message should be elided"
+    assert "it is 200 lines long" in elided_msgs[0]["content"], "the marker must carry the line count"
+
+
 def test_an_already_elided_result_is_not_elided_again():
     """An elided body is ~850 characters, over COMPACT_MIN_BODY, so a second pass used to
     cut the middle out of the MARKER — and count the marker's characters as room freed."""
@@ -1572,3 +1588,33 @@ def test_a_collapse_is_reported_with_the_room_it_freed():
         # the stub's length is kept + marker, so chars freed == stub length - pointer length
         assert r["chars"] > 0 and r["spill"] in out[r["index"]]["content"]
         assert _ELIDED_SIGIL not in out[r["index"]]["content"]
+
+
+def test_elision_marker_count_matches_saved_file():
+    """The marker's 'it is N lines long' must equal the saved file's real line count.
+    GPT review of #272 (2026-09-29): the label counted the in-memory body (len(body))
+    while the file on disk is a 2-line provenance header plus the body, so the marker
+    under-reported by 2. The count must be measured on the serialized file, via
+    splitlines, so a trailing newline in the body adds no phantom line."""
+    import os, tempfile
+    from sage.gateway.being_tool_loop import compact_convo
+    tmpdir = tempfile.mkdtemp(prefix="elision-lines-")
+    body = "\n".join(f"line {i}" for i in range(2000))
+    out, el = compact_convo(_elidable(body), _LLM16k(), spill_root=tmpdir)
+    rec = next(r for r in el if r.get("spill"))
+    saved = rec["spill"]
+    # the marker names a bare home-relative path (memory_read resolves it under home);
+    # the file physically lands under spill_root
+    assert saved.startswith("scratch/elided/"), saved
+    assert os.path.isfile(os.path.join(tmpdir, saved)), "the named file must exist under spill_root"
+    file_lines = len(open(os.path.join(tmpdir, saved)).read().splitlines())
+    assert f"it is {file_lines} lines long" in out[3]["content"], \
+        "the marker's line count must equal the saved file's real line count"
+    assert file_lines == 2002, "2-line provenance header plus the 2000-line body"
+    # a trailing newline in the body must not add a phantom line to the count
+    body_nl = body + "\n"
+    out2, el2 = compact_convo(_elidable(body_nl), _LLM16k(), spill_root=tmpdir)
+    rec2 = next(r for r in el2 if r.get("spill"))
+    file_lines2 = len(open(os.path.join(tmpdir, rec2["spill"])).read().splitlines())
+    assert file_lines2 == 2002, "a trailing newline adds no line to the count"
+    assert f"it is {file_lines2} lines long" in out2[3]["content"]

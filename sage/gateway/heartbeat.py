@@ -1119,14 +1119,73 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         if not text:
             continue
         over = total() - budget_chars
-        keep = max(floors[key], len(text) - over)
+        raw_keep = budget_chars - fixed_chars
+        keep = max(floors[key], raw_keep) if raw_keep >= 0 else 0
         if keep >= len(text):
             continue
         # keep the HEAD of the digest (newest-first there) and the TAIL of recall/journal
-        out[key] = (text[:keep] + "\n[…trimmed to fit the context window…]") if key == "digest" \
-            else ("[…trimmed to fit the context window…]\n" + text[-keep:])
+        # Trim on ENTRY boundaries, not raw characters: a character cut can split an entry
+        # mid-line, and the being then reads a half-fact. Entries are the "- ..." lines
+        # fleet_digest and the recall/journal builders emit. The marker says how many
+        # entries were dropped, so the being knows what it is missing (the same spirit as
+        # the elision-marker line count: markers must report true counts).
+        lines = text.split("\n")
+        if key == "digest":
+            kept, dropped = [], 0
+            i = 0
+            while i < len(lines):
+                if not lines[i].startswith("- "):
+                    while i < len(lines) and not lines[i].startswith("- "):
+                        i += 1
+                    if i >= len(lines):
+                        break
+                j = i
+                while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
+                    j += 1
+                entry = lines[i:j + 1]
+                if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
+                    break
+                kept.extend(entry)
+                i = j + 1
+            total_entries = sum(1 for k in lines if k.startswith("- "))
+            kept_entries = sum(1 for k in kept if k.startswith("- "))
+            dropped = total_entries - kept_entries
+            out[key] = ("\n".join(kept) + ("\n[…trimmed to fit the context window: "
+                          + str(dropped) + " older entr" + ("y" if dropped == 1 else "ies")
+                          + " dropped…]" if dropped else ""))
+        else:
+            kept, dropped = [], 0
+            i = len(lines) - 1
+            while i >= 0:
+                if lines[i].startswith("- "):
+                    j = i
+                    while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
+                        j += 1
+                    entry = lines[i:j + 1]
+                    if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
+                        dropped += 1
+                    else:
+                        kept.extend(reversed(entry))
+                    i = i - 1
+                else:
+                    end = i
+                    i -= 1
+                    j = i
+                    while j >= 0 and not lines[j].startswith("- "):
+                        j -= 1
+                    entry = lines[j:end + 1]
+                    if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
+                        dropped += 1
+                    else:
+                        kept.extend(reversed(entry))
+                    i = j - 1 - 1
+            kept.reverse()
+            out[key] = (("[…trimmed to fit the context window: " + str(dropped)
+                         + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
+                        if dropped else "") + "\n".join(kept))
+        removed = sum(len(k) + 1 for k in lines[i:]) if i < len(lines) else 0
         interventions.append({"kind": "context_fit", "block": key,
-                              "suppressed": f"{len(text) - keep} chars of {key}",
+                              "suppressed": f"{removed} chars of {key}",
                               "reason": f"prompt + a p99 answer ({reserve} tok) would not fit "
                                         f"num_ctx ({num_ctx}); the generation would be cut "
                                         f"mid-answer (27/506 generates already were)"})
