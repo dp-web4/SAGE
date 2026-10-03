@@ -3087,7 +3087,10 @@ def main(argv=None) -> int:
                          "is no step cap: work continues while there is work, and the clock "
                          "is the box's limit rather than a guess at how much work there is. "
                          "Keep the unit's TimeoutStartSec comfortably above it — the record "
-                         "is written at beat end, and a kill loses the beat.")
+                         "is written at beat end, and a kill loses the beat. 0 (or less) "
+                         "means NO deadline: the beat runs while the being works (dp, "
+                         "2026-10-03: 'no cap on beat duration, if the being wants to keep "
+                         "going it should').")
     ap.add_argument("--reflect-steps", type=int, default=3)
     ap.add_argument("--since-hours", type=float, default=None,
                     help="digest window; default: since the last beat, min 1h, max 48h")
@@ -3470,7 +3473,7 @@ def main(argv=None) -> int:
     # Everything below runs under the kill handler: a SIGTERM (the unit's 45-minute
     # TimeoutStartSec) unwinds here and the record is still written, marked, with the
     # phases that completed. Explore and the posture turn share one wall-clock deadline.
-    explore_deadline = t0 + args.explore_budget_s
+    explore_deadline = explore_deadline_for(t0, args.explore_budget_s)
     explore = after = reflect = answer = None
     preempted = None
     account = {"present": False, "sha256": None, "reply": "", "generates": []}
@@ -3959,6 +3962,15 @@ def _config_check(instance: Path, model: str, llm, offered) -> dict:
         "headroom_tokens": None,     # num_ctx - (largest prompt + num_predict)
         "context_overcommitted": None,
     }
+
+
+def explore_deadline_for(t0: float, budget_s: float) -> Optional[float]:
+    """The wall-clock moment explore stops issuing tool steps, or None for NO deadline.
+
+    A budget of 0 or less is "no cap" (dp, 2026-10-03: "no cap on beat duration, if the being
+    wants to keep going it should"). It must not be read as t0 + 0, which would end explore
+    before its first step -- the opposite of what the operator asked for."""
+    return None if budget_s is None or budget_s <= 0 else t0 + budget_s
 
 
 def stay_awake_reason(*turns) -> Optional[str]:
