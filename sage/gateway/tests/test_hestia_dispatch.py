@@ -1610,7 +1610,12 @@ def test_request_run_says_when_the_file_is_unchanged_since_the_seat_answered():
     # asking again before the seat answers is not flagged: nobody has answered yet
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
     assert r.ok and "unchanged" not in r.result
-    conv.append(home, "seat", speaker="seat", text="Ran it: prints a.", via="seat")
+    # the seat's answer as seat_run_requests.py writes it: a receipt naming this path. (Until
+    # #276's re-review this fixture was free prose, "Ran it: prints a.", which is exactly the
+    # unbound turn that must NOT count -- see test_unrelated_seat_prose_after_a_request_is_not_its_answer.)
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text="[request_run] I ran notes/train.py with no arguments (the script's defaults). "
+                     "exit code 0.\n\nstdout:\na\n")
     asked = [t["seq"] for t in conv.recent(home, "seat", limit=10)]
 
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "verify my fix"}), _ALLOW)
@@ -1773,6 +1778,61 @@ def test_a_seat_answer_for_another_path_is_not_the_answer_to_this_request():
     assert "unchanged" not in r.result, r.result
 
 
+def test_unrelated_seat_prose_after_a_request_is_not_its_answer():
+    """GPT re-review of #276 at fef135b7b: in the solicited arm, ANY later seat turn without the
+    marker was still taken as "the seat answered that at seq N". Request new.py -> an unrelated
+    seat message -> re-request new.py came back UNCHANGED, carrying the unrelated message as
+    the answer. That is #154's queue-conflation class. Free prose answers nothing: the request
+    is still owed."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    d(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text="Morning. I merged the window fix overnight; your journal reads well.")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False
+    assert "unchanged" not in r.result, r.result
+    assert "UNCHANGED" not in conv.recent(home, "seat", limit=1)[-1]["text"]
+    # prose that merely mentions the file is still prose
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text="I'll look at notes/new.py after lunch; I ran it once yesterday.")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "third"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+
+
+def test_a_marked_receipt_for_this_path_or_a_turn_naming_the_seq_answers_the_request():
+    """The bound answers still count: a seat_run_requests.py decline (or run) receipt naming
+    THIS path, and a seat turn that names the request's seq ("answering your seq N")."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    d(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I did not run notes/new.py (sha {sha}). Answers your request "
+                     f"seq {asked}.\n\nreason: it opens the camera device.")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    got = r.result.get("unchanged", "")
+    assert got and "it opens the camera device" in got, r.result
+    assert f"at seq {asked}" in got, got
+
+    d2, home2, sha2 = _seat_conv_with_train()
+    d2(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    asked2 = conv.recent(home2, "seat", limit=1)[-1]["seq"]
+    conv.append(home2, "seat", speaker="seat", via="seat",
+                text=f"Answering your seq {asked2}: not running this one, it writes outside notes/.")
+    r = d2(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    got = r.result.get("unchanged", "")
+    assert got and "writes outside notes/" in got, r.result
+    # ...but a turn naming some OTHER seq is not this request's answer
+    d3, home3, _ = _seat_conv_with_train()
+    d3(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    asked3 = conv.recent(home3, "seat", limit=1)[-1]["seq"]
+    conv.append(home3, "seat", speaker="seat", via="seat",
+                text=f"Answering your seq {int(asked3) + 1000}: done.")
+    r = d3(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+
+
 def test_an_unchanged_receipt_caps_what_it_carries():
     """A seat answer is capped at both ends by the seat, but a decline can be prose of any
     length. The tail is what carries the exception line, so the cap keeps the tail."""
@@ -1789,7 +1849,8 @@ def test_an_unchanged_receipt_caps_what_it_carries():
 
     d(BeingIntent("request_run", {"path": "notes/train.py", "why": "first"}), _ALLOW)
     conv.append(home, "seat", speaker="seat", via="seat",
-                text="[request_run] " + ("x" * 4000) + "\nZeroDivisionError: division by zero")
+                text="[request_run] I did not run notes/train.py. " + ("x" * 4000)
+                     + "\nZeroDivisionError: division by zero")
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
     got = r.result["unchanged"]
     assert "ZeroDivisionError: division by zero" in got, "the cap dropped the tail"

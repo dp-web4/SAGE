@@ -51,6 +51,17 @@ from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 _RUN_MARKER = "[request_run]"
 # The first line of a seat run/decline receipt (seat_run_requests.py): the verb and the path.
 _SEAT_RUN_LINE = re.compile(r"\[request_run\] I (ran|did not run) (\S+)")
+# How a seat turn names the request seqs it answers. The same pattern seat_run_requests.py
+# writes ("Answers your request seq N.") and reads, including the hand-written forms.
+_SEAT_NAMES_SEQ = re.compile(r"\b(?:request seq|answering your seq|about seq|on your seq)\s+"
+                             r"(\d+(?:\s*(?:,|and)\s*(?:seq\s+)?\d+)*)", re.I)
+
+
+def _seqs_named(text: str) -> set:
+    out = set()
+    for m in _SEAT_NAMES_SEQ.finditer(text or ""):
+        out.update(int(n) for n in re.findall(r"\d+", m.group(1)))
+    return out
 # A say that ASKS for a run, and the runnable names it could mean. Kept narrow on purpose:
 # a false match reroutes a turn, so it must name a .py/.sh AND ask with the verb. The bare
 # verb matched seq 2893, "Waiting for dp's confirmation of a full successful run" — a
@@ -3073,10 +3084,22 @@ class HestiaF1aDispatcher:
                 unchanged = (asked_at, t.get("seq"))
                 answer_text = text
             elif asked_at is not None:
-                # The seat's ANSWER carries the marker (seat_run_requests.py writes it for
-                # both a run and a decline). A later remark about that answer does not, and
-                # must not displace it: on 2026-09-22 this pointed at seq 3300, a seat aside,
-                # while the run it was about was seq 3299.
+                # ONLY A TURN BOUND TO THIS REQUEST ANSWERS IT. GPT re-review of #276 at
+                # fef135b7b: any later seat turn counted, so request new.py -> an unrelated
+                # seat message -> re-request came back "the seat answered that at seq N" with
+                # the unrelated message carried as the answer (#154's queue conflation). Bound
+                # means: a run/decline receipt naming THIS path (seat_run_requests.py writes the
+                # marker for both; one for another path was skipped above), or a turn that names
+                # this request's seq. Free prose -- even prose mentioning the file -- is not.
+                try:
+                    _named_this_seq = int(asked_at) in _seqs_named(text)
+                except (TypeError, ValueError):
+                    _named_this_seq = False
+                if named is None and not _named_this_seq:
+                    continue
+                # The seat's ANSWER carries the marker. A later remark about that answer does
+                # not, and must not displace it: on 2026-09-22 this pointed at seq 3300, a seat
+                # aside, while the run it was about was seq 3299.
                 if unchanged and answer_text.startswith(_RUN_MARKER) \
                         and not text.startswith(_RUN_MARKER):
                     continue
