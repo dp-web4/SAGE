@@ -1939,6 +1939,29 @@ def test_a_marked_receipt_for_this_path_or_a_turn_naming_the_seq_answers_the_req
     assert "unchanged" not in r.result, r.result
 
 
+def test_a_receipt_for_this_path_about_other_bytes_or_older_requests_is_not_the_answer():
+    """The same two exceptions conversations._already_answered applies to the wake: a receipt
+    for this path that states OTHER bytes is not an answer about these, and one naming only
+    seqs older than this request answered those, not this one."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    d(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text="[request_run] I ran notes/new.py (sha 0123456789ab) with no arguments (the "
+                     "script's defaults). exit code 0.\n")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+
+    d2, home2, _ = _seat_conv_with_train()
+    d2(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    asked = int(conv.recent(home2, "seat", limit=1)[-1]["seq"])
+    conv.append(home2, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I did not run notes/new.py. Answers your request seq "
+                     f"{max(asked - 1, 0)}.\n\nreason: superseded.")
+    r = d2(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+
+
 def test_an_unchanged_receipt_caps_what_it_carries():
     """A seat answer is capped at both ends by the seat, but a decline can be prose of any
     length. The tail is what carries the exception line, so the cap keeps the tail."""

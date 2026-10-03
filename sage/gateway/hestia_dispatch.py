@@ -51,17 +51,6 @@ from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 _RUN_MARKER = "[request_run]"
 # The first line of a seat run/decline receipt (seat_run_requests.py): the verb and the path.
 _SEAT_RUN_LINE = re.compile(r"\[request_run\] I (ran|did not run) (\S+)")
-# How a seat turn names the request seqs it answers. The same pattern seat_run_requests.py
-# writes ("Answers your request seq N.") and reads, including the hand-written forms.
-_SEAT_NAMES_SEQ = re.compile(r"\b(?:request seq|answering your seq|about seq|on your seq)\s+"
-                             r"(\d+(?:\s*(?:,|and)\s*(?:seq\s+)?\d+)*)", re.I)
-
-
-def _seqs_named(text: str) -> set:
-    out = set()
-    for m in _SEAT_NAMES_SEQ.finditer(text or ""):
-        out.update(int(n) for n in re.findall(r"\d+", m.group(1)))
-    return out
 # A say that ASKS for a run, and the runnable names it could mean. Kept narrow on purpose:
 # a false match reroutes a turn, so it must name a .py/.sh AND ask with the verb. The bare
 # verb matched seq 2893, "Waiting for dp's confirmation of a full successful run" — a
@@ -3091,12 +3080,24 @@ class HestiaF1aDispatcher:
                 # means: a run/decline receipt naming THIS path (seat_run_requests.py writes the
                 # marker for both; one for another path was skipped above), or a turn that names
                 # this request's seq. Free prose -- even prose mentioning the file -- is not.
+                # The same binding conversations._already_answered applies to the seat's wake
+                # (#154 recut, #332), so the receipt and the wake agree on what an answer is:
+                # one definition of how a seat turn names a seq, and the same two exceptions --
+                # a receipt stating OTHER bytes, or naming only seqs older than this request.
+                seqs = {int(n) for mm in conv._ANSWER_NAMES.finditer(text)
+                        for n in re.findall(r"\d+", mm.group(1))}
                 try:
-                    _named_this_seq = int(asked_at) in _seqs_named(text)
+                    _asked = int(asked_at)
                 except (TypeError, ValueError):
-                    _named_this_seq = False
-                if named is None and not _named_this_seq:
-                    continue
+                    _asked = None
+                if not (_asked is not None and _asked in seqs):
+                    if named is None:
+                        continue
+                    _sha = re.search(r"\(sha ([0-9a-f]+)\)", named[2])
+                    if _sha and not (digest.startswith(_sha.group(1)) or _sha.group(1).startswith(digest)):
+                        continue
+                    if seqs and _asked is not None and _asked > max(seqs):
+                        continue
                 # The seat's ANSWER carries the marker. A later remark about that answer does
                 # not, and must not displace it: on 2026-09-22 this pointed at seq 3300, a seat
                 # aside, while the run it was about was seq 3299.
