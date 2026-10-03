@@ -48,7 +48,7 @@ def test_closed_sets_reach_the_explore_specs_and_peer_ask_is_closed_over_real_na
 
 def test_the_beat_wires_the_names_in(monkeypatch):
     src = Path(hb.__file__).read_text()
-    assert "_toolset.specs(_unavail, _enums)" in src and "_schema_chars_for(_explore_tools, _unavail, _enums)" in src
+    assert "_toolset.specs(_unavail, _enums, brief=" in src and "_schema_chars_for(_explore_tools, _unavail, _enums, brief=" in src
     assert "sibling_line(args.member)" in src, "beside the inbox"
     d = tempfile.mkdtemp(prefix="hub-mesh-")
     with open(os.path.join(d, "members.json"), "w") as f:

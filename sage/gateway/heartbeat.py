@@ -1005,7 +1005,8 @@ _SCHEMA_CHARS_PER_VERB = 700   # above the 651 measured, so the bound stays cons
 _SCHEMA_CHARS_FLOOR = 12_000   # at least the 18-verb measurement, for when the verb count is unknown too
 
 
-def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[dict] = None) -> Optional[int]:
+def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[dict] = None,
+                      brief: bool = False) -> Optional[int]:
     """Chars the offered verbs' schemas actually cost. None rather than a guess if it
     cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
     13 verbs to 18. Callers must route None through _schema_chars_fallback, never `or`
@@ -1019,7 +1020,8 @@ def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[d
             # here, so the cost is measured on THOSE specs, not on the full descriptions
             from sage.gateway import toolset
             names = set(offered)
-            return len(json.dumps([t for t in toolset.specs(unavail, enums) if t["function"]["name"] in names]))
+            return len(json.dumps([t for t in toolset.specs(unavail, enums, brief=brief)
+                                   if t["function"]["name"] in names]))
         from sage.gateway.being_gate_client import ollama_tools
         return len(json.dumps(ollama_tools(list(offered))))
     except Exception:
@@ -3333,11 +3335,13 @@ def main(argv=None) -> int:
     from sage.gateway import peers as _peers
     _reach = _peers.reachable(args.member)
     _enums = {("peer_ask", "to"): _reach} if _reach else None
-    _explore_specs = _toolset.specs(_unavail, _enums)
+    # per instance (RESEARCH_GENERALIZATION_RULE): "brief" shortens available verbs' descriptions
+    _tool_desc_mode = _toolset.tool_descriptions_mode(instance_config(instance))
+    _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief")
     # the names are DERIVED from the specs offered, never kept beside them: the seed's tool list
     # and the window's schema measurement must describe exactly what the model is handed
     _explore_tools = [t["function"]["name"] for t in _explore_specs]
-    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums)
+    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief")
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
     _state_head = f"# Your own state\n\n"
@@ -3773,6 +3777,7 @@ def main(argv=None) -> int:
         "member": args.member, "model": args.model, "window_h": round(hours, 2), "clock": _clock,
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
+        "tool_descriptions": _tool_desc_mode,
         "decline_closing": decline_closing_for(instance_config(instance)),
         "answered_run_wake": answered_run_wake_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,

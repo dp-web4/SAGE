@@ -70,7 +70,48 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
     return out
 
 
-def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, list]] = None) -> List[dict]:
+# BRIEF DESCRIPTIONS (opt-in per instance, `tool_descriptions: "brief"`; dp, 2026-10-03). Measured on
+# legion-being: the seed that compaction cannot touch grew 15.7k -> 17.1k tokens in a week, much of it
+# verb schemas (33 verbs, 23.8k chars, descriptions 47% of that), leaving ~1.3k tokens of a 18.4k
+# compaction target for a whole beat's work; long beats retried ~50% of generates at the window. In
+# brief mode an available verb's description is its first sentence, capped, plus a pointer to
+# `describe`, which returns the full text. Parameters, enums and required keys are untouched: they
+# are what make a call well-formed. Per instance (RESEARCH_GENERALIZATION_RULE): measured on one being.
+BRIEF_DESC_CHARS = 160
+DESCRIBE = "describe"
+
+
+def tool_descriptions_mode(cfg: Optional[dict]) -> str:
+    """instance.json `tool_descriptions`: "brief" opts in; anything else is the full descriptions."""
+    return "brief" if str((cfg or {}).get("tool_descriptions", "")).strip().lower() == "brief" else "full"
+
+
+def brief_description(name: str, desc: str) -> str:
+    """The first sentence of a verb's description, capped at BRIEF_DESC_CHARS, and -- when that cut
+    anything -- where the rest is. Never shorter than what it replaces; a short description stays whole."""
+    import re
+    m = re.match(r"(.+?[.!?])(\s|$)", desc.strip(), re.S)
+    first = (m.group(1) if m else desc.strip())
+    if len(first) > BRIEF_DESC_CHARS:
+        first = first[:BRIEF_DESC_CHARS - 1].rstrip() + "…"
+    if first.strip() == desc.strip():
+        return desc
+    return f"{first} (Full text: {DESCRIBE} {name}.)"
+
+
+def full_text(name: str) -> str:
+    """What `describe` answers: the verb's whole description and each parameter's, from the schema table."""
+    if name not in _TOOL_SCHEMAS:
+        return (f"there is no verb called {name!r}. Verbs: " + ", ".join(canonical_toolset()))
+    desc, props, required = _TOOL_SCHEMAS[name]
+    lines = [f"{name}: {desc}"]
+    for k, v in props.items():
+        lines.append(f"  {k}{' (required)' if k in required else ''}: {v}")
+    return "\n".join(lines)
+
+
+def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, list]] = None,
+          *, brief: bool = False) -> List[dict]:
     """The Ollama tool specs for the whole canonical toolset. Available verbs carry their full
     description; an unavailable one carries one line and the reason, parameters intact."""
     unavail = unavail or {}
@@ -90,6 +131,8 @@ def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, 
             # long descriptions go, since they are what made an unusable verb cost ~700 chars
             properties = {k: {"type": "string"} for k in props}
         else:
+            if brief and name != DESCRIBE:
+                desc = brief_description(name, desc)
             properties = {k: dict({"type": "string", "description": v},
                                   **({"enum": list(closed[(name, k)])} if closed.get((name, k)) else {}))
                           for k, v in props.items()}
