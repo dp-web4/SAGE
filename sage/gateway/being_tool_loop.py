@@ -958,10 +958,14 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # THE ARGUMENTS ARE THE ACT, NOT A NOTE ABOUT IT (2026-10-01): asked only "Now the arguments", a
         # memory_write's content came back as "I am choosing to use memory_write because ..." and check's
         # target as "check". The tool's own description rides with the ask.
-        desc = next((t["function"].get("description") or "" for t in offered if t["function"]["name"] == act), "")
+        # NO PROSE IN THE ARGUMENT ASK (2026-10-03, Sprout trial + E21). With the tool's description here, it became
+        # the message: say texts "Say is a tool that lets you write messages…", "Add a turn to the conversation with
+        # dp: 'I'm sorry I was late. My car broke down…'" (sent to dp). With the slots' meanings instead, those came
+        # back as content too: say "What do you want to say?", recall query "What are you trying to remember?".
+        # SMALL_MODEL_LEGIBILITY 1.14: words in a prompt that produces a message become the message. The act's
+        # name and the JSON shape only; the keys (to, text, query) and the format carry the rest.
         arg_msgs = msgs + [ask, {"role": "assistant", "content": c1},
-                           {"role": "user", "content": (f"{act}: {desc[:600]}\n\nNow the arguments for {act}, as JSON. "
-                                                        "Write the actual values the tool needs, not why you chose it.")}]
+                           {"role": "user", "content": f"{act}. As JSON."}]
         # ARGUMENTS THAT FAIL ARE NOT AN ACT (GPT on #311): a parse or structural failure gets ONE re-ask
         # naming what was wrong; a second failure ends the step visibly with no act, never as an intent with
         # empty arguments whose meaning would depend on each effector's missing-argument behaviour.

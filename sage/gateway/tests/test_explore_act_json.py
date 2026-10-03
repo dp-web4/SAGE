@@ -106,13 +106,19 @@ def test_the_json_form_has_its_own_small_step_budget(tmp_path):
     assert "max_steps=_explore_steps" in src and src.count("max_steps=_explore_steps") == 2
 
 
-def test_the_argument_ask_carries_the_tools_description():
-    tools = [dict(TOOLS[0], function=dict(TOOLS[0]["function"], description="Record an event you witnessed."))]
-    llm = LLM(json.dumps({"act": "witness", "why": "x"}), json.dumps({"event": "e"}))
+def test_the_argument_ask_is_the_act_name_and_json_only():
+    """Sprout trial 2026-10-03 + E21: the description in the ask became the message ("Say is a tool that lets you
+    write messages...", "Add a turn to the conversation with dp: ..."), and slot meanings did too ("What do you
+    want to say?"). LEGIBILITY 1.14: no prose in a prompt that produces a message."""
+    say = {"type": "function", "function": {"name": "say", "description": "Add a turn to your conversation.",
+           "parameters": {"type": "object", "required": ["to", "text"], "properties": {
+               "to": {"type": "string", "description": "the conversation id"},
+               "text": {"type": "string", "description": "what you want to say"}}}}}
+    llm = LLM(json.dumps({"act": "say", "why": "x"}), json.dumps({"to": "dp", "text": "hello"}))
     run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "beat"}], max_steps=1,
-                         tools=tools, act_form="json")
+                         tools=[say], act_form="json")
     ask = llm.calls[1]["messages"][-1]["content"]
-    assert "Record an event you witnessed." in ask and "not why you chose it" in ask
+    assert ask == "say. As JSON.", ask
 
 
 # --- GPT on #311: arguments that fail are not an act; a grounded subset in the JSON form -------------------
