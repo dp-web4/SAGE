@@ -118,6 +118,52 @@ def test_an_unreadable_ledger_refuses_instead_of_resetting_the_cap(monkeypatch):
     assert not env.ok and "cannot be read" in env.error and calls == [], "never 'cannot tell' as zero usage"
 
 
+def test_the_slot_is_recorded_before_the_search_leaves(monkeypatch):
+    """GPT on #335: count before egress, not after; a search that never returns is still counted."""
+    d, _ = _disp()
+    seen = []
+
+    def run(argv, **kw):
+        seen.append(d._web_log().read_text())          # what the ledger holds at the moment of egress
+        return SimpleNamespace(returncode=1, stdout="", stderr="")
+    monkeypatch.setattr(subprocess, "run", run)
+    d(BeingIntent("web_search", {"query": "counted first"}), _ALLOW)
+    assert seen and "counted first" in seen[0]
+
+
+def test_an_unwritable_ledger_refuses_and_sends_nothing(monkeypatch):
+    """GPT on #335: write failure was fail-open (search sent, never counted). Now nothing leaves."""
+    calls = []
+    monkeypatch.setattr(subprocess, "run", _fake_run(calls, {"query": "q", "results": [], "error": None}))
+
+    def broken(fd):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(os, "fsync", broken)
+    d, _ = _disp()
+    env = d(BeingIntent("web_search", {"query": "anything"}), _ALLOW)
+    assert not env.ok and "cannot be read or written" in env.error and calls == []
+
+
+def test_twins_cannot_all_pass_a_cap_with_one_slot_left():
+    """GPT on #335: same member, concurrent reservations, one slot: exactly one wins."""
+    import threading
+    d, _ = _disp()
+    log = d._web_log()
+    log.parent.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    log.write_text("".join(json.dumps({"t": now - 60 * i, "query": "x"}) + "\n" for i in range(5)))
+    gate, out = threading.Barrier(8), []
+
+    def twin(i):
+        gate.wait()
+        out.append(d._web_reserve(now, f"twin {i}")[0])
+    ts = [threading.Thread(target=twin, args=(i,)) for i in range(8)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert sorted(out) == ["full"] * 7 + ["ok"], out
+    assert len(log.read_text().splitlines()) == 6
+
+
 KEY = "." + "ssh/id_" + "ed25519"     # built at runtime: a credential-shaped token as test data
 
 

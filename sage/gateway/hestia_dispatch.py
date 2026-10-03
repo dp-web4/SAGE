@@ -1484,6 +1484,30 @@ class HestiaF1aDispatcher:
         except Exception:
             return None
 
+    def _web_reserve(self, now: float, query: str) -> tuple:
+        """RESERVE A SLOT BEFORE ANYTHING LEAVES (GPT on #335): under an exclusive lock on the seat-owned ledger,
+        read the window, refuse at the cap, and durably append this attempt (flush + fsync) before returning.
+        Attempts are counted, not results. Returns ("ok", n_before) | ("full", recent) | ("unrecorded", None);
+        any failure to read OR record is "unrecorded", so the caller sends nothing."""
+        import fcntl
+        log = self._web_log()
+        try:
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with open(log.with_suffix(".lock"), "a", encoding="utf-8") as lk:
+                fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+                recent = self._web_recent(now)
+                if recent is None:
+                    return ("unrecorded", None)
+                if len(recent) >= self.WEB_SEARCH_CAP:
+                    return ("full", recent)
+                with open(log, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({"t": now, "query": query[:200]}) + "\n")
+                    f.flush()
+                    os.fsync(f.fileno())
+                return ("ok", len(recent))
+        except Exception:
+            return ("unrecorded", None)
+
     def _do_web_search(self, intent: BeingIntent) -> ResultEnvelope:
         """Search the web from this machine (sage/gateway/web_search.py), judged and witnessed like any act.
 
@@ -1492,8 +1516,8 @@ class HestiaF1aDispatcher:
         the query as data, after sweeping the query with the innate denylist (BeingGateClient.gate, egress stage);
         there is no composed command for the law to judge, so verdict.command is normally None. This handler
         builds a FIXED command from the validated query (web_search_command) and runs it on this machine. The
-        seat-owned hourly cap is checked before anything leaves, and fails closed when its ledger cannot be read;
-        results come back labelled as other people's words."""
+        seat-owned hourly cap RESERVES a slot under a lock, durably, before anything leaves, and fails closed
+        when its ledger cannot be read or written; results come back labelled as other people's words."""
         import json as _json
         import shlex
         import subprocess
@@ -1509,20 +1533,19 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=("web_search refused: the law judged a command this dispatcher "
                                                    "would not execute."))
         now = self._now()
-        log = self._web_log()
-        recent = self._web_recent(now)
-        if recent is None:
+        argv = shlex.split(cmd)
+        argv[0] = _sys.executable        # the seat's own interpreter, the module from this checkout
+        query = argv[argv.index("--") + 1]
+        state, recent = self._web_reserve(now, query)
+        if state == "unrecorded":
             return ResultEnvelope(ok=False, error=(
-                "not searched: this seat's record of your recent searches cannot be read, so the hourly limit "
-                "cannot be checked. Nothing was sent. This is the seat's to repair, not yours."))
-        if len(recent) >= self.WEB_SEARCH_CAP:
+                "not searched: this seat's record of your recent searches cannot be read or written, so the "
+                "hourly limit cannot be kept. Nothing was sent. This is the seat's to repair, not yours."))
+        if state == "full":
             frees = int((float(recent[0]["t"]) + self.WEB_SEARCH_WINDOW_S - now) / 60) + 1
             return ResultEnvelope(ok=False, error=(
                 f"not searched: you have searched {len(recent)} times in the last hour. You can search again in "
                 f"about {frees} min. What you already found is in your earlier results."))
-        argv = shlex.split(cmd)
-        argv[0] = _sys.executable        # the seat's own interpreter, the module from this checkout
-        query = argv[argv.index("--") + 1]
         begin = self._call("hestia_begin_action", {"tool_name": "web_search", "target": f"web:{query[:120]}"})
         err = _hestia_error(begin)
         if err:
@@ -1538,13 +1561,6 @@ class HestiaF1aDispatcher:
         except Exception as e:
             found = {"query": query, "results": [], "error": f"{type(e).__name__}: the search did not finish"}
         ok = not found.get("error")
-        try:
-            log.parent.mkdir(parents=True, exist_ok=True)
-            with open(log, "a", encoding="utf-8") as f:
-                f.write(_json.dumps({"t": now, "query": query[:200], "n": len(found.get("results") or []),
-                                     "ok": ok}) + "\n")
-        except Exception:
-            pass
         try:
             self._call("hestia_record_outcome", {"action_id": action_id, "success": ok, "magnitude": 0.0,
                                                  **({} if ok else {"error": str(found.get("error"))[:300]})})
