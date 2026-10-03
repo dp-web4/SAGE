@@ -176,6 +176,23 @@ def test_a_finished_review_folds_after_one_beat_that_acted_on_it_not_one_that_cr
     assert acted[1].startswith("- 1 notice(s) already handled"), acted[1]
 
 
+COORDINATION = {"id": 104, "kind": "coordination", "from_plugin": "legion-claude",
+                "queued_at": "2026-09-21T10:07:00Z", "pointer_uri": "shared-context/plans/p.md"}
+
+
+def test_a_coordination_note_shown_to_an_acting_beat_stays_until_its_pointer_is_opened():
+    """GPT re-review of c25999cf6: coordination is general work coordination pointing at a
+    forum/plan/file, and hestia leaves it out of member_unanswered because it may be acted on in
+    silence -- not because seeing it handles it. Several acting beats that never open it: still
+    mail. A successful memory_read of its pointer: folds."""
+    seen = _run_beats([COORDINATION], [(True, [_beat("say", "x")])] * 3)
+    assert all("shared-context/plans/p.md" in t for t in seen), seen
+    assert all("already handled" not in t for t in seen), seen
+    opened = _run_beats([COORDINATION], [(True, [_beat("memory_read", "shared-context/plans/p.md")])])
+    assert "p.md" in opened[0] and "p.md" not in opened[1], opened
+    assert opened[1].startswith("- 1 notice(s) already handled"), opened[1]
+
+
 def test_the_ledger_is_pruned_to_the_inbox_and_an_id_less_notice_never_folds():
     from sage.gateway.heartbeat import inbox_ledger, render_inbox
     last = {"inbox": {"opened": [1, 2, 100], "presented": [13840, 7]}}

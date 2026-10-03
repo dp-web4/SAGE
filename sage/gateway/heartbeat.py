@@ -1188,12 +1188,16 @@ def appeals_block(disp, last: dict) -> tuple:
     return "\n".join(parts), record
 
 
-# NOTICE KINDS THAT CARRY NO OUTSTANDING OBLIGATION. A finished review, a forum post, a
-# coordination note and an ack report something that already happened; once a beat that could
-# act has been shown one, showing it again adds nothing. Every other kind -- reply, handoff,
-# review_request, unreachable, a ruling or other disposition, and any kind not named here --
-# may still be owed something, so it stays as mail until the being OPENS it.
-INBOX_INFORMATIONAL = ("review_done", "forum-note", "coordination", "ack")
+# NOTICE KINDS THAT CARRY NO OUTSTANDING OBLIGATION. A finished review, a forum post and an ack
+# report something that already happened; once a beat that could act has been shown one, showing
+# it again adds nothing. Every other kind -- reply, handoff, coordination, review_request,
+# unreachable, a ruling or other disposition, and any kind not named here -- may still be owed
+# something, so it stays as mail until the being OPENS it.
+# NOT `coordination` (GPT re-review of c25999cf6): hestia defines it as general work coordination
+# pointing at a forum/plan/file, and leaves it out of member_unanswered because it may be ACTED ON
+# IN SILENCE -- not because seeing its one-line rendering handles it. SAGE itself sends peer asks
+# and seat wakes as coordination. It folds only once its pointer is opened, like a handoff.
+INBOX_INFORMATIONAL = ("review_done", "forum-note", "ack")
 
 
 def _notice_target(uri) -> str:
@@ -1263,7 +1267,7 @@ def render_inbox(notices: list, limit: int = 8, handled=None, shown: list = None
             and n.get("id") in handled]
     notices = [n for n in notices if not any(n is d for d in done)]
     fold = (f"- {len(done)} notice(s) already handled -- opened by you, or a finished review / "
-            f"forum / coordination note already shown to you -- not repeated here.") if done else ""
+            f"forum note / ack already shown to you -- not repeated here.") if done else ""
     if not notices:
         return fold or "(empty)"
     front = ("reply", "review_request", "review_done", "handoff", "unreachable", "forum-note", "coordination")
@@ -3640,8 +3644,12 @@ def main(argv=None) -> int:
     conversations_marked = mark_conversations_after_beat(
         instance, args.member, _shown_upto, explore, [after, reflect, answer])
     try:
+        # Whether explore acted is read from explore itself (the rule mark_conversations_after_beat
+        # applies), NOT from its return: that returns explore_acted=None when the being has no
+        # conversations, and then nothing informational would ever fold. Found by driving main()
+        # with an inbox (test_inbox_ledger_wiring.py); the pure-function tests could not see it.
         _inbox_record = inbox_ledger(last, _inbox_notices, [explore, after, reflect, answer],
-                                     conversations_marked.get("explore_acted"), _inbox_shown)
+                                     bool(explore is not None and explore.trace), _inbox_shown)
     except Exception as _e:
         _inbox_record = {**((last or {}).get("inbox") or {}), "error": f"{type(_e).__name__}: {_e}"}
     # governance escalation wakes it to arbitrate. The beat is where refusals actually
