@@ -1131,7 +1131,8 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         lines = text.split("\n")
         if key == "digest":
             kept, dropped = [], 0
-            for i in range(len(lines)):
+            i = len(lines) - 1
+            while i >= 0:
                 if lines[i].startswith("- "):
                     j = i
                     while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
