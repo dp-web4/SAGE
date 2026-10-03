@@ -68,7 +68,7 @@ def beat(tmp_path, monkeypatch):
     monkeypatch.setattr(governed_turn, "build_client",
                         lambda *a, **k: (NS(_dispatcher=disp), llm))
 
-    def fake_turn(client, llm_, messages, max_steps=8, tools=None, on_generate=None, should_yield=None):
+    def fake_turn(client, llm_, messages, *a, **kw):
         # the FIRST turn of a beat is explore: record the seed it was handed, act as scripted
         script["calls"] += 1
         if script["calls"] == 1:
