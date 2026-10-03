@@ -298,7 +298,7 @@ AFFORDANCES = """## What you have this beat
 
 You cannot run code, browse, or open files outside your home unless a grant exists. The seat gives you a digest of what moved in the fleet with absolute paths; if you want to read one of those things, try memory_read on that path and see what the law says.
 
-Acting means calling a tool. A reply with no tool call ends the beat as words only, and words leave no trace in your todo, journal, scratch, or memory."""
+Acting means calling a tool. A reply with no tool call ends the beat as words only, and words leave no trace in your todo, journal, scratch, or memory. A beat has no clock and no boundary: it lasts while you keep calling tools. Work you can do now, do now rather than planning it for "next beat". To stop, rest; to go straight on into another beat, stay_awake."""
 
 SYSTEM = HEAD + "\n\n{posture}\n\n" + AFFORDANCES + "\n\n"
 
