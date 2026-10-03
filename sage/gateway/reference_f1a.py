@@ -51,6 +51,9 @@ SEAT_OWNED = ("entrustment.md",)
 # asks_sent.jsonl is the record the ask limit counts (hestia_dispatch, SAGE #92); a being that
 # could rewrite it could reset its own limit.
 RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl")
+# A memory_read miss names same-named files one directory away; past this many it names the
+# first ones and says how many more there are, rather than dropping them silently.
+_SAME_NAME_SHOWN = 5
 
 
 def _named_file_stamps(content: str, root: Path, written: Path) -> str:
@@ -259,6 +262,41 @@ def _file_state(src: str) -> tuple:
     return "complete", None
 
 
+def _fresh_name(p):
+    """A sibling name for `p` that does not exist yet: <stem>-new.py, then -new2, -new3, ...
+    A hint that names a fresh start must never name a file that is already there: that "door"
+    is one more append (cbp-claude's review of #197, 2026-09-28)."""
+    fresh, n = p.with_name(f"{p.stem}-new{p.suffix}"), 2
+    while fresh.exists():
+        fresh, n = p.with_name(f"{p.stem}-new{n}{p.suffix}"), n + 1
+    return fresh
+
+
+_MAIN_GUARD = re.compile(r"""^if\s+__name__\s*==\s*['"]__main__['"]\s*:""", re.M)
+
+
+def _is_second_program(content: str, before: str) -> bool:
+    """Whether `content`, appended to the .py `before`, is a whole program of its own landing
+    below another one -- not the next part of a program written in parts.
+
+    It must be a complete program by itself (#240's rule: it compiles alone and has a def,
+    class or import), AND it must collide with what is already there: it redefines a top-level
+    def/class the file already has, or both carry a __main__ guard. A later part of one program
+    adds new names below the old ones and at most one guard, so it never qualifies (cbp-claude's
+    review of #197: the first cut hinted on every append to a top-level .py)."""
+    import ast
+    if _file_state(content)[0] != "complete" or not re.search(r"^(def|class|import|from) ", content, re.M):
+        return False
+    def names(src):
+        return {n.name for n in ast.parse(src).body
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+    try:
+        clash = names(content) & names(before)
+    except (SyntaxError, ValueError):
+        clash = set()
+    return bool(clash) or bool(_MAIN_GUARD.search(content) and _MAIN_GUARD.search(before))
+
+
 def _append_must_advance(content: str, before: str) -> str:
     """Why appending `content` to a .py file would move it backwards, and so is refused, or "".
 
@@ -315,7 +353,7 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     matched, and deleting through it would have broken the next argument)."""
     have = text.split("\n")
     want = old.split("\n")
-    best_k, best_i = 0, -1
+    best_k, ties = 0, []
     for i, line in enumerate(have):
         if line != want[0]:
             continue
@@ -323,7 +361,10 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
         while k < len(want) and i + k < len(have) and have[i + k] == want[k]:
             k += 1
         if k > best_k:
-            best_k, best_i = k, i
+            best_k, ties = k, [i]
+        elif k == best_k and k > 0:
+            ties.append(i)
+    best_i = ties[0] if ties else -1
     cut = lambda s: s if len(s) <= width else s[:width] + "…"  # noqa: E731
     if best_k == 0:
         # No line matches exactly. Name the nearest one, so indentation or one changed word
@@ -335,6 +376,29 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
         n = have.index(near[0]) + 1
         return (f" Your first line is not in the file. The closest line is line {n}: "
                 f"{cut(near[0])!r}; you sent {cut(want[0])!r}.")
+    # MORE THAN ONE PLACE. Measured 2026-09-21: cbp-being's refused `old` began with 3 lines
+    # of a stray block at 1610-1612 that ALSO occur at 330-332, the working data-loading
+    # branch. Naming only the first match told it "your lines are at 330", and a 4B acting on
+    # that deletes the code that works. When the matched prefix repeats, say every place, and
+    # what the file has after each, so the being can tell which one it meant.
+    if len(ties) > 1:
+        # Show each place at the first line where the places DIFFER from each other: the
+        # line right after the prefix is often shared too (2026-09-21: `else:` in both).
+        d = best_k
+        while d < best_k + 20 and all(i + d < len(have) for i in ties) and \
+                len({have[i + d] for i in ties}) == 1:
+            d += 1
+
+        def at(i):
+            s0, e0 = i + 1, i + best_k
+            where = f"line {s0}" if best_k == 1 else f"lines {s0}-{e0}"
+            after = (f"and its line {i + d + 1} is {cut(have[i + d])!r}" if i + d < len(have)
+                     else "then the file ends")
+            return f"{where} ({after})"
+        places = "; ".join(at(i) for i in ties[:4]) + ("; ..." if len(ties) > 4 else "")
+        return (f" Your first {best_k} line{'s' if best_k > 1 else ''} of {len(want)} match "
+                f"the file exactly in {len(ties)} places: {places}. Your line {best_k + 1} is "
+                f"{cut(want[best_k]) if best_k < len(want) else '(none)'!r}.")
     start, end = best_i + 1, best_i + best_k
     span = f"line {start}" if best_k == 1 else f"lines {start}-{end}"
     head = (f" Your first {best_k} line{'s' if best_k > 1 else ''} of {len(want)} match "
@@ -615,6 +679,27 @@ class ReferenceF1aDispatcher:
                 return cand_r
         return None
 
+    def _same_name_elsewhere(self, p: Path) -> list:
+        """Home-relative paths of EVERY file named like `p` in the home root or one directory
+        below it, in sorted order. Bounded to that depth on purpose: every measured near-miss
+        was a notes/ vs root confusion, and a deep walk of a home with backups/ in it costs a
+        beat. All matches are returned (one level is small) so the caller can say how many
+        there are rather than silently keeping the first few."""
+        root = self.memory_root
+        try:
+            dirs = [root] + sorted(d for d in root.iterdir() if d.is_dir() and not d.name.startswith("."))
+        except OSError:
+            return []
+        out = []
+        for d in dirs:
+            c = d / p.name
+            try:
+                if c != p and c.is_file():
+                    out.append(str(c.relative_to(root)))
+            except OSError:
+                continue
+        return out
+
     @staticmethod
     def _existence(p: Path) -> str:
         """'absent' | 'present' | 'unknown'. Never guesses.
@@ -698,6 +783,40 @@ class ReferenceF1aDispatcher:
         # facts, and each now says which it is.
         shown = str(intent.args["path"]).strip()
         if not p.exists():
+            near = self._same_name_elsewhere(p)
+            if near:
+                # A MISS ONE DIRECTORY AWAY IS NOT AN ABSENCE. Measured 2026-09-21 on cbp-being:
+                # 28 of its 76 "no such path" reads named a file that existed under the same
+                # name one directory over (it writes into notes/ and reads from the root, or
+                # the reverse). Two beats that day read `mechanism-training-script.py`, got
+                # "does not exist" for a script sitting in notes/, and wrote "verified" notes
+                # about it anyway. The answer names where the file is, so the next step is a
+                # read rather than an invention.
+                #
+                # SEVERAL MATCHES ARE LISTED NEUTRALLY (GPT review on #140). Nothing ranks
+                # notes/x.py over scratch/x.py, and this repair exists to stop invention after a
+                # miss, so it must not add a guess of its own: every match is named in the same
+                # way, none is called the one it meant, and the choice stays with the being.
+                nothing = ("Nothing was read this time, so nothing about its contents is "
+                           "known yet.")
+                if len(near) == 1:
+                    msg = (f"[no such path: '{shown}' does not exist, but a file with that name "
+                           f"DOES exist at '{near[0]}'. To read it: "
+                           f"memory_read {{\"path\": \"{near[0]}\"}}. {nothing}]")
+                else:
+                    shown_near = near[:_SAME_NAME_SHOWN]
+                    where = ", ".join(f"'{n}'" for n in shown_near)
+                    more = (f" and {len(near) - len(shown_near)} more"
+                            if len(near) > len(shown_near) else "")
+                    msg = (f"[no such path: '{shown}' does not exist, but {len(near)} files with "
+                           f"that name exist: {where}{more}. Nothing tells which of them you "
+                           f"mean; read the one your task is about with memory_read and its "
+                           f"path. Nothing was read this time, so nothing about any of their "
+                           f"contents is known yet.]")
+                return ResultEnvelope(
+                    ok=True, result=msg,
+                    witness_id=self._witness(
+                        f"memory_read {p.name} (does not exist; same name at {', '.join(near)})"))
             return ResultEnvelope(
                 ok=True,
                 result=(f"[no such path: '{shown}' does not exist. This is not an empty file: there is "
@@ -1047,9 +1166,12 @@ class ReferenceF1aDispatcher:
         # was not created by this write (GPT review on #141).
         existed = p.exists()
         before = 0
+        _before_text = ""
         if existed:
             with open(p, errors="replace") as f:
                 before = sum(1 for _ in f)
+            if p.suffix == ".py":
+                _before_text = p.read_text(errors="replace")
         if existed and before and p.suffix == ".py":
             _before = p.read_text(errors="replace")
             # The monotonic rule first (GPT review of #186): no append may move a .py file
@@ -1068,9 +1190,7 @@ class ReferenceF1aDispatcher:
                 # the append receipt; this refusal fires first on a broken file).
                 if (_file_state(content)[0] == "complete"
                         and re.search(r"^(def|class|import|from) ", content, re.M)):
-                    fresh, n = p.with_name(f"{p.stem}-new{p.suffix}"), 2
-                    while fresh.exists():
-                        fresh, n = p.with_name(f"{p.stem}-new{n}{p.suffix}"), n + 1
+                    fresh = _fresh_name(p)
                     why += (f" Your text is a whole program by itself: to start fresh with it, "
                             f"memory_write it to a name that does not exist yet (for example "
                             f"{fresh.name}), and that file will hold only your text. {p.name} "
@@ -1098,6 +1218,16 @@ class ReferenceF1aDispatcher:
             if p.parent.name in ("notes", "scratch") and p.parent.parent == self.memory_root:
                 result += (f" To start {p.name} fresh, retire_note it first, then memory_write "
                            f"the whole new version.")
+            elif p.suffix == ".py" and _is_second_program(content, _before_text):
+                # 2026-09-24 15:19Z: cbp-being decided on "a new file", then memory_write-d the new
+                # program twice to the OLD file's name. Both landed below 3666 broken lines, and
+                # retire_note refused the path (not in notes/ or scratch/). Outside those folders
+                # the only way to a fresh file is a fresh name, and no receipt said so. Only for a
+                # whole second program (not the next part of one), and only a name not taken.
+                result += (f" Your text is a whole program of its own, now below the one already "
+                           f"in {p.name}. To start a new file instead, memory_write to a name that "
+                           f"does not exist yet (for example {_fresh_name(p).name}); that receipt "
+                           f"says \"created\".")
         result += _python_status(p)
         if p.suffix != ".py":
             result += _named_file_stamps(content, self.memory_root, p)

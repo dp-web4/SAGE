@@ -43,6 +43,7 @@ class ToolTurnResult:
     stay_awake: Optional[str] = None                       # the being asked for another beat right after this one; its reason
     looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
     yielded: Optional[str] = None                          # the harness ended the turn for a higher-priority event: what
+    json_arg_failures: List[dict] = field(default_factory=list)  # act_form="json": chosen acts whose arguments failed (no act)
 
     @property
     def acted(self) -> bool:
@@ -837,9 +838,71 @@ def _sent_budget(llm) -> Optional[int]:
     return int(v) if v is not None else None
 
 
+# Outward acts whose slots a JSON turn cannot ground in this turn's state (GPT on #311): not offered there.
+JSON_ACT_EXCLUDE = frozenset({"channel_egress", "mesh", "pr_review", "pr_open", "pr_amend", "patch_apply",
+                              "request_scope", "appeal", "request_run", "git_restore"})
+_PLACEHOLDER = re.compile(r"^\s*[\[<{].*[\]>}]\s*$|\[(name|topic|path|id|line[^\]]*)\]|placeholder", re.I)
+
+
+_JSON_TYPES = {"string": str, "integer": int, "number": (int, float), "boolean": bool, "array": list, "object": dict}
+
+
+def _violation(value, schema: dict, where: str) -> Optional[str]:
+    """What is wrong with `value` against the subset of JSON Schema the tool specs use (type, enum, required,
+    properties, additionalProperties, items), recursively; None when it fits. GPT on #322: a required string slot
+    must not be satisfied by [] just because str([]) is non-empty, and an unexpected key is not an argument."""
+    schema = schema or {}
+    t = schema.get("type")
+    if t in _JSON_TYPES:
+        ok = isinstance(value, _JSON_TYPES[t]) and not (t in ("integer", "number") and isinstance(value, bool))
+        if not ok:
+            return f"'{where}' must be a {t}, not {type(value).__name__}"
+    if schema.get("enum") and value not in schema["enum"]:
+        return f"'{where}' must be one of {', '.join(map(str, schema['enum']))}"
+    if isinstance(value, str) and _PLACEHOLDER.search(value):
+        return f"'{where}' is a placeholder ({value[:40]!r}), not a real value"
+    if isinstance(value, dict):
+        props = schema.get("properties") or {}
+        for k in schema.get("required") or []:
+            if k not in value or (isinstance(value[k], str) and not value[k].strip()):
+                return f"'{k}' is required and was empty"
+        if props and schema.get("additionalProperties", False) is False:
+            extra = [k for k in value if k not in props]
+            if extra:
+                return f"'{extra[0]}' is not an argument of this tool"
+        for k, v in value.items():
+            if k in props and (bad := _violation(v, props[k], k)):
+                return bad
+    if isinstance(value, list) and schema.get("items"):
+        for i, v in enumerate(value):
+            if (bad := _violation(v, schema["items"], f"{where}[{i}]")):
+                return bad
+    return None
+
+
+def _check_args(content: str, schema: dict) -> tuple:
+    """(args, None) when the arguments satisfy the tool's own schema, else (None, what is wrong)."""
+    try:
+        args = json.loads(content)
+    except Exception:
+        return None, "they are not valid JSON"
+    if not isinstance(args, dict):
+        return None, "they are not a JSON object"
+    bad = _violation(args, dict(schema or {}, type="object"), "arguments")
+    return (None, bad) if bad else (args, None)
+
+
+# NEUTRAL BY DESIGN (GPT on #322): this is a FORMAT, not an invitation to act. "done" comes first and is as
+# complete an answer as any tool; the same sentence is the native arm's matched control, so a rise in acts is
+# measured against the same prompt, not against no prompt.
+ACT_ASK_JSON = ('Reply as JSON: {"act": ..., "why": "one short sentence"}. "act" is "done" if you are finished '
+                'or there is nothing you want to do, or the name of one of your tools if there is.')
+
+
 def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[str, Any]],
                          max_steps: int = 2, tools: Optional[List[dict]] = None,
                          should_yield: Optional[Callable[[], Optional[str]]] = None,
+                         act_form: str = "tools",
                          on_generate: Optional[Callable[[dict], None]] = None) -> ToolTurnResult:
     """Run a gated tool turn using an OllamaIRP-like `llm` exposing
     get_chat_response(messages, tools=...) -> {"content", "tool_calls"}.
@@ -858,9 +921,72 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     salvaged: List[dict] = []
     generates: List[dict] = []
     compacted: List[dict] = []
+    json_arg_failures: List[dict] = []     # act_form="json": arguments that could not be formed (no act)
     # (prompt_eval_count, chars at that prompt) from the last generate the server counted.
     # Compaction is anchored on this, so only the DELTA rides a chars-per-token estimate.
     measured = None
+
+    def _json_act(msgs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """One act as two closed JSON objects (act_form="json"), returned in the native reply's shape.
+
+        Measured 2026-10-01 on sprout-being's REAL explore seed (2B, 30 tools, nothing executed): the
+        native tool-call channel made 0/6 acts (all "[Your complete, well-structured response ...]");
+        choosing the act from an enum and then filling THAT tool's own parameter schema made 6/6
+        well-formed acts. "done" ends the turn in words, as a reply without a call does natively."""
+        # A GROUNDED SUBSET (GPT on #311): an outward act whose slots this turn cannot ground (a repo, a PR,
+        # a patch, a scope path, an egress channel) is not offered in the JSON form; the native form keeps it.
+        offered = [t for t in tools if t["function"]["name"] not in JSON_ACT_EXCLUDE]
+        names = [t["function"]["name"] for t in offered]
+        spec = {t["function"]["name"]: (t["function"].get("parameters") or {"type": "object"}) for t in offered}
+        # WHAT IT HAS ALREADY DONE THIS TURN, beside the choice (2026-10-01): told nothing, three of three
+        # offline turns ran to the step cap repeating gaze and never chose "done".
+        done_so_far = [c["function"]["name"] for m in msgs if m.get("role") == "assistant"
+                       for c in (m.get("tool_calls") or [])]
+        ask = {"role": "user", "content": ACT_ASK_JSON + (
+            f" This turn you have already done: {', '.join(done_so_far)}." if done_so_far else "")}
+        r1 = llm.get_chat_response(msgs + [ask], fmt={
+            "type": "object", "required": ["act", "why"],
+            "properties": {"act": {"type": "string", "enum": ["done"] + names}, "why": {"type": "string"}}})
+        c1 = r1.get("content", "") or ""
+        try:
+            j = json.loads(c1)
+        except Exception:
+            return {"content": c1, "tool_calls": [], "raw": r1.get("raw")}
+        act, why = j.get("act"), str(j.get("why") or "")
+        if act not in spec:
+            return {"content": why or c1, "tool_calls": [], "raw": r1.get("raw")}
+        # THE ARGUMENTS ARE THE ACT, NOT A NOTE ABOUT IT (2026-10-01): asked only "Now the arguments", a
+        # memory_write's content came back as "I am choosing to use memory_write because ..." and check's
+        # target as "check". The tool's own description rides with the ask.
+        desc = next((t["function"].get("description") or "" for t in offered if t["function"]["name"] == act), "")
+        arg_msgs = msgs + [ask, {"role": "assistant", "content": c1},
+                           {"role": "user", "content": (f"{act}: {desc[:600]}\n\nNow the arguments for {act}, as JSON. "
+                                                        "Write the actual values the tool needs, not why you chose it.")}]
+        # ARGUMENTS THAT FAIL ARE NOT AN ACT (GPT on #311): a parse or structural failure gets ONE re-ask
+        # naming what was wrong; a second failure ends the step visibly with no act, never as an intent with
+        # empty arguments whose meaning would depend on each effector's missing-argument behaviour.
+        problem, r2, args = None, None, None
+        for attempt in range(2):
+            if problem:
+                arg_msgs = arg_msgs + [{"role": "assistant", "content": (r2 or {}).get("content", "") or ""},
+                                       {"role": "user", "content": f"Those arguments cannot be used: {problem}. "
+                                                                   f"Give the arguments for {act} again, as JSON."}]
+            r2 = llm.get_chat_response(arg_msgs, fmt=spec[act])
+            args, problem = _check_args(r2.get("content", "") or "", spec[act])
+            if problem is None:
+                break
+        if problem is not None:
+            json_arg_failures.append({"step": len(thoughts), "act": act, "problem": problem})
+            return {"content": f"(I chose {act} but could not form its arguments: {problem}. Nothing was done.)",
+                    "tool_calls": [], "raw": (r2 or {}).get("raw") or r1.get("raw")}
+        return {"content": why, "tool_calls": [{"function": {"name": act, "arguments": args}}],
+                "raw": r2.get("raw") or r1.get("raw")}
+
+    def _once(msgs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """ONE attempt in this turn's act form, for the first try AND every retry (GPT on #322: both retries
+        fell back to native tool calling, so a JSON-mode step could switch arms mid-step after a transport
+        error or a think-only reply). The retries' budget and think handling still wrap this call."""
+        return _json_act(msgs) if act_form == "json" else llm.get_chat_response(msgs, tools=tools)
 
     def generate(convo: List[Dict[str, Any]]) -> Dict[str, Any]:
         nonlocal measured
@@ -902,7 +1028,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                               "chars": sum(e["chars"] for e in _elided)})
         retried = 0
         sent = _sent_budget(llm)          # the num_predict of the reply that stands
-        resp = llm.get_chat_response(msgs, tools=tools)
+        resp = _once(msgs)
         content = resp.get("content", "") or ""
         calls = resp.get("tool_calls", []) or []
         if content.startswith("[OllamaIRP:") and not calls:
@@ -915,7 +1041,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # no raw reply here, so no prompt_eval_count: the retry gets the think budget
             # (for a no-think model that is still more than its variant num_predict)
             with _retry_room(llm, _retry_budget(llm, None)) as budget:
-                resp = llm.get_chat_response(msgs, tools=tools)
+                resp = _once(msgs)
                 retried += 1
                 sent = budget
             content = resp.get("content", "") or ""
@@ -983,7 +1109,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                           f"{' , thinking OFF and a nudge' if unthought else ''} "
                           f"(num_ctx={getattr(llm, 'num_ctx', None)} prompt_eval={raw.get('prompt_eval_count')})",
                           file=_sys.stderr)
-                    resp = llm.get_chat_response(msgs, tools=tools)
+                    resp = _once(msgs)
                     retried += 1
                     sent = budget
                     content = resp.get("content", "") or ""
@@ -1025,5 +1151,6 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     # exactly what my first attempt did. Copied here so the intervention is observable in
     # the beat record (GPT review of #82: a list nobody returns is not an instrument).
     result.compacted = list(compacted)
+    result.json_arg_failures = list(json_arg_failures)
 
     return result
