@@ -1119,7 +1119,8 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         if not text:
             continue
         over = total() - budget_chars
-        keep = max(floors[key], len(text) - over)
+        raw_keep = budget_chars - fixed_chars
+        keep = max(floors[key], raw_keep) if raw_keep >= 0 else 0
         if keep >= len(text):
             continue
         # keep the HEAD of the digest (newest-first there) and the TAIL of recall/journal
@@ -1131,26 +1132,21 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         lines = text.split("\n")
         if key == "digest":
             kept, dropped = [], 0
-            i = len(lines) - 1
-            while i >= 0:
-                if lines[i].startswith("- "):
-                    j = i
-                    while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
-                        j += 1
-                    entry = lines[i:j + 1]
-                    if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
+            i = 0
+            while i < len(lines):
+                if not lines[i].startswith("- "):
+                    while i < len(lines) and not lines[i].startswith("- "):
+                        i += 1
+                    if i >= len(lines):
                         break
-                    kept.extend(entry)
-                    i = j
-                else:
-                    j = i
-                    while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
-                        j += 1
-                    entry = lines[i:j + 1]
-                    if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
-                        break
-                    kept.extend(entry)
-                    i = j
+                j = i
+                while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
+                    j += 1
+                entry = lines[i:j + 1]
+                if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
+                    break
+                kept.extend(entry)
+                i = j + 1
             total_entries = sum(1 for k in lines if k.startswith("- "))
             kept_entries = sum(1 for k in kept if k.startswith("- "))
             dropped = total_entries - kept_entries
@@ -1170,19 +1166,19 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
                         dropped += 1
                     else:
                         kept.extend(reversed(entry))
-                    i = j
+                    i = i - 1
                 else:
                     end = i
                     i -= 1
                     j = i
-                    while j - 1 >= 0 and not lines[j - 1].startswith("- "):
+                    while j >= 0 and not lines[j].startswith("- "):
                         j -= 1
                     entry = lines[j:end + 1]
                     if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
                         dropped += 1
                     else:
                         kept.extend(reversed(entry))
-                    i = j - 1
+                    i = j - 1 - 1
             kept.reverse()
             out[key] = (("[…trimmed to fit the context window: " + str(dropped)
                          + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
