@@ -581,3 +581,22 @@ def test_unregistered_file_name_names_request_run():
     # a plain unknown verb is not a file: no run hint, the door would be the wrong one
     v = _client(_allows).gate(BeingIntent("shell", {"command": "ls"}))
     assert v.rule == "registry.unbounded" and "request_run" not in v.reason, v
+
+
+def test_unregistered_verb_with_a_script_arg_names_request_run():
+    # cbp-being 2026-09-22 06:27Z: run_command {"command": "python <its file>"}, refused
+    # with no door; 7 of its 9 unbounded refusals had this shape.
+    for eff, args in (("run_command", {"command": "python mechanism-training-script-clean.py"}),
+                      ("python3", {"command": "python3 notes/mechanism-test-runner.py --epochs 3"}),
+                      ("exec", {"argv": ["bash", "'run.sh'"]})):
+        v = _client(_allows).gate(BeingIntent(eff, args))
+        assert v.rule == "registry.unbounded" and "request_run" in v.reason, (eff, v)
+        assert "no shell here" in v.reason, v
+    v = _client(_allows).gate(BeingIntent("python3", {"command": "python3 notes/mechanism-test-runner.py"}))
+    assert "path='notes/mechanism-test-runner.py'" in v.reason, v
+    v = _client(_allows).gate(BeingIntent("exec", {"argv": ["bash", "'run.sh'"]}))
+    assert "path='run.sh'" in v.reason, "quotes around the name are not part of the path"
+    # a flag that ends in .py is not a file the being named to run; nor is a non-string arg
+    for args in ({"command": "ls --x=a.py -q.py"}, {"n": 3}, {}):
+        v = _client(_allows).gate(BeingIntent("run_command", args))
+        assert v.rule == "registry.unbounded" and "request_run" not in v.reason, (args, v)

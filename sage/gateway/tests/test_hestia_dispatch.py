@@ -1610,7 +1610,12 @@ def test_request_run_says_when_the_file_is_unchanged_since_the_seat_answered():
     # asking again before the seat answers is not flagged: nobody has answered yet
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
     assert r.ok and "unchanged" not in r.result
-    conv.append(home, "seat", speaker="seat", text="Ran it: prints a.", via="seat")
+    # the seat's answer as seat_run_requests.py writes it: a receipt naming this path. (Until
+    # #276's re-review this fixture was free prose, "Ran it: prints a.", which is exactly the
+    # unbound turn that must NOT count -- see test_unrelated_seat_prose_after_a_request_is_not_its_answer.)
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text="[request_run] I ran notes/train.py with no arguments (the script's defaults). "
+                     "exit code 0.\n\nstdout:\na\n")
     asked = [t["seq"] for t in conv.recent(home, "seat", limit=10)]
 
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "verify my fix"}), _ALLOW)
@@ -1624,6 +1629,112 @@ def test_request_run_says_when_the_file_is_unchanged_since_the_seat_answered():
     f.write_text("print('b')\n")
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "after edit"}), _ALLOW)
     assert r.ok and "unchanged" not in r.result, r.result
+
+
+def _seat_conv_with_answered_request(opt_in):
+    """A seat conversation where request_run asked about notes/train.py and the seat RAN it
+    (a result naming the request's seq), with instance.json opting in or not."""
+    import json as _json
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    if opt_in is not None:
+        (home / "instance.json").write_text(_json.dumps(opt_in))
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print('a')\n")
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "first"}), _ALLOW)
+    assert r.ok and r.result.get("ran") is False
+    asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/train.py with no arguments. exit code 0.\n\n"
+                     f"stdout:\na\n\nAnswers your request seq {asked}.")
+    return d, home
+
+
+def _notifies():
+    return [a for n, a in FakeMcp.calls if n == "hestia_member_notify"]
+
+
+def test_an_answered_unchanged_request_wakes_nobody_where_the_instance_opts_in():
+    """Recut of #154, behind instance.json `answered_run_wake: "skip"`. Measured on cbp-being
+    (2026-09-24, seq 3557): a byte-identical re-request 7 minutes after the seat's answer woke
+    a seat session whose only possible act was to decline with the same result. The answer
+    already comes back in-beat (#178); here the request is still sent and recorded, but no
+    wake goes out, and the receipt says so rather than "asked and woken". Fails on main."""
+    from sage.gateway import conversations as conv
+    d, home = _seat_conv_with_answered_request({"answered_run_wake": "skip"})
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "verify my fix"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False
+    assert "unchanged" in r.result and "--- seq" in r.result["unchanged"], "the answer is carried"
+    assert not _notifies(), "an already-answered unchanged request must not wake the seat"
+    assert "NOT woken" in r.result["note"] and "woken." not in r.result["note"].split("NOT")[0]
+    assert "rerun=true" in r.result["note"]
+    last = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert last.startswith("[request_run] notes/train.py") and "UNCHANGED since" in last, \
+        "the request is still sent and recorded"
+    # rerun=true still wakes
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "force", "rerun": "true"}), _ALLOW)
+    assert r.ok and len(_notifies()) == 1, "rerun=true must still wake the seat"
+    assert "asked and woken" in r.result["note"]
+
+
+def test_an_answered_unchanged_request_still_wakes_by_default():
+    """Every instance without the key keeps the old behaviour: the wake goes out."""
+    for cfg in (None, {}, {"answered_run_wake": "nonsense"}):
+        d, home = _seat_conv_with_answered_request(cfg)
+        FakeMcp.calls.clear()
+        r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
+        assert r.ok and "unchanged" in r.result
+        assert len(_notifies()) == 1, cfg
+        assert r.result["note"].startswith("The seat has been asked and woken."), cfg
+
+
+def test_an_edited_file_wakes_the_seat_even_where_the_instance_opts_in():
+    d, home = _seat_conv_with_answered_request({"answered_run_wake": "skip"})
+    (home / "notes" / "train.py").write_text("print('b')\n")
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "after edit"}), _ALLOW)
+    assert r.ok and "unchanged" not in r.result
+    assert len(_notifies()) == 1
+
+
+def test_answered_run_wake_reader_and_beat_record():
+    """The one reader, and the beat record names the policy where it is on (the generalization
+    rule's "activation is visible in the runtime record")."""
+    import inspect
+    from sage.gateway import heartbeat
+    from sage.gateway.heartbeat import answered_run_wake_for
+    assert answered_run_wake_for(None) is None
+    assert answered_run_wake_for({}) is None
+    assert answered_run_wake_for({"answered_run_wake": "nonsense"}) is None
+    assert answered_run_wake_for({"answered_run_wake": True}) is None
+    assert answered_run_wake_for({"answered_run_wake": "skip"}) == "skip"
+    src = inspect.getsource(heartbeat)
+    assert '"answered_run_wake": answered_run_wake_for(instance_config(instance))' in src
+
+
+def test_cbp_being_is_the_only_instance_that_skips_answered_run_wakes():
+    """The measured being carries the opt-in; no other checked-in instance.json does."""
+    import json as _json
+    from pathlib import Path
+    from sage.gateway.heartbeat import answered_run_wake_for
+    repo = Path(__file__).resolve().parents[3]
+    on = []
+    for cfg_path in sorted((repo / "sage/instances").glob("*/instance.json")):
+        try:
+            cfg = _json.loads(cfg_path.read_text())
+        except Exception:
+            continue
+        if answered_run_wake_for(cfg):
+            on.append(cfg_path.parent.name)
+    assert on == ["cbp-qwen3.8-distill-4b"]
 
 
 def test_an_unchanged_receipt_carries_the_seat_answer_not_a_pointer_to_it():
@@ -1659,6 +1770,198 @@ def test_an_unchanged_receipt_carries_the_seat_answer_not_a_pointer_to_it():
     assert f"seq {ran_at}" in got and f"seq {aside_at}" not in got, (ran_at, aside_at, got)
 
 
+def test_an_unchanged_receipt_sees_a_seat_run_the_being_never_asked_for():
+    """Measured 2026-09-29 17:50Z: the seat ran a copy of sha f355443e29b4 on its own and
+    posted the traceback (seq 4437). cbp-being then asked for a run of that sha twice (4438,
+    4439) and neither receipt said UNCHANGED: the scan keyed on the being's own prior request.
+    The seat's run answer names the sha it ran; that is enough to key on."""
+    import hashlib
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "train.py"
+    f.write_text("print('a')\n")
+    sha = hashlib.sha256(f.read_bytes()).hexdigest()[:12]
+
+    # no request from the being at all; the seat ran it unasked and said which sha
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/train.py (sha {sha}) with no arguments. exit code 1.\n\n"
+                     "stderr:\nValueError: cannot reshape array of size 2000 into shape (2,10)\n")
+    ran_at = conv.recent(home, "seat", limit=1)[-1]["seq"]
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "confirm the fix"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False
+    got = r.result.get("unchanged")
+    assert got, r.result
+    assert f"seq {ran_at}" in got and "before you asked" in got, got
+    assert "cannot reshape array of size 2000" in got, got
+    turn = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert f"UNCHANGED since the seat ran this exact file at seq {ran_at}" in turn, turn
+
+    # a seat run of a DIFFERENT sha does not count
+    f.write_text("print('b')\n")
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "after edit"}), _ALLOW)
+    assert r.ok and "unchanged" not in r.result, r.result
+
+
+def _seat_conv_with_train(content="print(__file__)\n"):
+    import hashlib
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "other.py").write_text(content)
+    (home / "notes" / "new.py").write_text(content)
+    sha = hashlib.sha256(content.encode()).hexdigest()[:12]
+    return d, home, sha
+
+
+def test_an_unsolicited_seat_run_of_the_same_bytes_at_another_path_does_not_count():
+    """GPT HOLD on #276 at 6d7e98d5: the unsolicited match keyed only on the 12-char digest.
+    notes/new.py holding print(__file__), byte-identical to notes/other.py which the seat had
+    run, came back 'running it again will give the same result' with other.py's output --
+    though new.py never ran and necessarily prints a different path. Relative imports and
+    data make it more than a cosmetic difference. A seat run counts only for the PATH it ran."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/other.py (sha {sha}) with no arguments (the "
+                     "script's defaults), hidden from the GPU. exit code 0.\n\nstdout:\n"
+                     "/home/x/notes/other.py\n")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "see where I am"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False
+    assert "unchanged" not in r.result, r.result
+    assert "UNCHANGED" not in conv.recent(home, "seat", limit=1)[-1]["text"]
+    # the positive arm at the path it actually ran still holds
+    r = d(BeingIntent("request_run", {"path": "notes/other.py", "why": "again"}), _ALLOW)
+    assert "notes/other.py" in r.result.get("unchanged", ""), r.result
+
+
+def test_an_unsolicited_seat_run_with_other_arguments_does_not_count():
+    """The seat's run line states exactly which arguments went in (ran_line). A run with
+    arguments is not the run a request with none, or with different ones, would get; and a
+    request carrying its own flags is not answered by a default-argument run."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/new.py (sha {sha}) with arguments: --epochs 1, "
+                     "hidden from the GPU. exit code 0.\n\nstdout:\nok\n")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "defaults this time"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/other.py (sha {sha}) with no arguments (the "
+                     "script's defaults), hidden from the GPU. exit code 0.\n\nstdout:\nok\n")
+    r = d(BeingIntent("request_run", {"path": "notes/other.py", "why": "x",
+                                      "arguments": "--epochs 50"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+    # same path, same bytes, no arguments either side: counts, as prior evidence not a promise
+    r = d(BeingIntent("request_run", {"path": "notes/other.py", "why": "x"}), _ALLOW)
+    got = r.result.get("unchanged", "")
+    assert got and "will give the same result" not in got, got
+
+
+def test_a_seat_answer_for_another_path_is_not_the_answer_to_this_request():
+    """The solicited arm had the same hole: after the being asked about notes/new.py, ANY seat
+    turn counted as the answer, including a run receipt naming a different file."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    d(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I ran notes/other.py (sha {sha}) with no arguments (the "
+                     "script's defaults), hidden from the GPU. exit code 0.\n")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+
+
+def test_unrelated_seat_prose_after_a_request_is_not_its_answer():
+    """GPT re-review of #276 at fef135b7b: in the solicited arm, ANY later seat turn without the
+    marker was still taken as "the seat answered that at seq N". Request new.py -> an unrelated
+    seat message -> re-request new.py came back UNCHANGED, carrying the unrelated message as
+    the answer. That is #154's queue-conflation class. Free prose answers nothing: the request
+    is still owed."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    d(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text="Morning. I merged the window fix overnight; your journal reads well.")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    assert r.ok and r.result["ran"] is False
+    assert "unchanged" not in r.result, r.result
+    assert "UNCHANGED" not in conv.recent(home, "seat", limit=1)[-1]["text"]
+    # prose that merely mentions the file is still prose
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text="I'll look at notes/new.py after lunch; I ran it once yesterday.")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "third"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+
+
+def test_a_marked_receipt_for_this_path_or_a_turn_naming_the_seq_answers_the_request():
+    """The bound answers still count: a seat_run_requests.py decline (or run) receipt naming
+    THIS path, and a seat turn that names the request's seq ("answering your seq N")."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    d(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I did not run notes/new.py (sha {sha}). Answers your request "
+                     f"seq {asked}.\n\nreason: it opens the camera device.")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    got = r.result.get("unchanged", "")
+    assert got and "it opens the camera device" in got, r.result
+    assert f"at seq {asked}" in got, got
+
+    d2, home2, sha2 = _seat_conv_with_train()
+    d2(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    asked2 = conv.recent(home2, "seat", limit=1)[-1]["seq"]
+    conv.append(home2, "seat", speaker="seat", via="seat",
+                text=f"Answering your seq {asked2}: not running this one, it writes outside notes/.")
+    r = d2(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    got = r.result.get("unchanged", "")
+    assert got and "writes outside notes/" in got, r.result
+    # ...but a turn naming some OTHER seq is not this request's answer
+    d3, home3, _ = _seat_conv_with_train()
+    d3(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    asked3 = conv.recent(home3, "seat", limit=1)[-1]["seq"]
+    conv.append(home3, "seat", speaker="seat", via="seat",
+                text=f"Answering your seq {int(asked3) + 1000}: done.")
+    r = d3(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+
+
+def test_a_receipt_for_this_path_about_other_bytes_or_older_requests_is_not_the_answer():
+    """The same two exceptions conversations._already_answered applies to the wake: a receipt
+    for this path that states OTHER bytes is not an answer about these, and one naming only
+    seqs older than this request answered those, not this one."""
+    from sage.gateway import conversations as conv
+    d, home, sha = _seat_conv_with_train()
+    d(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text="[request_run] I ran notes/new.py (sha 0123456789ab) with no arguments (the "
+                     "script's defaults). exit code 0.\n")
+    r = d(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+
+    d2, home2, _ = _seat_conv_with_train()
+    d2(BeingIntent("request_run", {"path": "notes/new.py", "why": "first"}), _ALLOW)
+    asked = int(conv.recent(home2, "seat", limit=1)[-1]["seq"])
+    conv.append(home2, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I did not run notes/new.py. Answers your request seq "
+                     f"{max(asked - 1, 0)}.\n\nreason: superseded.")
+    r = d2(BeingIntent("request_run", {"path": "notes/new.py", "why": "again"}), _ALLOW)
+    assert "unchanged" not in r.result, r.result
+
+
 def test_an_unchanged_receipt_caps_what_it_carries():
     """A seat answer is capped at both ends by the seat, but a decline can be prose of any
     length. The tail is what carries the exception line, so the cap keeps the tail."""
@@ -1675,7 +1978,8 @@ def test_an_unchanged_receipt_caps_what_it_carries():
 
     d(BeingIntent("request_run", {"path": "notes/train.py", "why": "first"}), _ALLOW)
     conv.append(home, "seat", speaker="seat", via="seat",
-                text="[request_run] " + ("x" * 4000) + "\nZeroDivisionError: division by zero")
+                text="[request_run] I did not run notes/train.py. " + ("x" * 4000)
+                     + "\nZeroDivisionError: division by zero")
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
     got = r.result["unchanged"]
     assert "ZeroDivisionError: division by zero" in got, "the cap dropped the tail"
@@ -1819,6 +2123,40 @@ def test_request_run_carries_reason_as_the_why():
     turn = conv.recent(home, "seat", limit=1)[-1]["text"]
     assert "why: verify the fixes" in turn, turn
     assert "none given" not in turn, "the seat must not be told the being said nothing"
+
+
+def test_request_run_carries_every_argument_it_does_not_read():
+    """Measured 2026-09-22: cbp-being put its flags in 'body' and the seat saw no reason and
+    no flags; 20 of its first 66 request_runs used a key read nowhere ('arguments', 'command',
+    'body'). Whatever it passes must reach the seat under its own name."""
+    import importlib.util
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "train.py").write_text("print(1)\n")
+
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "to": "seat",
+                                      "body": "run with --input-dim 10",
+                                      "arguments": "--epochs 3", "command": "  "}), _ALLOW)
+    assert r.ok, r.error
+    last = conv.recent(home, "seat", limit=1)[-1]
+    turn = last["text"]
+    assert "body: run with --input-dim 10" in turn, turn
+    assert "arguments: --epochs 3" in turn, turn
+    assert "to: seat" not in turn, turn
+    assert "command:" not in turn, "an empty argument is not carried"
+    assert turn.startswith("[request_run] notes/train.py\n"), "unchanged-detection keys on this prefix"
+    # and the seat's reader still finds the path on the first line
+    src = Path(__file__).resolve().parents[2] / "scripts" / "seat_run_requests.py"
+    spec = importlib.util.spec_from_file_location("seat_run_requests", src)
+    srr = importlib.util.module_from_spec(spec); spec.loader.exec_module(srr)
+    assert srr.request_path(last) == "notes/train.py"
 
 
 def test_request_run_reports_an_absent_file_as_an_absence_not_a_refusal():

@@ -129,7 +129,7 @@ def test_the_clock_says_the_room_in_spoken_words():
 def test_the_heartbeat_carries_heard_words_in_before_it_builds_the_state():
     src = open(os.path.join(os.path.dirname(__file__), "..", "heartbeat.py")).read()
     ingest = src.index("_room.ingest_heard(instance")
-    assert ingest < src.index("pending_selection(instance, args.member)")
+    assert ingest < src.index("pending_selection(instance, args.member")
     assert ingest < src.index("body_reading=_body_cur) + _scope_tail")
 
 

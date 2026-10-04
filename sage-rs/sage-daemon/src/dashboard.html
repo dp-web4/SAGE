@@ -15,7 +15,7 @@
     --text-dim: #666;
     --accent: #00ff41;
     --state-wake: #00ff41;
-    --state-focus: #ffd700;
+    --state-wrap-up: #ffd700;
     --state-rest: #4488ff;
     --state-dream: #cc44ff;
     --state-crisis: #ff3333;
@@ -161,6 +161,10 @@
     font-weight: 700; font-size: 11px; margin-bottom: 2px;
     text-transform: uppercase; letter-spacing: 0.5px;
   }
+  .chat-msg .trial-tag {
+    font-weight: 600; font-size: 10px; margin-left: 6px; padding: 0 5px; border-radius: 3px;
+    background: #3a2f10; color: #e8c060; border: 1px solid #6a5420; text-transform: none;
+  }
   .chat-msg.user .sender { color: var(--accent); }
   .chat-msg.sage .sender { color: var(--state-color); }
   .chat-msg .time { font-size: 9px; color: var(--text-dim); float: right; margin-left: 8px; }
@@ -215,7 +219,7 @@
     <h1>SAGE</h1>
     <div class="meta">
       <span id="version-display">v--</span>
-      <span id="cycle-display">Cycle: --</span>
+      <span id="beats-display">Beats: --</span>
       <span id="uptime-display">Up: --</span>
       <span><span class="connection-dot" id="conn-dot"></span> <span id="conn-label">connecting</span></span>
     </div>
@@ -228,18 +232,23 @@
       </div>
       <div class="machine-name" id="machine-name">--</div>
       <div class="metabolic-badge" id="metabolic-badge">--</div>
+      <!-- What the being is doing and for how long, and who said so (SAGE #291). -->
+      <div class="model-label" id="metabolic-age">--</div>
       <div class="model-label" id="model-label">--</div>
 
       <div class="stats-section">
         <div class="stat-row">
           <div class="stat-compact">
-            <label>ATP</label>
+            <label title="The daemon's internal ATP oscillator (a 10-second cycle). Not the being's energy, and not the state shown above (SAGE #291).">ATP (internal)</label>
             <div class="value" id="atp-value">--</div>
             <div class="bar-wrap"><div class="bar-fill atp" id="atp-bar" style="width:0%"></div></div>
           </div>
+          <!-- Beats, from the heartbeat's reports (SAGE #295). Was "Cycles": the loop's 100 ms
+               ticks, which counted uptime x 10 and nothing the being did. -->
           <div class="stat-compact">
-            <label>Cycles</label>
-            <div class="value" id="cycle-value">0</div>
+            <label title="Beats that reported their end since the daemon started">Beats</label>
+            <div class="value" id="beats-value">0</div>
+            <div class="sub" id="beat-now">--</div>
             <div class="sub" id="messages-sub">msgs: --</div>
           </div>
         </div>
@@ -288,7 +297,9 @@
 <script>
 const BASE = window.location.origin;
 const STATE_COLORS = {
-  wake: '#00ff41', focus: '#ffd700', rest: '#4488ff',
+  // The activity indicator's states (SAGE #291). `focus` was the old oscillator's salience
+  // state; nothing reports it now. `wrap-up` is the end of a beat (reflect, answer).
+  wake: '#00ff41', 'wrap-up': '#ffd700', rest: '#4488ff',
   dream: '#cc44ff', crisis: '#ff3333',
 };
 
@@ -296,8 +307,36 @@ let machineName = 'sage';
 let connected = false;
 
 function setStateColor(state) {
-  const color = STATE_COLORS[state] || STATE_COLORS.wake;
+  const color = STATE_COLORS[state] || STATE_COLORS.rest;
   document.documentElement.style.setProperty('--state-color', color);
+}
+
+function fmtAge(secs) {
+  if (secs == null) return '?';
+  if (secs < 90) return secs + 's';
+  if (secs < 5400) return Math.round(secs / 60) + 'm';
+  if (secs < 172800) return (secs / 3600).toFixed(1) + 'h';
+  return Math.round(secs / 86400) + 'd';
+}
+
+function describeActivity(d) {
+  if (d.metabolic_age_secs == null) return '';
+  const src = d.metabolic_source || 'unknown';
+  if (d.metabolic_decayed) {
+    return 'for ' + fmtAge(d.metabolic_age_secs) + ' \u00b7 no report from ' + src.replace(/^stale:/, '');
+  }
+  return 'for ' + fmtAge(d.metabolic_age_secs) + ' \u00b7 ' + src;
+}
+
+// The beat running now (its phase and how many phase reports it has made), or how long since
+// the last one ended (SAGE #295).
+function describeBeat(b) {
+  if (b.current) {
+    return 'now: ' + b.current.phase + ' · ' + b.current.phase_reports + ' phase report'
+      + (b.current.phase_reports === 1 ? '' : 's') + ' · ' + fmtAge(b.current.age_secs);
+  }
+  if (b.since_last_beat_end_secs != null) return 'last ended ' + fmtAge(b.since_last_beat_end_secs) + ' ago';
+  return 'no beat since the daemon started';
 }
 
 function escapeHtml(text) {
@@ -352,9 +391,11 @@ async function refreshStatus() {
   try {
     const r = await fetch(BASE + '/status');
     const d = await r.json();
-    const state = (d.metabolic_state || 'wake').toLowerCase();
+    const state = (d.metabolic_state || 'unknown').toLowerCase();
     document.getElementById('metabolic-badge').textContent = state.toUpperCase();
     setStateColor(state);
+    // How long, and who said so: an indicator that cannot say its own age reads as current.
+    document.getElementById('metabolic-age').textContent = describeActivity(d);
 
     const pct = d.atp_percentage || 0;
     document.getElementById('atp-value').textContent = pct.toFixed(0) + '%';
@@ -362,9 +403,11 @@ async function refreshStatus() {
     bar.style.width = pct + '%';
     bar.style.backgroundPosition = (100 - pct) + '% 0';
 
-    document.getElementById('cycle-value').textContent =
-      d.consciousness_loop === false ? 'loop stopped' : (d.total_cycles || 0).toLocaleString();
-    document.getElementById('cycle-display').textContent = 'Cycle: ' + (d.total_cycles || 0).toLocaleString();
+    // Beats, not loop ticks (SAGE #295): counted from the heartbeat's reports.
+    const beats = d.beats || {};
+    document.getElementById('beats-value').textContent = (beats.completed || 0).toLocaleString();
+    document.getElementById('beats-display').textContent = 'Beats: ' + (beats.completed || 0).toLocaleString();
+    document.getElementById('beat-now').textContent = describeBeat(beats);
     document.getElementById('sys-fleet-size').textContent = 'Fleet: ' + (d.fleet_size || 0) + ' machines';
     // The SNARC the being last felt. updateSnarc() was defined and never called from the day
     // the conversations rewrite landed, so these bars read 0.00 on every machine (SAGE #111).
@@ -420,11 +463,13 @@ const chatInput = document.getElementById('chat-input');
 const chatSend = document.getElementById('chat-send');
 const chatLog = document.getElementById('chat-log');
 
-function appendChat(sender, text, cssClass, timestamp) {
+function appendChat(sender, text, cssClass, timestamp, trial) {
   const div = document.createElement('div');
   div.className = 'chat-msg ' + (cssClass || 'sage');
   const timeStr = timestamp ? '<span class="time">' + formatTime(timestamp) + '</span>' : '';
-  div.innerHTML = '<div class="sender">' + timeStr + escapeHtml(sender) + '</div>' +
+  // a live trial's label, beside the words and never in them (SAGE #337)
+  const trialStr = trial ? ' <span class="trial-tag">' + 'TEST · ' + escapeHtml(trial) + '</span>' : '';
+  div.innerHTML = '<div class="sender">' + timeStr + escapeHtml(sender) + trialStr + '</div>' +
                   '<div>' + escapeHtml(text) + '</div>';
   chatLog.appendChild(div);
   chatLog.scrollTop = chatLog.scrollHeight;
@@ -523,7 +568,7 @@ async function loadConversation(id) {
                       ' turns. Nothing is ever deleted.';
       chatLog.appendChild(n);
     }
-    (d.turns || []).forEach(t => appendChat(t.from, t.text, kindOf(t.from), t.ts));
+    (d.turns || []).forEach(t => appendChat(t.from, t.text, kindOf(t.from), t.ts, t.trial));
     const waiting = (c && c.awaiting_being) || 0;
     convState.textContent = writable
       ? (waiting ? waiting + ' awaiting the being' : 'up to date')

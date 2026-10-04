@@ -10,5 +10,8 @@
   {"name":"explicit_false_beats_legacy_true","input":{"engage":true,"start_accepted":false,"started":true},"expected":"recorded; wake request was not accepted (unknown reason); awaiting a later beat"},
   {"name":"malformed_is_not_truthy","input":{"engage":true,"start_accepted":"true","started":true,"wake_error":null},"expected":"recorded; wake request outcome unknown (unknown reason); beat entry unconfirmed"},
   {"name":"numeric_is_not_boolean","input":{"engage":true,"start_accepted":1,"started":true},"expected":"recorded; wake request outcome unknown (unknown reason); beat entry unconfirmed"},
-  {"name":"empty","input":{},"expected":"recorded; awaiting the next beat"}
+  {"name":"empty","input":{},"expected":"recorded; awaiting the next beat"},
+  {"name":"successor_is_not_entry","input":{"engage":false,"queued":true,"next":{"armed":true}},"expected":"recorded; awaiting the next beat"},
+  {"name":"successor_failure_promises_no_delivery","input":{"engage":false,"queued":true,"next":{"armed":false,"error":"timeout"}},"expected":"recorded; awaiting the next beat"},
+  {"name":"successor_does_not_resolve_immediate_uncertainty","input":{"engage":true,"start_accepted":null,"started":null,"next":{"armed":true}},"expected":"recorded; wake request outcome unknown (unknown reason); beat entry unconfirmed"}
 ]

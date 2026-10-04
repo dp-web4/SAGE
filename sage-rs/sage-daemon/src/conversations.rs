@@ -66,6 +66,12 @@ pub struct Turn {
     /// this daemon writes "daemon-loopback". A turn without it predates the field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub via: Option<String>,
+    /// A LIVE TRIAL'S LABEL (Python `trial_name`, instance.json "trial"): set on every turn the
+    /// being wrote while a trial ran, beside its words. Carried through so the dashboard can
+    /// show it; without this field serde dropped it and the person saw an unlabelled message
+    /// (GPT on SAGE #337). dp, 2026-10-03: "include a note that it's a test message".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trial: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -335,6 +341,7 @@ pub fn append_via(instance: &Path, id: &str, speaker: &str, text: &str,
         witness: None,
         beat: None,
         via: via.map(str::to_string),
+        trial: None,
     };
     let line = serde_json::to_string(&turn).map_err(|e| e.to_string())?;
     f.seek(SeekFrom::End(0)).map_err(|e| e.to_string())?;
@@ -525,7 +532,7 @@ mod tests {
         let t = |from: &str| Turn {
             ts: String::new(), seq: 0, from: from.into(), text: String::new(),
             witness: None, beat: None,
-            via: None,
+            via: None, trial: None,
         };
         let nowhere = std::env::temp_dir().join("conv-rs-no-seen");
         let aw = |ts: &[Turn]| awaiting(&nowhere, "x", ts, "being");
@@ -572,6 +579,26 @@ mod cross_writer_tests {
     /// This reads a turn written by the Python side and writes one the Python side must be
     /// able to read back: same keys, same ISO timestamp shape, same `from` field name.
     #[test]
+    fn a_trial_label_survives_read_and_serialize_and_is_absent_otherwise() {
+        let line = r#"{"ts": "2026-10-03T01:08:43Z", "seq": 7, "from": "sprout-being", "text": "hello", "via": "say", "trial": "json-act"}"#;
+        let t: Turn = serde_json::from_str(line).expect("parses");
+        assert_eq!(t.trial.as_deref(), Some("json-act"));
+        assert_eq!(t.text, "hello", "the words are untouched");
+        let v: serde_json::Value = serde_json::from_str(&serde_json::to_string(&t).unwrap()).unwrap();
+        assert_eq!(v["trial"], "json-act", "the endpoint serializes it back out");
+        let plain: Turn = serde_json::from_str(r#"{"ts": "x", "seq": 1, "from": "dp", "text": "hi"}"#).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&serde_json::to_string(&plain).unwrap()).unwrap();
+        assert!(v.get("trial").is_none(), "no trial: no field, unchanged");
+    }
+
+    #[test]
+    fn the_dashboard_shows_a_trial_label_beside_the_words() {
+        let html = include_str!("dashboard.html");
+        assert!(html.contains("appendChat(t.from, t.text, kindOf(t.from), t.ts, t.trial)"));
+        assert!(html.contains("'TEST · ' + escapeHtml(trial)"), "visible, escaped, beside not inside the text");
+    }
+
+    #[test]
     fn a_python_written_turn_round_trips() {
         let python_line = r#"{"ts": "2026-09-07T22:22:49Z", "seq": 2, "from": "dp", "text": "hi", "witness": "act-9", "beat": "heartbeat-abc"}"#;
         let t: Turn = serde_json::from_str(python_line).expect("must parse the Python writer's line");
@@ -583,7 +610,7 @@ mod cross_writer_tests {
         let mine = serde_json::to_string(&Turn {
             ts: iso_utc_now(), seq: 3, from: "dp".into(), text: "x".into(),
             witness: None, beat: None,
-            via: None,
+            via: None, trial: None,
         }).unwrap();
         let v: serde_json::Value = serde_json::from_str(&mine).unwrap();
         assert!(v.get("from").is_some(), "the field is `from`, not `from_`: {mine}");

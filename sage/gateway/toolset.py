@@ -33,7 +33,7 @@ from sage.gateway.being_gate_client import _TOOL_SCHEMAS
 # Verbs that act on a BODY part, and the part the measured inventory must carry for them.
 BODY_VERBS = ("camera", "gaze", "speak", "pair_audio")
 # Verbs that act in the being's own git worktree.
-WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "pr_open", "pr_amend")
+WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "pr_open", "pr_amend", "pr_sync")
 
 
 def canonical_toolset() -> List[str]:
@@ -55,7 +55,7 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
         if v not in _TOOL_SCHEMAS:
             continue
         if inv is None:
-            out[v] = "this machine's body was not measured this turn, so whether it has the part is unknown"
+            out[v] = "availability unknown: this machine's body was not measured this turn"
         elif v not in have:
             part = {"camera": "camera", "gaze": "movable eyes (no gaze-capable cortex is running)",
                     "speak": "speaker it can drive (a speaker, and a speech engine to feed it)",
@@ -70,10 +70,15 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
     return out
 
 
-def specs(unavail: Optional[Dict[str, str]] = None) -> List[dict]:
+def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, list]] = None) -> List[dict]:
     """The Ollama tool specs for the whole canonical toolset. Available verbs carry their full
     description; an unavailable one carries one line and the reason, parameters intact."""
     unavail = unavail or {}
+    # CLOSED VALUE SETS reach the explore turn too (2026-10-01): SAGE #312 put gaze.mode / git_read.op enums
+    # in ollama_tools(), but explore is built here, so they never reached the turn where gaze is used.
+    # `enums` adds per-beat sets, e.g. {("peer_ask", "to"): the siblings and seats this being can reach}.
+    from sage.gateway.being_gate_client import _param_enums
+    closed = {**_param_enums(), **(enums or {})}
     out = []
     for name in canonical_toolset():
         desc, props, required = _TOOL_SCHEMAS[name]
@@ -85,7 +90,9 @@ def specs(unavail: Optional[Dict[str, str]] = None) -> List[dict]:
             # long descriptions go, since they are what made an unusable verb cost ~700 chars
             properties = {k: {"type": "string"} for k in props}
         else:
-            properties = {k: {"type": "string", "description": v} for k, v in props.items()}
+            properties = {k: dict({"type": "string", "description": v},
+                                  **({"enum": list(closed[(name, k)])} if closed.get((name, k)) else {}))
+                          for k, v in props.items()}
         out.append({"type": "function", "function": {
             "name": name, "description": desc,
             "parameters": {"type": "object", "properties": properties, "required": required}}})

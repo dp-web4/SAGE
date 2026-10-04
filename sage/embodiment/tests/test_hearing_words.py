@@ -3,7 +3,7 @@ hear when i reply in voice?").
 
 Pinned here: nothing is transcribed outside the window speak() opens or while the being is speaking;
 heard words carry no speaker identity; whisper's near-silence hallucinations are dropped; the beat
-shows only words since the previous beat; a voice wakes a beat, held while one is already running.
+shows only words since the previous beat; a voice wakes a beat, queued behind a running one (#295).
 """
 import json
 import os
@@ -54,9 +54,9 @@ def test_a_long_speech_is_cut_at_the_cap_not_buffered_forever():
 
 def test_the_window_opens_and_closes_by_time(tmp_path):
     p = str(tmp_path / "listen.json")
-    assert listening.window(path=p) == {"listening": False, "speaking": False}, "absent = closed"
+    assert listening.window(path=p) == {"listening": False, "speaking": False, "always": False, "muted": None}, "absent = closed"
     listening.mark(path=p, listen_until=time.time() + 60, speaking_until=time.time() - 1)
-    assert listening.window(path=p) == {"listening": True, "speaking": False}
+    assert listening.window(path=p) == {"listening": True, "speaking": False, "always": False, "muted": None}
     listening.mark(path=p, speaking_until=time.time() + 5)
     assert listening.window(path=p)["speaking"] and listening.window(path=p)["listening"]
     assert not listening.window(time.time() + 120, path=p)["listening"]
@@ -120,9 +120,13 @@ def test_whisper_near_silence_hallucinations_are_dropped_and_no_speaker_is_recor
                            "avg_logprob": -0.2}])
     rec = t.transcribe(b"\0\0" * 16000)
     assert rec["text"] == "Hi Sprout, it's good to hear you."
-    assert set(rec) == {"ts", "text", "seconds", "source"}, "words, time, mic — never who"
+    # words, time, mic, and what was left out (2026-10-01: nothing dropped silently) — never who
+    assert set(rec) <= {"ts", "text", "seconds", "source", "dropped", "unclear"}
+    assert not {"speaker", "who", "from"} & set(rec)
+    assert rec["dropped"][0]["why"] == "silence" and "unclear" not in rec, "a hallucination is not unclear speech"
     t.model = _FakeModel([{"text": " you", "no_speech_prob": 0.1, "avg_logprob": -1.6}])
-    assert t.transcribe(b"\0\0" * 1600) is None
+    gone = t.transcribe(b"\0\0" * 1600)
+    assert gone["text"] == "" and gone["dropped"][0]["at"] == "all", "no words: measured, never a heard line"
 
 
 def test_a_missing_whisper_fails_open(monkeypatch):
@@ -145,35 +149,72 @@ def test_speak_opens_the_window_after_the_sound_and_mutes_during_it(monkeypatch,
             during.append(listening.window())
     monkeypatch.setattr(subprocess, "run", run)
     body.speak("hello")
-    assert during == [{"listening": False, "speaking": True}], "muted while its own voice plays"
+    assert during == [{"listening": False, "speaking": True, "always": False, "muted": None}], "muted while its own voice plays"
     after = listening.window(time.time() + 1)
-    assert after == {"listening": True, "speaking": False}
+    assert after == {"listening": True, "speaking": False, "always": False, "muted": None}
     assert not listening.window(time.time() + body.LISTEN_WINDOW_S + 1)["listening"]
 
 
-def test_a_voice_wakes_a_beat_held_while_one_is_running(monkeypatch, tmp_path):
+def _hearing_presence(monkeypatch, tmp_path):
+    """Presence reading a temp heard.jsonl, against a fake systemd (SAGE #295)."""
     from sage.embodiment import presence
-    from sage.gateway import being_join
+    from sage.gateway import arousal
+    from sage.gateway.tests.fake_systemd import FakeSystemd
     heard = tmp_path / "heard.jsonl"
     monkeypatch.setattr(presence, "HEARD", str(heard))
-    monkeypatch.setattr(being_join, "write_wake_marker", lambda d, s: None)
-    started = []
-    import subprocess
-    monkeypatch.setattr(subprocess, "run",
-                        lambda argv, **k: started.append(argv) or type("R", (), {"returncode": 0, "stderr": ""})())
+    sysd = FakeSystemd()
+    monkeypatch.setattr(arousal, "_systemd", sysd)
     p = presence.Presence.__new__(presence.Presence)
-    p.heard_seen, p.heard_pending, p.last_heard_wake = 0, None, 0.0
+    p.heard_seen, p.last_key, p._since_trim = 0, "", 0
     p._log = lambda ev: None
+    return p, heard, sysd, arousal
+
+
+def test_a_voice_wakes_a_beat_and_mid_beat_it_starts_the_next_one(monkeypatch, tmp_path):
+    """Words heard are an event (#295): a beat now, or, while one runs, queued so the next beat
+    starts the moment it ends. Not held for presence's next poll, and not spaced by a 45 s gap."""
+    p, heard, sysd, arousal = _hearing_presence(monkeypatch, tmp_path)
+    sysd.running = True
     heard.write_text(json.dumps({"ts": time.time(), "text": "hello Sprout"}) + "\n")
-    running = [True]
-    monkeypatch.setattr(presence.Presence, "_beat_running", staticmethod(lambda: running[0]))
-    p._check_heard(time.time())
-    assert started == [] and p.heard_pending, "held, not dropped, while a beat runs"
-    running[0] = False
-    p._check_heard(time.time())
-    assert started and started[0][-1] == "sage-heartbeat.service" and p.heard_pending is None
-    p._check_heard(time.time() + 5)
-    assert len(started) == 1, "no new words, no new beat"
+    [w] = p._check_heard(time.time())
+    assert w["queued"] is True and sysd.starts == 0 and len(sysd.arms) == 1
+    assert [e["descriptor"] for e in arousal.peek_pending()] == ['heard a voice: "hello Sprout"']
+    sysd.beat_ends()
+    assert sysd.starts == 1, "the next beat started as soon as the running one ended"
+    assert p._check_heard(time.time() + 5) == [], "no new words, no new beat"
+    sysd.beat_ends()
+    with open(heard, "a") as f:
+        f.write(json.dumps({"ts": time.time(), "text": "are you there"}) + "\n")
+    [w] = p._check_heard(time.time() + 6)
+    assert w["start_accepted"] is True and w["started"] is None and sysd.starts == 2, "no 45 s gap: new words, new beat"
+
+
+def test_a_failed_beat_start_keeps_the_words_pending(monkeypatch, tmp_path):
+    """GPT review of #220: a failed start once cleared the words. Now they are in the pending set
+    before any start is tried, and the next beat, whatever starts it, claims them."""
+    p, heard, sysd, arousal = _hearing_presence(monkeypatch, tmp_path)
+    sysd.start_rc = 1
+    heard.write_text(json.dumps({"ts": time.time(), "text": "hello Sprout"}) + "\n")
+    [w] = p._check_heard(time.time())
+    assert w["start_accepted"] is None and w["started"] is None
+    [e] = arousal.claim_pending("the-next-beat")
+    assert e["descriptor"] == 'heard a voice: "hello Sprout"'
+
+
+def test_heard_log_preserves_unknown_and_does_not_claim_a_started_beat(monkeypatch, tmp_path, capsys):
+    p, heard, sysd, _ = _hearing_presence(monkeypatch, tmp_path)
+    logged = []
+    p._log = logged.append
+    for i, rc in enumerate((0, 1, -15)):
+        sysd.running, sysd.start_rc = False, rc
+        with heard.open("a") as stream:
+            stream.write(json.dumps({"ts": i, "text": f"turn {i}"}) + "\n")
+        p._check_heard(time.time())
+        assert logged[-1]["started"] is None
+        assert logged[-1]["start_accepted"] is (True if rc == 0 else None)
+        assert logged[-1]["wake_evidence_version"] == 2
+    text = capsys.readouterr().out
+    assert "beat started" not in text and text.count("beat entry unconfirmed") == 3
 
 
 def test_a_failed_playback_or_synthesis_opens_no_window(monkeypatch, tmp_path):
@@ -190,35 +231,7 @@ def test_a_failed_playback_or_synthesis_opens_no_window(monkeypatch, tmp_path):
         monkeypatch.setattr(subprocess, "run", run)
         with pytest.raises(subprocess.CalledProcessError):
             body.speak("hello")
-        assert listening.window(time.time() + 1) == {"listening": False, "speaking": False}, fails
-
-
-def test_a_failed_beat_start_keeps_the_words_and_retries(monkeypatch, tmp_path):
-    """GPT review of #220: a failed `systemctl start` cleared the pending words, so the voice
-    was never delivered. They stay pending until a beat actually starts."""
-    from sage.embodiment import presence
-    from sage.gateway import being_join
-    heard = tmp_path / "heard.jsonl"
-    monkeypatch.setattr(presence, "HEARD", str(heard))
-    monkeypatch.setattr(being_join, "write_wake_marker", lambda d, s: None)
-    monkeypatch.setattr(presence.Presence, "_beat_running", staticmethod(lambda: False))
-    rc = [1]
-    started = []
-    import subprocess
-    monkeypatch.setattr(subprocess, "run", lambda argv, **k: started.append(argv)
-                        or type("R", (), {"returncode": rc[0], "stderr": "Failed to start"})())
-    p = presence.Presence.__new__(presence.Presence)
-    p.heard_seen, p.heard_pending, p.last_heard_wake = 0, None, 0.0
-    p._log = lambda ev: None
-    heard.write_text(json.dumps({"ts": time.time(), "text": "hello Sprout"}) + "\n")
-    t = time.time()
-    p._check_heard(t)
-    assert len(started) == 1 and p.heard_pending, "failed start: words kept"
-    p._check_heard(t + 5)
-    assert len(started) == 1, "retry waits out the gap"
-    rc[0] = 0
-    p._check_heard(t + presence.HEARD_BEAT_GAP_S + 1)
-    assert len(started) == 2 and p.heard_pending is None, "retried and delivered"
+        assert listening.window(time.time() + 1) == {"listening": False, "speaking": False, "always": False, "muted": None}, fails
 
 
 def test_the_mic_that_heard_is_named_not_the_first_one_listed():
