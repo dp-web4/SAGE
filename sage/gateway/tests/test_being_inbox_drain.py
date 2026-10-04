@@ -96,3 +96,39 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def _client(stdout: str, rc: int = 0, stderr: str = ""):
+    """A fake channel_client and the identity file naming it."""
+    d = Path(tempfile.mkdtemp(prefix="cc-"))
+    cc = d / "cc.sh"
+    cc.write_text(f"#!/bin/sh\nprintf '%s' {json_quote(stdout)}\nprintf '%s' {json_quote(stderr)} >&2\nexit {rc}\n")
+    cc.chmod(0o755)
+    ident = d / "ident"
+    ident.write_text(f"CHANNEL_CLIENT='{cc}'\nHUB_URL='http://127.0.0.1:1'\nMY_LCT='lct'\nMY_KEYPAIR='{d}/k'\n")
+    return str(ident)
+
+
+def json_quote(s: str) -> str:
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
+def test_cannot_tell_is_not_empty():
+    """Sprout, 2026-10-03: a failed or unreadable fetch returned [] and the beat recorded fetched 0 with no
+    error -- 1,778 drains of sprout-being's mailbox, never one fetch. Each failure now lands in `errors`."""
+    for env, why in ((_client("", rc=1, stderr="no pinned pubkey for lct"), "exited 1: no pinned pubkey"),
+                     (_client("banner text, not json"), "unreadable reply"),
+                     (_client('{"error": "forbidden"}'), "no notifications field")):
+        r = drain_once(_inst(), env_file=env, notify=lambda k, p: {"ok": True})
+        assert r["fetched"] == 0 and r["errors"] and why in r["errors"][0], (why, r)
+
+
+def test_an_empty_mailbox_is_still_empty_with_no_error():
+    r = drain_once(_inst(), env_file=_client('{"notifications": []}'), notify=lambda k, p: {"ok": True})
+    assert r["fetched"] == 0 and r["errors"] == []
+
+
+def test_a_real_notice_is_fetched_through_the_client():
+    body = '{"notifications": [{"kind": "reply", "pointer_uri": "p", "from": "f", "pair_id": "n-7"}]}'
+    r = drain_once(_inst(), env_file=_client(body), notify=lambda k, p: {"ok": True})
+    assert r["fetched"] == 1 and r["persisted"] == 1 and r["errors"] == []

@@ -298,7 +298,7 @@ AFFORDANCES = """## What you have this beat
 
 You cannot run code, browse, or open files outside your home unless a grant exists. The seat gives you a digest of what moved in the fleet with absolute paths; if you want to read one of those things, try memory_read on that path and see what the law says.
 
-Acting means calling a tool. A reply with no tool call ends the beat as words only, and words leave no trace in your todo, journal, scratch, or memory."""
+Acting means calling a tool. A reply with no tool call ends the beat as words only, and words leave no trace in your todo, journal, scratch, or memory. A beat has no clock and no boundary: it lasts while you keep calling tools. Work you can do now, do now rather than planning it for "next beat". To stop, rest; to go straight on into another beat, stay_awake."""
 
 SYSTEM = HEAD + "\n\n{posture}\n\n" + AFFORDANCES + "\n\n"
 
@@ -1005,7 +1005,8 @@ _SCHEMA_CHARS_PER_VERB = 700   # above the 651 measured, so the bound stays cons
 _SCHEMA_CHARS_FLOOR = 12_000   # at least the 18-verb measurement, for when the verb count is unknown too
 
 
-def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[dict] = None) -> Optional[int]:
+def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[dict] = None,
+                      brief: bool = False) -> Optional[int]:
     """Chars the offered verbs' schemas actually cost. None rather than a guess if it
     cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
     13 verbs to 18. Callers must route None through _schema_chars_fallback, never `or`
@@ -1019,7 +1020,8 @@ def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[d
             # here, so the cost is measured on THOSE specs, not on the full descriptions
             from sage.gateway import toolset
             names = set(offered)
-            return len(json.dumps([t for t in toolset.specs(unavail, enums) if t["function"]["name"] in names]))
+            return len(json.dumps([t for t in toolset.specs(unavail, enums, brief=brief)
+                                   if t["function"]["name"] in names]))
         from sage.gateway.being_gate_client import ollama_tools
         return len(json.dumps(ollama_tools(list(offered))))
     except Exception:
@@ -3148,7 +3150,10 @@ def main(argv=None) -> int:
                          "is no step cap: work continues while there is work, and the clock "
                          "is the box's limit rather than a guess at how much work there is. "
                          "Keep the unit's TimeoutStartSec comfortably above it — the record "
-                         "is written at beat end, and a kill loses the beat.")
+                         "is written at beat end, and a kill loses the beat. 0 (or less) "
+                         "means NO deadline: the beat runs while the being works (dp, "
+                         "2026-10-03: 'no cap on beat duration, if the being wants to keep "
+                         "going it should').")
     ap.add_argument("--reflect-steps", type=int, default=3)
     ap.add_argument("--since-hours", type=float, default=None,
                     help="digest window; default: since the last beat, min 1h, max 48h")
@@ -3391,11 +3396,13 @@ def main(argv=None) -> int:
     from sage.gateway import peers as _peers
     _reach = _peers.reachable(args.member)
     _enums = {("peer_ask", "to"): _reach} if _reach else None
-    _explore_specs = _toolset.specs(_unavail, _enums)
+    # per instance (RESEARCH_GENERALIZATION_RULE): "brief" shortens available verbs' descriptions
+    _tool_desc_mode = _toolset.tool_descriptions_mode(instance_config(instance))
+    _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief")
     # the names are DERIVED from the specs offered, never kept beside them: the seed's tool list
     # and the window's schema measurement must describe exactly what the model is handed
     _explore_tools = [t["function"]["name"] for t in _explore_specs]
-    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums)
+    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief")
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
     _state_head = f"# Your own state\n\n"
@@ -3456,9 +3463,11 @@ def main(argv=None) -> int:
     # ONE source of truth with the beat record's `tool_schema_chars`: two sites computing
     # the same number separately is how they drift apart, which is the defect this whole
     # change is about.
-    _schema_measured = _schema_chars_for(_explore_tools)
-    _schema_chars = (_schema_measured if _schema_measured is not None
-                     else _schema_chars_fallback(_explore_tools))
+    # _schema_chars is the ONE measurement made where the specs are built (above): the canonical
+    # toolset as actually offered -- availability-shortened and, where the instance opts in, brief.
+    # A second `_schema_chars_for(_explore_tools)` here re-measured the FULL descriptions and
+    # overwrote it, so the fitter budgeted ~7.7k chars of verbs that were never sent (found
+    # 2026-10-04, the first brief beat: offered 17,012, budgeted 25,516).
     _template_guess = 1200
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
     # token cost is converted and charged here. Measured 2,042 tokens, about a third of the
@@ -3531,7 +3540,7 @@ def main(argv=None) -> int:
     # Everything below runs under the kill handler: a SIGTERM (the unit's 45-minute
     # TimeoutStartSec) unwinds here and the record is still written, marked, with the
     # phases that completed. Explore and the posture turn share one wall-clock deadline.
-    explore_deadline = t0 + args.explore_budget_s
+    explore_deadline = explore_deadline_for(t0, args.explore_budget_s)
     explore = after = reflect = answer = None
     preempted = None
     account = {"present": False, "sha256": None, "reply": "", "generates": []}
@@ -3831,6 +3840,7 @@ def main(argv=None) -> int:
         "member": args.member, "model": args.model, "window_h": round(hours, 2), "clock": _clock,
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
+        "tool_descriptions": _tool_desc_mode,
         "decline_closing": decline_closing_for(instance_config(instance)),
         "answered_run_wake": answered_run_wake_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
@@ -3857,7 +3867,7 @@ def main(argv=None) -> int:
         # whose config resolved a 4096 window while the tree offered a verb the model was
         # never shown. A starved beat and a silent one are indistinguishable unless the
         # record says which tools were offered and whether the window is the intended one.
-        "config": _fill_headroom({**_config_check(instance, args.model, llm, _explore_tools), **prompt_sizes},
+        "config": _fill_headroom({**_config_check(instance, args.model, llm, _explore_tools, _schema_chars), **prompt_sizes},
                                  partial, host_session_id),
         "scope": scope_record,
         "appeals": appeals_record,
@@ -3987,7 +3997,7 @@ IDLE_UNIT = os.environ.get("SAGE_HEARTBEAT_UNIT", "sage-heartbeat.service")
 RESUME_UNIT = "sage-heartbeat-resume-wake"
 
 
-def _config_check(instance: Path, model: str, llm, offered) -> dict:
+def _config_check(instance: Path, model: str, llm, offered, schema_chars: Optional[int] = None) -> dict:
     """Did this beat run with the tool set and the context window the seat meant to give it?
     `active_embodiment` in instance.json is the canonical statement of intent (PRD r3 §3.2);
     the resolved window comes from the model config keyed on the ollama tag, which silently
@@ -4003,7 +4013,7 @@ def _config_check(instance: Path, model: str, llm, offered) -> dict:
         # is where that shows up. Imported locally: main()'s `from ... import ollama_tools`
         # binds it as a LOCAL of main, so referencing it here NameErrors at runtime — which
         # no test would have caught, because none of them call _config_check.
-        "tool_schema_chars": _schema_chars_for(offered),
+        "tool_schema_chars": schema_chars if schema_chars is not None else _schema_chars_for(offered),
         "num_ctx_intended": want_ctx, "num_ctx_resolved": got_ctx,
         "window_matches_intent": None if want_ctx is None else (got_ctx == want_ctx),
         "tag_intended": want_tag, "tag_running": model,
@@ -4020,6 +4030,15 @@ def _config_check(instance: Path, model: str, llm, offered) -> dict:
         "headroom_tokens": None,     # num_ctx - (largest prompt + num_predict)
         "context_overcommitted": None,
     }
+
+
+def explore_deadline_for(t0: float, budget_s: float) -> Optional[float]:
+    """The wall-clock moment explore stops issuing tool steps, or None for NO deadline.
+
+    A budget of 0 or less is "no cap" (dp, 2026-10-03: "no cap on beat duration, if the being
+    wants to keep going it should"). It must not be read as t0 + 0, which would end explore
+    before its first step -- the opposite of what the operator asked for."""
+    return None if budget_s is None or budget_s <= 0 else t0 + budget_s
 
 
 def stay_awake_reason(*turns) -> Optional[str]:
