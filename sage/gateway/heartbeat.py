@@ -1166,7 +1166,8 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
                         j += 1
                     entry = lines[i:j + 1]
                     if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
-                        dropped += 1
+                        dropped = i + 1
+                        break
                     else:
                         kept.extend(reversed(entry))
                     i = i - 1
