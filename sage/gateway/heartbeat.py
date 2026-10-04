@@ -3874,6 +3874,11 @@ def main(argv=None) -> int:
         if res is None:
             continue
         for dup in (getattr(res, "duplicates", None) or []):
+            if dup.get("rule") == "one_per_conversation_per_turn":
+                interventions.append({"kind": "duplicate", "phase": ph, "effector": dup.get("effector"),
+                                      "conversation": dup.get("conversation"), "rule": dup["rule"],
+                                      "suppressed": "a second utterance to the same conversation in the same turn"})
+                continue
             interventions.append({"kind": "duplicate", "phase": ph, "effector": dup.get("effector"),
                                   "suppressed": "a second execution of an identical call in the same turn"})
         for jf in (getattr(res, "json_arg_failures", None) or []):

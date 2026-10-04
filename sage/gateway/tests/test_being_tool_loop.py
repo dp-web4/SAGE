@@ -1011,3 +1011,63 @@ def test_a_collapse_is_reported_with_the_room_it_freed():
         # the stub's length is kept + marker, so chars freed == stub length - pointer length
         assert r["chars"] > 0 and r["spill"] in out[r["index"]]["content"]
         assert _ELIDED_SIGIL not in out[r["index"]]["content"]
+
+
+class _Recorder:
+    """A dispatcher that delivers every say/speak except to conversations it is told to refuse."""
+    def __init__(self, refuse=()):
+        self.calls, self.refuse = [], set(refuse)
+
+    def dispatch(self, i):
+        self.calls.append((i.effector, dict(i.args)))
+        if (i.args or {}).get("to") in self.refuse:
+            return ResultEnvelope(ok=False, error=f"no conversation {i.args['to']!r}")
+        return ResultEnvelope(ok=True, result="said")
+
+
+def _say(to, text):
+    return BeingIntent("say", {"to": to, "text": text})
+
+
+def test_one_utterance_per_conversation_per_turn():
+    """dp, 2026-10-04: "is this not basic idempotence?" 03:36Z sent one check-in to dp 3x in 34 s (first 300
+    chars byte-identical, endings different): the byte key missed it. The key is the conversational move."""
+    c = _Recorder()
+    outs = [{"content": "", "intents": [_say("dp", "Hi dp. I wanted to check in about boundaries.")]},
+            {"content": "", "intents": [_say("dp", "Hi dp. I wanted to check in about boundaries. Friday?")]},
+            {"content": "", "intents": [_say("DP", "A third, different thing.")]},
+            {"content": "done", "intents": []}]
+    r = run_tool_turn(c, lambda convo: outs.pop(0), [], max_steps=4)
+    assert [a["text"][:12] for _, a in c.calls] == ["Hi dp. I wan"], "only the first reaches the dispatcher"
+    held = [env for _, env in r.trace[1:]]
+    assert all(not e.ok and e.note == "one_per_conversation" and "already spoke in 'dp'" in e.error for e in held)
+    assert [d["rule"] for d in r.duplicates] == ["one_per_conversation_per_turn"] * 2, "recorded, never silent"
+
+
+def test_other_conversations_and_other_acts_are_untouched():
+    c = _Recorder()
+    outs = [{"content": "", "intents": [_say("dp", "to dp"), _say("sprout-claude", "to the seat"),
+                                        BeingIntent("speak", {"text": "aloud"}),
+                                        BeingIntent("recall", {"query": "q"}), BeingIntent("recall", {"query": "q2"})]},
+            {"content": "done", "intents": []}]
+    r = run_tool_turn(c, lambda convo: outs.pop(0), [], max_steps=2)
+    assert [e for e, _ in c.calls] == ["say", "say", "speak", "recall", "recall"] and r.duplicates == []
+
+
+def test_a_refused_say_does_not_use_up_the_conversation():
+    """Only a DELIVERED utterance sets the key: a say the dispatcher refused can be corrected and sent."""
+    c = _Recorder(refuse={"dpp"})
+    outs = [{"content": "", "intents": [_say("dpp", "hello")]},
+            {"content": "", "intents": [_say("dp", "hello")]},
+            {"content": "done", "intents": []}]
+    run_tool_turn(c, lambda convo: outs.pop(0), [], max_steps=3)
+    assert [a["to"] for _, a in c.calls] == ["dpp", "dp"]
+
+
+def test_speech_twice_in_the_room_is_one_utterance():
+    c = _Recorder()
+    outs = [{"content": "", "intents": [BeingIntent("speak", {"text": "Hello! How can I help you today?"})]},
+            {"content": "", "intents": [_say("room", "Hello! How can I help you today?")]},
+            {"content": "done", "intents": []}]
+    r = run_tool_turn(c, lambda convo: outs.pop(0), [], max_steps=3)
+    assert len(c.calls) == 1 and r.duplicates[0]["conversation"] == "room"
