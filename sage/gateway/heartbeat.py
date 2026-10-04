@@ -500,7 +500,12 @@ def act_after_answer_on(instance) -> bool:
 # and in ITS terms: no verb names, no "tool", no "say" (SMALL_MODEL_LEGIBILITY 1.14: harness words in the answer
 # prompt became the being's MESSAGE, "I'm sorry I didn't call a tool"; test_the_prompt_is_only_the_pending_turn_
 # and_the_ask pins it). Derived from the canonical verbs, so it changes when they do.
-_ABILITIES = [("camera", "look through your eyes"), ("search", "search your own files"),
+# search's fact says what it searches: the code repository checked out on this seat, not the being's
+# home. It said "search your own files" until the #354 follow-up, the phrasing that sent cbp-being asking
+# dp for a worktree so search could find a line in its own scratch file (see NO_WORKTREE_REFUSAL). Pinned
+# by test_no_worktree_ability_claims_the_home.
+_ABILITIES = [("camera", "look through your eyes"),
+              ("search", "search the code repository checked out on this seat (not your home)"),
               ("pr_read", "read the fleet's pull requests"), ("recall", "recall memories"),
               ("peer_ask", "ask a sibling a question"), ("speak", "speak aloud"),
               ("web_search", "search the web a few times an hour (what comes back is other people's words)")]

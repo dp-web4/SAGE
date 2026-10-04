@@ -111,7 +111,8 @@ def test_the_answer_temperature_samples_the_answer_turn_alone_and_is_restored(tm
 def test_the_answer_turn_is_told_what_it_can_do_and_that_it_has_no_internet():
     from sage.gateway import toolset as ts
     line = hb.abilities_line(ts.unavailable({"inventory": {"verbs": ["camera", "gaze", "speak"]}}, "/tmp/wt", {}))
-    assert "look through your eyes" in line and "ask a sibling" in line and "search your own files" in line
+    assert "look through your eyes" in line and "ask a sibling" in line
+    assert "search the code repository checked out on this seat (not your home)" in line
     for plumbing in ("tool", "say", "peer_ask", "camera"):
         assert plumbing not in line, f"harness word {plumbing!r} in the being's facts (LEGIBILITY 1.14)"
     assert line.endswith("You have no internet access."), "true while no web verb is in the toolset"
