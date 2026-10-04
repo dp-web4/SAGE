@@ -135,6 +135,85 @@ def test_without_a_worktree_the_verbs_still_fail_closed():
               "worktree" in (v.reason or "").lower())
 
 
+# What each no-worktree refusal must say (2026-10-04). verb -> (words naming what it is FOR,
+# the home-file tool it points to or None, that tool's parameters it must name).
+# cbp-being asked dp three times to configure a worktree so `search` could find lines in its
+# own scratch file. Search cannot read the home at all; memory_read with start_line could.
+_REFUSAL_MUST_SAY = {
+    "search":   ("code-repository checkout", "memory_read", ("start_line",)),
+    "git_read": ("git history", "memory_read", ()),
+    "check":    ("test suites", "request_run", ()),
+    "camera":   ("No other tool captures a frame", None, ()),
+}
+# Wording that tells the being to get a worktree set up, or names the file someone would edit.
+_CONFIGURE_WORDS = ("configur", "instance.json", "ask the operator", "ask dp", "request_scope",
+                    "declare", "set up a worktree", "needs a worktree")
+
+
+def _assert_refusal_says_what_the_verb_is_for(verb, text):
+    purpose, tool, params = _REFUSAL_MUST_SAY[verb]
+    check(f"{verb}: names what it is for ({purpose!r})", purpose in text)
+    check(f"{verb}: says what it reads is not the being's home, or says it is not enabled",
+          any(s in text for s in ("not your home", "not in your home", "not read your home",
+                                  "not enabled")))
+    if tool:
+        check(f"{verb}: points to {tool}", tool in text)
+        schema_params = B._TOOL_SCHEMAS[tool][1]
+        for p in params:
+            check(f"{verb}: names {tool}'s {p}", p in text)
+        # EVERY line parameter the refusal names must be one the tool takes. The brief for this
+        # fix said "memory_read with start_line/end_line", but memory_read has no end_line: it
+        # reads a window from start_line on. A parameter a refusal names is one the being sends.
+        for word in ("start_line", "end_line"):
+            if word in text:
+                check(f"{verb}: {word} is a parameter {tool} really takes", word in schema_params)
+    low = text.lower()
+    for w in _CONFIGURE_WORDS:
+        check(f"{verb}: contains no instruction to configure a worktree ({w!r})", w not in low)
+
+
+@requires_gate_core
+def test_no_worktree_refusals_say_what_the_verb_is_for():
+    """The deny the GATE returns, verb by verb: still a deny (the fail-closed test above), but now
+    one that says what the verb is for, where the being's own files are served instead, and
+    nothing that reads as "get someone to configure a worktree"."""
+    c = _client(None)
+    for eff, args in (("search", {"pattern": "x"}), ("git_read", {"op": "log"}),
+                      ("check", {"target": "gateway"}), ("camera", {})):
+        v = c.gate(B.BeingIntent(effector=eff, args=args))
+        check(f"{eff}: denied", v.decision, "deny")
+        reason = v.reason or ""
+        check(f"{eff}: the deny carries the whole refusal", B.NO_WORKTREE_REFUSAL[eff] in reason)
+        _assert_refusal_says_what_the_verb_is_for(eff, B.NO_WORKTREE_REFUSAL[eff])
+
+
+def test_the_composers_and_the_dispatcher_say_the_same_refusal():
+    """Without the gate core: each composer raises the refusal text, and the dispatcher's own
+    no-worktree branch (its second line of defence) says the same words, so the being hears one
+    answer however the act reaches it."""
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    composers = {"search": (B.search_command, {"pattern": "x"}),
+                 "git_read": (B.git_read_command, {"op": "log"}),
+                 "check": (B.check_command, {"target": "gateway"}),
+                 "camera": (B.camera_command, {})}
+    for verb, (compose, args) in composers.items():
+        try:
+            compose(args, {"worktree": None, "memory_root": "/tmp/x"})
+            _fail(f"{verb}: composed with no worktree")
+        except ValueError as e:
+            check(f"{verb}: the composer raises the shared refusal", str(e), B.NO_WORKTREE_REFUSAL[verb])
+        _assert_refusal_says_what_the_verb_is_for(verb, B.NO_WORKTREE_REFUSAL[verb])
+    with tempfile.TemporaryDirectory() as home:
+        d = D.__new__(D)
+        d.worktree = os.path.join(home, "does-not-exist")
+        d.memory_root = home
+        for verb, args in (("search", {"pattern": "x"}), ("git_read", {"op": "log"}),
+                           ("check", {"target": "gateway"})):
+            env = getattr(d, f"_do_{verb}")(B.BeingIntent(effector=verb, args=args))
+            check(f"{verb}: dispatcher still refuses (pending, not run)", (env.ok, env.pending), (False, True))
+            check(f"{verb}: dispatcher says the shared refusal", env.note, B.NO_WORKTREE_REFUSAL[verb])
+
+
 def _call_args(src, needle, start=0):
     """The argument text of the first `needle(` call at or after `start`, paren-matched."""
     i = src.index(needle, start)
@@ -226,6 +305,8 @@ def test_no_other_call_site_builds_a_gate_without_a_worktree():
 def main():
     for fn in (test_every_registry_composer_takes_ctx, test_the_gate_composes_with_the_worktree,
                test_without_a_worktree_the_verbs_still_fail_closed,
+               test_no_worktree_refusals_say_what_the_verb_is_for,
+               test_the_composers_and_the_dispatcher_say_the_same_refusal,
                test_the_construction_sites_give_both_halves_the_same_tree,
                test_no_other_call_site_builds_a_gate_without_a_worktree):
         why = standalone_skip_reason(fn)

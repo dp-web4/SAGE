@@ -106,7 +106,7 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     # decision about whether every being with a memory_root may capture a frame, not a cleanup.
     # Pinned by test_without_a_worktree_the_verbs_still_fail_closed.
     if not worktree:
-        raise ValueError("camera requires a worktree context")
+        raise ValueError(NO_WORKTREE_REFUSAL["camera"])
     if not memory_root:
         raise ValueError("camera requires a memory_root context")
 
@@ -235,6 +235,50 @@ def pr_review_signature(member_id: str, action_id: Optional[str], being_lct: Opt
 _REV = (r"(?:[0-9a-fA-F]{7,40}|HEAD|[A-Za-z][A-Za-z0-9._/-]{0,60})"
         r"(?:[~^][0-9]{0,3})?")
 
+# WHAT A WORKTREE VERB SAYS WHEN THIS SEAT HAS NO WORKTREE (2026-10-04). Until today each of
+# these said "<verb> needs a worktree of your own; none is configured on this seat". That is
+# true, and it names exactly one way forward: get a worktree configured. cbp-being took it.
+# It wanted to fix one line of a scratch file in its own home, reached for `search`, was told a
+# worktree was missing, and asked dp three times to configure one so search could find lines
+# in its files. But search is `git grep` over a code-repository checkout and cannot see the
+# being's home at all: a worktree would not have helped, and the tool it needed (memory_read
+# with start_line) was already in its hands. Configuring a worktree would also have turned on
+# git_read, check and camera (see camera_command), which is a policy decision dp has not made.
+#
+# So each refusal now says what the verb is FOR, that it does not read the being's home, and
+# which tool serves the likely need there. None of them tells the being to ask for a worktree.
+# Every tool and parameter named here must exist as named: memory_read takes `path` and
+# `start_line` (no end_line; a long file comes back in windows that say how to read on), and
+# request_run takes `path`. Pinned by test_no_worktree_refusals_say_what_the_verb_is_for, which
+# checks each named parameter against _TOOL_SCHEMAS. The dispatcher (hestia_dispatch) and the
+# toolset's availability line say the same text, so the being hears one answer however it asks.
+NO_WORKTREE_REFUSAL = {
+    "search": (
+        "search reads a code-repository checkout (a worktree), not your home, and this seat "
+        "has none. To find or read lines in your own files (notes/, scratch/, todo.md, "
+        "journal.md), use memory_read with the file's path and start_line: it shows the file "
+        "from that line on and says which lines it covered."),
+    "git_read": (
+        "git_read reads the git history of a code-repository checkout (a worktree): its "
+        "commits, diffs, blame, and files as they were at an earlier commit. It does not read "
+        "your home, and this seat has none. To read one of your own files as it is now, use "
+        "memory_read with the file's path (and start_line to begin at a given line)."),
+    "check": (
+        "check runs SAGE's own test suites (gateway, irp) inside a code-repository checkout "
+        "(a worktree), not in your home, and this seat has none, so there is nothing here for "
+        "it to test. To find out what one of your own files does when it runs, use request_run "
+        "with its path: the seat decides whether to run it and answers with the real output."),
+    # CAMERA'S HONEST ALTERNATIVE IS DIFFERENT: there is none. It never reads a worktree (the
+    # frame lands in the being's home); the requirement is the policy hold described in
+    # camera_command. So it says it is not enabled, says why without pointing at a step the
+    # being could ask someone to take, and says plainly that no other tool captures a frame.
+    "camera": (
+        "camera is not enabled on this seat. Here it is held to the same condition as the "
+        "verbs that read a code-repository checkout (a worktree), and this seat has none; "
+        "whether this seat captures frames is a policy decision about the seat, not a step "
+        "you can take. No other tool captures a frame."),
+}
+
 GIT_OPS = ("log", "show", "diff", "status", "blame", "cat")
 
 # A revision the being may name: a hex sha, HEAD with optional ~n/^n, or a plain branch or
@@ -282,7 +326,7 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     import re
     worktree = (ctx or {}).get("worktree")
     if not worktree:
-        raise ValueError("git_read needs a worktree of your own; none is configured on this seat")
+        raise ValueError(NO_WORKTREE_REFUSAL["git_read"])
     op = str(args.get("op", "")).strip()
     if op not in GIT_OPS:
         raise ValueError(f"git_read 'op' must be one of {list(GIT_OPS)}, got {op!r}")
@@ -816,7 +860,7 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     import shlex
     worktree = (ctx or {}).get("worktree")
     if not worktree:
-        raise ValueError("search needs a worktree of your own; none is configured on this seat")
+        raise ValueError(NO_WORKTREE_REFUSAL["search"])
     pattern = str(args.get("pattern", ""))
     if not pattern.strip():
         raise ValueError("search needs a 'pattern' — the text or extended-regex to look for")
@@ -1025,9 +1069,10 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
     import shlex
     worktree = (ctx or {}).get("worktree")
     if not worktree:
-        raise ValueError(
-            "check needs a worktree of your own: there is nothing to run tests in, and a "
-            "relative path would be judged against a tree you do not hold (PRD M1)")
+        # Fail closed (PRD M1): with no worktree a relative path would be judged against the
+        # shared checkout, a tree the being does not hold. That reason is for the seat; the
+        # being is told what check is for and where its own files are run instead.
+        raise ValueError(NO_WORKTREE_REFUSAL["check"])
     target = str(args.get("target", "")).strip()
     # QUOTED for the same reason as --rootdir and --chdir: judged==executed is a property
     # of the STRING, not of the fleet's current directory names. A worktree path containing

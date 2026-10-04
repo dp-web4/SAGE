@@ -2137,11 +2137,9 @@ class HestiaF1aDispatcher:
         in the single resolution, not an argument for dropping the flag."""
         import shlex
         import subprocess
-        from sage.gateway.being_gate_client import git_read_command
+        from sage.gateway.being_gate_client import git_read_command, NO_WORKTREE_REFUSAL
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="git_read needs a worktree of your own; none is "
-                                       "configured on this seat")
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["git_read"])
         try:
             cmd = git_read_command(intent.args, {"worktree": self.worktree})
         except ValueError as e:
@@ -2205,10 +2203,9 @@ class HestiaF1aDispatcher:
         than universal."""
         import shlex
         import subprocess
-        from sage.gateway.being_gate_client import search_command
+        from sage.gateway.being_gate_client import search_command, NO_WORKTREE_REFUSAL
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="search needs a worktree of your own; none is configured")
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["search"])
         try:
             cmd = search_command(intent.args, {"worktree": self.worktree})
         except ValueError as e:
@@ -2374,11 +2371,10 @@ class HestiaF1aDispatcher:
         import hashlib
         import shlex
         import subprocess
-        from sage.gateway.being_gate_client import check_argv, check_command
+        from sage.gateway.being_gate_client import check_argv, check_command, NO_WORKTREE_REFUSAL
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="check needs a worktree of your own; none is configured "
-                                       "on this seat (PRD M1)")
+            # fails closed per PRD M1; the being hears what check is for (NO_WORKTREE_REFUSAL)
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["check"])
         # Rebuild the SAME command the gate judged — same function, same context. Composing
         # it differently here would mean the law ruled on one command and the seat ran
         # another, which is the whole failure this organ exists to make impossible.
