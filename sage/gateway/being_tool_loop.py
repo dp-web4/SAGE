@@ -75,6 +75,18 @@ REPEAT_NUDGE_AT = 3          # identical consecutive calls before the harness na
 
 REPEAT_BREAK_AT = 6          # ... and before it ends the tool phase
 
+
+def _conversation_of(intent) -> Optional[str]:
+    """The conversation an utterance lands in, for the one-per-conversation-per-turn key: `say` -> its `to`
+    (case-folded), `speak` -> "room" (voice is the room conversation). None for every other act, and for a
+    say with no `to`, which the dispatcher refuses on its own."""
+    if intent.effector == "speak":
+        return "room"
+    if intent.effector == "say":
+        to = str((intent.args or {}).get("to") or "").strip().lower()
+        return to or None
+    return None
+
 def _fingerprint(intents) -> Optional[str]:
     """What makes two steps 'the same call'. None when it cannot be computed, which never
     counts as a repeat — an unfingerprintable step must not end a turn."""
@@ -103,6 +115,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     trace: List[Tuple[BeingIntent, ResultEnvelope]] = []
     done_ok: set = set()
     duplicates: List[dict] = []
+    spoke_in: set = set()                              # conversations this turn has delivered a say/speak to
     last_fp, repeats = None, 0
     stay_awake = None
 
@@ -154,9 +167,27 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                 trace.append((intent, env))
                 convo.append({"role": "tool", "effector": intent.effector, "content": env.to_tool_message()})
                 continue
+            # ONE UTTERANCE PER CONVERSATION PER TURN (dp, 2026-10-04: "is this not basic idempotence?"). The
+            # byte key above misses a model that REGENERATES instead of replaying: since 10-01, 21 second
+            # says to the same conversation in one turn, 18 copies, re-drafts or harness echoes (03:36Z: one
+            # check-in to dp sent 3x in 34 s, first 300 chars byte-identical), and no similarity cutoff
+            # separates them from the 3 genuine follow-ups. So the key is the conversational move itself:
+            # after a DELIVERED say to a conversation, a later one this turn is not sent; it can wait a beat.
+            conv = _conversation_of(intent)
+            if conv is not None and conv in spoke_in:
+                env = ResultEnvelope(ok=False, error=f"not sent: you already spoke in '{conv}' this turn. "
+                                                     f"Anything more can go in your next beat.",
+                                     note="one_per_conversation")
+                duplicates.append({"step": step, "effector": intent.effector, "conversation": conv,
+                                   "rule": "one_per_conversation_per_turn"})
+                trace.append((intent, env))
+                convo.append({"role": "tool", "effector": intent.effector, "content": env.to_tool_message()})
+                continue
             env = client.dispatch(intent)                  # gate + F1a dispatch + consume
             if env.ok:
                 done_ok.add(key)
+                if conv is not None:
+                    spoke_in.add(conv)
             trace.append((intent, env))
             convo.append({"role": "tool", "effector": intent.effector,
                           "content": env.to_tool_message()})
