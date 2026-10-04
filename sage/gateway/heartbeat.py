@@ -2587,6 +2587,8 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
       * conversations exist, nothing waiting -> the generic form, ids listed.
       * something waiting -> the person's name, the real id, and WHAT THEY SAID.
     """
+    global LAST_SELECTION_ERROR
+    LAST_SELECTION_ERROR = None     # describes THIS selection, the one whose result the beat records
     try:
         from sage.gateway import conversations as _conv
         ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
@@ -2683,7 +2685,6 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
         # "CANNOT TELL" IS NOT "NOTHING PENDING" (2026-10-04). This swallowed every failure, so a selection
         # that raised looked exactly like an empty inbox: on HUB, hub-claude's 09-21 question was never
         # selected in 300+ beats while the beat records showed nothing wrong. The beat record now carries it.
-        global LAST_SELECTION_ERROR
         LAST_SELECTION_ERROR = f"{type(e).__name__}: {e}"[:300]
         print(f"[heartbeat] pending_selection failed: {LAST_SELECTION_ERROR}", file=sys.stderr)
     return "", "", "", "", None
@@ -3647,6 +3648,10 @@ def main(argv=None) -> int:
     # on main with no producer; install_kill_handler() is that producer.
     explore = after = reflect = answer = None
     selected = None          # the record names it; a beat killed before selection must still write its record
+    # This beat's selection error starts clean (legion-claude on #353): a failure in an earlier beat in the same
+    # process must not appear beside this beat's correct selection.
+    global LAST_SELECTION_ERROR
+    LAST_SELECTION_ERROR = None
     act_after = None
     preempted = None
     account = {"present": False, "sha256": None, "reply": "", "generates": []}
