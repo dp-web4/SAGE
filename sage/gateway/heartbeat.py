@@ -1182,7 +1182,7 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
                         dropped += 1
                     else:
                         kept.extend(reversed(entry))
-                    i = j - 1 - 1
+                    i = j - 1
             kept.reverse()
             removed = max(0, len(text) - sum(len(k) + 1 for k in kept))
             if key == "recall":

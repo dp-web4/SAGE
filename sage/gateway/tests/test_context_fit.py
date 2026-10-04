@@ -346,3 +346,24 @@ def test_nonbulleted_trim_emits_char_count_marker():
     assert "chars removed" in out["journal"]
     assert "older entr" not in out["journal"]
     assert "…trimmed to fit the context window:" in out["journal"]
+
+
+def test_nonbullet_entry_continuation_lines_not_skipped():
+    """Regression: i = j - 1 - 1 skipped a continuation line of the next entry.
+
+    Two entries, each with a bullet line and a continuation line. The budget
+    is tight enough that the first entry is dropped but the second is kept.
+    With the old double-decrement, the continuation line of the second entry
+    was skipped, leaving a dangling line. With i = j - 1, both lines of the
+    second entry are kept.
+    """
+    text = "- entry one\n  continuation one\n- entry two\n  continuation two"
+    out, _ = fit_to_window(
+        num_ctx=8192, num_predict=1024, fixed_chars=0, slack=512,
+        blocks={"journal": text},
+    )
+    journal = out["journal"]
+    assert "entry two" in journal
+    assert "continuation two" in journal
+    assert "entry one" not in journal
+    assert "continuation one" not in journal
