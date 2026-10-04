@@ -42,7 +42,7 @@ WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "
 # full refusal the verb itself returns is being_gate_client.NO_WORKTREE_REFUSAL.
 NO_WORKTREE_HERE = {
     "search": ("it searches a code-repository checkout (a worktree), not your home, and this "
-               "seat has none; to find or read lines in your own files use memory_read with "
+               "seat has none; to read lines in your own files use memory_read with "
                "start_line"),
     "git_read": ("it reads the git history of a code-repository checkout (a worktree), not "
                  "your home, and this seat has none; to read your own files use memory_read"),
@@ -60,7 +60,17 @@ NO_WORKTREE_HERE = {
                  "and this seat has none"),
     "pr_sync": ("it updates your pull request inside a code-repository checkout (a worktree), "
                 "and this seat has none"),
+    "camera": ("it is not enabled on this seat: here it is held to the same condition as the "
+               "verbs that read a code-repository checkout (a worktree), and this seat has none; "
+               "no other tool captures a frame"),
 }
+# Verbs that never touch a worktree but that the GATE still refuses without one. camera is the
+# only one: camera_command raises NO_WORKTREE_REFUSAL["camera"] when ctx has no worktree (a policy
+# hold, see the comment there). Until this list, the toolset offered camera in full on such a
+# seat (or said "this machine's body has no camera"), while calling it returned "camera is not
+# enabled on this seat". Availability now follows the gate's condition, which is unchanged; the
+# no-worktree reason wins over the body reason because it is the one calling the verb returns.
+WORKTREE_HELD_VERBS = ("camera",)
 
 
 def canonical_toolset() -> List[str]:
@@ -89,7 +99,7 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
                     "pair_audio": "audio link to pair"}.get(v, "such part")
             out[v] = f"this machine's body has no {part} (measured)"
     if not worktree:
-        for v in WORKTREE_VERBS:
+        for v in WORKTREE_VERBS + WORKTREE_HELD_VERBS:
             if v in _TOOL_SCHEMAS:
                 out[v] = NO_WORKTREE_HERE.get(
                     v, "it works in a code-repository checkout (a worktree), and this seat has none")

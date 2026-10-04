@@ -232,6 +232,35 @@ def test_no_worktree_refusals_say_what_the_verb_is_for():
         _assert_refusal_says_what_the_verb_is_for(eff, B.NO_WORKTREE_REFUSAL[eff])
 
 
+_FIND_WORDS = ("find", "search", "grep", "locate", "look up", "look for")
+# The home tools that address a file by path and line and search nothing. request_run is not here:
+# check's refusal says "To find out what one of your own files does when it runs, use
+# request_run", and running a file is how one finds that out.
+_HOME_TOOLS = ("memory_read", "memory_edit")
+
+
+def test_no_home_tool_is_credited_with_finding():
+    """No refusal, and no toolset availability line, credits a home tool with FINDING anything.
+    #354's search refusal said "To find or read lines in your own files ... use memory_read", but
+    memory_read reads a window from start_line on and searches nothing (Codex, #354 follow-up). A
+    being told it can find with memory_read goes looking with a tool that cannot look.
+
+    Checked per CLAUSE (split on '.' and ';'), so "search reads a code-repository checkout" in the
+    search refusal's first sentence is not mistaken for a claim about memory_read in its second."""
+    import re
+    from sage.gateway import toolset
+    texts = [(f"refusal {k}", v) for k, v in B.NO_WORKTREE_REFUSAL.items()]
+    texts += [(f"toolset {k}", v) for k, v in toolset.NO_WORKTREE_HERE.items()]
+    for label, text in texts:
+        for clause in re.split(r"[.;]\s", text):
+            low = clause.lower()
+            tools = [t for t in _HOME_TOOLS if t in low]
+            if not tools:
+                continue
+            for w in _FIND_WORDS:
+                check(f"{label}: {w!r} is not credited to {tools} ({clause!r})", w not in low)
+
+
 def test_the_composers_and_the_dispatcher_say_the_same_refusal():
     """Without the gate core: each composer raises the refusal text, and the dispatcher's own
     no-worktree branch (its second line of defence) says the same words, so the being hears one
