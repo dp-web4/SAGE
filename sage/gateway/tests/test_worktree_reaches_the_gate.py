@@ -179,6 +179,11 @@ def test_every_worktree_verb_has_a_refusal_and_a_check():
 # Wording that tells the being to get a worktree set up, or names the file someone would edit.
 _CONFIGURE_WORDS = ("configur", "instance.json", "ask the operator", "ask dp", "request_scope",
                     "declare", "set up a worktree", "needs a worktree")
+# Claims a no-worktree check never observed. The only fact in hand is "no checkout here": it says
+# nothing about whether the home's files are tracked (the CBP being's home has 461 paths on main)
+# or whether the being has an open PR. A refusal states what the verb cannot do, not these.
+_UNOBSERVED_CLAIMS = ("not part of any repository", "not in any repository",
+                      "no pull request of yours", "no proposal of yours", "you have no pull request")
 
 
 def _assert_refusal_says_what_the_verb_is_for(verb, text):
@@ -209,6 +214,8 @@ def _assert_refusal_says_what_the_verb_is_for(verb, text):
     low = text.lower()
     for w in _CONFIGURE_WORDS:
         check(f"{verb}: contains no instruction to configure a worktree ({w!r})", w not in low)
+    for w in _UNOBSERVED_CLAIMS:
+        check(f"{verb}: asserts nothing the check did not observe ({w!r})", w not in low)
 
 
 @requires_gate_core

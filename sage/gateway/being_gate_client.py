@@ -286,19 +286,22 @@ NO_WORKTREE_REFUSAL = {
         "home, and this seat has none. To put lines of your own files back, use memory_edit "
         "with the file's path, start_line and end_line, and new for the text you want there."),
     # The PR verbs have no home-file counterpart: a pull request is made from commits in a
-    # checkout. Purpose plus "this seat has none", and nothing to configure.
+    # checkout. Purpose plus "this seat has none", and nothing to configure. Each says what
+    # the VERB cannot do here, never a fact about the home or the being's PRs that this check did
+    # not observe: the CBP being's home has 461 paths tracked on main, and a missing checkout
+    # says nothing about whether a PR of its exists (#354 review).
     "pr_open": (
         "pr_open opens a pull request from commits on your own branch in a code-repository "
-        "checkout (a worktree), and this seat has none, so there is nothing here to propose "
-        "from. Files in your home are not part of any repository."),
+        "checkout (a worktree), and this seat has none, so pr_open cannot "
+        "propose files from your home."),
     "pr_amend": (
         "pr_amend revises a pull request you opened, by committing changes from your "
         "code-repository checkout (a worktree) onto its branch, and this seat has none, so "
-        "there is no pull request of yours here to revise."),
+        "pr_amend cannot revise your proposal here."),
     "pr_sync": (
         "pr_sync brings a pull request you opened up to date with its base branch, by merging "
-        "inside your code-repository checkout (a worktree), and this seat has none, so there "
-        "is no pull request of yours here to update."),
+        "inside your code-repository checkout (a worktree), and this seat has none, so pr_sync "
+        "cannot update your proposal here."),
     # CAMERA'S HONEST ALTERNATIVE IS DIFFERENT: there is none. It never reads a worktree (the
     # frame lands in the being's home); the requirement is the policy hold described in
     # camera_command. So it says it is not enabled, says why without pointing at a step the
