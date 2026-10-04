@@ -1110,7 +1110,7 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
     # digest every beat to buy room the model has never used.
     reserve = min(num_predict, ANSWER_RESERVE_CAP)
     budget_chars = window_budget_chars(num_ctx, num_predict, slack)
-    order = ("digest", "recall")
+    order = ("digest", "recall") + tuple(k for k in blocks if k not in ("digest", "recall"))
     floors = {"digest": 1200, "recall": 400}
     out, interventions = dict(blocks), []
     total = lambda: fixed_chars + sum(len(v or "") for v in out.values())
@@ -1122,7 +1122,7 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
             continue
         over = total() - budget_chars
         raw_keep = budget_chars - fixed_chars
-        keep = max(floors[key], raw_keep) if raw_keep >= 0 else 0
+        keep = max(floors.get(key, 0), raw_keep) if raw_keep >= 0 else 0
         if keep >= len(text):
             continue
         # keep the HEAD of the digest (newest-first there) and the TAIL of recall/journal
@@ -1185,9 +1185,17 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
                     i = j - 1 - 1
             kept.reverse()
             removed = max(0, len(text) - sum(len(k) + 1 for k in kept))
-            out[key] = (("[…trimmed to fit the context window: " + str(dropped)
-                         + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
-                        if removed > 0 else "") + "\n".join(kept))
+            if key == "recall":
+                total_entries = sum(1 for k in lines if k.startswith("- "))
+                kept_entries = sum(1 for k in kept if k.startswith("- "))
+                dropped = total_entries - kept_entries
+                out[key] = (("[…trimmed to fit the context window: " + str(dropped)
+                             + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
+                            if dropped > 0 else "") + "\n".join(kept))
+            else:
+                out[key] = (("[…trimmed to fit the context window: " + str(removed)
+                             + " chars removed…]\n"
+                            if removed > 0 else "") + "\n".join(kept))
         removed = max(0, len(text) - sum(len(k) + 1 for k in kept))
         interventions.append({"kind": "context_fit", "block": key,
                               "suppressed": f"{removed} chars of {key}",

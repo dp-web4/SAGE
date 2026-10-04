@@ -331,4 +331,18 @@ def test_digest_trim_drops_continuation_lines_with_their_entry():
     assert "entry 1" in out["digest"]
     assert "entry 2" not in out["digest"]
     assert "continuation line" not in out["digest"]
-    assert "…trimmed to fit the context window: 1 older entry dropped…]" in out["digest"]
+
+
+def test_nonbulleted_trim_emits_char_count_marker():
+    """Non-bulleted text (no '- ' lines) falls to the else branch, which keeps
+    the newest contiguous suffix and reports a char-count marker. The marker
+    must use `removed` (char count), not `dropped` (entry count, undefined in
+    this branch — a latent NameError at HEAD)."""
+    text = "x" * 30000
+    out, _ = fit_to_window(
+        num_ctx=8192, num_predict=1024, fixed_chars=0, slack=512,
+        blocks={"journal": text},
+    )
+    assert "chars removed" in out["journal"]
+    assert "older entr" not in out["journal"]
+    assert "…trimmed to fit the context window:" in out["journal"]
