@@ -34,7 +34,7 @@ from sage.gateway.being_gate_client import _TOOL_SCHEMAS
 BODY_VERBS = ("camera", "gaze", "speak", "pair_audio")
 # Verbs that act in the being's own git worktree.
 WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "pr_open", "pr_amend", "pr_sync")
-# The one-line reason for the three READ/CHECK worktree verbs, short because it is paid every
+# The one-line reason for each worktree verb, short because it is paid every
 # turn. The old line, "you have no git worktree on this seat (instance.json declares none)",
 # names a config file and so reads as a step someone could take; cbp-being asked dp three times
 # for a worktree so `search` could find lines in its own scratch file, which search can never
@@ -48,6 +48,18 @@ NO_WORKTREE_HERE = {
                  "your home, and this seat has none; to read your own files use memory_read"),
     "check": ("it runs SAGE's test suites in a code-repository checkout (a worktree), not your "
               "home, and this seat has none; to run one of your own files use request_run"),
+    "patch_apply": ("it changes files in a code-repository checkout (a worktree), not your "
+                    "home, and this seat has none; to change lines of your own files use "
+                    "memory_edit"),
+    "git_restore": ("it restores a file from git history in a code-repository checkout (a "
+                    "worktree), not your home, and this seat has none; to put lines of your own "
+                    "files back use memory_edit"),
+    "pr_open": ("it opens a pull request from commits in a code-repository checkout (a "
+                "worktree), and this seat has none"),
+    "pr_amend": ("it revises your pull request from a code-repository checkout (a worktree), "
+                 "and this seat has none"),
+    "pr_sync": ("it updates your pull request inside a code-repository checkout (a worktree), "
+                "and this seat has none"),
 }
 
 
@@ -80,7 +92,7 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
         for v in WORKTREE_VERBS:
             if v in _TOOL_SCHEMAS:
                 out[v] = NO_WORKTREE_HERE.get(
-                    v, "you have no git worktree on this seat (instance.json declares none)")
+                    v, "it works in a code-repository checkout (a worktree), and this seat has none")
     if "game" in _TOOL_SCHEMAS and not (cfg or {}).get("game_stepper"):
         out["game"] = "no game is set up on this seat (instance.json has no game_stepper)"
     return out

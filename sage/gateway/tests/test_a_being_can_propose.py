@@ -218,7 +218,7 @@ def test_pr_amend_validates_and_names_only_its_own_proposal(tmp_path):
         pr_amend_command({"title": "a" * 200, "message": "m"}, ctx)
     with pytest.raises(ValueError, match="needs a 'message'"):
         pr_amend_command({"title": "a proper title here", "message": "  "}, ctx)
-    with pytest.raises(ValueError, match="needs a worktree"):
+    with pytest.raises(ValueError, match="this seat has none"):
         pr_amend_command({"title": "a proper title here", "message": "m"}, {})
     g("checkout", "-q", "-b", "legion-being/a-proposal")
     assert pr_amend_command({"title": "a proper title here", "message": "why"}, ctx) == "true"
@@ -263,7 +263,10 @@ def test_the_verbs_without_a_worktree_are_pending_not_errors(tmp_path):
                  ("pr_open", {"slug": "x-y", "title": "a title long enough", "body": "b"}),
                  ("git_restore", {"rev": "HEAD", "path": "a.py"})):
         env = getattr(d, f"_do_{v}")(BeingIntent(v, a))
-        assert env.pending and "worktree of your own" in env.note, v
+        # the shared refusal: what the verb is for and "this seat has none", no configure step
+        from sage.gateway.being_gate_client import NO_WORKTREE_REFUSAL
+        assert env.pending and env.note == NO_WORKTREE_REFUSAL[v], v
+        assert "this seat has none" in env.note and "configur" not in env.note, v
 
 
 # -- git_restore -------------------------------------------------------------------------

@@ -140,11 +140,42 @@ def test_without_a_worktree_the_verbs_still_fail_closed():
 # cbp-being asked dp three times to configure a worktree so `search` could find lines in its
 # own scratch file. Search cannot read the home at all; memory_read with start_line could.
 _REFUSAL_MUST_SAY = {
-    "search":   ("code-repository checkout", "memory_read", ("start_line",)),
-    "git_read": ("git history", "memory_read", ()),
-    "check":    ("test suites", "request_run", ()),
-    "camera":   ("No other tool captures a frame", None, ()),
+    "search":      ("code-repository checkout", "memory_read", ("path", "start_line")),
+    "git_read":    ("git history", "memory_read", ("path", "start_line")),
+    "check":       ("test suites", "request_run", ("path",)),
+    # patch_apply has search's trap: changing a line of your own file is memory_edit's job.
+    "patch_apply": ("applying a patch", "memory_edit", ("path", "start_line", "end_line", "new")),
+    # git_restore: the home keeps no readable history, so memory_edit is the only honest pointer.
+    "git_restore": ("git history", "memory_edit", ("path", "start_line", "end_line", "new")),
+    # The PR verbs have no home counterpart: purpose plus "this seat has none".
+    "pr_open":     ("opens a pull request", None, ()),
+    "pr_amend":    ("revises a pull request", None, ()),
+    "pr_sync":     ("up to date with its base branch", None, ()),
+    "camera":      ("No other tool captures a frame", None, ()),
 }
+# Minimal args per verb. Every composer refuses on the missing worktree before it reads them.
+_NO_WORKTREE_ARGS = {
+    "search": {"pattern": "x"}, "git_read": {"op": "log"}, "check": {"target": "gateway"},
+    "patch_apply": {"diff": "x", "why": "y"}, "git_restore": {"rev": "HEAD", "path": "a.py"},
+    "pr_open": {"slug": "x-y", "title": "a title long enough", "body": "b"},
+    "pr_amend": {"title": "a title long enough", "message": "why"}, "pr_sync": {},
+    "camera": {},
+}
+_COMPOSERS = {"search": B.search_command, "git_read": B.git_read_command,
+              "check": B.check_command, "patch_apply": B.patch_apply_command,
+              "git_restore": B.git_restore_command, "pr_open": B.pr_open_command,
+              "pr_amend": B.pr_amend_command, "pr_sync": B.pr_sync_command,
+              "camera": B.camera_command}
+
+
+def test_every_worktree_verb_has_a_refusal_and_a_check():
+    """The table, the tests and the toolset's worktree verbs name the same set: a new worktree
+    verb added without a refusal (and so with the old "configure one" shape) fails here."""
+    from sage.gateway import toolset
+    check("every toolset worktree verb has a refusal",
+          sorted(set(toolset.WORKTREE_VERBS) - set(B.NO_WORKTREE_REFUSAL)), [])
+    check("every refusal is pinned by _REFUSAL_MUST_SAY",
+          sorted(B.NO_WORKTREE_REFUSAL), sorted(_REFUSAL_MUST_SAY))
 # Wording that tells the being to get a worktree set up, or names the file someone would edit.
 _CONFIGURE_WORDS = ("configur", "instance.json", "ask the operator", "ask dp", "request_scope",
                     "declare", "set up a worktree", "needs a worktree")
@@ -153,20 +184,27 @@ _CONFIGURE_WORDS = ("configur", "instance.json", "ask the operator", "ask dp", "
 def _assert_refusal_says_what_the_verb_is_for(verb, text):
     purpose, tool, params = _REFUSAL_MUST_SAY[verb]
     check(f"{verb}: names what it is for ({purpose!r})", purpose in text)
-    check(f"{verb}: says what it reads is not the being's home, or says it is not enabled",
-          any(s in text for s in ("not your home", "not in your home", "not read your home",
-                                  "not enabled")))
+    check(f"{verb}: says this seat has none, or that it is not enabled",
+          "this seat has none" in text or "not enabled" in text)
     if tool:
+        check(f"{verb}: says what it works on is not the being's home",
+              any(s in text for s in ("not your home", "not in your home", "not read your home",
+                                      "not files in your home", "not reach your home")))
         check(f"{verb}: points to {tool}", tool in text)
         schema_params = B._TOOL_SCHEMAS[tool][1]
         for p in params:
             check(f"{verb}: names {tool}'s {p}", p in text)
-        # EVERY line parameter the refusal names must be one the tool takes. The brief for this
-        # fix said "memory_read with start_line/end_line", but memory_read has no end_line: it
-        # reads a window from start_line on. A parameter a refusal names is one the being sends.
-        for word in ("start_line", "end_line"):
+            check(f"{verb}: {p} is a parameter {tool} really takes", p in schema_params)
+        # EVERY line parameter the refusal names must be one the tool takes, listed or not. The
+        # brief for this fix said "memory_read with start_line/end_line", but memory_read has no
+        # end_line: it reads a window from start_line on. A parameter a refusal names is one the
+        # being sends.
+        for word in ("start_line", "end_line", "delete_lines"):
             if word in text:
                 check(f"{verb}: {word} is a parameter {tool} really takes", word in schema_params)
+    else:
+        for other in ("memory_read", "memory_edit", "request_run"):
+            check(f"{verb}: points to no home tool it was not given ({other})", other not in text)
     low = text.lower()
     for w in _CONFIGURE_WORDS:
         check(f"{verb}: contains no instruction to configure a worktree ({w!r})", w not in low)
@@ -178,9 +216,8 @@ def test_no_worktree_refusals_say_what_the_verb_is_for():
     one that says what the verb is for, where the being's own files are served instead, and
     nothing that reads as "get someone to configure a worktree"."""
     c = _client(None)
-    for eff, args in (("search", {"pattern": "x"}), ("git_read", {"op": "log"}),
-                      ("check", {"target": "gateway"}), ("camera", {})):
-        v = c.gate(B.BeingIntent(effector=eff, args=args))
+    for eff in sorted(B.NO_WORKTREE_REFUSAL):
+        v = c.gate(B.BeingIntent(effector=eff, args=dict(_NO_WORKTREE_ARGS[eff])))
         check(f"{eff}: denied", v.decision, "deny")
         reason = v.reason or ""
         check(f"{eff}: the deny carries the whole refusal", B.NO_WORKTREE_REFUSAL[eff] in reason)
@@ -192,13 +229,9 @@ def test_the_composers_and_the_dispatcher_say_the_same_refusal():
     no-worktree branch (its second line of defence) says the same words, so the being hears one
     answer however the act reaches it."""
     from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
-    composers = {"search": (B.search_command, {"pattern": "x"}),
-                 "git_read": (B.git_read_command, {"op": "log"}),
-                 "check": (B.check_command, {"target": "gateway"}),
-                 "camera": (B.camera_command, {})}
-    for verb, (compose, args) in composers.items():
+    for verb in sorted(B.NO_WORKTREE_REFUSAL):
         try:
-            compose(args, {"worktree": None, "memory_root": "/tmp/x"})
+            _COMPOSERS[verb](dict(_NO_WORKTREE_ARGS[verb]), {"worktree": None, "memory_root": "/tmp/x"})
             _fail(f"{verb}: composed with no worktree")
         except ValueError as e:
             check(f"{verb}: the composer raises the shared refusal", str(e), B.NO_WORKTREE_REFUSAL[verb])
@@ -207,8 +240,9 @@ def test_the_composers_and_the_dispatcher_say_the_same_refusal():
         d = D.__new__(D)
         d.worktree = os.path.join(home, "does-not-exist")
         d.memory_root = home
-        for verb, args in (("search", {"pattern": "x"}), ("git_read", {"op": "log"}),
-                           ("check", {"target": "gateway"})):
+        # camera has no dispatcher-side worktree branch: its composer is the only refusal.
+        for verb in sorted(set(B.NO_WORKTREE_REFUSAL) - {"camera"}):
+            args = dict(_NO_WORKTREE_ARGS[verb])
             env = getattr(d, f"_do_{verb}")(B.BeingIntent(effector=verb, args=args))
             check(f"{verb}: dispatcher still refuses (pending, not run)", (env.ok, env.pending), (False, True))
             check(f"{verb}: dispatcher says the shared refusal", env.note, B.NO_WORKTREE_REFUSAL[verb])
@@ -305,6 +339,7 @@ def test_no_other_call_site_builds_a_gate_without_a_worktree():
 def main():
     for fn in (test_every_registry_composer_takes_ctx, test_the_gate_composes_with_the_worktree,
                test_without_a_worktree_the_verbs_still_fail_closed,
+               test_every_worktree_verb_has_a_refusal_and_a_check,
                test_no_worktree_refusals_say_what_the_verb_is_for,
                test_the_composers_and_the_dispatcher_say_the_same_refusal,
                test_the_construction_sites_give_both_halves_the_same_tree,
