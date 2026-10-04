@@ -1111,7 +1111,7 @@ def test_memory_write_appends_by_default_and_says_so_and_can_replace():
     assert open(os.path.join(root, "notes.md")).read() == "only\n"
 
     bad = disp(BeingIntent("memory_write", {"path": "notes.md", "content": "x", "mode": "overwrite"}), v)
-    assert not bad.ok and "'append' (the default) or 'replace'" in bad.error
+    assert not bad.ok and "'append' (the default), 'replace', or 'restore'" in bad.error
     assert open(os.path.join(root, "notes.md")).read() == "only\n", "a refused mode changes nothing"
 
 
