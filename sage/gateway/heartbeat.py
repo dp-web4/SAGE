@@ -3402,9 +3402,11 @@ def main(argv=None) -> int:
     # ONE source of truth with the beat record's `tool_schema_chars`: two sites computing
     # the same number separately is how they drift apart, which is the defect this whole
     # change is about.
-    _schema_measured = _schema_chars_for(_explore_tools)
-    _schema_chars = (_schema_measured if _schema_measured is not None
-                     else _schema_chars_fallback(_explore_tools))
+    # _schema_chars is the ONE measurement made where the specs are built (above): the canonical
+    # toolset as actually offered -- availability-shortened and, where the instance opts in, brief.
+    # A second `_schema_chars_for(_explore_tools)` here re-measured the FULL descriptions and
+    # overwrote it, so the fitter budgeted ~7.7k chars of verbs that were never sent (found
+    # 2026-10-04, the first brief beat: offered 17,012, budgeted 25,516).
     _template_guess = 1200
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
     # token cost is converted and charged here. Measured 2,042 tokens, about a third of the
@@ -3804,7 +3806,7 @@ def main(argv=None) -> int:
         # whose config resolved a 4096 window while the tree offered a verb the model was
         # never shown. A starved beat and a silent one are indistinguishable unless the
         # record says which tools were offered and whether the window is the intended one.
-        "config": _fill_headroom({**_config_check(instance, args.model, llm, _explore_tools), **prompt_sizes},
+        "config": _fill_headroom({**_config_check(instance, args.model, llm, _explore_tools, _schema_chars), **prompt_sizes},
                                  partial, host_session_id),
         "scope": scope_record,
         "appeals": appeals_record,
@@ -3934,7 +3936,7 @@ IDLE_UNIT = os.environ.get("SAGE_HEARTBEAT_UNIT", "sage-heartbeat.service")
 RESUME_UNIT = "sage-heartbeat-resume-wake"
 
 
-def _config_check(instance: Path, model: str, llm, offered) -> dict:
+def _config_check(instance: Path, model: str, llm, offered, schema_chars: Optional[int] = None) -> dict:
     """Did this beat run with the tool set and the context window the seat meant to give it?
     `active_embodiment` in instance.json is the canonical statement of intent (PRD r3 §3.2);
     the resolved window comes from the model config keyed on the ollama tag, which silently
@@ -3950,7 +3952,7 @@ def _config_check(instance: Path, model: str, llm, offered) -> dict:
         # is where that shows up. Imported locally: main()'s `from ... import ollama_tools`
         # binds it as a LOCAL of main, so referencing it here NameErrors at runtime — which
         # no test would have caught, because none of them call _config_check.
-        "tool_schema_chars": _schema_chars_for(offered),
+        "tool_schema_chars": schema_chars if schema_chars is not None else _schema_chars_for(offered),
         "num_ctx_intended": want_ctx, "num_ctx_resolved": got_ctx,
         "window_matches_intent": None if want_ctx is None else (got_ctx == want_ctx),
         "tag_intended": want_tag, "tag_running": model,
