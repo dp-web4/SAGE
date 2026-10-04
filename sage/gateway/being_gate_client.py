@@ -858,9 +858,17 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
 # being can verify a claim about its own harness, and the smallest thing that does that is
 # a fixed set of suites plus a single node id inside them. Anything wider is a shell with a
 # friendly name, which is the one thing the bounded registry exists to prevent.
+#
+# "tests" is the top-level tests/ of WHATEVER the worktree holds (nomad 2026-10-03). A being's
+# worktree is not always SAGE: nomad-being's D0 task is a small fixture repo whose suite lives
+# at tests/, and with only the two SAGE suites listed, `check` could not run a single test in
+# the tree it was asked to fix. It is still one fixed entry, the path is still joined onto the
+# worktree and judged absolute, and it still runs in the same read-only sandbox. A worktree
+# with no tests/ gets pytest's own "file or directory not found", which is a true answer.
 CHECK_TARGETS = {
     "gateway": "sage/gateway/tests/",
     "irp": "sage/irp/tests/",
+    "tests": "tests/",
 }
 
 
@@ -1753,8 +1761,9 @@ _TOOL_SCHEMAS = {
     "check": ("Run a test suite in your own worktree and read the result. This is how you "
               "find out whether something you believe about your harness is true, instead of "
               "asserting it. A failure is a real answer, not a problem.",
-              {"target": "'gateway' or 'irp' for a whole suite, or '<suite>::<test_name>' "
-                         "for one test, e.g. 'gateway::test_relative_memory_path'"},
+              {"target": "'gateway' or 'irp' for a SAGE suite, 'tests' for the tests/ folder at "
+                         "the top of your worktree, or '<suite>::<test_name>' for one test, e.g. "
+                         "'tests::test_double_space'"},
               ["target"]),
     # Written to the being in the second person and without jargon, like every schema here.
     # It says what the seat will do, what the law will refuse, and — the part that matters

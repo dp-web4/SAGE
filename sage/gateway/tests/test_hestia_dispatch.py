@@ -1181,6 +1181,23 @@ def test_the_sandbox_binds_source_read_only_and_hashes_conftest():
         "a changed conftest must change the source identity — it is executable test input"
 
 
+def test_check_reaches_the_top_level_tests_of_a_worktree_that_is_not_sage():
+    """nomad-being's D0 worktree is a fixture repo with its suite at tests/. With only the two
+    SAGE suites allowed, `check` refused every target there, so the being could patch the bug
+    but never run the test that says whether it is fixed (nomad 2026-10-03)."""
+    from sage.gateway.being_gate_client import check_command, check_argv
+
+    wt = "/wt"
+    whole = check_argv({"target": "tests"}, {"worktree": wt})
+    assert "/wt/tests/" in whole, whole
+    one = check_argv({"target": "tests::test_double_space"}, {"worktree": wt})
+    assert "/wt/tests/" in one and one[-2:] == ["-k", "test_double_space"], one
+    # still the allow-list: a path the being names itself is refused, not run
+    import pytest
+    with pytest.raises(ValueError):
+        check_command({"target": "tests/../../etc"}, {"worktree": wt})
+
+
 def test_a_space_in_the_worktree_path_cannot_split_the_judged_command():
     """judged==executed is a property of the STRING, not of today's directory names.
 
