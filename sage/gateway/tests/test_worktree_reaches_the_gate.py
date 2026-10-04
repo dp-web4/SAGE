@@ -189,7 +189,8 @@ def _assert_refusal_says_what_the_verb_is_for(verb, text):
     if tool:
         check(f"{verb}: says what it works on is not the being's home",
               any(s in text for s in ("not your home", "not in your home", "not read your home",
-                                      "not files in your home", "not reach your home")))
+                                      "not files in your home", "not reach your home",
+                                      "not anything in your home")))
         check(f"{verb}: points to {tool}", tool in text)
         schema_params = B._TOOL_SCHEMAS[tool][1]
         for p in params:

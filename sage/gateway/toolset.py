@@ -46,7 +46,7 @@ NO_WORKTREE_HERE = {
                "start_line"),
     "git_read": ("it reads the git history of a code-repository checkout (a worktree), not "
                  "your home, and this seat has none; to read your own files use memory_read"),
-    "check": ("it runs SAGE's test suites in a code-repository checkout (a worktree), not your "
+    "check": ("it runs the test suites of a code-repository checkout (a worktree), not your "
               "home, and this seat has none; to run one of your own files use request_run"),
     "patch_apply": ("it changes files in a code-repository checkout (a worktree), not your "
                     "home, and this seat has none; to change lines of your own files use "

@@ -264,9 +264,10 @@ NO_WORKTREE_REFUSAL = {
         "your home, and this seat has none. To read one of your own files as it is now, use "
         "memory_read with the file's path (and start_line to begin at a given line)."),
     "check": (
-        "check runs SAGE's own test suites (gateway, irp) inside a code-repository checkout "
-        "(a worktree), not in your home, and this seat has none, so there is nothing here for "
-        "it to test. To find out what one of your own files does when it runs, use request_run "
+        # Names no suite on purpose: #352 adds a worktree's own tests/ beside gateway and irp,
+        # and a list here would go stale the day the target set changes.
+        "check runs the test suites of a code-repository checkout (a worktree), not anything "
+        "in your home, and this seat has none, so there is nothing here for it to test. To find out what one of your own files does when it runs, use request_run "
         "with its path: the seat decides whether to run it and answers with the real output."),
     # patch_apply has the same trap as search: a being that wants to change a line of its own
     # file reaches for the verb named "apply a patch", hears "no worktree", and asks for one.
