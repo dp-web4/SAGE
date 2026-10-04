@@ -133,12 +133,42 @@ def test_a_stamped_row_is_signed_by_its_carrier_and_the_mark_names_it():
     row = dict(ROW, transport={"mode": "direct", "carrier_lct": "BEING-LCT", "version": 3})
     with _SwapHome(home):
         m = FakeMcp(pending=[row])
-        r = drain_once(plugin_id="cbp-being", mcp=m,
-                       sender=lambda to, kind, ptr: (True, "[hub-notify] -> legion kind=coordination ledger=1588 hash=h"),
-                       log=lambda *_: None)
+        r = drain_once(
+            plugin_id="cbp-being",
+            mcp=m,
+            sender=lambda to, kind, ptr: (
+                True,
+                "[hub-notify] -> legion (61525719-def6-475c-a030-917f24a9dbf2) "
+                "kind=coordination ledger=1588 hash=h",
+            ),
+            log=lambda *_: None,
+        )
     assert r["forwarded"] == 1 and r["transport_faults"] == []
     mark = [a for n, a in m.calls if "mark_forwarded" in a][0]
-    assert mark["carrier_lct"] == "being-lct" and mark["hub_receipt"] == {"ledger": "1588"}
+    assert mark["carrier_lct"] == "being-lct"
+    assert mark["hub_receipt"] == {
+        "ledger": "1588",
+        "recipient_lct": "61525719-def6-475c-a030-917f24a9dbf2",
+    }
+
+
+def test_hub_receipt_never_infers_recipient_when_sender_did_not_report_one():
+    from sage.gateway import egress_drain as ed
+    assert ed._hub_receipt("ledger=9") == {"ledger": "9"}
+    assert ed._hub_receipt("[hub-notify] -> thor kind=coordination ledger=9") == {"ledger": "9"}
+
+
+def test_hub_receipt_parses_recipient_from_real_success_shape_only():
+    from sage.gateway import egress_drain as ed
+    detail = (
+        "signed_as=being; [hub-notify] -> thor "
+        "(aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee) "
+        "kind=coordination ledger=42 hash=sha256-content:x"
+    )
+    assert ed._hub_receipt(detail) == {
+        "ledger": "42",
+        "recipient_lct": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    }
 
 
 def test_a_stamped_row_with_no_key_for_its_carrier_is_never_sent_under_another():
