@@ -603,6 +603,14 @@ _ELIDED_SIGIL = "characters elided from the middle"
 # A stub that is itself collapsed, oldest first, once the stubs are what fills the window.
 _COLLAPSED_SIGIL = "collapsed to a pointer"
 COMPACT_STUBS_KEPT = 8         # the newest elision stubs are never collapsed: recent context
+# The being's OWN earlier turns: once the results are all stubs and pointers, what is left to
+# grow is its own tool calls and words. The newest COMPACT_OWN_TURNS_KEPT assistant turns are
+# never touched; older ones keep each argument's head (which call, on what) and lose the body,
+# since the call already ran and its receipt is in the conversation and the file it changed.
+COMPACT_OWN_TURNS_KEPT = 4
+COMPACT_OWN_ARG_MAX = 400      # an argument string at or under this is kept whole
+COMPACT_OWN_ARG_HEAD = 160
+_OWN_SIGIL = "chars of this argument elided: the call already ran, and its receipt follows"
 
 
 def _spill_age_s(name: str, now: float) -> Optional[float]:
@@ -880,8 +888,14 @@ def _convo_chars(msgs) -> int:
     (tokens, chars) anchor taken from the server's count — if the anchor counted content only
     while the estimate counted images, every image would be charged twice: once inside the
     server's prompt_eval_count and again as "added chars" on every later step."""
+    # A TOOL CALL IS PROMPT TOO. An assistant turn's tool_calls are sent back on every later
+    # generate, and this counted only `content`: legion-being's 89-step beat (2026-10-05) carried
+    # ~24k chars of its own call arguments (edit bodies up to 2.5k each) that the estimate never
+    # saw, so between anchors a new edit looked free and the compactor fired late, at the wall.
     return sum(len(m.get("content") or "")
                + int(len(m.get("images") or ()) * MIDTURN_IMAGE_TOKENS * _CPT_ADDED)
+               + sum(len(json.dumps((tc.get("function") or {}).get("arguments") or {}))
+                     for tc in (m.get("tool_calls") or ()))
                for m in msgs)
 
 
@@ -1081,6 +1095,36 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
             out[i]["content"] = ptr
             elided.append({"index": i, "chars": len(body) - len(ptr), "collapsed": True,
                            "spill": m.group(1)})
+    # THE BEING'S OWN TURNS WERE NEVER COMPACTED (legion-being, dp chat seq 148, 2026-10-05:
+    # "my context window filled mid-beat at exactly 32,768 — my own turns fill it and
+    # compaction never trims them"). Results become stubs and then pointers; its own calls stayed
+    # whole forever, so a long beat always ended at the wall. Oldest first, newest kept.
+    if _est_tokens(size(out), measured) > room:
+        own = [i for i, m in enumerate(out) if m.get("role") == "assistant"]
+        for i in own[:-COMPACT_OWN_TURNS_KEPT] if len(own) > COMPACT_OWN_TURNS_KEPT else []:
+            if _est_tokens(size(out), measured) <= room:
+                break
+            freed = 0
+            calls = []
+            for tc in out[i].get("tool_calls") or []:
+                fn = dict(tc.get("function") or {})
+                args = dict(fn.get("arguments") or {})
+                for k, v in args.items():
+                    if isinstance(v, str) and len(v) > COMPACT_OWN_ARG_MAX and _OWN_SIGIL not in v:
+                        cut_n = len(v) - COMPACT_OWN_ARG_HEAD
+                        args[k] = v[:COMPACT_OWN_ARG_HEAD] + f"…[{cut_n} {_OWN_SIGIL}]"
+                        freed += cut_n
+                fn["arguments"] = args
+                calls.append(dict(tc, function=fn))
+            if calls:
+                out[i]["tool_calls"] = calls
+            body = out[i].get("content") or ""
+            if len(body) > COMPACT_OWN_ARG_MAX and _OWN_SIGIL not in body:
+                cut_n = len(body) - COMPACT_OWN_ARG_HEAD
+                out[i]["content"] = body[:COMPACT_OWN_ARG_HEAD] + f"…[{cut_n} chars of what you said here elided to leave room]"
+                freed += cut_n
+            if freed:
+                elided.append({"index": i, "chars": freed, "own_turn": True})
     # THE NEWEST RESULT IS PROTECTED — until protecting it is what cuts the answer. When
     # every older result is already a stub and the prompt still does not fit, the newest
     # one is trimmed too, with a larger keep (the being is working from it right now),
