@@ -151,6 +151,7 @@ _REFUSAL_MUST_SAY = {
     "pr_open":     ("opens a pull request", None, ()),
     "pr_amend":    ("revises a pull request", None, ()),
     "pr_sync":     ("up to date with its base branch", None, ()),
+    "git_clean":   ("deletes one untracked file", None, ()),
     "camera":      ("No other tool captures a frame", None, ()),
 }
 # Minimal args per verb. Every composer refuses on the missing worktree before it reads them.
@@ -159,13 +160,13 @@ _NO_WORKTREE_ARGS = {
     "patch_apply": {"diff": "x", "why": "y"}, "git_restore": {"rev": "HEAD", "path": "a.py"},
     "pr_open": {"slug": "x-y", "title": "a title long enough", "body": "b"},
     "pr_amend": {"title": "a title long enough", "message": "why"}, "pr_sync": {},
-    "camera": {},
+    "git_clean": {"path": "scratch.py"}, "camera": {},
 }
 _COMPOSERS = {"search": B.search_command, "git_read": B.git_read_command,
               "check": B.check_command, "patch_apply": B.patch_apply_command,
               "git_restore": B.git_restore_command, "pr_open": B.pr_open_command,
               "pr_amend": B.pr_amend_command, "pr_sync": B.pr_sync_command,
-              "camera": B.camera_command}
+              "git_clean": B.git_clean_command, "camera": B.camera_command}
 
 
 def test_every_worktree_verb_has_a_refusal_and_a_check():
