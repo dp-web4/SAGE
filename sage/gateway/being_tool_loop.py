@@ -19,6 +19,7 @@ import ast
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -501,6 +502,41 @@ _ELIDED_SIGIL = "characters elided from the middle"
 # A stub that is itself collapsed, oldest first, once the stubs are what fills the window.
 _COLLAPSED_SIGIL = "collapsed to a pointer"
 COMPACT_STUBS_KEPT = 8         # the newest elision stubs are never collapsed: recent context
+
+# AN EMPTY TURN'S THINKING HAD NO READ SURFACE. The stderr line keeps 200 chars of it and
+# the beat record 4,000, so a generate that thought for 8,000 tokens and answered nothing
+# could not be read: legion-being 2026-10-05, at num_ctx 32768, retried 6 of 19 generates,
+# every one thinking until prompt + eval == num_ctx or eval == num_predict_think, ~5 min
+# each. Whether that is a "Wait —" loop or long real deliberation decides the remedy
+# (sampling vs budget), and nothing kept the text that would say which. Kept whole, in
+# the being's own scratch (private), by age like the spills.
+EMPTY_THINKING_DIR = "scratch/empty-thinking"
+EMPTY_THINKING_KEEP_S = 7 * 24 * 3600
+
+
+def keep_empty_thinking(root: Optional[str], raw: dict, msg: dict) -> Optional[str]:
+    """Write an empty turn's whole thinking to <root>/scratch/empty-thinking/ and return the
+    relative path, or None (no root, nothing thought, or the write failed: never raises)."""
+    thinking = str((msg or {}).get("thinking") or "")
+    if not root or not thinking.strip():
+        return None
+    try:
+        d = os.path.join(root, EMPTY_THINKING_DIR)
+        os.makedirs(d, exist_ok=True)
+        now = time.time()
+        for n in os.listdir(d):
+            p = os.path.join(d, n)
+            if os.path.isfile(p) and now - os.path.getmtime(p) > EMPTY_THINKING_KEEP_S:
+                os.remove(p)
+        name = time.strftime("%Y%m%d-%H%M%S", time.gmtime(now)) + f"-{int(now * 1000) % 1000:03d}.txt"
+        head = (f"done_reason={(raw or {}).get('done_reason')} "
+                f"prompt_eval={(raw or {}).get('prompt_eval_count')} "
+                f"eval={(raw or {}).get('eval_count')} chars={len(thinking)}\n\n")
+        with open(os.path.join(d, name), "w", encoding="utf-8") as f:
+            f.write(head + thinking)
+        return f"{EMPTY_THINKING_DIR}/{name}"
+    except OSError:
+        return None
 
 
 def _spill_age_s(name: str, now: float) -> Optional[float]:
@@ -1090,6 +1126,9 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                   f"prompt_eval={raw.get('prompt_eval_count')} eval={raw.get('eval_count')} "
                   f"raw_content={str(msg.get('content', ''))[:200]!r} "
                   f"thinking={str(msg.get('thinking', ''))[:200]!r}", file=_sys.stderr)
+            _kept = keep_empty_thinking(getattr(client, "memory_root", None), raw, msg)
+            if _kept:
+                print(f"[tool-loop] EMPTY turn's whole thinking kept: {_kept}", file=_sys.stderr)
             # Qwen3.8 (heretic) sometimes re-opens a think block even with think=false and
             # spends the whole budget there (measured 5/10 turns, 2026-09-03). Give it room
             # ONCE to finish and act, rather than recording silence as the being's choice.
