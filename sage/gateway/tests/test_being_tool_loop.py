@@ -960,22 +960,29 @@ def test_an_uncapped_turn_runs_until_the_being_stops_asking():
     assert r.reply == "done after twenty" and not r.capped
     assert r.steps == 20 and len(r.trace) == 20      # far past the old cap of 8
 
-def test_an_uncapped_turn_without_a_clock_gets_a_safety_ceiling():
-    """"As long as it wishes" is bounded by a resource, not by nothing."""
-    from sage.gateway.being_tool_loop import run_tool_turn, _UNCAPPED_SAFETY_CEILING
+def test_an_uncapped_turn_without_a_clock_has_no_step_ceiling():
+    """dp, 2026-10-05: "remove the 200-step ceiling too". An uncapped turn with no deadline
+    runs until the being stops asking for tools; no hidden step count ends it."""
+    from sage.gateway import being_tool_loop as btl
+    from sage.gateway.being_tool_loop import run_tool_turn
+    assert not hasattr(btl, "_UNCAPPED_SAFETY_CEILING")
 
-    # The calls must VARY: an identical call repeated is a loop, and the repetition guard
-    # (added 2026-09-13) ends the turn long before the ceiling. Two guards, two shapes of
-    # runaway — this test is about the one that keeps asking for genuinely new work.
+    # The calls VARY: an identical call repeated is a loop, and the repetition guard ends that
+    # (a different runaway, still guarded). This one keeps asking for new work, 250 steps --
+    # past the old ceiling of 200 -- and then stops on its own.
     n = iter(range(10_000))
+    calls = {"n": 0}
 
     def gen(convo):
+        calls["n"] += 1
+        if calls["n"] > 250:
+            return {"content": "done after 250", "intents": []}
         return {"content": "", "intents": [BeingIntent("witness", {"event": f"x{next(n)}"})]}
 
     r = run_tool_turn(_client(OK_DISPATCH), gen, [{"role": "user", "content": "go"}], max_steps=0)
-    assert r.capped and r.steps == _UNCAPPED_SAFETY_CEILING
-    assert any("safety ceiling" in str(i.get("note", "")) for i in r.interjected)
-    assert r.looped is None
+    assert r.reply == "done after 250" and not r.capped
+    assert r.steps == 250 and r.looped is None
+    assert not any("ceiling" in str(i.get("note", "")) for i in r.interjected)
 
 def test_a_being_can_end_its_own_turn_with_rest():
     """dp: "it should be able to continue as long as it wishes" — the other half is stopping

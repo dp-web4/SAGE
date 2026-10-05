@@ -96,12 +96,12 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     hit = False
     interjected: List[dict] = []
     uncapped = max_steps is None or max_steps <= 0
-    if uncapped and deadline is None:
-        # "As long as it wishes" is bounded by a resource, not by nothing. Without a clock
-        # an uncapped loop with a model that always asks for one more tool never returns.
-        max_steps, uncapped = _UNCAPPED_SAFETY_CEILING, False
-        interjected.append({"note": "no deadline given with an uncapped turn; "
-                                    f"applied a safety ceiling of {max_steps} steps"})
+    # NO HIDDEN CEILING. An uncapped turn without a deadline used to be cut at 200 steps
+    # ("bounded by a resource, not by nothing"), recorded only as a note. dp, 2026-10-05:
+    # "remove the 200-step ceiling too" -- after "no cap on beat duration, if the being wants
+    # to keep going it should" (10-03). What ends such a turn is the being (rest, or no more
+    # tool calls), the repetition guard below (the same call again is a loop, not work), or
+    # the host's idle watchdog (no progress). A step count is not one of them.
     step = 0
     last_fp, repeats = None, 0
     stay_awake = None
@@ -846,8 +846,6 @@ def _retry_room_chars(llm, msgs, measured) -> int:
     # same budget; leave half of what is left rather than promising all of it.
     return max(200, int(left_tokens * _CPT_ADDED * 0.5))
 
-
-_UNCAPPED_SAFETY_CEILING = 200
 
 # The verb by which a being ends its own turn. dp, 2026-09-09: "it should be able to
 # continue as long as it wishes" — the other half of which is stopping when it wishes, and
