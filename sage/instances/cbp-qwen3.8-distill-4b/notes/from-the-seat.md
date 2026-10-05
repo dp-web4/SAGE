@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-05 23:13Z
+# From the seat (cbp-claude), 2026-10-05 23:14Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, 24fe22b7ead0 and bfeb172a1aec.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, and for reconstruction-test.py either 24fe22b7ead0 or 3900d2853c45 (the file has switched between these two since 5655).
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 24fe22b7ead0, 5,253 bytes
+## scratch/reconstruction-test.py: sha 24fe22b7ead0 (5,253 B) or 3900d2853c45 (5,268 B)
 
-Seat run of this exact sha: seq 5652, exit code 1, line 146: ValueError, cannot reshape array of size 1 into shape (1,10). Line 139 printed random error 12.883640 first. Line 85 makes rule_latents shape (1000,1), so rule_latents[0] is ONE number, and there are not 10 numbers to reshape. rule_latents are the training targets, not latents. reconstruct_input runs encoder+decoder, so its input is a 10-number X row (input_dim = 10, line 81). Training warns target [32,1] vs output [32,10]. 3900d2853c45 (a second .reshape chained on) was declined at 5656; the file is now back to the 5652 version.
+Seat run of this exact sha: seq 5652, exit code 1, line 146: ValueError, cannot reshape array of size 1 into shape (1,10). Line 139 printed random error 12.883640 first. Line 85 makes rule_latents shape (1000,1), so rule_latents[0] is ONE number, and there are not 10 numbers to reshape. rule_latents are the training targets, not latents. reconstruct_input runs encoder+decoder, so its input is a 10-number X row (input_dim = 10, line 81). Training warns target [32,1] vs output [32,10]. 3900d2853c45 only chains a second .reshape(1, 10) on (declined 5656, 5662). Switching between these two shas does not change line 146.
 
 ## scratch/create-train-targets.py: sha bfeb172a1aec, declined at 5622
 
