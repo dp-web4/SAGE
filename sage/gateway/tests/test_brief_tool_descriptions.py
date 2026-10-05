@@ -73,3 +73,19 @@ def test_the_heartbeat_offers_and_measures_the_same_specs():
     assert '_toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief")' in src
     assert '_schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief")' in src
     assert '"tool_descriptions": _tool_desc_mode' in src, "the beat record says which mode ran"
+
+
+def test_brief_text_says_which_verbs_touch_the_worktree_and_which_keep_nothing():
+    """legion-being, 2026-10-05 (dp chat seq 148): "I confused which tools touch the worktree vs
+    my home (the run sandbox changes a copy and keeps nothing; patch_apply is the worktree
+    tool) -- a one-line reminder in the tool descriptions would save a beat." It spent most of a
+    beat patching a sandbox copy. The brief line is all it sees, so the fact lives there."""
+    from sage.gateway import toolset
+    brief = {s["function"]["name"]: s["function"]["description"].split(" (Full text")[0]
+             for s in toolset.specs(brief=True)}
+    assert "COPIES" in brief["run"] and "nothing it changes is kept" in brief["run"]
+    assert "worktree" in brief["patch_apply"]
+    for verb in ("memory_edit", "memory_write"):
+        assert "home" in brief[verb] and "worktree" in brief[verb] and "absolute path" in brief[verb]
+    for verb in ("run", "patch_apply", "memory_edit", "memory_write"):
+        assert len(brief[verb]) <= toolset.BRIEF_DESC_CHARS

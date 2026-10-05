@@ -2026,7 +2026,7 @@ _TOOL_SCHEMAS = {
     # to the END", and the file now held two programs, with the fixes in the one that never runs.
     # The old 1,846-line file with ten main()s was built the same way. The receipt (#141) tells it
     # afterwards, and this tells it before.
-    "memory_write": ("Add to a file in your own memory. APPENDS BY DEFAULT — your content goes "
+    "memory_write": ("Add to a file in your home, or in your worktree by its absolute path where writes there are allowed. APPENDS BY DEFAULT — your content goes "
                      "onto the END of whatever is already there; an append never replaces a line. "
                      "That is what you want for journal.md and todo.md and what you do NOT want "
                      "when you are correcting a file. To overwrite the WHOLE file, pass "
@@ -2094,7 +2094,7 @@ _TOOL_SCHEMAS = {
     # having moved, not a failure of its own. The measured habit this verb exists to break
     # is asserting an outcome it never observed; a verb whose refusals read as its own fault
     # teaches exactly that habit.
-    "patch_apply": ("Change files in your own worktree by sending a patch. This is how you act "
+    "patch_apply": ("Change files in your own worktree by sending a patch (all-or-nothing; for one small change memory_edit on the absolute path also works). This is how you act "
                     "on what you have read, instead of describing what you would do. Send a "
                     "unified diff as `git diff` prints it — its `diff --git a/<path> b/<path>` "
                     "headers are what the seat reads to know which files you are proposing to "
@@ -2200,7 +2200,7 @@ _TOOL_SCHEMAS = {
                     "settled or refuted, so a later beat does not read it as news.",
                     {"path": "the note, e.g. notes/my-note.md", "reason": "what you know now that the note does not"},
                     ["path", "reason"]),
-    "memory_edit": ("Change part of a file you already wrote. memory_write only ever ADDS to "
+    "memory_edit": ("Change part of a file in your home, or in your worktree by its absolute path where writes there are allowed. memory_write only ever ADDS to "
                     "the end of a file; this is how you alter what is already in one. Give the "
                     "exact text to replace, OR the line numbers to replace, and what replaces "
                     "it. Text must appear exactly once, so include a neighbouring line if it "
@@ -2301,7 +2301,7 @@ _TOOL_SCHEMAS = {
               "old": "the exact text to replace — must occur exactly once",
               "new": "what to put there instead (empty string deletes it)"},
              ["path", "old", "new"]),
-    "run": ("RUN a Python file you wrote and read what it printed. It executes in a sandbox "
+    "run": ("RUN a Python file you wrote, in a sandbox on COPIES of your files, and read what it printed: nothing it changes is kept, in your home or your worktree. It executes in a sandbox "
             "holding only a Python interpreter and copies of the files you name — no network, "
             "no home, no worktree. Nothing it does persists, so PRINT what you want to keep. "
             "This is how a rule becomes testable without spending a move.",
