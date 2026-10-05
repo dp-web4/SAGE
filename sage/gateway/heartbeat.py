@@ -320,6 +320,27 @@ POSTURE_TURN = """The rest of your beat, which every being in the fleet receives
 This is still your time. If reading this changes what you want to do, act by calling a tool: {tools}. If not, say in a few words what you noticed.
 """
 
+# The same posture turn, framed as STANDING GUIDANCE rather than as words addressed to the
+# being. PER-INSTANCE (instance.json "posture_framing": "standing_guidance"; see
+# posture_framing_for). Why: POSTURE_TURN hands the posture over "in the operator's words" as a
+# fresh user turn and closes on "say in a few words what you noticed", which reads as a message
+# from dp awaiting a reply. On cbp-being, 2026-10-03 20:41Z, the posture phase used `say` to send
+# dp thanks for a line of the posture, and it landed in dp's chat just after the being's answer to
+# an unrelated question; other posture replies open by acknowledging the posture as if it had just
+# been sent. dp's ruling: frame it as standing guidance, take no tool away. So the tools line is
+# the same, `say` included, and the posture and digest are byte-identical; only the framing and
+# the closing sentence differ.
+POSTURE_TURN_STANDING = """Standing guidance: dp's posture for every being in the fleet, given to you each beat. It is not a message and it does not await a reply; act within it.
+
+{posture}
+
+# What moved in the fleet
+
+{digest}
+
+This is still your time. If reading this changes what you want to do, act by calling a tool: {tools}. If not, end the turn with a few words on what you noticed; they are a note, not a reply to anyone.
+"""
+
 ASK = "This time is yours. What, if anything, do you want to do?\n"
 # Act-first only: the short turn is imperative, the measured-acting shape (condition C,
 # Sprout 09-05). Under the open question the distill answered as an assistant asking the
@@ -2152,6 +2173,22 @@ def no_result_line_for(cfg: Optional[dict]) -> Optional[str]:
     return v if v in NO_RESULT_LINES else None
 
 
+POSTURE_FRAMINGS = ("standing_guidance",)
+
+
+def posture_framing_for(cfg: Optional[dict]) -> Optional[str]:
+    """instance.json `posture_framing`: how the act-first posture turn introduces the posture.
+    PER-INSTANCE (RESEARCH_GENERALIZATION_RULE): absent, or any value not in POSTURE_FRAMINGS,
+    means the default POSTURE_TURN ("in the operator's words ... say in a few words what you
+    noticed"). `"standing_guidance"` uses POSTURE_TURN_STANDING, which presents the same posture as
+    standing guidance that awaits no reply. It changes prompting on a turn the being acts in, so it
+    is a behavioural change, not a factual correction; the evidence is cbp-being's alone, so it is
+    recorded in every beat record where it is on, and it is nobody else's default. Posture-first
+    beings carry the posture in the system prompt and have no posture turn, so it never reaches them."""
+    v = (cfg or {}).get("posture_framing")
+    return v if v in POSTURE_FRAMINGS else None
+
+
 ANSWERED_RUN_WAKES = ("skip",)
 
 
@@ -3058,7 +3095,7 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
             header: str, state: str, recall: str, inbox: str, digest: str,
             frame: Optional[str] = None, frames: Optional[list] = None,
             frame_metas: Optional[list] = None, museum: str = "",
-            tools: Optional[list] = None):
+            tools: Optional[list] = None, posture_framing: Optional[str] = None):
     """The explore turn(s) of a beat: (seed messages, second user turn or None).
 
     Posture-first: posture in the system prompt; one user turn with state, inbox, recall,
@@ -3112,8 +3149,9 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     # stays with the posture: it is context, not something addressed to anyone.
     user = (header + state + f"## Your inbox\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
             + ASK_ACT_FIRST + tools_line)
-    second = POSTURE_TURN.format(posture=posture_text, digest=digest,
-                                 tools=", ".join(tools))
+    # posture_framing: per-instance (posture_framing_for); same posture, digest and tools either way.
+    _turn = POSTURE_TURN_STANDING if posture_framing == "standing_guidance" else POSTURE_TURN
+    second = _turn.format(posture=posture_text, digest=digest, tools=", ".join(tools))
     user_msg = {"role": "user", "content": user}
     if _frames:
         # A frame rides the user turn as an `images` list beside string content — the shape
@@ -3598,6 +3636,7 @@ def main(argv=None) -> int:
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
         museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
+        posture_framing=posture_framing_for(instance_config(instance)),
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 f"{render_clock(_clock)}\n"
                 # The absolute home path is context, NOT an address to copy. Measured on
@@ -3966,6 +4005,7 @@ def main(argv=None) -> int:
         "decline_closing": decline_closing_for(instance_config(instance)),
         "no_result_line": no_result_line_for(instance_config(instance)),
         "answered_run_wake": answered_run_wake_for(instance_config(instance)),
+        "posture_framing": posture_framing_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,

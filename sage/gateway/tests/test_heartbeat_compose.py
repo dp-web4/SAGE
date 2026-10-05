@@ -253,6 +253,41 @@ def test_the_conversation_header_keys_on_reply_expectation_not_on_pending():
         "a STATEMENT asks nothing — the row that produced twelve messages"
     assert "say` is for answering a person" in conversation_header(inst, me)
 
+def test_standing_guidance_frames_the_posture_without_changing_it_or_the_tools():
+    """posture_framing="standing_guidance" (per-instance): the posture turn says the posture is
+    standing guidance that awaits no reply, keeps every tool (say included), and carries the
+    posture and the digest byte-identical. cbp-being 2026-10-03 20:41Z: the default framing ("in
+    the operator's words ... say in a few words") drew a `say` to dp thanking it for the posture."""
+    from sage.gateway.heartbeat import POSTURE_TURN, POSTURE_TURN_STANDING
+    _, default = compose(True, **KW)
+    _, standing = compose(True, posture_framing="standing_guidance", **KW)
+    assert "Standing guidance" in standing and "does not await a reply" in standing
+    assert "act within it" in standing and "dp's posture" in standing, "attribution kept, truthfully"
+    assert "in the operator's words" not in standing
+    assert "say" in EXPLORE_TOOLS and TOOLS in standing, "no tool removed, say still offered"
+    # the posture itself is unchanged: the same text, verbatim, in both framings
+    assert POSTURE in standing and POSTURE in default
+    assert standing.split(POSTURE)[1].split("This is still your time.")[0] == \
+        default.split(POSTURE)[1].split("This is still your time.")[0], "digest block identical"
+    # default unchanged; unknown values fall back to it; posture-first has no posture turn at all
+    assert default == POSTURE_TURN.format(posture=POSTURE, digest="DIGEST", tools=TOOLS)
+    assert compose(True, posture_framing="nonsense", **KW)[1] == default
+    assert compose(False, posture_framing="standing_guidance", **KW)[1] is None
+    assert standing == POSTURE_TURN_STANDING.format(posture=POSTURE, digest="DIGEST", tools=TOOLS)
+
+
+def test_posture_framing_is_per_instance_and_recorded():
+    import inspect
+    from sage.gateway import heartbeat
+    from sage.gateway.heartbeat import posture_framing_for
+    assert posture_framing_for(None) is None and posture_framing_for({}) is None
+    assert posture_framing_for({"posture_framing": "nonsense"}) is None
+    assert posture_framing_for({"posture_framing": "standing_guidance"}) == "standing_guidance"
+    src = inspect.getsource(heartbeat)
+    assert '"posture_framing": posture_framing_for(instance_config(instance))' in src, "recorded per beat"
+    assert "posture_framing=posture_framing_for(instance_config(instance))" in src, "reaches compose"
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):
