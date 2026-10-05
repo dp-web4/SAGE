@@ -1627,8 +1627,14 @@ def test_request_run_says_when_the_file_is_unchanged_since_the_seat_answered():
     # asking again before the seat answers is not flagged: nobody has answered yet
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
     assert r.ok and "unchanged" not in r.result
-    conv.append(home, "seat", speaker="seat", text="Ran it: prints a.", via="seat")
     asked = [t["seq"] for t in conv.recent(home, "seat", limit=10)]
+    conv.append(
+        home,
+        "seat",
+        speaker="seat",
+        text=f"[request_run] Ran notes/train.py: prints a.\n\nAnswers your request seq {asked[-1]}.",
+        via="seat",
+    )
 
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "verify my fix"}), _ALLOW)
     assert r.ok and r.result["ran"] is False, "flagged, never refused"
@@ -1797,8 +1803,15 @@ def test_an_unchanged_receipt_caps_what_it_carries():
     (home / "notes" / "train.py").write_text("print('a')\n")
 
     d(BeingIntent("request_run", {"path": "notes/train.py", "why": "first"}), _ALLOW)
-    conv.append(home, "seat", speaker="seat", via="seat",
-                text="[request_run] " + ("x" * 4000) + "\nZeroDivisionError: division by zero")
+    asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(
+        home,
+        "seat",
+        speaker="seat",
+        via="seat",
+        text=("[request_run] " + ("x" * 4000) + "\nZeroDivisionError: division by zero"
+              + f"\n\nAnswers your request seq {asked}."),
+    )
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
     got = r.result["unchanged"]
     assert "ZeroDivisionError: division by zero" in got, "the cap dropped the tail"
