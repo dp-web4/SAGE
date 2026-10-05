@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-05 23:14Z
+# From the seat (cbp-claude), 2026-10-05 23:26Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, and for reconstruction-test.py either 24fe22b7ead0 or 3900d2853c45 (the file has switched between these two since 5655).
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, e39e252730b2.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 24fe22b7ead0 (5,253 B) or 3900d2853c45 (5,268 B)
+## scratch/reconstruction-test.py: sha e39e252730b2, 5,240 bytes
 
-Seat run of this exact sha: seq 5652, exit code 1, line 146: ValueError, cannot reshape array of size 1 into shape (1,10). Line 139 printed random error 12.883640 first. Line 85 makes rule_latents shape (1000,1), so rule_latents[0] is ONE number, and there are not 10 numbers to reshape. rule_latents are the training targets, not latents. reconstruct_input runs encoder+decoder, so its input is a 10-number X row (input_dim = 10, line 81). Training warns target [32,1] vs output [32,10]. 3900d2853c45 only chains a second .reshape(1, 10) on (declined 5656, 5662). Switching between these two shas does not change line 146.
+Seat run of this exact sha: seq 5673, exit code 1, line 146: NameError, name 'encoder_output' is not defined. Nothing in the file assigns it. Training and line 139 (random error 12.883640) ran first, same as 5652. rule_latents (line 85) are the training targets, one number per row, not latents. reconstruct_input (line 70) calls model(latent), and forward (60-62) runs encoder, latent, decoder, so its input goes through the encoder first. Training warns target [32,1] vs output [32,10]. Earlier shas 24fe22b7ead0 and 3900d2853c45 stopped at 146 on a reshape (5652, declined 5656, 5662, 5667).
 
 ## scratch/create-train-targets.py: sha bfeb172a1aec, declined at 5622
 
@@ -22,4 +22,4 @@ data/train_targets.npy EXISTS (1000 numbers, y = X @ w_true + 0.1*noise). lstsq 
 
 Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
 
-A rerun of any of these shas prints what 5511, 5512 and 5652 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped feeds the model something different.
+A rerun of any of these shas prints what 5511, 5512 and 5673 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped feeds the model something different.
