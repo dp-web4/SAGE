@@ -1188,6 +1188,23 @@ def test_the_sandbox_binds_source_read_only_and_hashes_conftest():
         "a changed conftest must change the source identity — it is executable test input"
 
 
+def test_check_reaches_the_top_level_tests_of_a_worktree_that_is_not_sage():
+    """nomad-being's D0 worktree is a fixture repo with its suite at tests/. With only the two
+    SAGE suites allowed, `check` refused every target there, so the being could patch the bug
+    but never run the test that says whether it is fixed (nomad 2026-10-03)."""
+    from sage.gateway.being_gate_client import check_command, check_argv
+
+    wt = "/wt"
+    whole = check_argv({"target": "tests"}, {"worktree": wt})
+    assert "/wt/tests/" in whole, whole
+    one = check_argv({"target": "tests::test_double_space"}, {"worktree": wt})
+    assert "/wt/tests/" in one and one[-2:] == ["-k", "test_double_space"], one
+    # still the allow-list: a path the being names itself is refused, not run
+    import pytest
+    with pytest.raises(ValueError):
+        check_command({"target": "tests/../../etc"}, {"worktree": wt})
+
+
 def test_a_space_in_the_worktree_path_cannot_split_the_judged_command():
     """judged==executed is a property of the STRING, not of today's directory names.
 
@@ -1790,7 +1807,8 @@ def test_pr_amend_without_a_worktree_is_pending_not_an_error():
     d, _ = _mdisp()
     d.worktree = None
     env = d(BeingIntent("pr_amend", {"title": "a title long enough", "message": "why"}), _ALLOW)
-    assert env.pending and "worktree of your own" in env.note
+    from sage.gateway.being_gate_client import NO_WORKTREE_REFUSAL   # main #354
+    assert env.pending and env.note == NO_WORKTREE_REFUSAL["pr_amend"]
 
 def test_an_unrecognised_mount_reply_is_a_failure_not_a_pass():
     """Yesterday's guard enumerated the refusals it knew about. membot also rate-limits at
@@ -2396,8 +2414,14 @@ def test_request_run_says_when_the_file_is_unchanged_since_the_seat_answered():
     # asking again before the seat answers is not flagged: nobody has answered yet
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
     assert r.ok and "unchanged" not in r.result
-    conv.append(home, "seat", speaker="seat", text="Ran it: prints a.", via="seat")
     asked = [t["seq"] for t in conv.recent(home, "seat", limit=10)]
+    conv.append(
+        home,
+        "seat",
+        speaker="seat",
+        text=f"[request_run] Ran notes/train.py: prints a.\n\nAnswers your request seq {asked[-1]}.",
+        via="seat",
+    )
 
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "verify my fix"}), _ALLOW)
     assert r.ok and r.result["ran"] is False, "flagged, never refused"
@@ -2566,8 +2590,15 @@ def test_an_unchanged_receipt_caps_what_it_carries():
     (home / "notes" / "train.py").write_text("print('a')\n")
 
     d(BeingIntent("request_run", {"path": "notes/train.py", "why": "first"}), _ALLOW)
-    conv.append(home, "seat", speaker="seat", via="seat",
-                text="[request_run] " + ("x" * 4000) + "\nZeroDivisionError: division by zero")
+    asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(
+        home,
+        "seat",
+        speaker="seat",
+        via="seat",
+        text=("[request_run] " + ("x" * 4000) + "\nZeroDivisionError: division by zero"
+              + f"\n\nAnswers your request seq {asked}."),
+    )
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again"}), _ALLOW)
     got = r.result["unchanged"]
     assert "ZeroDivisionError: division by zero" in got, "the cap dropped the tail"

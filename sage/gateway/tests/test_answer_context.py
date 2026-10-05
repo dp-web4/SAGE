@@ -106,3 +106,64 @@ def test_the_answer_temperature_samples_the_answer_turn_alone_and_is_restored(tm
     assert hb.answer_temperature(tmp_path) == 1.5, "clamped"
     src = Path(hb.__file__).read_text()
     assert "temperature=answer_temperature(instance)" in src
+
+
+def test_the_answer_turn_is_told_what_it_can_do_and_that_it_has_no_internet():
+    from sage.gateway import toolset as ts
+    line = hb.abilities_line(ts.unavailable({"inventory": {"verbs": ["camera", "gaze", "speak"]}}, "/tmp/wt", {}))
+    assert "look through your eyes" in line and "ask a sibling" in line
+    assert "search the code repository checked out on this seat (not your home)" in line
+    for plumbing in ("tool", "say", "peer_ask", "camera"):
+        assert plumbing not in line, f"harness word {plumbing!r} in the being's facts (LEGIBILITY 1.14)"
+    assert line.endswith("You have no internet access."), "true while no web verb is in the toolset"
+    h, t = _home()
+    assert "no internet" not in hb.answer_context_block(h, ME, hb.SelectedTurn("room", t)), "not tied to the option"
+
+
+def test_every_answer_prompt_carries_what_it_can_do_even_without_answer_context():
+    """GPT on #334: an instance with NO answer_context (Sprout's checked-in config) must still be told."""
+    h, t = _home()
+    assert hb.answer_context_on(h) is False
+    llm = LLM(json.dumps({"answer": False, "message": ""}))
+    hb.answer_turn_json(Client(), llm, hb.SelectedTurn("room", t), name="s", machine="s", member=ME)
+    user = llm.calls[0]["messages"][-1]["content"]
+    assert hb.abilities_line() in user and user.index(hb.abilities_line()) < user.index("You have not answered yet")
+
+
+def test_answer_then_act_is_opt_in_and_wired_without_say_or_speak(tmp_path):
+    assert hb.act_after_answer_on(tmp_path) is False
+    for v in ('"false"', "1", '"yes"', "null"):
+        (tmp_path / "instance.json").write_text('{"act_after_answer": %s}' % v)
+        assert hb.act_after_answer_on(tmp_path) is False, f"{v} is not a literal true: off"
+    (tmp_path / "instance.json").write_text('{"act_after_answer": true}')
+    assert hb.act_after_answer_on(tmp_path) is True
+    src = Path(hb.__file__).read_text()
+    i = src.index("ANSWER, THEN ACT (2026-10-02)")
+    block = src[i:i + 2200]
+    assert 'not in ("say", "speak")' in block and "should_yield=_yield_for_a_person" in block
+    assert "act_form=explore_turn_mode(instance)" in block and 'get("sent")' in block and "preempted" in block
+    assert '"act_after_answer": _turn(act_after)' in src
+    assert "if not, rest." in hb.AFTER_ANSWER, "a format with rest as a full answer, not an instruction to act"
+
+
+def test_once_a_web_verb_exists_the_line_names_it_and_stops_saying_no_internet(monkeypatch):
+    from sage.gateway import toolset
+    monkeypatch.setattr(toolset, "canonical_toolset", lambda: ["camera", "search", "peer_ask", "web_search", "rest"])
+    line = hb.abilities_line()
+    assert "search the web a few times an hour" in line and "no internet" not in line
+
+
+def test_the_line_claims_only_what_is_measured_on_this_machine():
+    """GPT on #334: canonical_toolset() has every fleet verb; a headless being must not be told it can see."""
+    from sage.gateway import toolset as ts
+    body = lambda verbs: {"inventory": {"verbs": verbs}}  # noqa: E731
+    sprout = hb.abilities_line(ts.unavailable(body(["camera", "gaze", "speak", "pair_audio"]), "/tmp/wt", {}))
+    assert "look through your eyes" in sprout and "speak aloud" in sprout
+    headless = hb.abilities_line(ts.unavailable(body([]), "/tmp/wt", {}))
+    assert "look through your eyes" not in headless and "speak aloud" not in headless
+    no_speaker = hb.abilities_line(ts.unavailable(body(["camera", "gaze"]), "/tmp/wt", {}))
+    assert "look through your eyes" in no_speaker and "speak aloud" not in no_speaker
+    unmeasured = hb.abilities_line()
+    assert "eyes" not in unmeasured and "speak" not in unmeasured, "not measured: not claimed"
+    src = Path(hb.__file__).read_text()
+    assert "abilities=abilities_line(_unavail)" in src, "the beat passes what it measured"

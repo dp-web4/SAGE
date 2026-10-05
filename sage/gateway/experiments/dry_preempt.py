@@ -71,7 +71,8 @@ def fake_turn(client, llm, seed, max_steps=2, tools=None, on_generate=None, shou
     if phase == "reflect" and case == "c":
         arrive()
     why = should_yield() if should_yield else None
-    state["turns"].append({"phase": phase, "yielded": why})
+    state["turns"].append({"phase": phase, "yielded": why, "tools": sorted(names)[:40], "act_form": act_form,
+                           "first_user": str((seed[-1] or {}).get("content", ""))[:160]})
     return ToolTurnResult(reply="", yielded=why)
 
 
@@ -97,13 +98,14 @@ governed_turn.build_client = build
 def fake_answer(client, llm, selected, **k):
     state["answer"] = {"cid": selected.cid, "text": selected.text, "woke": selected.woke}
     r = ToolTurnResult(reply="")
-    r.answer_form = {"sent": False, "why": "dry run"}
+    r.answer_form = {"sent": True, "why": "dry run"}
+    r.reply = "I'd love to try it."
     return r
 
 
 hb.answer_turn_json = fake_answer
 cfg = json.loads((home / "instance.json").read_text())
-cfg.update(preempt=True, answer_turn="json")
+cfg.update(preempt=True, answer_turn="json", act_after_answer=(os.environ.get("DRY_ACT_AFTER") == "1"))
 (home / "instance.json").write_text(json.dumps(cfg))
 hb.main(["--member", "sprout-being", "--model", "qwen3.8-distill:2b", "--instance", str(home),
          "--no-hub-drain", "--no-escalate"])
@@ -115,4 +117,5 @@ print(json.dumps({"case": case, "preempted_phase": pre.get("phase"), "selected":
                   "left_pending_count": pre.get("left_pending"),
                   "still_pending_after_beat": [f'{e["kind"]}: {e["descriptor"]}' for e in still],
                   "reflect_ran": any(t["phase"] == "reflect" for t in state["turns"]),
-                  "answer": state["answer"]}, default=str))
+                  "answer": state["answer"], "turns": state["turns"],
+                  "act_after_answer": rec.get("act_after_answer") is not None}, default=str))

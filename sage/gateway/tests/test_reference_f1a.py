@@ -537,6 +537,16 @@ def test_a_missed_edit_anchor_says_where_it_stopped_matching():
                                          "new": ""}), _ALLOW)
     assert not r.ok and "closest line is line 1" in r.error, r.error
 
+    # Indentation does not pick the line: unindented old text, measured on cbp-being 2026-10-04.
+    g = Path(root) / "notes" / "m.py"
+    disp(BeingIntent("memory_write", {"path": "notes/m.py", "content":
+        "                layers.append(nn.Linear(hidden_dim, input_dim))\n"
+        "            layers.append(nn.Linear(prev_dim, hidden_dim))\n"}), _ALLOW)
+    r = disp(BeingIntent("memory_edit", {"path": "notes/m.py",
+                                         "old": "layers.append(nn.Linear(hidden_dim, hidden_dim))",
+                                         "new": "q"}), _ALLOW)
+    assert not r.ok and "closest line is line 1: '                layers" in r.error, r.error
+
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "q"}), _ALLOW)
     assert not r.ok and "Not even your first line" in r.error, r.error
     assert f.read_text() == before

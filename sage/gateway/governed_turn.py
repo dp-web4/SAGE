@@ -175,6 +175,18 @@ def instance_config(instance: Path) -> dict:
         return {}
 
 
+def trial_name(instance: Path | str) -> str | None:
+    """The live trial this being is under, from `instance.json` "trial", or None.
+
+    dp, 2026-10-03, after a trial's argument step put "Add a turn to the conversation with dp: 'I'm sorry I was
+    late. My car broke down…'" into his conversation looking like the being's own words: "in trial messages you
+    might want to include a note that it's a test message". While set, every turn the being writes and every
+    line it speaks carries {"trial": <name>} BESIDE its words (never in them, never in the audio), and so does
+    the beat record. Set it when a trial starts, remove it when it ends."""
+    v = instance_config(Path(instance)).get("trial")
+    return v.strip()[:80] if isinstance(v, str) and v.strip() else None
+
+
 def worktree_for(instance: Path | str) -> str | None:
     """THE being's own git worktree, read from `instance.json`. ONE resolver, every seat.
 

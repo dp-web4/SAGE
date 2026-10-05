@@ -955,7 +955,7 @@ def test_pr_amend_reads_the_branch_from_the_worktree_and_refuses_a_non_pr_branch
             continue
         with pytest.raises(ValueError, match=msg):
             pr_amend_command(bad, {"worktree": wt, "member": "legion-being"})
-    with pytest.raises(ValueError, match="needs a worktree"):
+    with pytest.raises(ValueError, match="this seat has none"):   # NO_WORKTREE_REFUSAL (main #354)
         pr_amend_command({"title": "a proper title here", "message": "m"}, {})
 
     # no new body on a branch that is NOT its own: refused, before the "true" early return.
@@ -980,7 +980,7 @@ def test_pr_amend_is_offered_to_the_being():
     # the CANONICAL TOOLSET (2026-09-29): offered to every being; without a worktree it says why
     from sage.gateway import toolset
     assert "pr_amend" in offered_explore_tools(None)
-    assert "no git worktree" in toolset.unavailable(None, None, {}).get("pr_amend", "")
+    assert "this seat has none" in toolset.unavailable(None, None, {}).get("pr_amend", "")
     assert _REGISTRY["pr_amend"]["tool"] == "pr_amend"      # the law sees the outward act
 
 
@@ -1057,7 +1057,7 @@ def test_git_restore_takes_its_content_from_history_and_no_flags():
                      (({"rev": "HEAD", "path": "a b.py"}), "may not contain whitespace")):
         with pytest.raises(ValueError, match=msg):
             git_restore_command(bad, ctx)
-    with pytest.raises(ValueError, match="needs a worktree"):
+    with pytest.raises(ValueError, match="this seat has none"):   # NO_WORKTREE_REFUSAL (main #354)
         git_restore_command({"rev": "HEAD", "path": "a.py"}, {})
 
     assert "git_restore" in _REGISTRY and "git_restore" in _CONSEQUENTIAL
@@ -1067,7 +1067,7 @@ def test_git_restore_takes_its_content_from_history_and_no_flags():
     # the CANONICAL TOOLSET (2026-09-29): offered to every being; without a worktree it says why
     from sage.gateway import toolset
     assert "git_restore" in offered_explore_tools(None)
-    assert "no git worktree" in toolset.unavailable(None, None, {}).get("git_restore", "")
+    assert "this seat has none" in toolset.unavailable(None, None, {}).get("git_restore", "")
 
 
 def test_every_composed_verb_composes_at_the_GATE_too(monkeypatch):

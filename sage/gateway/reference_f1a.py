@@ -434,14 +434,18 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
     cut = lambda s: s if len(s) <= width else s[:width] + "…"  # noqa: E731
     if best_k == 0:
         # No line matches exactly. Name the nearest one, so indentation or one changed word
-        # is visible rather than guessed at.
+        # is visible rather than guessed at. Rank on the STRIPPED text, then show the line as it
+        # is. Measured 2026-10-04 on cbp-being: it sent an unindented old for line 28 (16
+        # spaces); ranking with the indentation counted made line 212 (12 spaces, one word
+        # different, dead code after main()) the "closest", and its next edit changed 212.
         import difflib
-        near = difflib.get_close_matches(want[0], have, n=1, cutoff=0.6)
+        bare = [line.strip() for line in have]
+        near = difflib.get_close_matches(want[0].strip(), bare, n=1, cutoff=0.6)
         if not near:
             return f" Not even your first line ({cut(want[0])!r}) is in the file."
-        n = have.index(near[0]) + 1
+        n = bare.index(near[0]) + 1
         return (f" Your first line is not in the file. The closest line is line {n}: "
-                f"{cut(near[0])!r}; you sent {cut(want[0])!r}.")
+                f"{cut(have[n - 1])!r}; you sent {cut(want[0])!r}.")
     # MORE THAN ONE PLACE. Measured 2026-09-21: cbp-being's refused `old` began with 3 lines
     # of a stray block at 1610-1612 that ALSO occur at 330-332, the working data-loading
     # branch. Naming only the first match told it "your lines are at 330", and a 4B acting on

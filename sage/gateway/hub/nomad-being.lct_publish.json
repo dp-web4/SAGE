@@ -1,0 +1,35 @@
+{
+  "_sprout": {
+    "note": "seed generated and held on sprout; document only is relayed",
+    "public_key_hex": "5145648973e1d28e5e670b0ca1cd6164862dcb746aa868517ff7f66d6914f5bb",
+    "seed_path": "/home/dp/.web4/nomad-being/channel_key.bin"
+  },
+  "action": "lct_publish",
+  "document": {
+    "binding_proof": {
+      "bytes": "83916aa0d621ee94e9ab9723b7314da868d1f48e700e2095883ecc1e5ae8c1bcf2f2f09d5b5cadb4dc1d2f5c585029ee8d9fe90a15886b26438a103414c25602"
+    },
+    "created_at": "2026-10-05T04:15:01.244736773Z",
+    "created_by": null,
+    "entity_type": "ai_embodied",
+    "hardware_binding": {
+      "description": "Software-bound keys (development)",
+      "level": 4,
+      "trust_ceiling": 0.75
+    },
+    "id": "0fa130b2-286c-499c-a251-112c7738bf5d",
+    "lineage_depth": 0,
+    "mrh": {
+      "horizon_depth": 0
+    },
+    "parent_id": null,
+    "public_key": {
+      "key": "5145648973e1d28e5e670b0ca1cd6164862dcb746aa868517ff7f66d6914f5bb"
+    },
+    "status": "active"
+  },
+  "lct_id": "lct:web4:mb32:bj73k7ftpych4ztwlbwkxygu2rpvvp6mmcy6g5wkb6fscckz62uba",
+  "provenance": "self_issued",
+  "published_at": "<relayer: set at send time>",
+  "published_by": "<relayer: MUST equal the envelope signer's member uuid>"
+}
