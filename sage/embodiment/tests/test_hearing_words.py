@@ -186,7 +186,7 @@ def test_a_voice_wakes_a_beat_and_mid_beat_it_starts_the_next_one(monkeypatch, t
     with open(heard, "a") as f:
         f.write(json.dumps({"ts": time.time(), "text": "are you there"}) + "\n")
     [w] = p._check_heard(time.time() + 6)
-    assert w["started"] is True and sysd.starts == 2, "no 45 s gap: new words, new beat"
+    assert w["start_accepted"] is True and w["started"] is None and sysd.starts == 2, "no 45 s gap: new words, new beat"
 
 
 def test_a_failed_beat_start_keeps_the_words_pending(monkeypatch, tmp_path):
@@ -196,9 +196,25 @@ def test_a_failed_beat_start_keeps_the_words_pending(monkeypatch, tmp_path):
     sysd.start_rc = 1
     heard.write_text(json.dumps({"ts": time.time(), "text": "hello Sprout"}) + "\n")
     [w] = p._check_heard(time.time())
-    assert w["started"] is False
+    assert w["start_accepted"] is None and w["started"] is None
     [e] = arousal.claim_pending("the-next-beat")
     assert e["descriptor"] == 'heard a voice: "hello Sprout"'
+
+
+def test_heard_log_preserves_unknown_and_does_not_claim_a_started_beat(monkeypatch, tmp_path, capsys):
+    p, heard, sysd, _ = _hearing_presence(monkeypatch, tmp_path)
+    logged = []
+    p._log = logged.append
+    for i, rc in enumerate((0, 1, -15)):
+        sysd.running, sysd.start_rc = False, rc
+        with heard.open("a") as stream:
+            stream.write(json.dumps({"ts": i, "text": f"turn {i}"}) + "\n")
+        p._check_heard(time.time())
+        assert logged[-1]["started"] is None
+        assert logged[-1]["start_accepted"] is (True if rc == 0 else None)
+        assert logged[-1]["wake_evidence_version"] == 2
+    text = capsys.readouterr().out
+    assert "beat started" not in text and text.count("beat entry unconfirmed") == 3
 
 
 def test_a_failed_playback_or_synthesis_opens_no_window(monkeypatch, tmp_path):

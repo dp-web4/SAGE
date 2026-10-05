@@ -167,10 +167,11 @@ class Presence:
             "gaze": d.get("gaze", "open"), "noticing": noticing,
             # no "atp": the daemon's internal oscillator is not a reading (#291)
             "metabolic": metabolic,
-            "beat": {k: woke.get(k) for k in ("engage", "queued", "started") if k in woke},
+            "beat": {k: woke.get(k) for k in ("engage", "queued", "wake_evidence_version",
+                     "start_accepted", "started", "wake_error", "next") if k in woke},
         })
         print(f"[presence] {'+'.join(events)} (sal={sal.get('salience')}) -> "
-              f"{'beat started' if woke.get('started') else 'queued' if woke.get('queued') else 'pending'}"
+              f"{arousal.delivery_text(woke)}"
               f"{': ' + noticing[:80] if noticing else ''}", flush=True)
         return woke
 
@@ -183,6 +184,7 @@ class Presence:
 
     def _check_heard(self, now: float) -> list:
         """Each new line in heard.jsonl is an event: a beat now, or the next one if one runs."""
+        from sage.gateway import arousal
         size = self._heard_size()
         if size < self.heard_seen:
             self.heard_seen = 0                 # rotated/truncated
@@ -201,10 +203,12 @@ class Presence:
                                       key=f"heard:{ts}:{text}")
                     woke.append(w)
                     self._log({"ts": round(now, 2), "kind": "beat_wake", "by": "heard", "heard_ts": ts,
-                               "text": text, "started": bool(w.get("started")),
+                               "text": text, "started": None,
+                               **{k: w[k] for k in ("wake_evidence_version", "start_accepted", "next")
+                                  if k in w},
                                "queued": bool(w.get("queued")), "err": str(w.get("wake_error", ""))[:120]})
                     print(f"[presence] heard a voice -> "
-                          f"{'beat started' if w.get('started') else 'queued for the next beat' if w.get('queued') else 'pending: ' + str(w.get('wake_error', ''))[:80]}",
+                          f"{arousal.delivery_text(w)}",
                           flush=True)
             self.heard_seen = size
         return woke
