@@ -1176,7 +1176,11 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         if not text:
             continue
         over = total() - budget_chars
-        raw_keep = budget_chars - fixed_chars
+        # Aggregate budget (invariant C): trim THIS block by exactly the overage, so the
+        # total lands on budget_chars. The old `budget_chars - fixed_chars` was a constant
+        # applied to every block, so two trimmed blocks each got the full budget (2x).
+        # Recomputed per block: keep = len(text) - over, floored at the block's floor.
+        raw_keep = len(text) - over
         keep = max(floors.get(key, 0), raw_keep) if raw_keep >= 0 else 0
         if keep >= len(text):
             continue
