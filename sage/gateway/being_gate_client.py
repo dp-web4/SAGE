@@ -253,9 +253,13 @@ _REV = (r"(?:[0-9a-fA-F]{7,40}|HEAD|[A-Za-z][A-Za-z0-9._/-]{0,60})"
 # checks each named parameter against _TOOL_SCHEMAS. The dispatcher (hestia_dispatch) and the
 # toolset's availability line say the same text, so the being hears one answer however it asks.
 NO_WORKTREE_REFUSAL = {
+    # "read lines", never "find": memory_read shows a file from a line on; it does not search.
+    # #354 first said "To find or read lines ... use memory_read", which hands a being that
+    # wants to locate a string a tool that cannot locate one (Codex, #354 follow-up). Pinned by
+    # test_no_home_tool_is_credited_with_finding.
     "search": (
         "search reads a code-repository checkout (a worktree), not your home, and this seat "
-        "has none. To find or read lines in your own files (notes/, scratch/, todo.md, "
+        "has none. To read lines in your own files (notes/, scratch/, todo.md, "
         "journal.md), use memory_read with the file's path and start_line: it shows the file "
         "from that line on and says which lines it covered."),
     "git_read": (
