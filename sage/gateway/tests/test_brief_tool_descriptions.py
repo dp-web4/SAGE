@@ -73,3 +73,19 @@ def test_the_heartbeat_offers_and_measures_the_same_specs():
     assert '_toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief")' in src
     assert '_schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief")' in src
     assert '"tool_descriptions": _tool_desc_mode' in src, "the beat record says which mode ran"
+
+
+def test_brief_text_says_where_each_writing_verb_writes():
+    """legion-being, 2026-10-05 (dp chat seq 148): "I confused which tools touch the worktree vs
+    my home ... a one-line reminder in the tool descriptions would save a beat." In brief mode
+    the first sentence is all a being sees, so where each verb writes lives there. (On the
+    Legion carrier, where `check` is sandboxed, memory_* also reach the worktree and `run` works
+    on copies; main says only what main does: the home or a granted path, and the worktree patch.)"""
+    from sage.gateway import toolset
+    brief = {s["function"]["name"]: s["function"]["description"].split(" (Full text")[0]
+             for s in toolset.specs(brief=True)}
+    assert "worktree" in brief["patch_apply"] and "all-or-nothing" in brief["patch_apply"]
+    for verb in ("memory_edit", "memory_write"):
+        assert "home" in brief[verb] and "granted" in brief[verb]
+    for verb in ("patch_apply", "memory_edit", "memory_write"):
+        assert len(brief[verb]) <= toolset.BRIEF_DESC_CHARS
