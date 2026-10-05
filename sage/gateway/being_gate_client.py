@@ -2479,6 +2479,21 @@ class BeingGateClient:
                 for a in _REGISTRY[intent.effector]["path_args"]:
                     if intent.args.get(a):
                         tool_input[a] = next(resolved)
+                # THE COMPOSED ACT, IN THE KEYS THE ONE GATE READS (GPT on #367). The legacy stage
+                # judged `command` (what a composed verb will run) and `compose_paths` (what a
+                # patch will touch); the single gate derives both ONLY from tool_input:
+                # _command_text() reads tool_input["command"], core.path_targets() reads its
+                # ratified path keys. Without these, game/search/check/git_* /pr_* were judged on
+                # the being's friendly args, and patch_apply's targets were not judged at all.
+                # No SAGE-only keys: "command" (no registry verb has a cmd_arg, pinned) and
+                # "paths" (a PATH_LIST_KEY), so SAGE stays a thin adapter into the one gate.
+                if judged_command is not None:
+                    tool_input["command"] = judged_command
+                derived = list(resolved)          # what compose_paths added after the path args
+                if derived:
+                    prior = tool_input.get("paths")
+                    prior = [prior] if isinstance(prior, str) else list(prior or [])
+                    tool_input["paths"] = prior + derived
                 ge = sg.GateEvent(tool=tool, tool_input=tool_input, cwd=self.workspace,
                                   session_id=getattr(self, "host_session_id", None),
                                   raw={"effector": intent.effector, **intent.args})

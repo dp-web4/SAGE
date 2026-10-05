@@ -621,3 +621,53 @@ def test_single_gate_judges_the_relative_memory_path_at_the_being_home():
     assert calls[-1][0]["tool_input"]["path"] == os.path.realpath("/tmp/being-home/todo.md")
     c.gate(PEER)
     assert calls[-1][0]["tool_input"] == PEER.args, "verbs with no path args are passed through unchanged"
+
+
+def test_single_gate_is_handed_the_composed_command_not_the_friendly_args():
+    """GPT on #367: hestia_single_gate derives `command` only from tool_input["command"]. A composed verb's
+    judged line must be there, or the one gate scopes the being's args instead of the act."""
+    c, calls = _sg_client("allow")
+    c.worktree = "/tmp/wt"
+    c._core = SimpleNamespace(NormalizedEvent=lambda **kw: SimpleNamespace(**kw))
+    v = c.gate(BeingIntent("search", {"pattern": "hello"}))
+    ti = calls[-1][0]["tool_input"]
+    assert ti["command"] == v.command and ti["command"].startswith("git --no-pager -C /tmp/wt grep"), ti
+    assert ti["pattern"] == "hello" and calls[-1][0]["raw"] == {"effector": "search", "pattern": "hello"}
+    c.gate(BeingIntent("git_read", {"op": "log"}))
+    assert calls[-1][0]["tool_input"]["command"].startswith("git --no-pager -C /tmp/wt log")
+
+
+def test_single_gate_is_handed_derived_paths_in_a_ratified_key(monkeypatch):
+    """patch_apply has no path_args: what it touches comes from compose_paths (the diff's targets). Those
+    must reach the one gate in a key core.path_targets() reads ("paths"), after any path-arg paths."""
+    from sage.gateway import being_gate_client as bgc
+    spec = dict(tool="patch_apply", path_args=("path",), cmd_arg=None,
+                compose=lambda args, ctx: "git -C /tmp/wt apply --check -",
+                compose_paths=lambda args, ctx: ["/tmp/wt/a.py", "/tmp/wt/b.py"])
+    monkeypatch.setitem(bgc._REGISTRY, "probe_patch", spec)
+    c, calls = _sg_client("allow")
+    c.memory_root = "/tmp/being-home"
+    c._core = SimpleNamespace(NormalizedEvent=lambda **kw: SimpleNamespace(**kw))
+    c.gate(BeingIntent("probe_patch", {"path": "p.diff"}))
+    ti = calls[-1][0]["tool_input"]
+    import os
+    assert ti["path"] == os.path.realpath("/tmp/being-home/p.diff"), ti
+    assert ti["paths"] == ["/tmp/wt/a.py", "/tmp/wt/b.py"], ti
+    assert ti["command"] == "git -C /tmp/wt apply --check -"
+
+
+def test_single_gate_translation_matches_what_hestia_reads():
+    """The keys used are the ones hestia_single_gate.normalized_event reads, not a SAGE-only convention:
+    with the real module (when installed), the derived event carries the composed command and the paths."""
+    import importlib, os, sys as _sys
+    import pytest
+    shared = os.path.join(os.environ.get("HESTIA_HOME", os.path.expanduser("~/.hestia")), "shared")
+    if os.path.isdir(shared) and shared not in _sys.path:
+        _sys.path.insert(0, shared)
+    try:
+        sgm = importlib.import_module("hestia_single_gate")
+    except Exception:
+        pytest.skip("hestia_single_gate not importable here")
+    ev = sgm.normalized_event(sgm.GateEvent(tool="patch_apply", cwd="/tmp/wt", raw={},
+                                             tool_input={"command": "git -C /tmp/wt apply -", "paths": ["/tmp/wt/a.py"]}))
+    assert ev.command == "git -C /tmp/wt apply -" and "/tmp/wt/a.py" in ev.paths
