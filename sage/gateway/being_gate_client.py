@@ -1835,7 +1835,7 @@ _TOOL_SCHEMAS = {
     # to the END", and the file now held two programs, with the fixes in the one that never runs.
     # The old 1,846-line file with ten main()s was built the same way. The receipt (#141) tells it
     # afterwards, and this tells it before.
-    "memory_write": ("Add text to a file in your home. It APPENDS to the end: if the file exists, "
+    "memory_write": ("Add text to a file in your home, or in another path you are granted. It APPENDS to the end: if the file exists, "
                      "what is already there stays and your text goes below it. It never replaces. "
                      "To change or replace lines in an existing file, including rewriting a whole "
                      "script, use memory_edit (start_line 1 to the last line replaces all of it). "
@@ -1897,7 +1897,7 @@ _TOOL_SCHEMAS = {
     # having moved, not a failure of its own. The measured habit this verb exists to break
     # is asserting an outcome it never observed; a verb whose refusals read as its own fault
     # teaches exactly that habit.
-    "patch_apply": ("Change files in your own worktree by sending a patch. This is how you act "
+    "patch_apply": ("Change files in your own worktree by sending a patch, applied all-or-nothing. This is how you act "
                     "on what you have read, instead of describing what you would do. Send a "
                     "unified diff as `git diff` prints it — its `diff --git a/<path> b/<path>` "
                     "headers are what the seat reads to know which files you are proposing to "
@@ -2003,7 +2003,7 @@ _TOOL_SCHEMAS = {
                     "settled or refuted, so a later beat does not read it as news.",
                     {"path": "the note, e.g. notes/my-note.md", "reason": "what you know now that the note does not"},
                     ["path", "reason"]),
-    "memory_edit": ("Change part of a file you already wrote. memory_write only ever ADDS to "
+    "memory_edit": ("Change part of a file you already wrote, in your home or another path you are granted. memory_write only ever ADDS to "
                     "the end of a file; this is how you alter what is already in one. Give the "
                     "exact text to replace, OR the line numbers to replace, and what replaces "
                     "it. Text must appear exactly once, so include a neighbouring line if it "
