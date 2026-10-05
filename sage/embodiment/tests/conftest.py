@@ -14,6 +14,9 @@ import pytest
 @pytest.fixture(autouse=True)
 def _no_systemd_and_no_live_pending_set(monkeypatch, tmp_path_factory):
     monkeypatch.setenv("SAGE_NO_SYSTEMD", "1")
+    # Pin the systemd path so these tests read the same on a Mac (arousal picks launchd where
+    # there is launchctl and no systemctl); the launchd tests set it themselves.
+    monkeypatch.setenv("SAGE_WAKE_BACKEND", "systemd")
     monkeypatch.setenv("SAGE_ACTIVITY_REPORT", "0")
     pend = str(tmp_path_factory.mktemp("pending") / "pending_events.json")
     monkeypatch.setenv("SAGE_PENDING_EVENTS", pend)
@@ -24,7 +27,7 @@ def _no_systemd_and_no_live_pending_set(monkeypatch, tmp_path_factory):
 
     def guarded(args, *a, **k):
         argv0 = str(args[0] if isinstance(args, (list, tuple)) and args else args).split()[0:1]
-        if argv0 and os.path.basename(argv0[0]) in ("systemctl", "systemd-run"):
+        if argv0 and os.path.basename(argv0[0]) in ("systemctl", "systemd-run", "launchctl"):
             raise FileNotFoundError(f"tests may not run {argv0[0]} (conftest, SAGE #295)")
         return real_run(args, *a, **k)
     monkeypatch.setattr(subprocess, "run", guarded)
