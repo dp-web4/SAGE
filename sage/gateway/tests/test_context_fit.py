@@ -357,13 +357,19 @@ def test_nonbullet_entry_continuation_lines_not_skipped():
     was skipped, leaving a dangling line. With i = j - 1, both lines of the
     second entry are kept.
     """
-    text = "- entry one\n  continuation one\n- entry two\n  continuation two"
+    # Pad each continuation line to 10,000 chars so the two entries together exceed
+    # the budget (keep ≈ 19,302 chars for num_ctx=8192, num_predict=1024, slack=512,
+    # CPT=2.9) while each entry alone (≈10,033 chars) still fits. This forces a real
+    # trim that drops the older entry and keeps the newer one.
+    pad = "x" * 10000
+    text = ("- entry one\n  continuation one " + pad +
+            "\n- entry two\n  continuation two " + pad)
     out, _ = fit_to_window(
         num_ctx=8192, num_predict=1024, fixed_chars=0, slack=512,
-        blocks={"journal": text},
+        blocks={"recall": text},
     )
-    journal = out["journal"]
-    assert "entry two" in journal
-    assert "continuation two" in journal
-    assert "entry one" not in journal
-    assert "continuation one" not in journal
+    recall = out["recall"]
+    assert "entry two" in recall
+    assert "continuation two" in recall
+    assert "entry one" not in recall
+    assert "continuation one" not in recall
