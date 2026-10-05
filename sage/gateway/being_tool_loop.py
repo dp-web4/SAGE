@@ -842,9 +842,6 @@ def _sent_budget(llm) -> Optional[int]:
     return int(v) if v is not None else None
 
 
-
-# An uncapped turn is bounded by its deadline. If a caller gives neither, this is the
-# backstop — high enough never to bind real work, low enough to end a runaway.
 # Room held back for the ANSWER on a retry whose last attempt was cut mid-JSON. Larger
 # than the ordinary reserve on purpose: the thing that did not fit is the thing we are
 # asking for again, so the retry must have strictly MORE room than the attempt it replaces.
