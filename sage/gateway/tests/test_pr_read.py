@@ -98,3 +98,17 @@ def test_a_long_thread_is_bounded_and_the_cut_is_said():
     assert "more chars]" in out, "a trimmed body or comment must say it was trimmed"
     assert "p19" in out and "p0 " not in out, "the NEWEST are the ones kept"
     assert "(none yet)" in render_pr(dict(PR, comments=[], reviews=[]), "dp-web4/SAGE#2")
+
+
+def test_the_newest_item_gets_the_leftover_budget():
+    # two items, both long: the older is cut at the flat 1200, the newest gets the room the
+    # 5000-char total cap leaves over, and the whole answer stays bounded
+    pr = dict(PR, body="b" * 100,
+              comments=[{"author": {"login": "old"}, "createdAt": "2026-10-04T00:00:00Z", "body": "o" * 3000},
+                        {"author": {"login": "new"}, "createdAt": "2026-10-05T00:00:00Z", "body": "n" * 3000}],
+              reviews=[])
+    out = render_pr(pr, "dp-web4/SAGE#1", last=2)
+    assert len(out) <= PR_READ_TOTAL_CHARS + 200
+    assert "n" * 3000 in out, "the newest item is kept whole when the cap has room"
+    assert "o" * 1200 in out and "o" * 1201 not in out, "the older item stays at the flat cut"
+    assert "more chars]" in out, "the older cut is still said"

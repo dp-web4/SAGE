@@ -109,8 +109,14 @@ def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
         parts = [head, "", "## Description", cut(pr.get("body"), PR_READ_BODY_CHARS) or "(empty)", ""]
         parts.append(f"## Reviews and comments: {total} in all" +
                      (f", the last {len(shown)} shown, newest last" if total > len(shown) else ", newest last"))
-        for ts, kind, body in shown:
-            parts.append(f"--- {ts[:16].replace('T', ' ')}Z {kind}\n{cut(body, PR_READ_ITEM_CHARS) or '(no text)'}")
+        for i, (ts, kind, body) in enumerate(shown):
+            # the NEWEST item gets the room the total cap leaves over: the over-cap rule already
+            # says the newest is the one being answered, so a flat 1200-char cut on it wastes the
+            # budget (measured 2026-10-05: a 4186-char review cut at 1200 while ~1600 chars of
+            # the 5000-char cap sat unused, hiding its tail from the being)
+            n = (max(PR_READ_ITEM_CHARS, PR_READ_TOTAL_CHARS - len("\n".join(parts)) - 200)
+                 if i == len(shown) - 1 else PR_READ_ITEM_CHARS)
+            parts.append(f"--- {ts[:16].replace('T', ' ')}Z {kind}\n{cut(body, n) or '(no text)'}")
         if not items:
             parts.append("(none yet)")
         return "\n".join(parts)
