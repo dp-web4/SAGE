@@ -1072,61 +1072,6 @@ def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512
             }
 
 
-def _parse_entries(text):
-    """Parse text into ordered entries. A '- ' line starts a bullet entry;
-    continuation lines belong to it. Non-bullet text between bullets is one
-    non-bullet entry. Returns list of (start, end, is_bullet, lines)."""
-    lines = text.split("\n")
-    entries = []
-    i = 0
-    n = len(lines)
-    while i < n:
-        if lines[i].startswith("- "):
-            j = i
-            while j + 1 < n and not lines[j + 1].startswith("- "):
-                j += 1
-            entries.append((i, j, True, lines[i:j + 1]))
-            i = j + 1
-        else:
-            j = i
-            while j + 1 < n and not lines[j + 1].startswith("- "):
-                j += 1
-            if j > i or (j == i and lines[i].strip()):
-                entries.append((i, j, False, lines[i:j + 1]))
-            i = j + 1
-    return entries
-
-
-def _select_fitting(entries, keep, newest_first):
-    """Select the longest contiguous run of entries that fits in keep chars.
-    newest_first=True keeps the newest (tail); False keeps the head (digest).
-    Returns (kept_lines, dropped_count, removed_chars)."""
-    if not entries:
-        return [], 0, 0
-    if newest_first:
-        order = list(range(len(entries) - 1, -1, -1))
-    else:
-        order = list(range(len(entries)))
-    kept = []
-    used = 0
-    for idx in order:
-        s, e, is_b, elines = entries[idx]
-        cost = sum(len(k) + 1 for k in elines)
-        if used + cost > keep:
-            break
-        kept.append((idx, elines))
-        used += cost
-    kept.sort(key=lambda t: t[0])
-    kept_lines = []
-    for idx, elines in kept:
-        kept_lines.extend(elines)
-    total_chars = sum(len(k) + 1 for k in kept_lines)
-    all_chars = sum(len(k) + 1 for k in sum((e[3] for e in entries), []))
-    removed = max(0, all_chars - total_chars)
-    dropped = len(entries) - len(kept)
-    return kept_lines, dropped, removed
-
-
 def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack: int = 512):
     """Trim the seat-supplied blocks until prompt + num_predict fits inside num_ctx.
 
@@ -1165,7 +1110,7 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
     # digest every beat to buy room the model has never used.
     reserve = min(num_predict, ANSWER_RESERVE_CAP)
     budget_chars = window_budget_chars(num_ctx, num_predict, slack)
-    order = ("digest", "recall") + tuple(k for k in blocks if k not in ("digest", "recall"))
+    order = ("digest", "recall")
     floors = {"digest": 1200, "recall": 400}
     out, interventions = dict(blocks), []
     total = lambda: fixed_chars + sum(len(v or "") for v in out.values())
@@ -1176,38 +1121,14 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         if not text:
             continue
         over = total() - budget_chars
-        # Aggregate budget (invariant C): trim THIS block by exactly the overage, so the
-        # total lands on budget_chars. The old `budget_chars - fixed_chars` was a constant
-        # applied to every block, so two trimmed blocks each got the full budget (2x).
-        # Recomputed per block: keep = len(text) - over, floored at the block's floor.
-        raw_keep = len(text) - over
-        keep = max(floors.get(key, 0), raw_keep) if raw_keep >= 0 else 0
+        keep = max(floors[key], len(text) - over)
         if keep >= len(text):
             continue
         # keep the HEAD of the digest (newest-first there) and the TAIL of recall/journal
-        # Trim on ENTRY boundaries, not raw characters: a character cut can split an entry
-        # mid-line, and the being then reads a half-fact. Entries are the "- ..." lines
-        # fleet_digest and the recall/journal builders emit. The marker says how many
-        # entries were dropped, so the being knows what it is missing (the same spirit as
-        # the elision-marker line count: markers must report true counts).
-        entries = _parse_entries(text)
-        newest_first = key != "digest"
-        kept_lines, dropped, removed = _select_fitting(entries, keep, newest_first)
-        if key == "digest":
-            out[key] = ("\n".join(kept_lines) + ("\n[…trimmed to fit the context window: "
-                          + str(dropped) + " older entr" + ("y" if dropped == 1 else "ies")
-                          + " dropped…]" if removed > 0 else ""))
-        elif key == "recall":
-            out[key] = (("[…trimmed to fit the context window: " + str(dropped)
-                         + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
-                        if dropped > 0 else "") + "\n".join(kept_lines))
-        else:
-            out[key] = (("[…trimmed to fit the context window: " + str(removed)
-                         + " chars removed…]\n"
-                        if removed > 0 else "") + "\n".join(kept_lines))
-        removed = max(0, len(text) - sum(len(k) + 1 for k in kept_lines))
+        out[key] = (text[:keep] + "\n[…trimmed to fit the context window…]") if key == "digest" \
+            else ("[…trimmed to fit the context window…]\n" + text[-keep:])
         interventions.append({"kind": "context_fit", "block": key,
-                              "suppressed": f"{removed} chars of {key}",
+                              "suppressed": f"{len(text) - keep} chars of {key}",
                               "reason": f"prompt + a p99 answer ({reserve} tok) would not fit "
                                         f"num_ctx ({num_ctx}); the generation would be cut "
                                         f"mid-answer (27/506 generates already were)"})

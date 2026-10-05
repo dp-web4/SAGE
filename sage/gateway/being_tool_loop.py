@@ -1034,24 +1034,11 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         # The head of a ranged read already names its range, so point at a NARROWER read
         # and at the being's own notes, which is where its conclusions actually live.
         saved = _spill(spill_root, body, i, pinned)
-        # Read-compatible count: count the SERIALIZED file, not the body.
-        # body.count('\n') + 1 overcounts a trailing newline (a body ending in '\n'
-        # has one fewer content line than newlines+1), and the saved file adds a
-        # 2-line provenance header + blank line, so the body count never matched
-        # the file the marker points at. The count exists to select memory_read
-        # ranges of the saved file, so it must be the file's line count.
-        # (GPT review hold, 2026-09-29: 300-line body -> 302-line file, marker said 300;
-        # trailing-newline input reported 301, file still 302.)
-        body_lines = len(body.splitlines())  # content lines; a trailing '\n' adds none
-        file_lines = body_lines + 2 if saved else 0  # 2-line provenance header + body
         where = (f"The WHOLE result is saved as {saved} and outlives this beat — "
-                 f"it is {file_lines} lines long (2-line provenance header plus the body); "
-                 f"memory_read a narrow range of it "
-                 f"when you need the middle."
+                 f"memory_read a narrow range of it when you need the middle."
                  if saved else
                  "If you need part of it, read a NARROW range of the source rather than the "
-                 f"whole file again — a full re-read costs more room than this elision freed. "
-                 f"it is {body_lines} lines long (the body; nothing was saved to disk).")
+                 "whole file again — a full re-read costs more room than this elision freed.")
         out[i]["content"] = (kept_head +
                              f"\n[… {elided_n} {_ELIDED_SIGIL} to leave room for your answer. "
                              f"{where} …]\n"
@@ -1104,7 +1091,6 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     if idx and _est_tokens(size(out), measured) > room:
         i = idx[-1]
         body = out[i].get("content") or ""
-        lines = body.count('\n') + 1
         keep = COMPACT_KEEP_CHARS * 4
         if len(body) > keep + COMPACT_MIN_BODY:
             h = keep // 2

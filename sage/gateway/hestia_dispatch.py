@@ -114,7 +114,7 @@ def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
             # says the newest is the one being answered, so a flat 1200-char cut on it wastes the
             # budget (measured 2026-10-05: a 4186-char review cut at 1200 while ~1600 chars of
             # the 5000-char cap sat unused, hiding its tail from the being)
-            n = (max(PR_READ_ITEM_CHARS, PR_READ_TOTAL_CHARS - len("\n".join(parts)) - 200)
+            n = (min(len(body), PR_READ_TOTAL_CHARS - len("\n".join(parts)) - 60)
                  if i == len(shown) - 1 else PR_READ_ITEM_CHARS)
             parts.append(f"--- {ts[:16].replace('T', ' ')}Z {kind}\n{cut(body, n) or '(no text)'}")
         if not items:
