@@ -2626,6 +2626,8 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
       * conversations exist, nothing waiting -> the generic form, ids listed.
       * something waiting -> the person's name, the real id, and WHAT THEY SAID.
     """
+    global LAST_SELECTION_ERROR
+    LAST_SELECTION_ERROR = None     # describes THIS selection, the one whose result the beat records
     try:
         from sage.gateway import conversations as _conv
         ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
@@ -2718,9 +2720,16 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
             return ('If someone has spoken to you and you have not answered, and you have '
                     'something to say, call say with to set to one of: ' + ", ".join(ids[:6])
                     + '. Answering is not required.\n'), "", "", "", None
-    except Exception:
-        pass
+    except Exception as e:
+        # "CANNOT TELL" IS NOT "NOTHING PENDING" (2026-10-04). This swallowed every failure, so a selection
+        # that raised looked exactly like an empty inbox: on HUB, hub-claude's 09-21 question was never
+        # selected in 300+ beats while the beat records showed nothing wrong. The beat record now carries it.
+        LAST_SELECTION_ERROR = f"{type(e).__name__}: {e}"[:300]
+        print(f"[heartbeat] pending_selection failed: {LAST_SELECTION_ERROR}", file=sys.stderr)
     return "", "", "", "", None
+
+
+LAST_SELECTION_ERROR: Optional[str] = None
 
 
 def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
@@ -3681,6 +3690,11 @@ def main(argv=None) -> int:
     # nothing in heartbeats.jsonl and no monitor knew it had happened. BeatKilled was defined
     # on main with no producer; install_kill_handler() is that producer.
     explore = after = reflect = answer = None
+    selected = None          # the record names it; a beat killed before selection must still write its record
+    # This beat's selection error starts clean (legion-claude on #353): a failure in an earlier beat in the same
+    # process must not appear beside this beat's correct selection.
+    global LAST_SELECTION_ERROR
+    LAST_SELECTION_ERROR = None
     act_after = None
     preempted = None
     account = {"present": False, "sha256": None, "reply": "", "generates": []}
@@ -4043,6 +4057,11 @@ def main(argv=None) -> int:
         # principle): a guard that silences without saying what it silenced trades a
         # confident wrong for a confident silence.
         "interventions": interventions,
+        # a failed turn selection, by name: without it, "no one is waiting" and "selection broke" are one record
+        "selection_error": LAST_SELECTION_ERROR,
+        # which waiting turn this beat chose, and whether it asked: "never selected" vs "selected, not answered"
+        "selected": ({"turn": f"{selected.cid}:{selected.seq}", "expects_reply": bool(selected.expects_reply),
+                      "woke": bool(getattr(selected, "woke", False))} if selected is not None else None),
         # a live trial labels the beat, so its outputs can be told from the being's ordinary ones
         "trial": _trial_name(instance),
         "account": account,
