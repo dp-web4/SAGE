@@ -112,3 +112,36 @@ def test_the_newest_item_gets_the_leftover_budget():
     assert "n" * 3000 in out, "the newest item is kept whole when the cap has room"
     assert "o" * 1200 in out and "o" * 1201 not in out, "the older item stays at the flat cut"
     assert "more chars]" in out, "the older cut is still said"
+
+
+def test_the_live_shape_keeps_the_newest_whole():
+    # the shape of #360's live payload: an 800-char description, two older items at 1200+
+    # each, and a 2111-char newest. The newest must come out whole, not cut at 1200.
+    pr = dict(PR, body="b" * 800,
+              comments=[{"author": {"login": "old2"}, "createdAt": "2026-10-03T00:00:00Z", "body": "a" * 1500},
+                        {"author": {"login": "old1"}, "createdAt": "2026-10-04T00:00:00Z", "body": "b" * 1500},
+                        {"author": {"login": "new"}, "createdAt": "2026-10-05T00:00:00Z", "body": "n" * 2111}],
+              reviews=[])
+    out = render_pr(pr, "dp-web4/SAGE#1", last=3)
+    assert len(out) <= PR_READ_TOTAL_CHARS + 200
+    assert "n" * 2111 in out, "the newest 2111-char item is kept whole"
+    # desc 800 + newest 2111 + two older at 1200 each = 5311 > 5000, so one older item is
+    # DROPPED rather than the newest cut: the newer older item (b) stays at the flat cut,
+    # the older one (a) is the one that goes
+    assert "b" * 1200 in out, "the newer older item stays at the flat cut"
+    assert "a" * 1200 not in out, "the older item is dropped, not the newest cut"
+    assert out.count("--- ") == 2, "newest + one older item shown"
+    assert "more chars]" in out, "every cut is still said"
+
+
+def test_a_newest_longer_than_the_room_stays_bounded_and_says_so():
+    # a newest item longer than the room the cap leaves: it is cut to the room, the answer
+    # stays under the total cap, and the item's own cut marker survives (the regression the
+    # seat named: the old code's tail trim dropped the marker, leaving 5032 chars).
+    pr = dict(PR, body="b" * 800,
+              comments=[{"author": {"login": "new"}, "createdAt": "2026-10-05T00:00:00Z", "body": "n" * 20000}],
+              reviews=[])
+    out = render_pr(pr, "dp-web4/SAGE#1", last=1)
+    assert len(out) <= PR_READ_TOTAL_CHARS + 200
+    assert "more chars]" in out, "the newest item's own cut marker survives the over-cap path"
+    assert "n" * 20000 not in out

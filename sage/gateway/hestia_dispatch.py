@@ -105,18 +105,55 @@ def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
     items.sort(key=lambda t: t[0])
     total = len(items)
     shown = items[-max(1, last):] if items else []
+    def newest_budget(base_len: int, header_len: int, body_len: int) -> int:
+        """How many chars of the newest item fit under the total cap, marker included.
+
+        The newest item is the one a being is about to answer, so it gets the room the
+        total cap leaves over everything already rendered. The item's own header line
+        and the cut marker " …[N more chars]" are part of the rendered text, so both
+        lengths are accounted for exactly (digit count iterated) and the budget is
+        clamped at 0: a newest item longer than the room is cut to the room, never
+        pushed past the cap.
+        """
+        room = PR_READ_TOTAL_CHARS - base_len - 1 - header_len
+        if room <= 0:
+            return 0
+        if body_len <= room:
+            return body_len
+        n = room
+        while True:
+            marker = f" \u2026[{body_len - n} more chars]"
+            if n + len(marker) <= room:
+                return n
+            n -= 1
+            if n < 0:
+                return 0
+
     def build(shown):
         parts = [head, "", "## Description", cut(pr.get("body"), PR_READ_BODY_CHARS) or "(empty)", ""]
         parts.append(f"## Reviews and comments: {total} in all" +
                      (f", the last {len(shown)} shown, newest last" if total > len(shown) else ", newest last"))
-        for i, (ts, kind, body) in enumerate(shown):
-            # the NEWEST item gets the room the total cap leaves over: the over-cap rule already
-            # says the newest is the one being answered, so a flat 1200-char cut on it wastes the
-            # budget (measured 2026-10-05: a 4186-char review cut at 1200 while ~1600 chars of
-            # the 5000-char cap sat unused, hiding its tail from the being)
-            n = (min(len(body), PR_READ_TOTAL_CHARS - len("\n".join(parts)) - 60)
-                 if i == len(shown) - 1 else PR_READ_ITEM_CHARS)
-            parts.append(f"--- {ts[:16].replace('T', ' ')}Z {kind}\n{cut(body, n) or '(no text)'}")
+        base = len("\n".join(parts))
+        # The NEWEST item is rendered first, at the exact room the total cap leaves over the
+        # header and description (measured 2026-10-05: a 4186-char review cut at a flat 1200
+        # while ~1600 chars of the 5000-char cap sat unused, hiding its tail from the being).
+        # Older items then fill the remainder newest-to-oldest at PR_READ_ITEM_CHARS each;
+        # when the room runs out, an OLDER item is dropped rather than the newest cut.
+        rendered = []
+        if shown:
+            ts, kind, body = shown[-1]
+            header = f"--- {ts[:16].replace('T', ' ')}Z {kind}\n"
+            n = newest_budget(base, len(header), len(body or ""))
+            rendered.append(header + (cut(body, n) or "(no text)"))
+            base += len(rendered[-1]) + 1
+        for ts, kind, body in reversed(shown[:-1]):
+            header = f"--- {ts[:16].replace('T', ' ')}Z {kind}\n"
+            if base + 1 + len(header) + PR_READ_ITEM_CHARS > PR_READ_TOTAL_CHARS:
+                break
+            rendered.append(header + (cut(body, PR_READ_ITEM_CHARS) or "(no text)"))
+            base += len(rendered[-1]) + 1
+        rendered.reverse()
+        parts.extend(rendered)
         if not items:
             parts.append("(none yet)")
         return "\n".join(parts)
