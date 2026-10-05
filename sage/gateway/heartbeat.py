@@ -1072,6 +1072,61 @@ def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512
             }
 
 
+def _parse_entries(text):
+    """Parse text into ordered entries. A '- ' line starts a bullet entry;
+    continuation lines belong to it. Non-bullet text between bullets is one
+    non-bullet entry. Returns list of (start, end, is_bullet, lines)."""
+    lines = text.split("\n")
+    entries = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        if lines[i].startswith("- "):
+            j = i
+            while j + 1 < n and not lines[j + 1].startswith("- "):
+                j += 1
+            entries.append((i, j, True, lines[i:j + 1]))
+            i = j + 1
+        else:
+            j = i
+            while j + 1 < n and not lines[j + 1].startswith("- "):
+                j += 1
+            if j > i or (j == i and lines[i].strip()):
+                entries.append((i, j, False, lines[i:j + 1]))
+            i = j + 1
+    return entries
+
+
+def _select_fitting(entries, keep, newest_first):
+    """Select the longest contiguous run of entries that fits in keep chars.
+    newest_first=True keeps the newest (tail); False keeps the head (digest).
+    Returns (kept_lines, dropped_count, removed_chars)."""
+    if not entries:
+        return [], 0, 0
+    if newest_first:
+        order = list(range(len(entries) - 1, -1, -1))
+    else:
+        order = list(range(len(entries)))
+    kept = []
+    used = 0
+    for idx in order:
+        s, e, is_b, elines = entries[idx]
+        cost = sum(len(k) + 1 for k in elines)
+        if used + cost > keep:
+            break
+        kept.append((idx, elines))
+        used += cost
+    kept.sort(key=lambda t: t[0])
+    kept_lines = []
+    for idx, elines in kept:
+        kept_lines.extend(elines)
+    total_chars = sum(len(k) + 1 for k in kept_lines)
+    all_chars = sum(len(k) + 1 for k in sum((e[3] for e in entries), []))
+    removed = max(0, all_chars - total_chars)
+    dropped = len(entries) - len(kept)
+    return kept_lines, dropped, removed
+
+
 def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack: int = 512):
     """Trim the seat-supplied blocks until prompt + num_predict fits inside num_ctx.
 
@@ -1131,72 +1186,22 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         # fleet_digest and the recall/journal builders emit. The marker says how many
         # entries were dropped, so the being knows what it is missing (the same spirit as
         # the elision-marker line count: markers must report true counts).
-        lines = text.split("\n")
+        entries = _parse_entries(text)
+        newest_first = key != "digest"
+        kept_lines, dropped, removed = _select_fitting(entries, keep, newest_first)
         if key == "digest":
-            kept, dropped = [], 0
-            i = 0
-            while i < len(lines):
-                if not lines[i].startswith("- "):
-                    while i < len(lines) and not lines[i].startswith("- "):
-                        i += 1
-                    if i >= len(lines):
-                        break
-                j = i
-                while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
-                    j += 1
-                entry = lines[i:j + 1]
-                if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
-                    break
-                kept.extend(entry)
-                i = j + 1
-            total_entries = sum(1 for k in lines if k.startswith("- "))
-            kept_entries = sum(1 for k in kept if k.startswith("- "))
-            dropped = total_entries - kept_entries
-            removed = max(0, len(text) - sum(len(k) + 1 for k in kept))
-            out[key] = ("\n".join(kept) + ("\n[…trimmed to fit the context window: "
+            out[key] = ("\n".join(kept_lines) + ("\n[…trimmed to fit the context window: "
                           + str(dropped) + " older entr" + ("y" if dropped == 1 else "ies")
                           + " dropped…]" if removed > 0 else ""))
+        elif key == "recall":
+            out[key] = (("[…trimmed to fit the context window: " + str(dropped)
+                         + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
+                        if dropped > 0 else "") + "\n".join(kept_lines))
         else:
-            kept, dropped = [], 0
-            i = len(lines) - 1
-            while i >= 0:
-                if lines[i].startswith("- "):
-                    j = i
-                    while j + 1 < len(lines) and not lines[j + 1].startswith("- "):
-                        j += 1
-                    entry = lines[i:j + 1]
-                    if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
-                        dropped = i + 1
-                        break
-                    else:
-                        kept.extend(reversed(entry))
-                    i = i - 1
-                else:
-                    end = i
-                    i -= 1
-                    j = i
-                    while j >= 0 and not lines[j].startswith("- "):
-                        j -= 1
-                    entry = lines[j:end + 1]
-                    if sum(len(k) + 1 for k in kept) + sum(len(k) + 1 for k in entry) > keep:
-                        dropped += 1
-                    else:
-                        kept.extend(reversed(entry))
-                    i = j - 1
-            kept.reverse()
-            removed = max(0, len(text) - sum(len(k) + 1 for k in kept))
-            if key == "recall":
-                total_entries = sum(1 for k in lines if k.startswith("- "))
-                kept_entries = sum(1 for k in kept if k.startswith("- "))
-                dropped = total_entries - kept_entries
-                out[key] = (("[…trimmed to fit the context window: " + str(dropped)
-                             + " older entr" + ("y" if dropped == 1 else "ies") + " dropped…]\n"
-                            if dropped > 0 else "") + "\n".join(kept))
-            else:
-                out[key] = (("[…trimmed to fit the context window: " + str(removed)
-                             + " chars removed…]\n"
-                            if removed > 0 else "") + "\n".join(kept))
-        removed = max(0, len(text) - sum(len(k) + 1 for k in kept))
+            out[key] = (("[…trimmed to fit the context window: " + str(removed)
+                         + " chars removed…]\n"
+                        if removed > 0 else "") + "\n".join(kept_lines))
+        removed = max(0, len(text) - sum(len(k) + 1 for k in kept_lines))
         interventions.append({"kind": "context_fit", "block": key,
                               "suppressed": f"{removed} chars of {key}",
                               "reason": f"prompt + a p99 answer ({reserve} tok) would not fit "
