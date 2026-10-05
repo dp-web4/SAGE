@@ -235,7 +235,14 @@ def test_worktree_verbs_are_offered_to_every_being_and_said_unavailable_without_
         assert offered[-1] == "rest", "rest stays the last choice"
         assert len(offered) == len(set(offered)), "no verb offered twice"
     u = toolset.unavailable(None, None, {})
-    assert all("no git worktree" in u[v] for v in toolset.WORKTREE_VERBS)
+    assert all("worktree" in u[v] for v in toolset.WORKTREE_VERBS)
+    # search/git_read/check say what they read and which tool serves the being's own files,
+    # not a config file someone could edit (2026-10-04: three asks for a worktree followed it)
+    for v, tool in (("search", "memory_read"), ("git_read", "memory_read"), ("check", "request_run"),
+                    ("patch_apply", "memory_edit"), ("git_restore", "memory_edit")):
+        assert tool in u[v] and "not your home" in u[v], v
+    assert not any("instance.json" in u[v] for v in toolset.WORKTREE_VERBS)
+    assert all("this seat has none" in u[v] for v in toolset.WORKTREE_VERBS)
     assert not any(v in toolset.unavailable(None, "/some/worktree", {}) for v in toolset.WORKTREE_VERBS)
 
 

@@ -96,3 +96,74 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def _client(stdout: str, rc: int = 0, stderr: str = ""):
+    """A fake channel_client and the identity file naming it."""
+    d = Path(tempfile.mkdtemp(prefix="cc-"))
+    cc = d / "cc.sh"
+    cc.write_text(f"#!/bin/sh\nprintf '%s' {json_quote(stdout)}\nprintf '%s' {json_quote(stderr)} >&2\nexit {rc}\n")
+    cc.chmod(0o755)
+    ident = d / "ident"
+    ident.write_text(f"CHANNEL_CLIENT='{cc}'\nHUB_URL='http://127.0.0.1:1'\nMY_LCT='lct'\nMY_KEYPAIR='{d}/k'\n")
+    return str(ident)
+
+
+def json_quote(s: str) -> str:
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
+def test_cannot_tell_is_not_empty():
+    """Sprout, 2026-10-03: a failed or unreadable fetch returned [] and the beat recorded fetched 0 with no
+    error -- 1,778 drains of sprout-being's mailbox, never one fetch. Each failure now lands in `errors`."""
+    for env, why in ((_client("", rc=1, stderr="no pinned pubkey for lct"), "exited 1: no pinned pubkey"),
+                     (_client("banner text, not json"), "unreadable reply"),
+                     (_client('{"error": "forbidden"}'), "no notifications field")):
+        r = drain_once(_inst(), env_file=env, notify=lambda k, p: {"ok": True})
+        assert r["fetched"] == 0 and r["errors"] and why in r["errors"][0], (why, r)
+
+
+def test_an_empty_mailbox_is_still_empty_with_no_error():
+    r = drain_once(_inst(), env_file=_client('{"notifications": []}'), notify=lambda k, p: {"ok": True})
+    assert r["fetched"] == 0 and r["errors"] == []
+
+
+def test_a_real_notice_is_fetched_through_the_client():
+    body = '{"notifications": [{"kind": "reply", "pointer_uri": "p", "from": "f", "pair_id": "n-7"}]}'
+    r = drain_once(_inst(), env_file=_client(body), notify=lambda k, p: {"ok": True})
+    assert r["fetched"] == 1 and r["persisted"] == 1 and r["errors"] == []
+
+
+def _recording_client(ident_text: str):
+    """A fake channel_client that records its argv, and an identity file in the given shape."""
+    d = Path(tempfile.mkdtemp(prefix="cc-"))
+    cc = d / "cc.sh"
+    cc.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$@\" > {d}/argv\nprintf '{{\"notifications\": []}}'\n")
+    cc.chmod(0o755)
+    ident = d / "ident"
+    ident.write_text(ident_text.replace("@CC@", str(cc)).replace("@D@", str(d)))
+    return str(ident), d
+
+
+def test_the_drain_reads_the_identity_file_exactly_as_hub_notify_sources_it():
+    """Sprout 2026-10-03: sends (hub-notify sources the file) were accepted while every mailbox read failed
+    "invalid length: found 94". The old parser kept a quoted value's trailing comment and keyed `export X=`
+    lines as "export X". Now the file is sourced, so both read one set of values."""
+    text = ('# a being identity file\n'
+            'export CHANNEL_CLIENT="@CC@"\n'
+            "HUB_URL='http://127.0.0.1:1'   # the hub\n"
+            'MY_LCT="2e175714-4b01-4063-a997-27a6dade7044"  # the being\n'
+            'MY_KEYPAIR="@D@/seed"\n')
+    ident, d = _recording_client(text)
+    r = drain_once(_inst(), env_file=ident, notify=lambda k, p: {"ok": True})
+    assert r["errors"] == [], r
+    argv = (d / "argv").read_text().splitlines()
+    assert argv[:4] == ["http://127.0.0.1:1", "2e175714-4b01-4063-a997-27a6dade7044", f"{d}/seed", "notifications"], argv
+
+
+def test_a_missing_or_unsourceable_identity_is_an_error_not_empty():
+    r = drain_once(_inst(), env_file="/nonexistent/ident", notify=lambda k, p: {"ok": True})
+    assert r["fetched"] == 0 and "no identity file" in r["errors"][0]
+    ident, _ = _recording_client("HUB_URL='http://127.0.0.1:1'\n")
+    r = drain_once(_inst(), env_file=ident, notify=lambda k, p: {"ok": True})
+    assert "sets no CHANNEL_CLIENT, MY_LCT, MY_KEYPAIR" in r["errors"][0], r

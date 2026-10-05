@@ -15,6 +15,7 @@
   "decline_closing": "standing_only",
   "no_result_line": "on",
   "answered_run_wake": "skip",
+  "posture_framing": "standing_guidance",
   "upgraded_from": "cbp-gemma3-4b",
   "upgraded_on": "2026-09-12",
   "notes": "Same being (cbp_sage_lct) as cbp-gemma3-4b: lived identity, experience buffer and 240 sessions carried forward 2026-09-12. Frontal lobe upgraded from gemma3:4b to empero Qwen3.8-4B-Distill (Q6_K, MTP head stripped, reasoning model, native tool calling). Thinking ENABLED (gemma3 had none). Reason: so the being can be given tools governed through hestia. gemma3-4b instance retained intact for rollback + A/B.",

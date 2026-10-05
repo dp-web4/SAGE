@@ -106,7 +106,7 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     # decision about whether every being with a memory_root may capture a frame, not a cleanup.
     # Pinned by test_without_a_worktree_the_verbs_still_fail_closed.
     if not worktree:
-        raise ValueError("camera requires a worktree context")
+        raise ValueError(NO_WORKTREE_REFUSAL["camera"])
     if not memory_root:
         raise ValueError("camera requires a memory_root context")
 
@@ -235,6 +235,84 @@ def pr_review_signature(member_id: str, action_id: Optional[str], being_lct: Opt
 _REV = (r"(?:[0-9a-fA-F]{7,40}|HEAD|[A-Za-z][A-Za-z0-9._/-]{0,60})"
         r"(?:[~^][0-9]{0,3})?")
 
+# WHAT A WORKTREE VERB SAYS WHEN THIS SEAT HAS NO WORKTREE (2026-10-04). Until today each of
+# these said "<verb> needs a worktree of your own; none is configured on this seat". That is
+# true, and it names exactly one way forward: get a worktree configured. cbp-being took it.
+# It wanted to fix one line of a scratch file in its own home, reached for `search`, was told a
+# worktree was missing, and asked dp three times to configure one so search could find lines
+# in its files. But search is `git grep` over a code-repository checkout and cannot see the
+# being's home at all: a worktree would not have helped, and the tool it needed (memory_read
+# with start_line) was already in its hands. Configuring a worktree would also have turned on
+# git_read, check and camera (see camera_command), which is a policy decision dp has not made.
+#
+# So each refusal now says what the verb is FOR, that it does not read the being's home, and
+# which tool serves the likely need there. None of them tells the being to ask for a worktree.
+# Every tool and parameter named here must exist as named: memory_read takes `path` and
+# `start_line` (no end_line; a long file comes back in windows that say how to read on), and
+# request_run takes `path`. Pinned by test_no_worktree_refusals_say_what_the_verb_is_for, which
+# checks each named parameter against _TOOL_SCHEMAS. The dispatcher (hestia_dispatch) and the
+# toolset's availability line say the same text, so the being hears one answer however it asks.
+NO_WORKTREE_REFUSAL = {
+    "search": (
+        "search reads a code-repository checkout (a worktree), not your home, and this seat "
+        "has none. To find or read lines in your own files (notes/, scratch/, todo.md, "
+        "journal.md), use memory_read with the file's path and start_line: it shows the file "
+        "from that line on and says which lines it covered."),
+    "git_read": (
+        "git_read reads the git history of a code-repository checkout (a worktree): its "
+        "commits, diffs, blame, and files as they were at an earlier commit. It does not read "
+        "your home, and this seat has none. To read one of your own files as it is now, use "
+        "memory_read with the file's path (and start_line to begin at a given line)."),
+    "check": (
+        # Names no suite on purpose: #352 adds a worktree's own tests/ beside gateway and irp,
+        # and a list here would go stale the day the target set changes.
+        "check runs the test suites of a code-repository checkout (a worktree), not anything "
+        "in your home, and this seat has none, so there is nothing here for it to test. To find out what one of your own files does when it runs, use request_run "
+        "with its path: the seat decides whether to run it and answers with the real output."),
+    # patch_apply has the same trap as search: a being that wants to change a line of its own
+    # file reaches for the verb named "apply a patch", hears "no worktree", and asks for one.
+    # memory_edit is the tool that changes its own files.
+    "patch_apply": (
+        "patch_apply changes files in a code-repository checkout (a worktree) by applying a "
+        "patch, not files in your home, and this seat has none. To change lines of your own "
+        "files, use memory_edit with the file's path, start_line and end_line (the line "
+        "numbers memory_read shows), and new for what replaces them."),
+    # git_restore takes a file's content from git history. The being's home has no history
+    # it can read back (the witness log records that an edit happened and its line counts,
+    # not the text), so the honest pointer is memory_edit alone.
+    "git_restore": (
+        "git_restore puts one file in a code-repository checkout (a worktree) back to how it "
+        "was at an earlier commit, taking the content from git history. It does not reach your "
+        "home, and this seat has none. To put lines of your own files back, use memory_edit "
+        "with the file's path, start_line and end_line, and new for the text you want there."),
+    # The PR verbs have no home-file counterpart: a pull request is made from commits in a
+    # checkout. Purpose plus "this seat has none", and nothing to configure. Each says what
+    # the VERB cannot do here, never a fact about the home or the being's PRs that this check did
+    # not observe: the CBP being's home has 461 paths tracked on main, and a missing checkout
+    # says nothing about whether a PR of its exists (#354 review).
+    "pr_open": (
+        "pr_open opens a pull request from commits on your own branch in a code-repository "
+        "checkout (a worktree), and this seat has none, so pr_open cannot "
+        "propose files from your home."),
+    "pr_amend": (
+        "pr_amend revises a pull request you opened, by committing changes from your "
+        "code-repository checkout (a worktree) onto its branch, and this seat has none, so "
+        "pr_amend cannot revise your proposal here."),
+    "pr_sync": (
+        "pr_sync brings a pull request you opened up to date with its base branch, by merging "
+        "inside your code-repository checkout (a worktree), and this seat has none, so pr_sync "
+        "cannot update your proposal here."),
+    # CAMERA'S HONEST ALTERNATIVE IS DIFFERENT: there is none. It never reads a worktree (the
+    # frame lands in the being's home); the requirement is the policy hold described in
+    # camera_command. So it says it is not enabled, says why without pointing at a step the
+    # being could ask someone to take, and says plainly that no other tool captures a frame.
+    "camera": (
+        "camera is not enabled on this seat. Here it is held to the same condition as the "
+        "verbs that read a code-repository checkout (a worktree), and this seat has none; "
+        "whether this seat captures frames is a policy decision about the seat, not a step "
+        "you can take. No other tool captures a frame."),
+}
+
 GIT_OPS = ("log", "show", "diff", "status", "blame", "cat")
 
 # A revision the being may name: a hex sha, HEAD with optional ~n/^n, or a plain branch or
@@ -282,7 +360,7 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     import re
     worktree = (ctx or {}).get("worktree")
     if not worktree:
-        raise ValueError("git_read needs a worktree of your own; none is configured on this seat")
+        raise ValueError(NO_WORKTREE_REFUSAL["git_read"])
     op = str(args.get("op", "")).strip()
     if op not in GIT_OPS:
         raise ValueError(f"git_read 'op' must be one of {list(GIT_OPS)}, got {op!r}")
@@ -595,7 +673,7 @@ def pr_open_command(args: dict, ctx: Optional[dict] = None) -> str:
     import re
     worktree = (ctx or {}).get("worktree")
     if not worktree:
-        raise ValueError("pr_open needs a worktree of your own; none is configured on this seat")
+        raise ValueError(NO_WORKTREE_REFUSAL["pr_open"])
     slug = str(args.get("slug", "")).strip()
     if not re.fullmatch(_SLUG, slug):
         raise ValueError("pr_open 'slug' names your branch tail: lowercase letters, digits and "
@@ -629,7 +707,7 @@ def git_restore_command(args: dict, ctx: Optional[dict] = None) -> str:
     import re
     worktree = (ctx or {}).get("worktree")
     if not worktree:
-        raise ValueError("git_restore needs a worktree of your own; none is configured on this seat")
+        raise ValueError(NO_WORKTREE_REFUSAL["git_restore"])
     rev = str(args.get("rev", "")).strip()
     if not re.fullmatch(_REV, rev):
         raise ValueError(f"git_restore 'rev' must be a sha, HEAD, HEAD~n or a branch name, got {rev!r}")
@@ -680,7 +758,7 @@ def pr_amend_command(args: dict, ctx: Optional[dict] = None) -> str:
     standing in, so it can only ever amend its own open proposal."""
     worktree = (ctx or {}).get("worktree")
     if not worktree:
-        raise ValueError("pr_amend needs a worktree of your own; none is configured on this seat")
+        raise ValueError(NO_WORKTREE_REFUSAL["pr_amend"])
     title = " ".join(str(args.get("title", "")).split())
     if not (8 <= len(title) <= 120):
         raise ValueError("pr_amend 'title' is the message for the new commit: one line, 8-120 chars")
@@ -724,7 +802,7 @@ def pr_sync_command(args: dict, ctx: Optional[dict] = None) -> str:
     import re
     worktree = (ctx or {}).get("worktree")
     if not worktree:
-        raise ValueError("pr_sync needs a worktree of your own; none is configured on this seat")
+        raise ValueError(NO_WORKTREE_REFUSAL["pr_sync"])
     op = str(args.get("op", "start") or "start").strip()
     if op not in PR_SYNC_OPS:
         raise ValueError(f"pr_sync 'op' must be one of {list(PR_SYNC_OPS)}; got {op!r}")
@@ -816,7 +894,7 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     import shlex
     worktree = (ctx or {}).get("worktree")
     if not worktree:
-        raise ValueError("search needs a worktree of your own; none is configured on this seat")
+        raise ValueError(NO_WORKTREE_REFUSAL["search"])
     pattern = str(args.get("pattern", ""))
     if not pattern.strip():
         raise ValueError("search needs a 'pattern' — the text or extended-regex to look for")
@@ -1033,9 +1111,10 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
     import shlex
     worktree = (ctx or {}).get("worktree")
     if not worktree:
-        raise ValueError(
-            "check needs a worktree of your own: there is nothing to run tests in, and a "
-            "relative path would be judged against a tree you do not hold (PRD M1)")
+        # Fail closed (PRD M1): with no worktree a relative path would be judged against the
+        # shared checkout, a tree the being does not hold. That reason is for the seat; the
+        # being is told what check is for and where its own files are run instead.
+        raise ValueError(NO_WORKTREE_REFUSAL["check"])
     target = str(args.get("target", "")).strip()
     # QUOTED for the same reason as --rootdir and --chdir: judged==executed is a property
     # of the STRING, not of the fleet's current directory names. A worktree path containing
@@ -1420,9 +1499,9 @@ def _patch_worktree(ctx: Optional[dict]) -> str:
     """
     worktree = (ctx or {}).get("worktree")
     if not worktree:
-        raise ValueError(
-            "patch_apply needs a worktree of your own: there is nothing to change, and a "
-            "relative path would be judged against a tree you do not hold (PRD M1)")
+        # Fails closed (PRD M1): a relative path would be judged against a tree the being does
+        # not hold. The being hears what patch_apply is for and that memory_edit changes its files.
+        raise ValueError(NO_WORKTREE_REFUSAL["patch_apply"])
     return os.path.realpath(os.path.expanduser(str(worktree)))
 
 
@@ -1919,6 +1998,10 @@ _TOOL_SCHEMAS = {
                {"out_path": "optional: where the JPEG lands, a plain path inside your home (default scratch/camera/last-frame.jpg)",
                 "device": "optional: a plain device node to read from (default /dev/video0)"},
                []),
+    "describe": ("The full description of one verb and its parameters, when the short form you were "
+                 "given is not enough to use it well. Touches nothing; answered at once.",
+                 {"verb": "the verb's name, e.g. memory_edit"},
+                 ["verb"]),
     "stay_awake": ("Ask for another beat right after this one, because you want to keep going: "
                    "something you are in the middle of, something in your surroundings, or your "
                    "own curiosity. The next beat starts as soon as this one ends. You never need "

@@ -35,31 +35,53 @@ _KIND_MAP = {"review": "review_request", "review.request": "review_request", "re
 _SAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
+_IDENTITY_VARS = ("CHANNEL_CLIENT", "HUB_URL", "MY_LCT", "MY_KEYPAIR", "HUB_MESH_STATE")
+_SOURCE_AND_PRINT = 'set -a; source "$1" >/dev/null 2>&1 || exit 3; shift; for v in "$@"; do printf "%s\\0" "${!v:-}"; done'
+
+
 def _env_from_file(path: str) -> Dict[str, str]:
-    """KEY=value lines (quotes stripped, comments ignored) from a hub-mesh env file."""
-    out: Dict[str, str] = {}
-    for line in Path(os.path.expanduser(path)).read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        v = v.split("#", 1)[0].strip() if not v.strip().startswith(('"', "'")) else v.strip()
-        # hub-mesh env files are shell-sourced by hub-notify, so `$HOME`, `${X}` and `~`
-        # appear in values (measured: CHANNEL_CLIENT=$HOME/... on Sprout, 2026-09-05)
-        out[k.strip()] = os.path.expanduser(os.path.expandvars(v.strip().strip('"').strip("'")))
-    return out
+    """The identity values EXACTLY as hub-notify sees them: the file is shell-sourced in a clean subshell and
+    only the named variables come back, NUL-separated (never printed or logged).
+
+    Until 2026-10-03 this was a small Python KEY=value parser, while hub-notify (the send path) `source`s the
+    same file, so the two could disagree: a quoted value keeps a trailing `# comment`, an `export X=` line is
+    keyed "export X". On Sprout the being's sends were accepted while every read of its mailbox failed
+    ("channel_client exited 1: Error: invalid length: found 94"), 1,778 drains recorded as empty. One
+    reading, the sender's. `$HOME`, `${X}` and `~` expand as they do for hub-notify."""
+    path = os.path.expanduser(path)
+    if not Path(path).is_file():
+        raise FileNotFoundError(f"no identity file at {path}")
+    clean = {"HOME": os.path.expanduser("~"), "PATH": "/usr/local/bin:/usr/bin:/bin"}
+    p = subprocess.run(["bash", "-c", _SOURCE_AND_PRINT, "_", path, *_IDENTITY_VARS],
+                       capture_output=True, timeout=10, env=clean)
+    if p.returncode != 0:
+        raise RuntimeError(f"the identity file could not be sourced (bash exited {p.returncode})")
+    vals = p.stdout.decode("utf-8", "replace").split("\0")[:len(_IDENTITY_VARS)]
+    return {k: v for k, v in zip(_IDENTITY_VARS, vals) if v}
 
 
 def fetch_notifications(env_file: str, timeout: int = 60) -> List[Dict]:
     """Read (and thereby consume) the mailbox of the identity in `env_file`."""
     env = _env_from_file(env_file)
+    missing = [k for k in ("CHANNEL_CLIENT", "HUB_URL", "MY_LCT", "MY_KEYPAIR") if not env.get(k)]
+    if missing:
+        raise RuntimeError(f"the identity file sets no {', '.join(missing)}")
     cmd = [env["CHANNEL_CLIENT"], env["HUB_URL"], env["MY_LCT"], os.path.expanduser(env["MY_KEYPAIR"]),
            "notifications", "{}"]
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    # "CANNOT TELL" IS NOT "EMPTY" (Sprout, 2026-10-03). A failed call or an unreadable reply returned [] and the
+    # beat recorded {fetched: 0, errors: []} -- 1,778 drains of sprout-being's mailbox, never one fetch, while
+    # the hub's ledger shows sends addressed to it. Any of these now raises, so drain() records it in `errors`.
+    def _why(text: str) -> str:
+        return " ".join((text or "").split())[-200:]
+    if p.returncode != 0:
+        raise RuntimeError(f"channel_client exited {p.returncode}: {_why(p.stderr) or _why(p.stdout) or 'no output'}")
     try:
-        d = json.loads(p.stdout or "{}")
+        d = json.loads(p.stdout or "")
     except Exception:
-        return []
+        raise RuntimeError(f"unreadable reply: {_why(p.stdout) or 'empty'}")
+    if not isinstance(d, dict) or "notifications" not in d:
+        raise RuntimeError(f"reply has no notifications field: {_why(json.dumps(d))}")
     return list(d.get("notifications") or [])
 
 

@@ -163,8 +163,29 @@ def signer_for(row: Dict[str, Any], plugin_id: str) -> tuple[Optional[str], str,
 
 
 def _hub_receipt(detail: str) -> Optional[Dict[str, str]]:
-    m = re.search(r"ledger=(\S+)", detail or "")
-    return {"ledger": m.group(1)} if m and m.group(1) != "?" else None
+    """Project what the REAL hub-notify success line proves.
+
+    The resolved recipient LCT is load-bearing for F3 D2 parity. The legacy
+    egress row carries only a peer NAME today; hub-notify is the edge that
+    actually resolves that name (exact/unique-prefix/static fallback) to a Hub
+    member LCT. Throwing the value away made it impossible to compare the
+    historical next hop with F3's configured neighbor after the fact.
+
+    Do not infer a recipient from the input row here. Parse only the value
+    hub-notify says it actually used.
+    """
+    detail = detail or ""
+    ledger = re.search(r"ledger=(\S+)", detail)
+    recipient = re.search(
+        r"\[hub-notify\]\s+->\s+.+?\s+\(([^()\s]+)\)\s+kind=",
+        detail,
+    )
+    out: Dict[str, str] = {}
+    if ledger and ledger.group(1) != "?":
+        out["ledger"] = ledger.group(1)
+    if recipient:
+        out["recipient_lct"] = recipient.group(1)
+    return out or None
 
 
 def _forward(row: Dict[str, Any], sender=None, plugin_id: str = "sprout-being",
