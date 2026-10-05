@@ -33,7 +33,7 @@ from sage.gateway.being_gate_client import _TOOL_SCHEMAS
 # Verbs that act on a BODY part, and the part the measured inventory must carry for them.
 BODY_VERBS = ("camera", "gaze", "speak", "pair_audio")
 # Verbs that act in the being's own git worktree.
-WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "pr_open", "pr_amend", "pr_sync")
+WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "pr_open", "pr_amend", "pr_sync", "git_clean")
 # The one-line reason for each worktree verb, short because it is paid every
 # turn. The old line, "you have no git worktree on this seat (instance.json declares none)",
 # names a config file and so reads as a step someone could take; cbp-being asked dp three times
@@ -60,6 +60,8 @@ NO_WORKTREE_HERE = {
                  "and this seat has none"),
     "pr_sync": ("it updates your pull request inside a code-repository checkout (a worktree), "
                 "and this seat has none"),
+    "git_clean": ("it deletes an untracked file in a code-repository checkout (a worktree), "
+                  "and this seat has none"),
     "camera": ("it is not enabled on this seat: here it is held to the same condition as the "
                "verbs that read a code-repository checkout (a worktree), and this seat has none; "
                "no other tool captures a frame"),
