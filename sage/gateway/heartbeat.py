@@ -320,6 +320,27 @@ POSTURE_TURN = """The rest of your beat, which every being in the fleet receives
 This is still your time. If reading this changes what you want to do, act by calling a tool: {tools}. If not, say in a few words what you noticed.
 """
 
+# The same posture turn, framed as STANDING GUIDANCE rather than as words addressed to the
+# being. PER-INSTANCE (instance.json "posture_framing": "standing_guidance"; see
+# posture_framing_for). Why: POSTURE_TURN hands the posture over "in the operator's words" as a
+# fresh user turn and closes on "say in a few words what you noticed", which reads as a message
+# from dp awaiting a reply. On cbp-being, 2026-10-03 20:41Z, the posture phase used `say` to send
+# dp thanks for a line of the posture, and it landed in dp's chat just after the being's answer to
+# an unrelated question; other posture replies open by acknowledging the posture as if it had just
+# been sent. dp's ruling: frame it as standing guidance, take no tool away. So the tools line is
+# the same, `say` included, and the posture and digest are byte-identical; only the framing and
+# the closing sentence differ.
+POSTURE_TURN_STANDING = """Standing guidance: dp's posture for every being in the fleet, given to you each beat. It is not a message and it does not await a reply; act within it.
+
+{posture}
+
+# What moved in the fleet
+
+{digest}
+
+This is still your time. If reading this changes what you want to do, act by calling a tool: {tools}. If not, end the turn with a few words on what you noticed; they are a note, not a reply to anyone.
+"""
+
 ASK = "This time is yours. What, if anything, do you want to do?\n"
 # Act-first only: the short turn is imperative, the measured-acting shape (condition C,
 # Sprout 09-05). Under the open question the distill answered as an assistant asking the
@@ -500,7 +521,12 @@ def act_after_answer_on(instance) -> bool:
 # and in ITS terms: no verb names, no "tool", no "say" (SMALL_MODEL_LEGIBILITY 1.14: harness words in the answer
 # prompt became the being's MESSAGE, "I'm sorry I didn't call a tool"; test_the_prompt_is_only_the_pending_turn_
 # and_the_ask pins it). Derived from the canonical verbs, so it changes when they do.
-_ABILITIES = [("camera", "look through your eyes"), ("search", "search your own files"),
+# search's fact says what it searches: the code repository checked out on this seat, not the being's
+# home. It said "search your own files" until the #354 follow-up, the phrasing that sent cbp-being asking
+# dp for a worktree so search could find a line in its own scratch file (see NO_WORKTREE_REFUSAL). Pinned
+# by test_no_worktree_ability_claims_the_home.
+_ABILITIES = [("camera", "look through your eyes"),
+              ("search", "search the code repository checked out on this seat (not your home)"),
               ("pr_read", "read the fleet's pull requests"), ("recall", "recall memories"),
               ("peer_ask", "ask a sibling a question"), ("speak", "speak aloud"),
               ("web_search", "search the web a few times an hour (what comes back is other people's words)")]
@@ -1056,7 +1082,8 @@ _SCHEMA_CHARS_PER_VERB = 700   # above the 651 measured, so the bound stays cons
 _SCHEMA_CHARS_FLOOR = 12_000   # at least the 18-verb measurement, for when the verb count is unknown too
 
 
-def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[dict] = None) -> Optional[int]:
+def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[dict] = None,
+                      brief: bool = False) -> Optional[int]:
     """Chars the offered verbs' schemas actually cost. None rather than a guess if it
     cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
     13 verbs to 18. Callers must route None through _schema_chars_fallback, never `or`
@@ -1070,7 +1097,8 @@ def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[d
             # here, so the cost is measured on THOSE specs, not on the full descriptions
             from sage.gateway import toolset
             names = set(offered)
-            return len(json.dumps([t for t in toolset.specs(unavail, enums) if t["function"]["name"] in names]))
+            return len(json.dumps([t for t in toolset.specs(unavail, enums, brief=brief)
+                                   if t["function"]["name"] in names]))
         from sage.gateway.being_gate_client import ollama_tools
         return len(json.dumps(ollama_tools(list(offered))))
     except Exception:
@@ -2150,6 +2178,22 @@ def no_result_line_for(cfg: Optional[dict]) -> Optional[str]:
     return v if v in NO_RESULT_LINES else None
 
 
+POSTURE_FRAMINGS = ("standing_guidance",)
+
+
+def posture_framing_for(cfg: Optional[dict]) -> Optional[str]:
+    """instance.json `posture_framing`: how the act-first posture turn introduces the posture.
+    PER-INSTANCE (RESEARCH_GENERALIZATION_RULE): absent, or any value not in POSTURE_FRAMINGS,
+    means the default POSTURE_TURN ("in the operator's words ... say in a few words what you
+    noticed"). `"standing_guidance"` uses POSTURE_TURN_STANDING, which presents the same posture as
+    standing guidance that awaits no reply. It changes prompting on a turn the being acts in, so it
+    is a behavioural change, not a factual correction; the evidence is cbp-being's alone, so it is
+    recorded in every beat record where it is on, and it is nobody else's default. Posture-first
+    beings carry the posture in the system prompt and have no posture turn, so it never reaches them."""
+    v = (cfg or {}).get("posture_framing")
+    return v if v in POSTURE_FRAMINGS else None
+
+
 ANSWERED_RUN_WAKES = ("skip",)
 
 
@@ -2587,6 +2631,8 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
       * conversations exist, nothing waiting -> the generic form, ids listed.
       * something waiting -> the person's name, the real id, and WHAT THEY SAID.
     """
+    global LAST_SELECTION_ERROR
+    LAST_SELECTION_ERROR = None     # describes THIS selection, the one whose result the beat records
     try:
         from sage.gateway import conversations as _conv
         ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
@@ -2679,9 +2725,16 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
             return ('If someone has spoken to you and you have not answered, and you have '
                     'something to say, call say with to set to one of: ' + ", ".join(ids[:6])
                     + '. Answering is not required.\n'), "", "", "", None
-    except Exception:
-        pass
+    except Exception as e:
+        # "CANNOT TELL" IS NOT "NOTHING PENDING" (2026-10-04). This swallowed every failure, so a selection
+        # that raised looked exactly like an empty inbox: on HUB, hub-claude's 09-21 question was never
+        # selected in 300+ beats while the beat records showed nothing wrong. The beat record now carries it.
+        LAST_SELECTION_ERROR = f"{type(e).__name__}: {e}"[:300]
+        print(f"[heartbeat] pending_selection failed: {LAST_SELECTION_ERROR}", file=sys.stderr)
     return "", "", "", "", None
+
+
+LAST_SELECTION_ERROR: Optional[str] = None
 
 
 def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
@@ -3056,7 +3109,7 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
             header: str, state: str, recall: str, inbox: str, digest: str,
             frame: Optional[str] = None, frames: Optional[list] = None,
             frame_metas: Optional[list] = None, museum: str = "",
-            tools: Optional[list] = None):
+            tools: Optional[list] = None, posture_framing: Optional[str] = None):
     """The explore turn(s) of a beat: (seed messages, second user turn or None).
 
     Posture-first: posture in the system prompt; one user turn with state, inbox, recall,
@@ -3110,8 +3163,9 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
     # stays with the posture: it is context, not something addressed to anyone.
     user = (header + state + f"## Your inbox\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
             + ASK_ACT_FIRST + tools_line)
-    second = POSTURE_TURN.format(posture=posture_text, digest=digest,
-                                 tools=", ".join(tools))
+    # posture_framing: per-instance (posture_framing_for); same posture, digest and tools either way.
+    _turn = POSTURE_TURN_STANDING if posture_framing == "standing_guidance" else POSTURE_TURN
+    second = _turn.format(posture=posture_text, digest=digest, tools=", ".join(tools))
     user_msg = {"role": "user", "content": user}
     if _frames:
         # A frame rides the user turn as an `images` list beside string content — the shape
@@ -3525,12 +3579,14 @@ def main(argv=None) -> int:
     except Exception:
         pass
     _enums = _enums or None
-    _explore_specs = _toolset.specs(_unavail, _enums)
+    # per instance (RESEARCH_GENERALIZATION_RULE): "brief" shortens available verbs' descriptions
+    _tool_desc_mode = _toolset.tool_descriptions_mode(instance_config(instance))
+    _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief")
     # the names are DERIVED from the specs offered, never kept beside them: the seed's tool list
     # and the window's schema measurement must describe exactly what the model is handed
     _explore_tools = [t["function"]["name"] for t in _explore_specs]
     entrusted = entrustment(instance)
-    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums)
+    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief")
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
     _state_head = f"# Your own state\n\n"
@@ -3594,6 +3650,7 @@ def main(argv=None) -> int:
     seed, posture_turn = compose(
         act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
         museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
+        posture_framing=posture_framing_for(instance_config(instance)),
         header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
                 f"{render_clock(_clock)}\n"
                 # The absolute home path is context, NOT an address to copy. Measured on
@@ -3638,6 +3695,11 @@ def main(argv=None) -> int:
     # nothing in heartbeats.jsonl and no monitor knew it had happened. BeatKilled was defined
     # on main with no producer; install_kill_handler() is that producer.
     explore = after = reflect = answer = None
+    selected = None          # the record names it; a beat killed before selection must still write its record
+    # This beat's selection error starts clean (legion-claude on #353): a failure in an earlier beat in the same
+    # process must not appear beside this beat's correct selection.
+    global LAST_SELECTION_ERROR
+    LAST_SELECTION_ERROR = None
     act_after = None
     preempted = None
     account = {"present": False, "sha256": None, "reply": "", "generates": []}
@@ -3874,6 +3936,11 @@ def main(argv=None) -> int:
         if res is None:
             continue
         for dup in (getattr(res, "duplicates", None) or []):
+            if dup.get("rule") == "one_per_conversation_per_turn":
+                interventions.append({"kind": "duplicate", "phase": ph, "effector": dup.get("effector"),
+                                      "conversation": dup.get("conversation"), "rule": dup["rule"],
+                                      "suppressed": "a second utterance to the same conversation in the same turn"})
+                continue
             interventions.append({"kind": "duplicate", "phase": ph, "effector": dup.get("effector"),
                                   "suppressed": "a second execution of an identical call in the same turn"})
         for jf in (getattr(res, "json_arg_failures", None) or []):
@@ -3953,9 +4020,11 @@ def main(argv=None) -> int:
         "member": args.member, "model": args.model, "window_h": round(hours, 2), "clock": _clock,
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
+        "tool_descriptions": _tool_desc_mode,
         "decline_closing": decline_closing_for(instance_config(instance)),
         "no_result_line": no_result_line_for(instance_config(instance)),
         "answered_run_wake": answered_run_wake_for(instance_config(instance)),
+        "posture_framing": posture_framing_for(instance_config(instance)),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,
@@ -3993,6 +4062,11 @@ def main(argv=None) -> int:
         # principle): a guard that silences without saying what it silenced trades a
         # confident wrong for a confident silence.
         "interventions": interventions,
+        # a failed turn selection, by name: without it, "no one is waiting" and "selection broke" are one record
+        "selection_error": LAST_SELECTION_ERROR,
+        # which waiting turn this beat chose, and whether it asked: "never selected" vs "selected, not answered"
+        "selected": ({"turn": f"{selected.cid}:{selected.seq}", "expects_reply": bool(selected.expects_reply),
+                      "woke": bool(getattr(selected, "woke", False))} if selected is not None else None),
         # a live trial labels the beat, so its outputs can be told from the being's ordinary ones
         "trial": _trial_name(instance),
         "account": account,

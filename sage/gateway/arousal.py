@@ -34,13 +34,28 @@ THE ONE FLOOD MECHANISM, and it drops nothing: an event whose `key` matches one 
 is COALESCED into it (count and last time move). A sustained identical event is one entry, not
 a hundred. Nothing else limits how often the being wakes; a beat that runs back-to-back with the
 next is the being staying awake because there is something to do.
+
+ON macOS THE SCHEDULER IS launchd, NOT systemd (McNugget, 2026-10-05). Until then every wake on
+a Mac failed with "no systemctl", including dp's turns through the daemon. The being ran only on
+its 30-minute launchd timer. The same three acts have launchd forms here, selected by `_backend()`:
+  * start a beat: `launchctl kickstart gui/<uid>/<heartbeat label>`, with no -k, so a running
+    beat is never killed;
+  * is a beat running: `launchctl print` reports `state = running`;
+  * start the next beat when this one ends: launchd has no transient unit ordered After= another,
+    and a helper process started by the beat is killed with the beat's job. So arm_next drops one
+    file named for the heartbeat label into a QueueDirectories folder. A separate launchd agent
+    (`sage/scripts/launchd_next_beat.sh`, example plist in sage/gateway/launchd/) waits for the
+    running beat to end, empties the queue and kickstarts the next beat. Two requests write the
+    same file, so they coalesce into one next beat, as the systemd successor does.
 """
 from __future__ import annotations
 
 import fcntl
 import json
+import glob
 import os
 import subprocess
+import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -74,6 +89,46 @@ TIMER = os.environ.get("SAGE_HEARTBEAT_TIMER", "sage-heartbeat.timer")
 #     While waiting, the unit shows LoadState=loaded, ActiveState=inactive and a Job id.
 NEXT_UNIT = "sage-heartbeat-next"
 
+# launchd (macOS). The heartbeat's label: $SAGE_HEARTBEAT_LABEL; else com.web4.sage-heartbeat.<SAGE_MACHINE>;
+# else the one com.web4.sage-heartbeat.* agent installed for this user. The successor agent is the
+# same label with "sage-heartbeat" -> "sage-heartbeat-next", watching NEXT_QUEUE_DIR.
+NEXT_QUEUE_DIR = os.path.expanduser(os.getenv("SAGE_NEXT_BEAT_QUEUE", "~/.local/state/sage/next-beat"))
+
+
+def _backend() -> str:
+    """'systemd' or 'launchd'. $SAGE_WAKE_BACKEND decides when set (tests pin it). Otherwise
+    launchd only where there is launchctl and no systemctl, which is a Mac."""
+    explicit = os.getenv("SAGE_WAKE_BACKEND", "").strip().lower()
+    if explicit in ("systemd", "launchd"):
+        return explicit
+    import shutil
+    if shutil.which("systemctl") is None and shutil.which("launchctl") is not None:
+        return "launchd"
+    return "systemd"
+
+
+def heartbeat_label() -> Optional[str]:
+    explicit = os.getenv("SAGE_HEARTBEAT_LABEL", "").strip()
+    if explicit:
+        return explicit
+    machine = os.getenv("SAGE_MACHINE", "").strip()
+    if machine:
+        return f"com.web4.sage-heartbeat.{machine}"
+    found = sorted(glob.glob(os.path.expanduser("~/Library/LaunchAgents/com.web4.sage-heartbeat.*.plist")))
+    found = [f for f in found if "sage-heartbeat-next." not in f]
+    if len(found) == 1:
+        return Path(found[0]).name[:-len(".plist")]
+    return None
+
+
+def _next_label(label: str) -> str:
+    return label.replace("sage-heartbeat.", "sage-heartbeat-next.", 1)
+
+
+def _gui(label: str) -> str:
+    return f"gui/{os.getuid()}/{label}"
+
+
 PENDING_PATH = os.path.expanduser(os.getenv("SAGE_PENDING_EVENTS", "~/.sprout/pending_events.json"))
 
 # How long the successor may take to be collected after it fired, before a new one is armed.
@@ -92,6 +147,7 @@ def _systemd_disabled() -> bool:
 
 
 def _systemd(args: list, timeout: float = 10) -> subprocess.CompletedProcess:
+    """The one door to the scheduler, systemd or launchd: SAGE_NO_SYSTEMD closes both."""
     if _systemd_disabled():
         raise FileNotFoundError("systemd calls are disabled here (SAGE_NO_SYSTEMD)")
     return subprocess.run(args, text=True, capture_output=True, timeout=timeout)
@@ -105,25 +161,84 @@ def _sh(*args: str) -> str:
 
 
 def _start_wake() -> dict:
-    """Start the beat unit now, and say whether that actually happened.
+    """Request a beat, reporting scheduler acceptance separately from execution.
 
-    `started` is the observed result of the start request, and a failure carries the reason
-    (GPT review of SAGE#81). A failed start loses nothing: the event is already in the pending
-    set and the next beat, whatever starts it, claims it."""
+    A successful nonblocking start only verifies/enqueues a job. It may coalesce with an
+    existing job, or the service may subsequently fail. `started` is retained as null for
+    compatibility: this caller has no beat-entry receipt, on success OR failure. A timeout
+    leaves acceptance unknown; it must not cause an automatic retry of an uncertain request.
+    """
+    evidence = {"wake_evidence_version": 2, "started": None}
+    if _backend() == "launchd":
+        return {**evidence, **_start_wake_launchd()}
     try:
         p = _systemd(["systemctl", "--user", "start", "--no-block", UNIT])
-    except FileNotFoundError as e:
-        return {"started": False,
-                "wake_error": f"no systemctl here ({e}); the event is pending for the next beat"}
+    except FileNotFoundError:
+        return {**evidence, "start_accepted": False,
+                "wake_error": "no systemctl: wake request could not be submitted"}
     except Exception as e:
-        return {"started": False, "wake_error": f"{type(e).__name__}: {e}"}
+        return {**evidence, "start_accepted": None, "wake_error": f"{type(e).__name__}: {e}"}
     if p.returncode != 0:
         detail = (p.stderr or p.stdout or "").strip()[:300]
-        return {"started": False, "wake_error": f"systemctl exit {p.returncode}: {detail}"}
-    return {"started": True}
+        # A client error can occur after submission (for example, losing the reply).
+        # Without a structured rejection receipt, a nonzero exit is not proof of rejection.
+        return {**evidence, "start_accepted": None,
+                "wake_error": f"systemctl exit {p.returncode}: {detail}"}
+    return {**evidence, "start_accepted": True}
+
+
+def _start_wake_launchd() -> dict:
+    """`launchctl kickstart` without -k: it starts the job if it is not running and never kills a
+    running one. Same evidence contract as systemd: exit 0 is acceptance (not beat entry), no
+    launchctl or no label is a definite non-submission, and any other failure is unknown."""
+    label = heartbeat_label()
+    if not label:
+        return {"start_accepted": False,
+                "wake_error": "no launchd heartbeat label (set SAGE_HEARTBEAT_LABEL or SAGE_MACHINE)"}
+    try:
+        p = _systemd(["launchctl", "kickstart", _gui(label)])
+    except FileNotFoundError:
+        return {"start_accepted": False, "wake_error": "no launchctl: wake request could not be submitted"}
+    except Exception as e:
+        return {"start_accepted": None, "wake_error": f"{type(e).__name__}: {e}"}
+    if p.returncode != 0:
+        detail = (p.stderr or p.stdout or "").strip()[:300]
+        return {"start_accepted": None, "wake_error": f"launchctl exit {p.returncode}: {detail}"}
+    return {"start_accepted": True}
+
+
+def _launchd_state(label: str) -> str:
+    """The job's `state = ...` line from `launchctl print`, or "" when it cannot be read."""
+    for line in _sh("launchctl", "print", _gui(label)).splitlines():
+        k, _, v = line.strip().partition(" = ")
+        if k == "state":
+            return v.strip()
+    return ""
+
+
+def delivery_text(woke: dict) -> str:
+    """Plain-text delivery evidence, shared by the console and contract-tested with Rust.
+
+    Old producers used started=true for scheduler acceptance. Never upgrade that legacy
+    field to observed beat entry. An explicit new field, including null, takes precedence.
+    """
+    accepted = (woke.get("start_accepted") if "start_accepted" in woke
+                else True if woke.get("started") is True else None)
+    if accepted is True:
+        return "recorded; wake request accepted; beat entry unconfirmed"
+    why = woke.get("wake_error")
+    why = why if isinstance(why, str) else "unknown reason"
+    if accepted is False:
+        return f"recorded; wake request was not accepted ({why}); awaiting a later beat"
+    if woke.get("engage") is True:
+        return f"recorded; wake request outcome unknown ({why}); beat entry unconfirmed"
+    return "recorded; awaiting the next beat"
 
 
 def beat_running() -> bool:
+    if _backend() == "launchd":
+        label = heartbeat_label()
+        return bool(label) and _launchd_state(label) == "running"
     return _sh("systemctl", "--user", "is-active", UNIT) in ("active", "activating")
 
 
@@ -139,6 +254,8 @@ def arm_next(*, _retry: bool = True) -> dict:
     {"armed": True} when a successor is waiting on the beat unit, including one that was already
     waiting ("already_armed": the requests coalesced). A successor that has already fired but not
     yet been collected is not a waiting one: wait for it to go (bounded), then arm a new one."""
+    if _backend() == "launchd":
+        return _arm_next_launchd()
     cmd = ["systemd-run", "--user", "--no-block", "--collect", f"--unit={NEXT_UNIT}",
            "-p", f"After={UNIT}", "systemctl", "--user", "start", "--no-block", UNIT]
     try:
@@ -164,6 +281,33 @@ def arm_next(*, _retry: bool = True) -> dict:
             return d
     return {"armed": False, "error": f"systemd-run exit {p.returncode}: {err[:300]}",
             "why": "the event stays pending for the next beat"}
+
+
+def _arm_next_launchd() -> dict:
+    """One file per heartbeat label in NEXT_QUEUE_DIR: the successor agent's QueueDirectories
+    starts it, it waits for the running beat to end, empties the queue and kickstarts the beat.
+    Reports armed only when that agent is loaded: a queued file nobody watches is not a successor."""
+    label = heartbeat_label()
+    if not label:
+        return {"armed": False, "error": "no launchd heartbeat label",
+                "why": "the event stays pending for the next beat"}
+    nxt = _next_label(label)
+    try:
+        q = Path(NEXT_QUEUE_DIR)
+        q.mkdir(parents=True, exist_ok=True)
+        f = q / label
+        already = f.exists()
+        f.write_text(f"{time.time():.3f}\n")
+    except Exception as e:
+        return {"armed": False, "error": f"{type(e).__name__}: {e}",
+                "why": "the event stays pending for the next beat"}
+    if not _launchd_state(nxt):
+        return {"armed": False, "error": f"successor agent {nxt} is not loaded",
+                "queued_file": str(f), "why": "the event stays pending for the next beat"}
+    d = {"armed": True, "by": nxt}
+    if already:
+        d["already_armed"] = True
+    return d
 
 
 # ---------------------------------------------------------------------------------------------
@@ -332,10 +476,11 @@ def request_beat(kind: str, descriptor: str, *, salience=None, key: Optional[str
         d["marker_error"] = f"{type(e).__name__}: {e}"
     if d["engage"]:
         d.update(_start_wake())
-        if not d["started"]:
-            # It may have lost a race with a beat that just started: queue behind it.
-            d["next"] = arm_next()
-            d["fallback"] = "pending; the next beat claims it"
+        if d["start_accepted"] is not True:
+            # An unsuccessful client may already have submitted the job. Do not turn
+            # uncertain acceptance into a second request through the successor path.
+            # The pending event remains available to a later event/beat/watchdog.
+            d["fallback"] = "recorded; awaiting a later beat"
     else:
         d["next"] = arm_next()
     return d

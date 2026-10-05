@@ -987,10 +987,9 @@ class HestiaF1aDispatcher:
         changed nothing" are different answers and only one of them is progress."""
         import shlex
         import subprocess
-        from sage.gateway.being_gate_client import git_restore_command
+        from sage.gateway.being_gate_client import git_restore_command, NO_WORKTREE_REFUSAL
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="git_restore needs a worktree of your own; none is configured")
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["git_restore"])
         try:
             cmd = git_restore_command(intent.args, self._git_ctx())
         except ValueError as e:
@@ -1034,10 +1033,9 @@ class HestiaF1aDispatcher:
         success means the file was the being's own addition and is now gone."""
         import shlex
         import subprocess
-        from sage.gateway.being_gate_client import git_clean_command
+        from sage.gateway.being_gate_client import git_clean_command, NO_WORKTREE_REFUSAL
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="git_clean needs a worktree of your own; none is configured")
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["git_clean"])
         try:
             cmd = git_clean_command(intent.args, self._git_ctx())
         except ValueError as e:
@@ -1092,10 +1090,10 @@ class HestiaF1aDispatcher:
         can only ever revise its own open proposal. It still cannot merge."""
         import shlex
         import subprocess
-        from sage.gateway.being_gate_client import pr_amend_command, pr_attribution
+        from sage.gateway.being_gate_client import (pr_amend_command, pr_attribution,
+                                                    NO_WORKTREE_REFUSAL)
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="pr_amend needs a worktree of your own; none is configured")
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["pr_amend"])
         try:
             cmd = pr_amend_command(intent.args, self._git_ctx())
         except ValueError as e:
@@ -1196,10 +1194,10 @@ class HestiaF1aDispatcher:
         import shlex
         import subprocess
         from sage.gateway.being_gate_client import (own_proposal_branch, pr_attribution,
-                                                    pr_base_branch, pr_sync_command)
+                                                    pr_base_branch, pr_sync_command,
+                                                    NO_WORKTREE_REFUSAL)
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="pr_sync needs a worktree of your own; none is configured")
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["pr_sync"])
         try:
             cmd = pr_sync_command(intent.args, self._git_ctx())
             branch = own_proposal_branch(self.worktree, self._git_ctx())
@@ -1367,10 +1365,10 @@ class HestiaF1aDispatcher:
         PR body says so rather than letting a trailer pass for a signature."""
         import shlex
         import subprocess
-        from sage.gateway.being_gate_client import pr_open_command, pr_attribution
+        from sage.gateway.being_gate_client import (pr_open_command, pr_attribution,
+                                                    NO_WORKTREE_REFUSAL)
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="pr_open needs a worktree of your own; none is configured")
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["pr_open"])
         try:
             cmd = pr_open_command(intent.args, self._git_ctx())
         except ValueError as e:
@@ -2190,11 +2188,9 @@ class HestiaF1aDispatcher:
         in the single resolution, not an argument for dropping the flag."""
         import shlex
         import subprocess
-        from sage.gateway.being_gate_client import git_read_command
+        from sage.gateway.being_gate_client import git_read_command, NO_WORKTREE_REFUSAL
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="git_read needs a worktree of your own; none is "
-                                       "configured on this seat")
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["git_read"])
         try:
             cmd = git_read_command(intent.args, {"worktree": self.worktree})
         except ValueError as e:
@@ -2258,10 +2254,9 @@ class HestiaF1aDispatcher:
         than universal."""
         import shlex
         import subprocess
-        from sage.gateway.being_gate_client import search_command
+        from sage.gateway.being_gate_client import search_command, NO_WORKTREE_REFUSAL
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="search needs a worktree of your own; none is configured")
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["search"])
         try:
             cmd = search_command(intent.args, {"worktree": self.worktree})
         except ValueError as e:
@@ -2427,11 +2422,10 @@ class HestiaF1aDispatcher:
         import hashlib
         import shlex
         import subprocess
-        from sage.gateway.being_gate_client import check_argv, check_command
+        from sage.gateway.being_gate_client import check_argv, check_command, NO_WORKTREE_REFUSAL
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="check needs a worktree of your own; none is configured "
-                                       "on this seat (PRD M1)")
+            # fails closed per PRD M1; the being hears what check is for (NO_WORKTREE_REFUSAL)
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["check"])
         # Rebuild the SAME command the gate judged — same function, same context. Composing
         # it differently here would mean the law ruled on one command and the seat ran
         # another, which is the whole failure this organ exists to make impossible.
@@ -2634,11 +2628,11 @@ class HestiaF1aDispatcher:
         import hashlib
         import subprocess
         from sage.gateway.being_gate_client import (diff_arg, patch_apply_argv, patch_apply_command,
-                                                    patch_digest, patch_file_path, patch_targets)
+                                                    patch_digest, patch_file_path, patch_targets,
+                                                    NO_WORKTREE_REFUSAL)
         if not self.worktree or not os.path.isdir(self.worktree):
-            return ResultEnvelope(ok=False, pending=True,
-                                  note="patch_apply needs a worktree of your own; none is "
-                                       "configured on this seat (PRD M1)")
+            # fails closed per PRD M1; the being hears what patch_apply is for
+            return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["patch_apply"])
         # Rebuild the SAME command the gate judged -- same function, same context.
         try:
             cmd = patch_apply_command(intent.args, {"worktree": self.worktree})

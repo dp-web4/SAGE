@@ -55,6 +55,38 @@ def test_availability_is_measured_not_assumed():
     assert set(nothing) == set(toolset.BODY_VERBS) | set(toolset.WORKTREE_VERBS) | {"game"}
 
 
+def test_camera_is_unavailable_where_the_gate_refuses_it():
+    """camera_command refuses without a worktree (a policy hold, unchanged here), so the toolset
+    must not offer it as working on such a seat, even when the body HAS a camera. Before this the
+    being was offered camera in full and then told "camera is not enabled on this seat"."""
+    from sage.gateway import being_gate_client as B
+    cam_body = {"inventory": {"verbs": ["camera"]}}
+    for body in (cam_body, {"inventory": {"verbs": []}}, None):
+        u = toolset.unavailable(body, None, {})
+        assert "camera" in u, (body, u)
+        assert u["camera"] == toolset.NO_WORKTREE_HERE["camera"], "the reason calling it returns"
+    why = toolset.NO_WORKTREE_HERE["camera"]
+    refusal = B.NO_WORKTREE_REFUSAL["camera"]
+    # the short note says what the refusal says: not enabled, held to the worktree condition,
+    # this seat has none, and no other tool captures a frame
+    for phrase in ("not enabled on this seat", "same condition as the verbs that read a "
+                   "code-repository checkout (a worktree)", "this seat has none",
+                   "o other tool captures a frame"):
+        assert phrase in why and phrase in refusal, phrase
+    try:
+        B.camera_command({}, {"worktree": None, "memory_root": "/tmp/x"})
+        raise AssertionError("camera composed with no worktree")
+    except ValueError as e:
+        assert str(e) == refusal, "the gate's condition is unchanged"
+    spec = {t["function"]["name"]: t["function"] for t in toolset.specs(toolset.unavailable(cam_body, None, {}))}
+    assert "CANNOT WORK" in spec["camera"]["description"] and why in spec["camera"]["description"]
+    # on a worktree seat camera is exactly as before: available when the body has one, the body
+    # reason when it does not
+    assert "camera" not in toolset.unavailable(cam_body, "/wt", {})
+    assert toolset.unavailable({"inventory": {"verbs": []}}, "/wt", {})["camera"] == \
+        "this machine's body has no camera (measured)"
+
+
 def test_the_whole_toolset_costs_less_where_less_can_work():
     rich = len(json.dumps(toolset.specs({})))
     poor = len(json.dumps(toolset.specs(toolset.unavailable({"inventory": {"verbs": []}}, None, {}))))

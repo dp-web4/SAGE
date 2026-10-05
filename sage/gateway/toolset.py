@@ -34,6 +34,45 @@ from sage.gateway.being_gate_client import _TOOL_SCHEMAS
 BODY_VERBS = ("camera", "gaze", "speak", "pair_audio")
 # Verbs that act in the being's own git worktree.
 WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "pr_open", "pr_amend", "pr_sync", "git_clean")
+# The one-line reason for each worktree verb, short because it is paid every
+# turn. The old line, "you have no git worktree on this seat (instance.json declares none)",
+# names a config file and so reads as a step someone could take; cbp-being asked dp three times
+# for a worktree so `search` could find lines in its own scratch file, which search can never
+# read. Each line says what the verb reads and which tool serves the being's own files. The
+# full refusal the verb itself returns is being_gate_client.NO_WORKTREE_REFUSAL.
+NO_WORKTREE_HERE = {
+    "search": ("it searches a code-repository checkout (a worktree), not your home, and this "
+               "seat has none; to read lines in your own files use memory_read with "
+               "start_line"),
+    "git_read": ("it reads the git history of a code-repository checkout (a worktree), not "
+                 "your home, and this seat has none; to read your own files use memory_read"),
+    "check": ("it runs the test suites of a code-repository checkout (a worktree), not your "
+              "home, and this seat has none; to run one of your own files use request_run"),
+    "patch_apply": ("it changes files in a code-repository checkout (a worktree), not your "
+                    "home, and this seat has none; to change lines of your own files use "
+                    "memory_edit"),
+    "git_restore": ("it restores a file from git history in a code-repository checkout (a "
+                    "worktree), not your home, and this seat has none; to put lines of your own "
+                    "files back use memory_edit"),
+    "pr_open": ("it opens a pull request from commits in a code-repository checkout (a "
+                "worktree), and this seat has none"),
+    "pr_amend": ("it revises your pull request from a code-repository checkout (a worktree), "
+                 "and this seat has none"),
+    "pr_sync": ("it updates your pull request inside a code-repository checkout (a worktree), "
+                "and this seat has none"),
+    "git_clean": ("it deletes an untracked file in a code-repository checkout (a worktree), "
+                  "and this seat has none"),
+    "camera": ("it is not enabled on this seat: here it is held to the same condition as the "
+               "verbs that read a code-repository checkout (a worktree), and this seat has none; "
+               "no other tool captures a frame"),
+}
+# Verbs that never touch a worktree but that the GATE still refuses without one. camera is the
+# only one: camera_command raises NO_WORKTREE_REFUSAL["camera"] when ctx has no worktree (a policy
+# hold, see the comment there). Until this list, the toolset offered camera in full on such a
+# seat (or said "this machine's body has no camera"), while calling it returned "camera is not
+# enabled on this seat". Availability now follows the gate's condition, which is unchanged; the
+# no-worktree reason wins over the body reason because it is the one calling the verb returns.
+WORKTREE_HELD_VERBS = ("camera",)
 
 
 def canonical_toolset() -> List[str]:
@@ -62,15 +101,57 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
                     "pair_audio": "audio link to pair"}.get(v, "such part")
             out[v] = f"this machine's body has no {part} (measured)"
     if not worktree:
-        for v in WORKTREE_VERBS:
+        for v in WORKTREE_VERBS + WORKTREE_HELD_VERBS:
             if v in _TOOL_SCHEMAS:
-                out[v] = "you have no git worktree on this seat (instance.json declares none)"
+                out[v] = NO_WORKTREE_HERE.get(
+                    v, "it works in a code-repository checkout (a worktree), and this seat has none")
     if "game" in _TOOL_SCHEMAS and not (cfg or {}).get("game_stepper"):
         out["game"] = "no game is set up on this seat (instance.json has no game_stepper)"
     return out
 
 
-def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, list]] = None) -> List[dict]:
+# BRIEF DESCRIPTIONS (opt-in per instance, `tool_descriptions: "brief"`; dp, 2026-10-03). Measured on
+# legion-being: the seed that compaction cannot touch grew 15.7k -> 17.1k tokens in a week, much of it
+# verb schemas (33 verbs, 23.8k chars, descriptions 47% of that), leaving ~1.3k tokens of a 18.4k
+# compaction target for a whole beat's work; long beats retried ~50% of generates at the window. In
+# brief mode an available verb's description is its first sentence, capped, plus a pointer to
+# `describe`, which returns the full text. Parameters, enums and required keys are untouched: they
+# are what make a call well-formed. Per instance (RESEARCH_GENERALIZATION_RULE): measured on one being.
+BRIEF_DESC_CHARS = 160
+DESCRIBE = "describe"
+
+
+def tool_descriptions_mode(cfg: Optional[dict]) -> str:
+    """instance.json `tool_descriptions`: "brief" opts in; anything else is the full descriptions."""
+    return "brief" if str((cfg or {}).get("tool_descriptions", "")).strip().lower() == "brief" else "full"
+
+
+def brief_description(name: str, desc: str) -> str:
+    """The first sentence of a verb's description, capped at BRIEF_DESC_CHARS, and -- when that cut
+    anything -- where the rest is. Never shorter than what it replaces; a short description stays whole."""
+    import re
+    m = re.match(r"(.+?[.!?])(\s|$)", desc.strip(), re.S)
+    first = (m.group(1) if m else desc.strip())
+    if len(first) > BRIEF_DESC_CHARS:
+        first = first[:BRIEF_DESC_CHARS - 1].rstrip() + "…"
+    if first.strip() == desc.strip():
+        return desc
+    return f"{first} (Full text: {DESCRIBE} {name}.)"
+
+
+def full_text(name: str) -> str:
+    """What `describe` answers: the verb's whole description and each parameter's, from the schema table."""
+    if name not in _TOOL_SCHEMAS:
+        return (f"there is no verb called {name!r}. Verbs: " + ", ".join(canonical_toolset()))
+    desc, props, required = _TOOL_SCHEMAS[name]
+    lines = [f"{name}: {desc}"]
+    for k, v in props.items():
+        lines.append(f"  {k}{' (required)' if k in required else ''}: {v}")
+    return "\n".join(lines)
+
+
+def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, list]] = None,
+          *, brief: bool = False) -> List[dict]:
     """The Ollama tool specs for the whole canonical toolset. Available verbs carry their full
     description; an unavailable one carries one line and the reason, parameters intact."""
     unavail = unavail or {}
@@ -90,6 +171,8 @@ def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, 
             # long descriptions go, since they are what made an unusable verb cost ~700 chars
             properties = {k: {"type": "string"} for k in props}
         else:
+            if brief and name != DESCRIBE:
+                desc = brief_description(name, desc)
             properties = {k: dict({"type": "string", "description": v},
                                   **({"enum": list(closed[(name, k)])} if closed.get((name, k)) else {}))
                           for k, v in props.items()}

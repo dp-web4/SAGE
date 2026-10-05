@@ -19,6 +19,7 @@ import ast
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -75,6 +76,18 @@ REPEAT_NUDGE_AT = 3          # identical consecutive calls before the harness na
 
 REPEAT_BREAK_AT = 6          # ... and before it ends the tool phase
 
+
+def _conversation_of(intent) -> Optional[str]:
+    """The conversation an utterance lands in, for the one-per-conversation-per-turn key: `say` -> its `to`
+    (case-folded), `speak` -> "room" (voice is the room conversation). None for every other act, and for a
+    say with no `to`, which the dispatcher refuses on its own."""
+    if intent.effector == "speak":
+        return "room"
+    if intent.effector == "say":
+        to = str((intent.args or {}).get("to") or "").strip().lower()
+        return to or None
+    return None
+
 def _fingerprint(intents) -> Optional[str]:
     """What makes two steps 'the same call'. None when it cannot be computed, which never
     counts as a repeat — an unfingerprintable step must not end a turn."""
@@ -103,6 +116,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     trace: List[Tuple[BeingIntent, ResultEnvelope]] = []
     done_ok: set = set()
     duplicates: List[dict] = []
+    spoke_in: set = set()                              # conversations this turn has delivered a say/speak to
     last_fp, repeats = None, 0
     stay_awake = None
 
@@ -127,6 +141,14 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
         convo.append({"role": "assistant", "content": content, "intents": intents})
         rested = None
         for intent in intents:
+            if intent.effector == "describe":
+                # Never dispatched: it reads the schema table and touches nothing (toolset.DESCRIBE).
+                from sage.gateway.toolset import full_text
+                env = ResultEnvelope(ok=True, result=full_text(str((intent.args or {}).get("verb") or "").strip()),
+                                     note="describe")
+                trace.append((intent, env))
+                convo.append({"role": "tool", "effector": intent.effector, "content": env.to_tool_message()})
+                continue
             if intent.effector == STAY_AWAKE:
                 stay_awake = str((intent.args or {}).get("reason") or "").strip() or "(no reason given)"
                 env = ResultEnvelope(ok=True, result=("noted: the next beat starts as soon as this one "
@@ -154,9 +176,27 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                 trace.append((intent, env))
                 convo.append({"role": "tool", "effector": intent.effector, "content": env.to_tool_message()})
                 continue
+            # ONE UTTERANCE PER CONVERSATION PER TURN (dp, 2026-10-04: "is this not basic idempotence?"). The
+            # byte key above misses a model that REGENERATES instead of replaying: since 10-01, 21 second
+            # says to the same conversation in one turn, 18 copies, re-drafts or harness echoes (03:36Z: one
+            # check-in to dp sent 3x in 34 s, first 300 chars byte-identical), and no similarity cutoff
+            # separates them from the 3 genuine follow-ups. So the key is the conversational move itself:
+            # after a DELIVERED say to a conversation, a later one this turn is not sent; it can wait a beat.
+            conv = _conversation_of(intent)
+            if conv is not None and conv in spoke_in:
+                env = ResultEnvelope(ok=False, error=f"not sent: you already spoke in '{conv}' this turn. "
+                                                     f"Anything more can go in your next beat.",
+                                     note="one_per_conversation")
+                duplicates.append({"step": step, "effector": intent.effector, "conversation": conv,
+                                   "rule": "one_per_conversation_per_turn"})
+                trace.append((intent, env))
+                convo.append({"role": "tool", "effector": intent.effector, "content": env.to_tool_message()})
+                continue
             env = client.dispatch(intent)                  # gate + F1a dispatch + consume
             if env.ok:
                 done_ok.add(key)
+                if conv is not None:
+                    spoke_in.add(conv)
             trace.append((intent, env))
             convo.append({"role": "tool", "effector": intent.effector,
                           "content": env.to_tool_message()})
@@ -470,6 +510,41 @@ _ELIDED_SIGIL = "characters elided from the middle"
 # A stub that is itself collapsed, oldest first, once the stubs are what fills the window.
 _COLLAPSED_SIGIL = "collapsed to a pointer"
 COMPACT_STUBS_KEPT = 8         # the newest elision stubs are never collapsed: recent context
+
+# AN EMPTY TURN'S THINKING HAD NO READ SURFACE. The stderr line keeps 200 chars of it and
+# the beat record 4,000, so a generate that thought for 8,000 tokens and answered nothing
+# could not be read: legion-being 2026-10-05, at num_ctx 32768, retried 6 of 19 generates,
+# every one thinking until prompt + eval == num_ctx or eval == num_predict_think, ~5 min
+# each. Whether that is a "Wait —" loop or long real deliberation decides the remedy
+# (sampling vs budget), and nothing kept the text that would say which. Kept whole, in
+# the being's own scratch (private), by age like the spills.
+EMPTY_THINKING_DIR = "scratch/empty-thinking"
+EMPTY_THINKING_KEEP_S = 7 * 24 * 3600
+
+
+def keep_empty_thinking(root: Optional[str], raw: dict, msg: dict) -> Optional[str]:
+    """Write an empty turn's whole thinking to <root>/scratch/empty-thinking/ and return the
+    relative path, or None (no root, nothing thought, or the write failed: never raises)."""
+    thinking = str((msg or {}).get("thinking") or "")
+    if not root or not thinking.strip():
+        return None
+    try:
+        d = os.path.join(root, EMPTY_THINKING_DIR)
+        os.makedirs(d, exist_ok=True)
+        now = time.time()
+        for n in os.listdir(d):
+            p = os.path.join(d, n)
+            if os.path.isfile(p) and now - os.path.getmtime(p) > EMPTY_THINKING_KEEP_S:
+                os.remove(p)
+        name = time.strftime("%Y%m%d-%H%M%S", time.gmtime(now)) + f"-{int(now * 1000) % 1000:03d}.txt"
+        head = (f"done_reason={(raw or {}).get('done_reason')} "
+                f"prompt_eval={(raw or {}).get('prompt_eval_count')} "
+                f"eval={(raw or {}).get('eval_count')} chars={len(thinking)}\n\n")
+        with open(os.path.join(d, name), "w", encoding="utf-8") as f:
+            f.write(head + thinking)
+        return f"{EMPTY_THINKING_DIR}/{name}"
+    except OSError:
+        return None
 
 
 def _spill_age_s(name: str, now: float) -> Optional[float]:
@@ -1059,6 +1134,9 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                   f"prompt_eval={raw.get('prompt_eval_count')} eval={raw.get('eval_count')} "
                   f"raw_content={str(msg.get('content', ''))[:200]!r} "
                   f"thinking={str(msg.get('thinking', ''))[:200]!r}", file=_sys.stderr)
+            _kept = keep_empty_thinking(getattr(client, "memory_root", None), raw, msg)
+            if _kept:
+                print(f"[tool-loop] EMPTY turn's whole thinking kept: {_kept}", file=_sys.stderr)
             # Qwen3.8 (heretic) sometimes re-opens a think block even with think=false and
             # spends the whole budget there (measured 5/10 turns, 2026-09-03). Give it room
             # ONCE to finish and act, rather than recording silence as the being's choice.
@@ -1099,10 +1177,20 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                     _cut = (f"and the window cut it before any tool call. The window will not grow."
                             if raw.get("done_reason") == "length"
                             else f"and then stopped without writing anything in your reply.")
+                    # NAME WHERE THE DELIBERATION WENT. legion-being 2026-10-05, at num_ctx 32768:
+                    # six of six kept empty turns were 18-28k chars of thinking that drafted the
+                    # code it meant to write (whole functions), cut before the write. The retry
+                    # said "act now" and nothing about the draft, so the next attempt derived it
+                    # again from scratch. The draft is kept (keep_empty_thinking); say so.
+                    _where = (f"Your whole deliberation is saved as {_kept} -- memory_read a "
+                              f"narrow range of it to reuse what you drafted rather than "
+                              f"deriving it again, and draft long code in a scratch file "
+                              f"(memory_write) rather than in your thinking. "
+                              if _kept else "")
                     msgs.append({"role": "user", "content": (
                         f"[harness] Your previous attempt spent its whole budget deliberating "
                         f"({raw.get('eval_count')} tokens) {_cut} "
-                        f"Act now: one tool call. The "
+                        f"{_where}Act now: one tool call. The "
                         f"deliberation belongs in journal.md, after the act.")})
                 from contextlib import ExitStack
                 with ExitStack() as _stack:
