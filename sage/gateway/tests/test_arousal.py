@@ -7,8 +7,8 @@ should not be artificial cap on beats".
 
 Until #295 this file pinned the opposite: a GRADED policy (digest 0.1 and unknown kinds 0.2 never
 woke the being), REFRACTORY (8 min), a "beat already due" hold-back and an hourly cap. What stays
-from it: every decision says why, the daemon's CLI answers in JSON, and `started` is observed,
-never assumed (GPT review of SAGE#81).
+from it: every decision says why, the daemon's CLI answers in JSON, and scheduler acceptance is observed,
+never promoted to heartbeat entry (GPT review of SAGE#81).
 
 Every test here runs against a FAKE systemd (`FakeSystemd`): the conftest makes arousal's real
 systemd door refuse, and the pending set lives in a temp dir.
@@ -50,7 +50,7 @@ def test_every_kind_wakes_the_being_including_those_below_the_old_bar(sysd, tmp_
     for kind in list(arousal.SALIENCE) + ["mesh_notice", "something-new"]:
         sysd.running = False
         d = arousal.respond(tmp_path, kind, descriptor=f"a {kind}")
-        assert d["engage"] is True and d["started"] is True, (kind, d)
+        assert d["engage"] is True and d["start_accepted"] is True and d["started"] is None, (kind, d)
         assert d["reason"], kind
         assert d["salience"] == arousal.SALIENCE.get(kind, arousal.DEFAULT_SALIENCE)
     assert sysd.starts == len(arousal.SALIENCE) + 2
@@ -68,7 +68,7 @@ def test_the_bars_and_caps_are_gone_from_the_code():
 def test_no_refractory_an_event_right_after_a_beat_starts_the_next(sysd, tmp_path):
     (tmp_path / "heartbeats.jsonl").write_text(json.dumps({"t0": 0, "elapsed_s": 1}) + "\n")
     d = arousal.respond(tmp_path, "seat_turn", descriptor="seat wrote 2 s after the beat ended")
-    assert d["engage"] is True and d["started"] is True and "refractory" not in json.dumps(d)
+    assert d["engage"] is True and d["start_accepted"] is True and d["started"] is None and "refractory" not in json.dumps(d)
 
 
 def test_an_event_mid_beat_is_queued_not_dropped_and_starts_the_next_beat(sysd, tmp_path):
@@ -144,15 +144,15 @@ def test_a_fired_successor_is_not_mistaken_for_a_waiting_one(sysd, monkeypatch):
 def test_a_failed_start_keeps_the_event_pending(sysd, tmp_path):
     sysd.start_rc = 5
     d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
-    assert d["engage"] is True and d["started"] is False and "exit 5" in d["wake_error"]
+    assert d["engage"] is True and d["start_accepted"] is None and d["started"] is None and "exit 5" in d["wake_error"]
     assert "dp_turn:dp spoke" in _pending(), "a failed start loses nothing"
 
 
 def test_no_systemctl_at_all_keeps_the_event_pending(tmp_path):
     """The conftest's refusing door stands in for a host with no systemctl (McNugget: launchd)."""
     d = arousal.respond(tmp_path, "dp_turn", descriptor="dp spoke")
-    assert d["started"] is False and "no systemctl" in d["wake_error"]
-    assert d["next"]["armed"] is False and "dp_turn:dp spoke" in _pending()
+    assert d["start_accepted"] is False and d["started"] is None and "no systemctl" in d["wake_error"]
+    assert "next" not in d and "dp_turn:dp spoke" in _pending()
 
 
 def test_a_claim_moves_the_set_and_a_dead_beats_claim_is_absorbed(sysd):

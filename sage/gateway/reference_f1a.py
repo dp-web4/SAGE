@@ -100,6 +100,72 @@ def _named_file_stamps(content: str, root: Path, written: Path) -> str:
     return (" Files this names: " + "; ".join(out) + ".") if out else ""
 
 
+# A REPLACE KEEPS THE OLD COPY. legion-being, 2026-09-27..10-04: of 537 whole-file replaces, four
+# took a large file to almost nothing (todo.md 143 KB -> 1.1 KB, 48 KB -> 1.9 KB, 102 KB -> 385 B;
+# a worktree test file 90 KB -> 12 B), at least two by mistake ("I overwrote a 102KB todo.md
+# without reading it first"). The receipt said so every time, AFTER the bytes were gone, and a
+# 100 KB file cannot be retyped through a 24k window. So the previous version of any file of
+# REPLACE_KEEP_MIN bytes or more is copied into the being's own home first, the receipt names it,
+# and memory_write mode='restore' puts the newest copy back in one call. Nothing is refused:
+# a deliberate clean-up costs nothing and stays one step from undone.
+REPLACE_KEEP_DIR = "scratch/replaced"
+REPLACE_KEEP_MIN = 4096
+REPLACE_KEEP_S = 7 * 24 * 3600
+
+
+def _kept_name(p, roots) -> str:
+    """A flat, readable name for p's kept copies: its path under the root it lives in, '/' -> '__'."""
+    from pathlib import Path as _P
+    rp = _P(p).resolve()
+    for r in roots:
+        if r:
+            try:
+                return str(rp.relative_to(_P(r).resolve())).replace("/", "__")
+            except ValueError:
+                continue
+    return rp.name
+
+
+def _keep_previous(p, memory_root, roots) -> str:
+    """Copy p's current bytes into <home>/scratch/replaced/<UTC stamp>-<name>; prune copies older than
+    REPLACE_KEEP_S. Returns the home-relative path of the copy, or '' when the copy could not be made."""
+    import shutil
+    import time as _t
+    from pathlib import Path as _P
+    d = _P(memory_root) / REPLACE_KEEP_DIR
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        name = f"{_t.strftime('%Y%m%d-%H%M%S', _t.gmtime())}-{_kept_name(p, roots)}"
+        dest = d / name
+        n = 0
+        while dest.exists():
+            n += 1
+            dest = d / f"{name}.{n}"
+        shutil.copy2(p, dest)
+        now = _t.time()
+        for old in d.iterdir():
+            try:
+                import calendar
+                age = now - calendar.timegm(_t.strptime(old.name[:15], "%Y%m%d-%H%M%S"))
+            except ValueError:
+                continue
+            if age > REPLACE_KEEP_S:
+                old.unlink(missing_ok=True)
+        return f"{REPLACE_KEEP_DIR}/{dest.name}"
+    except Exception:
+        return ""
+
+
+def _newest_kept(p, memory_root, roots):
+    from pathlib import Path as _P
+    d = _P(memory_root) / REPLACE_KEEP_DIR
+    suffix = "-" + _kept_name(p, roots)
+    if not d.is_dir():
+        return None
+    hits = sorted(x for x in d.iterdir() if x.name[15:].split(".")[0] == suffix or x.name[15:] == suffix)
+    return hits[-1] if hits else None
+
+
 def _python_status(p) -> str:
     """For a .py file: whether Python can PARSE it now, as one sentence for a receipt.
 
@@ -1324,6 +1390,23 @@ class ReferenceF1aDispatcher:
         self._rerouted_from = None
         p = self._safe_path(intent.args["path"], writing=True)
         _rerouted = self._rerouted_from
+        _roots = (self.memory_root, getattr(self, "worktree", None))
+        if str(intent.args.get("mode", "")).strip().lower() == "restore":
+            kept = _newest_kept(p, self.memory_root, _roots)
+            if kept is None:
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_write mode='restore': no kept copy of {p.name}. A copy is kept only when a "
+                    f"file of {REPLACE_KEEP_MIN} bytes or more is replaced, for "
+                    f"{REPLACE_KEEP_S // 86400} days, in {REPLACE_KEEP_DIR}/"))
+            import shutil
+            now_kept = _keep_previous(p, self.memory_root, _roots) if p.exists() else ""
+            before = p.stat().st_size if p.exists() else 0
+            shutil.copyfile(kept, p)
+            return ResultEnvelope(ok=True, result=(
+                f"RESTORED {p.name} from {REPLACE_KEEP_DIR}/{kept.name} — was {before} bytes, now "
+                f"{p.stat().st_size}." + (f" The version you just replaced is kept too, at {now_kept}."
+                                           if now_kept else "")),
+                witness_id=self._witness(f"memory_write restore {p.name} <- {kept.name}"))
         err = missing_args(intent.args, ("path", "content"), "memory_write", _hint)
         if err:
             return ResultEnvelope(ok=False, error=err)
@@ -1335,8 +1418,9 @@ class ReferenceF1aDispatcher:
         # runs). Both times it reasoned correctly from a false model of its own instrument.
         mode = str(intent.args.get("mode", "append")).strip().lower()
         if mode not in ("append", "replace"):
-            return ResultEnvelope(ok=False, error=f"memory_write 'mode' is 'append' (the default) "
-                                                  f"or 'replace'; got {mode!r}")
+            return ResultEnvelope(ok=False, error=f"memory_write 'mode' is 'append' (the default), "
+                                                  f"'replace', or 'restore' (put back the version a "
+                                                  f"replace kept); got {mode!r}")
         # Existence, not line count, decides "created": an existing EMPTY file has 0 lines and
         # was not created by this write (GPT review on #141).
         existed = p.exists()
@@ -1394,6 +1478,9 @@ class ReferenceF1aDispatcher:
                     f"what you did or plan to do, memory_write it to journal.md or todo.md "
                     f"instead.") + _python_status(p))
         p.parent.mkdir(parents=True, exist_ok=True)
+        kept = ""
+        if mode == "replace" and existed and before_bytes >= REPLACE_KEEP_MIN:
+            kept = _keep_previous(p, self.memory_root, _roots)
         with open(p, "w" if mode == "replace" else "a") as fh:
             fh.write(content + ("\n" if not content.endswith("\n") else ""))
         after_bytes = p.stat().st_size
@@ -1404,7 +1491,10 @@ class ReferenceF1aDispatcher:
                       f"append is the default, pass mode='replace' to overwrite)")
         if mode == "replace":
             result = (f"REPLACED the file with {len(content)} chars at {p} — was {before_bytes} "
-                      f"bytes, now {after_bytes}.{where_line}")
+                      f"bytes, now {after_bytes}.{where_line}"
+                      + (f" The previous version ({before_bytes} bytes) is kept at {kept}; if this "
+                         f"replace was a mistake, memory_write path='{intent.args['path']}' "
+                         f"mode='restore' puts it back." if kept else ""))
         elif not existed:
             result = (f"created {p.name} with {len(content)} chars at {p} — was 0 bytes, now "
                       f"{after_bytes}.{where_line}")

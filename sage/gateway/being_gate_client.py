@@ -2037,7 +2037,7 @@ _TOOL_SCHEMAS = {
                      "find days later.",
                      {"path": "path to your note",
                       "content": "what to write",
-                      "mode": "'append' (default) or 'replace' — replace overwrites the whole file"},
+                      "mode": "'append' (default), 'replace' (overwrites the whole file; a file of 4 KB or more is kept first), or 'restore' (puts back the version the last replace kept; content may be empty)"},
                      ["path", "content"]),
     "channel_egress": ("Send a message out through a sealed channel.",
                        {"to": "recipient", "body": "your message"}, ["to", "body"]),
