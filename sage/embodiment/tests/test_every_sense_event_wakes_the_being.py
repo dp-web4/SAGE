@@ -73,11 +73,11 @@ def test_the_cortex_detectors_define_an_event_not_salience():
 def test_a_sense_event_below_the_old_bars_starts_a_beat(world, frame):
     p, sysd, noticed, logged = world
     d = p.sense(frame, now=time.time())
-    assert d["engage"] is True and d["started"] is True and sysd.starts == 1
+    assert d["engage"] is True and d["start_accepted"] is True and d["started"] is None and sysd.starts == 1
     assert noticed == [frame["descriptor"]], "between beats, the being still voices it"
     [e] = arousal.peek_pending()
     assert e["kind"] == "sense" and e["salience"] == frame["salience"]["salience"], "recorded, not read"
-    assert logged[-1]["kind"] == "noticed" and logged[-1]["beat"]["started"] is True
+    assert logged[-1]["kind"] == "noticed" and logged[-1]["beat"]["start_accepted"] is True and logged[-1]["beat"]["started"] is None
 
 
 def test_no_cooldown_no_hourly_cap_n_events_n_beats(world):
@@ -90,6 +90,18 @@ def test_no_cooldown_no_hourly_cap_n_events_n_beats(world):
         arousal.claim_pending(f"b{i}")
         sysd.beat_ends()
     assert sysd.starts == 12
+
+
+@pytest.mark.parametrize("rc,accepted", [(0, True), (1, None), (-15, None)])
+def test_sense_log_and_console_preserve_acceptance_not_entry(world, capsys, rc, accepted):
+    p, sysd, _, logged = world
+    sysd.start_rc = rc
+    p.sense(_frame(motion=0.2), now=time.time())
+    evidence = logged[-1]["beat"]
+    assert evidence["wake_evidence_version"] == 2
+    assert evidence["start_accepted"] is accepted and evidence["started"] is None
+    text = capsys.readouterr().out
+    assert "beat entry unconfirmed" in text and "beat started" not in text
 
 
 def test_an_event_mid_beat_is_queued_with_no_noticing_and_starts_the_next_beat(world):
@@ -126,7 +138,7 @@ def test_the_daemon_is_not_consulted_to_decide_a_wake(world, monkeypatch):
     p, sysd, _, _ = world
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("presence read the daemon")))
-    assert p.sense(_frame(motion=0.2), now=time.time())["started"] is True
+    assert p.sense(_frame(motion=0.2), now=time.time())["start_accepted"] is True
     assert not hasattr(P, "LOW_ATP") and not hasattr(p, "_read_energy")
 
 
@@ -135,7 +147,7 @@ def test_the_marker_names_the_event_and_a_failed_start_keeps_it_pending(world, t
     p, sysd, _, _ = world
     sysd.start_rc = 1
     d = p.sense(_frame(motion=0.2, descriptor="someone walked in"), now=time.time())
-    assert d["started"] is False
+    assert d["start_accepted"] is None and d["started"] is None
     assert [e["descriptor"] for e in arousal.peek_pending()] == ["someone walked in"], "nothing lost"
     w = being_join.consume_wake_marker()
     assert w["by"] == "presence" and w["descriptor"] == "someone walked in"
