@@ -23,7 +23,9 @@ def _client(mech):
     c._profile = object()
     c._mech = mech
     c._core = SimpleNamespace(
-        NormalizedEvent=lambda **kw: SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command")),
+        # paths too: the real NormalizedEvent always carries the rooted paths _normalize computed
+        NormalizedEvent=lambda **kw: SimpleNamespace(raw=kw.get("raw", {}), tool=kw.get("tool"), command=kw.get("command"),
+                                                     paths=kw.get("paths", [])),
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
@@ -600,3 +602,22 @@ def test_unregistered_verb_with_a_script_arg_names_request_run():
     for args in ({"command": "ls --x=a.py -q.py"}, {"n": 3}, {}):
         v = _client(_allows).gate(BeingIntent("run_command", args))
         assert v.rule == "registry.unbounded" and "request_run" not in v.reason, (args, v)
+
+
+def test_single_gate_judges_the_relative_memory_path_at_the_being_home():
+    """Sprout, 2026-10-05 19:24Z: after hestia #1231 activated the single-gate branch, every relative
+    `journal.md`/`todo.md` write was refused "'journal.md' is not granted" although the grant was the
+    being's home: the RAW arg went to decide() with cwd=workspace. decide() must see the same rooted path
+    the dispatcher touches (reference_f1a._safe_path), exactly as the legacy stage already did."""
+    import os
+    c, calls = _sg_client("allow")
+    c.memory_root = "/tmp/being-home"
+    c._core = SimpleNamespace(NormalizedEvent=lambda **kw: SimpleNamespace(**kw))
+    c.gate(BeingIntent("memory_write", {"path": "journal.md", "content": "x"}))
+    ev, _ = calls[-1]
+    assert ev["tool_input"]["path"] == os.path.realpath("/tmp/being-home/journal.md"), ev["tool_input"]
+    assert ev["tool_input"]["content"] == "x" and ev["raw"]["path"] == "journal.md", "raw keeps what the being said"
+    c.gate(BeingIntent("memory_read", {"path": "/tmp/being-home/todo.md"}))
+    assert calls[-1][0]["tool_input"]["path"] == os.path.realpath("/tmp/being-home/todo.md")
+    c.gate(PEER)
+    assert calls[-1][0]["tool_input"] == PEER.args, "verbs with no path args are passed through unchanged"
