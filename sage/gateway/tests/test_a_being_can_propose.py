@@ -139,6 +139,7 @@ def test_pr_open_commits_with_the_beings_trailers_and_runs_the_judged_gh_command
     monkeypatch.setenv("SAGE_PR_BASE", "main")
     monkeypatch.setenv("SAGE_SEAT", "legion-claude")
     origin, wt, g = _repo(tmp_path)
+    g("push", "-q", "origin", "HEAD:main")   # the base pr_open cuts from
     bindir = _fake_gh(tmp_path, monkeypatch)
     (wt / "test_new.py").write_text("def test_it():\n    assert False\n")
     d = _disp(tmp_path, wt)
@@ -172,6 +173,7 @@ def test_pr_open_refuses_to_carry_the_beings_own_record_into_a_public_pr(tmp_pat
     """SAGE #157: a 2-file change opened carrying 141 sage/instances/ files."""
     monkeypatch.setenv("SAGE_PR_BASE", "main")
     _, wt, g = _repo(tmp_path)
+    g("push", "-q", "origin", "HEAD:main")
     bindir = _fake_gh(tmp_path, monkeypatch)
     (wt / "sage" / "instances" / "legion-being").mkdir(parents=True)
     (wt / "sage" / "instances" / "legion-being" / "journal.md").write_text("private\n")
@@ -184,9 +186,10 @@ def test_pr_open_refuses_to_carry_the_beings_own_record_into_a_public_pr(tmp_pat
     assert (wt / "real_change.py").exists(), "a refusal must not destroy the being's work"
 
 
-def test_pr_open_says_what_the_branch_carries_when_its_base_is_behind_main(tmp_path, monkeypatch):
-    """2026-09-21: a 41-line change opened as 198 files / 31,456 insertions, and the answer
-    was a URL. The PR body and the being's own answer now both say what the branch carries."""
+def test_pr_open_cuts_from_the_base_not_from_head(tmp_path, monkeypatch):
+    """2026-09-21: a 41-line change opened as 198 files; 2026-10-05: #360 cut from #272's
+    branch. The branch is now cut from origin/<base>, so lineage on the worktree's branch is
+    not carried and the base the PR was cut from is recorded for pr_sync."""
     monkeypatch.setenv("SAGE_PR_BASE", "main")
     _, wt, g = _repo(tmp_path)
     bindir = _fake_gh(tmp_path, monkeypatch)
@@ -201,10 +204,11 @@ def test_pr_open_says_what_the_branch_carries_when_its_base_is_behind_main(tmp_p
         "slug": "one-line", "title": "one small change here", "body": "b"}))
     assert env.ok, env.error
     carry = env.result["carries"]
-    assert carry["commits"] == 3 and carry["files"] == 3 and carry["behind_main"] == 1, carry
-    assert carry["mine_only"] is False
-    assert "Read the last commit, not the PR diff" in (bindir / "gh.body").read_text()
-    assert "only your newest" in env.result["note"]
+    assert carry["commits"] == 1 and carry["files"] == 1 and carry["mine_only"] is True, carry
+    assert carry["behind_main"] == 0, carry
+    assert g("show", "--name-only", "--format=", "legion-being/one-line").stdout.split() == ["mine.py"]
+    assert (wt / "someone_elses.py").exists(), "cut from origin/main, which has it"
+    assert g("config", "--get", "branch.legion-being/one-line.sagebase").stdout.strip() == "main"
 
 
 # -- pr_amend ----------------------------------------------------------------------------
@@ -340,3 +344,17 @@ def test_the_dispatcher_refuses_a_foreign_branch_even_if_the_composer_regresses(
     assert not env.ok and "not one of your PR branches" in env.error, env.result
     remote = subprocess.run(["git", "-C", str(origin), "branch"], capture_output=True, text=True).stdout
     assert "seat-branch" not in remote.split()
+
+
+def test_pr_sync_merges_the_base_the_proposal_was_cut_from_not_the_seat_default(tmp_path, monkeypatch):
+    """When the seat-wide default base moved to main (2026-10-05), a PR cut from the carrier
+    must keep syncing against the carrier: merging main into it would pull hundreds of
+    unrelated commits into a two-file proposal. pr_open records the base; pr_sync reads it."""
+    from sage.gateway.being_gate_client import pr_sync_command, proposal_base
+    monkeypatch.setenv("SAGE_PR_BASE", "main")
+    _, wt, g = _repo(tmp_path)
+    g("checkout", "-q", "-b", "legion-being/older-proposal")
+    g("config", "branch.legion-being/older-proposal.sagebase", "legion/some-integration-target")
+    ctx = {"worktree": str(wt), "member": "legion-being"}
+    assert proposal_base(str(wt), ctx) == "legion/some-integration-target"
+    assert pr_sync_command({"op": "start"}, ctx).endswith("merge --no-ff --no-commit origin/legion/some-integration-target")

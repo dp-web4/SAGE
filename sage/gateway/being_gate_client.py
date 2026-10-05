@@ -784,7 +784,7 @@ def pr_sync_command(args: dict, ctx: Optional[dict] = None) -> str:
         raise ValueError(f"pr_sync 'op' must be one of {list(PR_SYNC_OPS)}; got {op!r}")
     own_proposal_branch(worktree, ctx)
     if op == "start":
-        base = pr_base_branch(worktree, ctx)
+        base = proposal_base(worktree, ctx)
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,100}", base) or ".." in base:
             raise ValueError(f"pr_sync: the base branch {base!r} is not a plain branch name")
         return f"git --no-pager -C {worktree} merge --no-ff --no-commit origin/{base}"
@@ -804,6 +804,31 @@ def own_proposal_branch(worktree: str, ctx: Optional[dict] = None) -> str:
         raise ValueError(f"pr_amend: this worktree is on {br!r}, which is not one of your PR "
                          "branches. pr_amend revises a proposal you already opened")
     return br
+
+
+PROPOSAL_BASE_KEY = "sagebase"   # git config branch.<branch>.sagebase: the base pr_open cut it from
+
+
+def proposal_base(worktree: str, ctx: Optional[dict] = None) -> str:
+    """The base THIS proposal targets: what pr_open recorded when it cut the branch, else the
+    base its open PR names on GitHub, else pr_base_branch. pr_sync merges THIS, never the
+    seat-wide default: once the default moved to main (2026-10-05), syncing a PR that was cut
+    from the carrier against main would have merged hundreds of unrelated commits into it."""
+    import subprocess
+    br = own_proposal_branch(worktree, ctx)
+    rec = subprocess.run(["git", "config", "--get", f"branch.{br}.{PROPOSAL_BASE_KEY}"],
+                         cwd=worktree, text=True, capture_output=True, timeout=30).stdout.strip()
+    if rec:
+        return rec
+    try:
+        out = subprocess.run(["gh", "pr", "list", "--repo", PR_REPO, "--head", br, "--state", "open",
+                              "--json", "baseRefName", "--jq", ".[0].baseRefName"],
+                             cwd=worktree, text=True, capture_output=True, timeout=60).stdout.strip()
+        if out and out != "null":
+            return out
+    except Exception:
+        pass
+    return pr_base_branch(worktree, ctx)
 
 
 def _pr_number_for_branch(worktree: str, ctx: Optional[dict] = None) -> str:

@@ -1581,6 +1581,7 @@ def test_pr_open_commits_with_the_beings_trailers_and_runs_the_judged_gh_command
     g("config", "user.email", "seat@test"); g("config", "user.name", "seat")
     (wt / "README").write_text("base\n"); g("add", "-A"); g("commit", "-q", "-m", "base")
     g("push", "-q", "-u", "origin", "HEAD:legion-being/work"); g("checkout", "-q", "-b", "legion-being/work")
+    g("push", "-q", "origin", "HEAD:legion/mission-artifact")   # the base pr_open cuts from
 
     # the being's authored change: a red test, exactly the shape it specified
     (wt / "test_new.py").write_text("def test_it():\n    assert False\n")
@@ -1632,6 +1633,7 @@ def _pr_open_fixture(tmp_path, monkeypatch):
     g("config", "user.email", "seat@test"); g("config", "user.name", "seat")
     (wt / "README").write_text("base\n"); g("add", "-A"); g("commit", "-q", "-m", "base")
     g("push", "-q", "-u", "origin", "HEAD:legion-being/work"); g("checkout", "-q", "-b", "legion-being/work")
+    g("push", "-q", "origin", "HEAD:legion/mission-artifact")   # the base pr_open cuts from
     bindir = tmp_path / "bin"; bindir.mkdir()
     (bindir / "gh").write_text("#!/bin/sh\ncat > \"$0.body\"\necho \"$@\" > \"$0.args\"\necho https://example/pr/1\n")
     os.chmod(bindir / "gh", 0o755)
@@ -1670,21 +1672,16 @@ def test_pr_open_refuses_to_carry_the_beings_own_record_into_a_public_pr(tmp_pat
         "a refusal must not destroy the being's work"
 
 
-def test_pr_open_says_what_the_branch_carries_when_its_base_is_behind_main(tmp_path, monkeypatch):
-    """`pr_open` cuts from the worktree's HEAD. On 2026-09-21 that base was 442 commits behind
-    main, so a 41-line change opened as 198 files / 31,456 insertions — and the answer was a
-    URL. The being verified its own diff and could not have known; a reviewer read the whole
-    lineage as its proposal. Both the PR body and the being's answer now say it."""
-    import subprocess
+def test_pr_open_cuts_from_the_base_so_inherited_lineage_is_not_carried(tmp_path, monkeypatch):
+    """`pr_open` used to cut from the worktree's HEAD. On 2026-09-21 that base was 442 commits
+    behind main, so a 41-line change opened as 198 files / 31,456 insertions; on 2026-10-05
+    #360 was cut from #272's branch and both ran 400+ commits ahead of main (GPT seat). Now the
+    branch is cut from origin/<base>: lineage the worktree's branch carries stays behind, and
+    the PR holds the being's change alone."""
     from sage.gateway.being_gate_client import BeingIntent
     d, wt, g, bindir = _pr_open_fixture(tmp_path, monkeypatch)
-    # main moves on without this worktree...
-    g("checkout", "-q", "-b", "mainline")
-    (wt / "someone_elses.py").write_text("y = 2\n"); g("add", "-A"); g("commit", "-q", "-m", "not mine")
-    g("push", "-q", "origin", "HEAD:main")
-    # ...and the worktree's base carries two commits of its own that main never took — the
-    # shape of legion-being/work on legion/mission-artifact.
-    g("checkout", "-q", "legion-being/work")
+    g("push", "-q", "origin", "HEAD:main")           # what `carries` measures against
+    # the worktree's branch carries two commits of its own that the base never took
     (wt / "lineage_a.py").write_text("a = 1\n"); g("add", "-A"); g("commit", "-q", "-m", "someone else's lineage 1")
     (wt / "lineage_b.py").write_text("b = 1\n"); g("add", "-A"); g("commit", "-q", "-m", "someone else's lineage 2")
     (wt / "mine.py").write_text("z = 3\n")          # the being's actual change, uncommitted
@@ -1693,28 +1690,30 @@ def test_pr_open_says_what_the_branch_carries_when_its_base_is_behind_main(tmp_p
         "slug": "one-line", "title": "one small change here", "body": "b"}))
     assert env.ok, env.error
     carry = env.result["carries"]
-    assert carry["known"], carry
-    assert carry["commits"] == 3 and carry["files"] == 3, carry   # 2 inherited + the being's
-    assert carry["behind_main"] == 1 and carry["mine_only"] is False, carry
+    assert carry["known"] and carry["commits"] == 1 and carry["files"] == 1, carry
+    assert carry["mine_only"] is True, carry
+    files = g("show", "--name-only", "--format=", "legion-being/one-line").stdout.split()
+    assert files == ["mine.py"], files
+    assert g("config", "--get", "branch.legion-being/one-line.sagebase").stdout.strip() == "legion/mission-artifact"
     body = (bindir / "gh.body").read_text()
-    assert "What this branch carries" in body
-    assert "3 commits / 3 files" in body, body
-    assert "Read the last commit, not the PR diff" in body, body
-    assert "1 commits behind" in body, body
-    # and the being is told in its own answer, not only in the PR nobody shows it
-    assert "only your newest" in env.result["note"], env.result["note"]
+    assert "one commit" in body and "Read the last commit" not in body, body
 
-    # THE CONTROL: a branch whose base IS main says so, and says nothing alarming.
-    g("checkout", "-q", "legion-being/one-line")
-    g("reset", "-q", "--hard", "origin/main")
-    g("checkout", "-q", "-B", "legion-being/work", "origin/main")
-    (wt / "mine2.py").write_text("q = 4\n")
-    env2 = d._do_pr_open(BeingIntent("pr_open", {
-        "slug": "clean-base", "title": "a change on a clean base", "body": "b"}))
-    assert env2.ok, env2.error
-    assert env2.result["carries"]["mine_only"] is True, env2.result["carries"]
-    body2 = (bindir / "gh.body").read_text()
-    assert "one commit" in body2 and "Read the last commit" not in body2, body2
+
+def test_pr_open_refuses_and_moves_nothing_when_the_change_cannot_be_carried_onto_the_base(tmp_path, monkeypatch):
+    """A file the being changed that ALSO differs between its branch and the base cannot be
+    carried across: git refuses, and the being is told which files, still on its branch with
+    its change intact."""
+    from sage.gateway.being_gate_client import BeingIntent
+    d, wt, g, bindir = _pr_open_fixture(tmp_path, monkeypatch)
+    (wt / "README").write_text("base, as my branch has it\n"); g("add", "-A"); g("commit", "-q", "-m", "branch-only")
+    (wt / "README").write_text("base, as my branch has it\nand my change\n")
+    env = d._do_pr_open(BeingIntent("pr_open", {
+        "slug": "clash", "title": "a change on a diverged file", "body": "b"}))
+    assert not env.ok and "README" in env.error and "Nothing moved" in env.error, env.error
+    assert g("rev-parse", "--abbrev-ref", "HEAD").stdout.strip() == "legion-being/work"
+    assert "and my change" in (wt / "README").read_text()
+    assert "legion-being/clash" not in g("branch").stdout
+    assert not (bindir / "gh.args").exists(), "nothing may reach gh"
 
 
 def test_check_reports_unverified_with_its_tree_when_the_substrate_is_down(tmp_path):
