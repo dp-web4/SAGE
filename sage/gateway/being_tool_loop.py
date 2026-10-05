@@ -1169,10 +1169,20 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                     _cut = (f"and the window cut it before any tool call. The window will not grow."
                             if raw.get("done_reason") == "length"
                             else f"and then stopped without writing anything in your reply.")
+                    # NAME WHERE THE DELIBERATION WENT. legion-being 2026-10-05, at num_ctx 32768:
+                    # six of six kept empty turns were 18-28k chars of thinking that drafted the
+                    # code it meant to write (whole functions), cut before the write. The retry
+                    # said "act now" and nothing about the draft, so the next attempt derived it
+                    # again from scratch. The draft is kept (keep_empty_thinking); say so.
+                    _where = (f"Your whole deliberation is saved as {_kept} -- memory_read a "
+                              f"narrow range of it to reuse what you drafted rather than "
+                              f"deriving it again, and draft long code in a scratch file "
+                              f"(memory_write) rather than in your thinking. "
+                              if _kept else "")
                     msgs.append({"role": "user", "content": (
                         f"[harness] Your previous attempt spent its whole budget deliberating "
                         f"({raw.get('eval_count')} tokens) {_cut} "
-                        f"Act now: one tool call. The "
+                        f"{_where}Act now: one tool call. The "
                         f"deliberation belongs in journal.md, after the act.")})
                 from contextlib import ExitStack
                 with ExitStack() as _stack:
