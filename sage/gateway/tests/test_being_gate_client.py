@@ -198,6 +198,20 @@ def test_single_gate_decides_and_client_does_not_resequence():
     assert prof["member_id"] == "test-being" and prof["host_agent"] == "test-harness"
 
 
+def test_single_gate_judges_a_relative_memory_path_at_the_being_memory_root():
+    """decide() must be handed the path the dispatcher touches. Measured on Sprout
+    2026-10-05: tool_input carried the bare 'journal.md' with cwd=workspace, and a being
+    granted path:<its home>/** was refused its own journal."""
+    c, calls = _sg_client("allow")
+    c.memory_root = "/tmp/being-home"
+    c.gate(BeingIntent("memory_write", {"path": "journal.md", "content": "x"}))
+    ev, _ = calls[0]
+    assert ev["tool_input"]["path"] == "/tmp/being-home/journal.md", ev["tool_input"]
+    assert ev["raw"]["path"] == "/tmp/being-home/journal.md" and ev["tool_input"]["content"] == "x"
+    c.gate(BeingIntent("memory_read", {"path": "/tmp/being-home/notes/x.md"}))
+    assert calls[1][0]["tool_input"]["path"] == "/tmp/being-home/notes/x.md"
+
+
 def test_single_gate_deny_and_no_verdict_map_fail_closed():
     assert _sg_client("deny", "mrh.path")[0].gate(WRITE).rule == "mrh.path"
     v = _sg_client("allow", available=False)[0].gate(WRITE)

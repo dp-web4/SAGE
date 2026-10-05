@@ -2335,6 +2335,17 @@ class BeingGateClient:
             return "present"
         return f"absent: {getattr(self, '_single_gate_error', None) or 'not imported'}"
 
+    def _rooted_path(self, v) -> str:
+        """A path arg as the dispatcher will touch it. The being's memory paths are relative
+        to ITS OWN memory root (the instance dir), never to the process cwd: the gate must
+        judge the same path the dispatcher will touch (reference_f1a._safe_path roots the
+        same way). realpath, not abspath: the dispatcher resolves symlinks (_safe_path), so
+        the judged path and the touched path must be the same real path."""
+        p = os.path.expanduser(str(v))
+        if not os.path.isabs(p):
+            p = os.path.join(self.memory_root, p)
+        return os.path.realpath(p)
+
     # -- normalize a being intent into the gate's NormalizedEvent -------------
     def _normalize(self, intent: BeingIntent):
         spec = _REGISTRY[intent.effector]
@@ -2342,15 +2353,7 @@ class BeingGateClient:
         for a in spec["path_args"]:
             v = intent.args.get(a)
             if v:
-                p = os.path.expanduser(str(v))
-                # The being's memory paths are relative to ITS OWN memory root (the
-                # instance dir), never to the process cwd: the gate must judge the same
-                # path the dispatcher will touch (reference_f1a._safe_path roots the same way).
-                if not os.path.isabs(p):
-                    p = os.path.join(self.memory_root, p)
-                # realpath, not abspath: the dispatcher resolves symlinks (_safe_path), so the
-                # judged path and the touched path must be the same real path
-                paths.append(os.path.realpath(p))
+                paths.append(self._rooted_path(v))
         # COMPOSED PATHS (patch_apply). `path_args` reads a path the being ASSERTS; this reads
         # the paths the act will actually touch, derived by the seat from the being's artifact.
         # For a diff those are not the same thing, and only the derived ones may be judged --
@@ -2418,9 +2421,17 @@ class BeingGateClient:
                                     default_role="role:constellation:member",
                                     host_agent=getattr(self, "_host_agent", "sage-raising"),
                                     client_name=f"sage-{self.member_id}-gate")
-                ge = sg.GateEvent(tool=tool, tool_input=dict(intent.args), cwd=self.workspace,
+                # The path args go to decide() ROOTED, as _normalize roots them. Handed raw,
+                # with cwd=workspace, a bare 'journal.md' was judged as <workspace>/journal.md
+                # and refused under a grant that covers the being's home -- the first beat on
+                # Sprout after its hestia build began shipping hestia_single_gate (2026-10-05).
+                tool_input = dict(intent.args)
+                for a in _REGISTRY[intent.effector]["path_args"]:
+                    if tool_input.get(a):
+                        tool_input[a] = self._rooted_path(tool_input[a])
+                ge = sg.GateEvent(tool=tool, tool_input=tool_input, cwd=self.workspace,
                                   session_id=getattr(self, "host_session_id", None),
-                                  raw={"effector": intent.effector, **intent.args})
+                                  raw={"effector": intent.effector, **tool_input})
                 d = sg.decide(ge, gp)
                 available = getattr(d, "verdict_available", True)
                 dec = d.decision if (available and d.decision in ("allow", "warn", "deny")) else "deny"
