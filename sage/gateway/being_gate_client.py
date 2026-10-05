@@ -306,6 +306,9 @@ NO_WORKTREE_REFUSAL = {
         "pr_sync brings a pull request you opened up to date with its base branch, by merging "
         "inside your code-repository checkout (a worktree), and this seat has none, so pr_sync "
         "cannot update your proposal here."),
+    "git_clean": (
+        "git_clean deletes one untracked file you added to your code-repository checkout (a "
+        "worktree), and this seat has none, so there is nothing here for git_clean to delete."),
     # CAMERA'S HONEST ALTERNATIVE IS DIFFERENT: there is none. It never reads a worktree (the
     # frame lands in the being's home); the requirement is the policy hold described in
     # camera_command. So it says it is not enabled, says why without pointing at a step the
@@ -745,6 +748,42 @@ def git_restore_command(args: dict, ctx: Optional[dict] = None) -> str:
                          "and no being writes there. Everything else in your worktree is yours "
                          "to restore")
     return f"git --no-pager -C {worktree} checkout {rev} -- {full}"
+
+
+def git_clean_command(args: dict, ctx: Optional[dict] = None) -> str:
+    """The shell command for a git_clean intent: `git clean -f -- <path>`, ONE untracked file.
+
+    WHY THIS VERB EXISTS (legion-being, 2026-10-03; dp: "yes"). A being that writes a probe or a
+    scratch test into its worktree had no way to take it back out: git_restore puts back a TRACKED
+    file, retire_note works only in notes/ and scratch/ of its home, and pr_amend stages everything
+    (git add -A) -- so a throwaway file became part of its pull request. memory_write could only
+    empty it, which leaves an empty file to commit.
+
+    NARROW BY CONSTRUCTION. `git clean -f` removes untracked files and nothing else: it cannot
+    touch a tracked file, history, or an ignored file (no -x), and the being never holds a flag.
+    The dispatcher also asks git that the path is untracked and not ignored before it acts, so the
+    answer names exactly what happened. Same path rules as git_restore."""
+    worktree = (ctx or {}).get("worktree")
+    if not worktree:
+        raise ValueError(NO_WORKTREE_REFUSAL["git_clean"])
+    path = str(args.get("path", "")).strip()
+    if not path:
+        raise ValueError("git_clean needs a 'path': the one untracked file to delete")
+    if any(ch.isspace() for ch in path):
+        raise ValueError("git_clean 'path' may not contain whitespace")
+    if path.startswith("-") or ".." in path.split("/"):
+        raise ValueError(f"git_clean 'path' must be a plain path inside your worktree, got {path!r}")
+    full = os.path.realpath(os.path.join(worktree, path))
+    root = os.path.realpath(worktree)
+    if not full.startswith(root + os.sep):
+        raise ValueError(_escape_refusal("git_clean", path, worktree))
+    if os.path.isdir(full):
+        raise ValueError(f"git_clean deletes ONE file, and {path!r} is a directory. Name the file")
+    top = os.path.relpath(full, root).split(os.sep, 1)[0]
+    if top.casefold() in (".githooks", ".git"):
+        raise ValueError(f"git_clean cannot delete {path!r}: {top}/ holds what git EXECUTES or "
+                         "git's own machinery, and no being writes or removes anything there")
+    return f"git --no-pager -C {worktree} clean -f -- {full}"
 
 
 def pr_amend_command(args: dict, ctx: Optional[dict] = None) -> str:
@@ -1667,6 +1706,10 @@ _REGISTRY = {
     # the content can only come from history, so the being cannot author bytes through it.
     "git_restore":    dict(tool="git_restore",  path_args=("path",), cmd_arg=None,
                            compose=git_restore_command),
+    # git_clean: delete ONE untracked file from the worktree. Composed like git_restore; `git clean
+    # -f` cannot touch a tracked or ignored file, so the being can only take back what it added.
+    "git_clean":      dict(tool="git_clean",    path_args=("path",), cmd_arg=None,
+                           compose=git_clean_command),
     # pr_open: the being's worktree changes become a pull request, attributed to it,
     # for NOT-SAME review. Composed like pr_review — the law rules on the `gh` string.
     "pr_open":        dict(tool="pr_open",     path_args=(),       cmd_arg=None,
@@ -1768,7 +1811,7 @@ _CONSEQUENTIAL = frozenset({"peer_ask", "pr_read", "memory_write", "channel_egre
 
 
                             "retire_note", "request_run", "memory_edit", "camera",
-                            "pr_open", "pr_amend", "pr_sync", "git_restore",
+                            "pr_open", "pr_amend", "pr_sync", "git_restore", "git_clean",
                             "gaze",    # moves the body's own eyes (2026-09-23)
                             "speak",   # makes sound in the room (2026-09-26)
                             "pair_audio",  # moves the body's own hardware link (2026-09-27)
@@ -1927,6 +1970,13 @@ _TOOL_SCHEMAS = {
                 {"op": "start (default), continue, or abort",
                  "message": "for continue: how you resolved the conflicts (the commit body)"},
                 []),
+    "git_clean": ("Delete ONE file you created in your worktree that git does not track yet -- a "
+                  "probe, a scratch test, a file you no longer want in your pull request. pr_amend "
+                  "stages everything, so a file you leave there is proposed with your work. It "
+                  "cannot delete a tracked file (use git_restore to undo edits to one) or an ignored "
+                  "one, and the answer says which it refused and why.",
+                  {"path": "the one untracked file to delete, inside your worktree"},
+                  ["path"]),
     "git_restore": ("Put ONE file back to the way it was at a commit — `git checkout <rev> -- "
                     "<path>`. Use it to undo your own edits to a file rather than trying to "
                     "retype it: the content comes from history, so you cannot get it wrong. "
