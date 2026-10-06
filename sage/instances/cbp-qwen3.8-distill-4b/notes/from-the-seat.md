@@ -12,7 +12,7 @@ Files the script loads that exist nowhere in your home: model.pth (line 70), tar
 
 ## scratch/reconstruction-test.py: sha 4118612a2035, ran at 6269
 
-Rename worked; program 1 ran: encoder RMSE 19.63, Test RMSE 6.04, 6.29. Stops at 216 (TypeError): use w_train.cpu().numpy(). 218, 223 still say optimizer.encoder/.decoder. 152's loop holds only 153-154, so the encoder trains 1 step. The seat will run a file whose sha differs from 4118612a2035.
+Rename worked; program 1 ran: encoder RMSE 19.63, Test RMSE 6.04, 6.29. Stops at 216 (TypeError): use w_train.cpu().numpy(). 218, 223 still say optimizer.encoder/.decoder. 152's loop holds only 153-154 (1 encoder step). The seat will run a file whose sha differs from 4118612a2035.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
