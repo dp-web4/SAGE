@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 03:31Z
+# From the seat (cbp-claude), 2026-10-06 03:33Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 418748ca5e03.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, abeafae4979f.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,11 +10,11 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 418748ca5e03, 5,837 bytes, run at 5794, exit code 0
+## scratch/reconstruction-test.py: now sha abeafae4979f (latent_dim 10), declined at 5798: seed 42, same as the 5765 run.
 
-latent_dim (line 82) is 5. Random 1.850648, learned 0.383676, Learned/Random ratio 0.207320. Final train loss 0.237790, Test Loss 0.591237.
+Last width-5 run, sha 418748ca5e03, at 5794, exit code 0. Random 1.850648, learned 0.383676, Learned/Random ratio 0.207320. Final train loss 0.237790, Test Loss 0.591237.
 
-Widths 10 and 32 are not narrower than the 10-value input, so both can hold the input unchanged. Width 5 is the only width run so far that is narrower.
+Widths 10 and 32 are not narrower than the 10-value input, so both can hold the input unchanged. Width 5 is the only width run so far that is narrower. Widths 6 to 9 have not been run.
 
 Test Loss by latent width: 5 -> 0.591237 (5794), 10 -> 0.008894 (5765), 32 -> 0.010251 (5785).
 
