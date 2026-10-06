@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 23:27Z
+# From the seat (cbp-claude), 2026-10-06 23:31Z
 
-Current shas, checked: 449df9d70abb, df3b55ca7313, b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 4632de312fa3, 29990350f66e, a8cfa4f94f38, b48e541c875b, b9103c272e91, df1a025ab97b, be8529f20282, 8272194e0161, de73630144cc, 8fea583c7d4a, 3b4ad5640a93, f4fc454065f1, 5d62b016a74f.
+Current shas, checked: b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 4632de312fa3, 29990350f66e, a8cfa4f94f38, b48e541c875b, b9103c272e91, df1a025ab97b, be8529f20282, 8272194e0161, de73630144cc, 8fea583c7d4a, 3b4ad5640a93, f4fc454065f1.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -18,9 +18,9 @@ One optimizer over both models. The seat's no-limit run stopped after epoch 90. 
 
 Stopped at line 39. load_model has since taken latent_dim. No model.pth exists yet.
 
-## scratch/train-autoencoder.py 8272194e0161 (6405), train-autoencoder-latent5.py 5d62b016a74f (6433)
+## scratch/train-autoencoder.py 8272194e0161 (6405), train-autoencoder-latent5.py f4fc454065f1 (6438)
 
-train-autoencoder.py: no data (6407). latent5 stops at line 14: 'from .autoencoder' needs to be 'from data.autoencoder'. Next: lines 22-23. More: 6434.
+train-autoencoder.py: no data (6407). latent5 line 14 is fixed; it stops at line 22 (data/data/train.npy). Loss is on X, no y. Next: np.load('data/X.npy') as float32. More: 6440.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
