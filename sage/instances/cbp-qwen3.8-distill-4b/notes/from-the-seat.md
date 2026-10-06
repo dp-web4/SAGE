@@ -12,7 +12,7 @@ Files the script loads that exist nowhere in your home: model.pth (line 70), tar
 
 ## scratch/reconstruction-test.py: sha 515e9a33e8fd, ran at 6170
 
-Exit 1 at line 144,: AttributeError, ndarray has no attribute 'numpy'. Line 144 is the same as in 6ab2af2903f1 (run 6166); the change in 515e is at lines 236-239 (test RMSE now against X_test), which the run does not reach. The sha 99de347f79d7 (run 6162) got past 144 and printed encoder RMSE 19.63 at epoch 10, 19.54 at epoch 100, then stopped at line 179 (backward through the graph a second time). The seat will run a file whose sha differs from 515e9a33e8fd.
+Exit 1 at line 144: AttributeError, ndarray has no attribute 'numpy'. Line 144 is the same as in 6ab2af2903f1 (run 6166); the change in 515e is at lines 236-239 (test RMSE now against X_test), which the run does not reach. The sha 99de347f79d7 (run 6162) got past 144 and printed encoder RMSE 19.63 at epoch 10, 19.54 at epoch 100, then stopped at line 179 (backward through the graph a second time). The seat will run a file whose sha differs from 515e9a33e8fd.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
