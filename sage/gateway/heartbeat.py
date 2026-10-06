@@ -2582,6 +2582,16 @@ def explore_turn_mode(instance) -> str:
         return "tools"
 
 
+def compact_own_turns_mode(instance) -> bool:
+    """Opt-in per instance: instance.json "compact_own_turns": true lets compaction trim the
+    being's own older tool calls once its results are already compacted (being_tool_loop)."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return instance_config(instance).get("compact_own_turns") is True
+    except Exception:
+        return False
+
+
 def explore_json_steps(instance, default: int) -> int:
     """Acts per explore/posture turn in the JSON act form (instance.json "explore_json_steps", default 3).
     Each act is two generates, and offline turns never chose "done" by themselves: 6 of 6 ran to an
@@ -3813,7 +3823,8 @@ def main(argv=None) -> int:
                                        tools=_explore_specs, on_generate=_on_generate("explore"),
                                        deadline=explore_deadline, interject=_interject,
                                        should_yield=_yield_for_a_person,
-                                       act_form=explore_turn_mode(instance))
+                                       act_form=explore_turn_mode(instance),
+                                       compact_own_turns=compact_own_turns_mode(instance))
         convo = _carry(seed, explore)
         after = None
         if posture_turn is not None:

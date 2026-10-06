@@ -820,7 +820,7 @@ def test_loop_feeds_the_previous_prompt_count_into_compaction():
     roots = []
     orig = L.compact_convo
 
-    def spy(msgs, llm, reserve=L._ANSWER_RESERVE, measured=None, spill_root=None):
+    def spy(msgs, llm, reserve=L._ANSWER_RESERVE, measured=None, spill_root=None, own_turns=False):
         seen.append(measured)
         roots.append(spill_root)
         return orig(msgs, llm, reserve, measured, spill_root)

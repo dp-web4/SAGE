@@ -602,10 +602,11 @@ _ELIDED_SIGIL = "characters elided from the middle"
 # A stub that is itself collapsed, oldest first, once the stubs are what fills the window.
 _COLLAPSED_SIGIL = "collapsed to a pointer"
 COMPACT_STUBS_KEPT = 8         # the newest elision stubs are never collapsed: recent context
-# The being's OWN earlier turns: once the results are all stubs and pointers, what is left to
-# grow is its own tool calls and words. The newest COMPACT_OWN_TURNS_KEPT assistant turns are
-# never touched; older ones keep each argument's head (which call, on what) and lose the body,
-# since the call already ran and its receipt is in the conversation and the file it changed.
+# The being's OWN earlier turns (opt-in per instance, instance.json "compact_own_turns": true).
+# Once the results are all stubs and pointers, what is left to grow is its own tool calls and
+# words. The newest COMPACT_OWN_TURNS_KEPT assistant turns are never touched; older ones keep
+# each argument's head (which call, on what) and lose the body: the call already ran, and its
+# receipt is in the conversation and the file it changed.
 COMPACT_OWN_TURNS_KEPT = 4
 COMPACT_OWN_ARG_MAX = 400      # an argument string at or under this is kept whole
 COMPACT_OWN_ARG_HEAD = 160
@@ -991,7 +992,8 @@ def _headline_prefix_len(body: str) -> int:
 
 
 def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
-                  measured=None, spill_root: Optional[str] = None) -> tuple:
+                  measured=None, spill_root: Optional[str] = None,
+                  own_turns: bool = False) -> tuple:
     """Shrink the OLDEST tool results until the prompt leaves room for an answer.
 
     THE SEED FITTING IS NOT ENOUGH. heartbeat.fit_to_window sizes the first prompt; this
@@ -1126,11 +1128,11 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
             out[i]["content"] = ptr
             elided.append({"index": i, "chars": len(body) - len(ptr), "collapsed": True,
                            "spill": m.group(1)})
-    # THE BEING'S OWN TURNS WERE NEVER COMPACTED (legion-being, dp chat seq 148, 2026-10-05:
-    # "my context window filled mid-beat at exactly 32,768 — my own turns fill it and
-    # compaction never trims them"). Results become stubs and then pointers; its own calls stayed
-    # whole forever, so a long beat always ended at the wall. Oldest first, newest kept.
-    if _est_tokens(size(out), measured) > room:
+    # THE BEING'S OWN TURNS (opt-in). legion-being, dp chat seq 148, 2026-10-05: "my context
+    # window filled mid-beat at exactly 32,768 — my own turns fill it and compaction never trims
+    # them". Results become stubs and then pointers; its own calls stayed whole forever, so a
+    # long beat always ended at the wall. Oldest first, the newest kept.
+    if own_turns and _est_tokens(size(out), measured) > room:
         own = [i for i, m in enumerate(out) if m.get("role") == "assistant"]
         for i in own[:-COMPACT_OWN_TURNS_KEPT] if len(own) > COMPACT_OWN_TURNS_KEPT else []:
             if _est_tokens(size(out), measured) <= room:
@@ -1152,7 +1154,8 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
             body = out[i].get("content") or ""
             if len(body) > COMPACT_OWN_ARG_MAX and _OWN_SIGIL not in body:
                 cut_n = len(body) - COMPACT_OWN_ARG_HEAD
-                out[i]["content"] = body[:COMPACT_OWN_ARG_HEAD] + f"…[{cut_n} chars of what you said here elided to leave room]"
+                out[i]["content"] = (body[:COMPACT_OWN_ARG_HEAD]
+                                     + f"…[{cut_n} chars of what you said here elided to leave room]")
                 freed += cut_n
             if freed:
                 elided.append({"index": i, "chars": freed, "own_turn": True})
@@ -1248,7 +1251,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                          deadline: Optional[float] = None,
                          interject: "Optional[Callable[[], str]]" = None,
                          should_yield: Optional[Callable[[], Optional[str]]] = None,
-                         act_form: str = "tools") -> ToolTurnResult:
+                         act_form: str = "tools",
+                         compact_own_turns: bool = False) -> ToolTurnResult:
     """Run a gated tool turn using an OllamaIRP-like `llm` exposing
     get_chat_response(messages, tools=...) -> {"content", "tool_calls"}.
 
@@ -1370,7 +1374,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # closing words nine times in a day. Anchored on the server's own count from the
         # previous generate, so only the delta rides an estimate.
         msgs, _elided = compact_convo(msgs, llm, measured=measured,
-                                      spill_root=getattr(client, "memory_root", None))
+                                      spill_root=getattr(client, "memory_root", None),
+                                      own_turns=compact_own_turns)
         if _elided:
             compacted.append({"step": len(thoughts), "elisions": len(_elided),
                               "chars": sum(e["chars"] for e in _elided)})
@@ -1519,10 +1524,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # from stderr (SAGE #45 sends the room; this says what it was).
         raw = resp.get("raw") or {}
         if raw.get("prompt_eval_count"):
-            # the nudge (if any) was appended to msgs before the reply that stands, so the
-            # chars it added are inside this count: re-measure from the list as sent
-            measured = (int(raw["prompt_eval_count"]),
-                        _convo_chars(msgs))
+            # re-measure from the list AS SENT: any nudge appended above is inside this count
+            measured = (int(raw["prompt_eval_count"]), _convo_chars(msgs))
         entry = {"done_reason": raw.get("done_reason"), "prompt_eval_count": raw.get("prompt_eval_count"),
                  "eval_count": raw.get("eval_count"), "retried": retried, "num_predict": sent}
         window = _window_pressure(llm, raw.get("prompt_eval_count"))

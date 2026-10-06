@@ -2845,7 +2845,18 @@ class BeingGateClient:
                                     default_role="role:constellation:member",
                                     host_agent=getattr(self, "_host_agent", "sage-raising"),
                                     client_name=f"sage-{self.member_id}-gate")
-                ge = sg.GateEvent(tool=tool, tool_input=dict(intent.args), cwd=self.workspace,
+                # JUDGE THE PATH THE DISPATCHER WILL TOUCH (2026-10-05, Sprout). The being writes
+                # `journal.md`, relative to ITS OWN home; _normalize roots it there (as
+                # reference_f1a._safe_path does). Handing the single gate the RAW args with
+                # cwd=workspace made it resolve `journal.md` against the SAGE checkout, outside the
+                # being's grant: from the #1231 cutover (19:22Z) every relative journal/todo write
+                # was refused "'journal.md' is not granted" although the grant was the being's home.
+                tool_input = dict(intent.args)
+                resolved = iter(ev.paths)
+                for a in _REGISTRY[intent.effector]["path_args"]:
+                    if intent.args.get(a):
+                        tool_input[a] = next(resolved)
+                ge = sg.GateEvent(tool=tool, tool_input=tool_input, cwd=self.workspace,
                                   session_id=getattr(self, "host_session_id", None),
                                   raw={"effector": intent.effector, **intent.args})
                 d = sg.decide(ge, gp)

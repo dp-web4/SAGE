@@ -1,4 +1,4 @@
-"""The being's own earlier turns are compacted too (being_tool_loop.compact_convo).
+"""The being's own earlier turns: counted by the estimate always, compacted when opted in.
 
 legion-being, dp chat seq 148 (2026-10-05): "my context window filled mid-beat at exactly
 32,768 — my own turns fill it and compaction never trims them"."""
@@ -10,6 +10,9 @@ from sage.gateway import being_tool_loop as btl
 class LLM:
     def __init__(self, num_ctx):
         self.num_ctx = num_ctx
+
+
+TIGHT = btl._ANSWER_RESERVE + 2500
 
 
 def _convo(n_turns=10, arg=2000):
@@ -29,9 +32,16 @@ def test_the_estimate_counts_tool_call_arguments():
     assert btl._convo_chars(m) >= len(json.dumps({"new": "x" * 1000}))
 
 
-def test_old_own_turns_lose_their_bodies_newest_are_whole():
+def test_off_by_default_own_turns_are_untouched():
     msgs = _convo()
-    out, elided = btl.compact_convo(msgs, LLM(num_ctx=btl._ANSWER_RESERVE + 2500))
+    out, elided = btl.compact_convo(msgs, LLM(TIGHT))
+    assert not any(e.get("own_turn") for e in elided)
+    assert all(btl._OWN_SIGIL not in json.dumps(m.get("tool_calls") or []) for m in out)
+
+
+def test_opted_in_old_own_turns_lose_their_bodies_newest_are_whole():
+    msgs = _convo()
+    out, elided = btl.compact_convo(msgs, LLM(TIGHT), own_turns=True)
     own = [m for m in out if m["role"] == "assistant"]
     for m in own[-btl.COMPACT_OWN_TURNS_KEPT:]:
         assert btl._OWN_SIGIL not in m["tool_calls"][0]["function"]["arguments"]["new"]
@@ -45,13 +55,21 @@ def test_old_own_turns_lose_their_bodies_newest_are_whole():
 
 def test_nothing_is_cut_when_the_prompt_fits():
     msgs = _convo(n_turns=3, arg=100)
-    out, elided = btl.compact_convo(msgs, LLM(num_ctx=200_000))
+    out, elided = btl.compact_convo(msgs, LLM(200_000), own_turns=True)
     assert out == msgs and elided == []
 
 
 def test_a_cut_argument_is_not_cut_again():
     msgs = _convo()
-    once, _ = btl.compact_convo(msgs, LLM(num_ctx=btl._ANSWER_RESERVE + 2500))
-    twice, el2 = btl.compact_convo(once, LLM(num_ctx=btl._ANSWER_RESERVE + 2500))
+    once, _ = btl.compact_convo(msgs, LLM(TIGHT), own_turns=True)
+    twice, el2 = btl.compact_convo(once, LLM(TIGHT), own_turns=True)
     assert not any(e.get("own_turn") for e in el2)
     assert twice[2]["tool_calls"] == once[2]["tool_calls"]
+
+
+def test_the_instance_opt_in_is_read(tmp_path):
+    from sage.gateway.heartbeat import compact_own_turns_mode
+    (tmp_path / "instance.json").write_text(json.dumps({"compact_own_turns": True}))
+    assert compact_own_turns_mode(tmp_path) is True
+    (tmp_path / "instance.json").write_text(json.dumps({"compact_own_turns": "yes"}))
+    assert compact_own_turns_mode(tmp_path) is False
