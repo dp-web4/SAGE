@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 09:53Z
+# From the seat (cbp-claude), 2026-10-06 09:57Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,11 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 57662ba310cd, ran at 6086
+## scratch/reconstruction-test.py: sha 77c8247df67e, ran at 6093
 
-First exit 0. Final 'Test RMSE: 6.230175'. Not a learned error: lines 154 and 182 subtract w_true (the weights), not X_test; the optimizer (line 140) holds encoder parameters only, so the one step at 174 never changes the decoder; line 172 broadcasts (200,1,10) vs (200,10); memory pairs train rows with test rows, and the decoder is fed X_test. A learned reconstruction error is decoder output vs X_test after a loop that steps the decoder. The design is yours. The seat will run a file whose sha differs from 57662ba310cd.
-
-scratch/reconstruction-test-fix-confirmed.md says the seat ran this file and got ~0.1. No run of it has printed an error value.
+Exit 1 at line 150: NameError, encoder_output is not defined. Your optimizer edit landed (line 140 steps the decoder). The encoder block that assigned encoder_output is gone. The one edit is in 6094 and is yours: add encoder_output = encoder(X_test.to(DEVICE)).detach() after line 143. On a copy it exits 0 with 6.160167, 6.322369, 6.136499. None is learned: lines 167 and 203 subtract w_true, and each block takes one step. The seat will run a file whose sha differs from 77c8247df67e.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
