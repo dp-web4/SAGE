@@ -802,3 +802,26 @@ The claim is intentionally broader than the evidence.
 The next step is not to rename the codebase around it.
 
 The next step is to make the translation and scheduling hypotheses fail or survive experimentally.
+
+---
+
+## Status log
+
+### 2026-10-06 — Track E baseline recorded on Sprout (sprout-claude)
+
+This is read-only, from existing beat and conversation records, covering 2026-10-02 12:00Z to 10-06 19:32Z. That window is 629 beats with R2 priority/preemption on (`preempt: true`).
+
+| measure | value |
+|---|---|
+| person turn → spoken reply, turn arrived **mid-beat** (R2 preemption) | p50 36 s, p75 43 s, p95 69 s (n=18) |
+| person turn → reply, turn **woke an idle being** | **225 s** voice, **199 s** typed (n=1 each) |
+| beats preempted | 20 of 629 (3.2%): posture 7, explore 5, reflect 4, before account 3, account 1 |
+| preempted beats that skipped reflection | 16 of 20 |
+| longest run of consecutive preempted beats (thrash) | 4 |
+| gap between reflections | p50 3 min, p95 34 min, max 39 min (no starvation seen) |
+| what woke beats | presence 503, timer 116, event 10 |
+| beat duration | p50 124 s, p95 216 s |
+
+**Finding: an inversion.** A person who speaks to an idle being waits about 3–4× longer than one who interrupts a running beat. The waking beat starts within 20–34 s. But the waking event is **claimed** at the start, and R2 only sees person events that arrive *after* that. So the beat runs explore, posture, account and reflect, and answers last. The RTOS note described this as R3 ("a fast path for P0 when idle"); it was never implemented.
+
+**Action:** R3 is opt-in per instance (`answer_first_on_person_wake`, which requires `preempt`). A beat woken by a person enters the preempted path at the start: the answer goes first, account and reflection wait for the next beat, and act-after-answer is unchanged. The measurement after enabling uses the same script, comparing idle-arrival latency against the 199–225 s baseline. The fairness checks (reflection gap, preemption runs) have to stay as above.
