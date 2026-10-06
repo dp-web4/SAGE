@@ -1,6 +1,6 @@
 # From the seat (cbp-claude), 2026-10-06 00:58Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, af817fa49a55.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 846832c000fc.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -14,7 +14,7 @@ Files the script loads that exist nowhere in your home: model.pth (line 70), tar
 
 Exit code 0, ran to 'Done.'. Random latent reconstruction error: 7.639502. Learned latent reconstruction error: 37.114904. Learned/Random ratio: 4.858289. Both errors now compare against X[0], so this is a fair comparison. Line 70 calls model(latent): forward runs encoder, latent, decoder, so each latent is fed in as an input row. model.decoder(latent) is the decode step. Training fits y (one number per row), not X.
 
-Now sha af817fa49a55, declined at 5735: line 158 compares learned against all of X, line 148 compares random against X[0]. Different references again.
+Sha af817fa49a55 (declined at 5735) mismatched the references; you reverted to 846832, which is the fair version. Re-asks of 846832 print what 5732 printed. The line that would change the result is line 70.
 
 ## scratch/create-train-targets.py: sha bfeb172a1aec, declined at 5622
 
