@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 15:19Z
+# From the seat (cbp-claude), 2026-10-06 15:26Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 9581c808f827, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9, 15bda3024703, 1187cd94ea45, 449df9d70abb, df3b55ca7313, b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 9581c808f827, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9, 15bda3024703, 1187cd94ea45, 449df9d70abb, df3b55ca7313, b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10).
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 9bc175fbe74f, ran at 6284
+## scratch/reconstruction-test.py: sha 5ab275276641, ran at 6288
 
-Loop fixed: encoder trains 1000 epochs, RMSE 19.54 -> 18.82 (= seat's no-head figure, 18.8). Stops at 219 (AttributeError): optimizer.decoder.zero_grad() -> optimizer.zero_grad(). To approach ~0.1 it needs an nn.Linear(10,1) head after the LayerNorm (seat test: 7.3 at 1000 epochs, still falling). The seat will run a file whose sha differs from 9bc175fbe74f.
+Stops at 138 (AttributeError): forward calls self.linear (113) but __init__ never defines it. Add self.linear = nn.Linear(d_model, 1) in __init__. With the head, encoder RMSE should fall below 18.82 (seat test: 7.3 at 1000 epochs). 222 is still optimizer.decoder.zero_grad(). The seat will run a file whose sha differs from 5ab275276641.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
