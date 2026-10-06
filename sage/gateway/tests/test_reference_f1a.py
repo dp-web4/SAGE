@@ -168,6 +168,13 @@ def test_memory_edit_refuses_an_ambiguous_or_absent_anchor_and_changes_nothing()
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "a = 1", "new": "a = 9"}), _ALLOW)
     assert not r.ok and "appears 2 times" in r.error, r.error
     assert (home / "notes" / "s.py").read_text() == before, "an ambiguous edit changed the file"
+    # ...and it names where the copies are and the start_line door, which must then work
+    assert "lines 1, 2" in r.error and "start_line" in r.error, r.error
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "a = 1", "new": "a = 9",
+                                         "start_line": 2}), _ALLOW)
+    assert r.ok, r.error
+    assert (home / "notes" / "s.py").read_text() == before.replace("a = 1\na = 1", "a = 1\na = 9")
+    (home / "notes" / "s.py").write_text(before)
 
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "q"}), _ALLOW)
     assert not r.ok and "not in" in r.error, r.error

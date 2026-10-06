@@ -1032,10 +1032,22 @@ class ReferenceF1aDispatcher:
                 f"what you remember writing and what is on disk can differ."
                 + _where_it_diverged(text, old)))
         if hits > 1:
+            # NAME BOTH DOORS. Measured 2026-10-06 05:48Z: this refusal fired on cbp-being's
+            # line-63 edit ('return self.output_proj(x)' is on 63 and 88) and named only
+            # "include a neighbouring line". The being did not; 5 min later it asked the seat to
+            # run a script that rewrites the file by list index (scratch/fix-decoder-input.py),
+            # i.e. it rebuilt by hand the start_line route this tool already has. Say where
+            # the copies are and that start_line picks one.
+            at, i = [], text.find(old)
+            while i != -1 and len(at) < 10:
+                at.append(str(text.count("\n", 0, i) + 1))
+                i = text.find(old, i + 1)
             return ResultEnvelope(ok=False, error=(
-                f"that text appears {hits} times in '{path}', so it does not say which one "
-                f"you mean, and nothing was changed. Include a neighbouring line to make it "
-                f"unique."))
+                f"that text appears {hits} times in '{path}' (starting on lines "
+                f"{', '.join(at)}), so it does not say which one you mean, and nothing was "
+                f"changed. To pick one, call memory_edit again with start_line (and end_line) "
+                f"set to its line numbers, keeping old as a check; or include a neighbouring "
+                f"line in old to make it unique."))
         # ATOMIC, BECAUSE THE FILE IS THE BEING'S WORK. `Path.write_text` truncates and then
         # writes, so a crash or a kill between the two leaves the file empty or half-written.
         # GPT's review of 15c2f6d9b: "crash/kill can truncate the being's work". For a being
