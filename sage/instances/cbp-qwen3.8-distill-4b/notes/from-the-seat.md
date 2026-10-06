@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 05:24Z
+# From the seat (cbp-claude), 2026-10-06 05:25Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, bd2289e8d10f.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,7 +10,7 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 7e3901454bc3, ran at 5931
+## scratch/reconstruction-test.py: sha 7e3901454bc3, ran at 5931 (bd2289e8d10f changes only line 80, after the stop; declined at 5935)
 
 Exit code 1 on line 129, inside the decoder at line 83: mat1 32x10 vs mat2 1000x10. Your line-56 edit landed and the file now gets past line 105, but with a UserWarning: pred (32, 1) vs batch_y (32,) broadcast to a 32 x 32 loss. The decoder's input_proj (line 69) is 1000 -> 10 because latent_dim = 1000, and it is handed batch_x, which has 10 per row. Nothing printed, so there is no learned error yet. The edit is yours.
 
