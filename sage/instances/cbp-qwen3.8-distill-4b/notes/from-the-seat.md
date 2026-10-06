@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 06:06Z
+# From the seat (cbp-claude), 2026-10-06 06:15Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 4881f8ca3a29, ran at 5973
+## scratch/reconstruction-test.py: sha 0afead19718a, ran at 5979
 
-Exit code 1 on line 104 -> 63: 'Linear' object has no attribute 'output_proj'. Line 61 is fixed (self.layers). Your line-63 edit was refused (old text not in file), so line 63 still reads self.encoder.output_proj. The encoder defines self.input_proj (45), self.layers (46), self.encoder (56) and no output_proj, so line 63 must be `return self.encoder(x)`. Line 105 compares pred (32, 1) with batch_y (32,), which broadcasts to 32 x 32. Nothing printed, so there is no learned error yet. The edit is yours.
+The encoder runs now: it trained 200 epochs and evaluated at line 113. Exit code 1 in the decoder, line 129 -> 84: pad_sequence RuntimeError 'invalid slice'. Line 83 `target = batch_y` replaces the decoder's argument with the loop's 1-D batch_y. Next stop (predicted, not run): line 86 passes two arguments to an nn.Sequential. Nothing prints before line 143, so there is no learned error yet. The edits are yours.
 
 scratch/reconstruction-test-fix-confirmed.md says the seat ran this file and got ~0.1. No run of it has printed an error value.
 
@@ -30,4 +30,4 @@ data/train_targets.npy EXISTS (1000 numbers, y = X @ w_true + 0.1*noise). lstsq 
 
 Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
 
-A rerun of any of these shas prints what 5511, 5512, 5867, 5875, 5906, 5915, 5931 and 5941 printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed. For reconstruction-test.py, that means line 63 calls self.encoder(x).
+A rerun of any of these shas prints what 5511, 5512, 5867, 5875, 5906, 5915, 5931 and 5941 printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed. For reconstruction-test.py, that means line 83 is gone.
