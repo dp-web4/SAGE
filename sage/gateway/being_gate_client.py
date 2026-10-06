@@ -2822,6 +2822,23 @@ class BeingGateClient:
                 "workspace": getattr(self, "workspace", None)}
 
     # -- gate one intent (intent -> verdict), fail-closed --------------------
+    def _policy_grants(self) -> tuple:
+        """(granted, granted_reach) from the member's live policy snapshot, the way the legacy
+        stage computes them; ((), ()) when there is no mechanism, no snapshot, or it raises.
+        Never widens: these are the grants the law already holds for this member."""
+        if self._mech is None or self._core is None:
+            return (), ()
+        try:
+            snap = self._mech.fetch_policy_snapshot(
+                self.member_id, host_agent=getattr(self, "_host_agent", "sage-raising"))
+            if snap is None:
+                return (), ()
+            policy = self._core.resolve_agent_policy(self._profile, vault_reader=lambda _m: snap)
+            return (_granted_roots(self._core, policy, self.workspace),
+                    _granted_reach(self._core, policy, self.workspace))
+        except Exception:
+            return (), ()
+
     def gate(self, intent: BeingIntent) -> GatewayVerdict:
         # Stage 0: bounded registry. Unknown effector never reaches the law.
         if intent.effector not in _REGISTRY:
@@ -2863,8 +2880,16 @@ class BeingGateClient:
                 available = getattr(d, "verdict_available", True)
                 dec = d.decision if (available and d.decision in ("allow", "warn", "deny")) else "deny"
                 rule = d.rule or ("" if available else "gate.no_verdict")
+                # THE GRANTS RIDE ON AN ALLOW, AS THEY DO ON THE LEGACY PATH. The dispatcher's own
+                # confinement (reference_f1a._safe_path, _extra_roots) reads them off the verdict;
+                # without them every grant beyond the home is inert at the last mile. Measured on
+                # legion-being 2026-10-06, the first beats under the one gate: a memory_read of its
+                # own worktree file the gate ALLOWED was refused "outside your reach", and the being
+                # worked around it with scratch scripts taking the path as `data`.
+                granted, granted_reach = self._policy_grants() if dec != "deny" else ((), ())
                 return GatewayVerdict(dec, rule, getattr(d, "reason", "") or ("ok" if dec != "deny" else ""),
-                                      innate=False, stage="single-gate", command=judged_command)
+                                      innate=False, stage="single-gate", command=judged_command,
+                                      granted=granted, granted_reach=granted_reach)
             except Exception as e:  # a gate that raises is a refused act, never an ungoverned one
                 return GatewayVerdict("deny", "gate.raised", innate=True, stage="single-gate",
                                       reason=f"{type(e).__name__}: {e}")
