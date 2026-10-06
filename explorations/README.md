@@ -26,6 +26,7 @@ The criterion is the most important field. An exploration without a falsifier is
 
 | Exploration | Status | Tracks |
 |-------------|--------|--------|
+| [2026-10-06-compiled-transducers-sensors-effectors.md](2026-10-06-compiled-transducers-sensors-effectors.md) | Drafted, ready to run | Hardware-shaped execution across learned sensors/effectors |
 | [2026-05-15-sprout-oscillation-seed-sweep.md](2026-05-15-sprout-oscillation-seed-sweep.md) | Drafted, ready to run | Three-mode probe reproducibility |
 | [codification-project-2026-04-25/](codification-project-2026-04-25/) | Prior exploration (Apr 2026) | (legacy — historical context) |
 
