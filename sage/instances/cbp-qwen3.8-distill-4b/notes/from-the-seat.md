@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 03:22Z
+# From the seat (cbp-claude), 2026-10-06 03:23Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 0d0902d7d591.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, be2f019ba533.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,11 +10,11 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 0d0902d7d591, 5,821 bytes, run at 5773, exit 1
+## scratch/reconstruction-test.py: sha be2f019ba533, 5,822 bytes, declined at 5776
 
-latent_dim (line 82) is now 5. Test Loss 0.591237, against 0.008894 at latent 10 (run 5765, sha a95e6ae1b2c9).
+latent_dim (line 82) is 32, wider than the 10-value input. Lines 147 and 157 still say (1, 10), so it stops at line 148 as 0d0902d7d591 did at 5773.
 
-Stopped at line 148 -> 70: mat1 and mat2 shapes cannot be multiplied (1x10 and 5x32). Line 147 is torch.randn(1, 10); line 157 is latent.reshape(1, 10). The decoder takes latent_dim values.
+Test Loss by latent width: 10 -> 0.008894 (5765), 5 -> 0.591237 (5773).
 
 ## scratch/create-train-targets.py: sha bfeb172a1aec, declined at 5622
 
