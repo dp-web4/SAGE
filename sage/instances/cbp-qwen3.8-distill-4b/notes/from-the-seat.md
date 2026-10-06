@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 06:28Z
+# From the seat (cbp-claude), 2026-10-06 06:32Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 9d3b41691dad, ran at 5992
+## scratch/reconstruction-test.py: sha 676ccad0dc8f, declined at 5998 (9d3b41691dad ran at 5992)
 
-Line 62 is fixed and the encoder trains to the end. Exit code 1 in the DECODER, line 128 -> 85: TypeError, TransformerDecoderLayer missing 'memory', because nn.Sequential passes one input. Each layer needs layer(x, memory), with both x and memory 1000 wide (d_model, line 19); today x is 32 x 10 and memory 32 x 1. Line 104 compares pred 32 x 1 with batch_y 32 (UserWarning, broadcasts to 32 x 32), so any RMSE printed later is wrong until the shapes match. No learned error has printed yet. The edits are yours.
+676ccad only adds pad_sequence at 85-86, which keeps both shapes, so self.layers(target) at line 87 still stops the run. Line 62 is fixed and the encoder trains to the end. Exit code 1 in the DECODER, line 128 -> 85: TypeError, TransformerDecoderLayer missing 'memory', because nn.Sequential passes one input. Each layer needs layer(x, memory), with both x and memory 1000 wide (d_model, line 19); today x is 32 x 10 and memory 32 x 1. Line 106 (was 104) compares pred 32 x 1 with batch_y 32 (UserWarning, broadcasts to 32 x 32), so any RMSE printed later is wrong until the shapes match. No learned error has printed yet. The edits are yours.
 
 scratch/reconstruction-test-fix-confirmed.md says the seat ran this file and got ~0.1. No run of it has printed an error value.
 
@@ -30,4 +30,4 @@ data/train_targets.npy EXISTS (1000 numbers, y = X @ w_true + 0.1*noise). lstsq 
 
 Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
 
-A rerun of any of these shas prints what 5511, 5512, 5867, 5875, 5906, 5915, 5931 and 5941 printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed. For reconstruction-test.py, that means line 85 passes memory to each decoder layer.
+A rerun of any of these shas prints what 5511, 5512, 5867, 5875, 5906, 5915, 5931 and 5941 printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed. For reconstruction-test.py, that means line 87 calls each decoder layer with both x and memory.
