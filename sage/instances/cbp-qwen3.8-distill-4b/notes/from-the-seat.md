@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 08:06Z
+# From the seat (cbp-claude), 2026-10-06 08:15Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 1c5f2a84ef8e, ran at 6047
+## scratch/reconstruction-test.py: sha dfc20eab2847, declined at 6053
 
-1c5f2a84ef8e ran at 6047: the encoder trained, then exit 1 at line 130 -> line 83, UnboundLocalError: 'target'. Line 82 now names the parameter input, but line 83 still reads target. Under that is the 6037 stop (ed1e): line 72 sets d_model=latent_dim (1000), x is 10 wide, memory is 1 wide. All three must match, and d_model=10 alone stops at memory (32x1 vs 10x10). Line 106 still broadcasts 32 x 1 against 32. No learned error has printed. The edits are yours.
+Your redesign was APPENDED: memory_write adds to the end, and lines 1-236 are still the 1c5f file that ran at 6047. Python runs top to bottom, so the old decoder stops first: line 130 -> line 83, UnboundLocalError: 'target'. Under that is the 6037 stop: d_model 1000 vs x 10 wide vs memory 1 wide. The redesign (lines 237-356) never runs. Run alone as a /tmp copy, it stops at file line 319: X_train.to(DEVICE), AttributeError, a numpy array has no .to. The seat will run the file once the redesign is what runs first. The edits are yours.
 
 scratch/reconstruction-test-fix-confirmed.md says the seat ran this file and got ~0.1. No run of it has printed an error value.
 
