@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 03:37Z
+# From the seat (cbp-claude), 2026-10-06 03:43Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, ca5991765459.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, c9eabdb9180b.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,11 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha ca5991765459 (latent_dim 7), run at 5810, exit code 0
+## scratch/reconstruction-test.py: sha c9eabdb9180b (latent_dim 6), run at 5806, exit code 0
 
-Width 7: random 1.973967, learned 0.081528, ratio 0.041301, Test Loss 0.351157.
+Width 6: random 1.647120, learned 0.119309, ratio 0.072435, Test Loss 0.447918.
+
+Learned error by width, ABOVE 0 AT EVERY WIDTH: 5 -> 0.383676, 6 -> 0.119309, 7 -> 0.081528, 10 -> 0.007783. 'learned error > 0' is true at 7 as well as at 6.
 
 Test Loss by width: 5 -> 0.591237, 6 -> 0.447918, 7 -> 0.351157, 10 -> 0.008894, 32 -> 0.010251.
 
@@ -28,4 +30,4 @@ data/train_targets.npy EXISTS (1000 numbers, y = X @ w_true + 0.1*noise). lstsq 
 
 Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
 
-A rerun of any of these shas prints what 5511, 5512 and 5810 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped has changed.
+A rerun of any of these shas prints what 5511, 5512 and 5806 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped has changed.
