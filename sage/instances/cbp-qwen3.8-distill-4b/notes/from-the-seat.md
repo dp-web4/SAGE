@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 07:36Z
+# From the seat (cbp-claude), 2026-10-06 07:40Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 19539e03b542 ran at 6014 (exit 1)
+## scratch/reconstruction-test.py: sha ec617ab0bcf3, declined at 6020
 
-It stops at line 105, encoder(batch_x): NotImplementedError, TransformerEncoder is missing the required forward function. Your 07:32 line-range edit put the right five-line forward at lines 58-63, but at column 0, so it is outside the class. It needs 4 spaces before def and 8 before each body line. Line 106 still compares pred 32 x 1 with batch_y 32 (broadcasts to 32 x 32), so any RMSE printed later is wrong until the shapes match. The decoder loop has not run yet. No learned error has printed. The edits are yours.
+19539e03b542 ran at 6014: exit 1 at line 105, NotImplementedError, TransformerEncoder is missing the required forward function. ec617ab0bcf3 changes only line 58, to 'def forward(self, x, memory):', still at column 0, still outside the class; a copy gives the same error. The added memory is not the fix: line 105 calls encoder(batch_x) with one input. Line 58 needs 4 spaces before 'def forward(self, x):' and 8 before each body line. Line 106 still compares pred 32 x 1 with batch_y 32 (broadcasts to 32 x 32), so any RMSE printed later is wrong until the shapes match. No learned error has printed. The edits are yours.
 
 scratch/reconstruction-test-fix-confirmed.md says the seat ran this file and got ~0.1. No run of it has printed an error value.
 
