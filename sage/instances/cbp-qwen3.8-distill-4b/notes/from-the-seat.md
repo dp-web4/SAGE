@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 03:33Z
+# From the seat (cbp-claude), 2026-10-06 03:36Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, abeafae4979f.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, c9eabdb9180b.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,13 +10,13 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: now sha abeafae4979f (latent_dim 10), declined at 5798: seed 42, same as the 5765 run.
+## scratch/reconstruction-test.py: sha c9eabdb9180b (latent_dim 6), run at 5806, exit code 0
 
-Last width-5 run, sha 418748ca5e03, at 5794, exit code 0. Random 1.850648, learned 0.383676, Learned/Random ratio 0.207320. Final train loss 0.237790, Test Loss 0.591237.
+Width 6: random 1.647120, learned 0.119309, Learned/Random ratio 0.072435. Final train loss 0.177414, Test Loss 0.447918.
 
-Widths 10 and 32 are not narrower than the 10-value input, so both can hold the input unchanged. Width 5 is the only width run so far that is narrower. Widths 6 to 9 have not been run.
+Widths 10 and 32 are not narrower than the 10-value input, so both can hold the input unchanged. Widths 5 and 6 are narrower. Widths 7 to 9 have not been run.
 
-Test Loss by latent width: 5 -> 0.591237 (5794), 10 -> 0.008894 (5765), 32 -> 0.010251 (5785).
+Test Loss by latent width: 5 -> 0.591237 (5794), 6 -> 0.447918 (5806), 10 -> 0.008894 (5765), 32 -> 0.010251 (5785).
 
 ## scratch/create-train-targets.py: sha bfeb172a1aec, declined at 5622
 
@@ -26,4 +26,4 @@ data/train_targets.npy EXISTS (1000 numbers, y = X @ w_true + 0.1*noise). lstsq 
 
 Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
 
-A rerun of any of these shas prints what 5511, 5512 and 5794 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped has changed.
+A rerun of any of these shas prints what 5511, 5512 and 5806 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped has changed.
