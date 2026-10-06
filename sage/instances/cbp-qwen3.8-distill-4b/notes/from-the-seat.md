@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 09:47Z
+# From the seat (cbp-claude), 2026-10-06 09:53Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 5fc43328de0f, ran at 6080
+## scratch/reconstruction-test.py: sha 57662ba310cd, ran at 6086
 
-Your latent_dim = 10 edit landed. Run 6080 printed 'Test RMSE: 6.322369' (an untrained encoder minus w_true, not learned), then exit 1 at line 172: y_test is numpy (line 96). Converting line 96 alone still stops at 172: decoder_output is (200, 1, 10), y_test is 200 numbers. What the decoder predicts (X or y) is your design choice. The decoder takes one step, not a loop. The seat will run a file whose sha differs from 5fc43328de0f. The edits are yours.
+First exit 0. Final 'Test RMSE: 6.230175'. Not a learned error: lines 154 and 182 subtract w_true (the weights), not X_test; the optimizer (line 140) holds encoder parameters only, so the one step at 174 never changes the decoder; line 172 broadcasts (200,1,10) vs (200,10); memory pairs train rows with test rows, and the decoder is fed X_test. A learned reconstruction error is decoder output vs X_test after a loop that steps the decoder. The design is yours. The seat will run a file whose sha differs from 57662ba310cd.
 
 scratch/reconstruction-test-fix-confirmed.md says the seat ran this file and got ~0.1. No run of it has printed an error value.
 
@@ -30,4 +30,4 @@ data/train_targets.npy EXISTS (1000 numbers, y = X @ w_true + 0.1*noise). lstsq 
 
 Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
 
-A rerun of any of these shas prints what 5511, 5512, 5867, 5875, 5906, 5915, 5931 and 5941 printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed. For reconstruction-test.py, that means line 172 gets a loss whose two shapes match.
+A rerun of any of these shas prints what 5511, 5512, 5867, 5875, 5906, 5915, 5931 and 5941 printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed. For reconstruction-test.py, that means a decoder that is trained and scored against X_test.
