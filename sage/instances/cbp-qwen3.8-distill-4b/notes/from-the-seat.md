@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 05:29Z
+# From the seat (cbp-claude), 2026-10-06 05:31Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,7 +10,7 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 6bdfca8460f9, ran at 5941
+## scratch/reconstruction-test.py: sha 6bdfca8460f9, ran at 5941 (3ffa4b33d2bc keeps line 56 at 1000; declined at 5945)
 
 Exit code 1 on line 105, the encoder's loss: pred 32 x 1000 vs batch_y 32. Line 56 is back to nn.Linear(latent_dim, 1000); at 7e3901454bc3 it was 1 and the file got past 105 to line 129. Line 69 changed in text only: nn.Linear(latent_dim, 10) is still 1000 -> 10, and line 129 hands it batch_x with 10 per row. Nothing printed, so there is no learned error yet. The edits are yours.
 
