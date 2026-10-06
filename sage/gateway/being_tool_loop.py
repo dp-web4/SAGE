@@ -46,6 +46,7 @@ class ToolTurnResult:
     duplicates: List[dict] = field(default_factory=list)   # identical calls answered without re-executing: {step, effector}
     stay_awake: Optional[str] = None                       # the being asked for another beat right after this one; its reason
     yielded: Optional[str] = None                          # the harness ended the turn for a higher-priority event: what
+    handoff: Optional[str] = None                          # the harness ended the turn at the window floor: the note it wrote
     json_arg_failures: List[dict] = field(default_factory=list)  # act_form="json": chosen acts whose arguments failed (no act)
 
     @property
@@ -121,6 +122,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     last_fp, repeats = None, 0
     stay_awake = None
     warned = False
+    floor_warned_at = None                             # the step the floor notice was given
     reads_this_turn: Dict[str, List[int]] = {}
 
     while uncapped or step < max_steps:
@@ -173,6 +175,29 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                 f"work, or call `rest` and close cleanly.")})
             interjected.append({"step": step, "nudge": "window", "pressure": round(w["pressure"], 3),
                                 "left": w["left"]})
+
+        # THE FLOOR: compaction can no longer make room in this beat (see FLOOR_HANDOFF_AFTER).
+        if w and w.get("floor"):
+            if floor_warned_at is None:
+                floor_warned_at = step
+                convo.append({"role": "user", "content": (
+                    f"[harness] Your window is at its floor: after compaction this beat's prompt "
+                    f"({w.get('prompt')} of {w.get('num_ctx')} tokens) no longer leaves room for an "
+                    f"answer, and it cannot shrink further. Write where you are to a scratch note "
+                    f"now (what you are doing, the next step, the files involved), then call "
+                    f"stay_awake: the next beat starts with an empty window. If you are still here "
+                    f"in {FLOOR_HANDOFF_AFTER} steps, the harness writes a handoff note for you "
+                    f"({HANDOFF_NOTE}) and starts that next beat itself.")})
+                interjected.append({"step": step, "nudge": "floor", "prompt": w.get("prompt")})
+            elif step - floor_warned_at >= FLOOR_HANDOFF_AFTER:
+                note = _write_handoff(getattr(client, "memory_root", None), trace, content, step, w,
+                                      pending=intents)
+                interjected.append({"step": step, "handoff": note or "(note could not be written)"})
+                return ToolTurnResult(
+                    reply=content, trace=trace, steps=step, interjected=interjected,
+                    duplicates=duplicates, handoff=note,
+                    stay_awake=stay_awake or (f"harness: the window reached its floor at step {step}; "
+                                              f"continue from {note or 'your scratch notes'}"))
 
         if not intents:                                    # a spoken turn — the being is done
             return ToolTurnResult(reply=content, trace=trace, steps=step,
@@ -892,6 +917,53 @@ def _retry_room_chars(llm, msgs, measured) -> int:
 # until 09-13 there was no way to say so except by falling silent.
 REST = "rest"
 WINDOW_WARN_AT = 0.80        # fraction of num_ctx at which the being is told where it stands
+# THE WINDOW FLOOR (dp, 2026-10-06: "build the automatic window reset"). Beats are uncapped, and
+# each step adds a pointer and a trimmed call that compaction is never allowed to remove; on top
+# of a ~19.5k-token seed that floor reaches 32,768 after ~25-30 steps, and from there every
+# generate retries against the wall (legion-being 10-05/06: 30-31% retried on the longest beats,
+# prompts 32,1xx-32,7xx). "At the floor" = after compaction the prompt still does not leave the
+# answer reserve. The being is told once; FLOOR_HANDOFF_AFTER steps later, still at the floor,
+# the harness writes the handoff note and ends the turn so the next beat starts with an empty
+# window. The note is the harness's, said so in its first line; it never speaks for the being.
+FLOOR_HANDOFF_AFTER = 2
+HANDOFF_NOTE = "scratch/handoff.md"
+
+
+def _write_handoff(root: Optional[str], trace, last_content: str, step: int, window: dict,
+                   pending=()) -> Optional[str]:
+    """Write the harness's handoff note to <root>/scratch/handoff.md and return its relative path,
+    or None (no root, or the write failed: never raises). What the harness KNOWS, said as such:
+    the last acts and their outcomes, and the being's last words. It does not guess the plan."""
+    if not root:
+        return None
+    try:
+        lines = [f"# Handoff written by the harness, not by you ({time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())})",
+                 "",
+                 f"Your last beat reached its window floor at step {step} ({window.get('prompt')} of "
+                 f"{window.get('num_ctx')} tokens after compaction) and was ended so this beat could start "
+                 f"with an empty window. Your own scratch notes, todo.md and journal.md hold what you wrote; "
+                 f"this is what the harness saw.",
+                 "", "## Your last acts (newest last)"]
+        for intent, env in list(trace)[-10:]:
+            args = {k: (v if len(str(v)) <= 80 else str(v)[:77] + "...") for k, v in (intent.args or {}).items()}
+            outcome = "ok" if getattr(env, "ok", False) else ("refused" if getattr(env, "refused", False)
+                                                             else f"failed: {str(getattr(env, 'error', '') or '')[:120]}")
+            lines.append(f"- {intent.effector} {json.dumps(args, ensure_ascii=False)[:240]} -> {outcome}")
+        if pending:
+            lines += ["", "## The call you were about to make (NOT run: the beat ended first)"]
+            for intent in pending:
+                lines.append(f"- {intent.effector} {json.dumps(intent.args or {}, ensure_ascii=False)[:400]}")
+        if (last_content or "").strip():
+            lines += ["", "## What you last said", (last_content or "").strip()[:800]]
+        lines += ["", "Compaction kept each long result's whole text under scratch/elided/; "
+                      "memory_read a narrow range of one if you need it."]
+        path = os.path.join(root, HANDOFF_NOTE)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        return HANDOFF_NOTE
+    except OSError:
+        return None
 
 
 def _window_pressure(llm, prompt_tokens) -> Optional[dict]:
@@ -1379,6 +1451,11 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         if _elided:
             compacted.append({"step": len(thoughts), "elisions": len(_elided),
                               "chars": sum(e["chars"] for e in _elided)})
+        try:
+            _room = int(getattr(llm, "num_ctx", 0) or 0) - _ANSWER_RESERVE
+            at_floor = bool(measured) and _room > 0 and _est_tokens(_convo_chars(msgs), measured) > _room
+        except (TypeError, ValueError):
+            at_floor = False
         retried = 0
         nudged = False
         chars_sent = _convo_chars(msgs)
@@ -1547,6 +1624,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             calls = salvage_tool_calls(content, tools)
             salvaged.extend({"step": len(thoughts) - 1, "effector": c["function"]["name"],
                              "form": c["_salvaged"]} for c in calls)
+        if window is not None:
+            window = dict(window, floor=at_floor)
         return {"content": content, "intents": parse_tool_calls(calls), "window": window}
 
     result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps,

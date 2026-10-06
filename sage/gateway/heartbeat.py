@@ -2341,6 +2341,9 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
         _seat = seat_name()
         parts.append(f"## From the seat ({_seat}), directly (notes/from-the-seat.md: what the "
                      "seat measured for you. You read this; you do not write it)\n" + from_seat.strip())
+    handoff = handoff_view(instance)
+    if handoff:
+        parts.append(handoff)
     from_dp = letter_view(instance / DP_CHANNEL, DP_CHANNEL_CHARS, DP_CHANNEL)
     if from_dp.strip():
         parts.append("## From dp, the operator, directly (notes/from-dp.md: dp's own words, "
@@ -2357,6 +2360,26 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     for d in ("scratch", "notes"):
         parts.append(dir_listing(instance, d))
     return "\n\n".join(parts)
+
+
+HANDOFF_SHOW_S = 24 * 3600
+HANDOFF_CHARS = 3000
+
+
+def handoff_view(instance) -> str:
+    """The harness's window-floor handoff (being_tool_loop.HANDOFF_NOTE), shown while it is fresh
+    and until the being retires it. '' when there is none. The last beat was ENDED by the harness
+    so this one could start with an empty window; the note says what the harness saw."""
+    from sage.gateway.being_tool_loop import HANDOFF_NOTE
+    p = Path(instance) / HANDOFF_NOTE
+    try:
+        if not p.is_file() or time.time() - p.stat().st_mtime > HANDOFF_SHOW_S:
+            return ""
+        text = p.read_text(errors="replace")[:HANDOFF_CHARS]
+    except OSError:
+        return ""
+    return (f"## Where your last beat stopped ({HANDOFF_NOTE}, written by the harness when your window "
+            f"reached its floor; retire_note it once you have picked up from it)\n" + text.strip())
 
 
 LISTING_LIMIT = 30
@@ -4128,6 +4151,7 @@ def main(argv=None) -> int:
                                              (i for i in getattr(res, "interjected", [])
                                               if i.get("nudge") == "window"), None),
                                          "looped": getattr(res, "looped", None),
+                                         "handoff": getattr(res, "handoff", None),
                                          "interjected": list(getattr(res, "interjected", [])),
                                          "trace": _trace(res), "thinking": [t[:4000] for t in res.thinking],
                                          "salvaged": list(res.salvaged), "generates": list(res.generates)}
