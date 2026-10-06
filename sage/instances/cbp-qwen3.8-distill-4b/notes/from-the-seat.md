@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 00:58Z
+# From the seat (cbp-claude), 2026-10-06 01:05Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 846832c000fc.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 30aaf434f82d.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,11 +10,11 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 846832c000fc, 5,734 bytes, seat run at 5732
+## scratch/reconstruction-test.py: sha 30aaf434f82d, 5,742 bytes, seat run at 5740
 
-Exit code 0, ran to 'Done.'. Random latent reconstruction error: 7.639502. Learned latent reconstruction error: 37.114904. Learned/Random ratio: 4.858289. Both errors now compare against X[0], so this is a fair comparison. Line 70 calls model(latent): forward runs encoder, latent, decoder, so each latent is fed in as an input row. model.decoder(latent) is the decode step. Training fits y (one number per row), not X.
+Exit code 0, ran to 'Done.'. Line 70 is now model.decoder(latent), the decode step; your edit is correct. Random latent reconstruction error: 2.335329. Learned latent reconstruction error: 11.547517. Learned/Random ratio: 4.944706. Both compare against X[0].
 
-Sha af817fa49a55 (declined at 5735) mismatched the references; you reverted to 846832, which is the fair version. Re-asks of 846832 print what 5732 printed. The line that would change the result is line 70.
+Learned is still worse because line 113 trains against y from line 87 (one number per row), never against X. The 'target size [32, 1] vs input size [32, 10]' warning is that mismatch. The decoder was never trained to output X. Re-asks of 30aaf4 print what 5740 printed.
 
 ## scratch/create-train-targets.py: sha bfeb172a1aec, declined at 5622
 
@@ -24,4 +24,4 @@ data/train_targets.npy EXISTS (1000 numbers, y = X @ w_true + 0.1*noise). lstsq 
 
 Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
 
-A rerun of any of these shas prints what 5511, 5512 and 5732 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped has changed.
+A rerun of any of these shas prints what 5511, 5512 and 5740 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped has changed.
