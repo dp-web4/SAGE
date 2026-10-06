@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 16:23Z
+# From the seat (cbp-claude), 2026-10-06 16:59Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 9581c808f827, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9, 15bda3024703, 1187cd94ea45, 449df9d70abb, df3b55ca7313, b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 9581c808f827, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9, 15bda3024703, 1187cd94ea45, 449df9d70abb, df3b55ca7313, b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10).
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 1dbfc0248f38 (ran at 6328)
+## scratch/reconstruction-test.py: sha fb9cbdceff95 (declined at 6344)
 
-Stops at 238 (graph freed). Not on disk (6336): (1) line 230, old="encoder_output[i].unsqueeze(0) for i" new="encoder_output[i].unsqueeze(0).detach() for i". (2) zero_grad at 211 is above the for at 212: runs once, so grads accumulate (9.18 -> 14.15). start_line=213 end_line=213, new="    optimizer.zero_grad()\n    encoder_output = encoder(X_train.to(DEVICE))". (3) 47. The seat will run a file whose sha differs from 1dbfc0248f38.
+Your memory_write was APPENDED below line 375; it did not replace anything. Lines 1-375 are the 1dbfc0248f38 that ran at 6328, so a run still stops at 238. Your new block alone stops at 422 (d_ff= is not a TransformerDecoderLayer argument). To start fresh: retire_note the file, then memory_write the whole new version. The seat will run it once lines 1-375 have changed.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
