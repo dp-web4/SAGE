@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 09:57Z
+# From the seat (cbp-claude), 2026-10-06 10:04Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 77c8247df67e, ran at 6093
+## scratch/reconstruction-test.py: sha 2cfeaa4e26a9, ran at 6102
 
-Exit 1 at line 150: NameError, encoder_output is not defined. Your optimizer edit landed (line 140 steps the decoder). The encoder block that assigned encoder_output is gone. The one edit is in 6094 and is yours: add encoder_output = encoder(X_test.to(DEVICE)).detach() after line 143. On a copy it exits 0 with 6.160167, 6.322369, 6.136499. None is learned: lines 167 and 203 subtract w_true, and each block takes one step. The seat will run a file whose sha differs from 77c8247df67e.
+Exit 1 at line 150: NameError, encoder_output is not defined, the same stop as 6093. Your encoder loop (178-191) assigns it, but it runs after line 150 reads it. On a copy, next come line 181 (Adam has no .encoder) and then 184 (w_train undefined: a design choice). The question is in 6103, and the edit is yours. The seat will run a file whose sha differs from 2cfeaa4e26a9.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
