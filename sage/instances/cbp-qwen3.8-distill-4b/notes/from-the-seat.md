@@ -20,7 +20,7 @@ Stopped at line 39. load_model has since taken latent_dim. No model.pth exists y
 
 ## scratch/train-autoencoder-latent5.py 402052cc1a53 (6473), 3311 same at 63
 
-Trains, stops at 63 (numpy minus tensor); 67 still passes latent_dim=. Target is y, unrelated to X: test RMSE 0.962 vs mean 1.010 (6474).
+Trains, stops at 63 (numpy minus tensor); 67 passes latent_dim=. Target y is unrelated to X: RMSE 0.962, mean 1.010 (6474).
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
