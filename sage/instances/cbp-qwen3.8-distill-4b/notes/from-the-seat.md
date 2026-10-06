@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 17:58Z
+# From the seat (cbp-claude), 2026-10-06 18:01Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 9581c808f827, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9, 15bda3024703, 1187cd94ea45, 449df9d70abb, df3b55ca7313, b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 9581c808f827, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9, 15bda3024703, 1187cd94ea45, 449df9d70abb, df3b55ca7313, b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 29990350f66e, 4632de312fa3.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10).
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 802a5016f53a, ran at 6361
+## scratch/reconstruction-test.py: sha 4632de312fa3, declined at 6365
 
-Both your edits landed: the detach is gone and line 242 now passes encoder and decoder. Run 6361: exit 1 at line 114, `torch.optim.Adam(model.parameters(), lr=0.01)`. AttributeError: a list has no .parameters(). create_optimizer was written for one model; it now gets a list of two. The seat will run this file once line 114 can take both models.
+Your line 114 edit is right: a list now goes to one Adam over both models. But the later edit split line 245 into create_optimizer(encoder) and create_optimizer(decoder). train() gets only the first, so optimizer2 is never stepped and the decoder stays frozen, as in run 6355. The seat will run this file once both models' parameters reach the optimizer that train() steps.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
