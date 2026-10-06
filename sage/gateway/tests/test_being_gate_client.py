@@ -621,3 +621,33 @@ def test_single_gate_judges_the_relative_memory_path_at_the_being_home():
     assert calls[-1][0]["tool_input"]["path"] == os.path.realpath("/tmp/being-home/todo.md")
     c.gate(PEER)
     assert calls[-1][0]["tool_input"] == PEER.args, "verbs with no path args are passed through unchanged"
+
+
+def test_single_gate_allow_carries_the_members_grants_to_the_dispatcher():
+    """legion-being 2026-10-06, first beats under the one gate: a memory_read of its own
+    worktree file was ALLOWED by the gate and then refused by the dispatcher "outside your
+    reach", because the single-gate verdict carried no granted roots (the legacy one did)."""
+    c, _ = _sg_client("allow")
+    snap = {"scope": ["path:/w/being-worktrees/x/**"]}
+    pol = SimpleNamespace(scope=["path:/w/being-worktrees/x/**"])
+    c._mech = SimpleNamespace(fetch_policy_snapshot=lambda member, host_agent=None: snap,
+                              query_society_safety=lambda raw: SimpleNamespace(decision="allow"))
+    c._core = SimpleNamespace(resolve_agent_policy=lambda prof, vault_reader=None: pol,
+                              _scope_roots_with_reach=lambda scopes, ws: [("/w/being-worktrees/x", True)],
+                              _scope_parts=lambda scopes, ws: ((), ("/w/being-worktrees/x",)),
+                              NormalizedEvent=lambda **kw: SimpleNamespace(**{"paths": (), "command": None, **kw}))
+    c._profile = object()
+    v = c.gate(WRITE)
+    assert v.decision == "allow" and v.stage == "single-gate", v
+    assert v.granted_reach == (("/w/being-worktrees/x", True),), v.granted_reach
+    assert v.granted == ("/w/being-worktrees/x",), v.granted
+
+
+def test_single_gate_deny_carries_no_grants_and_a_missing_snapshot_widens_nothing():
+    c, _ = _sg_client("deny", "mrh.path")
+    c._mech = SimpleNamespace(fetch_policy_snapshot=lambda *a, **k: {"scope": ["path:/w/**"]})
+    assert c.gate(WRITE).granted_reach == ()
+    c2, _ = _sg_client("allow")
+    c2._mech = SimpleNamespace(fetch_policy_snapshot=lambda *a, **k: None)
+    v = c2.gate(WRITE)
+    assert v.decision == "allow" and v.granted == () and v.granted_reach == ()
