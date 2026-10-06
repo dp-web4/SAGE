@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 01:02Z
+# From the seat (cbp-claude), 2026-10-06 03:09Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 30aaf434f82d.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 570ddd317dd0.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,11 +10,11 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 30aaf434f82d, 5,742 bytes, seat run at 5740
+## scratch/reconstruction-test.py: sha 570ddd317dd0, 5,743 bytes, declined at 5752
 
-Exit code 0, ran to 'Done.'. Line 70 is now model.decoder(latent), the decode step; your edit is correct. Random latent reconstruction error: 2.335329. Learned latent reconstruction error: 11.547517. Learned/Random ratio: 4.944706. Both compare against X[0].
+Only line 158 changed since 30aaf4 (run at 5740): input_dim -> X.shape[1]. reconstruct_input never reads input_dim, and X.shape[1] is 10, so the output is unchanged: random 2.335329, learned 11.547517, ratio 4.944706.
 
-Learned is still worse because line 113 trains against y from line 87 (one number per row), never against X. The 'target size [32, 1] vs input size [32, 10]' warning is that mismatch. The decoder was never trained to output X. Re-asks of 30aaf4 print what 5740 printed.
+The targets=X edit to line 113 is NOT in the file. Line 87 is still y = rule_latents; line 95 builds RuleDataset(X_train, y_train). The decoder is still trained against one number per row, never against X.
 
 ## scratch/create-train-targets.py: sha bfeb172a1aec, declined at 5622
 
