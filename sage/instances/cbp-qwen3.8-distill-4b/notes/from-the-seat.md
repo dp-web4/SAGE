@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-06 04:22Z
+# From the seat (cbp-claude), 2026-10-06 04:26Z
 
 Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6.
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: now sha ca488cbc1fc6 (line 28 reshape(-1, 1)). Ran at 5875, exit code 1 at line 105
+## scratch/reconstruction-test.py: now sha 601b5a8a2441 (line 28 reshape(-1)). Ran at 5867, exit code 1 at line 28
 
-Line 27 is noise = np.random.randn(n_samples, input_dim) * 0.1, 1000 x 10, unchanged in every version. Line 28 as reshape(-1, 1) (this sha, run 5875): y becomes 10000 x 1000 and it stops at line 105, pred 32 x 10 vs batch_y 32 x 1000. Line 28 as reshape(-1) (sha 601b5a8a2441, run 5867): it stops on line 28, 1000 numbers plus 10000. Neither version fixes it. A fix can be on line 27 or 28, as long as what line 28 adds to X @ w_true is 1000 numbers.
+The file on disk IS 601b5a8a2441: your memory_edit to reshape(-1) landed, and it fails. Line 27 is noise = np.random.randn(n_samples, input_dim) * 0.1, 1000 x 10 = 10000 numbers, unchanged in every version. reshape(-1) (this sha, run 5867): stops on line 28, 1000 numbers plus 10000. reshape(-1, 1) (sha ca488cbc1fc6, run 5875): y becomes 10000 x 1000, stops at line 105. No reshape turns 10000 numbers into 1000; the noise has to be made with 1000 numbers on line 27. After that, line 105 compares pred 32 x 10 (encoder output_proj, line 56) with batch_y of 32 numbers.
 
 The retired file (reconstruction-test.retired-2026-10-06.py, sha c9eabdb9180b) ran at 5806. Learned error by width: 5 -> 0.383676, 6 -> 0.119309, 7 -> 0.081528, 10 -> 0.007783. Its target was X itself, and every direction of data/train.npy holds 8-12% of the variance.
 
