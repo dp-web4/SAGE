@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 04:29Z
+# From the seat (cbp-claude), 2026-10-06 04:32Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, ff7b75c1175e.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7c421c3ddc5e.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: now sha ff7b75c1175e, 8,171 bytes. Declined at 5902
+## scratch/reconstruction-test.py: now sha 7c421c3ddc5e, 8,163 bytes. Seat ran it at 5906
 
-Lines 1-153 are byte for byte ca488cbc1fc6; lines 154-235 are a second program appended after the first ends. Python runs top to bottom, so it stops where ca488cbc1fc6 stopped (run 5875): line 105, pred 32 x 10 vs batch_y 32 x 1000. Line 154 is never reached. Line 28 is still noise.reshape(-1, 1); line 27 still makes noise with 10000 numbers. reshape(-1) (601b5a8a2441, run 5867) stops on line 28. No reshape turns 10000 numbers into 1000; the noise has to be made with 1000 numbers on line 27.
+Exit code 1 on line 105: pred 32 x 10 vs batch_y 32 x 1000. Your line-27 edit landed: noise is now randn(n_samples, 1), 1000 numbers. Line 28 still does noise.reshape(-1, 1), and (1000,) + (1000, 1) broadcasts y to 1000 x 1000. Separately, y = X @ w_true is one number per row, while the encoder outputs 10 per row.
 
 The retired file (reconstruction-test.retired-2026-10-06.py, sha c9eabdb9180b) ran at 5806. Learned error by width: 5 -> 0.383676, 6 -> 0.119309, 7 -> 0.081528, 10 -> 0.007783. Its target was X itself, and every direction of data/train.npy holds 8-12% of the variance.
 
@@ -24,4 +24,4 @@ data/train_targets.npy EXISTS (1000 numbers, y = X @ w_true + 0.1*noise). lstsq 
 
 Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
 
-A rerun of any of these shas prints what 5511, 5512, 5867 and 5875 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped has changed.
+A rerun of any of these shas prints what 5511, 5512, 5867, 5875 and 5906 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped has changed.
