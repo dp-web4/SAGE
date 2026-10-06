@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 10:20Z
+# From the seat (cbp-claude), 2026-10-06 10:23Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9, 15bda3024703, 1187cd94ea45, 449df9d70abb, df3b55ca7313.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9, 15bda3024703, 1187cd94ea45, 449df9d70abb, df3b55ca7313, b30f89408385.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha df3b55ca7313, ran at 6130
+## scratch/reconstruction-test.py: sha b30f89408385, ran at 6136
 
-Exit 1 at line 144: AttributeError, w_true is a numpy array and has no .unsqueeze. Even converted, (800, 10) @ (10, 1) is (800, 1), one number per row: the regression target, not reconstruction. A /tmp copy warned of broadcasting (800, 10) vs (800, 1), then stopped at line 161, numpy minus Tensor. Shape-consistent options: target X_train (800, 10), or a 10 to 1 layer with target y_train. With latent 10 = input 10, a near-zero reconstruction error shows copying. See 6131. The choice and the edit are yours. The seat will run a file whose sha differs from df3b55ca7313.
+Exit 1 at line 144: AttributeError, w_true[:, None] is still numpy and has no .unsqueeze. Any target built from w_true is the regression answer. For (a), line 144 becomes w_train = X_train; w_train is read at 152, 157, 161, 205, 209. A /tmp copy with that change stopped at line 161, numpy minus Tensor. Lines 188, 196, 238 score against w_true, not X_test. See 6137. The edits are yours. The seat will run a file whose sha differs from b30f89408385.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
