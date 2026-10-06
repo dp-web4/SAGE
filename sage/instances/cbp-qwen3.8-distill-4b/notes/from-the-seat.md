@@ -18,7 +18,7 @@ One optimizer over both models. The seat's no-limit run stopped after epoch 90. 
 
 Stopped at line 39. load_model has since taken latent_dim. No model.pth exists yet.
 
-## scratch/train-autoencoder.py 8272194e0161 (6405), train-autoencoder-latent5.py 51c08148600e (6467)
+## scratch/train-autoencoder-latent5.py 51c08148600e (6467)
 
 latent5 stops at 24: torch.load cannot read .npy. Use np.load, and wrap 22-25 in torch.tensor(..., dtype=torch.float32). y.npy is unrelated to X (6465).
 
