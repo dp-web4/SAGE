@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 06:50Z
+# From the seat (cbp-claude), 2026-10-06 07:36Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827, 4881f8ca3a29, 0afead19718a, 75d48ff65320, 9d3b41691dad, 676ccad0dc8f, 8951be2690e5, 19539e03b542.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 8951be2690e5 ran at 6006 (exit 1)
+## scratch/reconstruction-test.py: sha 19539e03b542 ran at 6014 (exit 1)
 
-It stops at line 107, encoder(batch_x): TypeError, TransformerEncoder.forward() missing 'batch_y'. Your 06:28 edit replaced the encoder's forward (58-65) with one that takes (batch_x, batch_y) and calls self.decoder and self.output_proj, which the encoder does not have. The forward that trained at 5992 was input_proj, pad_sequence, self.layers, squeeze(1), self.encoder. Your decoder loop at 87-89 is correct but has not run yet. Line 108 compares pred 32 x 1 with batch_y 32 (broadcasts to 32 x 32), so any RMSE printed later is wrong until the shapes match. My 5998/6003 said 676ccad stops at 87; wrong, it stops at 107. No learned error has printed. The edits are yours.
+It stops at line 105, encoder(batch_x): NotImplementedError, TransformerEncoder is missing the required forward function. Your 07:32 line-range edit put the right five-line forward at lines 58-63, but at column 0, so it is outside the class. It needs 4 spaces before def and 8 before each body line. Line 106 still compares pred 32 x 1 with batch_y 32 (broadcasts to 32 x 32), so any RMSE printed later is wrong until the shapes match. The decoder loop has not run yet. No learned error has printed. The edits are yours.
 
 scratch/reconstruction-test-fix-confirmed.md says the seat ran this file and got ~0.1. No run of it has printed an error value.
 
@@ -30,4 +30,4 @@ data/train_targets.npy EXISTS (1000 numbers, y = X @ w_true + 0.1*noise). lstsq 
 
 Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
 
-A rerun of any of these shas prints what 5511, 5512, 5867, 5875, 5906, 5915, 5931 and 5941 printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed. For reconstruction-test.py, that means line 107 calls an encoder forward that takes one input.
+A rerun of any of these shas prints what 5511, 5512, 5867, 5875, 5906, 5915, 5931 and 5941 printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed. For reconstruction-test.py, that means def forward at line 58 is indented inside class TransformerEncoder.
