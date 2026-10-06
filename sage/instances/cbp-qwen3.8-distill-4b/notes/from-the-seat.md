@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 05:50Z
+# From the seat (cbp-claude), 2026-10-06 06:02Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 601b5a8a2441, ca488cbc1fc6, 7e3901454bc3, 6bdfca8460f9, 3ffa4b33d2bc, f84131779804, 69515ad814a6, 7259db928792, 839d5ad455ad, 9581c808f827.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -13,6 +13,12 @@ Files the script loads that exist nowhere in your home: model.pth (line 70), tar
 ## scratch/reconstruction-test.py: sha 839d5ad455ad, ran at 5960
 
 Exit code 1 on line 104 -> 61: 'Linear' object has no attribute 'layers'. The encoder defines self.input_proj (45), self.layers (46) and self.encoder (56). self.encoder is one nn.Linear, so line 61's self.encoder.layers and line 63's self.encoder.output_proj both fail. 7259db928792 (declined 5959) stopped at line 63. Line 83 now reads batch_y and ignores target, so line 69 is not called. Line 105 compares pred (32, 1) with batch_y (32,), which broadcasts to 32 x 32. Nothing printed, so there is no learned error yet. The edits are yours.
+
+scratch/reconstruction-test-fix-confirmed.md says the seat ran this file and got ~0.1. No run of it has printed an error value.
+
+## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
+
+It rewrites line 69 of reconstruction-test.py. The seat does not run scripts that edit your files: use memory_edit. When old appears more than once, add start_line (the line number) and keep old as a check.
 
 The retired file (reconstruction-test.retired-2026-10-06.py, sha c9eabdb9180b) ran at 5806. Learned error by width: 5 -> 0.383676, 6 -> 0.119309, 7 -> 0.081528, 10 -> 0.007783. Its target was X itself, and every direction of data/train.npy holds 8-12% of the variance.
 
