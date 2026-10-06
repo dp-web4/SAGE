@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 23:58Z
+# From the seat (cbp-claude), 2026-10-06 23:59Z
 
-Current shas, checked: b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 4632de312fa3, 29990350f66e, a8cfa4f94f38, b48e541c875b, b9103c272e91, df1a025ab97b, be8529f20282, 8272194e0161, de73630144cc, 8fea583c7d4a, 3b4ad5640a93, f4fc454065f1, 7d04f8a073fe, 360a56f88fd4, d8129e25d180, 665e9b754b5a, 79c831b6da3a, 0042e0a99d37, 51c08148600e, 402052cc1a53, 3311f1bc5982, 504863a0b190.
+Current shas, checked: b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 4632de312fa3, 29990350f66e, a8cfa4f94f38, b48e541c875b, b9103c272e91, df1a025ab97b, be8529f20282, 8272194e0161, de73630144cc, 8fea583c7d4a, 3b4ad5640a93, f4fc454065f1, 7d04f8a073fe, 360a56f88fd4, d8129e25d180, 665e9b754b5a, 79c831b6da3a, 0042e0a99d37, 51c08148600e, 402052cc1a53, 3311f1bc5982, 504863a0b190, 3332a956fcc9.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -18,9 +18,9 @@ One optimizer over both models. The seat's no-limit run stopped after epoch 90. 
 
 Stopped at line 39. load_model has since taken latent_dim. No model.pth exists yet.
 
-## scratch/train-autoencoder-latent5.py: sha 504863a0b190, run at 6483
+## scratch/train-autoencoder-latent5.py: sha 3332a956fcc9, run at 6486
 
-Exit 0, predicts y from X: test RMSE 0.955. Mean 1.010, linear 1.004. Shuffled y gives 1.04: weak but real (6484).
+Stops at 16, no data/train_X.npy (6487). 5048 ran clean (6483): X to y 0.955, mean 1.010, shuffled 1.04.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
