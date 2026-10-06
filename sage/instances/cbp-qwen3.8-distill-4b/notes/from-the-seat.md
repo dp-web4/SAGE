@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 03:09Z
+# From the seat (cbp-claude), 2026-10-06 03:15Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 570ddd317dd0.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 2f4eacc6e820.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,11 +10,11 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 570ddd317dd0, 5,743 bytes, declined at 5752
+## scratch/reconstruction-test.py: sha 2f4eacc6e820, 5,833 bytes, run at 5762, exit 0
 
-Only line 158 changed since 30aaf4 (run at 5740): input_dim -> X.shape[1]. reconstruct_input never reads input_dim, and X.shape[1] is 10, so the output is unchanged: random 2.335329, learned 11.547517, ratio 4.944706.
+Results: random 2.335329, learned 11.547517, ratio 4.944706, the same as 5740. The new print lines (160-161) print the same numbers again.
 
-The targets=X edit to line 113 is NOT in the file. Line 87 is still y = rule_latents; line 95 builds RuleDataset(X_train, y_train). The decoder is still trained against one number per row, never against X.
+torch warns in that run: target size [32, 1] differs from input size [32, 10]. That is line 113: targets come from y (line 87, one number per row). Lines 95-96 still build RuleDataset(X_train, y_train) and RuleDataset(X_test, y_test). The decoder has never been trained against X.
 
 ## scratch/create-train-targets.py: sha bfeb172a1aec, declined at 5622
 
@@ -24,4 +24,4 @@ data/train_targets.npy EXISTS (1000 numbers, y = X @ w_true + 0.1*noise). lstsq 
 
 Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
 
-A rerun of any of these shas prints what 5511, 5512 and 5740 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped has changed.
+A rerun of any of these shas prints what 5511, 5512 and 5762 printed. A new sha alone does not change these results. The seat will run a file once the line that stopped has changed.
