@@ -34,7 +34,9 @@ def test_at_the_floor_the_being_is_told_once_then_the_harness_hands_off(tmp_path
     assert r.stay_awake and "floor" in r.stay_awake and btl.HANDOFF_NOTE in r.stay_awake
     note = (tmp_path / btl.HANDOFF_NOTE).read_text()
     assert note.startswith("# Handoff written by the harness, not by you")
-    assert "witness" in note and "NOT run" in note and "e5" in note      # the pending call is named
+    # the handoff step's own call RAN before the hand-off (the being's last act outranks the note)
+    assert "e5" in note and "NOT run" not in note
+    assert r.trace[-1][0].args == {"event": "e5"} and r.trace[-1][1].ok
 
 
 def test_no_floor_no_handoff(tmp_path):
@@ -102,3 +104,17 @@ def test_generate_marks_the_floor_from_the_servers_own_count(tmp_path):
     assert any(i.get("nudge") == "floor" for i in r.interjected), r.interjected
     assert r.handoff == btl.HANDOFF_NOTE, r.interjected
     assert len(seen) <= 6
+
+
+def test_a_rest_in_the_handoff_step_is_the_beings_choice(tmp_path):
+    c = _client(OK_DISPATCH)
+    c.memory_root = str(tmp_path)
+    n = {"i": 0}
+
+    def gen(convo):
+        i = n["i"]; n["i"] += 1
+        intent = BeingIntent("rest", {"reason": "done for now"}) if i == 2 else BeingIntent("witness", {"event": f"e{i}"})
+        return {"content": "", "intents": [intent],
+                "window": {"prompt": 32000, "num_ctx": 32768, "pressure": 0.97, "left": 768, "floor": True}}
+    r = btl.run_tool_turn(c, gen, [{"role": "user", "content": "go"}], max_steps=50)
+    assert r.rested == "done for now" and r.handoff is None

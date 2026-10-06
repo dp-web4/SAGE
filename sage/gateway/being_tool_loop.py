@@ -123,6 +123,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     stay_awake = None
     warned = False
     floor_warned_at = None                             # the step the floor notice was given
+    handoff_due = None                                 # the window reading that made the handoff due
     reads_this_turn: Dict[str, List[int]] = {}
 
     while uncapped or step < max_steps:
@@ -190,14 +191,11 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                     f"({HANDOFF_NOTE}) and starts that next beat itself.")})
                 interjected.append({"step": step, "nudge": "floor", "prompt": w.get("prompt")})
             elif step - floor_warned_at >= FLOOR_HANDOFF_AFTER:
-                note = _write_handoff(getattr(client, "memory_root", None), trace, content, step, w,
-                                      pending=intents)
-                interjected.append({"step": step, "handoff": note or "(note could not be written)"})
-                return ToolTurnResult(
-                    reply=content, trace=trace, steps=step, interjected=interjected,
-                    duplicates=duplicates, handoff=note,
-                    stay_awake=stay_awake or (f"harness: the window reached its floor at step {step}; "
-                                              f"continue from {note or 'your scratch notes'}"))
+                # RUN THIS STEP'S CALLS FIRST, then hand off. The first live handoff (legion-being
+                # 2026-10-06 21:26Z) cut the being off mid-compliance: its pending call WAS its own
+                # state note ("I'm at the context floor. Let me write a precise scratch note ...")
+                # and the harness's note listed it as "NOT run". The being's own words outrank ours.
+                handoff_due = w
 
         if not intents:                                    # a spoken turn — the being is done
             return ToolTurnResult(reply=content, trace=trace, steps=step,
@@ -306,6 +304,14 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
             return ToolTurnResult(reply=rested or content, trace=trace, steps=step,
                                   interjected=interjected, rested=rested or "(no reason given)",
                                   duplicates=duplicates, stay_awake=stay_awake)
+        if handoff_due is not None:
+            note = _write_handoff(getattr(client, "memory_root", None), trace, content, step, handoff_due)
+            interjected.append({"step": step, "handoff": note or "(note could not be written)"})
+            return ToolTurnResult(
+                reply=content, trace=trace, steps=step, interjected=interjected,
+                duplicates=duplicates, handoff=note,
+                stay_awake=stay_awake or (f"harness: the window reached its floor at step {step}; "
+                                          f"continue from {note or 'your scratch notes'}"))
         step += 1
 
         # A LOOP IS NOT WORK. Measured 2026-09-13T10:19Z: legion-being finished its beat and
