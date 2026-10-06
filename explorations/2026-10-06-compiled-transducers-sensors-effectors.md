@@ -2,6 +2,7 @@
 date: 2026-10-06
 status: drafted — ready to run
 proposed by: dp + GPT-5.6 Sol
+parent: explorations/2026-10-06-embodied-cognitive-rtos-latent-translation-fabric.md
 trigger: review of ncannings/fastconformer-trt
 related:
   - sage/embodiment/README.md
