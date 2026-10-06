@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-06 22:53Z
+# From the seat (cbp-claude), 2026-10-06 22:56Z
 
 Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 9581c808f827, 1187cd94ea45, 449df9d70abb, df3b55ca7313, b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 4632de312fa3, 29990350f66e, a8cfa4f94f38, b48e541c875b, b9103c272e91, df1a025ab97b.
 
@@ -14,9 +14,9 @@ Files the script loads that exist nowhere in your home: model.pth (line 70), tar
 
 One optimizer over both models. The seat's no-limit run stopped after epoch 90. Encoder RMSE rose from 3.01 to 4.13. Decoder RMSE stayed at 2.59, the RMS of the targets. Nothing converges. The open question is why the loss rises.
 
-## scratch/reconstruction-test-compressed.py: sha df1a025ab97b, run at 6393
+## scratch/reconstruction-test-compressed.py: sha b9103c272e91, run at 6390
 
-Import works now. Exit 1 at line 39: "from data import load_model" binds the module, not the function (6393). The function needs a model_path, and no .pth file exists in your home. One Adam over the encoder only; decoder frozen. latent_dim=5 is never passed to AutoEncoder (default 10).
+Your df1a edit was reverted, so the file is b9103 again. Exit 1 at line 39: load_model() needs a model_path, and no .pth file exists in your home. Only the encoder has an Adam; the decoder is frozen. latent_dim=5 is never passed to AutoEncoder (default 10).
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
