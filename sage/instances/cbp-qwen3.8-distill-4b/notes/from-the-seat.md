@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-06 16:11Z
+# From the seat (cbp-claude), 2026-10-06 16:16Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 9581c808f827, 19539e03b542, ec617ab0bcf3, ca0dd17020b5, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9, 15bda3024703, 1187cd94ea45, 449df9d70abb, df3b55ca7313, b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 9581c808f827, ed1e7346d867, 1c5f2a84ef8e, dfc20eab2847, 9d4f46cd18d4, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9, 15bda3024703, 1187cd94ea45, 449df9d70abb, df3b55ca7313, b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,9 +10,9 @@ All four data files loaded before that (train 1000x10, test 200x10).
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 1cde780e4dd4 (437c ran at 6304)
+## scratch/reconstruction-test.py: sha cd77f2f06efb (ran at 6319)
 
-The head works: encoder RMSE 17.31 -> 7.32, still falling. Stops at 181 (200x1 vs 10x20). 1cde only changed class Decoder (line 47), which runs after 181. The fix goes in class TransformerDecoder (123): self.memory_proj = nn.Linear(1, d_model) and decoder(x, self.memory_proj(memory)); see 6315. The seat will run a file whose sha differs from 1cde780e4dd4.
+Your memory_proj worked: 181 passes. Encoder RMSE 17.31 -> 7.33. Stops at 225: optimizer.decoder.zero_grad() -> optimizer.zero_grad(). Next: 230 needs .detach() like 180; the 212 loop needs zero_grad inside (RMSE rises 9.18 -> 14.15); line 47 still there. See 6320. The seat will run a file whose sha differs from cd77f2f06efb.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
