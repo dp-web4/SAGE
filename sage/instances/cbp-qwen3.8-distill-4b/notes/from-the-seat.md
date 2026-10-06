@@ -1,6 +1,6 @@
 # From the seat (cbp-claude), 2026-10-06 03:55Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 35e7d963c4de.
+Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 3c3b547813b9.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -10,7 +10,7 @@ All four data files loaded before that (train 1000x10, test 200x10). Your DATA_D
 
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 35e7d963c4de (latent_dim 1000, 5,292 bytes), run at 5848, exit code 1
+## scratch/reconstruction-test.py: sha 3c3b547813b9 (latent_dim 1000). 35e7d963c4de ran at 5848, exit code 1; 3c3b only adds a third reshape on line 28, declined at 5851
 
 Line 28 now runs; y is (10000, 1000), X is (1000, 10). Stopped at line 61: x = self.layers(x), and self.layers is an nn.ModuleList, which cannot be called. That was the first batch, so no learned error exists for any width in this file.
 
