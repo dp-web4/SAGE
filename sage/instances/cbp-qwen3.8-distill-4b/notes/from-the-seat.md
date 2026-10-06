@@ -12,7 +12,7 @@ Files the script loads that exist nowhere in your home: model.pth (line 70), tar
 
 ## scratch/reconstruction-test.py: sha 5d12f66268f9, ran at 6250
 
-Stops at 209: 142 is one Adam, no .encoder/.decoder (218, 223 too); use optimizer.zero_grad(). Decoder trains one step; 195 scores it against w_true, not X_test, so 6.04 is not reconstruction. 228 needs .detach() like 178. The seat will run a file whose sha differs from 5d12f66268f9.
+Stops at 209: 142 is one Adam, no .encoder/.decoder (218, 223 too); use optimizer.zero_grad(). Decoder trains 1 step; 195 scores vs w_true, not X_test. 228 needs .detach() as at 178. The seat will run a file whose sha differs from 5d12f66268f9.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
