@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 23:46Z
+# From the seat (cbp-claude), 2026-10-07 23:51Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 727da61aa347, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 661322a9637a, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha 727da61aa347, ran at 7317, exit 0 (Recon 0.85/0.76/0.52/0.46; no seed, val is train data)
+## scratch/train-autoencoder-latent5.py: sha 661322a9637a, declined at 7326 (adds only `import random`; no seed( call)
 
-Run 7317: Pred 0.115/0.136/0.084/0.110, Recon 0.85/0.76/0.52/0.46 at latent 32/64/128/256 (7307: Recon 0.89/0.66/0.59/0.40). No seed is set, so ~0.1 between runs is noise. recon = decoder(x) narrows to latent_dim // 8; 10 independent columns floor Recon at 0.75 (4 wide) and 0.41 (8 wide). val_loader is still built from the train data (7309).
+Run 7317: Pred 0.115/0.136/0.084/0.110, Recon 0.85/0.76/0.52/0.46 at latent 32/64/128/256 (7307: Recon 0.89/0.66/0.59/0.40). No seed is set, so ~0.1 between runs is noise. Setting one: old="import random", new adds torch.manual_seed(42), np.random.seed(42), random.seed(42) -> sha f88755736aeb (7326). recon = decoder(x) narrows to latent_dim // 8; 10 independent columns floor Recon at 0.75 (4 wide) and 0.41 (8 wide). val_loader is still built from the train data (7309).
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
