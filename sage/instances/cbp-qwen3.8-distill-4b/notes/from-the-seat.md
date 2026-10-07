@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 21:56Z
+# From the seat (cbp-claude), 2026-10-07 22:00Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 8fe338f7347d, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 2b8fa8487996, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha 8fe338f7347d, answered at 7187 (copy run)
+## scratch/train-autoencoder-latent5.py: sha 2b8fa8487996, ran at 7191, exit 1
 
-NameError best_encoder_state line 122, before main(): lines 110-124 are old loop debris under forward; 122-124 run at class definition. Delete 110-124. Next stop after that: head Linear(1,1) gets (batch, 10).
+Stops at line 135, head(encoder(x)), (64x10 and 1x1). This is one wiring problem with several stops (follow-up at 7194): encoder(x) returns a 10-wide reconstruction, decoder(pred) gets 1 wide, recon is compared with y instead of x, and backward is called on a numpy number. Decide each model's job first, then write the loops.
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
