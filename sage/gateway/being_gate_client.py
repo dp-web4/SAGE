@@ -2516,6 +2516,24 @@ class BeingGateClient:
                 # "paths" (a PATH_LIST_KEY), so SAGE stays a thin adapter into the one gate.
                 if judged_command is not None:
                     tool_input["command"] = judged_command
+                # A COMPOSED VERB'S FRIENDLY PATH IS WORKTREE-RELATIVE (McNugget's live probe on #368):
+                # git_read/search/git_restore/git_clean run `git -C <worktree> … <path>`, so the file
+                # touched is <worktree>/<path>. Left raw, core.path_targets() read `path` and resolved it
+                # against cwd=workspace: 'SAGE' is not granted, for a file inside the being's own worktree.
+                # Rooted (and realpath'd, so a `..` is judged where it lands), judged == executed again.
+                wt = getattr(self, "worktree", None)
+                spec_c = _REGISTRY[intent.effector]
+                if spec_c.get("compose") is not None and wt:
+                    for key in ("path", "paths"):
+                        if key in spec_c["path_args"]:
+                            continue                      # already rooted above, at the memory root
+                        v = tool_input.get(key)
+                        if isinstance(v, str) and v.strip() and not os.path.isabs(os.path.expanduser(v)):
+                            tool_input[key] = os.path.realpath(os.path.join(wt, v))
+                        elif isinstance(v, list):
+                            tool_input[key] = [os.path.realpath(os.path.join(wt, x))
+                                               if isinstance(x, str) and x.strip()
+                                               and not os.path.isabs(os.path.expanduser(x)) else x for x in v]
                 derived = list(resolved)          # what compose_paths added after the path args
                 if derived:
                     prior = tool_input.get("paths")

@@ -696,3 +696,23 @@ def test_check_runs_exactly_one_test_in_one_file(tmp_path):
             assert False, f"should have refused {bad!r}"
         except ValueError as e:
             assert expect in str(e), f"{bad!r} -> {e}"
+
+
+def test_single_gate_roots_a_composed_verbs_friendly_path_at_the_worktree():
+    """McNugget, live probe on #368: git_read {op: cat, path: sage/gateway/fleet_shards.json} was refused "'SAGE' is
+    not granted" because the raw `path` was resolved against the workspace, while the composed line runs
+    `git -C <worktree>`. The gate must judge <worktree>/<path>, and a `..` where it actually lands."""
+    import os
+    c, calls = _sg_client("allow")
+    c.worktree = "/tmp/wt"
+    c._core = SimpleNamespace(NormalizedEvent=lambda **kw: SimpleNamespace(**kw))
+    c.gate(BeingIntent("git_read", {"op": "cat", "path": "sage/gateway/fleet_shards.json"}))
+    ev = calls[-1][0]
+    assert ev["tool_input"]["path"] == os.path.realpath("/tmp/wt/sage/gateway/fleet_shards.json"), ev["tool_input"]
+    assert ev["raw"]["path"] == "sage/gateway/fleet_shards.json", "raw keeps what the being said"
+    n = len(calls)
+    v = c.gate(BeingIntent("git_read", {"op": "cat", "path": "../outside.txt"}))
+    assert v.blocks and len(calls) == n, "git_read's composer refuses a traversal before the law is even asked"
+    c.gate(BeingIntent("memory_read", {"path": "journal.md"}))
+    assert calls[-1][0]["tool_input"]["path"] == os.path.realpath(os.path.join(c.memory_root, "journal.md")), \
+        "non-composed verbs keep the memory root"
