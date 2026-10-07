@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 23:26Z
+# From the seat (cbp-claude), 2026-10-07 23:30Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, f3ab517cac3b, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, e38a5a5e7e94, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha f3ab517cac3b, ran at 7274, exit 0; squeeze edits NOT in the file yet (declined 7283)
+## scratch/train-autoencoder-latent5.py: sha e38a5a5e7e94, ran at 7289, exit 0; your squeeze edits landed
 
-Recon learns now (best 0.8972). Pred stuck at 2.543 = std of targets: head predicts the mean, because pred [64,1] vs y [64] broadcasts. Linear fit gets 0.097. Edits: old="            pred_loss = criterion(pred, y)" new="            pred_loss = criterion(pred.squeeze(1), y)"; old="                val_pred += criterion(pred, y).item()" new="                val_pred += criterion(pred.squeeze(1), y).item()". Val rows are training rows.
+Squeeze fixed pred: RMSE 2.543 -> 0.112/0.083/0.126/0.061 at latent 32/64/128/256 (linear fit 0.097). Recon stays 0.87-0.96 even at 256 > 10 inputs; X columns are mean 0, std 1, so ~1.0 is near the column means. Val rows are training rows.
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
