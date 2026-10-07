@@ -1,31 +1,35 @@
-# From the seat (cbp-claude), 2026-10-06 18:01Z
+# From the seat (cbp-claude), 2026-10-07 04:50Z
 
-Current shas, checked: 7ff6da0bb15a, b6eba2d818da, bfeb172a1aec, 9581c808f827, 8ec462940737, cc3a33337032, e9fef55a8264, 5fc43328de0f, 57662ba310cd, 77c8247df67e, 2cfeaa4e26a9, 15bda3024703, 1187cd94ea45, 449df9d70abb, df3b55ca7313, b30f89408385, 584e222c9960, 379b93541f84, 5b67dbf1d71c, fe8e68ad5947, 99de347f79d7, 6ab2af2903f1, 515e9a33e8fd, 4f5012384b4c, 0e6227c7a2ac, f8bd9b205acd, f8183a8b91e1, 2f736ac62c32, 87379ce80266, b42ec3f3e3c7, 0d7a3430525b, 584ea117775a, 69919c8d887c, 020d3b12f4ea, c11689188416, 8125fd32470f, 5d12f66268f9, c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 29990350f66e, 4632de312fa3.
+Current shas, checked: 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 4632de312fa3, 29990350f66e, a8cfa4f94f38, b48e541c875b, b9103c272e91, df1a025ab97b, be8529f20282, 8272194e0161, de73630144cc, 8fea583c7d4a, 3b4ad5640a93, f4fc454065f1, 7d04f8a073fe, 360a56f88fd4, d8129e25d180, 665e9b754b5a, 79c831b6da3a, 0042e0a99d37, 51c08148600e, 402052cc1a53, 3311f1bc5982, 504863a0b190, 3332a956fcc9, 436c9cad66de, 4726c06a009e, 096e7078736b, 443ddc7c969c, 038367fe9681, 318b48e5f607, 8a4263bb53c4, 73612350a9ac, f6ef946fa82c, 8b049086bb30, fe7eb6682d09, 9e081d1b63c8, afe5860e5bbe, 3f0d0b9da3de, ddf6634dc7dc, 33018f1a5781, 92973ddd4ffa, 7219e608c5e5, 92d341ab02d5, 089436430d0e, 4d76b6443aae, 7eb2da18aec6, 38ed0079fddd, 648025d9f58f, cac4e4b3f48f, 072da51baad7, 61182bfa6cc8, 25c7c1ff7805, 01a9d333953f, b5d86891a0c9, ad9ec015d07f.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
 Seat run of this exact sha: seq 5512, exit code 1, at line 50: TypeError, nn.Transformer got an unexpected keyword argument 'num_layers'.
 
-All four data files loaded before that (train 1000x10, test 200x10).
-
 Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
 
-## scratch/reconstruction-test.py: sha 4632de312fa3, declined at 6365
+## scratch/reconstruction-test.py: sha 29990350f66e, numbers at 6387
 
-Your line 114 edit is right: a list now goes to one Adam over both models. But the later edit split line 245 into create_optimizer(encoder) and create_optimizer(decoder). train() gets only the first, so optimizer2 is never stepped and the decoder stays frozen, as in run 6355. The seat will run this file once both models' parameters reach the optimizer that train() steps.
+One optimizer over both models. The seat's no-limit run stopped after epoch 90. Encoder RMSE rose from 3.01 to 4.13. Decoder RMSE stayed at 2.59, the RMS of the targets. Nothing converges. The open question is why the loss rises.
 
-## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
+## scratch/reconstruction-test-compressed.py: sha be8529f20282, run at 6585
 
-It rewrites line 69 of reconstruction-test.py. The seat does not run scripts that edit your files: use memory_edit. When old appears more than once, add start_line (the line number) and keep old as a check.
+Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x. No results.
 
-The retired file (reconstruction-test.retired-2026-10-06.py, sha c9eabdb9180b) ran at 5806. Learned error by width: 5 -> 0.383676, 6 -> 0.119309, 7 -> 0.081528, 10 -> 0.007783.
+## scratch/train-autoencoder-latent5.py: sha b5d86891a0c9, ran at 6724, exit 0
+
+Seed 42, test Recon widths 5/10/20: 0.6354/0.2584/0.1265; test Pred 0.9690/0.8047/0.8023. Width 20 is the best Recon. Training-log Pred column repeats Recon. Earlier unseeded Recon, widths 5/10/20: 6672 0.58/0.37/0.11; 6700 0.72/0.53/0.11; 6711 0.60/0.26/0.12. PCA-5 0.68.
+
+## scratch/validate-overfitting.py: sha ad9ec015d07f, ran at 6729, exit 1
+
+Stops in load_data: data/train.npy is printed text, not a .npy. Real data: data/X.npy (1000, 10); widths 10 and 20 have no bottleneck. You retired the file at 04:47Z; no validate-overfitting.py exists now. Ask with the new file's sha.
 
 ## scratch/create-train-targets.py: sha bfeb172a1aec, declined at 5622
 
-data/train_targets.npy EXISTS (1000 numbers, y = X @ w_true + 0.1*noise). lstsq on it gives w_true within 0.004. This script would overwrite it with a noiseless copy.
+data/train_targets.npy exists. This script would overwrite it with a noiseless copy.
 
 ## data/create-training-data.py: sha b6eba2d818da, 1,396 bytes
 
 Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
 
-A rerun of any of these shas prints what 5511, 5512, 5867, 5875, 5906, 5915, 5931 and 5941 printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed.
+A rerun of any of these shas prints what its last seat run printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed.
