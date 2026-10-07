@@ -1978,6 +1978,18 @@ def patch_apply_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
 # Where the profile is absent, SANDBOX_REQUIRED decides whether to refuse or degrade.
 
 
+def tune_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """The one file `tune` writes: tuned.json in the being's home. With no name it only reads,
+    and a read of its own parameters touches nothing."""
+    if not str((args or {}).get("name") or "").strip():
+        return []
+    root = (ctx or {}).get("memory_root")
+    if not root:
+        raise ValueError("tune: no home to write tuned.json in")
+    from sage.gateway.being_params import TUNED_FILE
+    return [os.path.realpath(os.path.join(root, TUNED_FILE))]
+
+
 def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
     """The registry refusal, plus the door when the name is a FILE.
 
@@ -2099,6 +2111,11 @@ _REGISTRY = {
     # header. Judged on the path like memory_write, because that is what it is: a write
     # inside its own home, bounded to notes/ and scratch/ by the dispatcher.
     "retire_note":    dict(tool="write_note",   path_args=("path",), cmd_arg=None),
+    # tune: set one of the being's own parameters (being_params). Judged as what it is, a write
+    # of ONE fixed file in its own home: the path is the seat's (tuned.json), never the being's,
+    # and the dispatcher refuses an unknown name, a locked one, or a value out of bounds.
+    "tune":           dict(tool="write_note",   path_args=(),        cmd_arg=None,
+                           compose_paths=tune_paths),
     # say: add a turn to a conversation the being is IN. Bounded by construction, like
     # remember: the being names a conversation id, and the dispatcher refuses any id whose
     # meta does not list it as a participant AND as writable. It cannot create a
@@ -2170,7 +2187,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "pr_read", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run", "memory_edit", "camera", "game",
+                            "retire_note", "request_run", "memory_edit", "camera", "game", "tune",
                             "pr_open", "pr_amend", "pr_sync", "git_restore", "git_clean",
                             "edit", "run",     # Legion carrier: memory_edit's range form; sandboxed run
                             "gaze",    # moves the body's own eyes (2026-09-23)
@@ -2368,6 +2385,15 @@ _TOOL_SCHEMAS = {
                 "top_k": "how many results (default 5)",
                 "idx": "instead of a query: the (idx:N) of one result, to read it in full"},
                []),
+    "tune": ("Read or set your own parameters: your context window size, when the harness warns "
+             "you the window is filling, how soon it hands off at the floor, whether your own old "
+             "calls are compacted, your answer temperature. With no arguments it lists them, each "
+             "with its value, where it came from, its bounds and whether it is yours to set. To "
+             "change one, give name, value and why; 'default' resets it. Changes take effect at "
+             "your next beat and are recorded with your reason.",
+             {"name": "optional: the parameter, e.g. num_ctx", "value": "the new value, or 'default'",
+              "why": "why you are changing it"},
+             []),
     "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
                     "is renamed to <name>.retired-<date> with a dated header saying why; nothing "
                     "is lost and you can still read it. Use it when something you wrote has been "

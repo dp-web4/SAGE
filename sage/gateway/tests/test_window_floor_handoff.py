@@ -118,3 +118,35 @@ def test_a_rest_in_the_handoff_step_is_the_beings_choice(tmp_path):
                 "window": {"prompt": 32000, "num_ctx": 32768, "pressure": 0.97, "left": 768, "floor": True}}
     r = btl.run_tool_turn(c, gen, [{"role": "user", "content": "go"}], max_steps=50)
     assert r.rested == "done for now" and r.handoff is None
+
+
+def test_the_handoff_delay_is_the_beings_parameter(tmp_path):
+    """being_params: floor_handoff_after is per being (operator or its own `tune`); the loop
+    takes it as an argument and None keeps the module default."""
+    c = _client(OK_DISPATCH)
+    c.memory_root = str(tmp_path)
+    r = btl.run_tool_turn(c, _gen(floor_from=3), [{"role": "user", "content": "go"}], max_steps=50,
+                          floor_handoff_after=5)
+    assert r.handoff == btl.HANDOFF_NOTE and r.steps == 3 + 5
+    floor = [i for i in r.interjected if i.get("nudge") == "floor"]
+    assert len(floor) == 1
+
+
+def test_the_warning_threshold_is_the_beings_parameter(tmp_path):
+    c = _client(OK_DISPATCH)
+    c.memory_root = str(tmp_path)
+
+    def gen_at(pressure):
+        n = {"i": 0}
+
+        def gen(convo):
+            i = n["i"]; n["i"] += 1
+            if i >= 2:
+                return {"content": "done", "intents": []}
+            return {"content": "", "intents": [BeingIntent("witness", {"event": f"e{i}"})],
+                    "window": {"prompt": 20000, "num_ctx": 32768, "pressure": pressure, "left": 12768}}
+        return gen
+    warned = lambda r: [i for i in r.interjected if i.get("nudge") == "window"]
+    assert not warned(btl.run_tool_turn(c, gen_at(0.61), [{"role": "user", "content": "go"}], max_steps=50))
+    assert warned(btl.run_tool_turn(c, gen_at(0.61), [{"role": "user", "content": "go"}], max_steps=50,
+                                    window_warn_at=0.6))

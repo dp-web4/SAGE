@@ -82,7 +82,9 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                   messages: List[Dict[str, Any]], max_steps: int = 3,
                   deadline: Optional[float] = None,
                   interject: "Optional[Callable[[], str]]" = None,
-                  should_yield: Optional[Callable[[], Optional[str]]] = None) -> ToolTurnResult:
+                  should_yield: Optional[Callable[[], Optional[str]]] = None,
+                  window_warn_at: Optional[float] = None,
+                  floor_handoff_after: Optional[int] = None) -> ToolTurnResult:
     """Run one being turn that may reach for tools, gated end to end.
 
     Loop invariant: the being never sees a fabricated result — each tool message is a
@@ -103,6 +105,9 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     handed to the being as a user turn, so something that arrives while it is working
     reaches it in seconds rather than at the next beat.
     """
+    # Per-being parameters (being_params): None = the module default, read at call time.
+    warn_at = WINDOW_WARN_AT if window_warn_at is None else window_warn_at
+    handoff_after = FLOOR_HANDOFF_AFTER if floor_handoff_after is None else floor_handoff_after
     convo = list(messages)
     trace: List[Tuple[BeingIntent, ResultEnvelope]] = []
     done_ok: set = set()
@@ -165,7 +170,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
         # cannot plan against; a gradient it can see is a resource it can spend. Once per
         # turn only: the warning costs the very thing it is warning about.
         w = out.get("window")
-        if w and not warned and w.get("pressure", 0) >= WINDOW_WARN_AT:
+        if w and not warned and w.get("pressure", 0) >= warn_at:
             warned = True
             pct = int(w["pressure"] * 100)
             convo.append({"role": "user", "content": (
@@ -187,10 +192,10 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                     f"answer, and it cannot shrink further. Write where you are to a scratch note "
                     f"now (what you are doing, the next step, the files involved), then call "
                     f"stay_awake: the next beat starts with an empty window. If you are still here "
-                    f"in {FLOOR_HANDOFF_AFTER} steps, the harness writes a handoff note for you "
+                    f"in {handoff_after} steps, the harness writes a handoff note for you "
                     f"({HANDOFF_NOTE}) and starts that next beat itself.")})
                 interjected.append({"step": step, "nudge": "floor", "prompt": w.get("prompt")})
-            elif step - floor_warned_at >= FLOOR_HANDOFF_AFTER:
+            elif step - floor_warned_at >= handoff_after:
                 # RUN THIS STEP'S CALLS FIRST, then hand off. The first live handoff (legion-being
                 # 2026-10-06 21:26Z) cut the being off mid-compliance: its pending call WAS its own
                 # state note ("I'm at the context floor. Let me write a precise scratch note ...")
@@ -1338,7 +1343,9 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                          interject: "Optional[Callable[[], str]]" = None,
                          should_yield: Optional[Callable[[], Optional[str]]] = None,
                          act_form: str = "tools",
-                         compact_own_turns: bool = False) -> ToolTurnResult:
+                         compact_own_turns: bool = False,
+                         window_warn_at: Optional[float] = None,
+                         floor_handoff_after: Optional[int] = None) -> ToolTurnResult:
     """Run a gated tool turn using an OllamaIRP-like `llm` exposing
     get_chat_response(messages, tools=...) -> {"content", "tool_calls"}.
 
@@ -1644,7 +1651,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
 
     result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps,
                            deadline=deadline, interject=interject,
-                           should_yield=should_yield)
+                           should_yield=should_yield, window_warn_at=window_warn_at,
+                           floor_handoff_after=floor_handoff_after)
     result.thinking = thoughts
     result.salvaged = salvaged
     result.generates = generates

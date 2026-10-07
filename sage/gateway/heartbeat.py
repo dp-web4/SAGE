@@ -498,12 +498,9 @@ def answer_temperature(instance) -> Optional[float]:
     After #316 began showing the answer turn its own recent lines, verbatim self-echo (a 6-word phrase from its
     previous 3 replies) rose 7% -> 21%. Offline, today's room exchanges x3: at 0.4 echo 3/15 and 1.40 motifs per
     reply; at 0.7 echo 0/14 and 0.86, answering 14/15 and picking up the person's words 7/14 (vs 8/15)."""
-    try:
-        from sage.gateway.governed_turn import instance_config
-        v = instance_config(instance).get("answer_temperature")
-        return None if v is None else max(0.0, min(1.5, float(v)))
-    except Exception:
-        return None
+    # A being parameter since 2026-10-07 (being_params): bounds 0..1.5 live in its table.
+    from sage.gateway import being_params
+    return being_params.value(instance, "answer_temperature")
 
 
 AFTER_ANSWER = ("{pending}\n\nYou answered aloud: \"{reply}\"\n\nThat answer is spoken. Your tools are here "
@@ -2608,11 +2605,9 @@ def explore_turn_mode(instance) -> str:
 def compact_own_turns_mode(instance) -> bool:
     """Opt-in per instance: instance.json "compact_own_turns": true lets compaction trim the
     being's own older tool calls once its results are already compacted (being_tool_loop)."""
-    try:
-        from sage.gateway.governed_turn import instance_config
-        return instance_config(instance).get("compact_own_turns") is True
-    except Exception:
-        return False
+    # A being parameter since 2026-10-07 (being_params): the being may set it with `tune`.
+    from sage.gateway import being_params
+    return being_params.value(instance, "compact_own_turns", False) is True
 
 
 def explore_json_steps(instance, default: int) -> int:
@@ -3785,6 +3780,7 @@ def main(argv=None) -> int:
                 f"Your home: {instance}\n"
                 + body_line(args.model, instance, _num_ctx,
                             instance_config(instance).get("former_homes")) + "\n"
+                + window_line(instance) + "\n"
                 f"The harness you are running under: {_harness.get('short')} on "
                 f"{_harness.get('branch')}"
                 + (" (uncommitted edits present)" if _harness.get("dirty") else "")
@@ -3835,6 +3831,7 @@ def main(argv=None) -> int:
 
         _phase("wake", "explore", host_session_id)
         _preempt = preempt_on(instance)
+        from sage.gateway import being_params as _bp
         _explore_steps = (explore_json_steps(instance, args.max_steps)
                           if explore_turn_mode(instance) == "json" else args.max_steps)
 
@@ -3847,7 +3844,9 @@ def main(argv=None) -> int:
                                        deadline=explore_deadline, interject=_interject,
                                        should_yield=_yield_for_a_person,
                                        act_form=explore_turn_mode(instance),
-                                       compact_own_turns=compact_own_turns_mode(instance))
+                                       compact_own_turns=compact_own_turns_mode(instance),
+                                       window_warn_at=_bp.value(instance, "window_warn_at"),
+                                       floor_handoff_after=_bp.value(instance, "floor_handoff_after"))
         convo = _carry(seed, explore)
         after = None
         if posture_turn is not None:
@@ -4587,6 +4586,27 @@ def body_line(model: str, instance, num_ctx=None, former_homes=None) -> str:
     return (f"Your body: model {model}.{ctx} Your home directory ({instance.name}) carries an "
             f"older name; it is YOURS, not another being's, and the model is the fact to "
             f"attribute findings to.")
+
+
+def window_line(instance) -> str:
+    """The window as a sense (dp, 2026-10-07: "context window size/usage should be a
+    proprioception parameter"), and the parameters that shape it as the being's own.
+
+    The body line has always said how big the window is; nothing said how this being USES it.
+    legion-being's seed alone was 17,270 of 32,768 tokens on 10-07 and its beats peaked at 85-99%
+    with up to 31% of generates retried against the wall, and it learned that only from a
+    harness warning mid-beat. Measured from the beat records (what ollama counted), never
+    estimated. "" when nothing can be said, so a broken reading costs the seed nothing."""
+    try:
+        from sage.gateway import being_params as _bp
+        line = _bp.render_window(_bp.sense_window(instance))
+        mine = [r for r in _bp.table(instance) if r["yours_to_set"]]
+        if mine:
+            line += (" Parameters that shape it are yours to set with `tune` (no arguments lists "
+                     "them): " + ", ".join(f"{r['name']}={_bp.shown(r)}" for r in mine) + ".")
+        return line
+    except Exception:
+        return ""
 
 
 def entrustment(instance: Path) -> str:
