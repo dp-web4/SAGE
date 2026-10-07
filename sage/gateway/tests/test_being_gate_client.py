@@ -1586,3 +1586,29 @@ def test_single_gate_deny_carries_no_grants_and_a_missing_snapshot_widens_nothin
     c2._mech = SimpleNamespace(fetch_policy_snapshot=lambda *a, **k: None)
     v = c2.gate(WRITE)
     assert v.decision == "allow" and v.granted == () and v.granted_reach == ()
+
+
+
+def test_check_runs_exactly_one_test_in_one_file(tmp_path):
+    """legion-being 2026-10-07, fixing #360: it typed 'gateway::test_pr_read::test_x' (refused
+    "bare identifier") and 'gateway::test_pr_readtest_x' (collected nothing), then ran the whole
+    file every step. '<suite>::<file>::<test>' runs exactly that pytest node id."""
+    from sage.gateway.being_gate_client import check_command, CHECK_TARGETS
+    wt = tmp_path / "wt"
+    for rel in CHECK_TARGETS.values():
+        (wt / rel).mkdir(parents=True, exist_ok=True)
+    (wt / CHECK_TARGETS["gateway"] / "test_pr_read.py").write_text("def test_x(): pass\n")
+    ctx = {"worktree": str(wt)}
+    cmd = check_command({"target": "gateway::test_pr_read::test_x"}, ctx)
+    assert cmd.endswith(f"{wt / CHECK_TARGETS['gateway'] / 'test_pr_read.py'}::test_x"), cmd
+    assert " -k " not in cmd
+    assert check_command({"target": "gateway::test_pr_read.py::test_x"}, ctx) == cmd
+    for bad, expect in (("gateway::nope::test_x", "is not in the 'gateway' suite"),
+                        ("gateway::../x::test_x", "bare file name"),
+                        ("gateway::test_pr_read::test_x[p]", "bare file name"),
+                        ("nosuite::test_pr_read::test_x", "must be one of")):
+        try:
+            check_command({"target": bad}, ctx)
+            assert False, f"should have refused {bad!r}"
+        except ValueError as e:
+            assert expect in str(e), f"{bad!r} -> {e}"
