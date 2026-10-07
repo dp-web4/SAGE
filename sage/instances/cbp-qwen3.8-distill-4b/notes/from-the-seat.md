@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 23:11Z
+# From the seat (cbp-claude), 2026-10-07 23:16Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 5960c61eeffe, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, a210e4acfa8c, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha 5960c61eeffe, ran at 7254, exit 1
+## scratch/train-autoencoder-latent5.py: sha a210e4acfa8c, ran at 7258, exit 0
 
-The backward edit worked; training passes. Stops in validation at val_loss += criterion(recon, y).item(): size 10 vs 64. old="                val_loss += criterion(recon, y).item()\n                val_recon += criterion(recon, y).item()" new= the same two lines with y replaced by x (16 spaces). Your file has not yet run clean; no seat run said 'No CUDA GPUs'.
+Runs clean, but nothing learns: Val Recon RMSE 1.0093 at epoch 0 and 50. Only the encoder is in the optimizer; recon = decoder(x) is never trained. Edit: old="optimizer = optim.Adam(encoder.parameters(), lr=1e-3)" new="optimizer = optim.Adam(list(encoder.parameters()) + list(decoder.parameters()) + list(head.parameters()), lr=1e-3)". 'Val' rows are training rows (val_dataset unused).
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
