@@ -1633,3 +1633,18 @@ def test_run_mounts_the_worktree_read_only_on_the_import_path(tmp_path, monkeypa
     assert cmd.count(" --bind ") == 1 and " /work" in cmd                     # /work is the one
     no_wt = B.run_command({"path": "scratch/p.py"}, dict(ctx, worktree=None))
     assert "PYTHONPATH" not in no_wt and real not in no_wt
+
+
+
+def test_run_never_mounts_a_worktree_that_overlaps_the_home(tmp_path, monkeypatch):
+    """The run sandbox must never see the being's live home. A worktree equal to the home,
+    inside it, or containing it is not mounted at all."""
+    from sage.gateway import being_gate_client as B
+    monkeypatch.setattr(B, "sandbox_available", lambda: True)
+    outer = tmp_path / "outer"; home = outer / "inst"; (home / "scratch").mkdir(parents=True)
+    (home / "scratch" / "p.py").write_text("print(1)\n")
+    (home / "sub").mkdir()
+    for wt in (home, home / "sub", outer):
+        cmd = B.run_command({"path": "scratch/p.py"},
+                            {"memory_root": str(home), "member": "m", "worktree": str(wt)})
+        assert "PYTHONPATH" not in cmd and str(home) not in cmd.replace("/work", ""), (wt, cmd)

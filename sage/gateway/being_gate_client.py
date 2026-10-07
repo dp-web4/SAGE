@@ -1371,9 +1371,16 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
     # Nothing in the sandbox can write it: /work stays the only writable mount.
     worktree = (ctx or {}).get("worktree")
     wt_bind = wt_env = ""
-    if worktree and os.path.isdir(worktree):
+    # NEVER THE HOME. The sandbox must not see the being's live home (journal, todo, memory):
+    # test_run_sandbox_denies_the_seat_falsified_from_inside asserts it from inside. A worktree
+    # that IS the home, lies inside it, or contains it is not mounted.
+    _wt = os.path.realpath(worktree) if worktree and os.path.isdir(worktree) else ""
+    _home = os.path.realpath(memory_root)
+    if _wt and (_wt == _home or _wt.startswith(_home + os.sep) or _home.startswith(_wt + os.sep)):
+        _wt = ""
+    if _wt:
         import shlex as _shlex
-        q = _shlex.quote(os.path.realpath(worktree))
+        q = _shlex.quote(_wt)
         wt_bind = f" --ro-bind {q} {q}"
         wt_env = f" --setenv PYTHONPATH {q}"
     return (
