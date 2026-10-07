@@ -245,12 +245,21 @@ WHERE_HIDDEN = ("with the GPU hidden from it (CUDA_VISIBLE_DEVICES was empty), "
 WHERE_GPU = "with the GPU visible to it"
 
 
-def child_env(gpu: bool) -> dict:
+def child_env(gpu: bool, home: str | None = None) -> dict:
     """The environment the being's code runs under: the seat's own, with CUDA devices hidden
-    unless the seat chose `--gpu`."""
+    unless the seat chose `--gpu`, and the being's home first on PYTHONPATH.
+
+    IMPORTS RESOLVE FROM THE HOME, LIKE FILE PATHS DO. The child runs with cwd = home, so
+    `np.load("data/X.npy")` finds the home's data/. But `python scratch/X.py` puts scratch/ on
+    sys.path, not the cwd, so `from data.autoencoder import AutoEncoder` -- the same home, the
+    same data/ -- failed "No module named 'data'". The being wrote that import four times
+    (seq 6405, 6406, 6520, 6759 on CBP), each a run spent on a mismatch it could not see. Some of
+    its files work around it with a sys.path line; those still work, since this only adds."""
     env = dict(os.environ)
     if not gpu:
         env["CUDA_VISIBLE_DEVICES"] = ""
+    if home:
+        env["PYTHONPATH"] = os.pathsep.join(x for x in (home, env.get("PYTHONPATH")) if x)
     return env
 
 
@@ -365,7 +374,7 @@ def cmd_run(args) -> None:
     # and the heartbeat would call code that never ran "unchanged since that run" (sprout's
     # review of SAGE #224). heartbeat.files_and_runs compares this sha with the file now.
     ran_sha = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
-    rc, out, err, timed = run_child(interp + [str(p)] + script_args, str(inst), args.timeout, child_env(args.gpu))
+    rc, out, err, timed = run_child(interp + [str(p)] + script_args, str(inst), args.timeout, child_env(args.gpu, str(inst)))
 
     def block(name: str, s: str) -> str:
         s = (s or "").rstrip()
