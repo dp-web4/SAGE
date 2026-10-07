@@ -208,6 +208,45 @@ def _indent_changed(removed: str, new: str, first_line: int) -> str:
             f"with {na}. In Python those spaces decide which block a line belongs to")
 
 
+def _head_and_tail(removed: str, budget: int = 400) -> str:
+    """A long removal is quoted by its first AND last lines, with the count of the middle.
+
+    Measured on cbp-being, 2026-10-07 19:03Z: told to delete a 13-line duplicate decoder
+    block, it deleted lines 75-107 (33 lines), also taking the class's forward and the start
+    of train_model. The receipt quoted only the first 400 chars, which was the decoder block
+    it meant to delete, then '...'. The overreach was in the cut. A range that runs too far
+    runs too far at its END, so the end is what the receipt must show."""
+    if len(removed) <= budget:
+        return removed
+    lines = removed.splitlines(keepends=True)
+    head, tail = [], []
+    used = 0
+    for ln in lines:
+        if used + len(ln) > budget // 2 and head:
+            break
+        head.append(ln)
+        used += len(ln)
+    used = 0
+    for ln in reversed(lines[len(head):]):
+        if used + len(ln) > budget // 2 and tail:
+            break
+        tail.insert(0, ln)
+        used += len(ln)
+    hidden = len(lines) - len(head) - len(tail)
+    if hidden <= 0:
+        return removed
+    return "".join(head) + f"[... {hidden} more removed lines not shown ...]\n" + "".join(tail)
+
+
+def _defs_removed(removed: str) -> str:
+    """Name every def/class line a removal took, since a quote can be cut but a name list is short."""
+    names = [ln.strip().split("(")[0].rstrip(":") for ln in removed.splitlines()
+             if ln.lstrip().startswith(("def ", "class ", "async def "))]
+    if not names:
+        return ""
+    return "\nThis removed " + ", ".join(f"'{n}'" for n in names) + "."
+
+
 def _not_python(content: str, before: str) -> str:
     """Why `content` cannot be appended to a .py file, or "" if it can.
 
@@ -1045,8 +1084,7 @@ class ReferenceF1aDispatcher:
                 repl += "\n"
             new_text = "".join(lines[:s0 - 1]) + repl + "".join(lines[s1:])
             what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)" + _indent_changed(removed, new, s0)
-            shown = removed if len(removed) <= 400 else removed[:400] + "..."
-            gone = f" The lines removed were:\n{shown}"
+            gone = f" The lines removed were:\n{_head_and_tail(removed)}" + _defs_removed(removed)
             return self._commit_edit(p, path, text, new_text, what, gone)
         hits = text.count(old)
         if hits == 0:
