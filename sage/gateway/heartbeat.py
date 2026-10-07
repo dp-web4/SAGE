@@ -2293,12 +2293,9 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
         files_block, files_refuted, files_facts = "", [], {}
     if files_block:
         parts.append(files_block)
-    if entrusted:
-        # Ahead of everything else the being holds: what it has been entrusted with is the
-        # frame the rest of its state is read in. Labelled by provenance, and pointed at
-        # where its own interpretation belongs, so the two never merge in the record.
-        parts.append("## What you are entrusted with (extended to you; you cannot edit this "
-                     "file. Your own reading of it belongs in notes/plan.md)\n" + entrusted)
+    # (The entrustment is appended ONCE, above, after the body. This carrier's own 09-21 copy
+    # stood here too after main's 09-28 version merged back in, so from then until 2026-10-07
+    # every beat carried the entrustment twice: ~4k chars, ~1,250 tokens of a 32,768 window.)
     # Conversations first among the channels: a turn addressed to the being and unanswered
     # is the one thing in its state that is waiting on IT, and it should never have to infer
     # that from a wall of notes. Both directions live in one ordered record.

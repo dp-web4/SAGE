@@ -316,3 +316,14 @@ def test_the_conversation_header_keys_on_reply_expectation_not_on_pending():
     assert "Nobody is waiting" in conversation_header(inst, me), \
         "a STATEMENT asks nothing — the row that produced twelve messages"
     assert "say` is for answering a person" in conversation_header(inst, me)
+
+
+def test_the_entrustment_is_in_the_state_exactly_once(tmp_path):
+    """2026-10-07: after main's 09-28 entrustment append merged back into the carrier beside the
+    carrier's own 09-21 one, every legion-being beat carried it twice (~4k chars). Found by
+    measuring the seed section by section, not by any test."""
+    from sage.gateway.heartbeat import own_state
+    marker = "ENTRUSTED-SENTINEL-7431"
+    s = own_state(tmp_path, member="m", entrusted=marker, mark_conversations=False, body_reading={})
+    assert s.count(marker) == 1
+    assert s.count("## What you are entrusted with") == 1
