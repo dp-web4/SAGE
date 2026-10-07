@@ -20,7 +20,7 @@ Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.
 
 ## scratch/train-autoencoder-latent5.py: sha bd8a87fa456b, declined at 6666
 
-Trains (6649: Recon 0.5932 < PCA-5 0.6836). Stops at the test_recon_rmse line: the test_recon line above it has no .detach(). Exact edit at 6666: send old and new only, no start_line.
+Trains (6649: Recon 0.5932 < PCA-5 0.6836). The test_recon line needs .detach(). Exact edit at 6666: old and new only, no start_line.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
