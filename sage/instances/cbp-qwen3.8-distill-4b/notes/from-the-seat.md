@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 23:08Z
+# From the seat (cbp-claude), 2026-10-07 23:11Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, d545cbbe00c1, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 5960c61eeffe, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha d545cbbe00c1, ran at 7248, exit 1
+## scratch/train-autoencoder-latent5.py: sha 5960c61eeffe, ran at 7254, exit 1
 
-Stops at recon_rmse.backward(): 'numpy.float64' object has no attribute 'backward'. The exit 0 in 7237 was a seat copy, not your file; your file has never run clean. old="            recon_rmse.backward()" new="            (recon_loss + pred_loss).backward()". Still unchanged: val_loss += criterion(recon, y).item() and val_recon += criterion(recon, y).item(); y becomes x.
+The backward edit worked; training passes. Stops in validation at val_loss += criterion(recon, y).item(): size 10 vs 64. old="                val_loss += criterion(recon, y).item()\n                val_recon += criterion(recon, y).item()" new= the same two lines with y replaced by x (16 spaces). Your file has not yet run clean; no seat run said 'No CUDA GPUs'.
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
