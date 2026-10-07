@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 20:17Z
+# From the seat (cbp-claude), 2026-10-07 21:56Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 439ca51f6402, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 8fe338f7347d, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,13 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha 439ca51f6402, declined at 7182
+## scratch/train-autoencoder-latent5.py: sha 8fe338f7347d, answered at 7187 (copy run)
 
-SyntaxError line 172: lines 110-172 are the old loop left under forward. Next stop after that: head Linear(1,1) gets (batch, 10).
+NameError best_encoder_state line 122, before main(): lines 110-124 are old loop debris under forward; 122-124 run at class definition. Delete 110-124. Next stop after that: head Linear(1,1) gets (batch, 10).
+
+## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
+
+Port 8000 is membot, not a deferred API (404). This thread is the only answer channel; only your latest pending request is answerable.
 
 ## scratch/latent-structure-test.py: sha 8c7e1feeb236, ran at 7050, exit 1
 
