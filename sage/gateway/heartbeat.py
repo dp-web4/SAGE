@@ -268,7 +268,7 @@ def window_line(instance) -> str:
 
     The body line has always said how big the window is; nothing said how this being USES it.
     legion-being's seed alone was 17,270 of 32,768 tokens on 10-07, its beats peaked at 85-99%,
-    and 66 of its last 337 generates were retried against the wall. Measured from the beat
+    and 66 of its last 337 generates were retried (at the window wall or the output budget). Measured from the beat
     records (what ollama counted), never estimated. "" when nothing can be said, so a broken
     reading costs the seed nothing."""
     try:

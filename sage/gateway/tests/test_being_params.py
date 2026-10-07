@@ -108,23 +108,32 @@ def test_an_unreadable_tuned_file_is_reported_and_not_guessed(tmp_path):
     assert not ok and "unreadable" in text
 
 
-def _beat(prompts, retried=(), ctx=32768, handoff=None):
+def _beat(prompts, retried=(), ctx=32768, handoff=None, causes=None):
     gens = [{"prompt_eval_count": p, "retried": 1 if i in retried else 0} for i, p in enumerate(prompts)]
+    for i, c in (causes or {}).items():
+        gens[i]["retry_cause"] = c
     return {"ts": "t", "num_ctx": ctx, "explore": {"generates": gens, "handoff": handoff}}
 
 
 def test_window_sense_reads_what_the_server_counted(tmp_path):
     h = _home(tmp_path)
-    beats = [_beat([16000, 20000]), _beat([17270, 25000, 31000], retried=(2,), handoff="scratch/handoff.md")]
+    beats = [_beat([16000, 20000], retried=(1,)),
+             _beat([17270, 25000, 31000], retried=(1, 2), handoff="scratch/handoff.md",
+                   causes={1: "window", 2: "output_budget"})]
     (h / "heartbeats.jsonl").write_text("\n".join(json.dumps(b) for b in beats) + "\n{torn")
     s = bp.sense_window(h)
     assert s["num_ctx"]["value"] == 32768
     last = s["last"]
     assert last["seed_tokens"]["value"] == 17270 and last["peak_tokens"]["value"] == 31000
-    assert (last["retried"], last["generates"], last["handed_off"]) == (1, 3, True)
-    assert s["recent"] == {"beats": 2, "peak_over_90pct": 1, "retried": 1, "generates": 5}
+    assert (last["retried"], last["generates"], last["handed_off"]) == (2, 3, True)
+    assert last["retry_causes"] == {"window": 1, "output_budget": 1}
+    assert s["recent"] == {"beats": 2, "peak_over_90pct": 1, "retried": 3, "generates": 5,
+                           "retry_causes": {"window": 1, "output_budget": 1, "unrecorded": 1}}
     line = bp.render_window(s)
     assert "17,270 (52%)" in line and "31,000 (94%)" in line and "handed off" in line
+    # the two limits are named apart, and an old record's cause is not guessed
+    assert "2 of 3 generates retried (1 the window wall, 1 the output budget for one reply)" in line
+    assert "1 cause not recorded" in line
 
 
 def test_window_sense_with_no_beats_is_a_gap_not_a_zero(tmp_path):
