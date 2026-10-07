@@ -92,7 +92,7 @@ class Hearing(threading.Thread):
             return
         utt = self.segmenter.feed(chunk, level, baseline)
         if utt:
-            self.transcriber.submit(utt)
+            self.transcriber.submit(utt, ended_at=now)
 
     def run(self):
         leftover = b""

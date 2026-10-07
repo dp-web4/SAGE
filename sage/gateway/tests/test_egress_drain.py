@@ -361,3 +361,32 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_the_receipt_survives_hub_notify_stderr_notes(tmp_path):
+    """McNugget, 2026-10-04: every forwarded row recorded hub_receipt None. _forward keeps only the
+    last 300 chars of hub-notify's output, and with stdout first, the stderr notes it prints while
+    resolving a name pushed the stdout success line (the receipt) out of that tail."""
+    import os
+    from sage.gateway import egress_drain as ed
+    fake_notify = tmp_path / "hub-notify.sh"
+    fake_notify.write_text("#!/bin/sh\nexit 0\n")
+    fake_notify.chmod(0o755)
+    env_file = tmp_path / "ident"
+    env_file.write_text("")
+
+    class P:
+        returncode = 0
+        stdout = "[hub-notify] -> legion-being (3c999a3a-bb2d-45e1-b996-d4f2f0dc0825) kind=coordination ledger=1588 hash=h pdigest=p ptr=x"
+        stderr = "[hub-notify] resolved 'legion-being' via hub roster -> 3c999a3a-bb2d-45e1-b996-d4f2f0dc0825\n" + "note " * 80
+
+    real_run, old_notify = ed.subprocess.run, ed.HUB_NOTIFY
+    ed.HUB_NOTIFY, ed.subprocess.run = str(fake_notify), (lambda argv, **kw: P())
+    try:
+        ok, detail = ed._forward({"forward_on": "legion-being", "kind": "coordination", "pointer_uri": "x"},
+                                 env_file=str(env_file), signed_as="being")
+    finally:
+        ed.HUB_NOTIFY, ed.subprocess.run = old_notify, real_run
+    assert ok, detail
+    assert ed._hub_receipt(detail) == {"ledger": "1588",
+                                       "recipient_lct": "3c999a3a-bb2d-45e1-b996-d4f2f0dc0825"}, detail

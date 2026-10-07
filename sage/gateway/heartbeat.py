@@ -2556,6 +2556,16 @@ def explore_turn_mode(instance) -> str:
         return "tools"
 
 
+def compact_own_turns_mode(instance) -> bool:
+    """Opt-in per instance: instance.json "compact_own_turns": true lets compaction trim the
+    being's own older tool calls once its results are already compacted (being_tool_loop)."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return instance_config(instance).get("compact_own_turns") is True
+    except Exception:
+        return False
+
+
 def explore_json_steps(instance, default: int) -> int:
     """Acts per explore/posture turn in the JSON act form (instance.json "explore_json_steps", default 3).
     Each act is two generates, and offline turns never chose "done" by themselves: 6 of 6 ran to an
@@ -2574,6 +2584,28 @@ def preempt_on(instance) -> bool:
         return bool(instance_config(instance).get("preempt"))
     except Exception:
         return False
+
+
+def answer_first_on_person_wake_on(instance) -> bool:
+    """Opt-in per instance (R3): instance.json "answer_first_on_person_wake": true."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        return bool(instance_config(instance).get("answer_first_on_person_wake"))
+    except Exception:
+        return False
+
+
+def woken_by_a_person(claimed) -> list:
+    """The P0 person events among the events this beat CLAIMED at its start (R3).
+
+    R2 preemption only sees P0 events that arrive AFTER the beat starts (p0_since); the event that
+    woke the beat is claimed at the start and never counts. Measured on Sprout (2026-10-02..06, the
+    embodied-RTOS arc's Track E baseline): a person who spoke while a beat ran was answered in p50 36 s
+    (p95 69 s), but a person whose turn WOKE an idle being waited 225 s (voice) and 199 s (typed):
+    the beat started within 20-34 s, then ran explore, posture, account and reflect, and answered last."""
+    evs = [e for e in (claimed or []) if isinstance(e, dict) and not e.get("claim_error")
+           and event_class(e) == "P0"]
+    return evs if person_turns_that_woke(evs) else []
 
 
 def p0_since(t0: float, pending: Optional[list] = None) -> list:
@@ -3714,13 +3746,25 @@ def main(argv=None) -> int:
             got = p0_since(_beat_started) if _preempt else []
             return got[0].get("descriptor") or got[0].get("kind") if got else None
 
-        explore = run_ollama_tool_turn(client, llm, seed, max_steps=_explore_steps,
-                                       tools=_explore_specs, on_generate=_on_generate("explore"),
-                                       should_yield=_yield_for_a_person,
-                                       act_form=explore_turn_mode(instance))
-        convo = _carry(seed, explore)
+        # R3, ANSWER FIRST WHEN A PERSON WOKE THE BEAT (opt-in, with preemption on): the same path a
+        # preempted beat takes (account and reflection wait for the next beat; the answer goes to the
+        # person now), entered at the start instead of at a later yield point. See woken_by_a_person.
+        _r3 = (woken_by_a_person(_claimed)
+               if _preempt and answer_first_on_person_wake_on(instance) else [])
+        if _r3:
+            preempted = {"by": _r3[0].get("descriptor") or _r3[0].get("kind"), "after_s": 0.0,
+                         "phase": "start", "woke": True}
+            explore = None
+            convo = list(seed)
+        else:
+            explore = run_ollama_tool_turn(client, llm, seed, max_steps=_explore_steps,
+                                           tools=_explore_specs, on_generate=_on_generate("explore"),
+                                           should_yield=_yield_for_a_person,
+                                           act_form=explore_turn_mode(instance),
+                                           compact_own_turns=compact_own_turns_mode(instance))
+            convo = _carry(seed, explore)
         after = None
-        if posture_turn is not None:
+        if posture_turn is not None and not _r3:
             convo.append({"role": "user", "content": posture_turn})
             _phase("wake", "posture", host_session_id)
             after = run_ollama_tool_turn(client, llm, convo, max_steps=_explore_steps,
@@ -3791,7 +3835,18 @@ def main(argv=None) -> int:
         except Exception as e:
             account["skipped" if preempted else "error"] = (str(e) if preempted else f"{type(e).__name__}: {e}")
         _check_preempt("account")
-        if preempted:
+        if _r3:
+            # The person whose turn WOKE this beat: those events were claimed at the start, so they are
+            # selected from what was claimed (woke=True), not from p0_since (arrivals after the start).
+            try:
+                from sage.gateway import room as _room_r3
+                _room_r3.ingest_heard(instance, args.member, (_body_cur or {}).get("inventory"))
+            except Exception as _e:
+                preempted["room_error"] = f"{type(_e).__name__}: {_e}"
+            say_line, pending_block, say_first, target, selected = pending_selection(
+                instance, args.member, person_turns_that_woke(_r3))
+            preempted["selected"] = f"{selected.cid}:{selected.seq}" if selected is not None else None
+        elif preempted:
             say_line, pending_block, say_first, target, selected = _take_late()
         else:
             # Reflect gets its OWN compact context, not the whole beat. Carrying the seed (posture,

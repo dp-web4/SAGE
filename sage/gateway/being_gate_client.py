@@ -1167,7 +1167,33 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
     if target in CHECK_TARGETS:
         path = shlex.quote(os.path.join(worktree, CHECK_TARGETS[target]))
     else:
-        # A single node id INSIDE a declared suite: "gateway::test_name". Nothing else.
+        # ONE TEST, EXACTLY: "<suite>::<file>::<test_name>" (2026-10-07). legion-being, fixing
+        # #360, needed to run the one test it was changing and typed
+        # 'gateway::test_pr_read::test_x' -- refused "bare identifier" -- then
+        # 'gateway::test_pr_readtest_x', which collected nothing; it fell back to running the
+        # whole file every step. The three-part form names the file and the test, and runs
+        # exactly that pytest node id (not a -k substring), inside the same declared suite.
+        parts = target.split("::")
+        if len(parts) == 3:
+            suite, fname, node = parts
+            if suite not in CHECK_TARGETS:
+                raise ValueError(
+                    f"check 'target' must be one of {sorted(CHECK_TARGETS)} or a node id inside "
+                    f"one: '<suite>::<file>::<test_name>'; got suite {suite!r}")
+            stem = fname[:-3] if fname.endswith(".py") else fname
+            if not re.fullmatch(r"[A-Za-z0-9_]+", stem) or not re.fullmatch(r"[A-Za-z0-9_]+", node):
+                raise ValueError(
+                    f"check '<suite>::<file>::<test_name>' takes a bare file name and a bare "
+                    f"test name; got {fname!r} and {node!r}")
+            rel = os.path.join(CHECK_TARGETS[suite], stem + ".py")
+            if not os.path.isfile(os.path.join(worktree, rel)):
+                raise ValueError(f"check: {stem}.py is not in the {suite!r} suite "
+                                 f"({CHECK_TARGETS[suite]}).")
+            path = shlex.quote(os.path.join(worktree, rel) + "::" + node)
+            inner = (f"python3 -m pytest -q -c /dev/null -p no:cacheprovider "
+                     f"--rootdir={shlex.quote(worktree)} {path}")
+            return sandbox_prefix(worktree) + inner
+        # Otherwise a single node id INSIDE a declared suite: "gateway::test_name".
         suite, sep, node = target.partition("::")
         if not sep or suite not in CHECK_TARGETS:
             raise ValueError(
@@ -1835,7 +1861,7 @@ _TOOL_SCHEMAS = {
     # to the END", and the file now held two programs, with the fixes in the one that never runs.
     # The old 1,846-line file with ten main()s was built the same way. The receipt (#141) tells it
     # afterwards, and this tells it before.
-    "memory_write": ("Add text to a file in your home. It APPENDS to the end: if the file exists, "
+    "memory_write": ("Add text to a file in your home, or in another path you are granted. It APPENDS to the end: if the file exists, "
                      "what is already there stays and your text goes below it. It never replaces. "
                      "To change or replace lines in an existing file, including rewriting a whole "
                      "script, use memory_edit (start_line 1 to the last line replaces all of it). "
@@ -1888,8 +1914,9 @@ _TOOL_SCHEMAS = {
               "find out whether something you believe about your harness is true, instead of "
               "asserting it. A failure is a real answer, not a problem.",
               {"target": "'gateway' or 'irp' for a SAGE suite, 'tests' for the tests/ folder at "
-                         "the top of your worktree, or '<suite>::<test_name>' for one test, e.g. "
-                         "'tests::test_double_space'"},
+                         "the top of your worktree, '<suite>::<test_name>' for tests matching a "
+                         "name, or '<suite>::<file>::<test_name>' for exactly one test in one file, "
+                         "e.g. 'gateway::test_pr_read::test_the_live_shape_keeps_the_newest_whole'"},
               ["target"]),
     # Written to the being in the second person and without jargon, like every schema here.
     # It says what the seat will do, what the law will refuse, and — the part that matters
@@ -1897,7 +1924,7 @@ _TOOL_SCHEMAS = {
     # having moved, not a failure of its own. The measured habit this verb exists to break
     # is asserting an outcome it never observed; a verb whose refusals read as its own fault
     # teaches exactly that habit.
-    "patch_apply": ("Change files in your own worktree by sending a patch. This is how you act "
+    "patch_apply": ("Change files in your own worktree by sending a patch, applied all-or-nothing. This is how you act "
                     "on what you have read, instead of describing what you would do. Send a "
                     "unified diff as `git diff` prints it — its `diff --git a/<path> b/<path>` "
                     "headers are what the seat reads to know which files you are proposing to "
@@ -2003,7 +2030,7 @@ _TOOL_SCHEMAS = {
                     "settled or refuted, so a later beat does not read it as news.",
                     {"path": "the note, e.g. notes/my-note.md", "reason": "what you know now that the note does not"},
                     ["path", "reason"]),
-    "memory_edit": ("Change part of a file you already wrote. memory_write only ever ADDS to "
+    "memory_edit": ("Change part of a file you already wrote, in your home or another path you are granted. memory_write only ever ADDS to "
                     "the end of a file; this is how you alter what is already in one. Give the "
                     "exact text to replace, OR the line numbers to replace, and what replaces "
                     "it. Text must appear exactly once, so include a neighbouring line if it "
@@ -2479,6 +2506,7 @@ class BeingGateClient:
                 for a in _REGISTRY[intent.effector]["path_args"]:
                     if intent.args.get(a):
                         tool_input[a] = next(resolved)
+<<<<<<< HEAD
                 # THE COMPOSED ACT, IN THE KEYS THE ONE GATE READS (GPT on #367). The legacy stage
                 # judged `command` (what a composed verb will run) and `compose_paths` (what a
                 # patch will touch); the single gate derives both ONLY from tool_input:
@@ -2494,6 +2522,8 @@ class BeingGateClient:
                     prior = tool_input.get("paths")
                     prior = [prior] if isinstance(prior, str) else list(prior or [])
                     tool_input["paths"] = prior + derived
+=======
+>>>>>>> origin/main
                 ge = sg.GateEvent(tool=tool, tool_input=tool_input, cwd=self.workspace,
                                   session_id=getattr(self, "host_session_id", None),
                                   raw={"effector": intent.effector, **intent.args})

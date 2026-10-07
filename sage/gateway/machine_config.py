@@ -277,7 +277,7 @@ def get_config(machine_name: Optional[str] = None) -> SAGEMachineConfig:
 
     elif machine_name == 'nomad':
         # Nomad: Legion laptop, RTX 4060 8GB
-        workspace = '/mnt/c/projects/ai-agents'
+        workspace = os.path.expanduser('~/ai-agents')
         state_dir = f'{workspace}/HRM/sage/raising/state'
         model = model_override or 'gemma3:4b'
         return SAGEMachineConfig(
