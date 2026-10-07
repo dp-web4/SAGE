@@ -1117,3 +1117,33 @@ def test_a_missed_anchor_with_one_match_reads_as_before():
     text = "a\nb\nc\nd"
     msg = _where_it_diverged(text, "b\nc\nX")
     assert "match lines 2-3 of the file exactly" in msg and "places" not in msg
+
+
+def test_a_range_edit_whose_old_is_elsewhere_says_where():
+    """cbp-being 2026-10-07 02:53Z: the seat's exact old text sent with the traceback's line
+    number (148) instead of the line it was on (145), refused twice in one beat. The refusal
+    now names the line where old is, when it occurs once."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    f = home / "notes" / "s.py"
+    before = "a = 1\nb = f(a)\nc = g(b)\nprint(c)\n"
+    f.write_text(before)
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 4,
+                                         "old": "b = f(a)", "new": "b = f(a).detach()"}), _ALLOW)
+    assert not r.ok
+    assert "Your old text IS in the file, once, at line 2, not at line 4" in r.error, r.error
+    assert "with start_line 2" in r.error
+    assert f.read_text() == before
+    # multi-line old names its range
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 1, "end_line": 2,
+                                         "old": "c = g(b)\nprint(c)", "new": "x"}), _ALLOW)
+    assert not r.ok and "at lines 3-4, not at line 1" in r.error, r.error
+    # old absent, or present more than once: no location is claimed
+    f.write_text(before + "b = f(a)\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 4,
+                                         "old": "b = f(a)", "new": "y"}), _ALLOW)
+    assert not r.ok and "IS in the file" not in r.error, r.error
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 4,
+                                         "old": "zzz", "new": "y"}), _ALLOW)
+    assert not r.ok and "IS in the file" not in r.error, r.error

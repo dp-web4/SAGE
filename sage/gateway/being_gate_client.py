@@ -1167,7 +1167,33 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
     if target in CHECK_TARGETS:
         path = shlex.quote(os.path.join(worktree, CHECK_TARGETS[target]))
     else:
-        # A single node id INSIDE a declared suite: "gateway::test_name". Nothing else.
+        # ONE TEST, EXACTLY: "<suite>::<file>::<test_name>" (2026-10-07). legion-being, fixing
+        # #360, needed to run the one test it was changing and typed
+        # 'gateway::test_pr_read::test_x' -- refused "bare identifier" -- then
+        # 'gateway::test_pr_readtest_x', which collected nothing; it fell back to running the
+        # whole file every step. The three-part form names the file and the test, and runs
+        # exactly that pytest node id (not a -k substring), inside the same declared suite.
+        parts = target.split("::")
+        if len(parts) == 3:
+            suite, fname, node = parts
+            if suite not in CHECK_TARGETS:
+                raise ValueError(
+                    f"check 'target' must be one of {sorted(CHECK_TARGETS)} or a node id inside "
+                    f"one: '<suite>::<file>::<test_name>'; got suite {suite!r}")
+            stem = fname[:-3] if fname.endswith(".py") else fname
+            if not re.fullmatch(r"[A-Za-z0-9_]+", stem) or not re.fullmatch(r"[A-Za-z0-9_]+", node):
+                raise ValueError(
+                    f"check '<suite>::<file>::<test_name>' takes a bare file name and a bare "
+                    f"test name; got {fname!r} and {node!r}")
+            rel = os.path.join(CHECK_TARGETS[suite], stem + ".py")
+            if not os.path.isfile(os.path.join(worktree, rel)):
+                raise ValueError(f"check: {stem}.py is not in the {suite!r} suite "
+                                 f"({CHECK_TARGETS[suite]}).")
+            path = shlex.quote(os.path.join(worktree, rel) + "::" + node)
+            inner = (f"python3 -m pytest -q -c /dev/null -p no:cacheprovider "
+                     f"--rootdir={shlex.quote(worktree)} {path}")
+            return sandbox_prefix(worktree) + inner
+        # Otherwise a single node id INSIDE a declared suite: "gateway::test_name".
         suite, sep, node = target.partition("::")
         if not sep or suite not in CHECK_TARGETS:
             raise ValueError(
@@ -1888,8 +1914,9 @@ _TOOL_SCHEMAS = {
               "find out whether something you believe about your harness is true, instead of "
               "asserting it. A failure is a real answer, not a problem.",
               {"target": "'gateway' or 'irp' for a SAGE suite, 'tests' for the tests/ folder at "
-                         "the top of your worktree, or '<suite>::<test_name>' for one test, e.g. "
-                         "'tests::test_double_space'"},
+                         "the top of your worktree, '<suite>::<test_name>' for tests matching a "
+                         "name, or '<suite>::<file>::<test_name>' for exactly one test in one file, "
+                         "e.g. 'gateway::test_pr_read::test_the_live_shape_keeps_the_newest_whole'"},
               ["target"]),
     # Written to the being in the second person and without jargon, like every schema here.
     # It says what the seat will do, what the law will refuse, and — the part that matters

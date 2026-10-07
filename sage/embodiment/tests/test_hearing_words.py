@@ -69,7 +69,7 @@ def _hearing(monkeypatch, tmp_path, **win):
         listening.mark(**win)
     h = audio.Hearing()
     got = []
-    h.transcriber.submit = lambda u: got.append(u) or True
+    h.transcriber.submit = lambda u, **k: got.append(u) or True
     return h, got
 
 
@@ -244,3 +244,28 @@ def test_the_mic_that_heard_is_named_not_the_first_one_listed():
     assert body._heard_mic([{"source": "alsa_input.analog"}], inv) == "your mic"
     assert body._heard_mic([{"source": "alsa_input.analog"}],
                            {"audio_sources": [{"name": "USB Mic", "kind": "wired"}]}) == "USB Mic"
+
+
+def test_heard_and_unheard_records_carry_track_a_timing(monkeypatch, tmp_path):
+    """Compiled-transducers arc, Track A baseline: each record says when the utterance closed (t_end), how long it
+    waited (queue_s) and how long whisper took (asr_s), so end-of-speech -> kept-words latency is measurable."""
+    monkeypatch.setattr(listening, "UNHEARD_PATH", str(tmp_path / "unheard.jsonl"))
+    t = listening.Transcriber(source="mic", heard_path=str(tmp_path / "heard.jsonl"))
+    t._fp16 = False
+    t.model = _FakeModel([{"text": " Hello there.", "no_speech_prob": 0.05, "avg_logprob": -0.2}])
+    import time as _t
+    t._handle(b"\0\0" * 16000, ended_at=_t.time() - 0.5)
+    rec = json.loads((tmp_path / "heard.jsonl").read_text().splitlines()[-1])
+    assert rec["text"] == "Hello there." and rec["asr_s"] is not None and rec["asr_s"] >= 0
+    assert rec["queue_s"] >= 0.5 and abs(rec["t_end"] - (_t.time() - 0.5)) < 5
+    t.model = _FakeModel([{"text": " you", "no_speech_prob": 0.9, "avg_logprob": -0.3}])
+    t._handle(b"\0\0" * 1600)                       # no end time given: timing still carries asr_s
+    un = json.loads((tmp_path / "unheard.jsonl").read_text().splitlines()[-1])
+    assert un["why"] == "no kept words" and "asr_s" in un and "t_end" not in un
+
+
+def test_submit_queues_the_end_time_and_run_unpacks_it():
+    t = listening.Transcriber(source="mic")
+    assert t.submit(b"\0\0", ended_at=123.0)
+    audio, ended = t.q.get_nowait()
+    assert audio == b"\0\0" and ended == 123.0
