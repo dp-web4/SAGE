@@ -3751,6 +3751,14 @@ def main(argv=None) -> int:
               + 1200 + 400 + LOOP_GROWTH_CHARS + _frame_chars)
     state_block, conv_rung, conv_intervention = fit_state(
         _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other)
+    # entrustment_mode "daily": the showing is recorded from the state that is SENT, never from a render
+    try:
+        from sage.gateway import being_params as _bp_e
+        if (entrusted and entrusted in state_block
+                and _bp_e.value(instance, "entrustment_mode", "full") == "daily"):
+            record_entrustment_seen(instance, entrusted)
+    except Exception:
+        pass
     _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + _template_guess
     blocks, fit_interventions = fit_to_window(
         num_ctx=_num_ctx, num_predict=_num_predict,
@@ -4640,10 +4648,7 @@ def entrustment_shown(instance: Path, text: str, mode: str = "full", mark: bool 
         seen = {}
     if seen.get("day") != day or seen.get("sha") != digest:
         if mark:
-            try:
-                seen_path.write_text(json.dumps({"day": day, "sha": digest}) + "\n")
-            except OSError:
-                pass
+            record_entrustment_seen(instance, text, now)
         why = "the first beat of the day" if seen.get("sha") == digest else (
             "its text changed since you last saw it whole" if seen else "shown whole")
         return text + f"\n\n_(Shown whole: {why}. Later beats today show its opening and point here.)_"
@@ -4655,6 +4660,23 @@ def entrustment_shown(instance: Path, text: str, mode: str = "full", mark: bool 
             f"sections on what you have to work with, what is not open, your collaborator and how your "
             f"work becomes real, are in {ENTRUSTMENT_FILE}; memory_read it whenever you want them. It is "
             f"shown whole again tomorrow, or as soon as it changes.)_")
+
+
+def record_entrustment_seen(instance: Path, text: str, now: Optional[float] = None) -> None:
+    """Record that `text` was shown WHOLE today. The beat calls this once, after the fitter has
+    chosen the state it will actually send, and only if that state carries the whole text: the
+    fitter renders several rungs, so recording during composition (the first daily land,
+    e1439e70c) would let one render consume the showing another one sends -- and, tied to
+    mark_conversations=False as it was, it never recorded at all (measured: no seen file after
+    the first beat, so every beat still carried the entrustment whole). Never raises."""
+    import hashlib
+    now = time.time() if now is None else now
+    try:
+        (Path(instance) / ENTRUSTMENT_SEEN).write_text(json.dumps({
+            "day": time.strftime("%Y-%m-%d", time.gmtime(now)),
+            "sha": hashlib.sha256(text.encode()).hexdigest()[:16]}) + "\n")
+    except OSError:
+        pass
 
 
 def entrustment(instance: Path) -> str:

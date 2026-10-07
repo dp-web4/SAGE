@@ -78,3 +78,28 @@ def test_choice_parameters_are_refused_outside_their_words(tmp_path):
     assert not ok and "full, daily" in text
     ok, _ = bp.tune(h, "entrustment_mode", "Daily", "fewer tokens on repeat beats")
     assert ok and bp.value(h, "entrustment_mode") == "daily"
+
+
+def test_the_beat_records_a_whole_showing_from_the_state_it_sends(tmp_path):
+    """e1439e70c tied the record to mark_conversations, which the beat always passes False
+    (the fitter renders several rungs; a render is not a reading), so it never recorded and
+    every beat carried the entrustment whole. The beat now records via record_entrustment_seen
+    after fit_state, from the state it sends."""
+    from sage.gateway.heartbeat import record_entrustment_seen
+    day1 = 1791331200.0
+    # a render during composition records nothing
+    assert entrustment_shown(tmp_path, TEXT, "daily", mark=False, now=day1 + 60).startswith(TEXT)
+    assert entrustment_shown(tmp_path, TEXT, "daily", mark=False, now=day1 + 61).startswith(TEXT)
+    # the beat sends it whole, then records; the next beat the same day gets the short form
+    record_entrustment_seen(tmp_path, TEXT, now=day1 + 62)
+    later = entrustment_shown(tmp_path, TEXT, "daily", mark=False, now=day1 + 3600)
+    assert not later.startswith(TEXT) and "entrustment.md" in later
+
+
+def test_main_records_the_showing_after_the_fitter():
+    import inspect
+    from sage.gateway import heartbeat
+    src = inspect.getsource(heartbeat.main)
+    fit = src.index("fit_state(")
+    rec = src.index("record_entrustment_seen(instance, entrusted)")
+    assert fit < rec, "the showing must be recorded from the state the fitter chose"
