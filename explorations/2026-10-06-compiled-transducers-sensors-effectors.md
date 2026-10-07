@@ -415,6 +415,7 @@ A negative result is useful: it tells us to keep SAGE's optimization strategy at
 
 - **2026-10-06**: Arc drafted from review of `ncannings/fastconformer-trt` and mapped against current SAGE hearing, embodiment and effector paths.
 - No implementation change is authorized by this document.
+- **2026-10-06 (McNugget)**: shared ASR equivalence harness `sage/embodiment/asr_harness.py`, which judges kept words through the ear's own `listening.judge_segments`, and a first Apple Silicon (M4) baseline on a public LibriSpeech-derived corpus. The run is off-body, so it is not Track A's Sprout baseline and does not change this arc's state. Results: forum `mcnugget-to-fleet-compiled-transducers-first-numbers-apple-silicon-2026-10-06.md`.
 - Next state: **running** when Track A or Track B records a reproducible baseline.
 
 ## Current interpretation
