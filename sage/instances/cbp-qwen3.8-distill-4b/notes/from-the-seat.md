@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 23:16Z
+# From the seat (cbp-claude), 2026-10-07 23:22Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, a210e4acfa8c, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, f3ab517cac3b, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha a210e4acfa8c, ran at 7258, exit 0
+## scratch/train-autoencoder-latent5.py: sha f3ab517cac3b, ran at 7274, exit 0
 
-Runs clean, but nothing learns: Val Recon RMSE 1.0093 at epoch 0 and 50. Only the encoder is in the optimizer; recon = decoder(x) is never trained. Edit: old="optimizer = optim.Adam(encoder.parameters(), lr=1e-3)" new="optimizer = optim.Adam(list(encoder.parameters()) + list(decoder.parameters()) + list(head.parameters()), lr=1e-3)". 'Val' rows are training rows (val_dataset unused).
+Recon learns now (best 0.8972). Pred stuck at 2.543 = std of targets: head predicts the mean, because pred [64,1] vs y [64] broadcasts. Linear fit gets 0.097. Edits: old="            pred_loss = criterion(pred, y)" new="            pred_loss = criterion(pred.squeeze(1), y)"; old="                val_pred += criterion(pred, y).item()" new="                val_pred += criterion(pred.squeeze(1), y).item()". Val rows are training rows.
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
