@@ -205,6 +205,33 @@ def test_the_being_can_retire_its_own_note_and_only_its_own():
     assert not env.ok and "reason" in env.error, "a retirement says what it knows now"
 
 
+def test_a_second_retire_of_the_same_name_on_the_same_day_keeps_both():
+    """Measured 2026-10-07 on cbp-being: scratch/validate-overfitting.py was retired at 04:47Z,
+    rewritten under the same name, and retired again at 07:50Z. Both landed on
+    validate-overfitting.retired-2026-10-07.py, and the second write replaced the first, so the
+    04:47Z copy was gone while the receipt said ok. 'Nothing is destroyed' has to hold per call."""
+    from sage.gateway.reference_f1a import ReferenceF1aDispatcher, BeingIntent
+    root = Path(tempfile.mkdtemp(prefix="retire-twice-"))
+    (root / "scratch").mkdir()
+    d = ReferenceF1aDispatcher(memory_root=root)
+    allow = SimpleNamespace(decision="allow", rule="", reason="ok", innate=False, stage="local-law")
+    results = []
+    for body in ("first version\n", "second version\n", "third version\n"):
+        (root / "scratch" / "v.py").write_text(body)
+        env = d(BeingIntent("retire_note", {"path": "scratch/v.py", "reason": "rewritten"}), allow)
+        assert env.ok, env.error
+        results.append(env.result)
+    kept = sorted((root / "scratch").glob("v.retired-*"))
+    assert len(kept) == 3, [k.name for k in kept]
+    texts = " ".join(k.read_text() for k in kept)
+    for body in ("first version", "second version", "third version"):
+        assert body in texts, "every retired copy survives"
+    names = {k.name for k in kept}
+    for r in results:
+        assert r.split(" -> ")[1] in names, "the receipt names the file it actually wrote"
+    assert all(k.suffix == ".py" for k in kept), "the extension stays last"
+
+
 def test_the_unit_file_is_exported_from_systemds_own_answer():
     """cbp-being guessed the unit's location four times in two days — /etc/systemd/system,
     a made-up hestia.policy-daemon.service, /var/log/systemd/units, /root/.config — each a
