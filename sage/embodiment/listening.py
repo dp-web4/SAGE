@@ -202,9 +202,11 @@ class Transcriber(threading.Thread):
         self.running = True
         self.backlog_drops = 0        # utterances dropped because transcription fell behind (counted, logged)
 
-    def submit(self, audio: bytes) -> bool:
+    def submit(self, audio: bytes, ended_at: Optional[float] = None) -> bool:
+        """Queue one utterance. `ended_at` is when the segmenter closed it (the person stopped speaking):
+        the start of the latency the compiled-transducers arc's Track A measures (end of speech -> kept words)."""
         try:
-            self.q.put_nowait(audio)
+            self.q.put_nowait((audio, time.time() if ended_at is None else float(ended_at)))
             return True
         except queue.Full:
             # a backlog means we are behind; drop rather than lag forever, but never silently
@@ -235,30 +237,38 @@ class Transcriber(threading.Thread):
     def run(self):
         while self.running:
             try:
-                audio = self.q.get(timeout=1.0)
+                item = self.q.get(timeout=1.0)
             except queue.Empty:
                 continue
+            audio, ended_at = item if isinstance(item, tuple) else (item, None)
             if self.model is None and not self.status.startswith("unavailable"):
                 self._load()
             if self.model is None:
                 continue
-            self._handle(audio)
+            self._handle(audio, ended_at)
 
-    def _handle(self, audio: bytes) -> None:
+    def _handle(self, audio: bytes, ended_at: Optional[float] = None) -> None:
+        # TIMING BESIDE THE WORDS (compiled-transducers arc, Track A baseline): when the utterance ended, how long
+        # it waited in the queue, and how long whisper took. Measurement only; nothing about what is kept changes.
+        t0 = time.time()
+        timing = {"asr_s": None}
+        if ended_at is not None:
+            timing.update({"t_end": round(float(ended_at), 2), "queue_s": round(t0 - float(ended_at), 3)})
         try:
             rec = self.transcribe(audio)
+            timing["asr_s"] = round(time.time() - t0, 3)
         except Exception as e:
             # A TRANSCRIBER FAILURE IS NOT SILENCE (GPT on #325): measured, never shown as speech. The error's
             # class only, never its text (it can carry paths or audio-derived content).
             self.transcribe_errors = getattr(self, "transcribe_errors", 0) + 1
             _append(UNHEARD_PATH, {"ts": round(time.time(), 2), "why": "transcribe_error",
                                    "error": type(e).__name__, "seconds": round(len(audio) / 2 / RATE, 1),
-                                   "source": self.source})
+                                   "source": self.source, **timing})
             return
         if rec and rec.get("text"):
-            _append(self.heard_path, rec)
+            _append(self.heard_path, dict(rec, **timing))
         elif rec:
-            _append(UNHEARD_PATH, dict(rec, why="no kept words"))   # measured, never shown as speech
+            _append(UNHEARD_PATH, dict(rec, why="no kept words", **timing))   # measured, never shown as speech
 
 
 def _append(path: str, rec: dict) -> None:
