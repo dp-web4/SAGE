@@ -436,10 +436,39 @@ def _cpu_model(plat: Dict) -> Optional[str]:
     if plat["os"] == "macos":
         o, _ = _run(["sysctl", "-n", "machdep.cpu.brand_string"])
         return o.strip() if o else None
-    for line in (_read("/proc/cpuinfo") or "").splitlines():
+    info = _read("/proc/cpuinfo") or ""
+    for line in info.splitlines():
         if line.lower().startswith("model name"):
             return line.split(":", 1)[1].strip()
+    # aarch64 /proc/cpuinfo has no "model name" (sprout, 2026-10-07: Cortex-A78AE read as null).
+    # lscpu names the core from its own tables; without it, the raw ids are still a fact.
+    o, _ = _run(["lscpu"])
+    for line in (o or "").splitlines():
+        if line.lower().startswith("model name"):
+            return line.split(":", 1)[1].strip()
+    part = re.search(r"^CPU part\s*:\s*(\S+)", info, re.M)
+    impl = re.search(r"^CPU implementer\s*:\s*(\S+)", info, re.M)
+    if part:
+        return f"ARM CPU part {part.group(1)}" + (f" (implementer {impl.group(1)})" if impl else "")
     return None
+
+
+def parse_swapusage(text: str) -> Optional[Tuple[int, int]]:
+    """`sysctl -n vm.swapusage`: 'total = 2048.00M  used = 1024.50M  free = ...' -> (total, used) bytes."""
+    unit = {"K": 1 << 10, "M": 1 << 20, "G": 1 << 30}
+    got = {}
+    for k, n, u in re.findall(r"(total|used)\s*=\s*([\d.]+)([KMG])", text or ""):
+        got[k] = int(float(n) * unit[u])
+    return (got["total"], got["used"]) if "total" in got and "used" in got else None
+
+
+def _macos_swap() -> Dict:
+    o, why = _run(["sysctl", "-n", "vm.swapusage"])
+    sw = parse_swapusage(o or "")
+    if not sw:
+        return {"swap_used_bytes": gap(why or "unparseable vm.swapusage"),
+                "swap_total_bytes": gap(why or "unparseable vm.swapusage")}
+    return {"swap_used_bytes": ok(sw[1], "sysctl vm.swapusage"), "swap_total_bytes": ok(sw[0], "sysctl vm.swapusage")}
 
 
 def sense_memory(plat: Dict, unified: bool) -> Dict:
@@ -455,7 +484,7 @@ def sense_memory(plat: Dict, unified: bool) -> Dict:
                 else gap(why_v or "vm_stat lacks the page counts"),
                 "anon_bytes": gap("no /proc/meminfo on macOS"), "cache_bytes": gap("no /proc/meminfo on macOS"),
                 "available_bytes": gap("no /proc/meminfo on macOS"),
-                "swap_used_bytes": gap("not read on macOS")}
+                **_macos_swap()}
     mi = parse_meminfo(_read("/proc/meminfo") or "")
     if "MemTotal" not in mi:
         return {"pool": pool, "scope": "unknown", "total_bytes": gap("/proc/meminfo unreadable"),
@@ -505,8 +534,9 @@ WIN_HOST_PS = (
     "$o=Get-CimInstance Win32_OperatingSystem; "
     "$p=@(Get-Process -Name vmmem,vmmemWSL -ErrorAction SilentlyContinue | "
     "Select-Object Name,WorkingSet64,PrivateMemorySize64); "
+    "$v=@(Get-CimInstance Win32_VideoController | Select-Object Name,Status,DriverVersion); "
     "[pscustomobject]@{total_kib=$o.TotalVisibleMemorySize; free_kib=$o.FreePhysicalMemory; "
-    "commit_limit_kib=$o.TotalVirtualMemorySize; commit_free_kib=$o.FreeVirtualMemory; vm=$p} "
+    "commit_limit_kib=$o.TotalVirtualMemorySize; commit_free_kib=$o.FreeVirtualMemory; vm=$p; video=$v} "
     "| ConvertTo-Json -Compress -Depth 3")
 
 # A neutral marker, stated in the snapshot with its threshold. It controls nothing.
@@ -547,6 +577,12 @@ def parse_win_host(text: str, now: float) -> Dict:
         why = ("no vmmem/vmmemWSL process visible to this Windows user (it runs elevated or under "
                "another session on some hosts)")
         out["wsl_vm_working_set_bytes"] = out["wsl_vm_private_bytes"] = gap(why)
+    # The host's display adapters, as Windows names them (nomad and hub, 2026-10-07: an Iris Xe
+    # and a W5500 the guest cannot see). Names only: nothing about them is measurable from WSL.
+    video = d.get("video")
+    video = [video] if isinstance(video, dict) else (video or [])
+    out["gpus"] = [{"name": str(v.get("Name")), "status": v.get("Status"), "driver": v.get("DriverVersion")}
+                   for v in video if isinstance(v, dict) and v.get("Name")]
     low = free < LOW_HEADROOM_FRACTION * total
     out["low_headroom"] = {"value": low, "threshold": f"available < {LOW_HEADROOM_FRACTION:.0%} of host physical",
                            "source": "this snapshot", "controls": "nothing (an indicator)"}
@@ -642,7 +678,11 @@ def amd_gpu(card: Dict, readings: Dict, sources: Dict, integrated: Optional[bool
     def rd(k, conv=lambda x: x, missing="not exposed by amd-smi, rocm-smi or amdgpu sysfs"):
         v = readings.get(k)
         return ok(conv(v), sources[k]) if v is not None else gap(missing)
-    temps = readings.get("temps") or {}
+    # A sensor that reads exactly 0 C on a running GPU is unsupported, not cold (pub, 2026-10-07:
+    # the W5500's hwmon "mem" reads 0). Named, never shown as a temperature.
+    raw = readings.get("temps") or {}
+    temps = {k: v for k, v in raw.items() if v != 0}
+    zero = {k: "sensor reads 0 C (not supported on this ASIC)" for k, v in raw.items() if v == 0}
     tkey = "edge" if "edge" in temps else ("junction" if "junction" in temps else next(iter(temps), None))
     temp = ok(round(temps[tkey], 1), f"{sources.get('temps', 'sysfs')} ({tkey})") if tkey else gap("no GPU temperature sensor")
     gtt = rd("gtt_used", int, "GTT use not exposed")
@@ -668,7 +708,9 @@ def amd_gpu(card: Dict, readings: Dict, sources: Dict, integrated: Optional[bool
         share = gtt
     g = _gpu("amd", name, topo, utilization_pct=rd("util"), memory_used_bytes=used,
              memory_total_bytes=total, temperature_c=temp, shared_memory_used_bytes=share,
-             temperatures={k: round(v, 1) for k, v in temps.items()} if len(temps) > 1 else None)
+             temperatures={k: round(v, 1) for k, v in temps.items()} if len(temps) > 1 or zero else None)
+    if zero:
+        g["temperatures_unavailable"] = zero
     if integrated is None:
         g["topology_why"] = "an integrated-Radeon CPU and more than one AMD GPU: which one is integrated is not known"
     return g
@@ -855,12 +897,42 @@ def _sense_apple() -> Tuple[List[Dict], Optional[str]]:
     if not d:
         return [], "ioreg answered without an IOAccelerator"
     return [_gpu("apple", d.get("name") or "Apple GPU", "unified",
-                 utilization_pct=ok(d["util"], "ioreg PerformanceStatistics") if "util" in d
+                 utilization_pct=ok(d["util"], "ioreg PerformanceStatistics (instantaneous)") if "util" in d
                  else gap("ioreg has no Device Utilization %"),
                  memory_used_bytes=gap(UNIFIED_NO_POOL), memory_total_bytes=gap(UNIFIED_NO_POOL),
                  temperature_c=gap("macOS exposes GPU temperature only to root (powermetrics)"),
                  shared_memory_used_bytes=ok(d["in_use_bytes"], "ioreg In use system memory")
                  if "in_use_bytes" in d else gap("ioreg has no In use system memory"))], None
+
+
+HOST_ONLY = "a GPU on the Windows host (Win32_VideoController), not measurable from inside the WSL guest"
+
+
+def _vendor_of_name(name: str) -> str:
+    n = name.lower()
+    return ("nvidia" if "nvidia" in n else "amd" if ("amd" in n or "radeon" in n)
+            else "intel" if "intel" in n else "unknown")
+
+
+def merge_host_gpus(gpus: List[Dict], host: Dict) -> List[Dict]:
+    """The guest's sensed GPUs, plus every Windows host adapter the guest did not sense, named and
+    unmeasured. A host adapter is the same GPU as a sensed one when the names match."""
+    out = list(gpus)
+    sensed = {str(g.get("name", "")).strip().lower() for g in gpus}
+    for a in (host or {}).get("gpus") or []:
+        name = str(a.get("name") or "").strip()
+        if not name or name.lower() in sensed or "basic display" in name.lower():
+            continue
+        vendor = _vendor_of_name(name)
+        topo = "unified" if vendor == "intel" else "unknown"
+        g = _gpu(vendor, name, topo, utilization_pct=gap(HOST_ONLY), memory_used_bytes=gap(HOST_ONLY),
+                 memory_total_bytes=gap(HOST_ONLY), temperature_c=gap(HOST_ONLY),
+                 shared_memory_used_bytes=gap(HOST_ONLY))
+        g["seen_by"] = "windows host"
+        if topo == "unknown":
+            g["topology_why"] = "Windows names the adapter; whether it is discrete or integrated is not measured"
+        out.append(g)
+    return out
 
 
 def topology_of(gpus: List[Dict], plat: Dict) -> Tuple[str, str]:
@@ -869,7 +941,7 @@ def topology_of(gpus: List[Dict], plat: Dict) -> Tuple[str, str]:
         return "unknown", "no GPU sensed"
     if len(kinds) == 1:
         k = kinds[0]
-        why = {"discrete": "every GPU has its own VRAM pool",
+        why = {"discrete": "every sensed GPU has its own VRAM pool",
                "unified": "the GPU and CPU share one memory pool",
                "unified_carveout": "an integrated GPU with a VRAM carve-out reserved from system RAM",
                "unknown": "the GPU's topology could not be determined"}[k]
@@ -882,8 +954,21 @@ def topology_of(gpus: List[Dict], plat: Dict) -> Tuple[str, str]:
 
 def _mount_of(path: str) -> Optional[str]:
     """The mount point holding `path`, from /proc/self/mountinfo: works when `path` itself is
-    not traversable by this user (Ollama's models dir is often 0750 ollama)."""
-    path = os.path.abspath(path)
+    not traversable by this user (Ollama's models dir is often 0750 ollama).
+
+    The path is RESOLVED first (legion, 2026-10-07: its models dir is a symlink onto another
+    disk, and the unresolved path matched "/"). realpath resolves every component this user can
+    see; a link inside a directory it cannot traverse stays unresolved, which sense_disks says.
+    Off Linux (no mountinfo), the nearest ancestor that is a mount point."""
+    path = os.path.realpath(path)
+    if not sys.platform.startswith("linux"):
+        p = path
+        while p and not os.path.ismount(p):
+            parent = os.path.dirname(p)
+            if parent == p:
+                break
+            p = parent
+        return p or None
     best = None
     for line in (_read("/proc/self/mountinfo") or "").splitlines():
         f = line.split()
@@ -925,7 +1010,8 @@ def sense_disks(targets: List[Tuple[str, str]]) -> Tuple[List[Dict], List[Dict]]
             if not mp:
                 gaps.append({"label": label, "path": path, "unavailable": "path not visible to this user"})
                 continue
-            probe, via = mp, f" (measured at its mount {mp}: the path is not readable by this user)"
+            probe, via = mp, (f" (measured at its mount {mp}: the path is not readable by this user, "
+                              "so a symlink inside it could lead elsewhere unseen)")
         try:
             st = os.statvfs(probe)
             dev = str(os.stat(probe).st_dev)
@@ -937,7 +1023,9 @@ def sense_disks(targets: List[Tuple[str, str]]) -> Tuple[List[Dict], List[Dict]]
             continue
         total, free = st.f_blocks * st.f_frsize, st.f_bavail * st.f_frsize
         used = total - st.f_bfree * st.f_frsize
-        disks[dev] = {"labels": [label], "path": path, "mount": _mount_of(probe) if sys.platform.startswith("linux") else None,
+        real = os.path.realpath(path)
+        disks[dev] = {"labels": [label], "path": path, **({"resolved": real} if real != os.path.abspath(path) else {}),
+                      "mount": _mount_of(probe),
                       "total_bytes": ok(total, "statvfs" + via), "free_bytes": ok(free, "statvfs" + via),
                       "used_pct": ok(round(100.0 * used / (used + free), 1) if used + free else None, "statvfs" + via)}
     return list(disks.values()), gaps
@@ -979,6 +1067,11 @@ def sample(disks: Optional[List[Tuple[str, str]]] = None, cpu_window: float = CP
         snap["wsl_host"] = dict(carried_host, carried=True)
     elif plat["kind"] != "wsl2":
         snap["wsl_host"] = {"unavailable": "not a WSL guest: `memory` is this machine's own single view"}
+    if plat["kind"] == "wsl2" and (snap.get("wsl_host") or {}).get("gpus"):
+        snap["gpus"] = merge_host_gpus(gpus, snap["wsl_host"])
+        snap["memory_topology"], snap["memory_topology_why"] = topology_of(snap["gpus"], plat)
+        if snap["gpus"] and "gpu_unavailable" in snap:
+            snap["gpu_unavailable_in_guest"] = snap.pop("gpu_unavailable")
     snap["sample_ms"] = round((time.time() - t0) * 1000.0, 1)
     snap["cpu_window_ms"] = round(cpu_window * 1000.0)
     snap["line"] = summary_line(snap)
@@ -1006,6 +1099,8 @@ def _gpu_part(g: Dict, multi: bool) -> str:
     if t is not None:
         bits.append(f"{t:.0f}°C")
     if not bits:
+        if g.get("seen_by") == "windows host":
+            return f"{head}: on the Windows host, not measurable from WSL"
         return f"{head}: no readings"
     return head + " " + " · ".join(bits)
 
@@ -1013,9 +1108,11 @@ def _gpu_part(g: Dict, multi: bool) -> str:
 def _host_part(h: Dict) -> str:
     """The Windows host, headroom first: what the machine has left, and how much the VM holds."""
     ht, hu, ha = val(h.get("memory_total_bytes")), val(h.get("memory_used_bytes")), val(h.get("memory_available_bytes"))
-    if ht is None or hu is None or ha is None:
+    if ht is None or hu is None:
         why = (h.get("memory_total_bytes") or {}).get("unavailable") or "not sampled yet"
         return f"Windows host memory: {why}"
+    if ha is None:      # a block from before the headroom fields: show what it measured
+        return f"host {_gib(hu)}/{_gib(ht)} GiB"
     bits = [f"{_gib(ha)} free"]
     vm = val(h.get("wsl_vm_working_set_bytes"))
     bits.append(f"WSL VM holds {_gib(vm)}" if vm is not None else "WSL VM footprint not visible")
@@ -1032,7 +1129,8 @@ def summary_line(s: Dict) -> str:
     parts, missing = [], []
     gpus = s.get("gpus") or []
     if gpus:
-        parts.append("; ".join(_gpu_part(g, len(gpus) > 1) for g in gpus))
+        shown = sorted(gpus, key=lambda g: val(g.get("utilization_pct")) is None)   # measured first, stable
+        parts.append("; ".join(_gpu_part(g, len(gpus) > 1) for g in shown))
         for g in gpus:
             if val(g.get("temperature_c")) is None and len(gpus) == 1:
                 missing.append("GPU temp: " + g["temperature_c"].get("unavailable", "unavailable"))
@@ -1061,6 +1159,9 @@ def summary_line(s: Dict) -> str:
                 ram += " (one pool, GPU included)"
             elif wsl:
                 ram += " (WSL cap)"
+        sw = val(mem.get("swap_used_bytes"))
+        if sw and round(sw / GIB, 1) > 0:      # shown when it prints as more than 0.0 GiB
+            ram += f" (+{_gib(sw)} GiB swap)"
         cb.append(ram)
     else:
         missing.append("RAM: " + (mem.get("used_bytes") or {}).get("unavailable", "unavailable"))

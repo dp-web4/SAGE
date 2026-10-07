@@ -517,3 +517,142 @@ def test_standalone_cli_json(tmp_path):
     s = json.loads(p.stdout)
     assert s["schema"] == P.SCHEMA and s["disks"][0]["labels"][0] == "t"
     assert list(tmp_path.iterdir()) == [], "the sampler writes nothing"
+
+
+# ---- the fleet's real runs (2026-10-07, SAGE #379): every machine's own output ---------------
+
+FLEET = ("sprout", "nomad", "legion", "pub", "hub", "mcnugget")
+
+
+@pytest.mark.parametrize("m", FLEET)
+def test_every_fleet_snapshot_is_honest(m):
+    s = json.loads(fx(f"{m}_snapshot.json"))
+    assert s["schema"] == "sage.body/1"
+    for path, r in readings(s):
+        if r["value"] is None:
+            assert r.get("unavailable"), f"{m}{path}: a missing value must say why"
+        else:
+            assert r.get("source"), f"{m}{path}: a value must say where it came from"
+    # the line re-renders from the snapshot alone, without raising, on every platform
+    assert P.summary_line(s)
+
+
+def test_sprout_unified_never_double_counts():
+    s = json.loads(fx("sprout_snapshot.json"))
+    g = s["gpus"][0]
+    assert s["memory_topology"] == "unified" and g["memory_total_bytes"]["value"] is None
+    assert "VRAM" not in P.summary_line(s)
+
+
+def test_sprout_swap_is_in_the_line():
+    """sprout: 4.1 of 10 GiB swap in use on a 7.4 GiB unified pool, and the line did not say so."""
+    s = json.loads(fx("sprout_snapshot.json"))
+    assert "+4.1 GiB swap" in P.summary_line(s)
+    s["memory"]["swap_used_bytes"]["value"] = 0
+    assert "swap" not in P.summary_line(s)
+
+
+def test_sprout_cpu_model_on_aarch64_comes_from_lscpu(monkeypatch):
+    """sprout: cpu.model was null; aarch64 /proc/cpuinfo has no 'model name'."""
+    monkeypatch.setattr(P, "_read", lambda path: fx("sprout_cpuinfo_aarch64.txt") if path == "/proc/cpuinfo" else None)
+    monkeypatch.setattr(P, "_run", lambda argv, timeout=5.0: (fx("sprout_lscpu.txt"), "") if argv[0] == "lscpu" else (None, "x"))
+    assert P._cpu_model(JETSON) == "Cortex-A78AE"
+    monkeypatch.setattr(P, "_run", lambda argv, timeout=5.0: (None, "lscpu not found"))
+    assert P._cpu_model(JETSON) == "ARM CPU part 0xd42 (implementer 0x41)"
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="mountinfo is Linux")
+def test_legion_a_symlinked_models_dir_is_attributed_to_its_real_mount(monkeypatch, tmp_path):
+    """legion: /usr/share/ollama/.ollama/models -> /home/dp/data/ollama/models, on its own mount;
+    the snapshot said mount "/" for it (abspath does not resolve links)."""
+    data = tmp_path / "data"
+    (data / "ollama" / "models").mkdir(parents=True)
+    (tmp_path / "share").mkdir()
+    (tmp_path / "share" / "models").symlink_to(data / "ollama" / "models")
+    mi = (f"22 1 259:3 / / rw - ext4 /dev/nvme0n1p2 rw\n"
+          f"90 22 259:5 / {data} rw - ext4 /dev/nvme0n1p3 rw\n")
+    real = P._read
+    monkeypatch.setattr(P, "_read", lambda path: mi if path == "/proc/self/mountinfo" else real(path))
+    assert P._mount_of(str(tmp_path / "share" / "models")) == str(data)
+
+
+def test_legion_snapshot_mixed_topology_and_x86_temp():
+    s = json.loads(fx("legion_snapshot.json"))
+    assert s["memory_topology"] == "mixed" and s["cpu"]["temperature_c"]["source"] == "thermal_zone x86_pkg_temp"
+
+
+def test_pub_an_amd_sensor_reading_zero_is_not_a_temperature(monkeypatch, tmp_path):
+    """pub: hwmon temp3 (mem) on the W5500 reads 0; a running GPU at 0 C cannot be right."""
+    s = json.loads(fx("pub_snapshot.json"))
+    pub_temps = s["gpus"][1]["temperatures"]            # {"edge": 35.0, "junction": 35.0, "mem": 0.0}
+    _no_tools(monkeypatch)
+    _amd_card(tmp_path, 2, temps=tuple((k, str(int(v * 1000))) for k, v in pub_temps.items()))
+    monkeypatch.setattr(P, "DRM_GLOB", str(tmp_path / "drm" / "card[0-9]*"))
+    g = P.sense_gpus(LINUX, s["cpu"]["model"])[0][0]
+    assert "mem" not in (g.get("temperatures") or {})
+    assert "reads 0" in g["temperatures_unavailable"]["mem"]
+    assert g["temperature_c"]["value"] == 35.0
+
+
+def test_pub_line_puts_the_measured_gpu_first():
+    line = P.summary_line(json.loads(fx("pub_snapshot.json")))
+    assert line.startswith("AMD GPU 0%"), line
+
+
+def test_nomad_the_windows_host_igpu_is_listed_and_topology_is_mixed():
+    """nomad: Windows reports an Iris Xe next to the RTX 4060; the snapshot omitted it and said
+    'every GPU has its own VRAM pool'."""
+    s = json.loads(fx("nomad_snapshot.json"))
+    host = P.parse_win_host(fx("nomad_win_host.json"), now=1.0)
+    gpus = P.merge_host_gpus(s["gpus"], host)
+    names = [g["name"] for g in gpus]
+    assert names == ["NVIDIA GeForce RTX 4060 Laptop GPU", "Intel(R) Iris(R) Xe Graphics"], "the 4060 once, the Xe added"
+    xe = gpus[1]
+    assert xe["vendor"] == "intel" and xe["topology"] == "unified" and xe["seen_by"] == "windows host"
+    assert "not measurable from inside the WSL guest" in xe["utilization_pct"]["unavailable"]
+    assert P.topology_of(gpus, WSL)[0] == "mixed"
+
+
+def test_hub_names_the_w5500_and_uhd_750_on_its_host():
+    s = json.loads(fx("hub_snapshot.json"))
+    host = P.parse_win_host(fx("hub_win_host.json"), now=1.0)
+    gpus = P.merge_host_gpus(s["gpus"], host)
+    assert [(g["vendor"], g["name"]) for g in gpus] == [("intel", "Intel(R) UHD Graphics 750"), ("amd", "AMD Radeon Pro W5500")]
+    s2 = dict(s, gpus=gpus, wsl_host=host)
+    s2["memory_topology"], _ = P.topology_of(gpus, WSL)
+    line = P.summary_line(s2)
+    assert "AMD GPU: on the Windows host, not measurable from WSL" in line
+
+
+def test_the_topology_reason_speaks_only_for_sensed_gpus():
+    assert P.topology_of([P._gpu("nvidia", "x", "discrete")], WSL)[1] == "every sensed GPU has its own VRAM pool"
+
+
+def test_an_old_shaped_host_block_still_renders_its_numbers():
+    """A carried block from before the memory follow-up has no available field; its numbers stay."""
+    s = json.loads(fx("nomad_snapshot.json"))
+    assert "host 17.4/31.7 GiB" in P.summary_line(s)
+
+
+def test_mcnugget_swap_from_vm_swapusage_and_gpu_marked_instantaneous(monkeypatch):
+    out = {"sysctl": None, "vm_stat": fx("macos_vm_stat.txt")}
+
+    def run(argv, timeout=5.0):
+        if argv[:2] == ["sysctl", "-n"] and argv[2] == "vm.swapusage":
+            return fx("macos_sysctl_vm_swapusage.txt"), ""
+        if argv[0] == "sysctl":
+            return fx("macos_sysctl_hw_memsize.txt"), ""
+        if argv[0] == "vm_stat":
+            return fx("macos_vm_stat.txt"), ""
+        return fx("macos_ioreg_accel.txt"), ""
+    monkeypatch.setattr(P, "_run", run)
+    m = P.sense_memory(MAC, unified=True)
+    assert m["swap_used_bytes"] == {"value": int(1024.50 * (1 << 20)), "source": "sysctl vm.swapusage"}
+    assert m["swap_total_bytes"]["value"] == 2048 * (1 << 20)
+    g = P.sense_gpus(MAC)[0][0]
+    assert "instantaneous" in g["utilization_pct"]["source"]
+
+
+@pytest.mark.skipif(sys.platform.startswith("linux"), reason="exercises the non-Linux mount fallback")
+def test_mount_is_found_without_mountinfo(tmp_path):
+    assert P._mount_of(str(tmp_path)) is not None

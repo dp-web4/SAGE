@@ -104,5 +104,74 @@
   "win_host_no_vmmem.json": {
     "status": "DERIVED",
     "basis": "cbp_win_host.json with vm emptied: the case where vmmem is not visible to the Windows user"
+  },
+  "sprout_snapshot.json": {
+    "status": "VERIFIED",
+    "machine": "sprout",
+    "captured": "2026-10-07",
+    "detail": "Jetson Orin Nano Super, L4T 6.8.12-1021-tegra, Python 3.12.3",
+    "cmd": "the PR #379 run block (module at da90eb419, before the memory follow-up)",
+    "source": "SAGE #379 fleet-run comment from sprout"
+  },
+  "nomad_snapshot.json": {
+    "status": "VERIFIED",
+    "machine": "nomad",
+    "captured": "2026-10-07",
+    "detail": "WSL2 6.6.87.2, RTX 4060 Laptop via /usr/lib/wsl/lib/nvidia-smi, Python 3.12.3",
+    "cmd": "the PR #379 run block (module at da90eb419, before the memory follow-up)",
+    "source": "SAGE #379 fleet-run comment from nomad"
+  },
+  "legion_snapshot.json": {
+    "status": "VERIFIED",
+    "machine": "legion",
+    "captured": "2026-10-07",
+    "detail": "native Ubuntu 6.8.0-142, RTX 4090 Laptop (99% busy, live llama-server) + Intel iGPU, Python 3.12.3",
+    "cmd": "the PR #379 run block (module at da90eb419, before the memory follow-up)",
+    "source": "SAGE #379 fleet-run comment from legion"
+  },
+  "pub_snapshot.json": {
+    "status": "VERIFIED",
+    "machine": "pub",
+    "captured": "2026-10-07",
+    "detail": "tl-Precision-3650-Tower, native Ubuntu 26.04 / 7.0.0-28, Radeon Pro W5500 (amdgpu sysfs, no amd-smi/rocm-smi) + UHD 750, Python 3.14.4",
+    "cmd": "the PR #379 run block (module at da90eb419, before the memory follow-up)",
+    "source": "SAGE #379 fleet-run comment from pub"
+  },
+  "hub_snapshot.json": {
+    "status": "VERIFIED",
+    "machine": "hub",
+    "captured": "2026-10-07",
+    "detail": "HUB, WSL2 6.6.114.1, W5500 + UHD 750 on the Windows host, Python 3.14.4",
+    "cmd": "the PR #379 run block (module at da90eb419, before the memory follow-up)",
+    "source": "SAGE #379 fleet-run comment from hub"
+  },
+  "mcnugget_snapshot.json": {
+    "status": "VERIFIED",
+    "machine": "mcnugget",
+    "captured": "2026-10-07",
+    "detail": "Mac mini M4, macOS 26.5.1, psutil 7.2.2, Python 3.14.8",
+    "cmd": "the PR #379 run block (module at da90eb419, before the memory follow-up)",
+    "source": "SAGE #379 fleet-run comment from mcnugget"
+  },
+  "nomad_win_host.json": {
+    "status": "DERIVED",
+    "basis": "nomad's measured host total/used and its Win32_VideoController adapters (Iris Xe, RTX 4060), put in WIN_HOST_PS's JSON shape; no commit or vmmem fields were measured there"
+  },
+  "hub_win_host.json": {
+    "status": "DERIVED",
+    "basis": "hub's measured host total/used and its Win32_VideoController adapters (UHD 750, W5500, with driver versions), in WIN_HOST_PS's JSON shape"
+  },
+  "sprout_cpuinfo_aarch64.txt": {
+    "status": "DERIVED",
+    "basis": "aarch64 /proc/cpuinfo layout (no 'model name'); CPU part 0xd42 as sprout reported"
+  },
+  "sprout_lscpu.txt": {
+    "status": "DERIVED",
+    "basis": "lscpu layout; 'Model name: Cortex-A78AE' as sprout reported"
+  },
+  "macos_sysctl_vm_swapusage.txt": {
+    "status": "FORMAT",
+    "basis": "sysctl -n vm.swapusage layout",
+    "values": "illustrative"
   }
 }
