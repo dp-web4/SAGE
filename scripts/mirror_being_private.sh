@@ -62,12 +62,36 @@ python3 - "$INSTANCE/heartbeats.jsonl" "$DEST/heartbeats" <<'PY' || die "heartbe
 import sys, os, json, collections, gzip, io
 src, out = sys.argv[1], sys.argv[2]
 if not os.path.exists(src): sys.exit(0)
-months = collections.OrderedDict(); n = 0
+# AN OVERSIZED BEAT IS ELIDED, NOT DROPPED (McNugget, 2026-10-04): one beat row was 35 MB (a search
+# result of 2.4 MB lines), its day file 14 MB gzipped, and the size guard below then failed EVERY
+# mirror for days, so the being's record existed only on its machine. Splitting a day cannot help
+# a single row that size. So in a row over ROW_CAP, every string over STR_CAP is replaced by a
+# marker with its length, sha256 and first 200 characters. The beat count stays exact, ordinary
+# rows stay byte-identical (an unchanged day is still no diff), and the full row remains in the
+# being's own heartbeats.jsonl.
+import hashlib
+ROW_CAP, STR_CAP = 1_000_000, 20_000
+def _elide(v, counter):
+    if isinstance(v, str) and len(v) > STR_CAP:
+        counter[0] += 1
+        return {"elided_by_mirror": True, "chars": len(v),
+                "sha256": hashlib.sha256(v.encode("utf-8", "replace")).hexdigest(), "head": v[:200]}
+    if isinstance(v, list): return [_elide(x, counter) for x in v]
+    if isinstance(v, dict): return {k: _elide(x, counter) for k, x in v.items()}
+    return v
+months = collections.OrderedDict(); n = 0; elided_rows = 0
 for line in open(src, encoding="utf-8", errors="replace"):
     if not line.strip(): continue
     n += 1
-    try: m = str(json.loads(line).get("ts") or "")[:10] or "undated"
-    except ValueError: m = "unparsed"
+    try:
+        d = json.loads(line); m = str(d.get("ts") or "")[:10] or "undated"
+    except ValueError:
+        d = None; m = "unparsed"
+    if d is not None and len(line) > ROW_CAP:
+        c = [0]; d = _elide(d, c)
+        if c[0]:
+            d["_mirror_elided"] = c[0]; elided_rows += 1
+            line = json.dumps(d, ensure_ascii=False)
     months.setdefault(m, []).append(line if line.endswith("\n") else line + "\n")
 total = 0
 for m, lines in months.items():
@@ -82,7 +106,7 @@ for m, lines in months.items():
     if not os.path.exists(p) or open(p, "rb").read() != blob:
         open(p + ".tmp", "wb").write(blob); os.replace(p + ".tmp", p)
 assert total == n, (total, n)
-print(f"heartbeats: {n} beats in {len(months)} day file(s)")
+print(f"heartbeats: {n} beats in {len(months)} day file(s)" + (f"; {elided_rows} oversized beat(s) elided" if elided_rows else ""))
 PY
 
 # counts: what the being has vs what the mirror holds (the two known exclusions aside)

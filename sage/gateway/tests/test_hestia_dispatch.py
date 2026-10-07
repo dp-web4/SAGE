@@ -948,6 +948,30 @@ def test_a_search_that_finds_nothing_is_a_result_not_an_error(tmp_path):
     assert "WHAT WAS SEARCHED" in miss.result["note"]
 
 
+def test_a_search_line_is_capped_and_says_how_much_was_cut(tmp_path):
+    """McNugget, 2026-10-04: a match in a single-line JSON file is the whole file. 13 of 40
+    shown lines were 2.4 MB archive session dumps, one search result was 60 MB, and its beat
+    record blocked the being's private mirror for days. Each shown line is now capped."""
+    import subprocess, types
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D, SEARCH_LINE_CHARS
+    from sage.gateway.being_gate_client import BeingIntent
+
+    wt = tmp_path / "wt"; (wt / "data").mkdir(parents=True)
+    (wt / "data" / "dump.json").write_text('{"inbox": "' + "x" * 50_000 + '"}\n')
+    (wt / "data" / "small.py").write_text("inbox = 1\n")
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    subprocess.run(["git", "-C", str(wt), "add", "-A"], check=True, capture_output=True)
+    d = D.__new__(D); d.worktree = str(wt); d._verdict = types.SimpleNamespace(command=None)
+    d._call = lambda name, args: {"actionId": "act-s"} if name == "hestia_begin_action" else {}
+
+    r = d._do_search(BeingIntent("search", {"pattern": "inbox"})).result
+    big = [ln for ln in r["lines"] if ln.startswith("data/dump.json")][0]
+    small = [ln for ln in r["lines"] if ln.startswith("data/small.py")][0]
+    assert len(big) < SEARCH_LINE_CHARS + 80, len(big)
+    assert "line cut here" in big and "more characters" in big
+    assert small == "data/small.py:1:inbox = 1", "a short line is untouched"
+
+
 def test_a_check_result_carries_the_evidence_a_reviewer_would_reconstruct_by_hand(tmp_path):
     """GPT's #60 evidence contract, carried forward from the #62 slice that never landed.
 

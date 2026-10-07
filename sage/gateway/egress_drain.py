@@ -209,7 +209,11 @@ def _forward(row: Dict[str, Any], sender=None, plugin_id: str = "sprout-being",
     env = _clean_env()
     env["HUB_MESH_ENV"] = env_file
     p = subprocess.run([HUB_NOTIFY, str(to), str(kind), str(ptr)], capture_output=True, text=True, timeout=60, env=env)
-    out = (p.stdout + p.stderr).strip()
+    # stderr FIRST, stdout LAST: only the tail is kept, and the receipt is hub-notify's stdout
+    # success line ("[hub-notify] -> peer (lct) kind=… ledger=N …"). With stdout first, its stderr
+    # notes ("resolved 'legion-being' via hub roster …") pushed that line out of the tail, and every
+    # forwarded row recorded hub_receipt: null although the hub had accepted it (McNugget, 10-04).
+    out = (p.stderr + "\n" + p.stdout).strip()
     return (p.returncode == 0 and "ledger=" in out), f"signed_as={signed_as} " + out[-300:]
 
 
