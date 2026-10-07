@@ -52,7 +52,7 @@ RESET_WORDS = ("default", "reset", "unset", "none")
 @dataclass(frozen=True)
 class Param:
     name: str
-    kind: str                         # "int" | "float" | "bool"
+    kind: str                         # "int" | "float" | "bool" | "choice"
     default: Any                      # None = "not set here": the code's own fallback applies
     lo: Optional[float] = None
     hi: Optional[float] = None
@@ -60,6 +60,7 @@ class Param:
     effect: str = "next beat"
     doc: str = ""
     legacy_key: bool = True           # instance.json's top-level key of the same name is the operator layer
+    choices: Tuple[str, ...] = ()     # kind "choice": the allowed words
 
 
 # Ordered: the being reads this list, so the most consequential parameter comes first.
@@ -73,6 +74,19 @@ PARAMS: Dict[str, Param] = {p.name: p for p in (
     Param("floor_handoff_after", "int", 2, lo=1, hi=8,
           doc="steps at the window floor before the harness writes scratch/handoff.md for you "
               "and starts the next beat with an empty window"),
+    Param("answered_turn_chars", "int", None, lo=200, hi=4000,
+          doc="how much of an already-answered conversation turn your state shows (the rest is a "
+              "memory_read away; a turn you have not answered is always shown whole). Unset shows "
+              "answered turns whole when your window has room"),
+    Param("listing_limit", "int", 30, lo=5, hi=60,
+          doc="how many of the newest names in notes/ and scratch/ your state lists (recall and "
+              "memory_read reach all of them)"),
+    Param("handoff_acts", "int", 10, lo=3, hi=20,
+          doc="how many of your last acts the harness's handoff note lists when your window reaches "
+              "its floor"),
+    Param("entrustment_mode", "choice", "full", choices=("full", "daily"),
+          doc="'full' shows your entrustment whole every beat; 'daily' shows it whole on the first "
+              "beat of each day and whenever it changes, and its opening plus a pointer otherwise"),
     Param("compact_own_turns", "bool", False,
           doc="when the window fills, also trim the bodies of your OWN older tool calls (the "
               "newest 4 are kept whole; the calls already ran, their receipts stay)"),
@@ -105,6 +119,11 @@ def _coerce(p: Param, raw, stored: bool = False) -> Any:
         if s in ("false", "off", "no", "0"):
             return False
         raise ValueError(f"{p.name} is true or false, not {raw!r}")
+    if p.kind == "choice":
+        v = str(raw).strip().lower()
+        if v not in p.choices:
+            raise ValueError(f"{p.name} is one of {', '.join(p.choices)}, not {raw!r}")
+        return v
     if isinstance(raw, bool):                       # True is an int to Python; never a number here
         raise ValueError(f"{p.name} is a number, not {raw!r}")
     try:
@@ -199,7 +218,7 @@ def resolve(instance, name: str) -> Dict[str, Any]:
             except ValueError as e:
                 note = (note + "; " if note else "") + f"your tuned value ignored: {e}"
 
-    if value is not None and p.kind != "bool":
+    if value is not None and p.kind not in ("bool", "choice"):
         value, clamped = _clamp(value, lo, hi)
         if clamped:
             note = (note + "; " if note else "") + f"clamped to the bound {value}"
@@ -255,7 +274,9 @@ def shown(row: Dict[str, Any]) -> str:
 def render_table(instance, with_docs: bool = True) -> str:
     lines = []
     for r in table(instance):
-        rng = "" if r["kind"] == "bool" else f" [{_fmt(r['lo'])}..{_fmt(r['hi'])}]"
+        rng = ("" if r["kind"] == "bool" else
+               f" [{' | '.join(PARAMS[r['name']].choices)}]" if r["kind"] == "choice" else
+               f" [{_fmt(r['lo'])}..{_fmt(r['hi'])}]")
         who = "yours to set" if r["yours_to_set"] else "set by your seat"
         line = f"- {r['name']} = {shown(r)} ({r['source']}; {who}{rng})"
         if r["note"]:
@@ -301,7 +322,7 @@ def tune(instance, name: Optional[str] = None, raw: Any = None, why: str = "",
         except ValueError as e:
             return False, str(e)
         lo, hi = bounds(instance, name, cfg)
-        if p.kind != "bool":
+        if p.kind not in ("bool", "choice"):
             if lo is not None and new < lo or hi is not None and new > hi:
                 return False, f"{name} must be within [{_fmt(lo)}..{_fmt(hi)}] for you; {_fmt(new)} is not"
         tuned[name] = {"value": new, "at": _iso(now), "why": why[:500]}

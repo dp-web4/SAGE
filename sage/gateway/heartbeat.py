@@ -2260,6 +2260,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
               body_reading: Optional[dict] = None,
               settled_turns: Optional[int] = None) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
+    from sage.gateway import being_params as _bp
     parts = []
     # The body first: it is the only thing in this state that is happening NOW. Everything below
     # is record. (dp 2026-09-23: "bridge the two halves ... world feedback to its actions".)
@@ -2283,8 +2284,12 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     if entrusted:
         # After the body (the only thing happening NOW) and ahead of every record: what the being
         # was extended frames how it reads the rest. Carried from legion/mission-artifact.
+        # `entrustment_mode` (being_params): "daily" shows it whole on the first beat of a UTC day
+        # and whenever its text changes, otherwise its opening section and the way to read the rest.
         parts.append("## What you are entrusted with (extended to you; you cannot edit this "
-                     "file. Your own reading of it belongs in notes/plan.md)\n" + entrusted)
+                     "file. Your own reading of it belongs in notes/plan.md)\n"
+                     + entrustment_shown(instance, entrusted, _bp.value(instance, "entrustment_mode", "full"),
+                                         mark=mark_conversations))
     # Its files and runs, measured: also NOW, so beside the body and before every record that
     # narrates them (see files_and_runs). Fail-open: a measurement that errors adds nothing.
     try:
@@ -2311,7 +2316,8 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
         convs = _conv.render_for_being(instance, member, per_conv=per_conv,
                                        turn_chars=turn_chars, mark=mark_conversations,
                                        refuted=refuted_claims(services) + files_refuted,
-                                       settled_turns=settled_turns)
+                                       settled_turns=settled_turns,
+                                       answered_cap=_bp.value(instance, "answered_turn_chars"))
         if convs.strip():
             parts.append(conversation_header(instance, member) + "\n" + convs.strip())
     if services.strip():
@@ -2352,7 +2358,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     journal = _read(instance / "journal.md", 1200)
     parts.append("## journal.md (tail)\n" + (journal.strip() or "(empty: this is your first beat)"))
     for d in ("scratch", "notes"):
-        parts.append(dir_listing(instance, d))
+        parts.append(dir_listing(instance, d, _bp.value(instance, "listing_limit", LISTING_LIMIT)))
     return "\n\n".join(parts)
 
 
@@ -4604,6 +4610,51 @@ def window_line(instance) -> str:
         return line
     except Exception:
         return ""
+
+
+ENTRUSTMENT_SEEN = ".entrustment_seen.json"   # seat-written: the day and hash last shown whole
+
+
+def entrustment_shown(instance: Path, text: str, mode: str = "full", mark: bool = True,
+                      now: Optional[float] = None) -> str:
+    """The entrustment as this beat shows it. "full" (the default): the whole text, every beat.
+    "daily": whole on the first beat of each UTC day and on any beat where the text has changed
+    since it was last shown whole; otherwise its opening (everything before its first `## `
+    section) and a pointer to the rest. dp's words are never paraphrased or reordered: the
+    short form is a prefix of the file plus a sentence saying what was left out and where it is.
+
+    Measured 2026-10-07 on legion-being: the entrustment is 3,933 chars (~1,250 tokens), re-read
+    every beat for weeks, of a seed that fills ~53% of its window before its first act.
+    `mark=False` reads without recording a whole showing, like the conversations block, so a
+    seat inspecting the state does not change what the being is next shown."""
+    import hashlib
+    if mode != "daily" or not text:
+        return text
+    now = time.time() if now is None else now
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    digest = hashlib.sha256(text.encode()).hexdigest()[:16]
+    seen_path = Path(instance) / ENTRUSTMENT_SEEN
+    try:
+        seen = json.loads(seen_path.read_text())
+    except Exception:
+        seen = {}
+    if seen.get("day") != day or seen.get("sha") != digest:
+        if mark:
+            try:
+                seen_path.write_text(json.dumps({"day": day, "sha": digest}) + "\n")
+            except OSError:
+                pass
+        why = "the first beat of the day" if seen.get("sha") == digest else (
+            "its text changed since you last saw it whole" if seen else "shown whole")
+        return text + f"\n\n_(Shown whole: {why}. Later beats today show its opening and point here.)_"
+    head = text.split("\n## ", 1)[0].rstrip()
+    rest = len(text) - len(head)
+    if rest <= 0:
+        return text
+    return (head + f"\n\n_(Unchanged since you read it whole today: its other {rest:,} chars, the "
+            f"sections on what you have to work with, what is not open, your collaborator and how your "
+            f"work becomes real, are in {ENTRUSTMENT_FILE}; memory_read it whenever you want them. It is "
+            f"shown whole again tomorrow, or as soon as it changes.)_")
 
 
 def entrustment(instance: Path) -> str:

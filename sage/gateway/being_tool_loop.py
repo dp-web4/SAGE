@@ -974,7 +974,12 @@ def _write_handoff(root: Optional[str], trace, last_content: str, step: int, win
                  f"with an empty window. Your own scratch notes, todo.md and journal.md hold what you wrote; "
                  f"this is what the harness saw.",
                  "", "## Your last acts (newest last)"]
-        for intent, env in list(trace)[-10:]:
+        try:
+            from sage.gateway import being_params as _bp
+            _acts = int(_bp.value(root, "handoff_acts", 10))
+        except Exception:
+            _acts = 10
+        for intent, env in list(trace)[-_acts:]:
             args = {k: (v if len(str(v)) <= 80 else str(v)[:77] + "...") for k, v in (intent.args or {}).items()}
             outcome = "ok" if getattr(env, "ok", False) else ("refused" if getattr(env, "refused", False)
                                                              else f"failed: {str(getattr(env, 'error', '') or '')[:120]}")

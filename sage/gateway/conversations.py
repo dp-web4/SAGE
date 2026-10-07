@@ -715,12 +715,20 @@ def drain_new_for(instance: Path, me: str, *, mark: bool = True) -> str:
 ANSWERED_TURN_CHARS = 400
 
 
-def _cap_for(turn: dict, me: str, answered_upto: int, turn_chars: Optional[int]) -> Optional[int]:
+def _cap_for(turn: dict, me: str, answered_upto: int, turn_chars: Optional[int],
+             answered_cap: Optional[int] = None) -> Optional[int]:
     """Chars to show of one turn. Answered turns (anything up to the being's own last word
     in this conversation, its own turns included) get the short cap; anything after it is
-    live and shown at full width. Never widens past `turn_chars`."""
-    if not turn_chars or int(turn.get("seq", 0)) > answered_upto:
+    live and shown at full width. Never widens past `turn_chars`.
+
+    `answered_cap` (being_params `answered_turn_chars`) caps an answered turn EVEN AT THE FULL
+    RUNG, where `turn_chars` is None. Without it the short cap only ever applied once the fitter
+    had stepped down the ladder, so at (12, None) every answered turn re-rendered whole: on
+    legion-being 2026-10-07 the seat's two long answered turns were 2,379 chars of every beat."""
+    if int(turn.get("seq", 0)) > answered_upto:
         return turn_chars
+    if not turn_chars:
+        return answered_cap or turn_chars
     return min(ANSWERED_TURN_CHARS, turn_chars)
 
 
@@ -754,7 +762,8 @@ def _refuted_mark(text: str, refuted) -> str:
 
 def render_for_being(instance: Path, me: str, per_conv: int = 12,
                      turn_chars: Optional[int] = None, *, mark: bool = True,
-                     refuted=None, settled_turns: Optional[int] = None) -> str:
+                     refuted=None, settled_turns: Optional[int] = None,
+                     answered_cap: Optional[int] = None) -> str:
     """The conversations block in a beat: every conversation the being is in, its recent
     turns, and what is unanswered — marked, because 'someone spoke and I have not replied'
     is the single fact that should never require inference.
@@ -838,7 +847,7 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
         lines = [f"- **{t['from']}{' (you)' if t.get('from') == me else ''}** ({t['ts']})"
                  + _provenance_tag(t)
                  + (_refuted_mark(t.get("text", ""), refuted) if t.get("from") == me else "")
-                 + f": {_shown_text(t, _cap_for(t, me, answered_upto, turn_chars), m['id'])}"
+                 + f": {_shown_text(t, _cap_for(t, me, answered_upto, turn_chars, answered_cap), m['id'])}"
                  for t in turns]
         pend = pend_before
         if turns and mark:
