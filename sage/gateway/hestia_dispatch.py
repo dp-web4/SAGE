@@ -1966,6 +1966,18 @@ class HestiaF1aDispatcher:
                                                "report": said},
                               witness_id=self._local._witness(f"pair_audio: {r.get('outcome')}"))
 
+    def _do_tune(self, intent: BeingIntent) -> ResultEnvelope:
+        """The being's own parameters (being_params): list them, or set one within its bounds."""
+        from sage.gateway import being_params
+        a = intent.args or {}
+        name = str(a.get("name") or "").strip() or None
+        ok, text = being_params.tune(Path(self.memory_root), name, a.get("value"), a.get("why") or "")
+        if not ok:
+            return ResultEnvelope(ok=False, error=text)
+        return ResultEnvelope(ok=True, result=text,
+                              witness_id=(self._local._witness(f"tune {name}: {text[:120]}")
+                                          if name else None))
+
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
         if not content:
