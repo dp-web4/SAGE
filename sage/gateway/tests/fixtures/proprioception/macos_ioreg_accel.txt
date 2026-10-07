@@ -1,0 +1,8 @@
++-o AGXAcceleratorG16G  <class AGXAcceleratorG16G, id 0x1000003b6, registered, matched, active, busy 0 (0 ms), retain 92>
+    {
+      "IOClass" = "AGXAcceleratorG16G"
+      "model" = "Apple M4"
+      "gpu-core-count" = 10
+      "PerformanceStatistics" = {"In use system memory (driver)"=0,"Alloc system memory"=4630511616,"Tiler Utilization %"=7,"recoveryCount"=0,"lastRecoveryTime"=0,"Renderer Utilization %"=7,"TiledSceneBytes"=1048576,"Device Utilization %"=9,"SplitSceneCount"=0,"Allocated PB Size"=98304,"In use system memory"=1362182144}
+      "IOMatchCategory" = "IOAccelerator"
+    }

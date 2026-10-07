@@ -265,6 +265,14 @@
           </div>
         </div>
 
+        <!-- The machine body (proprioception): the daemon's last sample, the same `line` the being
+             reads in its beat, so the indicator and the being cannot disagree. An indicator only. -->
+        <div class="stat-compact">
+          <label title="GPU, CPU, memory and disk, sampled by the daemon every few seconds. Gaps are named, never filled.">Body</label>
+          <div id="body-rows"><div class="sub">not sensed yet</div></div>
+          <div class="sub" id="body-age">--</div>
+        </div>
+
         <div class="stat-compact">
           <label>Fleet</label>
           <div id="peer-list"><div class="sub">loading...</div></div>
@@ -440,6 +448,31 @@ async function refreshPeers() {
       el.innerHTML = '<div class="sub">no peers</div>';
     }
   } catch(e) {}
+}
+
+// The machine body. Renders the snapshot's own `line` (one renderer, in the sampler) as rows,
+// and says how old it is: a reading that cannot say its age reads as current.
+async function refreshBody() {
+  const rows = document.getElementById('body-rows');
+  const age = document.getElementById('body-age');
+  try {
+    const r = await fetch(BASE + '/body');
+    const d = await r.json();
+    if (!r.ok || !d.line) {
+      rows.innerHTML = '<div class="sub">not sensed: ' + escapeHtml(d.unavailable || ('HTTP ' + r.status)) + '</div>';
+      age.textContent = '--';
+      return;
+    }
+    rows.innerHTML = d.line.split(' | ').map(p =>
+      '<div class="sub" style="color:' + (p.startsWith('unavailable:') ? 'var(--text-dim)' : 'var(--text)') + '">' +
+      escapeHtml(p) + '</div>').join('');
+    const s = d.served_age_s;
+    const err = d.sampler && d.sampler.last_error ? ' · last sample failed: ' + d.sampler.last_error.error : '';
+    age.textContent = (s == null ? 'age unknown' : 'sampled ' + fmtAge(s) + ' ago') + err;
+  } catch (e) {
+    rows.innerHTML = '<div class="sub">not sensed: the daemon did not answer /body</div>';
+    age.textContent = '--';
+  }
 }
 
 function updateSnarc(salience) {
@@ -650,6 +683,8 @@ async function init() {
   if (!convId && !convRefused) loadChatHistory();
   refreshHealth();
   refreshStatus();
+  refreshBody();
+  setInterval(refreshBody, 10000);
   setInterval(refreshHealth, 5000);
   setInterval(refreshStatus, 3000);
   setInterval(refreshPeers, 15000);

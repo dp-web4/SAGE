@@ -2194,6 +2194,15 @@ def posture_framing_for(cfg: Optional[dict]) -> Optional[str]:
     return v if v in POSTURE_FRAMINGS else None
 
 
+def proprioception_for(cfg: Optional[dict]) -> bool:
+    """instance.json `proprioception`: whether the body block carries the machine-body line (GPU,
+    CPU, memory, disk; sage.gateway.proprioception). ON BY DEFAULT, the opposite of the opt-in keys
+    above, because it is not a behavioural trial measured on one being: it is universal body sense
+    (dp, 2026-10-06), one line of fact. Only an explicit `false` turns it off, and an off instance
+    is recorded in its beat record."""
+    return (cfg or {}).get("proprioception") is not False
+
+
 ANSWERED_RUN_WAKES = ("skip",)
 
 
@@ -2214,7 +2223,8 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
               turn_chars: Optional[int] = CONV_TURN_CHARS,
               services: str = "", mark_conversations: bool = True,
               body_reading: Optional[dict] = None,
-              settled_turns: Optional[int] = None) -> str:
+              settled_turns: Optional[int] = None,
+              proprioception: bool = True) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
     # The body first: it is the only thing in this state that is happening NOW. Everything below
@@ -2232,7 +2242,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
                     _prev = _b["body"]; break
         except Exception:
             _prev = None
-        parts.append(_body.render(_cur, _prev, name=member))
+        parts.append(_body.render(_cur, _prev, name=member, proprioception=proprioception))
         own_state.last_body = _cur
     except Exception as _e:
         own_state.last_body = {"error": f"{type(_e).__name__}: {_e}"}
@@ -3628,12 +3638,14 @@ def main(argv=None) -> int:
 
     # PER-INSTANCE (RESEARCH_GENERALIZATION_RULE): absent means the default rendering.
     _settled_turns = settled_turns_for(instance_config(instance))
+    _proprioception = proprioception_for(instance_config(instance))
 
     def _build_state(per_conv, turn_chars):
         return (_state_head + own_state(instance, args.member, entrusted,
                                         per_conv=per_conv, turn_chars=turn_chars,
                                         services=_services, mark_conversations=False,
                                         settled_turns=_settled_turns,
+                                        proprioception=_proprioception,
                                         body_reading=_body_cur) + _scope_tail)
 
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
@@ -4036,6 +4048,7 @@ def main(argv=None) -> int:
         "no_result_line": no_result_line_for(instance_config(instance)),
         "answered_run_wake": answered_run_wake_for(instance_config(instance)),
         "posture_framing": posture_framing_for(instance_config(instance)),
+        **({} if proprioception_for(instance_config(instance)) else {"proprioception": False}),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,
