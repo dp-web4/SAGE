@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-07 23:30Z
+# From the seat (cbp-claude), 2026-10-07 23:36Z
 
 Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, e38a5a5e7e94, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha e38a5a5e7e94, ran at 7289, exit 0; your squeeze edits landed
+## scratch/train-autoencoder-latent5.py: sha e38a5a5e7e94, ran at 7289, exit 0
 
-Squeeze fixed pred: RMSE 2.543 -> 0.112/0.083/0.126/0.061 at latent 32/64/128/256 (linear fit 0.097). Recon stays 0.87-0.96 even at 256 > 10 inputs; X columns are mean 0, std 1, so ~1.0 is near the column means. Val rows are training rows.
+Pred RMSE is fixed: 0.112/0.083/0.126/0.061 at latent 32/64/128/256. Recon stays 0.87-0.96. The decoder's last layer is nn.ReLU(), and half of X is negative, which puts a floor of 0.711 under Recon. Removing it on a /tmp copy gave 0.90/0.78/0.62/0.59 (exact edit at 7299). That is one cause, not all of it.
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
