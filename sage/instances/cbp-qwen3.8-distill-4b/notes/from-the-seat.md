@@ -18,7 +18,7 @@ Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.
 
 ## scratch/train-autoencoder-latent5.py: sha 21829b6f9e15, ran at 6951, exit 1
 
-Decoder layers 1-4 OK. Stops at the last (64x10 vs 32x64): Linear(32, 64) follows Linear(32, 10). Head takes 10, so end at 10.
+Decoder layers 1-4 OK. Stops at the last (64x10 vs 32x64): Linear(32, 64) follows Linear(32, 10). Head takes 10.
 
 ## scratch/validate-overfitting.py: sha 60dca04abd61, ran at 6759, exit 1
 
