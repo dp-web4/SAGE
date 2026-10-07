@@ -163,6 +163,29 @@ def _indent_only_miss(have: str, old: str, new: str, first_line: int) -> str:
     return ""
 
 
+def _old_is_elsewhere(text: str, old: str, first_line: int) -> str:
+    """A range edit refused because the lines are not old says where old IS, when it occurs
+    exactly once. (Zero or several hits: the line number is the only locator, so say nothing.)
+
+    Measured 2026-10-07 02:53Z on cbp-being: the seat's message gave the exact old/new text
+    for one line and, separately, the traceback's line number (148). The line to change was
+    145. The being sent the seat's old text verbatim with start_line 148, was refused twice
+    in one beat ("lines 148-148 ... are not the text you gave as old"), and then said it
+    would apply the fix. The refusal showed line 148 but not that old was in the file once,
+    three lines up, so the right text and a wrong number cost a beat. The edit is not
+    retargeted on its own: the number may be the part the being meant."""
+    if not old.strip() or text.count(old) != 1:
+        return ""
+    at = text[:text.index(old)].count("\n") + 1
+    if at == first_line:
+        return ""
+    n = old.rstrip("\n").count("\n")
+    where = f"line {at}" if n == 0 else f"lines {at}-{at + n}"
+    return (f"\nYour old text IS in the file, once, at {where}, not at line {first_line}. "
+            f"Send the same edit with no start_line and end_line (old alone finds it), or "
+            f"with start_line {at}.")
+
+
 def _indent_changed(removed: str, new: str, first_line: int) -> str:
     """A range edit whose first line lost or gained leading spaces says so, in counts.
 
@@ -1015,7 +1038,8 @@ class ReferenceF1aDispatcher:
                 return ResultEnvelope(ok=False, error=(
                     f"lines {s0}-{s1} of '{path}' are not the text you gave as old, so nothing "
                     f"was changed. Those lines are now:\n{shown}"
-                    + _indent_only_miss(removed, old, new, s0)))
+                    + _indent_only_miss(removed, old, new, s0)
+                    + _old_is_elsewhere(text, old, s0)))
             repl = new
             if repl and not repl.endswith("\n") and removed.endswith("\n"):
                 repl += "\n"
