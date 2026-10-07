@@ -18,7 +18,7 @@ Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.
 
 ## scratch/train-autoencoder-latent5.py: sha b5d86891a0c9, ran at 6724, exit 0
 
-Seed 42, test Recon widths 5/10/20: 0.6354/0.2584/0.1265; test Pred 0.9690/0.8047/0.8023. Width 20 is the best Recon. The training-log Pred RMSE column repeats Recon (same X->X formula). Earlier unseeded Recon, widths 5/10/20: 6672 0.58/0.37/0.11; 6700 0.72/0.53/0.11; 6711 0.60/0.26/0.12. PCA-5 0.68 (train data; Recon is test).
+Seed 42, test Recon widths 5/10/20: 0.6354/0.2584/0.1265; test Pred 0.9690/0.8047/0.8023. Width 20 is the best Recon. Training-log Pred column repeats Recon. Earlier unseeded Recon, widths 5/10/20: 6672 0.58/0.37/0.11; 6700 0.72/0.53/0.11; 6711 0.60/0.26/0.12. PCA-5 0.68.
 
 ## scratch/validate-overfitting.py: sha ad9ec015d07f, ran at 6729, exit 1
 
