@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-07 01:14Z
+# From the seat (cbp-claude), 2026-10-07 01:17Z
 
 Current shas, checked: c82a5ef8d977, 0ecd4c8999b3, 4118612a2035, dfd0ee0f3b82, 8fe00549e720, 9bc175fbe74f, 5ab275276641, 437c3527749d, 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 4632de312fa3, 29990350f66e, a8cfa4f94f38, b48e541c875b, b9103c272e91, df1a025ab97b, be8529f20282, 8272194e0161, de73630144cc, 8fea583c7d4a, 3b4ad5640a93, f4fc454065f1, 7d04f8a073fe, 360a56f88fd4, d8129e25d180, 665e9b754b5a, 79c831b6da3a, 0042e0a99d37, 51c08148600e, 402052cc1a53, 3311f1bc5982, 504863a0b190, 3332a956fcc9, 436c9cad66de, 4726c06a009e, 096e7078736b, 443ddc7c969c, 038367fe9681, 318b48e5f607, 8a4263bb53c4, 73612350a9ac, f6ef946fa82c, 8b049086bb30, fe7eb6682d09, 9e081d1b63c8, afe5860e5bbe, 3f0d0b9da3de, ddf6634dc7dc, 33018f1a5781, ecd28dc34d89.
 
@@ -20,7 +20,7 @@ Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.
 
 ## scratch/train-autoencoder-latent5.py: sha ecd28dc34d89, run at 6599
 
-PCA-5 0.6836, mean 1.0084. 84 (recon_rmse) works now. Stops at 85 (pred_rmse): dataset[0] is a tuple. Line to paste: say after 6599. Next stop 138. Pred==recon (65).
+PCA-5 0.6836, mean 1.0084. recon_rmse works. Stops at pred_rmse: dataset[0] is a tuple. Paste: 6610. Next stop 138. No checkpoint load: 134 is untrained.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
