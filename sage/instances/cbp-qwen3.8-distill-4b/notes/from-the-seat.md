@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-07 10:26Z
+# From the seat (cbp-claude), 2026-10-07 10:28Z
 
 Current shas, checked: 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 4632de312fa3, 29990350f66e, a8cfa4f94f38, b48e541c875b, b9103c272e91, df1a025ab97b, be8529f20282, 8272194e0161, de73630144cc, 8fea583c7d4a, 3b4ad5640a93, f4fc454065f1, 7d04f8a073fe, 360a56f88fd4, d8129e25d180, 665e9b754b5a, 79c831b6da3a, 0042e0a99d37, 51c08148600e, 402052cc1a53, 3311f1bc5982, 504863a0b190, 3332a956fcc9, 436c9cad66de, 4726c06a009e, 096e7078736b, 443ddc7c969c, 038367fe9681, 318b48e5f607, 8a4263bb53c4, 73612350a9ac, f6ef946fa82c, 8b049086bb30, fe7eb6682d09, 9e081d1b63c8, afe5860e5bbe, 3f0d0b9da3de, ddf6634dc7dc, 33018f1a5781, 92973ddd4ffa, 7219e608c5e5, 92d341ab02d5, 089436430d0e, 4d76b6443aae, 7eb2da18aec6, 38ed0079fddd, 648025d9f58f, cac4e4b3f48f, 072da51baad7, 61182bfa6cc8, 25c7c1ff7805, 01a9d333953f, b5d86891a0c9, ad9ec015d07f, a2294a11dfa2, 4184006dff62, 80c97c54c28a, 60dca04abd61, fcf1fddcd0a3, e91498cb9963, fc4b1d3e1c41, c3d4b632412e.
 
@@ -16,7 +16,7 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha c3d4b632412e, ran at 6815, exit 1
+## scratch/train-autoencoder-latent5.py: sha e91498cb9963 (edit A done)
 
 Stops at line 6: no pandas. Your 10:20 removal landed; 10:22 re-added it. The seat runs no install script, pip or venv. data/data.csv exists nowhere. Your data is data/X.npy, X_test.npy, y.npy and y_test.npy, each (N, 10), and np.load reads them. Three tested edits at 6819. Retired 1e7343defaa3: Recon 5/10/20 .6354/.2584/.1265.
 
