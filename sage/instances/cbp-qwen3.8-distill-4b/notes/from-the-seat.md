@@ -18,7 +18,7 @@ Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.
 
 ## scratch/train-autoencoder-latent5.py: sha 5d58af475829, ran at 7021, exit 1
 
-100 epochs ran. Stops at line 186: the loop's train_model call lacks val_loader, named at 7022.
+100 epochs ran. Stops at line 186: the loop's train_model call lacks val_loader, named at 7026.
 
 ## scratch/validate-overfitting.py: sha 60dca04abd61, ran at 6759, exit 1
 
