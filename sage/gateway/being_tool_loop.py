@@ -1196,6 +1196,14 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
             pinned.add(m.group(1))
             lines = [ln for ln in body.splitlines() if ln.strip()]
             first = lines[0][:120] if lines else ""
+            # THE VERDICT SURVIVES THE POINTER TOO. A stub keeps a leading `headline` whole
+            # (_headline_prefix_len), but collapsing it kept 120 chars of its first line: for a
+            # `check` that cut "Failing (4): sage/gateway/tests/test_pr_read.py::" before the
+            # names. legion-being 2026-10-07 (#360): "4 failed ... plus 3 others (names elided
+            # from my window)". The pointer keeps the whole headline, bounded as before.
+            _hl = _headline_prefix_len(body)
+            if _hl:
+                first = body[:_hl]
             last = lines[-1][:120] if len(lines) > 1 else ""
             ptr = (f"[result {_COLLAPSED_SIGIL} to leave room for your answer. It began: "
                    f"{first!r}" + (f" and ended: {last!r}" if last else "")

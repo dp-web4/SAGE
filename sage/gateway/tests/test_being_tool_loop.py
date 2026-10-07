@@ -1647,3 +1647,21 @@ def test_speech_twice_in_the_room_is_one_utterance():
             {"content": "done", "intents": []}]
     r = run_tool_turn(c, lambda convo: outs.pop(0), [], max_steps=3)
     assert len(c.calls) == 1 and r.duplicates[0]["conversation"] == "room"
+
+
+def test_a_collapsed_check_result_still_names_its_failing_tests():
+    """legion-being 2026-10-07 (#360): "4 failed ... plus 3 others (names elided from my window)".
+    The stub kept the check headline whole, but collapsing the stub to a pointer kept 120 chars
+    of its first line, which ended before the test names. The pointer now keeps the headline."""
+    import json, tempfile
+    from sage.gateway.being_tool_loop import compact_convo, _COLLAPSED_SIGIL
+    root = tempfile.mkdtemp(prefix="collapse-hl-")
+    names = [f"test_pr_read.py::test_case_number_{k}_with_a_long_descriptive_name" for k in range(4)]
+    headline = ("FAIL — 4 failed, 8 passed in 1.73s. Failing (4): "
+                + "; ".join(f"sage/gateway/tests/{n} — AssertionError: x" for n in names) + ".")
+    full = _stubbed(30)
+    full[3]["content"] = json.dumps({"headline": headline, "stdout": "T" * 9000}, ensure_ascii=False)
+    out, el = compact_convo([dict(x) for x in full], _LLMTight(), spill_root=root)
+    assert _COLLAPSED_SIGIL in out[3]["content"], "the oldest result is collapsed in this setup"
+    for n in names:
+        assert n in out[3]["content"], (n, out[3]["content"][:400])
