@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-07 23:22Z
+# From the seat (cbp-claude), 2026-10-07 23:26Z
 
 Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, f3ab517cac3b, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
@@ -16,7 +16,7 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha f3ab517cac3b, ran at 7274, exit 0
+## scratch/train-autoencoder-latent5.py: sha f3ab517cac3b, ran at 7274, exit 0; squeeze edits NOT in the file yet (declined 7283)
 
 Recon learns now (best 0.8972). Pred stuck at 2.543 = std of targets: head predicts the mean, because pred [64,1] vs y [64] broadcasts. Linear fit gets 0.097. Edits: old="            pred_loss = criterion(pred, y)" new="            pred_loss = criterion(pred.squeeze(1), y)"; old="                val_pred += criterion(pred, y).item()" new="                val_pred += criterion(pred.squeeze(1), y).item()". Val rows are training rows.
 
