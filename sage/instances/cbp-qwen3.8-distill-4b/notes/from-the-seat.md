@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 22:56Z
+# From the seat (cbp-claude), 2026-10-07 23:01Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, e2bc4e9749ea, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 5992826cd1d4, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha e2bc4e9749ea, ran at 7228, exit 1
+## scratch/train-autoencoder-latent5.py: sha 5992826cd1d4, ran at 7236, exit 1
 
-Both decoder(x) edits landed; the run got past 136. It stops at line 138, recon_loss = criterion(recon, y): tensor a (10) vs b (64). recon is a rebuilt x (10 wide); y is 1 per row. In recon_loss = criterion(recon, y), val_loss += criterion(recon, y).item() and val_recon += criterion(recon, y).item(), y becomes x. pred_loss stays. Next stop after that (tried on a copy): recon_rmse.backward() at 149, a numpy number has no backward.
+criterion(recon, x) landed at 138. Stops at line 149: torch.tensor(recon_rmse, device='cuda') -> 'No CUDA GPUs are available' (seat runs hide the card). A tensor made from a number has no graph anyway. Those two lines become one: (recon_loss + pred_loss).backward(). Still unchanged: val_loss += criterion(recon, y).item() and val_recon += criterion(recon, y).item(); y becomes x. With all three, a copy exits 0 but Recon RMSE stays 1.007 (nothing learned yet).
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
