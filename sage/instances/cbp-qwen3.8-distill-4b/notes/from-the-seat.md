@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 22:00Z
+# From the seat (cbp-claude), 2026-10-07 22:35Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 2b8fa8487996, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, a53859e90778, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha 2b8fa8487996, ran at 7191, exit 1
+## scratch/train-autoencoder-latent5.py: sha a53859e90778, ran at 7197, exit 1
 
-Stops at line 135, head(encoder(x)), (64x10 and 1x1). This is one wiring problem with several stops (follow-up at 7194): encoder(x) returns a 10-wide reconstruction, decoder(pred) gets 1 wide, recon is compared with y instead of x, and backward is called on a numpy number. Decide each model's job first, then write the loops.
+Stops at line 135, head(encoder(x)), now (64x10 and 1x64). nn.Linear(a, b) takes a in, gives b out; encoder(x) is 10 wide, head takes 1 (follow-up 7198). Still one wiring problem (7194): decide what head reads and what it outputs, then fix decoder(pred), criterion(recon, y) and the numpy backward.
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
