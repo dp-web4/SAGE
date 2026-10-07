@@ -1049,6 +1049,20 @@ class ReferenceF1aDispatcher:
             gone = f" The lines removed were:\n{shown}"
             return self._commit_edit(p, path, text, new_text, what, gone)
         hits = text.count(old)
+        if hits == 0 and len(new.strip()) >= 40 and new not in old and text.count(new) == 1:
+            # ALREADY MADE. Measured 2026-10-07 10:20Z: cbp-being's pandas-import edit landed
+            # (ok=true), then the same beat sent it twice more. Both retries got the
+            # copy-it-exactly refusal below, and the being told its seat "the file edits I
+            # tried failed due to indentation mismatches" (seq 6812): it took the refusal's
+            # boilerplate as the cause and reported a done edit as failed. When the new text
+            # is already on disk, say that first. 40+ chars and exactly one copy, so a short
+            # common line that merely occurs elsewhere (`return x`) is not read as a done edit.
+            at = text.count("\n", 0, text.find(new)) + 1
+            return ResultEnvelope(ok=False, error=(
+                f"that old text is not in '{path}', but your new text already is, starting "
+                f"on line {at}. This edit has already been made, most likely by an earlier "
+                f"memory_edit of yours. Nothing was changed, and nothing needs to be: the file "
+                f"already says what you wanted it to say."))
         if hits == 0:
             return ResultEnvelope(ok=False, error=(
                 f"that text is not in '{path}', so nothing was changed. The file is as it "

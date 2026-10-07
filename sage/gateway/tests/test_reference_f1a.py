@@ -1147,3 +1147,27 @@ def test_a_range_edit_whose_old_is_elsewhere_says_where():
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 4,
                                          "old": "zzz", "new": "y"}), _ALLOW)
     assert not r.ok and "IS in the file" not in r.error, r.error
+
+
+def test_memory_edit_retry_of_a_made_edit_says_it_is_already_made():
+    """cbp-being 2026-10-07 10:20Z: its pandas-import edit landed, the same beat sent it twice
+    more, both got the copy-it-exactly refusal, and it told its seat the edits 'failed due to
+    indentation mismatches' (seq 6812). A retry whose new text is already there says so."""
+    disp, root = _disp()
+    home = Path(root)
+    src = "import os\nimport sys\nimport pandas as pd\n\nfrom data import load_data\nprint(1)\n"
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": src}), _ALLOW)
+    old = "import sys\nimport pandas as pd\n\nfrom data import load_data"
+    new = "import sys\n\nfrom data import load_data"
+    old, new = "import os\n" + old, "import os\n" + new
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": old, "new": new}), _ALLOW)
+    assert r.ok, r.error
+    before = (home / "notes" / "s.py").read_text()
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": old, "new": new}), _ALLOW)
+    assert not r.ok
+    assert "already been made" in r.error and "line 1" in r.error, r.error
+    assert "indentation" not in r.error, r.error
+    assert (home / "notes" / "s.py").read_text() == before
+    # a short new line that merely occurs elsewhere is NOT read as a made edit
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "print(1)"}), _ALLOW)
+    assert not r.ok and "already been made" not in r.error, r.error
