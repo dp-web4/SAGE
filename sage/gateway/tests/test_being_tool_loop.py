@@ -170,8 +170,9 @@ def test_generate_stats_record_the_window_wall_and_the_retry():
     # one generate as the loop sees it: the empty turn was retried once and the retry stood
     assert r.reply == "done" and calls["n"] == 2
     # num_predict: the retry's budget (no window declared -> the 6000 floor), not the first 1024
+    # retry_cause "length": this fake declares no num_ctx, so which limit was hit is not guessed
     assert r.generates == [{"done_reason": "stop", "prompt_eval_count": 5000, "eval_count": 40, "retried": 1,
-                            "num_predict": 6000, "nudged": True}]
+                            "num_predict": 6000, "nudged": True, "retry_cause": "length"}]
 
 
 def test_length_retry_gets_the_room_the_window_has_left_via_the_override():
@@ -204,7 +205,8 @@ def test_length_retry_gets_the_room_the_window_has_left_via_the_override():
     assert llm.num_predict_override is None                  # restored
     assert llm.max_response_tokens == 3000                   # untouched: it is not the lever
     assert r.generates == [{"done_reason": "stop", "prompt_eval_count": 6721, "eval_count": 700, "retried": 1,
-                            "num_predict": 16384 - 6721 - RETRY_MARGIN, "nudged": True}]
+                            "num_predict": 16384 - 6721 - RETRY_MARGIN, "nudged": True,
+                            "retry_cause": "output_budget"}]   # 6721 + 6000 < 16384: num_predict ran out
 
 
 def test_length_retry_without_a_window_falls_back_to_the_think_budget():
@@ -1665,3 +1667,49 @@ def test_a_collapsed_check_result_still_names_its_failing_tests():
     assert _COLLAPSED_SIGIL in out[3]["content"], "the oldest result is collapsed in this setup"
     for n in names:
         assert n in out[3]["content"], (n, out[3]["content"][:400])
+
+
+import pytest as _pytest
+
+
+@_pytest.mark.parametrize("prompt,evalc,cause,says,never", [
+    (5192, 3000, "window", "the window cut it", "output budget"),           # 5192 + 3000 = 8192: the wall
+    (2000, 3000, "output_budget", "output budget", "the window cut it"),    # room left: num_predict ran out
+])
+def test_a_length_stop_names_the_limit_it_actually_hit(prompt, evalc, cause, says, never):
+    """legion-being 2026-10-07: its last 400 empty first attempts were 189 window wall and 209
+    output budget, and every one was told "the window cut it". It then read its wall cuts
+    (25,204 + 7,564 = 32,768) as budget cuts. The nudge and the record now say which."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 8192
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            seen.append(str(messages[-1].get("content", "")))
+            if len(seen) == 1:
+                return {"content": "", "tool_calls": [],
+                        "raw": {"done_reason": "length", "prompt_eval_count": prompt, "eval_count": evalc,
+                                "message": {"content": "", "thinking": "drafting a long function ..."}}}
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": prompt + 50, "eval_count": 20,
+                            "message": {}}}
+
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(), [{"role": "user", "content": "hi"}])
+    assert len(seen) == 2
+    assert says in seen[1] and never not in seen[1], seen[1]
+    assert r.generates[0]["retry_cause"] == cause
+
+
+def test_retry_cause_of_reads_the_counts_not_the_reason_alone():
+    from types import SimpleNamespace
+    from sage.gateway.being_tool_loop import retry_cause_of
+    llm = SimpleNamespace(num_ctx=32768)
+    assert retry_cause_of(llm, {"done_reason": "length", "prompt_eval_count": 25204, "eval_count": 7564}) == "window"
+    assert retry_cause_of(llm, {"done_reason": "length", "prompt_eval_count": 22983, "eval_count": 8000}) == "output_budget"
+    assert retry_cause_of(llm, {"done_reason": "stop", "prompt_eval_count": 1000, "eval_count": 183}) == "stopped_thinking"
+    assert retry_cause_of(SimpleNamespace(), {"done_reason": "length", "eval_count": 8000}) == "length"   # no window: not guessed

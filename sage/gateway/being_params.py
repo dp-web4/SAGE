@@ -365,6 +365,17 @@ def _recent_beats(instance, n: int) -> List[dict]:
     return out
 
 
+def _causes(gens) -> Dict[str, int]:
+    """Retried generates by what the first attempt hit (being_tool_loop.retry_cause_of).
+    A record from before 2026-10-07 has no cause: counted as "unrecorded", never guessed."""
+    out: Dict[str, int] = {}
+    for g in gens:
+        if g.get("retried"):
+            k = g.get("retry_cause") or "unrecorded"
+            out[k] = out.get(k, 0) + 1
+    return out
+
+
 def sense_window(instance, lookback: int = WINDOW_LOOKBACK) -> Dict:
     beats = _recent_beats(instance, lookback)
     src = "heartbeats.jsonl explore.generates (ollama prompt_eval_count)"
@@ -385,6 +396,7 @@ def sense_window(instance, lookback: int = WINDOW_LOOKBACK) -> Dict:
             "peak_tokens": _ok(peak, src) if peak else _gap("no counted generate"),
             "generates": len(gens),
             "retried": sum(1 for g in gens if g.get("retried")),
+            "retry_causes": _causes(gens),
             "floor_reached": bool(ex.get("handoff")) or any(
                 (i or {}).get("nudge") == "floor" for i in (ex.get("interjected") or [])),
             "handed_off": bool(ex.get("handoff")),
@@ -396,10 +408,28 @@ def sense_window(instance, lookback: int = WINDOW_LOOKBACK) -> Dict:
                  for b in beats]
         retried = sum(sum(1 for g in b["explore"]["generates"] if g.get("retried")) for b in beats)
         total = sum(len(b["explore"]["generates"]) for b in beats)
+        causes: Dict[str, int] = {}
+        for b in beats:
+            for k, v in _causes(b["explore"]["generates"]).items():
+                causes[k] = causes.get(k, 0) + v
         out["recent"] = {"beats": len(beats),
                          "peak_over_90pct": sum(1 for x in peaks if x >= 0.9 * ctx),
-                         "retried": retried, "generates": total}
+                         "retried": retried, "generates": total, "retry_causes": causes}
     return out
+
+
+_CAUSE_WORDS = {"window": "the window wall", "output_budget": "the output budget for one reply",
+                "stopped_thinking": "thinking that stopped with no reply",
+                "cut_call": "a tool call cut mid-arguments", "length": "a length cut (window size unknown)", "unrecorded": "cause not recorded"}
+
+
+def _render_causes(causes: Dict[str, int]) -> str:
+    if not causes:
+        return ""
+    order = ["window", "output_budget", "length", "stopped_thinking", "cut_call", "unrecorded"]
+    parts = [f"{causes[k]} {_CAUSE_WORDS.get(k, k)}" for k in order if causes.get(k)]
+    parts += [f"{v} {k}" for k, v in causes.items() if k not in order]
+    return " (" + ", ".join(parts) + ")"
 
 
 def render_window(sense: Dict) -> str:
@@ -413,7 +443,8 @@ def render_window(sense: Dict) -> str:
         return f"{v:,} ({100 * v // ctx}%)" if v else "not counted"
     s = (f"Your window: {ctx:,} tokens. Last beat: you started at {pct(last.get('seed_tokens'))} "
          f"before your first act, peaked at {pct(last.get('peak_tokens'))}; "
-         f"{last.get('retried', 0)} of {last.get('generates', 0)} generates retried against the wall")
+         f"{last.get('retried', 0)} of {last.get('generates', 0)} generates retried"
+         f"{_render_causes(last.get('retry_causes') or {})}")
     if last.get("handed_off"):
         s += "; it reached the floor and the harness handed off"
     elif last.get("floor_reached"):
@@ -421,5 +452,6 @@ def render_window(sense: Dict) -> str:
     rec = sense.get("recent")
     if rec and rec["beats"] > 1:
         s += (f". Last {rec['beats']} beats: {rec['peak_over_90pct']} peaked above 90%, "
-              f"{rec['retried']} of {rec['generates']} generates retried")
+              f"{rec['retried']} of {rec['generates']} generates retried"
+              f"{_render_causes(rec.get('retry_causes') or {})}")
     return s + "."
