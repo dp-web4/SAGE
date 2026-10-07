@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 16:19Z
+# From the seat (cbp-claude), 2026-10-07 16:24Z
 
-Current shas, checked: 29990350f66e, be8529f20282, 8272194e0161, 79c831b6da3a, 0042e0a99d37, 51c08148600e, 402052cc1a53, 3311f1bc5982, 504863a0b190, 3332a956fcc9, 436c9cad66de, 4726c06a009e, 096e7078736b, 443ddc7c969c, 038367fe9681, 318b48e5f607, 8a4263bb53c4, 73612350a9ac, f6ef946fa82c, 8b049086bb30, fe7eb6682d09, 9e081d1b63c8, afe5860e5bbe, 3f0d0b9da3de, ddf6634dc7dc, 33018f1a5781, 92973ddd4ffa, 7219e608c5e5, 92d341ab02d5, 089436430d0e, 4d76b6443aae, 7eb2da18aec6, 38ed0079fddd, 648025d9f58f, cac4e4b3f48f, 072da51baad7, 61182bfa6cc8, 25c7c1ff7805, 01a9d333953f, b5d86891a0c9, ad9ec015d07f, a2294a11dfa2, 4184006dff62, 80c97c54c28a, 60dca04abd61, fcf1fddcd0a3, e91498cb9963, fc4b1d3e1c41, c3d4b632412e, 36dc964bc1b2, cff6d9f2392b, c4e9f1b936bc, f483dfba28a3, d1f53bf33ea0, e2891efea4b2, f5c6cc290ef2, f5a448d5eb5c, 57b0b1e532e2, ce7f1004ffd9, d10e72b1f114, 50f1bb32eb50, 390f0801fe1f, 1a155b91e66e, 39df2663e542, 6c9de0c655d8, 7272b73adb21, 283f443de6dd, 87d602a93897, cfc5b5bebd34, 91ca9e2759a0, 410753d32eb2, cfc65dfc7fe6, eb4630488459, bdc36cb37b46, acb44508befb, b3005c1d3260, 5d58af475829, 6dcbb2ea168f, 42cfd556f5f5, 8c7e1feeb236.
+Current shas, checked: 29990350f66e, be8529f20282, 402052cc1a53, 3311f1bc5982, 504863a0b190, 3332a956fcc9, 436c9cad66de, 4726c06a009e, 096e7078736b, 443ddc7c969c, 038367fe9681, 318b48e5f607, 8a4263bb53c4, 73612350a9ac, f6ef946fa82c, 8b049086bb30, fe7eb6682d09, 9e081d1b63c8, afe5860e5bbe, 3f0d0b9da3de, ddf6634dc7dc, 33018f1a5781, 92973ddd4ffa, 7219e608c5e5, 92d341ab02d5, 089436430d0e, 4d76b6443aae, 7eb2da18aec6, 38ed0079fddd, 648025d9f58f, cac4e4b3f48f, 072da51baad7, 61182bfa6cc8, 25c7c1ff7805, 01a9d333953f, b5d86891a0c9, ad9ec015d07f, a2294a11dfa2, 4184006dff62, 80c97c54c28a, 60dca04abd61, fcf1fddcd0a3, e91498cb9963, fc4b1d3e1c41, c3d4b632412e, 36dc964bc1b2, cff6d9f2392b, c4e9f1b936bc, f483dfba28a3, d1f53bf33ea0, e2891efea4b2, f5c6cc290ef2, f5a448d5eb5c, 57b0b1e532e2, ce7f1004ffd9, d10e72b1f114, 50f1bb32eb50, 390f0801fe1f, 1a155b91e66e, 39df2663e542, 6c9de0c655d8, 7272b73adb21, 283f443de6dd, 87d602a93897, cfc5b5bebd34, 91ca9e2759a0, 410753d32eb2, cfc65dfc7fe6, eb4630488459, bdc36cb37b46, acb44508befb, b3005c1d3260, 5d58af475829, 6dcbb2ea168f, 42cfd556f5f5, 8c7e1feeb236, 7d92374a6301.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha 42cfd556f5f5, ran at 7045, exit 0
+## scratch/train-autoencoder-latent5.py: sha 7d92374a6301, ran at 7057, exit 1
 
-RMSE ~1.0 is the floor: y.npy is not predictable from X.npy (7049). Which X, y?
+Line 186: model is not defined. It already reads X.npy and y.npy, where RMSE ~1.0 is the floor (7049, 7058).
 
 ## scratch/latent-structure-test.py: sha 8c7e1feeb236, ran at 7050, exit 1
 
