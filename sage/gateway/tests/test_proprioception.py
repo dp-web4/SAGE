@@ -120,9 +120,66 @@ def test_amd_sources_merge_in_priority_order():
     assert src["temps"] == "rocm-smi"
 
 
-def test_windows_host_memory_parse():
-    assert P.parse_win_os_memory("33461164 5694172\r\n") == (33461164 * 1024, (33461164 - 5694172) * 1024)
-    assert P.parse_win_os_memory("") is None
+# ---- memory: the guest's cache and the host's headroom (dp: "always razor thin") ----------
+
+def test_guest_breakdown_from_a_large_cache_meminfo(monkeypatch):
+    text = fx("cbp_meminfo_large_cache.txt")
+    mi = P.parse_meminfo(text)
+    monkeypatch.setattr(P, "_read", lambda path: text if path == "/proc/meminfo" else None)
+    m = P.sense_memory(WSL, unified=False)
+    assert m["anon_bytes"] == {"value": mi["AnonPages"], "source": "/proc/meminfo AnonPages"}
+    assert m["cache_bytes"]["value"] == mi["Cached"] + mi["Buffers"]
+    assert m["available_bytes"]["value"] == mi["MemAvailable"]
+    assert m["cache_bytes"]["value"] > 3 * m["anon_bytes"]["value"], "the fixture is the large-cache case"
+    s = _snap(WSL, [], mem=m)
+    line = P.summary_line(s)
+    assert f"RAM {mi['AnonPages'] / P.GIB:.1f} used + {(mi['Cached'] + mi['Buffers']) / P.GIB:.1f} cache / " in line
+    assert "(WSL cap)" in line
+
+
+def test_host_block_from_the_real_windows_answer():
+    h = P.parse_win_host(fx("cbp_win_host.json"), now=1.0)
+    d = json.loads(fx("cbp_win_host.json"))
+    assert h["memory_total_bytes"]["value"] == d["total_kib"] * 1024
+    assert h["memory_available_bytes"]["value"] == d["free_kib"] * 1024
+    assert h["memory_used_bytes"]["value"] == (d["total_kib"] - d["free_kib"]) * 1024
+    assert h["committed_bytes"]["value"] == (d["commit_limit_kib"] - d["commit_free_kib"]) * 1024
+    assert h["wsl_vm_working_set_bytes"] == {"value": d["vm"][0]["WorkingSet64"], "source": "Get-Process vmmemWSL WorkingSet64"}
+    assert h["low_headroom"]["controls"].startswith("nothing") and "10%" in h["low_headroom"]["threshold"]
+    part = P._host_part(h)
+    gib = lambda b: f"{b / P.GIB:.1f}"
+    assert part == (f"host {gib((d['total_kib'] - d['free_kib']) * 1024)}/{gib(d['total_kib'] * 1024)} GiB "
+                    f"({gib(d['free_kib'] * 1024)} free; WSL VM holds {gib(d['vm'][0]['WorkingSet64'])})")
+
+
+def test_an_invisible_vmmem_is_named_not_guessed():
+    h = P.parse_win_host(fx("win_host_no_vmmem.json"), now=1.0)
+    assert h["wsl_vm_working_set_bytes"]["value"] is None
+    assert "no vmmem/vmmemWSL process visible" in h["wsl_vm_working_set_bytes"]["unavailable"]
+    assert "WSL VM footprint not visible" in P._host_part(h)
+
+
+def test_low_headroom_is_a_stated_marker_only():
+    ans = json.dumps({"total_kib": 32 << 20, "free_kib": 2 << 20, "commit_limit_kib": 1, "commit_free_kib": 0,
+                      "vm": {"Name": "vmmemWSL", "WorkingSet64": 20 << 30, "PrivateMemorySize64": 22 << 30}})
+    h = P.parse_win_host(ans, now=1.0)
+    assert h["low_headroom"]["value"] is True
+    assert P._host_part(h) == "host 30.0/32.0 GiB (2.0 free; WSL VM holds 20.0) · low headroom (available < 10% of host physical)"
+    assert P.parse_win_host("garbage", 1.0)["memory_total_bytes"]["value"] is None
+
+
+def test_the_host_view_exists_only_on_wsl(monkeypatch):
+    monkeypatch.setattr(P, "detect_platform", lambda: dict(LINUX))
+    s = P.sample([("here", str(FIX))], cpu_window=0.05, wsl_host=True)
+    assert "not a WSL guest" in s["wsl_host"]["unavailable"]
+    assert "host " not in s["line"].split("| disk")[0].split("RAM")[-1]
+
+
+def test_macos_has_no_breakdown_and_says_why(monkeypatch):
+    out = {"sysctl": fx("macos_sysctl_hw_memsize.txt"), "vm_stat": fx("macos_vm_stat.txt")}
+    monkeypatch.setattr(P, "_run", lambda argv, timeout=5.0: (out[argv[0]], ""))
+    m = P.sense_memory(MAC, unified=True)
+    assert m["cache_bytes"]["value"] is None and "macOS" in m["cache_bytes"]["unavailable"]
 
 
 # ---- topology: no double count --------------------------------------------------------------
@@ -376,7 +433,7 @@ def test_the_line_stays_short_even_when_everything_is_missing():
 def test_cbp_line_is_concise():
     line = P.being_line(json.loads(fx("cbp_snapshot.json")), now=json.loads(fx("cbp_snapshot.json"))["sampled_at"] + 4)
     assert line.startswith("- Your machine body, sampled 4 s ago: GPU ")
-    assert len(line) < 260, len(line)
+    assert len(line) < 320, len(line)   # 274 with the guest cache and the host headroom (2026-10-06)
 
 
 def test_a_stale_snapshot_says_so_and_a_missing_one_says_why():

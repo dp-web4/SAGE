@@ -1,20 +1,108 @@
 {
   "_what": "Where each proprioception fixture came from. VERIFIED = captured from the named machine's real tool output. FORMAT = the tool's documented/published output format with illustrative values, NOT captured on that machine; replace with a real capture when the machine runs `python3 -m sage.gateway.proprioception --json` (see the PR's run block).",
-  "cbp_nvidia_smi.csv": {"status": "VERIFIED", "machine": "cbp", "captured": "2026-10-06", "cmd": "nvidia-smi --query-gpu=index,pci.bus_id,name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits"},
-  "cbp_meminfo.txt": {"status": "VERIFIED", "machine": "cbp", "captured": "2026-10-06", "cmd": "cat /proc/meminfo (WSL2 guest)"},
-  "cbp_proc_stat_a.txt": {"status": "VERIFIED", "machine": "cbp", "captured": "2026-10-06", "cmd": "head -1 /proc/stat"},
-  "cbp_proc_stat_b.txt": {"status": "VERIFIED", "machine": "cbp", "captured": "2026-10-06", "cmd": "head -1 /proc/stat, 0.5 s after _a"},
-  "cbp_snapshot.json": {"status": "VERIFIED", "machine": "cbp", "captured": "2026-10-06", "cmd": "python3 -m sage.gateway.proprioception --json --disk instance=... --disk sage=..."},
-  "two_gpu_nvidia_smi.csv": {"status": "FORMAT", "basis": "nvidia-smi --query-gpu CSV, nounits; '[N/A]' is what nvidia-smi prints for an unsupported field", "values": "illustrative"},
-  "thor_nvidia_smi.csv": {"status": "FORMAT", "basis": "same CSV; memory.used/total print [N/A] on unified-memory NVIDIA parts (assumed for Thor, unverified)", "values": "illustrative"},
-  "thor_nvidia_smi_apps.csv": {"status": "FORMAT", "basis": "nvidia-smi --query-compute-apps=gpu_bus_id,used_memory CSV; one numeric row and one [N/A] row", "values": "illustrative"},
-  "orin_tegrastats.txt": {"status": "FORMAT", "basis": "tegrastats line layout on Orin under JetPack 6 (timestamp prefix, RAM a/bMB, GR3D_FREQ n%, name@tempC, VDD rails)", "values": "illustrative"},
-  "thor_tegrastats.txt": {"status": "FORMAT", "basis": "Orin layout applied to Thor's 14 cores and 128 GB; the GPU load field on Thor is UNKNOWN, so this line deliberately has no GR3D_FREQ (tests the gap path)", "values": "illustrative"},
-  "macos_vm_stat.txt": {"status": "FORMAT", "basis": "vm_stat output layout on Apple Silicon (16384-byte pages)", "values": "illustrative"},
-  "macos_ioreg_accel.txt": {"status": "FORMAT", "basis": "ioreg -r -d 1 -w 0 -c IOAccelerator on Apple Silicon: PerformanceStatistics with 'Device Utilization %' and 'In use system memory'", "values": "illustrative"},
-  "macos_sysctl_hw_memsize.txt": {"status": "FORMAT", "basis": "sysctl -n hw.memsize for a 16 GB machine (McNugget's documented RAM)"},
-  "rocm_smi.json": {"status": "FORMAT", "basis": "rocm-smi --showuse --showmemuse --showtemp --showmeminfo vram --json key layout", "values": "illustrative"},
-  "amd_smi_metric.json": {"status": "FORMAT", "basis": "amd-smi metric --json, ROCm 6.1+ list form with {value, unit}", "values": "illustrative"},
-  "amd_smi_metric_gpu_data.json": {"status": "FORMAT", "basis": "amd-smi metric --json wrapped in gpu_data with bare numbers (other ROCm releases)", "values": "illustrative"},
-  "amdgpu sysfs tree": {"status": "FORMAT", "basis": "built in-test: /sys/class/drm/cardN/device/{vendor,gpu_busy_percent,mem_info_vram_used,mem_info_vram_total,mem_info_gtt_used,hwmon/hwmonM/temp*_input,temp*_label}", "values": "illustrative"}
+  "cbp_nvidia_smi.csv": {
+    "status": "VERIFIED",
+    "machine": "cbp",
+    "captured": "2026-10-06",
+    "cmd": "nvidia-smi --query-gpu=index,pci.bus_id,name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits"
+  },
+  "cbp_meminfo.txt": {
+    "status": "VERIFIED",
+    "machine": "cbp",
+    "captured": "2026-10-06",
+    "cmd": "cat /proc/meminfo (WSL2 guest)"
+  },
+  "cbp_proc_stat_a.txt": {
+    "status": "VERIFIED",
+    "machine": "cbp",
+    "captured": "2026-10-06",
+    "cmd": "head -1 /proc/stat"
+  },
+  "cbp_proc_stat_b.txt": {
+    "status": "VERIFIED",
+    "machine": "cbp",
+    "captured": "2026-10-06",
+    "cmd": "head -1 /proc/stat, 0.5 s after _a"
+  },
+  "cbp_snapshot.json": {
+    "status": "VERIFIED",
+    "machine": "cbp",
+    "captured": "2026-10-06",
+    "cmd": "python3 -m sage.gateway.proprioception --json --disk instance=... --disk sage=..."
+  },
+  "two_gpu_nvidia_smi.csv": {
+    "status": "FORMAT",
+    "basis": "nvidia-smi --query-gpu CSV, nounits; '[N/A]' is what nvidia-smi prints for an unsupported field",
+    "values": "illustrative"
+  },
+  "thor_nvidia_smi.csv": {
+    "status": "FORMAT",
+    "basis": "same CSV; memory.used/total print [N/A] on unified-memory NVIDIA parts (assumed for Thor, unverified)",
+    "values": "illustrative"
+  },
+  "thor_nvidia_smi_apps.csv": {
+    "status": "FORMAT",
+    "basis": "nvidia-smi --query-compute-apps=gpu_bus_id,used_memory CSV; one numeric row and one [N/A] row",
+    "values": "illustrative"
+  },
+  "orin_tegrastats.txt": {
+    "status": "FORMAT",
+    "basis": "tegrastats line layout on Orin under JetPack 6 (timestamp prefix, RAM a/bMB, GR3D_FREQ n%, name@tempC, VDD rails)",
+    "values": "illustrative"
+  },
+  "thor_tegrastats.txt": {
+    "status": "FORMAT",
+    "basis": "Orin layout applied to Thor's 14 cores and 128 GB; the GPU load field on Thor is UNKNOWN, so this line deliberately has no GR3D_FREQ (tests the gap path)",
+    "values": "illustrative"
+  },
+  "macos_vm_stat.txt": {
+    "status": "FORMAT",
+    "basis": "vm_stat output layout on Apple Silicon (16384-byte pages)",
+    "values": "illustrative"
+  },
+  "macos_ioreg_accel.txt": {
+    "status": "FORMAT",
+    "basis": "ioreg -r -d 1 -w 0 -c IOAccelerator on Apple Silicon: PerformanceStatistics with 'Device Utilization %' and 'In use system memory'",
+    "values": "illustrative"
+  },
+  "macos_sysctl_hw_memsize.txt": {
+    "status": "FORMAT",
+    "basis": "sysctl -n hw.memsize for a 16 GB machine (McNugget's documented RAM)"
+  },
+  "rocm_smi.json": {
+    "status": "FORMAT",
+    "basis": "rocm-smi --showuse --showmemuse --showtemp --showmeminfo vram --json key layout",
+    "values": "illustrative"
+  },
+  "amd_smi_metric.json": {
+    "status": "FORMAT",
+    "basis": "amd-smi metric --json, ROCm 6.1+ list form with {value, unit}",
+    "values": "illustrative"
+  },
+  "amd_smi_metric_gpu_data.json": {
+    "status": "FORMAT",
+    "basis": "amd-smi metric --json wrapped in gpu_data with bare numbers (other ROCm releases)",
+    "values": "illustrative"
+  },
+  "amdgpu sysfs tree": {
+    "status": "FORMAT",
+    "basis": "built in-test: /sys/class/drm/cardN/device/{vendor,gpu_busy_percent,mem_info_vram_used,mem_info_vram_total,mem_info_gtt_used,hwmon/hwmonM/temp*_input,temp*_label}",
+    "values": "illustrative"
+  },
+  "cbp_meminfo_large_cache.txt": {
+    "status": "VERIFIED",
+    "machine": "cbp",
+    "captured": "2026-10-06",
+    "cmd": "cat /proc/meminfo (WSL2 guest; Cached+Buffers ~16.6 GiB vs AnonPages ~4.2 GiB)"
+  },
+  "cbp_win_host.json": {
+    "status": "VERIFIED",
+    "machine": "cbp",
+    "captured": "2026-10-06",
+    "cmd": "powershell.exe -Command <proprioception.WIN_HOST_PS> (Win32_OperatingSystem + Get-Process vmmemWSL)"
+  },
+  "win_host_no_vmmem.json": {
+    "status": "DERIVED",
+    "basis": "cbp_win_host.json with vm emptied: the case where vmmem is not visible to the Windows user"
+  }
 }

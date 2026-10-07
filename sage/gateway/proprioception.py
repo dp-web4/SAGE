@@ -453,6 +453,8 @@ def sense_memory(plat: Dict, unified: bool) -> Dict:
                 "total_bytes": ok(int(total), "sysctl hw.memsize") if total else gap(why_t or "sysctl gave no number"),
                 "used_bytes": ok(used, "vm_stat (app + wired + compressed)") if used is not None
                 else gap(why_v or "vm_stat lacks the page counts"),
+                "anon_bytes": gap("no /proc/meminfo on macOS"), "cache_bytes": gap("no /proc/meminfo on macOS"),
+                "available_bytes": gap("no /proc/meminfo on macOS"),
                 "swap_used_bytes": gap("not read on macOS")}
     mi = parse_meminfo(_read("/proc/meminfo") or "")
     if "MemTotal" not in mi:
@@ -464,9 +466,21 @@ def sense_memory(plat: Dict, unified: bool) -> Dict:
             "total_bytes": ok(mi["MemTotal"], "/proc/meminfo MemTotal"),
             "used_bytes": ok(mi["MemTotal"] - avail, "/proc/meminfo MemTotal-MemAvailable")
             if avail is not None else gap("MemAvailable missing (kernel < 3.14)"),
+            # THE BREAKDOWN (dp, 2026-10-06: CBP "regularly runs in 28-31.5g range, always razor
+            # thin"). `used` excludes the page cache, and on WSL the VM still holds that cache on
+            # the HOST, so "used" alone reads as plenty of room on a machine near its edge.
+            "anon_bytes": _mi(mi, "AnonPages"),
+            "cache_bytes": ok(mi["Cached"] + mi["Buffers"], "/proc/meminfo Cached+Buffers")
+            if "Cached" in mi and "Buffers" in mi else gap("Cached/Buffers missing from /proc/meminfo"),
+            "available_bytes": _mi(mi, "MemAvailable"),
+            "free_bytes": _mi(mi, "MemFree"),
             "swap_used_bytes": ok(mi.get("SwapTotal", 0) - mi.get("SwapFree", 0), "/proc/meminfo")
             if "SwapTotal" in mi else gap("no swap fields"),
             "swap_total_bytes": ok(mi["SwapTotal"], "/proc/meminfo") if "SwapTotal" in mi else gap("no swap fields")}
+
+
+def _mi(mi: Dict[str, int], key: str) -> Dict:
+    return ok(mi[key], f"/proc/meminfo {key}") if key in mi else gap(f"{key} missing from /proc/meminfo")
 
 
 def _windows_powershell() -> Optional[str]:
@@ -484,32 +498,76 @@ def _windows_powershell() -> Optional[str]:
     return None
 
 
-def parse_win_os_memory(text: str) -> Optional[Tuple[int, int]]:
-    """'<TotalVisibleMemorySize> <FreePhysicalMemory>' in KiB -> (total_bytes, used_bytes)."""
+# The host query: one Windows process, one JSON answer. vmmem / vmmemWSL is the WSL VM's own
+# process on the host; its working set is what the VM holds in physical RAM right now (the guest's
+# page cache included), its private bytes what it has committed.
+WIN_HOST_PS = (
+    "$o=Get-CimInstance Win32_OperatingSystem; "
+    "$p=@(Get-Process -Name vmmem,vmmemWSL -ErrorAction SilentlyContinue | "
+    "Select-Object Name,WorkingSet64,PrivateMemorySize64); "
+    "[pscustomobject]@{total_kib=$o.TotalVisibleMemorySize; free_kib=$o.FreePhysicalMemory; "
+    "commit_limit_kib=$o.TotalVirtualMemorySize; commit_free_kib=$o.FreeVirtualMemory; vm=$p} "
+    "| ConvertTo-Json -Compress -Depth 3")
+
+# A neutral marker, stated in the snapshot with its threshold. It controls nothing.
+LOW_HEADROOM_FRACTION = 0.10
+
+
+def parse_win_host(text: str, now: float) -> Dict:
+    """The WIN_HOST_PS answer -> the `wsl_host` block. Every field a reading; a missing one says why."""
     try:
-        t, f = [int(x) for x in (text or "").split()[:2]]
-        return t * 1024, (t - f) * 1024
+        d = json.loads(text)
+        total, free = int(d["total_kib"]) * 1024, int(d["free_kib"]) * 1024
     except Exception:
-        return None
+        why = "unparseable Win32_OperatingSystem answer"
+        return {"sampled_at": now, "memory_total_bytes": gap(why), "memory_used_bytes": gap(why),
+                "memory_available_bytes": gap(why), "wsl_vm_working_set_bytes": gap(why)}
+    src = "Windows Win32_OperatingSystem"
+    out = {"sampled_at": now,
+           "memory_total_bytes": ok(total, src + " TotalVisibleMemorySize"),
+           "memory_used_bytes": ok(total - free, src + " TotalVisibleMemorySize-FreePhysicalMemory"),
+           "memory_available_bytes": ok(free, src + " FreePhysicalMemory")}
+    try:
+        cl, cf = int(d["commit_limit_kib"]) * 1024, int(d["commit_free_kib"]) * 1024
+        out["commit_limit_bytes"] = ok(cl, src + " TotalVirtualMemorySize")
+        out["committed_bytes"] = ok(cl - cf, src + " TotalVirtualMemorySize-FreeVirtualMemory")
+    except Exception:
+        out["commit_limit_bytes"] = out["committed_bytes"] = gap("commit fields missing from the answer")
+    vm = d.get("vm")
+    vm = [vm] if isinstance(vm, dict) else (vm or [])
+    vm = [v for v in vm if isinstance(v, dict) and v.get("WorkingSet64") is not None]
+    if vm:
+        names = "+".join(sorted({str(v.get("Name")) for v in vm}))
+        out["wsl_vm_working_set_bytes"] = ok(sum(int(v["WorkingSet64"]) for v in vm),
+                                             f"Get-Process {names} WorkingSet64")
+        priv = [v.get("PrivateMemorySize64") for v in vm]
+        out["wsl_vm_private_bytes"] = ok(sum(int(x) for x in priv), f"Get-Process {names} PrivateMemorySize64") \
+            if all(x is not None for x in priv) else gap("PrivateMemorySize64 not reported")
+    else:
+        why = ("no vmmem/vmmemWSL process visible to this Windows user (it runs elevated or under "
+               "another session on some hosts)")
+        out["wsl_vm_working_set_bytes"] = out["wsl_vm_private_bytes"] = gap(why)
+    low = free < LOW_HEADROOM_FRACTION * total
+    out["low_headroom"] = {"value": low, "threshold": f"available < {LOW_HEADROOM_FRACTION:.0%} of host physical",
+                           "source": "this snapshot", "controls": "nothing (an indicator)"}
+    return out
 
 
 def sense_wsl_host() -> Dict:
-    """The Windows host's memory, as Windows reports it. ~0.5 s (a Windows process), so the daemon
-    asks for it on a slower cadence than the rest and carries its own timestamp."""
+    """The Windows host's memory, as Windows reports it, and the WSL VM's own footprint on it.
+    ~0.6 s (a Windows process), so the daemon asks for it on a slower cadence than the rest and
+    carries the block, with its own `sampled_at`, into the samples between."""
     ps = _windows_powershell()
     now = time.time()
     if not ps:
-        return {"sampled_at": now, "memory_total_bytes": gap("powershell.exe not reachable from this WSL guest"),
-                "memory_used_bytes": gap("powershell.exe not reachable from this WSL guest")}
-    o, why = _run([ps, "-NoProfile", "-NonInteractive", "-Command",
-                   "$o=Get-CimInstance Win32_OperatingSystem; \"$($o.TotalVisibleMemorySize) $($o.FreePhysicalMemory)\""],
-                  timeout=15)
-    m = parse_win_os_memory(o or "")
-    if not m:
-        why = why or "unparseable Win32_OperatingSystem answer"
-        return {"sampled_at": now, "memory_total_bytes": gap(why), "memory_used_bytes": gap(why)}
-    return {"sampled_at": now, "memory_total_bytes": ok(m[0], "Windows Win32_OperatingSystem"),
-            "memory_used_bytes": ok(m[1], "Windows Win32_OperatingSystem")}
+        why = "powershell.exe not reachable from this WSL guest"
+        return {"sampled_at": now, "memory_total_bytes": gap(why), "memory_used_bytes": gap(why),
+                "memory_available_bytes": gap(why), "wsl_vm_working_set_bytes": gap(why)}
+    o, why = _run([ps, "-NoProfile", "-NonInteractive", "-Command", WIN_HOST_PS], timeout=15)
+    if not o:
+        return {"sampled_at": now, "memory_total_bytes": gap(why), "memory_used_bytes": gap(why),
+                "memory_available_bytes": gap(why), "wsl_vm_working_set_bytes": gap(why)}
+    return parse_win_host(o, now)
 
 
 # ---- GPUs -----------------------------------------------------------------------------------
@@ -919,6 +977,8 @@ def sample(disks: Optional[List[Tuple[str, str]]] = None, cpu_window: float = CP
         snap["wsl_host"] = sense_wsl_host()
     elif plat["kind"] == "wsl2" and isinstance(carried_host, dict) and carried_host.get("sampled_at"):
         snap["wsl_host"] = dict(carried_host, carried=True)
+    elif plat["kind"] != "wsl2":
+        snap["wsl_host"] = {"unavailable": "not a WSL guest: `memory` is this machine's own single view"}
     snap["sample_ms"] = round((time.time() - t0) * 1000.0, 1)
     snap["cpu_window_ms"] = round(cpu_window * 1000.0)
     snap["line"] = summary_line(snap)
@@ -950,6 +1010,22 @@ def _gpu_part(g: Dict, multi: bool) -> str:
     return head + " " + " · ".join(bits)
 
 
+def _host_part(h: Dict) -> str:
+    """The Windows host, headroom first: what the machine has left, and how much the VM holds."""
+    ht, hu, ha = val(h.get("memory_total_bytes")), val(h.get("memory_used_bytes")), val(h.get("memory_available_bytes"))
+    if ht is None or hu is None or ha is None:
+        why = (h.get("memory_total_bytes") or {}).get("unavailable") or "not sampled yet"
+        return f"Windows host memory: {why}"
+    bits = [f"{_gib(ha)} free"]
+    vm = val(h.get("wsl_vm_working_set_bytes"))
+    bits.append(f"WSL VM holds {_gib(vm)}" if vm is not None else "WSL VM footprint not visible")
+    out = f"host {_gib(hu)}/{_gib(ht)} GiB ({'; '.join(bits)})"
+    lh = h.get("low_headroom") or {}
+    if lh.get("value") is True:
+        out += f" · low headroom ({lh.get('threshold', '')})"
+    return out
+
+
 def summary_line(s: Dict) -> str:
     """The one rendering. The being reads it, the dashboard shows it; both from the same snapshot,
     so they cannot disagree. Concise: readings first, gaps named briefly at the end."""
@@ -973,22 +1049,23 @@ def summary_line(s: Dict) -> str:
     else:
         missing.append("CPU temp: " + (cpu.get("temperature_c") or {}).get("unavailable", "unavailable"))
     used, total = val(mem.get("used_bytes")), val(mem.get("total_bytes"))
+    wsl = (s.get("platform") or {}).get("kind") == "wsl2"
     if used is not None and total is not None:
-        ram = f"RAM {_gib(used)}/{_gib(total)} GiB"
-        if mem.get("pool") == "unified":
-            ram += " (one pool, GPU included)"
-        host = s.get("wsl_host") or {}
-        if (s.get("platform") or {}).get("kind") == "wsl2":
-            ht, hu = val(host.get("memory_total_bytes")), val(host.get("memory_used_bytes"))
-            if ht is not None and hu is not None:
-                ram += f" (WSL cap; Windows host {_gib(hu)}/{_gib(ht)})"
-            elif ht is not None:
-                ram += f" (WSL cap; Windows host total {_gib(ht)})"
-            else:
+        anon, cache = val(mem.get("anon_bytes")), val(mem.get("cache_bytes"))
+        if wsl and anon is not None and cache is not None:
+            # the guest's cache is held on the host by the VM: show it beside what is in use
+            ram = f"RAM {_gib(anon)} used + {_gib(cache)} cache / {_gib(total)} GiB (WSL cap)"
+        else:
+            ram = f"RAM {_gib(used)}/{_gib(total)} GiB"
+            if mem.get("pool") == "unified":
+                ram += " (one pool, GPU included)"
+            elif wsl:
                 ram += " (WSL cap)"
         cb.append(ram)
     else:
         missing.append("RAM: " + (mem.get("used_bytes") or {}).get("unavailable", "unavailable"))
+    if wsl:
+        cb.append(_host_part(s.get("wsl_host") or {}))
     parts.append(" · ".join(cb))
     dk = []
     for d in s.get("disks") or []:
