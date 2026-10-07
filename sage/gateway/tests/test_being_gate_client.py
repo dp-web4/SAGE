@@ -1612,3 +1612,24 @@ def test_check_runs_exactly_one_test_in_one_file(tmp_path):
             assert False, f"should have refused {bad!r}"
         except ValueError as e:
             assert expect in str(e), f"{bad!r} -> {e}"
+
+
+
+def test_run_mounts_the_worktree_read_only_on_the_import_path(tmp_path, monkeypatch):
+    """legion-being 2026-10-07, fixing #360: a scratch script could not import the worktree's
+    render_pr, so it rebuilt the function with ast from a `data` copy and the replica drifted
+    from the real code. The worktree is now bound READ-ONLY with PYTHONPATH at it; /work stays
+    the only writable mount; with no worktree nothing changes."""
+    from sage.gateway import being_gate_client as B
+    monkeypatch.setattr(B, "sandbox_available", lambda: True)
+    home = tmp_path / "home"; (home / "scratch").mkdir(parents=True)
+    (home / "scratch" / "p.py").write_text("print(1)\n")
+    wt = tmp_path / "wt"; wt.mkdir()
+    ctx = {"memory_root": str(home), "member": "legion-being", "worktree": str(wt)}
+    cmd = B.run_command({"path": "scratch/p.py"}, ctx)
+    real = os.path.realpath(str(wt))
+    assert f"--ro-bind {real} {real}" in cmd and f"--setenv PYTHONPATH {real}" in cmd, cmd
+    assert f"--bind {real}" not in cmd.replace(f"--ro-bind {real}", "")       # never writable
+    assert cmd.count(" --bind ") == 1 and " /work" in cmd                     # /work is the one
+    no_wt = B.run_command({"path": "scratch/p.py"}, dict(ctx, worktree=None))
+    assert "PYTHONPATH" not in no_wt and real not in no_wt

@@ -1362,17 +1362,33 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
     interp = os.path.dirname(os.path.dirname(sys.executable))
     stage = f"{STAGE_ROOT}-{member}"
     script = os.path.basename(path)
+    # THE WORKTREE IS IMPORTABLE, READ-ONLY (2026-10-07). legion-being, fixing #360, could not
+    # `from sage.gateway.hestia_dispatch import render_pr` in a scratch script: the sandbox had
+    # no worktree, so it extracted the function with `ast` from a file passed as `data` and its
+    # replica drifted from the real code. The worktree is its own and already readable
+    # (memory_read, git_read, check), and `check` already mounts it read-only in the same
+    # sandbox; mounting it here, read-only, with PYTHONPATH pointing at it, adds no authority.
+    # Nothing in the sandbox can write it: /work stays the only writable mount.
+    worktree = (ctx or {}).get("worktree")
+    wt_bind = wt_env = ""
+    if worktree and os.path.isdir(worktree):
+        import shlex as _shlex
+        q = _shlex.quote(os.path.realpath(worktree))
+        wt_bind = f" --ro-bind {q} {q}"
+        wt_env = f" --setenv PYTHONPATH {q}"
     return (
         f"{SANDBOX} --clearenv"
         " --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind /lib64 /lib64 --ro-bind /bin /bin"
         " --ro-bind /etc/alternatives /etc/alternatives"
         f" --ro-bind {interp} {interp}"
         " --proc /proc --dev /dev --tmpfs /tmp"
+        f"{wt_bind}"
         # THE ONLY WRITABLE THING IN THERE, and its contents are copies the seat made.
         f" --bind {stage} /work"
         " --unshare-pid --unshare-net --unshare-ipc --unshare-uts"
         " --new-session --die-with-parent"
         " --setenv HOME /tmp --setenv PYTHONUTF8 1 --setenv PYTHONDONTWRITEBYTECODE 1"
+        f"{wt_env}"
         f" --setenv PATH {interp}/bin:/usr/bin:/bin"
         f" --chdir /work {interp}/bin/python3 /work/{script}"
     )
@@ -2453,8 +2469,10 @@ _TOOL_SCHEMAS = {
               "new": "what to put there instead (empty string deletes it)"},
              ["path", "old", "new"]),
     "run": ("RUN a Python file you wrote, in a sandbox on COPIES of your files, and read what it printed: nothing it changes is kept, in your home or your worktree. It executes in a sandbox "
-            "holding only a Python interpreter and copies of the files you name — no network, "
-            "no home, no worktree. Nothing it does persists, so PRINT what you want to keep. "
+            "holding only a Python interpreter, copies of the files you name, and (when you have "
+            "one) your worktree READ-ONLY on the import path, so `from sage.gateway... import x` "
+            "imports your worktree's real code. No network, no home. Nothing it does persists, "
+            "so PRINT what you want to keep. "
             "This is how a rule becomes testable without spending a move.",
             {"path": "a .py file in your home, e.g. 'scratch/evaluator.py'",
              "data": "optional: up to 8 more files, named by their SOURCE path — relative to your "
