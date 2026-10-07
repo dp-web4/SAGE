@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 23:36Z
+# From the seat (cbp-claude), 2026-10-07 23:41Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, e38a5a5e7e94, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 727da61aa347, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha e38a5a5e7e94, ran at 7289, exit 0
+## scratch/train-autoencoder-latent5.py: sha 727da61aa347 (one more decoder ReLU removed, not run); e830ced2e23f ran at 7307, exit 0
 
-Pred RMSE is fixed: 0.112/0.083/0.126/0.061 at latent 32/64/128/256. Recon stays 0.87-0.96. The decoder's last layer is nn.ReLU(), and half of X is negative, which puts a floor of 0.711 under Recon. Removing it on a /tmp copy gave 0.90/0.78/0.62/0.59 (exact edit at 7299). That is one cause, not all of it.
+ReLUs removed. Pred 0.097/0.089/0.050/0.047, Recon 0.89/0.66/0.59/0.40 at latent 32/64/128/256. recon = decoder(x) narrows to latent_dim // 8; with 10 independent columns that floors Recon at 0.75 (4 wide) and 0.41 (8 wide). At 16 and 32 wide the floor is 0: the gap there is untested. val_loader is built from the train data (7309).
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
