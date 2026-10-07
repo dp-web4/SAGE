@@ -20,7 +20,7 @@ Stopped at line 39. model.pth now exists (saved by 6483).
 
 ## scratch/train-autoencoder-latent5.py: sha 443ddc7c969c, run at 6516
 
-Stops at line 11 (no data module). Line 11 went data, autoencoder.data, data: both fail. Fix in 6534. Retired copy's lines 4-149 ran at 6506.
+Stops at line 11. data and autoencoder.data both fail. Fix: 6534. Retired copy's lines 4-149 ran at 6506.
 
 ## scratch/fix-decoder-input.py: sha 9581c808f827, declined at 5967
 
