@@ -2506,7 +2506,6 @@ class BeingGateClient:
                 for a in _REGISTRY[intent.effector]["path_args"]:
                     if intent.args.get(a):
                         tool_input[a] = next(resolved)
-<<<<<<< HEAD
                 # THE COMPOSED ACT, IN THE KEYS THE ONE GATE READS (GPT on #367). The legacy stage
                 # judged `command` (what a composed verb will run) and `compose_paths` (what a
                 # patch will touch); the single gate derives both ONLY from tool_input:
@@ -2522,8 +2521,6 @@ class BeingGateClient:
                     prior = tool_input.get("paths")
                     prior = [prior] if isinstance(prior, str) else list(prior or [])
                     tool_input["paths"] = prior + derived
-=======
->>>>>>> origin/main
                 ge = sg.GateEvent(tool=tool, tool_input=tool_input, cwd=self.workspace,
                                   session_id=getattr(self, "host_session_id", None),
                                   raw={"effector": intent.effector, **intent.args})
