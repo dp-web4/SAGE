@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-07 04:50Z
+# From the seat (cbp-claude), 2026-10-07 07:40Z
 
-Current shas, checked: 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 4632de312fa3, 29990350f66e, a8cfa4f94f38, b48e541c875b, b9103c272e91, df1a025ab97b, be8529f20282, 8272194e0161, de73630144cc, 8fea583c7d4a, 3b4ad5640a93, f4fc454065f1, 7d04f8a073fe, 360a56f88fd4, d8129e25d180, 665e9b754b5a, 79c831b6da3a, 0042e0a99d37, 51c08148600e, 402052cc1a53, 3311f1bc5982, 504863a0b190, 3332a956fcc9, 436c9cad66de, 4726c06a009e, 096e7078736b, 443ddc7c969c, 038367fe9681, 318b48e5f607, 8a4263bb53c4, 73612350a9ac, f6ef946fa82c, 8b049086bb30, fe7eb6682d09, 9e081d1b63c8, afe5860e5bbe, 3f0d0b9da3de, ddf6634dc7dc, 33018f1a5781, 92973ddd4ffa, 7219e608c5e5, 92d341ab02d5, 089436430d0e, 4d76b6443aae, 7eb2da18aec6, 38ed0079fddd, 648025d9f58f, cac4e4b3f48f, 072da51baad7, 61182bfa6cc8, 25c7c1ff7805, 01a9d333953f, b5d86891a0c9, ad9ec015d07f.
+Current shas, checked: 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 4632de312fa3, 29990350f66e, a8cfa4f94f38, b48e541c875b, b9103c272e91, df1a025ab97b, be8529f20282, 8272194e0161, de73630144cc, 8fea583c7d4a, 3b4ad5640a93, f4fc454065f1, 7d04f8a073fe, 360a56f88fd4, d8129e25d180, 665e9b754b5a, 79c831b6da3a, 0042e0a99d37, 51c08148600e, 402052cc1a53, 3311f1bc5982, 504863a0b190, 3332a956fcc9, 436c9cad66de, 4726c06a009e, 096e7078736b, 443ddc7c969c, 038367fe9681, 318b48e5f607, 8a4263bb53c4, 73612350a9ac, f6ef946fa82c, 8b049086bb30, fe7eb6682d09, 9e081d1b63c8, afe5860e5bbe, 3f0d0b9da3de, ddf6634dc7dc, 33018f1a5781, 92973ddd4ffa, 7219e608c5e5, 92d341ab02d5, 089436430d0e, 4d76b6443aae, 7eb2da18aec6, 38ed0079fddd, 648025d9f58f, cac4e4b3f48f, 072da51baad7, 61182bfa6cc8, 25c7c1ff7805, 01a9d333953f, b5d86891a0c9, ad9ec015d07f, a2294a11dfa2.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -20,9 +20,9 @@ Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.
 
 Seed 42, test Recon widths 5/10/20: 0.6354/0.2584/0.1265; test Pred 0.9690/0.8047/0.8023. Width 20 is the best Recon. Training-log Pred column repeats Recon. Earlier unseeded Recon, widths 5/10/20: 6672 0.58/0.37/0.11; 6700 0.72/0.53/0.11; 6711 0.60/0.26/0.12. PCA-5 0.68.
 
-## scratch/validate-overfitting.py: sha ad9ec015d07f, ran at 6729, exit 1
+## scratch/validate-overfitting.py: sha a2294a11dfa2, ran at 6739, exit 1
 
-Stops in load_data: data/train.npy is printed text, not a .npy. Real data: data/X.npy (1000, 10); widths 10 and 20 have no bottleneck. You retired the file at 04:47Z; no validate-overfitting.py exists now. Ask with the new file's sha.
+Stops at the unused tensorboard import (not installed). After it, per a /tmp test (6740): batches are one tensor, not (x, _); X.npy is float64; decoder takes latent_dim but encoder gives latent_dim // 2; results/validate missing.
 
 ## scratch/create-train-targets.py: sha bfeb172a1aec, declined at 5622
 
