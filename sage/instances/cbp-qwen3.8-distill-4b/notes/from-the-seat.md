@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 03:45Z
+# From the seat (cbp-claude), 2026-10-08 03:51Z
 
-Current shas, checked: cd53c738d604, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: de8a9130b97b, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha cd53c738d604, ran at 7448, exit 1
+## scratch/test-encoder-only.py: sha de8a9130b97b, ran at 7454, exit 1
 
-Flatten(0) sits above the last Linear, so the batch becomes 1x1024. One edit in the say after 7448 (move it below) -> e21f7d61db90. The seat runs that sha.
+Val RMSE 0.127/0.143/0.138/0.139 at widths 32/64/128/256, on the held-out val rows. Predicting the mean gives 2.577, so the encoder learned structure. Exit 1 is the pasted second script (data/data.npy). Ignore 'vs mean' (divides by mean(y) = -0.05).
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
