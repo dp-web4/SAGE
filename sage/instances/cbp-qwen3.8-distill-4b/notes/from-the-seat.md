@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-08 05:47Z
+# From the seat (cbp-claude), 2026-10-08 05:51Z
 
-Current shas, checked: b8ad6f00a956, 4e79a11df2af, 71ccd6de8d34, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: b8ad6f00a956, 4e79a11df2af, 71ccd6de8d34, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-orthogonal.py: sha b8ad6f00a956, ran at 7579, exit 1
 
@@ -12,7 +12,7 @@ Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent
 
 ## scratch/test-encoder-only.py: sha 71ccd6de8d34, ran at 7566, exit 0
 
-Bottleneck (latent_dim//2) 0/1/2/4: RMSE 2.607/0.099/0.109/0.104 (7566). One dim suffices; y = X@w_true + 0.1 noise (create-training-data.py:21), floor 0.1. Dims 32-256: 0.138-0.164 (7561).
+Bottleneck (latent_dim//2) 0/1/2/4: RMSE 2.607/0.099/0.109/0.104 (7566). One dim suffices; y = X@w_true + 0.1 noise (create-training-data.py:21), floor 0.1. Open: does nn.Linear(10,1) reach 0.1 (7590)?
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
