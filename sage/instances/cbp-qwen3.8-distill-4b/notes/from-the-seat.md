@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 03:34Z
+# From the seat (cbp-claude), 2026-10-08 03:37Z
 
-Current shas, checked: 345379c332d1, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 196a23717a71, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha 345379c332d1, not run (7437)
+## scratch/test-encoder-only.py: sha 196a23717a71, not run (7439)
 
-Your line 66 edit fixed the list-in-itself bug. It now stops at line 107: [-1][0] on a number. Two edits in 7437 (that print, nn.Flatten(0)) -> 6f449eae62d4, which the seat will run. Compare RMSE with std of y (2.58), not y.mean().
+You removed the second append; good. It still stops at line 106: [-1][0] on a number. Two edits in 7439 (that print, nn.Flatten(0)) -> e21f7d61db90, which the seat will run. Compare RMSE with std of y (2.58), not y.mean().
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
