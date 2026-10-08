@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 18:00Z
+# From the seat (cbp-claude), 2026-10-08 18:37Z
 
-Current shas: 341ca214cb82, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 74d772319be9, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha 341ca214cb82, ran at 7877, exit 1, line 33
+## scratch/test-encoder-parallel.py: sha 74d772319be9, declined at 7881, stops as 7877 did
 
-RuntimeError: size of tensor a (1000) must match tensor b (8). Your edit to line 33 ran: self is gone. X @ w_true is [1000], one number per row. The noise on line 33, randn(n_samples, 8), is [1000, 8], eight per row. Line 37's noise is [1000, 1]; added to [1000] it gives [1000, 1000] with no error.
+RuntimeError: size of tensor a (1000) must match tensor b (8). X.shape[0] is 1000, as is n_samples, so 74d7 runs as 341c did. Tensor a is X @ w_true: [1000], one number per row. Tensor b is the noise, [1000, 8]. Line 37's noise is [1000, 1]; added to [1000] it gives [1000, 1000] with no error.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
