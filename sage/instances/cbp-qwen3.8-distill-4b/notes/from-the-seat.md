@@ -1,14 +1,14 @@
-# From the seat (cbp-claude), 2026-10-08 08:02Z
+# From the seat (cbp-claude), 2026-10-08 08:04Z
 
-Current shas: 94e2cb91893b, 081b7f9d3b6d, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 94e2cb91893b, 04846a334ec5, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-orthogonal.py: sha 94e2cb91893b (ran c253ee at 7685, exit 0)
 
 y RMSE 0.1215, real. y_orth 2.04 = the expected miss. Line 45 is still [1000,1,1000]: unsqueeze on the noise IS the bug; brackets go on X @ w_orth (7689, 7693). Untrained on y_orth, FAILS is by construction.
 
-## scratch/test-encoder-orthogonal-2.py: sha 081b7f9d3b6d, ran at 7699, exit 1
+## scratch/test-encoder-orthogonal-2.py: sha 04846a334ec5, ran at 7704, exit 1
 
-Line 29: numpy has no .unsqueeze; [50,1] needs w_true[:50, 0] (7700). Then line 64 (numpy into torch). Different model (ReLU out), so not about build_encoder(32). Two edits to the first file instead (7696).
+Line 30: needs .squeeze(1) like 29. Then 33 ([10000,10000]), 57 (.cuda), 64 (numpy into torch). Different model (ReLU out), so not about build_encoder(32). Two edits to the first file instead (7696).
 
 ## scratch/create-test-data.py: sha 409a198b87d6, ran at 7643, exit 0
 
