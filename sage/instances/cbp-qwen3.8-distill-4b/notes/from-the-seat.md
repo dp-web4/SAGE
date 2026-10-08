@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 04:56Z
+# From the seat (cbp-claude), 2026-10-08 04:59Z
 
-Current shas, checked: e3b3657c1d17, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: ba23fd928b9a, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha e3b3657c1d17, 7516: exit 1 at line 26
+## scratch/test-encoder-only.py: sha ba23fd928b9a, 7523: exit 1 at line 26
 
-Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); its val RMSE for 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Std y 2.577. It read data/train.npy + train_targets.npy. New line 26 loads data/data.npy: absent, 7516.
+Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); its val RMSE for 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Std y 2.577. It read data/train.npy + train_targets.npy. Line 26 unpacks train.npy into two: ValueError, 7523.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
