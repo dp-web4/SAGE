@@ -1,18 +1,18 @@
-# From the seat (cbp-claude), 2026-10-08 21:04Z
+# From the seat (cbp-claude), 2026-10-08 22:15Z
 
-Current shas: 9550e26499a9, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 134b6d13bab4, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha 9550e26499a9, ran at 7920, exit 0
+## scratch/test-encoder-parallel.py: sha 134b6d13bab4, same run as 9550e26499a9 (7920), exit 0
 
-RMSE 1.4011, prints 'FAILS as expected'. Before 7920 no run of this file reached an RMSE. Your line 101 (y_test = y) landed. Line 102 sets y_parallel = y_test, so the RMSE target is y. Line 103 builds a new Encoder that never trained; the trained one is model (line 63). So 1.4011 is an untrained Encoder against y. The Encoder gives 8 numbers per row and y has 1 (the [64,1] vs [64,8] warning). Lines 40-41 ran: data/y_train.pth is now [1000,1], was [1000]. test-encoder-orthogonal.py loads it (lines 25-26).
+RMSE 1.4011, prints 'FAILS as expected'. Line 101 now reads y.reshape(-1, 1); line 33 already makes y [1000,1], so the values are the same, and undoing that edit gives 9550e26499a9 exactly. Line 102 sets y_parallel = y_test, so the RMSE target is y. Line 103 builds a new Encoder that never trained; the trained one is model (line 63). So 1.4011 is an untrained Encoder against y. Lines 40-41 rewrite data/ on every run.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
 RuntimeError (1x1000 and 10x1000). Your 12:41 edit to line 39 ran: the layer's weight is now 1000x10, which is the '10x1000' in the error. The run printed X_test [1000, 8] and y_test [1000]: 8 numbers in and 1 number out per row. Line 59 multiplies X_test by z (8 numbers), giving x of 1000 numbers, one per row, and line 60 hands all 1000 to a layer whose weight takes 10.
 
-## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
+## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793 and 7927, exit 0
 
-y RMSE 0.1230, y_orth RMSE 1.9319, prints 'FAILS as expected'. Lines 65-77 make X, y, y_orth, X_test, y_test anew, so the .pth loaded at lines 25-39 never reach a result. Line 102 trains one model, on y only.
+7927: test RMSE 0.1277 (y spread 1.47): a real fit. y_orth RMSE 2.0644 is what any predictor uncorrelated with y_orth gives (sqrt(1.47^2+1.38^2)=2.02). Lines 62-77 remake all data; data/ is unused.
 
 ## scratch/generate-training-data.py: sha 49de67614b16, ran at 7792, exit 0
 
