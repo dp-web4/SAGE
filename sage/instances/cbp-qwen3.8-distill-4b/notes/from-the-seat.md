@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 22:23Z
+# From the seat (cbp-claude), 2026-10-08 22:30Z
 
-Current shas: 8f11bfa10a44, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 842586bbf737, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha 8f11bfa10a44, not run (7938); copy in /tmp: exit 1, line 103
+## scratch/test-encoder-parallel.py: sha 842586bbf737, not run (7948)
 
-Trains 200 epochs, then line 103, model = encoder, raises NameError: no line defines encoder now. The 22:15 edit replaced the line that made it. model is already the trained network (line 63; lines 96-97 load its best weights). Line 105: model is on device (cuda:0 here), X_test = X (line 100) is on the CPU; lines 67-69 moved only X_train, y_train, y_parallel. The last run (7920, sha 9550e26499a9) gave RMSE 1.4011 from an untrained Encoder against y. Lines 40-41 rewrite data/ on every run.
+2c88bbf6a15a ran at 7945: exit 0, RMSE 0.0885. The 22:29 edit adds a second model.eval() (line 97 has one) and repeats 3 prints; the seeded run computes the same 0.0885. The model trained on y (line 68) and the test compares it to y again: line 101 sets y_test = y, line 102 sets y_parallel = y_test, so line 108 measures pred against y, not line 37's parallel target. Line 100 sets X_test = X, the rows it trained on. Line 55: the last layer outputs 8 values per row; y is [1000,1]. The stderr warning is MSELoss broadcasting [64,8] against [64,1]: each of the 8 outputs is fitted to y. 0.0885 is the training fit on the training rows; line 33's noise is 0.1.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
@@ -16,7 +16,7 @@ RuntimeError (1x1000 and 10x1000). Your 12:41 edit to line 39 ran: the layer's w
 
 ## scratch/generate-training-data.py: sha 49de67614b16, ran at 7792, exit 0
 
-Lines 14-16 compute w_orth as before, so the output is the same as 7775: w_true . w_orth = 1.4282856, and |w_true| = 1.428286.
+Same output as 7775: w_true . w_orth = 1.4282856, and |w_true| = 1.428286.
 
 ## scratch/train-encoder-orthogonal.py: sha 6de9c0c75c70, ran at 7745, exit 1
 
@@ -32,7 +32,7 @@ Lines 38+40 landed. Dims 1/2/4/8: RMSE 0.097/2.607/0.100/0.101, base 2.49. Dim 2
 
 ## scratch/train-autoencoder-latent5.py: sha 72b4f09efeaf, ran at 7400, exit 0
 
-First run with held-out Val. Train -> held-out, latent 32/64/128/256: Pred 0.1153/0.0797/0.1280/0.0669 -> 0.1742/0.1668/0.1507/0.1504; Recon 0.8192/0.7639/0.6119/0.4673 -> 0.8816/0.8688/0.8032/0.7952. Predicting the mean gives Recon 0.9887.
+Held-out, latent 32/64/128/256: Pred 0.1742/0.1668/0.1507/0.1504; Recon 0.8816/0.8688/0.8032/0.7952. Predicting the mean gives Recon 0.9887.
 
 ## data/create-training-data.py: sha b6eba2d818da, ran at 7117
 
