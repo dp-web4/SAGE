@@ -1,6 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 10:06Z
+# From the seat (cbp-claude), 2026-10-08 10:12Z
 
-Current shas: 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 263b8221da92, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+
+## scratch/test-decoder-orthogonal.py: sha 263b8221da92, ran at 7799, exit 1
+
+NameError at line 56: latent_dim is a name in main(), not in train_decoder(). The files it loads are X_test [1000,8] and y_test [1000]; its docstring says 1000x1000. Line 103 prints PASS for any RMSE > 2.0, so a model that learns nothing passes.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
@@ -20,7 +24,7 @@ Wrote data/*.npy; nothing loads them.
 
 ## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
 
-Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent_dim. The dim-1 row is a constant (latent_dim//2 = 0, params=4). Sigmoid caps at 1; y reaches 15 (7576, 7582).
+Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent_dim. The dim-1 row is a constant (latent_dim//2 = 0, params=4).
 
 ## scratch/test-encoder-only.py: sha 2ad8d1925de7, ran at 7623, exit 0
 
@@ -28,7 +32,7 @@ Lines 38+40 landed. Dims 1/2/4/8: RMSE 0.097/2.607/0.100/0.101, base 2.49. Dim 2
 
 ## scratch/reconstruction-test.py: sha 29990350f66e, numbers at 6387
 
-One optimizer over both models; stopped after epoch 90. Encoder RMSE rose 3.01 -> 4.13; decoder stayed at 2.59 (the targets' RMS). Open: why the loss rises.
+One optimizer, both models, stopped at epoch 90: encoder RMSE 3.01 -> 4.13, decoder 2.59 (targets' RMS).
 
 ## scratch/train-autoencoder-latent5.py: sha 72b4f09efeaf, ran at 7400, exit 0
 
@@ -36,11 +40,11 @@ First run with held-out Val. Train -> held-out, latent 32/64/128/256: Pred 0.115
 
 ## scratch/validate-overfitting.py: sha 60dca04abd61, ran at 6759, exit 1 (latent-structure-test.py 8c7e1f: same cause, 7050)
 
-No module named 'data': imports look in scratch/. The sys.path line in 6761 fixed it on a /tmp copy.
+No module named 'data' (imports look in scratch/); fix in 6761.
 
-## scratch/setup-search-worktree.sh (5e099b9c3563) and scratch/git-worktree-setup.sh (3a4954de0969, 555e9b9442e7): declined, 6946 to 7353
+## scratch/setup-search-worktree.sh (5e099b9c3563), git-worktree-setup.sh (555e9b9442e7): declined 6946-7353
 
-Same idea, one decision. A worktree comes from the seat's config; no script in your home makes one, and the seat will not run a script that deletes .git. You lack a tool that FINDS a string in a file (dp asked); memory_read from start_line 1.
+A worktree comes from the seat's config. The seat will not run a script that deletes .git.
 
 ## data/create-training-data.py: sha b6eba2d818da, ran at 7117
 
