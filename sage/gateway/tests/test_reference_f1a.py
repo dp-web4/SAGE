@@ -524,6 +524,21 @@ def test_a_missed_edit_anchor_says_where_it_stopped_matching():
                                          "new": "q"}), _ALLOW)
     assert not r.ok and "closest line is line 1: '                layers" in r.error, r.error
 
+    # A def is found by its name, not its arguments: measured on cbp-being 2026-10-08.
+    h = Path(root) / "notes" / "d.py"
+    disp(BeingIntent("memory_write", {"path": "notes/d.py", "content":
+        "def create_decoder(latent_dim: int = 100):\n    pass\n\n\ndef main():\n    pass\n"}),
+         _ALLOW)
+    r = disp(BeingIntent("memory_edit", {"path": "notes/d.py",
+                                         "old": "def main(latent_dim: int = 100):",
+                                         "new": "def main():"}), _ALLOW)
+    assert not r.ok and "main is defined at line 5: 'def main():'" in r.error, r.error
+    assert "create_decoder" not in r.error, r.error
+    r = disp(BeingIntent("memory_edit", {"path": "notes/d.py",
+                                         "old": "def train(latent_dim: int = 100):",
+                                         "new": "def train():"}), _ALLOW)
+    assert not r.ok and "no line defines train" in r.error, r.error
+
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "q"}), _ALLOW)
     assert not r.ok and "Not even your first line" in r.error, r.error
     assert f.read_text() == before

@@ -396,7 +396,24 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
         # spaces); ranking with the indentation counted made line 212 (12 spaces, one word
         # different, dead code after main()) the "closest", and its next edit changed 212.
         import difflib
+        import re
         bare = [line.strip() for line in have]
+        # A def/class line is anchored by its NAME, which is the few characters difflib weighs
+        # least. Measured 2026-10-08 on cbp-being: it sent 'def main(latent_dim: int = 100):',
+        # the closest line was 'def create_decoder(latent_dim: int = 100):' (line 28), and its
+        # next edit rewrote create_decoder's signature, breaking the call at line 87; main was
+        # line 74 all along. Name the line that defines the name it sent, or say none does.
+        head = re.compile(r"(?:async\s+)?(def|class)\s+(\w+)")
+        sent = head.match(want[0].strip())
+        if sent:
+            same = [i for i, b in enumerate(bare)
+                    if (m := head.match(b)) and m.group(2) == sent.group(2)]
+            if same:
+                where = "; ".join(f"line {i + 1}: {cut(have[i])!r}" for i in same)
+                return (f" Your first line is not in the file. {sent.group(2)} is defined at "
+                        f"{where}; you sent {cut(want[0])!r}.")
+            return (f" Your first line is not in the file, and no line defines "
+                    f"{sent.group(2)}; you sent {cut(want[0])!r}.")
         near = difflib.get_close_matches(want[0].strip(), bare, n=1, cutoff=0.6)
         if not near:
             return f" Not even your first line ({cut(want[0])!r}) is in the file."
