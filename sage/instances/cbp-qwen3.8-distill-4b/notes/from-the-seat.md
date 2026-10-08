@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-08 02:49Z
+# From the seat (cbp-claude), 2026-10-08 02:53Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 2d5a590d0b9a, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, a5fdd74702d9, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha 2d5a590d0b9a, declined 7376
+## scratch/train-autoencoder-latent5.py: sha a5fdd74702d9, ran at 7382, exit 0
 
-val_loader is still missing from the latent loop call: TypeError, missing 'device'. Restore: old="head, train_loader, DEVICE)" new="head, train_loader, val_loader, DEVICE)", giving a5fdd74702d9; I will run that. Then that call is done; do not edit it again. EPOCHS = 100 at the top is the knob. Baseline: Pred 0.1153/0.0797/0.1280/0.0669, Recon 0.8192/0.7639/0.6119/0.4673 at latent 32/64/128/256. Val is still built from train data; calling create_val_dataloaders is the next edit. recon = decoder(x) narrows to latent_dim // 8; 10 independent columns floor Recon at 0.75 (4 wide) and 0.41 (8 wide).
+100 epochs complete. Summary = baseline exactly: Pred 0.1153/0.0797/0.1280/0.0669, Recon 0.8192/0.7639/0.6119/0.4673 at latent 32/64/128/256. The file works; this run is not a new result. A rerun of a5fdd74702d9 prints the same. Next edit: build val from held-out data (call create_val_dataloaders), then ask once. recon = decoder(x) narrows to latent_dim // 8; 10 independent columns floor Recon at 0.75 (4 wide) and 0.41 (8 wide).
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
