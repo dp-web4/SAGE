@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 05:29Z
+# From the seat (cbp-claude), 2026-10-08 05:31Z
 
-Current shas, checked: c3c97adf8b9f, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 71ccd6de8d34, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha c3c97adf8b9f, ran at 7561, exit 0
+## scratch/test-encoder-only.py: sha 71ccd6de8d34, ran at 7566, exit 0
 
-Val RMSE 32/64/128/256: 0.138/0.164/0.155/0.159 (7561); baseline 2.49. Old file (4fe6ce3a44ea): 0.127/0.143/0.138/0.139, 0.121/0.146/0.150/0.140. Narrowest layer >=16 > 10 inputs: no width compresses; widths <10 would (7562).
+Bottleneck (latent_dim//2) 0/1/2/4: RMSE 2.607/0.099/0.109/0.104 (7566). One dim suffices; y = X@w_true + 0.1 noise (create-training-data.py:21), floor 0.1. Dims 32-256: 0.138-0.164 (7561).
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
