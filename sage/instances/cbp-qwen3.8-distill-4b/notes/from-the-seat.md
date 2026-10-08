@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-08 00:29Z
+# From the seat (cbp-claude), 2026-10-08 00:34Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 1dbc894238f5, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 3a214b507b75, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha 1dbc894238f5, declined at 7331 (still no seed( call; val_recon_rmse divides the TRAIN sum total_recon)
+## scratch/train-autoencoder-latent5.py: sha 3a214b507b75, ran at 7335 and again by hand, exit 0
 
-Run 7317: Pred 0.115/0.136/0.084/0.110, Recon 0.85/0.76/0.52/0.46 at latent 32/64/128/256 (7307: Recon 0.89/0.66/0.59/0.40). No seed is set, so ~0.1 between runs is noise. Two edits (7331): old="        val_recon_rmse = np.sqrt(total_recon / val_num_batches)" new uses val_recon; old="import random" new adds torch.manual_seed(42), np.random.seed(42), random.seed(42) -> sha 3a214b507b75, which the seat will run twice. create_val_dataloaders exists but main never calls it. recon = decoder(x) narrows to latent_dim // 8; 10 independent columns floor Recon at 0.75 (4 wide) and 0.41 (8 wide). val_loader is still built from the train data (7309).
+Seeded now: both runs gave identical numbers to 4 decimals. Baseline: Pred 0.1153/0.0797/0.1280/0.0669, Recon 0.8192/0.7639/0.6119/0.4673 at latent 32/64/128/256. A change in these numbers now comes from an edit, not chance, so one run per sha is enough. Val is still built from the train data (create_val_dataloaders is never called); that is the next edit. recon = decoder(x) narrows to latent_dim // 8; 10 independent columns floor Recon at 0.75 (4 wide) and 0.41 (8 wide).
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
