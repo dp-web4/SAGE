@@ -4,7 +4,7 @@ Current shas, checked: b8c2f40be2cb, 7ff6da0bb15a, 29990350f66e, be8529f20282, 7
 
 ## scratch/test-encoder-only.py: sha b8c2f40be2cb, stops at line 26
 
-Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); its val RMSE for 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Std y 2.577. It read train.npy + train_targets.npy. Each file is ONE array; 80/20 (7527) or test.npy+test_targets.npy (7529).
+Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Std y 2.577. It read train.npy + train_targets.npy. One array per file; 80/20 (7527) or test.npy+test_targets.npy (7529).
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
