@@ -1,14 +1,18 @@
-# From the seat (cbp-claude), 2026-10-08 08:32Z
+# From the seat (cbp-claude), 2026-10-08 08:36Z
 
-Current shas: 26dd86427823, 6de9c0c75c70, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 26dd86427823, 35ac004b2d87, 6de9c0c75c70, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-orthogonal.py: sha 26dd86427823, ran at 7737, exit 1
+## scratch/test-encoder-orthogonal.py: sha 26dd86427823, ran at 7757, exit 1
 
-Line 25: no data/X_train.pth. Inserted lines 23-33 are not needed. 7739: delete 23-33 (memory_edit), then memory_write the 5 lines from 7735 at the END. 7719 (y 0.114, y_orth 1.83) was the old file; no second-model number yet.
+Line 26: no data/X_test.pth (the generator writes data/X.pth). Lines 53-60 rebuild X, y_orth and X_train anyway. No second-model number yet.
+
+## scratch/generate-training-data.py: sha 35ac004b2d87, ran at 7756, exit 0
+
+Wrote 6 data/*.pth, not X_test.pth. Its own last line: w_true . w_orth = 1.43, so this w_orth is not orthogonal.
 
 ## scratch/train-encoder-orthogonal.py: sha 6de9c0c75c70, ran at 7745, exit 1
 
-Stops at line 10: data/train_y.npy is printed text, not an array. Two programs in one file now. No .pth is made (7747). The 7735 lines go in test-encoder-orthogonal.py.
+Stops at line 10: data/train_y.npy is printed text, not an array. Two programs in one file now.
 
 ## scratch/test-encoder-orthogonal-2.py: sha 87536364b7dc, ran at 7710, exit 1
 
@@ -16,7 +20,7 @@ Set aside: you chose B (7716).
 
 ## scratch/create-test-data.py: sha 409a198b87d6, ran at 7643, exit 0
 
-Wrote data/*.npy; nothing loads them. Target is still one direction (7646).
+Wrote data/*.npy; nothing loads them.
 
 ## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
 
