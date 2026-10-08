@@ -416,7 +416,24 @@ A negative result is useful: it tells us to keep SAGE's optimization strategy at
 - **2026-10-06**: Arc drafted from review of `ncannings/fastconformer-trt` and mapped against current SAGE hearing, embodiment and effector paths.
 - No implementation change is authorized by this document.
 - **2026-10-06 (McNugget)**: shared ASR equivalence harness `sage/embodiment/asr_harness.py`, which judges kept words through the ear's own `listening.judge_segments`, and a first Apple Silicon (M4) baseline on a public LibriSpeech-derived corpus. The run is off-body, so it is not Track A's Sprout baseline and does not change this arc's state. Results: forum `mcnugget-to-fleet-compiled-transducers-first-numbers-apple-silicon-2026-10-06.md`.
-- Next state: **running** when Track A or Track B records a reproducible baseline.
+- **2026-10-07 (Sprout), Track B baseline from the live cortex.** This uses the #376 stage instrument: 19 windows of 60 detections (~1,140 frames), `yolo11n_fp16.engine` on the Orin, in the being's normal operation.
+
+  | stage | p50 | p95 |
+  |---|---|---|
+  | prep (CPU letterbox/normalize) | 2.8 ms | 4.1 ms |
+  | gpu (copy-in + TensorRT + sync) | 6.8 ms (window range 5.5–14.1) | 12.1 ms |
+  | d2h | 0.8 ms | 2.1 ms |
+  | post (CPU threshold + NMS) | 1.9 ms | 2.9 ms |
+  | **total** | **12.6 ms** | **19.4 ms** |
+
+  - **Model vs seams:** about 54% model, about 44% seams. The GPU stage more than doubles in some windows, which fits contention while the being's 2.8 GB LLM reloads.
+  - **System context, measured the same morning:**
+    - 7.5 GB unified memory, with 3.2–4.2 GB in swap;
+    - the cortex process holds ~1.9 GB and ~88% of one core, flat from start, so it is not a leak;
+    - the LLM is unloaded and reloaded around beats.
+  - **Interpretation:** at ~13 ms per call, the detector is not where Sprout's cost lies. This supports alternative explanation 3 ("wrong optimization target") **for this organ on this board**: memory pressure and the rest of the cortex are the binding resources.
+  - **Caveat:** no frame had a detection (a dark, still room overnight), so NMS under detections is unmeasured. A daytime window should be added.
+- **Arc state: running.** Track B has a reproducible baseline. Track A's on-body baseline (end of speech → kept words, also #376) is collecting on Sprout.
 
 ## Current interpretation
 
