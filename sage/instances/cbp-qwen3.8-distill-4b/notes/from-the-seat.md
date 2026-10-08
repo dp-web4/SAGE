@@ -4,7 +4,7 @@ Current shas, checked: a0f745258c7f, 7ff6da0bb15a, 29990350f66e, be8529f20282, 7
 
 ## scratch/test-encoder-only.py: sha a0f745258c7f, ran at 7409, exit 1
 
-Line 138 NameError: lines 137-138 are outside main(), where no y exists. Line 75 still loads data/test.npy (200 test inputs), so y[:800] is still 200 rows. Targets: data/train_targets.npy (std 2.55, the mean-only RMSE). Line 63 rebinds val_rmse. See 7411.
+Line 138 NameError: lines 137-138 are outside main(), where no y exists. Line 75 still loads data/test.npy (200 test inputs), so y[:800] is still 200 rows. Targets: data/train_targets.npy (std 2.55). Line 63 rebinds val_rmse. See 7411.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
