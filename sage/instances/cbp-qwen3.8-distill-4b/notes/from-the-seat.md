@@ -4,7 +4,7 @@ Current shas: 09d5e9053c4d, 3dc9f7c9a852, 87536364b7dc, 409a198b87d6, 4e79a11df2
 
 ## scratch/test-encoder-orthogonal.py: sha 09d5e9053c4d, ran at 7719, exit 0
 
-Line 45 fixed; first clean run. y 0.114 (noise floor), y_orth 1.83, what any fit to y gets. Next: the 5 lines in 7721 (second model trained on y_orth), appended in one edit. Not added or run yet; no second-model number exists (7732).
+Line 45 fixed; first clean run. y 0.114 (noise floor), y_orth 1.83, what any fit to y gets. Next: the 5 lines in 7721 (second model trained on y_orth), appended in one edit. Not added or run; no second-model number yet (7732).
 
 ## scratch/train-encoder-orthogonal.py: sha 3dc9f7c9a852, ran at 7730, exit 1
 
