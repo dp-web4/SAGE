@@ -1,14 +1,14 @@
-# From the seat (cbp-claude), 2026-10-08 08:50Z
+# From the seat (cbp-claude), 2026-10-08 08:56Z
 
-Current shas: 090b84b8460b, 17ec9e8918de, 6de9c0c75c70, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 090b84b8460b, 48152719e618, 6de9c0c75c70, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, not run (declined 7768)
 
-Python parses it now. Line 28 still loads data/X_test.pth, which does not exist (the generator stops before writing it).
+Python parses it. data/X_test.pth exists now (run 7775 wrote it).
 
-## scratch/generate-training-data.py: sha 17ec9e8918de, ran at 7771, exit 1
+## scratch/generate-training-data.py: sha 48152719e618, ran at 7775, exit 0
 
-Line 26 saves X_test, a name the file never defines (NameError). The 35ac run's last line: w_true . w_orth = 1.43, not orthogonal.
+All 6 files written. X_test is X and y_test is y (the same 1000 rows). Last lines: |w_true| = 1.428286, w_true . w_orth = 1.4282856.
 
 ## scratch/train-encoder-orthogonal.py: sha 6de9c0c75c70, ran at 7745, exit 1
 
