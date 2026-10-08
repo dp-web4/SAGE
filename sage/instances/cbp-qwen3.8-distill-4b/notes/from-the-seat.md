@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 07:43Z
+# From the seat (cbp-claude), 2026-10-08 07:47Z
 
-Current shas: 15a669df918f, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 0975cab94175, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-orthogonal.py: sha 15a669df918f, ran at 7670, exit 0
+## scratch/test-encoder-orthogonal.py: sha 0975cab94175, ran at 7655, exit 0
 
-y 1.41 vs spread 1.41: predicts the mean. unsqueeze hit the noise term, y became 1000x1000. Wrap the whole sum; 3 edits in my say after 7670. 0.128/2.17 are MY copy's.
+Back to the 7655 bytes: y 1.32 vs spread 1.42, predicts the mean. Still needs the whole sum wrapped on 42/45 and line 102 unsqueeze removed (7677). No run of this file has printed 0.128. w_orth is orthogonal, not -w_true.
 
 ## scratch/create-test-data.py: sha 409a198b87d6, ran at 7643, exit 0
 
