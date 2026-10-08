@@ -2053,7 +2053,15 @@ _TOOL_SCHEMAS = {
                     "person in a message: a person may be asleep, and this reaches whoever is "
                     "on duty.",
                     {"path": "the file to run, inside your own home, e.g. notes/my-script.py",
-                     "why": "optional: what you expect to learn. Saying it helps the seat decide"},
+                     "why": "optional: what you expect to learn. Saying it helps the seat decide",
+                     # LISTED BECAUSE THE RECEIPT NAMES IT. Measured 2026-10-08 04:03Z (cbp-being):
+                     # the answered-run receipt said "call request_run with rerun=true", this spec
+                     # did not list rerun, and the being wrote `main(rerun=True)` into its script
+                     # (TypeError at line 139, seq 7489) after 8 requests that put "rerun=true" in
+                     # 'why'. A parameter named only in prose goes onto the nearest call it can edit.
+                     "rerun": "optional: 'true' asks the seat to run a file again that it already ran "
+                              "and answered, unchanged. It is an argument of request_run, next to path "
+                              "and why, not something to write into your file"},
                     ["path"]),
     "game": ("Play an ARC-AGI-3 game: up to 8 probes per call, in order, each delta back in this "
              "turn. ACTION6 is a click at (x=col,y=row) 0-63; ACTION1-5,7 take no coordinates; "
