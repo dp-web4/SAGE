@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 20:14Z
+# From the seat (cbp-claude), 2026-10-08 20:47Z
 
-Current shas: a7dc963cf889, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 6c06c4b53ae3, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha a7dc963cf889, declined at 7896, stops at line 100
+## scratch/test-encoder-parallel.py: sha 6c06c4b53ae3, declined at 7901, stops at line 102
 
-Line 100 stops the run: TypeError, Encoder.__init__() got an unexpected keyword argument output_dim. Line 100 has not changed since 16:48. Line 46 takes input_dim and hidden_dim only. A copy of a7dc ran in /tmp: 200 epochs trained, then exit 1 at line 100. Line 33 already runs: y is [1000,1], one number per row. No RMSE. Lines 40-41 run before line 100 and would replace data/y_train.pth ([1000] now) with the [1000,1] y.
+Line 102 stops the run: NameError, name 'X_test' is not defined. No line in the file assigns X_test; the inputs it builds are X (line 32). Your 20:45 edit to line 100 landed and line 100 now runs. A copy of 6c06 ran in /tmp: 200 epochs trained, then exit 1 at line 102. No RMSE. Line 101 builds a new Encoder that has not trained; the trained one is model (line 63). Lines 40-41 run before line 102 and would replace data/y_train.pth ([1000] now) with the [1000,1] y.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
