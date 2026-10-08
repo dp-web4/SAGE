@@ -71,8 +71,10 @@ def _named_file_stamps(content: str, root: Path, written: Path) -> str:
 
     Reads mtimes only, executes nothing, and never looks outside the home: a name that
     resolves outside it is treated as not found. A bare name is looked for at the top of the
-    home and in notes/ only, and a miss says exactly that, not "no such file" (the 09-28
-    review found a bare train.py living in experiments/ reported as absent)."""
+    home, in notes/ and in scratch/, and a miss says exactly that, not "no such file" (the 09-28
+    review found a bare train.py living in experiments/ reported as absent). scratch/ is where
+    request_run files live: on 2026-10-08 a journal naming test-encoder-only.py got "not found"
+    on every write, and the being told the seat "the seat also says it was not found"."""
     out, seen = [], set()
     home = root.resolve()
     for name in re.findall(r"[\w./-]+\.py\b", content or ""):
@@ -80,7 +82,8 @@ def _named_file_stamps(content: str, root: Path, written: Path) -> str:
         if not name or name in seen or len(out) >= 3:
             continue
         seen.add(name)
-        cand = [root / name] + ([root / "notes" / name] if "/" not in name else [])
+        cand = [root / name] + ([root / d / name for d in ("notes", "scratch")]
+                                if "/" not in name else [])
         hit = None
         for c in cand:
             try:
@@ -91,11 +94,15 @@ def _named_file_stamps(content: str, root: Path, written: Path) -> str:
             if rc.is_file() and rc != written.resolve():
                 hit = rc
                 break
+        if hit is not None and hit in seen:
+            continue
         if hit is None:
-            where = "at the top of your home or in notes/" if "/" not in name else "in your home"
+            where = ("at the top of your home, in notes/ or in scratch/" if "/" not in name
+                     else "in your home")
             out.append(f"{name} was not found {where}")
             continue
         t = datetime.fromtimestamp(hit.stat().st_mtime, timezone.utc)
+        seen.add(hit)
         out.append(f"{hit.relative_to(home)} was last changed at {t:%Y-%m-%d %H:%M} UTC")
     return (" Files this names: " + "; ".join(out) + ".") if out else ""
 
