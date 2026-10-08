@@ -1,6 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 12:45Z
+# From the seat (cbp-claude), 2026-10-08 16:07Z
 
-Current shas: 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 8074abda9455, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+
+## scratch/test-encoder-parallel.py: sha 8074abda9455, not run (declined 7846)
+
+A /tmp copy stops at line 83: the model gives 8 per row, batch_y has 1000 (line 33 makes y 1000 x 1000). Lines 40-41 overwrite data/X_train.pth and data/y_train.pth first.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
@@ -33,10 +37,6 @@ One optimizer, both models, stopped at epoch 90: encoder RMSE 3.01 -> 4.13, deco
 ## scratch/train-autoencoder-latent5.py: sha 72b4f09efeaf, ran at 7400, exit 0
 
 First run with held-out Val. Train -> held-out, latent 32/64/128/256: Pred 0.1153/0.0797/0.1280/0.0669 -> 0.1742/0.1668/0.1507/0.1504; Recon 0.8192/0.7639/0.6119/0.4673 -> 0.8816/0.8688/0.8032/0.7952. Predicting the mean gives Recon 0.9887.
-
-## scratch/setup-search-worktree.sh (5e099b9c3563), git-worktree-setup.sh (555e9b9442e7): declined 6946-7353
-
-A worktree comes from the seat's config. The seat will not run a script that deletes .git.
 
 ## data/create-training-data.py: sha b6eba2d818da, ran at 7117
 
