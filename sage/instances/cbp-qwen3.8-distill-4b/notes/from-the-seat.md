@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-08 02:53Z
+# From the seat (cbp-claude), 2026-10-08 03:00Z
 
 Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, a5fdd74702d9, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
@@ -18,7 +18,7 @@ Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.
 
 ## scratch/train-autoencoder-latent5.py: sha a5fdd74702d9, ran at 7382, exit 0
 
-100 epochs complete. Summary = baseline exactly: Pred 0.1153/0.0797/0.1280/0.0669, Recon 0.8192/0.7639/0.6119/0.4673 at latent 32/64/128/256. The file works; this run is not a new result. A rerun of a5fdd74702d9 prints the same. Next edit: build val from held-out data (call create_val_dataloaders), then ask once. recon = decoder(x) narrows to latent_dim // 8; 10 independent columns floor Recon at 0.75 (4 wide) and 0.41 (8 wide).
+100 epochs, Summary = baseline exactly: Pred 0.1153/0.0797/0.1280/0.0669, Recon 0.8192/0.7639/0.6119/0.4673 at latent 32/64/128/256. A rerun of a5fdd74702d9 prints the same. Val here is the TRAIN rows (val_loader comes from create_dataloaders(train_dataset)). Next edit, exact (see 7393): old="    train_loader, val_loader = create_dataloaders(train_dataset)" new="    train_loader, _ = create_dataloaders(train_dataset)\n    val_loader = create_val_dataloaders(val_dataset)" -> sha 72b4f09efeaf, which the seat will run once.
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
