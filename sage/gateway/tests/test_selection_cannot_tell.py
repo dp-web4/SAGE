@@ -65,7 +65,8 @@ def beat(tmp_path, monkeypatch):
     (inst / "identity.json").write_text(json.dumps({"identity": {"name": "t", "machine": "testbox"}}))
     (inst / "instance.json").write_text(json.dumps({"machine": "testbox"}))
     conv.create(inst, "dp", title="dp", participants=["dp", "test-being"], writable_by=["dp", "test-being"])
-    conv.append(inst, "dp", speaker="dp", text="What did you notice today?")
+    # seq comes from the store: it is not 1 when another test in this process appended first
+    asked_seq = conv.append(inst, "dp", speaker="dp", text="What did you notice today?")["seq"]
     forum = tmp_path / "forum"
     forum.mkdir()
     from sage.gateway import governed_turn, being_tool_loop, egress_drain
@@ -81,12 +82,13 @@ def beat(tmp_path, monkeypatch):
                       "--forum-dir", str(forum), "--repos", "", "--no-hub-drain", "--no-escalate"])
         assert rc == 0
         return json.loads((inst / "heartbeats.jsonl").read_text().strip().splitlines()[-1])
+    run.asked_turn = f"dp:{asked_seq}"
     return run
 
 
 def test_main_records_the_selected_question(beat):
     rec = beat()
-    assert rec["selected"] == {"turn": "dp:1", "expects_reply": True, "woke": False}, rec["selected"]
+    assert rec["selected"] == {"turn": beat.asked_turn, "expects_reply": True, "woke": False}, rec["selected"]
     assert rec["selection_error"] is None
 
 

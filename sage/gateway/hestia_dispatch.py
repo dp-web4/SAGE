@@ -143,6 +143,12 @@ def _hestia_error(env: dict) -> Optional[str]:
 # Matches a search shows. A search is a POINTER at lines to read, not a way to read a
 # file sideways; past this the being should narrow rather than scroll.
 SEARCH_LINES_SHOWN = 40
+# AND EACH LINE IS CAPPED (McNugget, 2026-10-04). A match in a single-line JSON file is the
+# whole file: mcnugget-being searched "inbox", 13 of the 40 shown lines were 2.4 MB session
+# dumps under archive/, and one search result was 60 MB -- in the being's prompt and in the beat
+# record, whose day file then blocked the private mirror for days. A 2 MB line tells the being
+# nothing a few hundred characters do not; the cut says how much was left out.
+SEARCH_LINE_CHARS = 400
 
 
 # How much of the seat's last answer an unchanged-file receipt carries back verbatim.
@@ -1799,9 +1805,10 @@ class HestiaF1aDispatcher:
         root = os.path.realpath(self.worktree) + os.sep
         lines = [ln.replace(root, "") for ln in lines]
         truncated = len(lines) > SEARCH_LINES_SHOWN
-        shown = [ln if len(ln) <= SEARCH_LINE_CHARS
-                 else ln[:SEARCH_LINE_CHARS] + f"  ...[{len(ln) - SEARCH_LINE_CHARS} more chars on this line]"
-                 for ln in lines[:SEARCH_LINES_SHOWN]]
+        shown = lines[:SEARCH_LINES_SHOWN]
+        shown = [ln if len(ln) <= SEARCH_LINE_CHARS else
+                 ln[:SEARCH_LINE_CHARS] + f" …[line cut here: {len(ln) - SEARCH_LINE_CHARS} more characters]"
+                 for ln in shown]
         if not shown:
             # "THE PATTERN IS NOT IN THAT FILE" AND "THERE IS NO SUCH FILE" ARE THE SAME
             # EXIT CODE, and only one of them is an answer. `git grep` returns 1 for both,

@@ -1464,15 +1464,6 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
         # [A-Za-z0-9_]+ by grammar — and the space before `-k` is two argv elements.
         path = shlex.quote(os.path.join(worktree, CHECK_TARGETS[target]))
     else:
-        # A single node id INSIDE a declared suite: "gateway::test_name" — or the ordinary
-        # pytest spelling of the same thing, "test_file.py::test_name", which is what anyone
-        # who has read the suite will type. Measured 2026-09-14: legion-being tried to run
-        # the one test that would have settled the hop it was working on, typed the pytest
-        # node id it had just read in the source, and was refused. It adapted in one step,
-        # which is the good case — but the verb refused a correct, unambiguous request for
-        # being spelled in the language of the tool it wraps rather than in ours. Dialect is
-        # not a boundary. The BOUND is "inside a declared suite", and a filename resolves
-        # that better than a suite name does, because the file is the thing the being read.
         # ONE TEST, EXACTLY: "<suite>::<file>::<test_name>" (2026-10-07). legion-being, fixing
         # #360, needed to run the one test it was changing and typed
         # 'gateway::test_pr_read::test_x' -- refused "bare identifier" -- then
@@ -1499,6 +1490,15 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
             inner = (f"python3 -m pytest -q -c /dev/null -p no:cacheprovider "
                      f"--rootdir={shlex.quote(worktree)} {path}")
             return sandbox_prefix(worktree) + inner
+        # A single node id INSIDE a declared suite: "gateway::test_name" — or the ordinary
+        # pytest spelling of the same thing, "test_file.py::test_name", which is what anyone
+        # who has read the suite will type. Measured 2026-09-14: legion-being tried to run
+        # the one test that would have settled the hop it was working on, typed the pytest
+        # node id it had just read in the source, and was refused. It adapted in one step,
+        # which is the good case — but the verb refused a correct, unambiguous request for
+        # being spelled in the language of the tool it wraps rather than in ours. Dialect is
+        # not a boundary. The BOUND is "inside a declared suite", and a filename resolves
+        # that better than a suite name does, because the file is the thing the being read.
         suite, sep, node = target.partition("::")
         if sep and suite.endswith(".py"):
             owners = [k for k, rel in CHECK_TARGETS.items()
