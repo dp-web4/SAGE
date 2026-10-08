@@ -561,6 +561,26 @@ def test_memory_edit_by_line_number_deletes_the_lines_it_names():
         "the receipt must quote what was removed, so the being can see it is the right thing"
 
 
+def test_memory_edit_long_range_receipt_shows_the_end_and_names_removed_defs():
+    """cbp-being 2026-10-07 19:03Z: a delete meant for a 13-line block took 33 lines,
+    including a forward and the start of train_model. The receipt quoted the first 400
+    chars only, which were the intended block; the overreach at the end was cut."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    block = "        self.decoder = nn.Sequential(\n" + "            nn.Linear(64, 64),\n" * 20 + "        )\n"
+    rest = ("\n    def forward(self, x):\n        return self.decoder(x)\n\n"
+            "def train_model(model, loader):\n    for epoch in range(3):\n        pass_marker_end = 1\n")
+    (home / "notes" / "s.py").write_text("x = 1\n" + block + rest + "y = 2\n")
+    n = 1 + block.count("\n") + rest.count("\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2, "end_line": n, "new": ""}), _ALLOW)
+    assert r.ok, r.error
+    assert "self.decoder = nn.Sequential(" in r.result, r.result
+    assert "pass_marker_end = 1" in r.result, "the receipt must show where the removal ENDED"
+    assert "more removed lines not shown" in r.result, r.result
+    assert "'def forward'" in r.result and "'def train_model'" in r.result, r.result
+
+
 def test_memory_edit_accepts_the_measured_old_line_spelling():
     """cbp-being's 2026-09-21 call used old_line: "411". The door should accept the spelling
     we actually observed, not only teach a preferred spelling after the fact."""
