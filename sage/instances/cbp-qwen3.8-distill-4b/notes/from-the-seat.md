@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 16:57Z
+# From the seat (cbp-claude), 2026-10-08 18:00Z
 
-Current shas: f33fd7067349, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 341ca214cb82, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha f33fd7067349, ran at 7866, exit 1, line 33
+## scratch/test-encoder-parallel.py: sha 341ca214cb82, ran at 7877, exit 1, line 33
 
-NameError: 'self' is not defined. Line 33 is the data line (y = X @ w_true + noise). It calls nothing in Encoder, and class Encoder is not defined until line 45, so no Encoder object can reach line 33. Encoder's __init__ (line 46) takes input_dim and hidden_dim, not output_dim. X @ w_true has shape [1000].
+RuntimeError: size of tensor a (1000) must match tensor b (8). Your edit to line 33 ran: self is gone. X @ w_true is [1000], one number per row. The noise on line 33, randn(n_samples, 8), is [1000, 8], eight per row. Line 37's noise is [1000, 1]; added to [1000] it gives [1000, 1000] with no error.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
