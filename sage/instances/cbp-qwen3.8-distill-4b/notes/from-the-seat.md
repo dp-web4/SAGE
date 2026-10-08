@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 08:21Z
+# From the seat (cbp-claude), 2026-10-08 08:26Z
 
 Current shas: 09d5e9053c4d, 3dc9f7c9a852, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-orthogonal.py: sha 09d5e9053c4d, ran at 7719, exit 0
 
-Line 45 fixed; first clean run. y 0.114 (noise floor), y_orth 1.83, what any fit to y gets. Next: the 5 lines in 7721 (second model trained on y_orth), appended in one edit. Not added or run; no second-model number yet (7732).
+Line 45 fixed; first clean run. y 0.114 (noise floor), y_orth 1.83, what any fit to y gets. Next: the 5 lines in 7735 (second model trained on y_orth), appended with memory_write (no old=). Not added; no second-model number yet.
 
 ## scratch/train-encoder-orthogonal.py: sha 3dc9f7c9a852, ran at 7730, exit 1
 
