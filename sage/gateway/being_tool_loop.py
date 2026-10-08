@@ -1098,6 +1098,39 @@ def _headline_prefix_len(body: str) -> int:
     return m.end() if m and m.end() <= HEADLINE_KEEP_MAX else 0
 
 
+def convo_composition(msgs: List[Dict[str, Any]]) -> Dict[str, int]:
+    """What the conversation is MADE OF after a compaction pass, in estimator chars (the same
+    _convo_chars every site uses). Instrumentation only: it changes nothing it measures.
+
+    2026-10-08: with the seed cut to ~15k tokens, legion-being's beats run longer and then sit
+    on a compaction floor of ~26-27k tokens, where 13 of 15 retries were window cuts. Whether
+    that floor is pointers, stubs, its own trimmed calls or the seed decides the next remedy,
+    and nothing recorded it. seed = everything before the first assistant turn; results are
+    split by what compaction has done to them; notes = harness/user turns after the seed."""
+    out = {"seed": 0, "results_whole": 0, "results_stub": 0, "results_pointer": 0,
+           "own_turns": 0, "notes": 0, "n_results": 0, "n_pointers": 0, "n_stubs": 0}
+    first_asst = next((i for i, m in enumerate(msgs) if m.get("role") == "assistant"), len(msgs))
+    for i, m in enumerate(msgs):
+        c = _convo_chars([m])
+        role = m.get("role")
+        if i < first_asst:
+            out["seed"] += c
+        elif role == "assistant":
+            out["own_turns"] += c
+        elif role == "tool":
+            body = m.get("content") or ""
+            out["n_results"] += 1
+            if _COLLAPSED_SIGIL in body:
+                out["results_pointer"] += c; out["n_pointers"] += 1
+            elif _ELIDED_SIGIL in body:
+                out["results_stub"] += c; out["n_stubs"] += 1
+            else:
+                out["results_whole"] += c
+        else:
+            out["notes"] += c
+    return out
+
+
 def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
                   measured=None, spill_root: Optional[str] = None,
                   own_turns: bool = False) -> tuple:
@@ -1495,7 +1528,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                                       own_turns=compact_own_turns)
         if _elided:
             compacted.append({"step": len(thoughts), "elisions": len(_elided),
-                              "chars": sum(e["chars"] for e in _elided)})
+                              "chars": sum(e["chars"] for e in _elided),
+                              "after": convo_composition(msgs)})
         try:
             _room = int(getattr(llm, "num_ctx", 0) or 0) - _ANSWER_RESERVE
             at_floor = bool(measured) and _room > 0 and _est_tokens(_convo_chars(msgs), measured) > _room

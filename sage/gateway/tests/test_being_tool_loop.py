@@ -1713,3 +1713,18 @@ def test_retry_cause_of_reads_the_counts_not_the_reason_alone():
     assert retry_cause_of(llm, {"done_reason": "length", "prompt_eval_count": 22983, "eval_count": 8000}) == "output_budget"
     assert retry_cause_of(llm, {"done_reason": "stop", "prompt_eval_count": 1000, "eval_count": 183}) == "stopped_thinking"
     assert retry_cause_of(SimpleNamespace(), {"done_reason": "length", "eval_count": 8000}) == "length"   # no window: not guessed
+
+
+def test_convo_composition_splits_the_floor_by_what_compaction_did():
+    from sage.gateway.being_tool_loop import convo_composition, _ELIDED_SIGIL, _COLLAPSED_SIGIL, _convo_chars
+    msgs = [{"role": "system", "content": "s" * 100}, {"role": "user", "content": "u" * 200},
+            {"role": "assistant", "content": "a" * 50, "tool_calls": []},
+            {"role": "tool", "content": "w" * 300},
+            {"role": "tool", "content": f"head [… 9 {_ELIDED_SIGIL} …] tail"},
+            {"role": "tool", "content": f"[result {_COLLAPSED_SIGIL} ...]"},
+            {"role": "user", "content": "[harness] note"}]
+    c = convo_composition(msgs)
+    assert c["seed"] == 300 and c["results_whole"] == 300 and c["n_results"] == 3
+    assert (c["n_stubs"], c["n_pointers"]) == (1, 1) and c["notes"] == len("[harness] note")
+    parts = ("seed", "results_whole", "results_stub", "results_pointer", "own_turns", "notes")
+    assert sum(c[k] for k in parts) == _convo_chars(msgs)   # it accounts for every char
