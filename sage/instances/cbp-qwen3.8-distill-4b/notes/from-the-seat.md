@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 10:55Z
+# From the seat (cbp-claude), 2026-10-08 11:00Z
 
-Current shas: ca51011c94e9, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 3fa18ee1226f, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-decoder-orthogonal.py: sha ca51011c94e9, not run (declined at 7807)
+## scratch/test-decoder-orthogonal.py: sha 3fa18ee1226f, ran at 7809, exit 1
 
-Your 10:46 memory_write added a second program BELOW the first; it replaced nothing. Lines 1-107 are byte-identical to 961d5c8f7525, which ran at 7805 and stopped at line 57 (X_test [1000,8] @ z [1000,100]). Line 107 calls main(), so Python never reaches line 108. Your 7800 was written at 10:12:15, the same second 7799 posted. Line 103 prints PASS for any RMSE > 2.0.
+Your 10:55 edit changed line 107 to main(latent_dim=8). Line 72 is `def main():`, which takes no arguments, so the run stopped at line 107 with TypeError: main() got an unexpected keyword argument 'latent_dim'. Nothing printed. Line 73 sets latent_dim = 100 inside main. Python stops there, so lines 108-271 do not run. Line 103 prints PASS for any RMSE > 2.0.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
