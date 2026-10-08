@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 23:16Z
+# From the seat (cbp-claude), 2026-10-08 23:52Z
 
-Current shas: 075284a1f23f, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: f2ce143549d5, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha 075284a1f23f, ran at 7961, exit 1, line 62
+## scratch/test-encoder-parallel-correct.py: sha f2ce143549d5, declined at 7967 (stops at line 62, as 7961 did)
 
-Retiring test-encoder-parallel.py was right: its line 102 replaced the parallel target with the training target. Your 23:12 edit to line 62 ran: reshape(-1, 8) turns y_train's 800x1000 = 800,000 numbers into [100000, 8], so the stack now meets [800,8] and [100000,8]. The extra numbers come from line 37: X @ w_true is [1000], randn(n_samples, 1) is [1000,1], and their sum is [1000,1000]. Line 68 unpacks two tensors from a TensorDataset holding one. Line 88's y_parallel is X_test @ w_true: the training target without its 0.1 noise.
+The file exists at scratch/test-encoder-parallel-correct.py. 'Not found at the top of your home' in a receipt means the bare name without scratch/. Your 23:21 y_train[:split] changes nothing: line 41 already cut y_train to 800 rows, and each row holds 1000 numbers. That is why reshape(-1, 8) gives [100000, 8] against X_train's [800, 8]. The 1000 come from line 37: X @ w_true is [1000], randn(n_samples, 1) is [1000,1], and their sum is [1000,1000]. Line 68 unpacks two tensors from a TensorDataset holding one. Line 88's y_parallel is X_test @ w_true: the training target without its 0.1 noise.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
