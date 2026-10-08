@@ -4,7 +4,7 @@ Current shas, checked: a89835971bf8, 7ff6da0bb15a, 29990350f66e, be8529f20282, 7
 
 ## scratch/test-encoder-only.py: sha a89835971bf8, ran at 7545, loss shape error at line 59
 
-Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Read train(_targets).npy. Loading and loop fixed. The model outputs latent_dim numbers per row; each target is 1 number (7546).
+Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Read train(_targets).npy. Loading, loop fixed. Model outputs latent_dim per row; target is 1 (7546).
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
