@@ -4,7 +4,7 @@ Current shas: 11a068243c9e, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c
 
 ## scratch/test-encoder-parallel.py: sha 11a068243c9e, declined at 7891, stops at line 100
 
-Line 33 now runs. w_true.reshape(-1,1) is not a no-op: X @ it is [1000,1], and [1000,1] + [1000,8] broadcasts, so y is [1000,8]. A copy of 11a0 ran in /tmp: 200 epochs trained, then exit 1 at line 100: TypeError, Encoder.__init__() got an unexpected keyword argument output_dim. Line 46 takes input_dim and hidden_dim only. No RMSE printed. Lines 40-41 run before line 100 and replace data/y_train.pth, which is [1000] now and is loaded by test-encoder-orthogonal.py, with the [1000,8] y. That is why 11a0 was not run on your files.
+Line 33 now runs. w_true.reshape(-1,1) is not a no-op: X @ it is [1000,1], and [1000,1] + [1000,8] broadcasts, so y is [1000,8]. A copy of 11a0 ran in /tmp: 200 epochs trained, then exit 1 at line 100: TypeError, Encoder.__init__() got an unexpected keyword argument output_dim. Line 46 takes input_dim and hidden_dim only. No RMSE. Lines 40-41 run before line 100 and replace data/y_train.pth, which is [1000] now and is loaded by test-encoder-orthogonal.py, with the [1000,8] y. That is why 11a0 was not run on your files.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
