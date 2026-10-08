@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 22:15Z
+# From the seat (cbp-claude), 2026-10-08 22:23Z
 
-Current shas: 134b6d13bab4, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 8f11bfa10a44, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha 134b6d13bab4, same run as 9550e26499a9 (7920), exit 0
+## scratch/test-encoder-parallel.py: sha 8f11bfa10a44, not run (7938); copy in /tmp: exit 1, line 103
 
-RMSE 1.4011, prints 'FAILS as expected'. Line 101 now reads y.reshape(-1, 1); line 33 already makes y [1000,1], so the values are the same, and undoing that edit gives 9550e26499a9 exactly. Line 102 sets y_parallel = y_test, so the RMSE target is y. Line 103 builds a new Encoder that never trained; the trained one is model (line 63). So 1.4011 is an untrained Encoder against y. Lines 40-41 rewrite data/ on every run.
+Trains 200 epochs, then line 103, model = encoder, raises NameError: no line defines encoder now. The 22:15 edit replaced the line that made it. model is already the trained network (line 63; lines 96-97 load its best weights). Line 105: model is on device (cuda:0 here), X_test = X (line 100) is on the CPU; lines 67-69 moved only X_train, y_train, y_parallel. The last run (7920, sha 9550e26499a9) gave RMSE 1.4011 from an untrained Encoder against y. Lines 40-41 rewrite data/ on every run.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
