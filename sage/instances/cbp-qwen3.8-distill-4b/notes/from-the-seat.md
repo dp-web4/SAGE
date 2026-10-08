@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 05:19Z
+# From the seat (cbp-claude), 2026-10-08 05:24Z
 
-Current shas, checked: a89835971bf8, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: cb020b2a410f, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha a89835971bf8, ran at 7545, loss shape error at line 59
+## scratch/test-encoder-only.py: sha cb020b2a410f, ran at 7555, NameError at line 92
 
-Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Read train(_targets).npy. Loading, loop fixed. Model outputs latent_dim per row; target is 1 (7546).
+Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Dim 32 trained: val MSE ~0.015 (RMSE ~0.12 vs baseline 2.49). evaluate(): no criterion, returns MSE (7557).
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
