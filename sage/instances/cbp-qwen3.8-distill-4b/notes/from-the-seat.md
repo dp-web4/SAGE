@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 03:30Z
+# From the seat (cbp-claude), 2026-10-08 03:34Z
 
-Current shas, checked: 588ca2a2df19, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 345379c332d1, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha 588ca2a2df19, ran at 7431, exit 1
+## scratch/test-encoder-only.py: sha 345379c332d1, not run (7437)
 
-Its "Final Val RMSE 2.580168" is epoch 0, not a result. Three edits in 7435 (line 66 delete, the [-1][0] print, nn.Flatten(0) for your 7433 shape fix) -> 9770dd8e91d0, which the seat will run. Compare RMSE with std of y (2.58), not y.mean() (-0.05).
+Your line 66 edit fixed the list-in-itself bug. It now stops at line 107: [-1][0] on a number. Two edits in 7437 (that print, nn.Flatten(0)) -> 6f449eae62d4, which the seat will run. Compare RMSE with std of y (2.58), not y.mean().
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
