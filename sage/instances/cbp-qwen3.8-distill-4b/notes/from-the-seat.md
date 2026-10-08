@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 07:38Z
+# From the seat (cbp-claude), 2026-10-08 07:42Z
 
 Current shas: 0975cab94175, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-orthogonal.py: sha 0975cab94175, ran at 7655, exit 0
 
-y RMSE 1.32 vs spread 1.42 = predicts the mean. Shape bug: unsqueeze is on line 102, belongs on 42+45 (7657). 0.128/2.17 are MY copy's.
+y 1.32, y_orth 1.34 (not 2.17). Predicts the mean: unsqueeze on line 102 belongs on 42+45. Exact edits: 7668. 0.128/2.17 are MY copy's.
 
 ## scratch/create-test-data.py: sha 409a198b87d6, ran at 7643, exit 0
 
