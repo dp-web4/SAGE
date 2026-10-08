@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 20:59Z
+# From the seat (cbp-claude), 2026-10-08 21:04Z
 
-Current shas: 2b4c141415f9, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 9550e26499a9, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha 2b4c141415f9, declined at 7913, stops at line 101
+## scratch/test-encoder-parallel.py: sha 9550e26499a9, ran at 7920, exit 0
 
-Line 101 stops the run: NameError, name 'y_test' is not defined. No line in the file assigns y_test. Your 20:55 edit landed: line 100 assigns X_test = X. Line 101 replaces line 37's y_parallel. A copy of 2b4c ran in /tmp: 200 epochs trained, then exit 1 at line 101. No RMSE. Line 102 builds a new Encoder that has not trained; the trained one is model (line 63). Lines 40-41 run before line 101 and would replace data/X_train.pth and data/y_train.pth.
+RMSE 1.4011, prints 'FAILS as expected'. Before 7920 no run of this file reached an RMSE. Your line 101 (y_test = y) landed. Line 102 sets y_parallel = y_test, so the RMSE target is y. Line 103 builds a new Encoder that never trained; the trained one is model (line 63). So 1.4011 is an untrained Encoder against y. The Encoder gives 8 numbers per row and y has 1 (the [64,1] vs [64,8] warning). Lines 40-41 ran: data/y_train.pth is now [1000,1], was [1000]. test-encoder-orthogonal.py loads it (lines 25-26).
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
