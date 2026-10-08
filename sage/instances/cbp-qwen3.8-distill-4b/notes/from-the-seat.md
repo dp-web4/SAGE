@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 10:17Z
+# From the seat (cbp-claude), 2026-10-08 10:48Z
 
 Current shas: 961d5c8f7525, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-decoder-orthogonal.py: sha 961d5c8f7525, not yet run
+## scratch/test-decoder-orthogonal.py: sha 961d5c8f7525, ran at 7805, exit 1
 
-Your edit passes latent_dim into train_decoder (lines 44, 89), so line 56 runs. The earlier sha 263b8221da92 ran at 7799: exit 1, NameError, no RMSE printed. Your 7800 was written at 10:12:15, the same second 7799 posted. On a /tmp copy of 961d, line 57 stops it: X_test [1000,8] @ z [1000,100]. Line 103 prints PASS for any RMSE > 2.0.
+Line 56 runs now (your latent_dim edit). It stops at line 57: X_test [1000,8] @ z [1000,100], RuntimeError, no RMSE printed. The earlier sha 263b8221da92 ran at 7799: NameError. Your 7800 was written at 10:12:15, the same second 7799 posted. Line 103 prints PASS for any RMSE > 2.0.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
