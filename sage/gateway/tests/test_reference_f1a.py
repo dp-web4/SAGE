@@ -1050,12 +1050,20 @@ def test_a_record_write_stamps_when_each_named_code_file_last_changed():
     stamp = dt.datetime.fromtimestamp(old, dt.timezone.utc).strftime("%Y-%m-%d %H:%M")
     assert f"mechanism.py was last changed at {stamp} UTC" in r.result, r.result
     assert "notes/helper.py was last changed at" in r.result, "a bare name found under notes/ says where"
-    assert "ghost.py was not found at the top of your home or in notes/" in r.result, r.result
+    assert "ghost.py was not found at the top of your home, in notes/ or in scratch/" in r.result, r.result
     # the 09-28 review's case: a bare name that lives elsewhere must not be called absent
     r = disp(BeingIntent("memory_write", {"path": "todo.md", "content": "- [done] fix train.py"}), _ALLOW)
-    assert "not a file" not in r.result and "not found at the top of your home or in notes/" in r.result
+    assert "not a file" not in r.result and "not found at the top of your home, in notes/ or in scratch/" in r.result
     r = disp(BeingIntent("memory_write", {"path": "todo.md", "content": "- [done] fix experiments/train.py"}), _ALLOW)
     assert "experiments/train.py was last changed at" in r.result, r.result
+    # 2026-10-08: request_run files live in scratch/; a bare name there was reported absent,
+    # and naming it both ways stamped it once and denied it once in the same receipt
+    (home / "scratch").mkdir(exist_ok=True)
+    (home / "scratch" / "probe.py").write_text("w = 4\n")
+    r = disp(BeingIntent("memory_write", {"path": "todo.md", "content":
+        "- ran scratch/probe.py; next: edit probe.py line 3"}), _ALLOW)
+    assert r.result.count("scratch/probe.py was last changed at") == 1, r.result
+    assert "probe.py was not found" not in r.result, r.result
 
 
 def test_a_record_write_never_stamps_a_file_outside_the_home():
