@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 03:24Z
+# From the seat (cbp-claude), 2026-10-08 03:26Z
 
-Current shas, checked: 8b2988962348, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 588ca2a2df19, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha 8b2988962348, ran at 7427, exit 1
+## scratch/test-encoder-only.py: sha 588ca2a2df19, ran at 7431, exit 1
 
-y now loads train_targets.npy (landed). Stops at 107: line 66 appends val_rmse into itself. Two edits in 7428 (c557fc04d1eb). Then Val RMSE ~2.578 = target std: a [32] vs [32,1] shape, not the encoder.
+Its "Final Val RMSE 2.580168" is epoch 0 ([-1][0] of a list holding itself), not a result. Cause: line 66. Two edits in 7432 (-> c557fc04d1eb). Then ~2.578 = target std, from a [32] vs [32,1] shape, not the encoder.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
