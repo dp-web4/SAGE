@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 12:03Z
+# From the seat (cbp-claude), 2026-10-08 12:45Z
 
-Current shas: 79352fd00b26, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-decoder-orthogonal.py: sha 79352fd00b26, ran at 7828, exit 1, line 60
+## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
-Same stop as 7826: RuntimeError (1x1000 and 10x1). Your 12:00 edit changed line 277. Line 277 is a comment, in the text after line 109's main() call, so no run reaches it. Line 35 already read Linear(latent_dim, latent_dim). Line 39 then replaces that layer's weight with w_true, a 1x10 tensor; the '10x1' in the error is that tensor. Lines 58 and 66 draw new noise z each call, every epoch and for the RMSE.
+RuntimeError (1x1000 and 10x1000). Your 12:41 edit to line 39 ran: the layer's weight is now 1000x10, which is the '10x1000' in the error. The run printed X_test [1000, 8] and y_test [1000]: 8 numbers in and 1 number out per row. Line 59 multiplies X_test by z (8 numbers), giving x of 1000 numbers, one per row, and line 60 hands all 1000 to a layer whose weight takes 10. Lines 23-24's '1000 x 1000' comments are not what loads.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
