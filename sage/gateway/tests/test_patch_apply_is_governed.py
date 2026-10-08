@@ -704,3 +704,17 @@ def main():
 if __name__ == "__main__":
     STANDALONE = True
     sys.exit(main())
+
+
+def test_a_miscounted_hunk_refusal_names_the_verb_that_needs_no_counts():
+    """legion-being 2026-10-08: six hand-written #360 patches in one beat, four refused for
+    miscounted hunk headers, each told only to "send a diff produced by git diff" -- which it
+    cannot do for an edit not yet made. The counts stay exact; the refusal names memory_edit."""
+    import pytest
+    from sage.gateway.being_gate_client import patch_targets
+    diff = ("diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n"
+            "@@ -1,3 +1,3 @@\n a\n-b\n+c\n")
+    with pytest.raises(ValueError) as e:
+        patch_targets(diff)
+    msg = str(e.value)
+    assert "ends inside a hunk" in msg and "memory_edit" in msg and "start_line" in msg

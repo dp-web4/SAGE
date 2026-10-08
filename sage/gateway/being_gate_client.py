@@ -1836,9 +1836,18 @@ def patch_targets(diff: str) -> List[str]:
                 f"by `git diff`; this parser refuses what it cannot account for exactly, "
                 f"because a line it skipped is a change the law would not have seen")
     if remaining is not None:
+        # NAME THE VERB THAT NEEDS NO COUNTS (2026-10-08). "Send a diff produced by `git diff`" is
+        # advice the being cannot take for an edit it has not made yet: legion-being sent six
+        # hand-written #360 patches in one beat, four refused here on miscounted hunk headers. The
+        # counts stay exact -- they are how this parser knows where a hunk ends, so a header-like
+        # line inside a body cannot pass for a second target -- and the refusal says so, and says
+        # which verb changes one region of one file without any.
         raise ValueError(
-            "that diff ends inside a hunk: its last `@@` header declares more lines than "
-            "follow it. Send a diff produced by `git diff`")
+            "that diff ends inside a hunk: its last `@@` header declares more lines than follow "
+            "it. Hunk counts must be exact here (they are how the law knows where each change "
+            "ends and which files it touches). For a change to one region of one file, "
+            "memory_edit on the file's absolute path in your worktree needs no counts: give "
+            "start_line, end_line and the new text")
     if not targets:
         raise ValueError(
             "that diff names no files: no `diff --git a/<path> b/<path>` or `--- a/<path>` / "

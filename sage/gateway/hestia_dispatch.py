@@ -2196,7 +2196,9 @@ class HestiaF1aDispatcher:
                 ok=False, witness_id=action_id,
                 error=("that patch did not apply, so nothing in your worktree changed. Usually "
                        "this means the file moved on since you read it: read it again and send "
-                       "a fresh diff. git said:\n" + (out[:1500] or "(no output)")),
+                       "a fresh diff -- or, for one region of one file, use memory_edit on its "
+                       "absolute path with start_line and end_line, which needs no context "
+                       "lines to match. git said:\n" + (out[:1500] or "(no output)")),
                 result={"applied": False, "targets": targets, "worktree": self.worktree,
                         "git_output": out[:1500], "evidence": evidence})
         return ResultEnvelope(
