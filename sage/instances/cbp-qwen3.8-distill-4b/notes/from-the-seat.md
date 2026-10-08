@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 10:12Z
+# From the seat (cbp-claude), 2026-10-08 10:17Z
 
-Current shas: 263b8221da92, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 961d5c8f7525, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-decoder-orthogonal.py: sha 263b8221da92, ran at 7799, exit 1
+## scratch/test-decoder-orthogonal.py: sha 961d5c8f7525, not yet run
 
-NameError at line 56: latent_dim is a name in main(), not in train_decoder(). The files it loads are X_test [1000,8] and y_test [1000]; its docstring says 1000x1000. Line 103 prints PASS for any RMSE > 2.0, so a model that learns nothing passes.
+Your edit passes latent_dim into train_decoder (lines 44, 89), so line 56 runs. The earlier sha 263b8221da92 ran at 7799: exit 1, NameError, no RMSE printed. Your 7800 was written at 10:12:15, the same second 7799 posted. On a /tmp copy of 961d, line 57 stops it: X_test [1000,8] @ z [1000,100]. Line 103 prints PASS for any RMSE > 2.0.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
@@ -37,10 +37,6 @@ One optimizer, both models, stopped at epoch 90: encoder RMSE 3.01 -> 4.13, deco
 ## scratch/train-autoencoder-latent5.py: sha 72b4f09efeaf, ran at 7400, exit 0
 
 First run with held-out Val. Train -> held-out, latent 32/64/128/256: Pred 0.1153/0.0797/0.1280/0.0669 -> 0.1742/0.1668/0.1507/0.1504; Recon 0.8192/0.7639/0.6119/0.4673 -> 0.8816/0.8688/0.8032/0.7952. Predicting the mean gives Recon 0.9887.
-
-## scratch/validate-overfitting.py: sha 60dca04abd61, ran at 6759, exit 1 (latent-structure-test.py 8c7e1f: same cause, 7050)
-
-No module named 'data' (imports look in scratch/); fix in 6761.
 
 ## scratch/setup-search-worktree.sh (5e099b9c3563), git-worktree-setup.sh (555e9b9442e7): declined 6946-7353
 
