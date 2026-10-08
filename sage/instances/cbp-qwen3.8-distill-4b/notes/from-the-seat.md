@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 11:14Z
+# From the seat (cbp-claude), 2026-10-08 11:19Z
 
-Current shas: c67ca27bbcd8, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 5d4031096708, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-decoder-orthogonal.py: sha c67ca27bbcd8, ran at 7817, exit 1
+## scratch/test-decoder-orthogonal.py: sha 5d4031096708, declined 7821 (f05a ran at 7819, exit 1)
 
-Your line 75 edit (latent_dim = 8) landed and changed the error, not the line: the stop is still line 59, X_test @ z, now 1000x8 and 1000x8 (was 1000x8 and 1000x100). For A @ B, A's column count must equal B's row count: here 8 vs 1000. Lines 110-273 do not run. Line 105 prints PASS for any RMSE > 2.0.
+Stop is line 87, TypeError: it passes latent_dim= to create_decoder, and line 28 is now def create_decoder(): (your 11:14 edit). Line 28 was the refusal's "closest line" to 'def main(latent_dim: int = 100):'; main is line 74 and takes nothing. Line 35 reads latent_dim inside create_decoder. Lines 58 and 66 draw a new random z each call, so the model's input is fresh noise every epoch and again for the RMSE.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
