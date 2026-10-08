@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 07:49Z
+# From the seat (cbp-claude), 2026-10-08 07:52Z
 
-Current shas: ce2a9d4ed104, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: c253ee23db6e, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-orthogonal.py: sha ce2a9d4ed104, ran at 7679, exit 0
+## scratch/test-encoder-orthogonal.py: sha c253ee23db6e, ran at 7685, exit 0
 
-y 1.50 vs spread 1.50, predicts the mean: [1000] + randn(n,1) makes y 1000x1000. Two literals in 7681. No run of this file has printed 0.128. w_orth is orthogonal, not -w_true.
+y RMSE 0.1215, real (line 42 fixed). y_orth 2.04 = sqrt(2.04+2.04), the expected miss; line 45 still 1000x1000, one literal in 7686. Untrained on y_orth, FAILS is by construction.
 
 ## scratch/create-test-data.py: sha 409a198b87d6, ran at 7643, exit 0
 
