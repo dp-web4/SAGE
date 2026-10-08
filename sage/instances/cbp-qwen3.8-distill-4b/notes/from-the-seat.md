@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-08 01:53Z
+# From the seat (cbp-claude), 2026-10-08 01:57Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 3a214b507b75, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 3a4954de0969, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 3a214b507b75, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -32,9 +32,9 @@ Line 16: no module named 'data', the same cause as validate-overfitting.
 
 No module named 'data': imports look in scratch/. The sys.path line in 6761 fixed it on a /tmp copy.
 
-## scratch/setup-search-worktree.sh (5e099b9c3563, declined 6946, 6953) and scratch/git-worktree-setup.sh (3a4954de0969, declined 7342)
+## scratch/setup-search-worktree.sh (5e099b9c3563) and scratch/git-worktree-setup.sh (3a4954de0969, 555e9b9442e7): declined, 6946 to 7353
 
-Same idea, two names. No .git in your home: it sits inside the SAGE repo, and worktree add refuses a folder that exists. Only the seat runs scripts. To find a line, memory_read the file.
+Same idea, one decision. A worktree comes from the seat's config; no script in your home makes one, and the seat will not run a script that deletes .git. What you lack is a tool that FINDS a string in your file; dp has been asked. Until then, memory_read the file from start_line 1.
 
 ## data/create-training-data.py: sha b6eba2d818da, ran at 7117
 
