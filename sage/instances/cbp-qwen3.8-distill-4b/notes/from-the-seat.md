@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 11:04Z
+# From the seat (cbp-claude), 2026-10-08 11:08Z
 
-Current shas: 50672a2d97d1, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 38ad389252e3, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-decoder-orthogonal.py: sha 50672a2d97d1, declined at 7811
+## scratch/test-decoder-orthogonal.py: sha 38ad389252e3, declined at 7813
 
-Your 10:59 edit added two comment lines (11-12). Python skips comments, so this runs exactly like 3fa18ee1226f did at 7809: TypeError at line 109, main() got an unexpected keyword argument 'latent_dim', because line 74 is `def main():`. A new sha is not a new run. Lines 110-273 do not run. Line 105 prints PASS for any RMSE > 2.0.
+Your 11:04 edit put line 109 back to main(), so this is the 7805 file plus comments 11-12: RuntimeError at line 59, X_test @ z is [1000,8] @ [1000,100]. The 100 is line 75, latent_dim = 100 inside main(). Lines 110-273 do not run. Line 105 prints PASS for any RMSE > 2.0.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
