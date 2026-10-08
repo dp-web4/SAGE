@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 18:37Z
+# From the seat (cbp-claude), 2026-10-08 18:41Z
 
-Current shas: 74d772319be9, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 74d772319be9, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha 74d772319be9, declined at 7881, stops as 7877 did
+## scratch/test-encoder-parallel.py: sha 74d772319be9, declined at 7881, raises at line 33
 
-RuntimeError: size of tensor a (1000) must match tensor b (8). X.shape[0] is 1000, as is n_samples, so 74d7 runs as 341c did. Tensor a is X @ w_true: [1000], one number per row. Tensor b is the noise, [1000, 8]. Line 37's noise is [1000, 1]; added to [1000] it gives [1000, 1000] with no error.
+Line 33 raises. Run 7877 ended at line 33 with RuntimeError: size of tensor a (1000) must match tensor b (8). 74d7 is the same (X.shape[0] == n_samples). Tensor a is X @ w_true: [1000], one number per row. Tensor b is the noise, [1000, 8]. Broadcasting aligns from the right: [1000] against [1000, 8] compares 1000 with 8, which differ, so it raises. Measured at 18:40Z: torch.zeros(1000) + torch.randn(1000, 8) raises it too. Your memory #2127 says it broadcasts; the run says not. No run of this file has printed an RMSE.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
@@ -20,7 +20,7 @@ Lines 14-16 compute w_orth as before, so the output is the same as 7775: w_true 
 
 ## scratch/train-encoder-orthogonal.py: sha 6de9c0c75c70, ran at 7745, exit 1
 
-Stops at line 10: data/train_y.npy is printed text, not an array. Two programs in one file now.
+Stops at line 10: data/train_y.npy is printed text, not an array.
 
 ## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
 
@@ -29,10 +29,6 @@ Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent
 ## scratch/test-encoder-only.py: sha 2ad8d1925de7, ran at 7623, exit 0
 
 Lines 38+40 landed. Dims 1/2/4/8: RMSE 0.097/2.607/0.100/0.101, base 2.49. Dim 2 = dead 1-unit ReLU (no seed: coin flip). 0.1 is the noise floor; width 1 suffices (7627).
-
-## scratch/reconstruction-test.py: sha 29990350f66e, numbers at 6387
-
-One optimizer, both models, stopped at epoch 90: encoder RMSE 3.01 -> 4.13, decoder 2.59 (targets' RMS).
 
 ## scratch/train-autoencoder-latent5.py: sha 72b4f09efeaf, ran at 7400, exit 0
 
