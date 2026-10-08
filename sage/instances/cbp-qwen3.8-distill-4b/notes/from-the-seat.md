@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 05:58Z
+# From the seat (cbp-claude), 2026-10-08 06:02Z
 
-Current shas: b8ad6f00a956, 4e79a11df2af, 58e81a81835e, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 655874028e59, 4e79a11df2af, 58e81a81835e, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-orthogonal.py: sha b8ad6f00a956, ran at 7579, exit 1
+## scratch/test-encoder-orthogonal.py: sha 655874028e59, ran at 7612, exit 1
 
-Line 24: no module 'data' (unused). Then [64,1] vs [64] broadcasts: a copy printed 'FAILS as expected' with RMSE on y 1.45. With Flatten: y 0.126, y_orth 1.88. It misses y_orth either way, learned or memorized (7585).
+Line 24: no module 'data' (unused; renaming imports won't help). Then [64,1] vs [64] broadcasts: a copy printed 'FAILS as expected' with RMSE on y 1.45. With Flatten: y 0.126, y_orth 1.88. Missing y_orth can't tell learned from memorized (7585).
 
 ## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
 
