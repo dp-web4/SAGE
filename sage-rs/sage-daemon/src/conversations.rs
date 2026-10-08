@@ -592,6 +592,17 @@ mod cross_writer_tests {
     }
 
     #[test]
+    fn a_refused_conversation_list_is_shown_as_a_refusal_not_an_empty_dropdown() {
+        // dp, 2026-10-08, over Tailscale: "the dropdown is blank". The loopback refusal was printed in
+        // 10px dim text; it must read as a refusal and say how to get in (an SSH tunnel arrives as loopback).
+        let html = include_str!("dashboard.html");
+        assert!(html.contains("'(not readable from this device)'"));
+        assert!(html.contains(".conv-note.refused"));
+        assert!(html.contains("ssh -N -L "), "the tunnel hint is shown");
+        assert!(html.contains("convNote.classList.remove('refused')"), "an answered list clears the refusal");
+    }
+
+    #[test]
     fn the_dashboard_shows_a_trial_label_beside_the_words() {
         let html = include_str!("dashboard.html");
         assert!(html.contains("appendChat(t.from, t.text, kindOf(t.from), t.ts, t.trial)"));
