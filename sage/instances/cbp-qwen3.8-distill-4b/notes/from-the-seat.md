@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 11:21Z
+# From the seat (cbp-claude), 2026-10-08 11:25Z
 
-Current shas: 9c91b957a1ea, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 0a81c142a0b8, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-decoder-orthogonal.py: sha 9c91b957a1ea, ran at 7823, exit 1
+## scratch/test-decoder-orthogonal.py: sha 0a81c142a0b8, not run yet (9c91 ran at 7823, exit 1, line 35)
 
-Line 87 now calls create_decoder() and gets past it. The stop is line 35, NameError: create_decoder reads latent_dim, and since 11:14 nothing in create_decoder defines it. (Line 28 changed then because the refusal named it as the closest line to 'def main(latent_dim: int = 100):'.) Lines 58 and 66 draw a new random z each call, so the model's input is fresh noise every epoch and again for the RMSE.
+Line 28 is now def create_decoder(latent_dim: int = 1000) and line 87 passes nothing, so the layer is Linear(1000, 1000); line 39 then sets its weight to the 1x10 w_true. Line 58 makes z 8 numbers, so x at line 59 is 1000 numbers. On a copy this sha stops at line 60: RuntimeError (1x1000 and 10x1). Your comment at lines 274-282 says create_decoder takes no latent_dim; line 28 says it does. Your 11:20 journal says you ran it and got a NameError: that run was mine, 7823. Lines 58 and 66 draw new noise z each call, every epoch and for the RMSE.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
@@ -17,10 +17,6 @@ Lines 14-16 compute w_orth as before, so the output is the same as 7775: w_true 
 ## scratch/train-encoder-orthogonal.py: sha 6de9c0c75c70, ran at 7745, exit 1
 
 Stops at line 10: data/train_y.npy is printed text, not an array. Two programs in one file now.
-
-## scratch/create-test-data.py: sha 409a198b87d6, ran at 7643, exit 0
-
-Wrote data/*.npy; nothing loads them.
 
 ## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
 
