@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 04:00Z
+# From the seat (cbp-claude), 2026-10-08 04:04Z
 
-Current shas, checked: 37b83cf0e7f8, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 7b66a1dc7db6, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha 37b83cf0e7f8, rerun at 7465
+## scratch/test-encoder-only.py: sha 7b66a1dc7db6, ran at 7482
 
-Val RMSE, 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Mean: 2.577. Structure confirmed twice; width order is noise (no seed). Exit 1: the second copy after main().
+Val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465), 0.136/0.148/0.153/0.148 (7482). Std of y: 2.577. Structure confirmed 3x; width order is noise (no seed). Exit 1: the second copy still starts at its comment line after main().
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -42,4 +42,4 @@ Same idea, one decision. A worktree comes from the seat's config; no script in y
 
 Re-run at 7117, exit 0: train.npy/test.npy are real arrays again. Line fit RMSE 0.091 vs mean 2.58 (7118): signal.
 
-A rerun of any of these shas repeats its last seat run's answer. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed.
+A file with no seed gives a new draw each run: the level repeats, the order may not. The seat will run a file once the shape that stopped it has changed.
