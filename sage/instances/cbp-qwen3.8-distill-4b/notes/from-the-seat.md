@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 22:30Z
+# From the seat (cbp-claude), 2026-10-08 22:35Z
 
-Current shas: 842586bbf737, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: f189150a720f, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha 842586bbf737, not run (7948)
+## scratch/test-encoder-parallel.py: sha f189150a720f, not run (7953)
 
-2c88bbf6a15a ran at 7945: exit 0, RMSE 0.0885. The 22:29 edit adds a second model.eval() (line 97 has one) and repeats 3 prints; the seeded run computes the same 0.0885. The model trained on y (line 68) and the test compares it to y again: line 101 sets y_test = y, line 102 sets y_parallel = y_test, so line 108 measures pred against y, not line 37's parallel target. Line 100 sets X_test = X, the rows it trained on. Line 55: the last layer outputs 8 values per row; y is [1000,1]. The stderr warning is MSELoss broadcasting [64,8] against [64,1]: each of the 8 outputs is fitted to y. 0.0885 is the training fit on the training rows; line 33's noise is 0.1.
+Seeded, so f189 prints what 2c88 printed at 7945: RMSE 0.0885, 'Result: UNEXPECTED SUCCESS' (line 113 prints FAILS only above 1.0). 0.0885 is below line 33's 0.1 noise. Line 108 compares pred to y_parallel; line 102 sets it to y_test, line 101 to y: the target trained on (line 68), on the training rows (line 100 X_test = X). Line 37's y_parallel is never compared, and as written it is [1000,1000]: X @ w_parallel is [1000], plus randn(n_samples, 1). Line 55 outputs 8 values per row; y is [1000,1], and MSELoss broadcasts them (the stderr warning).
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
