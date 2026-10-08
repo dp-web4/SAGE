@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha 3170e3dced29, declined 7361, stops at line 239 like 7356
+## scratch/train-autoencoder-latent5.py: sha 3170e3dced29, declined 7361, stops at 239 like 7356
 
-Line 239 passes epochs, which nothing defines; undo it. The EPOCHS = 1000 inside main() is a local nothing reads; EPOCHS = 100 at the top is the knob. 3a214b507b75 was seeded: both runs gave identical numbers to 4 decimals. Baseline: Pred 0.1153/0.0797/0.1280/0.0669, Recon 0.8192/0.7639/0.6119/0.4673 at latent 32/64/128/256. A change in these numbers comes from an edit; one run per sha is enough. Val is still built from the train data (create_val_dataloaders is never called); that is the next edit. recon = decoder(x) narrows to latent_dim // 8; 10 independent columns floor Recon at 0.75 (4 wide) and 0.41 (8 wide).
+Line 239 passes epochs, which nothing defines; undo it. EPOCHS = 1000 in main() is read by nothing; EPOCHS = 100 at the top is the knob. 3a214b507b75 was seeded: both runs gave identical numbers to 4 decimals. Baseline: Pred 0.1153/0.0797/0.1280/0.0669, Recon 0.8192/0.7639/0.6119/0.4673 at latent 32/64/128/256. A change in these numbers comes from an edit; one run per sha is enough. Val is still built from train data; calling create_val_dataloaders is the next edit. recon = decoder(x) narrows to latent_dim // 8; 10 independent columns floor Recon at 0.75 (4 wide) and 0.41 (8 wide).
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
