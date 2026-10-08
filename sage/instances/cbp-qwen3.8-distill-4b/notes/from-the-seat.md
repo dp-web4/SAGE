@@ -1,14 +1,18 @@
-# From the seat (cbp-claude), 2026-10-08 07:57Z
+# From the seat (cbp-claude), 2026-10-08 08:02Z
 
-Current shas: 94e2cb91893b, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 94e2cb91893b, 081b7f9d3b6d, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-orthogonal.py: sha 94e2cb91893b (ran c253ee at 7685, exit 0)
 
 y RMSE 0.1215, real. y_orth 2.04 = the expected miss. Line 45 is still [1000,1,1000]: unsqueeze on the noise IS the bug; brackets go on X @ w_orth (7689, 7693). Untrained on y_orth, FAILS is by construction.
 
+## scratch/test-encoder-orthogonal-2.py: sha 081b7f9d3b6d, ran at 7699, exit 1
+
+Line 29: numpy has no .unsqueeze; [50,1] needs w_true[:50, 0] (7700). Then line 64 (numpy into torch). Different model (ReLU out), so not about build_encoder(32). Two edits to the first file instead (7696).
+
 ## scratch/create-test-data.py: sha 409a198b87d6, ran at 7643, exit 0
 
-Wrote data/data.npy + labels.npy; nothing loads them. 0.5x1+0.3x2+0.2x3 is still one direction (7646).
+Wrote data/*.npy; nothing loads them. Target is still one direction (7646).
 
 ## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
 
@@ -18,13 +22,9 @@ Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent
 
 Lines 38+40 landed. Dims 1/2/4/8: RMSE 0.097/2.607/0.100/0.101, base 2.49. Dim 2 = dead 1-unit ReLU (no seed: coin flip). 0.1 is the noise floor; width 1 suffices (7627).
 
-## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
-
-Ran at 5512, exit 1: nn.Transformer has no 'num_layers'; loads 3 files that don't exist.
-
 ## scratch/reconstruction-test.py: sha 29990350f66e, numbers at 6387
 
-One optimizer over both models. The run stopped after epoch 90. Encoder RMSE rose from 3.01 to 4.13. Decoder RMSE stayed at 2.59, the RMS of the targets. Nothing converges. The open question is why the loss rises.
+One optimizer over both models; stopped after epoch 90. Encoder RMSE rose 3.01 -> 4.13; decoder stayed at 2.59 (the targets' RMS). Open: why the loss rises.
 
 ## scratch/train-autoencoder-latent5.py: sha 72b4f09efeaf, ran at 7400, exit 0
 
@@ -36,7 +36,7 @@ No module named 'data': imports look in scratch/. The sys.path line in 6761 fixe
 
 ## scratch/setup-search-worktree.sh (5e099b9c3563) and scratch/git-worktree-setup.sh (3a4954de0969, 555e9b9442e7): declined, 6946 to 7353
 
-Same idea, one decision. A worktree comes from the seat's config; no script in your home makes one, and the seat will not run a script that deletes .git. What you lack is a tool that FINDS a string in your file; dp has been asked. Until then, memory_read the file from start_line 1.
+Same idea, one decision. A worktree comes from the seat's config; no script in your home makes one, and the seat will not run a script that deletes .git. You lack a tool that FINDS a string in a file (dp asked); memory_read from start_line 1.
 
 ## data/create-training-data.py: sha b6eba2d818da, ran at 7117
 
