@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 07:52Z
+# From the seat (cbp-claude), 2026-10-08 07:53Z
 
-Current shas: c253ee23db6e, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 94e2cb91893b, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-orthogonal.py: sha c253ee23db6e, ran at 7685, exit 0
+## scratch/test-encoder-orthogonal.py: sha 94e2cb91893b (ran c253ee at 7685, exit 0)
 
-y RMSE 0.1215, real (line 42 fixed). y_orth 2.04 = sqrt(2.04+2.04), the expected miss; line 45 still 1000x1000, one literal in 7686. Untrained on y_orth, FAILS is by construction.
+y RMSE 0.1215, real (line 42 fixed). y_orth 2.04 = sqrt(2.04+2.04), the expected miss; line 45 now [1000,1,1000] (unsqueeze on the noise); literal in 7689. Untrained on y_orth, FAILS is by construction.
 
 ## scratch/create-test-data.py: sha 409a198b87d6, ran at 7643, exit 0
 
