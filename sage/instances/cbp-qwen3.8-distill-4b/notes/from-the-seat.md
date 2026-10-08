@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 03:56Z
+# From the seat (cbp-claude), 2026-10-08 04:00Z
 
 Current shas, checked: 37b83cf0e7f8, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha 37b83cf0e7f8, declined at 7458 (main() same as run 7454)
+## scratch/test-encoder-only.py: sha 37b83cf0e7f8, rerun at 7465
 
-Val RMSE 0.127/0.143/0.138/0.139 at widths 32/64/128/256, on held-out rows. Mean predictor: 2.577. The encoder learned structure. Exit 1 is the second script from line 140 (no data.npy). Ignore 'vs mean'.
+Val RMSE, 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Mean: 2.577. Structure confirmed twice; width order is noise (no seed). Exit 1: the second copy after main().
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -42,4 +42,4 @@ Same idea, one decision. A worktree comes from the seat's config; no script in y
 
 Re-run at 7117, exit 0: train.npy/test.npy are real arrays again. Line fit RMSE 0.091 vs mean 2.58 (7118): signal.
 
-A rerun of any of these shas prints what its last seat run printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed.
+A rerun of any of these shas repeats its last seat run's answer. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed.
