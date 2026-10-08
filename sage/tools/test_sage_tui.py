@@ -94,3 +94,35 @@ def test_compose_only_on_the_writable_conversation_on_screen():
     assert not st.begin(DP), "not the selected conversation"
     st.move([ROOM, DP], +1)
     assert st.begin(DP)
+
+
+# ---- scrolling the conversation text (dp 2026-10-08: the wheel switched conversations instead) ----
+def test_scroll_windows_and_clamps():
+    st = t.TuiState()
+    lines = [f"l{i}" for i in range(100)]
+    assert st.window(lines, 10) == lines[90:], "at rest it follows the newest lines"
+    st.scroll_by(+25, len(lines), 10)
+    assert st.window(lines, 10) == lines[65:75]
+    st.scroll_by(+1000, len(lines), 10)
+    assert st.scroll == 90 and st.window(lines, 10) == lines[0:10], "stops at the top of the history"
+    st.scroll_by(-1000, len(lines), 10)
+    assert st.scroll == 0, "stops at the newest"
+
+
+def test_new_turns_do_not_yank_a_reader_to_the_bottom_but_a_follower_follows():
+    st = t.TuiState()
+    lines = [f"l{i}" for i in range(50)]
+    st.scroll_by(+10, len(lines), 10)
+    shown = st.window(lines, 10)
+    st.grew(5); more = lines + [f"n{i}" for i in range(5)]
+    assert st.window(more, 10) == shown, "the same text stays on screen"
+    st2 = t.TuiState()
+    st2.grew(5)
+    assert st2.scroll == 0 and st2.window(more, 10) == more[-10:], "at the bottom, new turns are followed"
+
+
+def test_switching_conversation_returns_to_the_newest():
+    st = t.TuiState()
+    st.update([DP, ROOM]); st.scroll_by(+20, 100, 10)
+    st.move([DP, ROOM], +1)
+    assert st.sel_id == "room" and st.scroll == 0

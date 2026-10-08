@@ -7,7 +7,9 @@ This paints the same facts in a terminal: state, ATP, SNARC salience, the curren
 input line that speaks as dp through the same loopback route the dp console uses. Run it ON the machine (or over
 `ssh -t <machine> python3 -m sage.tools.sage_tui`): it reads 127.0.0.1, so the daemon's loopback-only rules hold.
 
-Keys: Up/Down or j/k pick a conversation, i types a message (Enter sends, Esc cancels), r refreshes, q quits.
+Keys: Up/Down or j/k pick a conversation; mouse wheel or PgUp/PgDn scroll its text, End (or G) back to the newest;
+i types a message (Enter sends, Esc cancels); r refreshes; q quits. With the mouse captured, select text with
+Shift+drag (most terminals).
 """
 from __future__ import annotations
 
@@ -20,7 +22,7 @@ import urllib.request
 
 BASE = os.environ.get("SAGE_TUI_BASE", "http://127.0.0.1:8760")
 REFRESH_S = 2.0
-TURNS = 60
+TURNS = 300            # enough history to scroll back through
 
 
 def fetch(path: str, body: dict | None = None, timeout: float = 3.0):
@@ -99,6 +101,25 @@ class TuiState:
         self.target = None          # pinned destination while composing
         self.draft = ""
         self.flash = ""
+        self.scroll = 0             # lines scrolled UP from the newest; 0 = following the bottom
+
+    def scroll_by(self, delta: int, total: int, room: int) -> None:
+        """Scroll the conversation text (dp 2026-10-08: the wheel switched conversations instead). Positive =
+        older. Clamped so the top of the history stops at the top of the pane."""
+        self.scroll = max(0, min(self.scroll + delta, max(0, total - room)))
+
+    def window(self, lines: list, room: int) -> list:
+        """The lines to show: the bottom `room` lines, shifted up by `scroll`. A refresh that adds turns keeps
+        what dp is reading in place by growing the offset (see grew)."""
+        if room <= 0:
+            return []
+        end = len(lines) - self.scroll
+        return lines[max(0, end - room):end]
+
+    def grew(self, added: int) -> None:
+        """New lines arrived while scrolled up: keep the same text on screen instead of yanking to the bottom."""
+        if self.scroll > 0 and added > 0:
+            self.scroll += added
 
     @property
     def typing(self) -> bool:
@@ -115,6 +136,7 @@ class TuiState:
             return
         i = ids.index(self.sel_id) if self.sel_id in ids else 0
         self.sel_id = ids[(i + delta) % len(ids)]
+        self.scroll = 0                                  # a different conversation starts at its newest turn
 
     def begin(self, meta: dict) -> bool:
         """Pin the destination: only the conversation actually on screen, and only if dp may write there."""
@@ -153,7 +175,12 @@ def run(stdscr) -> None:  # pragma: no cover - exercised by hand; TuiState and t
     import curses
     curses.curs_set(0)
     stdscr.timeout(int(REFRESH_S * 1000))
+    stdscr.keypad(True)
+    WHEEL_UP = getattr(curses, "BUTTON4_PRESSED", 0x80000)
+    WHEEL_DOWN = getattr(curses, "BUTTON5_PRESSED", 0x200000)
+    curses.mousemask(WHEEL_UP | WHEEL_DOWN)            # wheel events, not arrow keys (terminal-dependent)
     st = TuiState()
+    nlines = 0
     last = 0.0
     health = status = listing = conv = {}
     err = None
@@ -191,17 +218,39 @@ def run(stdscr) -> None:  # pragma: no cover - exercised by hand; TuiState and t
                            left - 1, curses.A_REVERSE if on else 0)
         lines = turn_lines(conv, w - left - 1)
         room = h - y0 - 2
-        for i, l in enumerate(lines[-room:] if room > 0 else []):
+        if nlines and len(lines) > nlines:
+            st.grew(len(lines) - nlines)
+        nlines = len(lines)
+        st.scroll_by(0, len(lines), room)               # re-clamp after a resize or a shorter conversation
+        for i, l in enumerate(st.window(lines, room)):
             stdscr.addnstr(y0 + i, left, l, w - left - 1)
         meta = (conv or {}).get("meta") or {}
+        up = f"[↑ {st.scroll} lines up — End: newest]  " if st.scroll else ""
         foot = (f"to {st.target}> {st.draft}" if st.typing else
-                st.flash or ("i: write  ↑↓: conversation  r: refresh  q: quit" if writable(meta)
-                             else "(read-only here)  ↑↓: conversation  r: refresh  q: quit"))
+                st.flash or (up + ("i: write  ↑↓: conversation  wheel/PgUp/PgDn: scroll  q: quit" if writable(meta)
+                                   else "(read-only here)  ↑↓: conversation  wheel/PgUp/PgDn: scroll  q: quit")))
         stdscr.addnstr(h - 1, 0, foot[-(w - 1):], w - 1, curses.A_REVERSE)
         stdscr.refresh()
         k = stdscr.getch()
         if k == -1:
             continue
+        page = max(1, room - 1)
+        if k == curses.KEY_MOUSE:
+            try:
+                _, _, _, _, bstate = curses.getmouse()
+            except curses.error:
+                continue
+            if bstate & WHEEL_UP:
+                st.scroll_by(+3, len(lines), room)
+            elif bstate & WHEEL_DOWN:
+                st.scroll_by(-3, len(lines), room)
+            continue
+        if k == curses.KEY_PPAGE:
+            st.scroll_by(+page, len(lines), room); continue
+        if k == curses.KEY_NPAGE:
+            st.scroll_by(-page, len(lines), room); continue
+        if k == curses.KEY_END or (k == ord("G") and not st.typing):
+            st.scroll = 0; continue
         if st.typing:
             if k in (10, 13):
                 if st.send():
