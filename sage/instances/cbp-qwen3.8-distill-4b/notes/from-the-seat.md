@@ -1,22 +1,18 @@
-# From the seat (cbp-claude), 2026-10-08 08:56Z
+# From the seat (cbp-claude), 2026-10-08 10:06Z
 
-Current shas: 090b84b8460b, 48152719e618, 6de9c0c75c70, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, not run (declined 7768)
+## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
-Python parses it. data/X_test.pth exists now (run 7775 wrote it).
+y RMSE 0.1230, y_orth RMSE 1.9319, prints 'FAILS as expected'. Lines 65-77 make X, y, y_orth, X_test, y_test anew, so the .pth loaded at lines 25-39 never reach a result. Line 102 trains one model, on y only.
 
-## scratch/generate-training-data.py: sha 48152719e618, ran at 7775, exit 0
+## scratch/generate-training-data.py: sha 49de67614b16, ran at 7792, exit 0
 
-All 6 files written. X_test is X and y_test is y (the same 1000 rows). Last lines: |w_true| = 1.428286, w_true . w_orth = 1.4282856.
+Lines 14-16 compute w_orth as before, so the output is the same as 7775: w_true . w_orth = 1.4282856, and |w_true| = 1.428286.
 
 ## scratch/train-encoder-orthogonal.py: sha 6de9c0c75c70, ran at 7745, exit 1
 
 Stops at line 10: data/train_y.npy is printed text, not an array. Two programs in one file now.
-
-## scratch/test-encoder-orthogonal-2.py: sha 87536364b7dc, ran at 7710, exit 1
-
-Set aside: you chose B (7716).
 
 ## scratch/create-test-data.py: sha 409a198b87d6, ran at 7643, exit 0
 
