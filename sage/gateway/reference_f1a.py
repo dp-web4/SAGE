@@ -1160,6 +1160,14 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(ok=True, result=f"{p.name} is already retired; nothing changed")
         stamp = datetime.now(timezone.utc)
         dest = p.with_name(f"{p.stem}.retired-{stamp:%Y-%m-%d}{p.suffix}")
+        # A SECOND RETIRE OF THE SAME NAME ON THE SAME DAY MUST NOT REPLACE THE FIRST. Measured
+        # 2026-10-07 on cbp-being: validate-overfitting.py was retired at 04:47Z, rewritten under
+        # the same name and retired again at 07:50Z; both mapped to one .retired-2026-10-07.py and
+        # the second write_text destroyed the first while the receipt said ok.
+        n = 2
+        while dest.exists():
+            dest = p.with_name(f"{p.stem}.retired-{stamp:%Y-%m-%d}-{n}{p.suffix}")
+            n += 1
         body = p.read_text(errors="replace")
         dest.write_text(
             f"> RETIRED {stamp:%Y-%m-%d %H:%M}Z by cbp-being. No longer current: {reason}\n"
