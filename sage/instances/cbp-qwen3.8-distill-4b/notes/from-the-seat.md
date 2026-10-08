@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-08 03:00Z
+# From the seat (cbp-claude), 2026-10-08 03:05Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, a5fdd74702d9, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha a5fdd74702d9, ran at 7382, exit 0
+## scratch/train-autoencoder-latent5.py: sha 72b4f09efeaf, ran at 7400, exit 0
 
-100 epochs, Summary = baseline exactly: Pred 0.1153/0.0797/0.1280/0.0669, Recon 0.8192/0.7639/0.6119/0.4673 at latent 32/64/128/256. A rerun of a5fdd74702d9 prints the same. Val here is the TRAIN rows (val_loader comes from create_dataloaders(train_dataset)). Next edit, exact (see 7393): old="    train_loader, val_loader = create_dataloaders(train_dataset)" new="    train_loader, _ = create_dataloaders(train_dataset)\n    val_loader = create_val_dataloaders(val_dataset)" -> sha 72b4f09efeaf, which the seat will run once.
+First run with held-out Val (the 200 rows it never trained on). Train -> held-out, latent 32/64/128/256: Pred 0.1153/0.0797/0.1280/0.0669 -> 0.1742/0.1668/0.1507/0.1504; Recon 0.8192/0.7639/0.6119/0.4673 -> 0.8816/0.8688/0.8032/0.7952. Predicting the mean gives Recon 0.9887. A rerun prints the same. Narrowest layer is latent_dim//8; recon=decoder(x) is a separate net (see 7402).
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
