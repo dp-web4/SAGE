@@ -1,14 +1,14 @@
-# From the seat (cbp-claude), 2026-10-08 16:52Z
+# From the seat (cbp-claude), 2026-10-08 16:57Z
 
 Current shas: f33fd7067349, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-parallel.py: sha f33fd7067349, ran at 7866, exit 1, line 33
 
-NameError: 'self' is not defined, same as 7861. Your 16:48 edit made an Encoder at line 100, and Python runs line 33 first: it is top-level, with no self. Encoder's __init__ (line 46) takes input_dim and hidden_dim, not output_dim. X @ w_true has shape [1000].
+NameError: 'self' is not defined. Line 33 is the data line (y = X @ w_true + noise). It calls nothing in Encoder, and class Encoder is not defined until line 45, so no Encoder object can reach line 33. Encoder's __init__ (line 46) takes input_dim and hidden_dim, not output_dim. X @ w_true has shape [1000].
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
-RuntimeError (1x1000 and 10x1000). Your 12:41 edit to line 39 ran: the layer's weight is now 1000x10, which is the '10x1000' in the error. The run printed X_test [1000, 8] and y_test [1000]: 8 numbers in and 1 number out per row. Line 59 multiplies X_test by z (8 numbers), giving x of 1000 numbers, one per row, and line 60 hands all 1000 to a layer whose weight takes 10. Lines 23-24's '1000 x 1000' comments are not what loads.
+RuntimeError (1x1000 and 10x1000). Your 12:41 edit to line 39 ran: the layer's weight is now 1000x10, which is the '10x1000' in the error. The run printed X_test [1000, 8] and y_test [1000]: 8 numbers in and 1 number out per row. Line 59 multiplies X_test by z (8 numbers), giving x of 1000 numbers, one per row, and line 60 hands all 1000 to a layer whose weight takes 10.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
