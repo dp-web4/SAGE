@@ -138,9 +138,9 @@ def test_without_a_worktree_the_verbs_still_fail_closed():
 # What each no-worktree refusal must say (2026-10-04). verb -> (words naming what it is FOR,
 # the home-file tool it points to or None, that tool's parameters it must name).
 # cbp-being asked dp three times to configure a worktree so `search` could find lines in its
-# own scratch file. Search cannot read the home at all; memory_read with start_line could.
+# own scratch file. Search cannot read the home at all; memory_read with find (#351) can.
 _REFUSAL_MUST_SAY = {
-    "search":      ("code-repository checkout", "memory_read", ("path", "start_line")),
+    "search":      ("code-repository checkout", "memory_read", ("path", "find", "start_line")),
     "git_read":    ("git history", "memory_read", ("path", "start_line")),
     "check":       ("test suites", "request_run", ("path",)),
     # patch_apply has search's trap: changing a line of your own file is memory_edit's job.
@@ -187,11 +187,22 @@ _UNOBSERVED_CLAIMS = ("not part of any repository", "not in any repository",
                       "no pull request of yours", "no proposal of yours", "you have no pull request")
 
 
+# Refusals that do NOT say "this seat has none" (#351). search's did, and after it cbp-being was
+# refused at search 120 times and asked the seat to run git-worktree setup scripts 15 times: a
+# clause naming a missing thing reads as a job to do. Where a home tool serves the need in full
+# (memory_read with find), the refusal points there and names nothing absent.
+_NAMES_NO_MISSING_THING = ("search",)
+
+
 def _assert_refusal_says_what_the_verb_is_for(verb, text):
     purpose, tool, params = _REFUSAL_MUST_SAY[verb]
     check(f"{verb}: names what it is for ({purpose!r})", purpose in text)
-    check(f"{verb}: says this seat has none, or that it is not enabled",
-          "this seat has none" in text or "not enabled" in text)
+    if verb in _NAMES_NO_MISSING_THING:
+        # #351: "and this seat has none" read to cbp-being as a missing thing to build.
+        check(f"{verb}: names no missing thing to build", "this seat has none" not in text)
+    else:
+        check(f"{verb}: says this seat has none, or that it is not enabled",
+              "this seat has none" in text or "not enabled" in text)
     if tool:
         check(f"{verb}: says what it works on is not the being's home",
               any(s in text for s in ("not your home", "not in your home", "not read your home",
@@ -234,17 +245,29 @@ def test_no_worktree_refusals_say_what_the_verb_is_for():
 
 
 _FIND_WORDS = ("find", "search", "grep", "locate", "look up", "look for")
-# The home tools that address a file by path and line and search nothing. request_run is not here:
-# check's refusal says "To find out what one of your own files does when it runs, use
-# request_run", and running a file is how one finds that out.
+# The home tools that address a file by path and line. request_run is not here: check's refusal
+# says "To find out what one of your own files does when it runs, use request_run", and running a
+# file is how one finds that out.
 _HOME_TOOLS = ("memory_read", "memory_edit")
+# The one way a home tool finds (#351): memory_read given `find` lists the line numbers in one
+# file where literal text occurs. A clause may credit memory_read with finding only if it names
+# that parameter, so the being is told the call that finds, not just the tool.
+_FINDS_WITH = {"memory_read": "and find"}
 
 
 def test_no_home_tool_is_credited_with_finding():
-    """No refusal, and no toolset availability line, credits a home tool with FINDING anything.
-    #354's search refusal said "To find or read lines in your own files ... use memory_read", but
-    memory_read reads a window from start_line on and searches nothing (Codex, #354 follow-up). A
-    being told it can find with memory_read goes looking with a tool that cannot look.
+    """No refusal and no toolset availability line credits a home tool with FINDING, unless the
+    clause names the parameter that really finds.
+
+    History. #354's search refusal said "To find or read lines in your own files ... use
+    memory_read" when memory_read only read a window from start_line on and searched nothing
+    (Codex, #354 follow-up); #357 made the rule absolute and the refusal said "read lines". That
+    was true and did not help: what cbp-being wanted was to locate `head = nn.Linear` in a scratch
+    file, so it kept calling search (120 refusals by 2026-10-07) and writing worktree setup
+    scripts. #351 gave memory_read a `find` parameter, which does find. The rule is now: a clause
+    crediting memory_read with finding must name `find` (as "... and find"); memory_edit is never
+    credited with finding. Pinned the other way too: the search refusal and the toolset's search
+    line must now point at memory_read with find, so a revert to "read lines" fails here.
 
     Checked per CLAUSE (split on '.' and ';'), so "search reads a code-repository checkout" in the
     search refusal's first sentence is not mistaken for a claim about memory_read in its second."""
@@ -258,8 +281,18 @@ def test_no_home_tool_is_credited_with_finding():
             tools = [t for t in _HOME_TOOLS if t in low]
             if not tools:
                 continue
-            for w in _FIND_WORDS:
-                check(f"{label}: {w!r} is not credited to {tools} ({clause!r})", w not in low)
+            credited = [w for w in _FIND_WORDS if w in low]
+            if not credited:
+                continue
+            for t in tools:
+                need = _FINDS_WITH.get(t)
+                check(f"{label}: {t} is credited with {credited} only beside its find parameter "
+                      f"({clause!r})", bool(need) and need in low)
+    check("find is a parameter memory_read really takes", "find" in B._TOOL_SCHEMAS["memory_read"][1])
+    for label, text in (("refusal search", B.NO_WORKTREE_REFUSAL["search"]),
+                        ("toolset search", toolset.NO_WORKTREE_HERE["search"])):
+        check(f"{label}: points at memory_read with find",
+              "memory_read" in text and "and find" in text)
 
 
 # Phrases that place a worktree verb in the being's home. "your home" is allowed only negated.

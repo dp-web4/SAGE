@@ -41,9 +41,8 @@ WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "
 # read. Each line says what the verb reads and which tool serves the being's own files. The
 # full refusal the verb itself returns is being_gate_client.NO_WORKTREE_REFUSAL.
 NO_WORKTREE_HERE = {
-    "search": ("it searches a code-repository checkout (a worktree), not your home, and this "
-               "seat has none; to read lines in your own files use memory_read with "
-               "start_line"),
+    "search": ("it searches a code-repository checkout (a worktree), not your home; to find a "
+               "line in your own files use memory_read with path and find"),
     "git_read": ("it reads the git history of a code-repository checkout (a worktree), not "
                  "your home, and this seat has none; to read your own files use memory_read"),
     "check": ("it runs the test suites of a code-repository checkout (a worktree), not your "

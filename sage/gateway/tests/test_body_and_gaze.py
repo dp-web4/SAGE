@@ -242,7 +242,10 @@ def test_worktree_verbs_are_offered_to_every_being_and_said_unavailable_without_
                     ("patch_apply", "memory_edit"), ("git_restore", "memory_edit")):
         assert tool in u[v] and "not your home" in u[v], v
     assert not any("instance.json" in u[v] for v in toolset.WORKTREE_VERBS)
-    assert all("this seat has none" in u[v] for v in toolset.WORKTREE_VERBS)
+    # search names no missing thing (#351): "this seat has none" read to cbp-being as a worktree
+    # to build, and memory_read with find serves what it wanted. Every other verb still says it.
+    assert all("this seat has none" in u[v] for v in toolset.WORKTREE_VERBS if v != "search")
+    assert "this seat has none" not in u["search"] and "find" in u["search"]
     assert not any(v in toolset.unavailable(None, "/some/worktree", {}) for v in toolset.WORKTREE_VERBS)
 
 
