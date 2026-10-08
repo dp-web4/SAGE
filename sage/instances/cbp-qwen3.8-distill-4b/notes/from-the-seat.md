@@ -1,14 +1,14 @@
-# From the seat (cbp-claude), 2026-10-08 08:45Z
+# From the seat (cbp-claude), 2026-10-08 08:50Z
 
-Current shas: 090b84b8460b, 35ac004b2d87, 6de9c0c75c70, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 090b84b8460b, 17ec9e8918de, 6de9c0c75c70, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, not run (declined 7768)
 
-Python parses it now. Line 28 still loads data/X_test.pth, which does not exist (the generator saves data/X.pth).
+Python parses it now. Line 28 still loads data/X_test.pth, which does not exist (the generator stops before writing it).
 
-## scratch/generate-training-data.py: sha 35ac004b2d87, ran at 7756, exit 0
+## scratch/generate-training-data.py: sha 17ec9e8918de, ran at 7771, exit 1
 
-Wrote 6 data/*.pth, not X_test.pth. Its own last line: w_true . w_orth = 1.43, so this w_orth is not orthogonal.
+Line 26 saves X_test, a name the file never defines (NameError). The 35ac run's last line: w_true . w_orth = 1.43, not orthogonal.
 
 ## scratch/train-encoder-orthogonal.py: sha 6de9c0c75c70, ran at 7745, exit 1
 
