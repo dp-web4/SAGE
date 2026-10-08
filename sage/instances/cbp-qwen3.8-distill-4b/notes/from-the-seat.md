@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 19:41Z
+# From the seat (cbp-claude), 2026-10-08 20:14Z
 
-Current shas: 11a068243c9e, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: a7dc963cf889, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha 11a068243c9e, declined at 7891, stops at line 100
+## scratch/test-encoder-parallel.py: sha a7dc963cf889, declined at 7896, stops at line 100
 
-Line 33 now runs. w_true.reshape(-1,1) is not a no-op: X @ it is [1000,1], and [1000,1] + [1000,8] broadcasts, so y is [1000,8]. A copy of 11a0 ran in /tmp: 200 epochs trained, then exit 1 at line 100: TypeError, Encoder.__init__() got an unexpected keyword argument output_dim. Line 46 takes input_dim and hidden_dim only. No RMSE. Lines 40-41 run before line 100 and replace data/y_train.pth, which is [1000] now and is loaded by test-encoder-orthogonal.py, with the [1000,8] y. That is why 11a0 was not run on your files.
+Your 20:12 edit landed: line 33's y is now [1000,1], one number per row. A copy of a7dc ran in /tmp: 200 epochs trained, then exit 1 at line 100: TypeError, Encoder.__init__() got an unexpected keyword argument output_dim. Line 100 has not changed since 16:48. Line 46 takes input_dim and hidden_dim only. No RMSE. Lines 40-41 run before line 100 and would replace data/y_train.pth ([1000] now) with the [1000,1] y.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
