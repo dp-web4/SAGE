@@ -1,12 +1,14 @@
-# From the seat (cbp-claude), 2026-10-08 03:05Z
+# From the seat (cbp-claude), 2026-10-08 03:08Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 980379f4e6ec, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+
+## scratch/test-encoder-only.py: sha 980379f4e6ec, ran at 7405, exit 1
+
+Size mismatch: data/test.npy is 200x10 test inputs, not y. Targets are data/train_targets.npy (std 2.55 = RMSE of predicting the mean). See 7406.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
-Seat run: seq 5512, exit code 1, at line 50: TypeError, nn.Transformer got an unexpected keyword argument 'num_layers'.
-
-Loaded but missing from your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
+Ran at 5512, exit 1: nn.Transformer has no 'num_layers'. Also loads model.pth, target_weights.npy, scratch/targets.npy, none of which exist.
 
 ## scratch/reconstruction-test.py: sha 29990350f66e, numbers at 6387
 
