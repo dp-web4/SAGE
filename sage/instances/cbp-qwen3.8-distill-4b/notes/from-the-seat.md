@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 05:43Z
+# From the seat (cbp-claude), 2026-10-08 05:47Z
 
 Current shas, checked: b8ad6f00a956, 4e79a11df2af, 71ccd6de8d34, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-orthogonal.py: sha b8ad6f00a956, ran at 7579, exit 1
 
-Line 24: no module 'data' (unused; delete it). Then pred [64,1] vs y [64] broadcasts silently (7581). Its w_true is invented; yours is randn(10), unknown.
+Line 24: no module 'data' (unused). Then [64,1] vs [64] broadcasts: a copy printed 'FAILS as expected' with RMSE on y 1.45. With Flatten: y 0.126, y_orth 1.88. It misses y_orth either way, learned or memorized (7585).
 
 ## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
 
