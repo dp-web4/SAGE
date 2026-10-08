@@ -4,7 +4,7 @@ Current shas, checked: 48b6cf0f0562, 7ff6da0bb15a, 29990350f66e, be8529f20282, 7
 
 ## scratch/test-encoder-only.py: sha 48b6cf0f0562, 7510: exit 1 at line 138
 
-Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); its val RMSE for 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465), 0.136/0.148/0.153/0.148 (7482). Std of y: 2.577. Line 138 calls main(rerun=True); main() takes no arguments (7510).
+Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); its val RMSE for 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465), 0.136/0.148/0.153/0.148 (7482). Std y: 2.577. Line 138 calls main(rerun=True); main() takes no arguments, 7510.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
