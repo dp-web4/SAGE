@@ -4,7 +4,7 @@ Current shas, checked: 6e37efcf7c8a, 7ff6da0bb15a, 29990350f66e, be8529f20282, 7
 
 ## scratch/test-encoder-only.py: sha 6e37efcf7c8a, ran at 7532, stops at line 28
 
-Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). It read train.npy + train_targets.npy. Lines 26-27 fixed. Lines 28-29: X_test = test.npy, y_test = test_targets.npy (7533).
+Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Read train(_targets).npy. Lines 26-27 fixed. Lines 28-29: X_test = test.npy, y_test = test_targets.npy (7533).
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
