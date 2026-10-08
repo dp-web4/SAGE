@@ -1671,9 +1671,28 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                         f"delivered. Say or call the SHORTEST form of what you were doing; what you "
                         f"leave out can go in the next beat.")})
                 nudged = True
+                # A WINDOW CUT IS RETRIED WITH ROOM, OR IT IS THE SAME CUT AGAIN (2026-10-08). The
+                # cut-call retry above compacts first; this one never did, so a turn that filled the
+                # window was re-sent as the same prompt plus a nudge. legion-being 09:52Z: 26,241 +
+                # 6,527 = 32,768, retried at "num_predict=8000" with ~6.4k actually left; thinking off,
+                # it wrote its #360 code into memory_write, the call was cut mid-JSON at the wall,
+                # llama-server returned 500, and that error became the beat's last reply (6 generates).
+                # So: compact against the server's own count of what failed, to leave the retry the
+                # standard retry reserve, and size the retry from what is left after that.
+                _budget_raw = raw
+                if retry_cause == "window" and raw.get("prompt_eval_count"):
+                    _anchor = (int(raw["prompt_eval_count"]), _convo_chars(msgs))
+                    msgs, _re = compact_convo(msgs, llm, reserve=_RETRY_RESERVE, measured=_anchor,
+                                              spill_root=getattr(client, "memory_root", None),
+                                              own_turns=compact_own_turns)
+                    if _re:
+                        compacted.append({"step": len(thoughts), "elisions": len(_re),
+                                          "chars": sum(e["chars"] for e in _re), "before_retry": True,
+                                          "after": convo_composition(msgs)})
+                    _budget_raw = dict(raw, prompt_eval_count=_est_tokens(_convo_chars(msgs), _anchor))
                 from contextlib import ExitStack
                 with ExitStack() as _stack:
-                    budget = _stack.enter_context(_retry_room(llm, _retry_budget(llm, raw)))
+                    budget = _stack.enter_context(_retry_room(llm, _retry_budget(llm, _budget_raw)))
                     _unthought = bool(thought_only and _stack.enter_context(_no_think(llm)))
                     print(f"[tool-loop] retrying once with num_predict={budget}, a nudge"
                           f"{' and thinking OFF' if _unthought else ''} "

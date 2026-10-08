@@ -1728,3 +1728,41 @@ def test_convo_composition_splits_the_floor_by_what_compaction_did():
     assert (c["n_stubs"], c["n_pointers"]) == (1, 1) and c["notes"] == len("[harness] note")
     parts = ("seed", "results_whole", "results_stub", "results_pointer", "own_turns", "notes")
     assert sum(c[k] for k in parts) == _convo_chars(msgs)   # it accounts for every char
+
+
+def test_a_window_cut_is_retried_after_compaction_not_as_the_same_prompt(tmp_path):
+    """legion-being 2026-10-08 09:52Z: 26,241 + 6,527 = 32,768 (the window); the retry was the same
+    prompt plus a nudge, its memory_write was cut mid-JSON at the wall, and the 500 became the
+    beat's reply. A window-cut retry now compacts first, against the server's own count."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    sent = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 32768
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            sent.append(sum(len(m.get("content") or "") for m in messages))
+            if len(sent) == 1:
+                # the wall: prompt + eval == num_ctx, nothing said
+                return {"content": "", "tool_calls": [],
+                        "raw": {"done_reason": "length", "prompt_eval_count": 30768, "eval_count": 2000,
+                                "message": {"content": "", "thinking": "drafting ..."}}}
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 3000, "eval_count": 20, "message": {}}}
+
+    big = "x" * 6000
+    seed = [{"role": "system", "content": "s"}, {"role": "user", "content": "go"}]
+    for i in range(4):
+        seed += [{"role": "assistant", "content": "", "tool_calls": [
+                     {"function": {"name": "memory_read", "arguments": {"path": f"f{i}"}}}]},
+                 {"role": "tool", "content": big}]
+    c = _client(OK_DISPATCH)
+    c.memory_root = str(tmp_path)
+    r = run_ollama_tool_turn(c, FakeLLM(), seed)
+    assert len(sent) == 2 and r.reply == "done"
+    assert sent[1] < sent[0], f"the retry must be smaller than what hit the wall: {sent}"
+    assert r.generates[0]["retry_cause"] == "window"
+    assert any(x.get("before_retry") for x in r.compacted), r.compacted
