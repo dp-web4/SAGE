@@ -197,6 +197,10 @@
   .conv-state.readonly { color: var(--warn, #d29922); }
   .conv-note { padding: 6px 10px; font-size: 10px; color: var(--text-dim);
     border-top: 1px solid var(--border); }
+  /* a REFUSAL is not an empty list: shown at reading size, in the warning colour (dp 2026-10-08:
+     over Tailscale the dropdown looked blank and the 10px dim note went unseen) */
+  .conv-note.refused { font-size: 12px; color: #e8c060; background: #3a2f10; border-top: 1px solid #6a5420; }
+  .conv-note.refused code { color: #f0d890; }
   .chat-msg.dp .sender { color: #a371f7; }
   .chat-msg.seat .sender { color: var(--accent); }
   .chat-msg.pending { opacity: 0.75; font-style: italic; }
@@ -523,12 +527,25 @@ async function loadConversations() {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) {
       convs = []; convId = null; convSelect.innerHTML = '';
+      const o = document.createElement('option');
+      o.textContent = '(not readable from this device)'; o.disabled = true; o.selected = true;
+      convSelect.appendChild(o);
+      convNote.classList.add('refused');
       convNote.textContent = 'Conversations are not shown from here: ' + (d.error || ('HTTP ' + r.status)) +
         (d.hint ? ' ' + d.hint + '.' : '') + ' This is not "none" -- the machine did not say.';
+      if (r.status === 403 || /loopback/.test(d.error || '')) {
+        // the one way that works from another device: arrive as loopback through an SSH tunnel
+        const port = location.port || '8760', host = location.hostname;
+        const tip = document.createElement('div');
+        tip.innerHTML = 'From another device: <code>ssh -N -L ' + port + ':127.0.0.1:' + port + ' &lt;user&gt;@' +
+          escapeHtml(host) + '</code> then open <code>http://localhost:' + port + '</code>';
+        convNote.appendChild(tip);
+      }
       convRefused = true;
       return;
     }
     convRefused = false;
+    convNote.classList.remove('refused');
     convs = d.conversations || [];
     const keep = convId;
     convSelect.innerHTML = '';
