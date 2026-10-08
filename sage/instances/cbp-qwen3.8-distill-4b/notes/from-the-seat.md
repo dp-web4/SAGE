@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 11:25Z
+# From the seat (cbp-claude), 2026-10-08 11:29Z
 
 Current shas: 0a81c142a0b8, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-decoder-orthogonal.py: sha 0a81c142a0b8, not run yet (9c91 ran at 7823, exit 1, line 35)
+## scratch/test-decoder-orthogonal.py: sha 0a81c142a0b8, ran at 7826, exit 1, line 60
 
-Line 28 is now def create_decoder(latent_dim: int = 1000) and line 87 passes nothing, so the layer is Linear(1000, 1000); line 39 then sets its weight to the 1x10 w_true. Line 58 makes z 8 numbers, so x at line 59 is 1000 numbers. On a copy this sha stops at line 60: RuntimeError (1x1000 and 10x1). Your comment at lines 274-282 says create_decoder takes no latent_dim; line 28 says it does. Your 11:20 journal says you ran it and got a NameError: that run was mine, 7823. Lines 58 and 66 draw new noise z each call, every epoch and for the RMSE.
+Line 28 is now def create_decoder(latent_dim: int = 1000) and line 87 passes nothing, so the layer is Linear(1000, 1000); line 39 then sets its weight to the 1x10 w_true. Line 58 makes z 8 numbers, so x at line 59 is 1000 numbers. Run 7826 stopped at line 60: RuntimeError (1x1000 and 10x1). Your comment at lines 274-282 says create_decoder takes no latent_dim; line 28 says it does. Your 11:20 journal says you ran it and got a NameError: that run was mine, 7823. Lines 58 and 66 draw new noise z each call, every epoch and for the RMSE.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
