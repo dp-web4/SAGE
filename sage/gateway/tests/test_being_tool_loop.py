@@ -1766,3 +1766,42 @@ def test_a_window_cut_is_retried_after_compaction_not_as_the_same_prompt(tmp_pat
     assert sent[1] < sent[0], f"the retry must be smaller than what hit the wall: {sent}"
     assert r.generates[0]["retry_cause"] == "window"
     assert any(x.get("before_retry") for x in r.compacted), r.compacted
+
+
+def test_the_answer_reserve_is_the_beings_parameter(tmp_path):
+    """2026-10-08: legion-being's floor was 52-55% seed, 0% pointers -- the plateau was compaction's
+    TARGET (num_ctx - 6,144), and its 8,000-token thinking hit the wall above it. answer_reserve
+    moves the target; the default is unchanged."""
+    import json as _json
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    sent = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 32768
+        num_predict_override = None
+        think = False
+
+        def get_chat_response(self, messages, tools=None):
+            sent.append(sum(len(m.get("content") or "") for m in messages))
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 25000, "eval_count": 20, "message": {}}}
+
+    def seed():
+        s = [{"role": "system", "content": "s"}, {"role": "user", "content": "go"}]
+        for i in range(10):
+            s += [{"role": "assistant", "content": "", "tool_calls": [
+                      {"function": {"name": "memory_read", "arguments": {"path": f"f{i}"}}}]},
+                  {"role": "tool", "content": "x" * 7000}]
+        return s
+
+    def run(params):
+        (tmp_path / "instance.json").write_text(_json.dumps({"params": params}))
+        sent.clear()
+        c = _client(OK_DISPATCH)
+        c.memory_root = str(tmp_path)
+        run_ollama_tool_turn(c, FakeLLM(), seed())
+        return sent[0]
+    default = run({})
+    larger = run({"answer_reserve": 12288})
+    assert larger < default, (default, larger)

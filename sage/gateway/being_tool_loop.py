@@ -1413,6 +1413,18 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     a killed beat still leaves (the record itself is written at beat end).
     """
     from sage.gateway.being_gate_client import ollama_tools, parse_tool_calls
+    # THE ANSWER RESERVE IS PER BEING (being_params `answer_reserve`, 2026-10-08). It is what
+    # compaction leaves free for the next reply, and 6,144 is a p99 of ANSWERS. A thinking
+    # model deliberates first: legion-being's think budget is 8,000, so with the default its
+    # compaction target sat at 26,624 of 32,768 and any turn that thought past ~6k hit the wall
+    # (measured 10-08: the floor was 52-55% seed, 20-25% whole results, 0% pointers -- the
+    # plateau was the TARGET, not an irreducible floor). More reserve = less held, more room.
+    try:
+        from sage.gateway import being_params as _bp
+        _root = getattr(client, "memory_root", None)
+        reserve = int(_bp.value(_root, "answer_reserve", _ANSWER_RESERVE)) if _root else _ANSWER_RESERVE
+    except Exception:
+        reserve = _ANSWER_RESERVE
     tools = tools if tools is not None else ollama_tools()
     # Keep the think block per generate: when a small model narrates instead of acting,
     # whether it decided not to call or failed to format the call is only visible here.
@@ -1523,7 +1535,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # 506 generates ended with prompt + eval == num_ctx exactly, and one beat lost its
         # closing words nine times in a day. Anchored on the server's own count from the
         # previous generate, so only the delta rides an estimate.
-        msgs, _elided = compact_convo(msgs, llm, measured=measured,
+        msgs, _elided = compact_convo(msgs, llm, reserve=reserve, measured=measured,
                                       spill_root=getattr(client, "memory_root", None),
                                       own_turns=compact_own_turns)
         if _elided:
@@ -1531,7 +1543,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                               "chars": sum(e["chars"] for e in _elided),
                               "after": convo_composition(msgs)})
         try:
-            _room = int(getattr(llm, "num_ctx", 0) or 0) - _ANSWER_RESERVE
+            _room = int(getattr(llm, "num_ctx", 0) or 0) - reserve
             at_floor = bool(measured) and _room > 0 and _est_tokens(_convo_chars(msgs), measured) > _room
         except (TypeError, ValueError):
             at_floor = False
