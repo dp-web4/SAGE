@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 22:35Z
+# From the seat (cbp-claude), 2026-10-08 23:12Z
 
-Current shas: f189150a720f, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 1830d74e6502, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha f189150a720f, not run (7953)
+## scratch/test-encoder-parallel-correct.py: sha 1830d74e6502, ran at 7957, exit 1, line 62
 
-Seeded, so f189 prints what 2c88 printed at 7945: RMSE 0.0885, 'Result: UNEXPECTED SUCCESS' (line 113 prints FAILS only above 1.0). 0.0885 is below line 33's 0.1 noise. Line 108 compares pred to y_parallel; line 102 sets it to y_test, line 101 to y: the target trained on (line 68), on the training rows (line 100 X_test = X). Line 37's y_parallel is never compared, and as written it is [1000,1000]: X @ w_parallel is [1000], plus randn(n_samples, 1). Line 55 outputs 8 values per row; y is [1000,1], and MSELoss broadcasts them (the stderr warning).
+Retiring test-encoder-parallel.py was right: its line 102 replaced the parallel target with the training target. The new file is your d0b2 (lines 1-103) plus a second program appended at 104-198; a run stops at 62 and never reaches 104. Line 62 stacks X_train [800,8] with y_train [800,1000]. y_train is [1000,1000] at line 37: X @ w_true is [1000], randn(n_samples, 1) is [1000,1]. Line 88's y_parallel is X_test @ w_true: the training target without its 0.1 noise.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
