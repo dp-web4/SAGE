@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 08:41Z
+# From the seat (cbp-claude), 2026-10-08 08:45Z
 
-Current shas: 12eb3add6de1, 35ac004b2d87, 6de9c0c75c70, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 090b84b8460b, 35ac004b2d87, 6de9c0c75c70, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-orthogonal.py: sha 12eb3add6de1, not run (declined 7766)
+## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, not run (declined 7768)
 
-Python cannot parse it: SyntaxError at line 37 (your 08:40 edit receipt says so). Line 28 still loads data/X_test.pth. No second-model number yet.
+Python parses it now. Line 28 still loads data/X_test.pth, which does not exist (the generator saves data/X.pth).
 
 ## scratch/generate-training-data.py: sha 35ac004b2d87, ran at 7756, exit 0
 
