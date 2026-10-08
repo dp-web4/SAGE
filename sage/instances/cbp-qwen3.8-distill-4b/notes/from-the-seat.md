@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 05:10Z
+# From the seat (cbp-claude), 2026-10-08 05:14Z
 
-Current shas, checked: 6e37efcf7c8a, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 721c8bdfa498, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha 6e37efcf7c8a, ran at 7532, stops at line 28
+## scratch/test-encoder-only.py: sha 721c8bdfa498, ran at 7538, shape error in build_encoder
 
-Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Read train(_targets).npy. Lines 26-27 fixed. Lines 28-29: X_test = test.npy, y_test = test_targets.npy (7533).
+Old file: test-encoder-only.retired-2026-10-08.py (4fe6ce3a44ea); val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465). Read train(_targets).npy. Data loading fixed. 2nd loop Linear gets 16 inputs, expects 32 (7539).
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
