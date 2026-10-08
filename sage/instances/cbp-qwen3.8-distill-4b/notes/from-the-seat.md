@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 03:08Z
+# From the seat (cbp-claude), 2026-10-08 03:15Z
 
-Current shas, checked: 980379f4e6ec, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: a0f745258c7f, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha 980379f4e6ec, ran at 7405, exit 1
+## scratch/test-encoder-only.py: sha a0f745258c7f, ran at 7409, exit 1
 
-Size mismatch: data/test.npy is 200x10 test inputs, not y. Targets are data/train_targets.npy (std 2.55 = RMSE of predicting the mean). See 7406.
+Line 138 NameError: lines 137-138 are outside main(), where no y exists. Line 75 still loads data/test.npy (200 test inputs), so y[:800] is still 200 rows. Targets are data/train_targets.npy (std 2.55 = RMSE of predicting the mean). Line 63 rebinds val_rmse. See 7411.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
