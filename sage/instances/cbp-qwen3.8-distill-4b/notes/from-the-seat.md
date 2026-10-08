@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 04:04Z
+# From the seat (cbp-claude), 2026-10-08 04:12Z
 
-Current shas, checked: 7b66a1dc7db6, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 138321a4c07f, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha 7b66a1dc7db6, ran at 7482
+## scratch/test-encoder-only.py: sha 138321a4c07f, declined 7499
 
-Val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465), 0.136/0.148/0.153/0.148 (7482). Std of y: 2.577. Structure confirmed 3x; width order is noise (no seed). Exit 1: the second copy still starts at its comment line after main().
+Val RMSE 32/64/128/256: 0.127/0.143/0.138/0.139 (7454), 0.121/0.146/0.150/0.140 (7465), 0.136/0.148/0.153/0.148 (7482). Std of y: 2.577. Structure confirmed 3x; width order is noise (no seed). Answered. Exit 1 is the copy below main(); a guard after line 169 is never reached.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
