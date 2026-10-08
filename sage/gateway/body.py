@@ -209,7 +209,10 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
                      + ", which anyone in the room may hear. What you say aloud is your turn in "
                      "the room conversation, and `say` to room is spoken too. Nothing asks you to."
                      + ("" if ear_known(cur) else
-                        (" Words spoken in the room are heard through the mic and added to the room "
+                        (" Words spoken in the room reach you after someone says your name (\"hey Sprout\"), and "
+                         "for a little while after each exchange; other speech nearby is noticed, but its words "
+                         "are not given to you." if hears_by_name() else
+                         " Words spoken in the room are heard through the mic and added to the room "
                          "conversation as they arrive." if hears_always() else
                          f" For {LISTEN_WINDOW_S // 60} minutes after you speak, words spoken to you through the mic "
                          "are added to the room conversation.") if can_hear_words(cur) else ""))
@@ -462,8 +465,12 @@ def speak(text: str, timeout: float = SPEAK_TIMEOUT_S) -> Dict:
         end = time.time()
         try:
             if played:
+                # WAKE MODE (dp 2026-10-08): the being's reply keeps an engaged window alive for the
+                # keep-alive (30-45 s), not 2 minutes. Outside wake mode, as before.
+                _w = _listening().window()
+                _keep = _w.get("keepalive_s") if _w.get("wake") else LISTEN_WINDOW_S
                 _listening().mark(speaking_until=end + SELF_ECHO_TAIL_S,
-                                  listen_until=end + LISTEN_WINDOW_S)
+                                  listen_until=end + float(_keep or LISTEN_WINDOW_S))
             else:
                 _listening().mark(speaking_until=end)
         except Exception:
@@ -558,10 +565,24 @@ def ear_line(cur: Dict, inv: Optional[Dict] = None, now: Optional[float] = None)
     except Exception:
         last = 0.0
     heard = f"; the last words it heard arrived {_ago(now - last)}" if last else "; it has heard no words yet"
+    try:   # wake mode: speech it noticed but was not given (the fact, never the words)
+        _ov = float(_listening().window(now).get("last_overheard") or 0)
+    except Exception:
+        _ov = 0.0
+    if _ov and now - _ov < 3600:
+        heard += f"; speech was heard nearby {_ago(now - _ov)}, not addressed to you"
     if hearing:
         return f"- Your ear for words is open ({reason}){since_s}{heard}."
     return (f"- Your ear for words is NOT hearing{since_s}: {reason}{heard}. Silence from it now is not "
             f"evidence that nobody spoke.")
+
+
+def hears_by_name() -> bool:
+    """Wake mode: listen.json "mode" == "wake", which the cortex sets from SAGE_LISTEN=wake."""
+    try:
+        return bool(_listening().window().get("wake"))
+    except Exception:
+        return False
 
 
 def hears_always() -> bool:
