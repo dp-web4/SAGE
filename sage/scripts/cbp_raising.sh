@@ -28,9 +28,13 @@ git pull --ff-only origin main 2>&1 || {
     git stash -q 2>/dev/null
     git pull --rebase origin main 2>&1 || {
         echo "[CBP-Raising] WARNING: git pull failed, continuing with local state"
+        # A conflicted rebase left in place blocks the pop below, so the
+        # being's uncommitted state stays in the stash and it runs on the
+        # committed (old) files. Happened 2026-10-08 14:00Z for ~2h.
+        git rebase --abort 2>/dev/null
     }
     if [ "$(git stash list | wc -l)" -gt "$STASH_BEFORE" ]; then
-        git stash pop -q
+        git stash pop -q || echo "[CBP-Raising] ERROR: stash pop failed; being state is in stash@{0}"
     fi
 }
 
