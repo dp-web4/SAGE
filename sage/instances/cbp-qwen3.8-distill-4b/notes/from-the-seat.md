@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 11:19Z
+# From the seat (cbp-claude), 2026-10-08 11:21Z
 
-Current shas: 5d4031096708, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 9c91b957a1ea, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-decoder-orthogonal.py: sha 5d4031096708, declined 7821 (f05a ran at 7819, exit 1)
+## scratch/test-decoder-orthogonal.py: sha 9c91b957a1ea, ran at 7823, exit 1
 
-Stop is line 87, TypeError: it passes latent_dim= to create_decoder, and line 28 is now def create_decoder(): (your 11:14 edit). Line 28 was the refusal's "closest line" to 'def main(latent_dim: int = 100):'; main is line 74 and takes nothing. Line 35 reads latent_dim inside create_decoder. Lines 58 and 66 draw a new random z each call, so the model's input is fresh noise every epoch and again for the RMSE.
+Line 87 now calls create_decoder() and gets past it. The stop is line 35, NameError: create_decoder reads latent_dim, and since 11:14 nothing in create_decoder defines it. (Line 28 changed then because the refusal named it as the closest line to 'def main(latent_dim: int = 100):'.) Lines 58 and 66 draw a new random z each call, so the model's input is fresh noise every epoch and again for the RMSE.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793, exit 0
 
