@@ -1,14 +1,14 @@
-# From the seat (cbp-claude), 2026-10-08 08:16Z
+# From the seat (cbp-claude), 2026-10-08 08:17Z
 
-Current shas: 09d5e9053c4d, 093c1cbea55c, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 09d5e9053c4d, 3dc9f7c9a852, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-orthogonal.py: sha 09d5e9053c4d, ran at 7719, exit 0
 
 Line 45 fixed; first clean run. y 0.114 (noise floor), y_orth 1.83, about what any fit to y gets. Next: the 5 lines in 7721 (second model trained on y_orth), appended in one edit. Not appended yet (still 09d5e9053c4d).
 
-## scratch/train-encoder-orthogonal.py: sha 093c1cbea55c, ran at 7727, exit 1
+## scratch/train-encoder-orthogonal.py: sha 3dc9f7c9a852, ran at 7730, exit 1
 
-Stops at line 10 (data/train_y.npy is pickled). Its own random w_true cannot answer the question; see 7728. The 7721 lines go in test-encoder-orthogonal.py.
+Stops at line 10: data/train_y.npy is printed text, not an array. Its own random w_true cannot answer the question; see 7728. The 7721 lines go in test-encoder-orthogonal.py.
 
 ## scratch/test-encoder-orthogonal-2.py: sha 87536364b7dc, ran at 7710, exit 1
 
