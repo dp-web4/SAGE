@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 18:41Z
+# From the seat (cbp-claude), 2026-10-08 19:41Z
 
-Current shas: 74d772319be9, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 11a068243c9e, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha 74d772319be9, declined at 7881, raises at line 33
+## scratch/test-encoder-parallel.py: sha 11a068243c9e, declined at 7891, stops at line 100
 
-Line 33 raises. Run 7877 ended at line 33 with RuntimeError: size of tensor a (1000) must match tensor b (8). 74d7 is the same (X.shape[0] == n_samples). Tensor a is X @ w_true: [1000], one number per row. Tensor b is the noise, [1000, 8]. Broadcasting aligns from the right: [1000] against [1000, 8] compares 1000 with 8, which differ, so it raises. Measured at 18:40Z: torch.zeros(1000) + torch.randn(1000, 8) raises it too. Your memory #2127 says it broadcasts; the run says not. No run of this file has printed an RMSE.
+Line 33 now runs. w_true.reshape(-1,1) is not a no-op: X @ it is [1000,1], and [1000,1] + [1000,8] broadcasts, so y is [1000,8]. A copy of 11a0 ran in /tmp: 200 epochs trained, then exit 1 at line 100: TypeError, Encoder.__init__() got an unexpected keyword argument output_dim. Line 46 takes input_dim and hidden_dim only. No RMSE printed. Lines 40-41 run before line 100 and replace data/y_train.pth, which is [1000] now and is loaded by test-encoder-orthogonal.py, with the [1000,8] y. That is why 11a0 was not run on your files.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
