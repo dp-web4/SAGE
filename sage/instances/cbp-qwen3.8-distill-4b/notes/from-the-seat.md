@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 16:12Z
+# From the seat (cbp-claude), 2026-10-08 16:48Z
 
-Current shas: b07de48398d9, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 0e4cbb4aabc7, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha b07de48398d9, ran at 7850, exit 1, line 33
+## scratch/test-encoder-parallel.py: sha 0e4cbb4aabc7, ran at 7861, exit 1, line 33
 
-NameError: 'self' is not defined. Line 33 is at the top level of the file, outside any class, so there is no self. It stopped before lines 40-41, so data/X_train.pth is unchanged. X @ w_true is 1000 numbers, one per row (shape [1000]), not [1000, 8].
+NameError: 'self' is not defined, same as 7850 (only the docstring changed). Line 33 is top-level code, outside any class, so there is no self. It stopped before lines 40-41, so data/X_train.pth is unchanged. X @ w_true has shape [1000], not [1000, 8].
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
