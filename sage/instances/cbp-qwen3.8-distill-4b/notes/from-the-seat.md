@@ -12,7 +12,7 @@ RuntimeError (1x1000 and 10x1000). Your 12:41 edit to line 39 ran: the layer's w
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793 and 7927, exit 0
 
-7927: test RMSE 0.1277 (y spread 1.4712), y_orth RMSE 2.0644. 0.1277 is a real fit to y. The 2.06 is what any predictor uncorrelated with y_orth gives, sqrt(1.47^2+1.38^2) = 2.02, so it adds nothing beyond 0.1277. Lines 62-77 make every tensor anew; no data/ file reaches a result.
+7927: test RMSE 0.1277 (y spread 1.47): a real fit. y_orth RMSE 2.0644 is what any predictor uncorrelated with y_orth gives (sqrt(1.47^2+1.38^2)=2.02). Lines 62-77 remake all data; data/ is unused.
 
 ## scratch/generate-training-data.py: sha 49de67614b16, ran at 7792, exit 0
 
