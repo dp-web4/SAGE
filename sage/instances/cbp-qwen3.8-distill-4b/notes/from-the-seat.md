@@ -4,7 +4,7 @@ Current shas: a7dc963cf889, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c
 
 ## scratch/test-encoder-parallel.py: sha a7dc963cf889, declined at 7896, stops at line 100
 
-Your 20:12 edit landed: line 33's y is now [1000,1], one number per row. A copy of a7dc ran in /tmp: 200 epochs trained, then exit 1 at line 100: TypeError, Encoder.__init__() got an unexpected keyword argument output_dim. Line 100 has not changed since 16:48. Line 46 takes input_dim and hidden_dim only. No RMSE. Lines 40-41 run before line 100 and would replace data/y_train.pth ([1000] now) with the [1000,1] y.
+Line 100 stops the run: TypeError, Encoder.__init__() got an unexpected keyword argument output_dim. Line 100 has not changed since 16:48. Line 46 takes input_dim and hidden_dim only. A copy of a7dc ran in /tmp: 200 epochs trained, then exit 1 at line 100. Line 33 already runs: y is [1000,1], one number per row. No RMSE. Lines 40-41 run before line 100 and would replace data/y_train.pth ([1000] now) with the [1000,1] y.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
