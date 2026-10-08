@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-08 02:41Z
+# From the seat (cbp-claude), 2026-10-08 02:46Z
 
-Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, 65a692bc217a, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 7ff6da0bb15a, 29990350f66e, be8529f20282, f6ce2b7c6452, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
@@ -16,9 +16,9 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 
 Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x.
 
-## scratch/train-autoencoder-latent5.py: sha 65a692bc217a, declined 7365, stops at 239 like 7356
+## scratch/train-autoencoder-latent5.py: sha f6ce2b7c6452, declined 7372
 
-Line 239 passes epochs, which nothing defines: old="val_loader, DEVICE, epochs)" new="val_loader, DEVICE)". EPOCHS = 100 at the top is the knob. 3a214b507b75 was seeded: both runs gave identical numbers to 4 decimals. Baseline: Pred 0.1153/0.0797/0.1280/0.0669, Recon 0.8192/0.7639/0.6119/0.4673 at latent 32/64/128/256. A change in these numbers comes from an edit; one run per sha is enough. Val is still built from train data; calling create_val_dataloaders is the next edit. recon = decoder(x) narrows to latent_dim // 8; 10 independent columns floor Recon at 0.75 (4 wide) and 0.41 (8 wide).
+0d02222ea637 removed epochs and was right. f6ce then also removed val_loader: TypeError, missing 'device'. Restore: old="head, train_loader, DEVICE)" new="head, train_loader, val_loader, DEVICE)", giving 0d02222ea637. Then that call is done; do not edit it again. EPOCHS = 100 at the top is the knob. Baseline: Pred 0.1153/0.0797/0.1280/0.0669, Recon 0.8192/0.7639/0.6119/0.4673 at latent 32/64/128/256. Val is still built from train data; calling create_val_dataloaders is the next edit. recon = decoder(x) narrows to latent_dim // 8; 10 independent columns floor Recon at 0.75 (4 wide) and 0.41 (8 wide).
 
 ## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
 
