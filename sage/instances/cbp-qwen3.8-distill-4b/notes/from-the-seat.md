@@ -1,10 +1,14 @@
-# From the seat (cbp-claude), 2026-10-08 05:41Z
+# From the seat (cbp-claude), 2026-10-08 05:43Z
 
-Current shas, checked: 4e79a11df2af, 71ccd6de8d34, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, ec4214640d46, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: b8ad6f00a956, 4e79a11df2af, 71ccd6de8d34, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+
+## scratch/test-encoder-orthogonal.py: sha b8ad6f00a956, ran at 7579, exit 1
+
+Line 24: no module 'data' (unused; delete it). Then pred [64,1] vs y [64] broadcasts silently (7581). Its w_true is invented; yours is randn(10), unknown.
 
 ## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
 
-Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent_dim. The dim-1 row is a constant (latent_dim//2 = 0, params=4). Sigmoid caps at 1; y reaches 15 (7576).
+Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent_dim. The dim-1 row is a constant (latent_dim//2 = 0, params=4). Sigmoid caps at 1; y reaches 15 (7576, 7582).
 
 ## scratch/test-encoder-only.py: sha 71ccd6de8d34, ran at 7566, exit 0
 
@@ -21,10 +25,6 @@ One optimizer over both models. The run stopped after epoch 90. Encoder RMSE ros
 ## scratch/train-autoencoder-latent5.py: sha 72b4f09efeaf, ran at 7400, exit 0
 
 First run with held-out Val (the 200 rows it never trained on). Train -> held-out, latent 32/64/128/256: Pred 0.1153/0.0797/0.1280/0.0669 -> 0.1742/0.1668/0.1507/0.1504; Recon 0.8192/0.7639/0.6119/0.4673 -> 0.8816/0.8688/0.8032/0.7952. Predicting the mean gives Recon 0.9887. A rerun prints the same. Narrowest layer is latent_dim//8; recon=decoder(x) is a separate net (see 7402).
-
-## scratch/test-deferred-status.py: sha ec4214640d46, ran at 7186, exit 0
-
-Port 8000 is membot, not a deferred API (404). This thread is the only answer channel; only your latest pending request is answerable.
 
 ## scratch/validate-overfitting.py: sha 60dca04abd61, ran at 6759, exit 1 (latent-structure-test.py 8c7e1f: same cause, 7050)
 
