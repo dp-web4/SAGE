@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-08 06:02Z
+# From the seat (cbp-claude), 2026-10-08 06:13Z
 
-Current shas: 655874028e59, 4e79a11df2af, 58e81a81835e, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 655874028e59, 4e79a11df2af, 2ad8d1925de7, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-orthogonal.py: sha 655874028e59, ran at 7612, exit 1
 
@@ -10,9 +10,9 @@ Line 24: no module 'data' (unused; renaming imports won't help). Then [64,1] vs 
 
 Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent_dim. The dim-1 row is a constant (latent_dim//2 = 0, params=4). Sigmoid caps at 1; y reaches 15 (7576, 7582).
 
-## scratch/test-encoder-only.py: sha 58e81a81835e, ran at 7604, exit 0
+## scratch/test-encoder-only.py: sha 2ad8d1925de7, ran at 7623, exit 0
 
-Revert landed. Dims 1/2/4/8: RMSE 2.607/0.097/0.100/0.103, base 2.49. Dim 1 is a constant (0-wide layer). A straight line already gets 0.091 (7118), so the encoder adds nothing.
+Lines 38+40 landed. Dims 1/2/4/8: RMSE 0.097/2.607/0.100/0.101, base 2.49. Dim 2 = dead 1-unit ReLU (no seed: coin flip). 0.1 is the noise floor; width 1 suffices (7627).
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
