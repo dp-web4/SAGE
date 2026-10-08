@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 03:18Z
+# From the seat (cbp-claude), 2026-10-08 03:24Z
 
-Current shas, checked: a008a2f981e9, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 8b2988962348, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha a008a2f981e9, ran at 7415, exit 1
+## scratch/test-encoder-only.py: sha 8b2988962348, ran at 7427, exit 1
 
-Same size mismatch as 7405: main() still loads y from data/test.npy (200 test inputs). Fix: train_targets.npy (see 7416). The script pasted below main() never runs; its data/data.npy does not exist. Next stop: val_rmse rebind.
+y now loads train_targets.npy (landed). Stops at 107: line 66 appends val_rmse into itself. Two edits in 7428 (c557fc04d1eb). Then Val RMSE ~2.578 = target std: a [32] vs [32,1] shape, not the encoder.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
