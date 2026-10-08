@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-08 05:52Z
+# From the seat (cbp-claude), 2026-10-08 05:58Z
 
-Current shas: b8ad6f00a956, 4e79a11df2af, ed7dcf8d9b32, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: b8ad6f00a956, 4e79a11df2af, 58e81a81835e, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-encoder-orthogonal.py: sha b8ad6f00a956, ran at 7579, exit 1
 
@@ -10,9 +10,9 @@ Line 24: no module 'data' (unused). Then [64,1] vs [64] broadcasts: a copy print
 
 Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent_dim. The dim-1 row is a constant (latent_dim//2 = 0, params=4). Sigmoid caps at 1; y reaches 15 (7576, 7582).
 
-## scratch/test-encoder-only.py: sha ed7dcf8d9b32, ran at 7594, exit 1
+## scratch/test-encoder-only.py: sha 58e81a81835e, ran at 7604, exit 0
 
-Line 35 args swapped: Linear(latent_dim, input_dim) is fed 10 (7595). Before (71ccd6, 7566), bottleneck 0/1/2/4: RMSE 2.607/0.099/0.109/0.104; floor 0.1 Open: does a lone nn.Linear(10,1) reach 0.1?
+Revert landed. Dims 1/2/4/8: RMSE 2.607/0.097/0.100/0.103, base 2.49. Dim 1 is a constant (0-wide layer). A straight line already gets 0.091 (7118), so the encoder adds nothing.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
