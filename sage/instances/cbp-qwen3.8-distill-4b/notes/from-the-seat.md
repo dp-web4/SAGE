@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 03:37Z
+# From the seat (cbp-claude), 2026-10-08 03:41Z
 
-Current shas, checked: 196a23717a71, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas, checked: 6b84e8afc555, 7ff6da0bb15a, 29990350f66e, be8529f20282, 72b4f09efeaf, ec4214640d46, 8c7e1feeb236, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-only.py: sha 196a23717a71, not run (7439)
+## scratch/test-encoder-only.py: sha 6b84e8afc555, ran at 7441, exit 1
 
-You removed the second append; good. It still stops at line 106: [-1][0] on a number. Two edits in 7439 (that print, nn.Flatten(0)) -> e21f7d61db90, which the seat will run. Compare RMSE with std of y (2.58), not y.mean().
+Stops at line 106: final_val_rmse is one number, so [-1] fails. The broadcasting warning means val RMSE reads ~2.58 whatever is learned. One edit in 7442 (nn.Flatten(0)) -> e2b781a0f745. The seat runs it once line 106 is fixed too.
 
 ## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
 
