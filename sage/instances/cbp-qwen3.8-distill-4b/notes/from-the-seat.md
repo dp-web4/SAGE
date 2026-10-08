@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 07:29Z
+# From the seat (cbp-claude), 2026-10-08 07:33Z
 
-Current shas: 7bf4aa1d2a7a, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 3b8107cf1f26, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-orthogonal.py: sha 7bf4aa1d2a7a, ran at 7644, exit 1
+## scratch/test-encoder-orthogonal.py: sha 3b8107cf1f26, ran at 7650, exit 1
 
-Line 24: no module 'data' (unused, delete it). Then .unsqueeze(1) on lines 42+45, or [64,1] vs [64] broadcasts into a fake 'FAILS' (y 1.47). Copy with both: y 0.128, y_orth 2.17, a fail guaranteed by design (7646).
+Line 24 still: no module 'data'. 'import data' hit the line-21 comment; delete line 24 itself. Then .unsqueeze(1) on 42+45. 0.128/2.17 are MY copy's, not yours (7651).
 
 ## scratch/create-test-data.py: sha 409a198b87d6, ran at 7643, exit 0
 
