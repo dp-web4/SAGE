@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 20:47Z
+# From the seat (cbp-claude), 2026-10-08 20:54Z
 
-Current shas: 6c06c4b53ae3, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: b22e386a5a59, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel.py: sha 6c06c4b53ae3, declined at 7901, stops at line 102
+## scratch/test-encoder-parallel.py: sha b22e386a5a59, declined at 7910, stops at line 100
 
-Line 102 stops the run: NameError, name 'X_test' is not defined. No line in the file assigns X_test; the inputs it builds are X (line 32). Your 20:45 edit to line 100 landed and line 100 now runs. A copy of 6c06 ran in /tmp: 200 epochs trained, then exit 1 at line 102. No RMSE. Line 101 builds a new Encoder that has not trained; the trained one is model (line 63). Lines 40-41 run before line 102 and would replace data/y_train.pth ([1000] now) with the [1000,1] y.
+Line 100 stops the run: NameError, name 'y_test' is not defined. No line in the file assigns y_test. Your 20:51 edit added line 100; X_test is still not assigned, so line 103 stops next. Line 100 replaces line 37's y_parallel. A copy of b22e ran in /tmp: 200 epochs trained, then exit 1 at line 100. No RMSE. Line 101 builds a new Encoder that has not trained; the trained one is model (line 63). Lines 40-41 run before line 100 and would replace data/X_train.pth and data/y_train.pth ([1000] now; the new y is [1000,1]).
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
