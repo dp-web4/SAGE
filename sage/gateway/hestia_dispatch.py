@@ -3095,8 +3095,11 @@ class HestiaF1aDispatcher:
         # output of a byte-identical notes/other.py -- a file that prints a different path,
         # and whose relative imports and data are not new.py's. A prior run is evidence for
         # this request only when it ran this path, these bytes, and these arguments.
+        # rerun="false" is the default spelled out, not a request to rerun: now that the spec lists
+        # rerun, a being may pass it on every call, and any `rerun:` line wakes the seat.
         arg_lines = [f"{k}: {str(v).strip()}" for k, v in intent.args.items()
-                     if k not in ("path", "why", "reason", "to") and str(v).strip()]
+                     if k not in ("path", "why", "reason", "to") and str(v).strip()
+                     and not (k == "rerun" and str(v).strip().lower() in ("false", "no", "0", "none"))]
 
         def _seat_names(text: str):
             """(verb, path, argument phrase) of a seat run/decline receipt's first line."""
@@ -3179,9 +3182,7 @@ class HestiaF1aDispatcher:
         # which is always this conversation. The seat passes flags it chooses to accept after
         # `--` (seat_run_requests.py, #175); this is how it sees them. The first line stays
         # "[request_run] <rel>", which the unchanged check above and the seat's reader key on.
-        for k, v in intent.args.items():
-            if k not in ("path", "why", "reason", "to") and str(v).strip():
-                lines.append(f"{k}: {str(v).strip()}")
+        lines.extend(arg_lines)
         if unchanged and unchanged[0] is None:
             lines.append(f"UNCHANGED since the seat ran this exact file at seq {unchanged[1]}.")
         elif unchanged:
@@ -3225,7 +3226,8 @@ class HestiaF1aDispatcher:
             note = ("The request was recorded in "
                     f"'{seat_conv}', but the seat was NOT woken for it: it already answered this "
                     "same file, unchanged, and that answer is above. NOTHING HAS RUN. To have it "
-                    "run again anyway, call request_run with rerun=true.")
+                    "run again anyway, call request_run again with its argument rerun set to "
+                    "'true', next to path and why. It is not a line in your file.")
         return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
             **result,
             "requested": rel,
