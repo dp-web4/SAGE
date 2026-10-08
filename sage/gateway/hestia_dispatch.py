@@ -93,6 +93,13 @@ def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
         text = (text or "").strip()
         return text if len(text) <= n else text[:n] + f" …[{len(text) - n} more chars]"
 
+    def cut_len(text, n):
+        """The rendered length of cut(text, n): n for a whole item, n + marker for a cut one."""
+        text = (text or "").strip()
+        if len(text) <= n:
+            return len(text)
+        return n + len(f" …[{len(text) - n} more chars]")
+
     head = (f"{target}: {pr.get('title', '')}\n"
             f"state {pr.get('state')}{' (draft)' if pr.get('isDraft') else ''}, "
             f"review decision {pr.get('reviewDecision') or 'none'}, mergeable {pr.get('mergeable')}; "
@@ -107,12 +114,91 @@ def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
     items.sort(key=lambda t: t[0])
     total = len(items)
     shown = items[-max(1, last):] if items else []
+    def newest_budget(base_len: int, header_len: int, body_len: int) -> int:
+        """How many chars of the newest item fit under the total cap, marker included.
+
+        The newest item is the one a being is about to answer, so it gets the room the
+        total cap leaves over everything already rendered. The item's own header line
+        and the cut marker " …[N more chars]" are part of the rendered text, so both
+        lengths are accounted for exactly (digit count iterated) and the budget is
+        clamped at 0: a newest item longer than the room is cut to PR_READ_ITEM_CHARS
+        (or the room, when smaller), never pushed past the cap.
+        """
+        room = PR_READ_TOTAL_CHARS - base_len - 1 - header_len
+        if room <= 0:
+            return 0
+        if body_len <= room:
+            return body_len
+        # Cut to the flat PR_READ_ITEM_CHARS cap (not the whole room): the room it
+        # frees then admits older items at their real rendered size (dp, #360 policy).
+        n = min(PR_READ_ITEM_CHARS, room)
+        while True:
+            marker = f" \u2026[{body_len - n} more chars]"
+            if n + len(marker) <= room:
+                return n
+            n -= 1
+            if n < 0:
+                return 0
+
     def build(shown):
         parts = [head, "", "## Description", cut(pr.get("body"), PR_READ_BODY_CHARS) or "(empty)", ""]
-        parts.append(f"## Reviews and comments: {total} in all" +
-                     (f", the last {len(shown)} shown, newest last" if total > len(shown) else ", newest last"))
-        for ts, kind, body in shown:
-            parts.append(f"--- {ts[:16].replace('T', ' ')}Z {kind}\n{cut(body, PR_READ_ITEM_CHARS) or '(no text)'}")
+        # The count line is appended AFTER rendering, from what was actually rendered:
+        # build() can drop older items the budget will not admit, so len(shown) is what was
+        # asked for, not what is shown (measured 2026-10-05: the line said "the last 8 shown"
+        # when 2 were rendered). The budget is computed against the line at its longest
+        # possible form (the len(shown) form); a shorter line only frees room.
+        def count_line(rendered_n: int) -> str:
+            return (f"## Reviews and comments: {total} in all"
+                    + (f", the last {rendered_n} shown, newest last" if total > rendered_n else ", newest last"))
+        base = len("\n".join(parts)) + 1
+        # Reserve the WORST-CASE count line up front: dropping an older item makes the line
+        # LONGER (it gains "the last N shown"), so budgeting the short form under-reserves and
+        # the total runs over the cap. The actual line is always <= this max, so the total
+        # stays under the cap and the newest item is sized to the true leftover.
+        reserved_count = max((len(count_line(n)) for n in range(1, len(shown) + 1)), default=0)
+        base += reserved_count
+        # The NEWEST item is rendered first, at the exact room the total cap leaves over the
+        # header and description (measured 2026-10-05: a 4186-char review cut at a flat 1200
+        # while ~1600 chars of the 5000-char cap sat unused, hiding its tail from the being).
+        # Older items then fill the remainder newest-to-oldest at PR_READ_ITEM_CHARS each;
+        # when the room runs out, an OLDER item is dropped rather than the newest cut.
+        rendered = []
+        if shown:
+            # Two passes, so the NEWEST item is sized to the TRUE room: the room the total
+            # cap leaves over the header, description, and the count line AS ACTUALLY
+            # RENDERED (which is shorter when older items are dropped). Pass 1 sizes the
+            # NEWEST item to that room, marker included (measured 2026-10-05: a 4186-char
+            # review cut at a flat 1200 while ~1600 chars of the 5000-char cap sat unused,
+            # hiding its tail from the being). Pass 2 then admits OLDER items
+            # newest-to-oldest, each at its REAL rendered size (header + cut body, marker
+            # included); when the room runs out, an OLDER item is dropped rather than the
+            # newest cut (dp, #360 review 2026-10-05). The newest is cut only when it alone
+            # exceeds the room -- then the older items fill what is left.
+            ts, kind, body = shown[-1]
+            header = f"--- {ts[:16].replace('T', ' ')}Z {kind}\n"
+            # The count line was reserved at its LONGEST form (reserved_count); the line that
+            # is actually rendered is shorter when older items are dropped, and that room
+            # goes to the newest item. Subtract what was reserved, not the len(shown) form:
+            # the two differ by exactly the room the dropped items free.
+            base_for_newest = base - reserved_count + len(count_line(1))
+            n = newest_budget(base_for_newest, len(header), len(body or ""))
+            rendered.append(header + (cut(body, n) or "(no text)"))
+            older = []
+            base_after_newest = base_for_newest + len(rendered[-1]) + 1
+            for ts, kind, body in reversed(shown[:-1]):
+                header = f"--- {ts[:16].replace('T', ' ')}Z {kind}\n"
+                rendered_body = cut(body, PR_READ_ITEM_CHARS) or "(no text)"
+                size = len(header) + len(rendered_body)
+                if base_after_newest + 1 + size > PR_READ_TOTAL_CHARS:
+                    break
+                older.append((header, rendered_body))
+                base_after_newest += size + 1
+            rendered.extend(h + b for h, b in older)
+        rendered.reverse()
+        # The count line reports what was actually rendered, not what was asked for:
+        # build() can drop older items the budget will not admit.
+        parts.insert(5, count_line(len(rendered)))
+        parts.extend(rendered)
         if not items:
             parts.append("(none yet)")
         return "\n".join(parts)
@@ -124,7 +210,11 @@ def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
         shown = shown[1:]
         out = build(shown)
     if len(out) > PR_READ_TOTAL_CHARS:          # one item and a long description: trim the tail
-        out = out[:PR_READ_TOTAL_CHARS] + f"\n…[answer trimmed at {PR_READ_TOTAL_CHARS} chars]"
+        # The marker is part of the answer, so the trim is bounded with it included:
+        # len(out) lands exactly at the cap, never past it (the old cut left the marker
+        # hanging over the cap by its own length).
+        marker = f"\n…[answer trimmed at {PR_READ_TOTAL_CHARS} chars]"
+        out = out[:PR_READ_TOTAL_CHARS - len(marker)] + marker
     return out
 
 

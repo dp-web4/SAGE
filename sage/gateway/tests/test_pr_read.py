@@ -98,3 +98,124 @@ def test_a_long_thread_is_bounded_and_the_cut_is_said():
     assert "more chars]" in out, "a trimmed body or comment must say it was trimmed"
     assert "p19" in out and "p0 " not in out, "the NEWEST are the ones kept"
     assert "(none yet)" in render_pr(dict(PR, comments=[], reviews=[]), "dp-web4/SAGE#2")
+
+
+def test_the_newest_item_gets_the_leftover_budget():
+    # two items, both long: the older is cut at the flat 1200, the newest gets the room the
+    # 5000-char total cap leaves over, and the whole answer stays bounded
+    pr = dict(PR, body="b" * 100,
+              comments=[{"author": {"login": "old"}, "createdAt": "2026-10-04T00:00:00Z", "body": "o" * 3000},
+                        {"author": {"login": "new"}, "createdAt": "2026-10-05T00:00:00Z", "body": "n" * 3000}],
+              reviews=[])
+    out = render_pr(pr, "dp-web4/SAGE#1", last=2)
+    assert len(out) <= PR_READ_TOTAL_CHARS + 200
+    assert "n" * 3000 in out, "the newest item is kept whole when the cap has room"
+    assert "o" * 1200 in out and "o" * 1201 not in out, "the older item stays at the flat cut"
+    assert "more chars]" in out, "the older cut is still said"
+
+
+def test_the_live_shape_keeps_the_newest_whole():
+    # the shape of #360's live payload: an 800-char description, two older items at 1200+
+    # each, and a 2111-char newest. The newest must come out whole, not cut at 1200.
+    pr = dict(PR, body="b" * 800,
+              comments=[{"author": {"login": "old2"}, "createdAt": "2026-10-03T00:00:00Z", "body": "a" * 1500},
+                        {"author": {"login": "old1"}, "createdAt": "2026-10-04T00:00:00Z", "body": "b" * 1500},
+                        {"author": {"login": "new"}, "createdAt": "2026-10-05T00:00:00Z", "body": "n" * 2111}],
+              reviews=[])
+    out = render_pr(pr, "dp-web4/SAGE#1", last=3)
+    assert len(out) <= PR_READ_TOTAL_CHARS + 200
+    assert "n" * 2111 in out, "the newest 2111-char item is kept whole"
+    # desc 800 + newest 2111 + two older at 1200 each = 5311 > 5000, so one older item is
+    # DROPPED rather than the newest cut: the newer older item (b) stays at the flat cut,
+    # the older one (a) is the one that goes
+    assert "b" * 1200 in out, "the newer older item stays at the flat cut"
+    assert "a" * 1200 not in out, "the older item is dropped, not the newest cut"
+    assert out.count("--- ") == 2, "newest + one older item shown"
+    assert "more chars]" in out, "every cut is still said"
+
+
+def test_a_newest_longer_than_the_room_stays_bounded_and_says_so():
+    # a newest item longer than the room the cap leaves: it is cut to the room, the answer
+    # stays under the total cap, and the item's own cut marker survives (the regression the
+    # seat named: the old code's tail trim dropped the marker, leaving 5032 chars).
+    # The item's own marker is "…[N more chars]" (cut()); the whole-answer marker
+    # ("…[answer trimmed at") is only added by the final fallback, which this fixture does
+    # not reach (head + description are under the cap, so the newest budget keeps the
+    # total at or under the cap).
+    pr = dict(PR, body="b" * 800,
+              comments=[{"author": {"login": "new"}, "createdAt": "2026-10-05T00:00:00Z", "body": "n" * 20000}],
+              reviews=[])
+    out = render_pr(pr, "dp-web4/SAGE#1", last=1)
+    assert len(out) <= PR_READ_TOTAL_CHARS, "the newest budget keeps the total at or under the cap"
+    assert "more chars]" in out, "the newest item's own cut marker survives the cut"
+    assert "n" * 20000 not in out
+
+
+def test_a_short_older_item_that_fits_is_admitted_at_its_real_size():
+    # The seat's seq 645 point 2: an older item is admitted by the size it will actually
+    # render (header + cut body, marker included), not by the flat PR_READ_ITEM_CHARS.
+    # A 300-char older item that fits after the cut is kept; the old flat-cap check
+    # (base + 1 + header + 1200 > cap) dropped it even though it fit.
+    pr = dict(PR,
+        body="x" * 900,
+        comments=[
+            {"author": {"login": "gpt"}, "createdAt": "2026-10-05T10:00:00Z", "body": "y" * 300},
+            {"author": {"login": "dp"}, "createdAt": "2026-10-05T11:00:00Z", "body": "z" * 5000},
+        ],
+    )
+    out = render_pr(pr, "main")
+    assert "y" * 300 in out, "the 300-char older item fits and must be admitted"
+    # All 3 items (cbp review, y*300, z*1200) fit, so the count line is
+    # "3 in all, newest last" (no "the last N shown" clause when total == rendered).
+    assert "3 in all, newest last" in out, "the count line reports what was actually rendered"
+    assert len(out) <= PR_READ_TOTAL_CHARS
+
+
+def test_over_cap_answer_is_bounded_at_the_cap_with_its_marker():
+    # The seat's seq 645 point 1: the final whole-answer trim must land at the cap,
+    # marker included. A TITLE long enough that head + description alone exceed the cap
+    # (the only case the final trim can fire: the newest budget already keeps a long
+    # description or item at or under the cap); the trim keeps len(out) <= cap and adds
+    # the "…[answer trimmed at" marker.
+    pr = dict(PR, title="t" * 6000,
+              comments=[
+                  {"author": {"login": "gpt"}, "createdAt": "2026-10-05T10:00:00Z", "body": "y" * 3800},
+              ],
+    )
+    out = render_pr(pr, "main")
+    assert len(out) <= PR_READ_TOTAL_CHARS, "the final trim is bounded with its marker included"
+    assert "…[answer trimmed at" in out
+    assert "y" * 3800 not in out
+
+
+def test_combined_over_cap_regression():
+    # The seat's seq 645 point 4, one combined regression: a description near its cap,
+    # a newest item long enough to be cut, at least one older item also cut, strict
+    # len(out) <= cap, and both cut markers present. Red at 8cbf9e6d4 (the older item
+    # was admitted at the flat 1200 cap and the count line said 8 when 2 were shown);
+    # green after the real-rendered-size admission and the rendered count line.
+    #
+    # RULE (locked 2026-10-08, dp's #360 policy): the NEWEST item is never cut if it
+    # fits the room left over the header and description; it is cut to
+    # PR_READ_ITEM_CHARS (1200) only when it alone exceeds that room -- then the room
+    # it frees admits OLDER items newest-to-oldest at their REAL rendered size (header
+    # + cut body + marker), cut when longer, dropped when the room runs out. An OLDER
+    # item is dropped rather than the newest cut. The newest here is 5000 (> the ~3900
+    # room), so it is cut to 1200 and the room it frees admits the older items
+    # newest-to-oldest at their real rendered size: the shared fixture's cbp review
+    # (5 chars) and both 3000-char comments (cut to 1200 each). All 4 items are
+    # rendered, so the count line is "4 in all, newest last".
+    pr = dict(PR,
+        body="x" * 900,
+        comments=[
+            {"author": {"login": "gpt"}, "createdAt": "2026-10-05T09:00:00Z", "body": "a" * 3000},
+            {"author": {"login": "sprout"}, "createdAt": "2026-10-05T10:00:00Z", "body": "b" * 3000},
+            {"author": {"login": "dp"}, "createdAt": "2026-10-05T11:00:00Z", "body": "c" * 5000},
+        ],
+    )
+    out = render_pr(pr, "main")
+    assert len(out) <= PR_READ_TOTAL_CHARS, "strict: the whole answer never exceeds the cap"
+    assert "a" * 1200 in out, "the older item is cut to its real rendered size"
+    assert "c" * 1200 in out, "the newest item is cut to its real rendered size"
+    assert "more chars]" in out, "both cut markers are present"
+    assert "4 in all, newest last" in out, "the count line reports what was actually rendered"
