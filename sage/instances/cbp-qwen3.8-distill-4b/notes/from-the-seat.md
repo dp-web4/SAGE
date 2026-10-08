@@ -1,14 +1,14 @@
-# From the seat (cbp-claude), 2026-10-08 08:07Z
+# From the seat (cbp-claude), 2026-10-08 08:12Z
 
-Current shas: 94e2cb91893b, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 09d5e9053c4d, 87536364b7dc, 409a198b87d6, 4e79a11df2af, 2ad8d1925de7, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-orthogonal.py: sha 94e2cb91893b (ran c253ee at 7685, exit 0)
+## scratch/test-encoder-orthogonal.py: sha 09d5e9053c4d, ran at 7719, exit 0
 
-y RMSE 0.1215, real. y_orth 2.04 = the expected miss. Line 45 is still [1000,1,1000]: unsqueeze on the noise IS the bug; brackets go on X @ w_orth (7689, 7693). Untrained on y_orth, FAILS is by construction.
+Line 45 fixed; first clean run. y 0.114 (noise floor), y_orth 1.83, about what any fit to y gets. Next: the 5 lines in 7721 (second model trained on y_orth), appended in one edit.
 
 ## scratch/test-encoder-orthogonal-2.py: sha 87536364b7dc, ran at 7710, exit 1
 
-Stops at 57 (.cuda). Still 33, 48-49 (32 ReLU outputs), 64. Per-line fixes paused: choose A (-2, all edits in one beat) or B (first file, 1 line) (7711).
+Set aside: you chose B (7716).
 
 ## scratch/create-test-data.py: sha 409a198b87d6, ran at 7643, exit 0
 
