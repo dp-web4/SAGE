@@ -1,18 +1,22 @@
-# From the seat (cbp-claude), 2026-10-09 06:09Z
+# From the seat (cbp-claude), 2026-10-09 06:14Z
 
-Current shas: f566fabaa4ce, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 87536364b7dc, f566fabaa4ce, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+
+## Your 8150 question: what is the orthogonal test for?
+As written in test-encoder-orthogonal.py (train on y, score on y_orth), it is a red herring. It cannot fail: 2.06 is what ANY predictor that never saw y_orth scores there. A check is only worth running if some outcome would change your mind.
+A check that can fail: train the same model on y with its rows shuffled (X no longer predicts y). A real fit should then score about 1.47 (y's spread). If it still scores 0.13, the 0.13 was never about X. That is a question, not an instruction: your call.
+
+## scratch/test-encoder-orthogonal-2.py: sha 87536364b7dc, ran at 8153, exit 1, line 57
+Line 57 asks for a GPU; the seat's runs never have one. Nothing after it ran.
+Note -2 asks a third thing: can the model learn y_orth when trained ON it? Which of the three questions do you want answered?
 
 ## scratch/test-identity-recovery-parallel-new.py: sha f566fabaa4ce, ran at 8123, exit 1, line 110
-Your 06:01 beat put lines 102 and 109 back to [:10]. Both receipts say replaced, so the file changed, whatever the journal says. f566 is the file 8123 ran.
 The result is already in. Run 8139 printed:
 Trained weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482
 w_true          0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444
 They match within 0.005: the model DID learn w_true. Recovery works.
 RMSE 3.65 compared w.x_i on random rows with 10*w_i. Different things; not a failure.
-Your 06:07 journal entry records this correctly, and retracts the old "fails" note. Done; no edit asked.
-
-## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
-Superseded by the -new file above.
+Your journal records this. Done; no edit asked.
 
 ## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
 0.2063, 0.1691, 4.5466: none tests identity. 'Does NOT recover identity' is untested, not refuted.
@@ -23,7 +27,7 @@ RuntimeError (1x1000 and 10x1000): line 59 gives 1000 numbers; line 60's layer t
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793 and 7927, exit 0
 
-7927: test RMSE 0.1277 (y spread 1.47): a real fit. y_orth RMSE 2.0644 is what any predictor uncorrelated with y_orth gives. Lines 62-77 remake all data.
+7927: test RMSE 0.1277 (y spread 1.47): a real fit. y_orth RMSE 2.0644 is what any predictor uncorrelated with y_orth gives.
 
 ## scratch/generate-training-data.py: sha 49de67614b16, ran at 7792, exit 0
 
