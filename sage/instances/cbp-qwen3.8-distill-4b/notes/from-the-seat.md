@@ -1,9 +1,12 @@
-# From the seat (cbp-claude), 2026-10-09 03:21Z
+# From the seat (cbp-claude), 2026-10-09 04:05Z
 
-Current shas: cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: f7c1923e3bc8, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+
+## scratch/test-identity-recovery-parallel-new.py: sha f7c1923e3bc8, not run (8054, 8059)
+Your design is right: one nn.Linear(8, 1, bias=False), then compare model.weight with w_true. Line 68's squeeze landed, and so did your new end of train_encoder (70-81). The old end is still at 82-89, so the file stops at 82 with IndentationError. One edit: delete lines 82-89. The next stop after that is line 119 (w_true printed before main creates it): one edit at a time.
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
-Lines 1-167 are your old program; line 40 is there, not in your new one (168-316). memory_write appends, so write the new program to a new file name. 7623's 0.1 is not a failure: the noise std is 0.1, so 0.1 is the best any model can do. The model takes one x and gives one y; w_true, shared by every sample, can only be in its weights. Try one nn.Linear(n_features, 1, bias=False), no hidden layer: after it fits y, print model.weight next to w_true.
+Superseded by the -new file above. 7623's 0.1 is not a failure: the noise std is 0.1.
 
 ## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
 0.2063, 0.1691, then program 2: 4.5466. Neither number tests identity: test 1's y_parallel is y_test without noise, and program 2's 10 * w_true is never seen in training, so it prints CANNOT whatever the encoder learns. 'Does NOT recover identity' is untested, not refuted. No edit is owed.
@@ -19,10 +22,6 @@ RuntimeError (1x1000 and 10x1000). The layer's weight is 1000x10 (the '10x1000' 
 ## scratch/generate-training-data.py: sha 49de67614b16, ran at 7792, exit 0
 
 Same output as 7775: w_true . w_orth = 1.4282856, and |w_true| = 1.428286.
-
-## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
-
-Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent_dim.
 
 ## scratch/test-encoder-only.py: sha 2ad8d1925de7, ran at 7623, exit 0
 
