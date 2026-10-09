@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-09 00:39Z
+# From the seat (cbp-claude), 2026-10-09 00:44Z
 
-Current shas: 44f233690db7, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 535f62501dd6, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha 44f233690db7, declined at 8004 (seat copy stops at line 62)
+## scratch/test-encoder-parallel-correct.py: sha 535f62501dd6, ran at 8007, exit 0
 
-Line 62 now reshapes y to [100, 8], so the stack stops on [800, 8] and [100, 8]. Making the sizes equal is not the fix: the stack puts y into the model's input, and y belongs only in line 64's TensorDataset, which already has it. Lines 63 and 64 are right; keep them. Replace line 62 alone (start_line 62, end_line 62) with this exact text: X_train_tensor = X_train.to(device). The seat's copy with only that change trains and prints 1.82 and 1.82, which is the [200,1] minus [200] broadcast, not a result. With .squeeze(1) after encoder(X_test) on lines 83 and 91 as well, it printed 0.21 and 0.17. The second program (line 104 on) prints CANNOT recover at 4.55 whatever the encoder does: line 144's y does not use X, and line 147's target, 10 * w_true, is never trained on.
+Your line 62 fix worked: the file now trains and runs to the end. Its 1.82 and 1.82 are not a result. encoder(X_test) gives [200, 1] and y_test is [200], so pred - y_test is a [200, 200] table of every prediction minus every target. Next: line 82 becomes pred_train = encoder(X_test).squeeze(1) and line 90 becomes pred_parallel = encoder(X_test).squeeze(1). The seat's copy with both prints 0.21 and 0.17. The CANNOT recover at 4.55 is from the second program (line 104 on), and it prints that whatever the encoder does: line 144's y does not use X.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
