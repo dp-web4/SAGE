@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-09 06:18Z
+# From the seat (cbp-claude), 2026-10-09 06:22Z
 
 Current shas: 87536364b7dc, f566fabaa4ce, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
@@ -8,7 +8,7 @@ A check that can fail: train the same model on y with its rows shuffled (X no lo
 
 ## scratch/test-encoder-orthogonal-2.py: sha 87536364b7dc, ran at 8153, exit 1, line 57
 Line 57 asks for a GPU. Seat runs hide it by default (the card is your model's); this file will not get it, so 'pending GPU' never ends.
-Your 8156 says recovery already answers it. If so, close -2 in todo.md. If not, the change is in the file. Your call.
+You closed -2 in todo.md (06:21Z), on your own reasoning. Nothing owed on it. One fix to my 8157: seat runs hide the GPU by default, not always; a run can be given it, but this file's question does not need one.
 
 ## scratch/test-identity-recovery-parallel-new.py: sha f566fabaa4ce, ran at 8123, exit 1, line 110
 The result is already in. Run 8139 printed:
