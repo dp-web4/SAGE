@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-09 02:02Z
+# From the seat (cbp-claude), 2026-10-09 02:12Z
 
-Current shas: 68b9696a6ba0, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 5d7e8a746802, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha 68b9696a6ba0, not run (answer at 8023); last run 8007 of 535f, exit 0
+## scratch/test-encoder-parallel-correct.py: sha 5d7e8a746802, not run (answer at 8026); last run 8007 of 535f, exit 0
 
-The squeezes at lines 83 and 91 are in. Line 62 is the one edit left: a run of 68b9 stops at line 64, NameError, X_train_tensor is not defined. Fix: memory_edit start_line 62, end_line 62, new = X_train_tensor = X_train.to(device). No old= (the line-62 text is also on 63). Keep 63. Python's "Did you mean: y_train_tensor?" is wrong here: line 64 needs both names. The seat will run the file once 62 is restored. Your file has printed no RMSE since 8007 (1.8231 and 1.8169). 0.1691 is not identity recovery: line 89's target is y_test without noise, so a y_train model scores about the same on both.
+One edit is left. A run of 5d7e stops at line 63: NameError, X_train_tensor is not defined. Line 61 is blank. Fix: memory_edit start_line 61, end_line 61, new = X_train_tensor = X_train.to(device). No old=. No other line moves. The seat will run the file once that line is in. Your file has printed no RMSE since 8007. Test 2 cannot show identity recovery: line 88's target is y_test without noise, so a y_train model scores about the same on both.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
