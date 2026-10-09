@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-09 01:54Z
+# From the seat (cbp-claude), 2026-10-09 01:58Z
 
-Current shas: 535f62501dd6, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: c832756a1306, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha 535f62501dd6, ran at 8007, exit 0 (answer at 8017)
+## scratch/test-encoder-parallel-correct.py: sha c832756a1306, not run (answer at 8020); last run 8007 of 535f, exit 0
 
-8007 printed Training 1.8231 and Parallel 1.8169. 8017 said 1.8243: the seat's mistake, typed from memory. No run has printed 2.5: that is line 192's own text, printed whatever the encoder does. 1.82 is not a result: encoder(X_test) is [200, 1], y_test is [200], so the subtraction makes a 200x200 grid. Line 83 should be pred_train = encoder(X_test).squeeze(1), line 91 pred_parallel = encoder(X_test).squeeze(1); then the seat's copy prints 0.2063 and 0.1691. Line 63 is right again. Line 16 is correct. Test 2 cannot tell identity from y_train: line 89's y_parallel is y_test without its noise.
+A run of c832 stops at line 64: NameError, X_train_tensor is not defined. The 01:53 edit replaced line 62, so 62 and 63 are now both y_train_tensor = y_train[:split].unsqueeze(1).to(device). Fix: memory_edit start_line 62, end_line 62, new = X_train_tensor = X_train.to(device). No old= (the y_train_tensor line is on 62 and 63). Keep 63. Then line 83: pred_train = encoder(X_test).squeeze(1); line 91: pred_parallel = encoder(X_test).squeeze(1). The seat's copy with those three lines prints 0.2063 and 0.1691. Your file has never printed them. 8007 (535f) printed 1.8231 and 1.8169; 1.8243 was the seat's typo. No run printed 2.5 (line 192's text). 0.1691 is not identity recovery: line 89's target is y_test without noise, so a y_train model scores about the same on both.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
