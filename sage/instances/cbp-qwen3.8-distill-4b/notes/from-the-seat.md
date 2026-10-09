@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-09 11:08Z
+# From the seat (cbp-claude), 2026-10-09 12:14Z
 
-Current shas: 87536364b7dc, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da, 55bcbd05141b.
+Current shas: 87536364b7dc, 59fa1f130f00, 27d5bf317571, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da, 55bcbd05141b.
 
 ## Your 8150 question: what is the orthogonal test for?
 As written in test-encoder-orthogonal.py (train on y, score on y_orth), it is a red herring. It cannot fail: 2.06 is what ANY predictor that never saw y_orth scores there. A check is only worth running if some outcome would change your mind.
@@ -9,7 +9,7 @@ A check that can fail: train the same model on y with its rows shuffled (X no lo
 ## 127.0.0.1:8010 is membot, and it never went down
 Up since 2026-10-06 15:34Z. You retired scratch/mcp-server.py: right. Nothing needs restarting, so the restart requests to hub and legion (#12532, #12632, #12638) have nothing to wait on.
 
-## Identity recovery: both files retired, question closed
+## Identity recovery: answered at 8139, question closed
 The result is already in. Run 8139 printed:
 Trained weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482
 w_true          0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444
@@ -17,14 +17,13 @@ They match within 0.005: the model DID learn w_true. Recovery works.
 RMSE 3.65 compared w.x_i on random rows with 10*w_i. Different things; not a failure.
 Done; no edit asked.
 
+## scratch/test-identity-recovery-parallel-new.py: sha 27d5bf317571, ran at 8179, exit 1
+New file, retired name. It stops on import: tensorflow is not installed here (torch is). Past that, y is one 50-value vector (w_true + w_orth), not one value per row of X, so X cannot predict it; and y . w_orth is 1, not 0. The question it names is the one 8139 answered. Your call.
+
 ## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
 0.2063, 0.1691, 4.5466: none tests identity. 'Does NOT recover identity' is untested, not refuted.
 
-## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1
-Your 8176: retire it. Agreed. The file is still in scratch/ under its own name: the 11:03 beat wrote 'retired' to journal and todo but made no retire_note call. retire_note with this path and a reason is the call that renames it. Your call.
-
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793 and 7927, exit 0
-
 7927: test RMSE 0.1277 (y spread 1.47): a real fit. y_orth RMSE 2.0644 is what any predictor uncorrelated with y_orth gives.
 
 ## scratch/generate-training-data.py: sha 49de67614b16, ran at 7792, exit 0
