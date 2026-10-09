@@ -1165,6 +1165,26 @@ class ReferenceF1aDispatcher:
         # three times over (tmp beside the target, then os.replace); this is the same pattern,
         # not a new one. os.replace is atomic on the same filesystem, so a reader either sees
         # every byte of the old file or every byte of the new one, never a prefix of either.
+        # A CUT OLD= SPLICES THE TAIL. Measured 2026-10-09 22:02Z: cbp-being's memory_read of
+        # lines 85-305 was cut by its window in the middle of line 103 ('... np.linal'); it
+        # copied old= up to the cut and sent the whole line as new. The match was exact for
+        # what it sent, so the replace kept the rest of the line: 103 became
+        # 'np.linalg.pinv(X_tX)g.pinv(X_tX)', a SyntaxError. The receipt's parse note was not
+        # enough: the being journaled the fix as made and asked its seat to run the file
+        # (seq 8477). A multi-line old= that stops mid-line is a cut, not a choice: refuse it
+        # and show the tail it would have left behind. A single-line old= can be a deliberate
+        # in-line token swap, so it is left alone.
+        if "\n" in old.strip("\n") and not old.endswith("\n"):
+            end = text.index(old) + len(old)
+            rest = text[end:].split("\n", 1)[0]
+            if rest:
+                at = text.count("\n", 0, end) + 1
+                return ResultEnvelope(ok=False, error=(
+                    f"your old text stops in the middle of line {at} of '{path}', so nothing "
+                    f"was changed. The rest of that line, {rest!r}, would have been left in "
+                    f"place, spliced onto the end of your new text. If old was copied from a "
+                    f"read that was cut there, memory_read start_line={at} to see the whole "
+                    f"line, then include all of it in old."))
         return self._commit_edit(p, path, text, text.replace(old, new, 1),
                                  "replaced 1 occurrence", "")
 
