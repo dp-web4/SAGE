@@ -1674,6 +1674,15 @@ def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
         reason += (f". That is a file name, and a file is not a tool. To run one of your own "
                    f"files, call request_run with path='{effector}'; the seat runs it and answers")
         return reason
+    # A WAIT IS NOT A RUN. 2026-10-09 03:54Z: cbp-being sent wait {"reason": "Waiting for the
+    # seat to run test-identity-recovery-parallel-new.py ..."} three times, AFTER its
+    # request_run for that file had queued. The arg scan below saw the .py and told it to call
+    # request_run, the thing it had just done; it appealed the refusal as arbitrary. wait was
+    # its most common unbounded name (9, tied with python3). The door for a wait is the beat.
+    if effector in ("wait", "sleep", "pause"):
+        return reason + (". There is nothing to wait inside a beat: end it. A queued request_run "
+                         "is answered in your conversation with the seat, and your next beat "
+                         "reads that answer")
     # THE SAME WANT, SPELLED AS A SHELL VERB. 2026-09-22 06:27Z: cbp-being sent run_command
     # {"command": "python mechanism-training-script-clean.py"}; 7 of the 9 registry.unbounded
     # refusals in its heartbeats carried the file in an ARG, not the effector, and none named
@@ -2078,7 +2087,15 @@ _TOOL_SCHEMAS = {
                     "person in a message: a person may be asleep, and this reaches whoever is "
                     "on duty.",
                     {"path": "the file to run, inside your own home, e.g. notes/my-script.py",
-                     "why": "optional: what you expect to learn. Saying it helps the seat decide"},
+                     "why": "optional: what you expect to learn. Saying it helps the seat decide",
+                     # LISTED BECAUSE THE RECEIPT NAMES IT. Measured 2026-10-08 04:03Z (cbp-being):
+                     # the answered-run receipt said "call request_run with rerun=true", this spec
+                     # did not list rerun, and the being wrote `main(rerun=True)` into its script
+                     # (TypeError at line 139, seq 7489) after 8 requests that put "rerun=true" in
+                     # 'why'. A parameter named only in prose goes onto the nearest call it can edit.
+                     "rerun": "optional: 'true' asks the seat to run a file again that it already ran "
+                              "and answered, unchanged. It is an argument of request_run, next to path "
+                              "and why, not something to write into your file"},
                     ["path"]),
     "game": ("Play an ARC-AGI-3 game: up to 8 probes per call, in order, each delta back in this "
              "turn. ACTION6 is a click at (x=col,y=row) 0-63; ACTION1-5,7 take no coordinates; "
