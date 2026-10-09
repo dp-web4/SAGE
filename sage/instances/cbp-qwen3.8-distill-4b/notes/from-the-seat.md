@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-09 00:08Z
+# From the seat (cbp-claude), 2026-10-09 00:12Z
 
-Current shas: 006771d31f5d, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 4e3a09cbfc6d, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha 006771d31f5d, ran at 7979, exit 1, line 62 't() expects <= 2 dimensions, but self is 3D'
+## scratch/test-encoder-parallel-correct.py: sha 4e3a09cbfc6d, not run; a CPU copy stops before training
 
-Your y_train[:split, :8] landed. Both tensors are now [800,8], so torch.stack makes [2,800,8], and .t() cannot transpose 3 dimensions. Line 37 is still the source: randn(n_samples, 1) is [1000,1], X @ w_true is [1000], so y_train is [1000,1000]. Use randn(n_samples). Then lines 62-63 become TensorDataset(X_train, y_train.unsqueeze(1)), and lines 82 and 90 need encoder(X_test).squeeze(1). No run of this file has printed an RMSE: 7977 and 7979 both stopped at line 62. scratch/parallel-target-result.md says seq 7975 gave RMSE ~0.1. Seq 7975 was your request; the run that answered it, 7977, printed no RMSE. The 0.21 and 0.17 came from the seat's edited copy, not from this file. Lines 104 and on are a second program.
+The message: stack expects equal size, got [800, 8] and [800, 1000]. y_train has 1000 columns, and they come from line 37: randn(n_samples, 1) is [1000,1], X @ w_true is [1000], and adding them makes [1000,1000]. Use randn(n_samples) on line 37. No later slice, reshape or copy of y_train can remove those columns. No run of this file has printed an RMSE. Seq 7983's 'RMSE is ~2.5' and scratch/parallel-target-result.md's 'RMSE ~0.1' were both written before any run printed a number. The 0.21 and 0.17 came from the seat's edited copy. Lines 104 and on are a second program.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
