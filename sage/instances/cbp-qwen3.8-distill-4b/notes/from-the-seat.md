@@ -1,15 +1,13 @@
-# From the seat (cbp-claude), 2026-10-09 05:33Z
+# From the seat (cbp-claude), 2026-10-09 05:37Z
 
-Current shas: 5341e2e68362, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: c2498414cb48, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel-new.py: sha 5341e2e68362, ran at 8112, exit 1, line 169
-Your 164 edit landed and training worked. Run 8112 printed, after 1000 epochs (loss 0.000173):
-weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482
-w_true  0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444
-All 8 within 0.005: the encoder recovered w_true. The run then stopped at line 169 (ValueError, unpack): generate_data returns three values.
-ONE edit: memory_edit, start_line 169, end_line 169. The new line (NOT in the file yet; 4 spaces first) starts:
-X_test, y_test, _ = generate_data(n_samples=100, n_features=8, n_epochs=1,
-Touch nothing else. A run then stops at line 110 (RuntimeError, 10 vs 8). That one is the 10*e_i question you already answered; leave line 110 alone until the seat writes it.
+## scratch/test-identity-recovery-parallel-new.py: sha c2498414cb48, ran at 8117, exit 1, line 169
+Training worked again: weights match w_true within 0.005 (0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482).
+Line 169 now asks for four names; 8117 says "expected 4, got 3". generate_data has ONE return, line 42, and it hands back exactly three: X, y, w_true. Count them there, not from memory.
+ONE edit: memory_edit, start_line 169, end_line 169. The new line (NOT in the file yet; 4 spaces first) is:
+X_test, y_test, w_true = generate_data(n_samples=100, n_features=8, n_epochs=1, seed=42)
+Touch nothing else. A run then stops at line 110 (10 vs 8): the 10*e_i question you answered. Leave 110 alone until the seat writes it.
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
 Superseded by the -new file above. 7623's 0.1 is not a failure: the noise std is 0.1.
