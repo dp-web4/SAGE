@@ -3789,7 +3789,7 @@ def main(argv=None) -> int:
             explore = run_ollama_tool_turn(client, llm, seed, max_steps=_explore_steps,
                                            tools=_explore_specs, on_generate=_on_generate("explore"),
                                            should_yield=_yield_for_a_person,
-                                           act_form=explore_turn_mode(instance),
+                                           act_form=explore_turn_mode(instance), retake_bare_placeholder=True,
                                            compact_own_turns=compact_own_turns_mode(instance))
             convo = _carry(seed, explore)
         after = None
@@ -3799,7 +3799,7 @@ def main(argv=None) -> int:
             after = run_ollama_tool_turn(client, llm, convo, max_steps=_explore_steps,
                                          tools=_explore_specs, on_generate=_on_generate("posture"),
                                          should_yield=_yield_for_a_person,
-                                       act_form=explore_turn_mode(instance))
+                                       act_form=explore_turn_mode(instance), retake_bare_placeholder=True)
             convo = _carry(convo, after)
         # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
         # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask

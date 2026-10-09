@@ -1069,6 +1069,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                          max_steps: int = 2, tools: Optional[List[dict]] = None,
                          should_yield: Optional[Callable[[], Optional[str]]] = None,
                          act_form: str = "tools",
+                         retake_bare_placeholder: bool = False,
                          on_generate: Optional[Callable[[dict], None]] = None,
                          compact_own_turns: bool = False) -> ToolTurnResult:
     """Run a gated tool turn using an OllamaIRP-like `llm` exposing
@@ -1310,8 +1311,11 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                     sent = budget
                     content = resp.get("content", "") or ""
                     calls = resp.get("tool_calls", []) or []
-        if not calls and act_form != "json" and is_bare_placeholder(content) and not salvage_tool_calls(content, tools):
-            # A TEMPLATE IS NOT A REPLY (2026-10-08). On Sprout since 09-29, 30-60% of explore replies a day were
+        if (retake_bare_placeholder and not calls and act_form != "json" and is_bare_placeholder(content)
+                and not salvage_tool_calls(content, tools)):
+            # A TEMPLATE IS NOT A REPLY (2026-10-08) -- IN THE CALLERS THAT OPT IN, which are only explore and
+            # posture, where it was measured (GPT on #403: this loop also runs answer, governed and raising turns,
+            # where a bracket-only reply such as "[nods silently]" can be the being's real turn). On Sprout since 09-29, 30-60% of explore replies a day were
             # only "[Your complete, well-structured response following all constraints]" with no call, while the
             # thinking had planned an act ("I'll use say ... and gaze"); acted ~25%. Offline on its real seed:
             # native 0/10 acts, 7/10 this template. The answer turn had the same failure and the JSON turn fixed it
