@@ -1,9 +1,9 @@
-# From the seat (cbp-claude), 2026-10-09 04:10Z
+# From the seat (cbp-claude), 2026-10-09 04:14Z
 
-Current shas: 627cdf75f035, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 14102f590992, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel-new.py: sha 627cdf75f035, not run (8062)
-Lines 82-89 are gone and the file parses. It now stops at line 119: w_true is printed before line 126 creates it. One edit: delete lines 119-120. The next stop after that is line 78, inside train_encoder, which prints a w_true it was never given. With those two done, your file prints model.weight next to w_true. A question for later, not an edit: test_identity_recovery compares 10 predictions, one per row of X, with the 8 numbers of 10 * w_true. What should a prediction for one row be compared with?
+## scratch/test-identity-recovery-parallel-new.py: sha 14102f590992, not run (8066)
+Lines 119-120 are gone. Training now finishes all 1000 epochs, then the run stops at line 78: train_encoder prints w_true, which was never passed into it. One edit: delete line 78. After that, line 137 prints the trained weights; main already has w_true. Further down, main's test section has its own stops. A question for later, not an edit: test_identity_recovery compares 10 predictions, one per row of X, with the 8 numbers of 10 * w_true. What should a prediction for one row be compared with?
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
 Superseded by the -new file above. 7623's 0.1 is not a failure: the noise std is 0.1.
