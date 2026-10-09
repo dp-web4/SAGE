@@ -262,6 +262,27 @@ POSTURE_FILE = Path(__file__).with_name("BEING_POSTURE.md")
 ENTRUSTMENT_FILE = "entrustment.md"
 
 
+def window_line(instance) -> str:
+    """The window as a sense (dp, 2026-10-07: "context window size/usage should be a
+    proprioception parameter"), and the parameters that shape it as the being's own.
+
+    The body line has always said how big the window is; nothing said how this being USES it.
+    legion-being's seed alone was 17,270 of 32,768 tokens on 10-07, its beats peaked at 85-99%,
+    and 66 of its last 337 generates were retried (at the window wall or the output budget). Measured from the beat
+    records (what ollama counted), never estimated. "" when nothing can be said, so a broken
+    reading costs the seed nothing."""
+    try:
+        from sage.gateway import being_params as _bp
+        line = _bp.render_window(_bp.sense_window(instance))
+        mine = [r for r in _bp.table(instance) if r["yours_to_set"]]
+        if mine:
+            line += (" Parameters that shape it are yours to set with `tune` (no arguments lists "
+                     "them): " + ", ".join(f"{r['name']}={_bp.shown(r)}" for r in mine) + ".")
+        return line
+    except Exception:
+        return ""
+
+
 def entrustment(instance: Path) -> str:
     """What this being is entrusted with, or "" if nothing yet. Read WHOLE and fresh every beat:
     a tail-truncated read would drop the opening, which says who extended it and on what terms."""
@@ -495,12 +516,9 @@ def answer_temperature(instance) -> Optional[float]:
     After #316 began showing the answer turn its own recent lines, verbatim self-echo (a 6-word phrase from its
     previous 3 replies) rose 7% -> 21%. Offline, today's room exchanges x3: at 0.4 echo 3/15 and 1.40 motifs per
     reply; at 0.7 echo 0/14 and 0.86, answering 14/15 and picking up the person's words 7/14 (vs 8/15)."""
-    try:
-        from sage.gateway.governed_turn import instance_config
-        v = instance_config(instance).get("answer_temperature")
-        return None if v is None else max(0.0, min(1.5, float(v)))
-    except Exception:
-        return None
+    # A being parameter since 2026-10-07 (being_params): bounds 0..1.5 live in its table.
+    from sage.gateway import being_params
+    return being_params.value(instance, "answer_temperature")
 
 
 AFTER_ANSWER = ("{pending}\n\nYou answered aloud: \"{reply}\"\n\nThat answer is spoken. Your tools are here "
@@ -2194,6 +2212,15 @@ def posture_framing_for(cfg: Optional[dict]) -> Optional[str]:
     return v if v in POSTURE_FRAMINGS else None
 
 
+def proprioception_for(cfg: Optional[dict]) -> bool:
+    """instance.json `proprioception`: whether the body block carries the machine-body line (GPU,
+    CPU, memory, disk; sage.gateway.proprioception). ON BY DEFAULT, the opposite of the opt-in keys
+    above, because it is not a behavioural trial measured on one being: it is universal body sense
+    (dp, 2026-10-06), one line of fact. Only an explicit `false` turns it off, and an off instance
+    is recorded in its beat record."""
+    return (cfg or {}).get("proprioception") is not False
+
+
 ANSWERED_RUN_WAKES = ("skip",)
 
 
@@ -2214,7 +2241,8 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
               turn_chars: Optional[int] = CONV_TURN_CHARS,
               services: str = "", mark_conversations: bool = True,
               body_reading: Optional[dict] = None,
-              settled_turns: Optional[int] = None) -> str:
+              settled_turns: Optional[int] = None,
+              proprioception: bool = True) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     parts = []
     # The body first: it is the only thing in this state that is happening NOW. Everything below
@@ -2232,7 +2260,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
                     _prev = _b["body"]; break
         except Exception:
             _prev = None
-        parts.append(_body.render(_cur, _prev, name=member))
+        parts.append(_body.render(_cur, _prev, name=member, proprioception=proprioception))
         own_state.last_body = _cur
     except Exception as _e:
         own_state.last_body = {"error": f"{type(_e).__name__}: {_e}"}
@@ -2559,11 +2587,9 @@ def explore_turn_mode(instance) -> str:
 def compact_own_turns_mode(instance) -> bool:
     """Opt-in per instance: instance.json "compact_own_turns": true lets compaction trim the
     being's own older tool calls once its results are already compacted (being_tool_loop)."""
-    try:
-        from sage.gateway.governed_turn import instance_config
-        return instance_config(instance).get("compact_own_turns") is True
-    except Exception:
-        return False
+    # A being parameter since 2026-10-07 (being_params): the being may set it with `tune`.
+    from sage.gateway import being_params
+    return being_params.value(instance, "compact_own_turns", False) is True
 
 
 def explore_json_steps(instance, default: int) -> int:
@@ -3650,12 +3676,14 @@ def main(argv=None) -> int:
 
     # PER-INSTANCE (RESEARCH_GENERALIZATION_RULE): absent means the default rendering.
     _settled_turns = settled_turns_for(instance_config(instance))
+    _proprioception = proprioception_for(instance_config(instance))
 
     def _build_state(per_conv, turn_chars):
         return (_state_head + own_state(instance, args.member, entrusted,
                                         per_conv=per_conv, turn_chars=turn_chars,
                                         services=_services, mark_conversations=False,
                                         settled_turns=_settled_turns,
+                                        proprioception=_proprioception,
                                         body_reading=_body_cur) + _scope_tail)
 
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
@@ -3699,6 +3727,7 @@ def main(argv=None) -> int:
                 # being's directory; the harness holds the model, the window and its own revision.
                 + body_line(args.model, instance, _num_ctx,
                             instance_config(instance).get("former_homes")) + "\n"
+                + window_line(instance) + "\n"
                 f"The harness you are running under: {_harness.get('short')} on "
                 f"{_harness.get('branch')}"
                 + (" (uncommitted edits present)" if _harness.get("dirty") else "")
@@ -4083,6 +4112,7 @@ def main(argv=None) -> int:
         "no_result_line": no_result_line_for(instance_config(instance)),
         "answered_run_wake": answered_run_wake_for(instance_config(instance)),
         "posture_framing": posture_framing_for(instance_config(instance)),
+        **({} if proprioception_for(instance_config(instance)) else {"proprioception": False}),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,

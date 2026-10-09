@@ -6,6 +6,13 @@ heard words carry no speaker identity; whisper's near-silence hallucinations are
 shows only words since the previous beat; a voice wakes a beat, queued behind a running one (#295).
 """
 import json
+
+_CORE = ("listening", "speaking", "always", "muted")
+
+
+def _core(w):
+    """The window's original four facts (wake mode added more fields beside them)."""
+    return {k: w.get(k) for k in _CORE}
 import os
 import struct
 import sys
@@ -54,9 +61,9 @@ def test_a_long_speech_is_cut_at_the_cap_not_buffered_forever():
 
 def test_the_window_opens_and_closes_by_time(tmp_path):
     p = str(tmp_path / "listen.json")
-    assert listening.window(path=p) == {"listening": False, "speaking": False, "always": False, "muted": None}, "absent = closed"
+    assert _core(listening.window(path=p)) == {"listening": False, "speaking": False, "always": False, "muted": None}, "absent = closed"
     listening.mark(path=p, listen_until=time.time() + 60, speaking_until=time.time() - 1)
-    assert listening.window(path=p) == {"listening": True, "speaking": False, "always": False, "muted": None}
+    assert _core(listening.window(path=p)) == {"listening": True, "speaking": False, "always": False, "muted": None}
     listening.mark(path=p, speaking_until=time.time() + 5)
     assert listening.window(path=p)["speaking"] and listening.window(path=p)["listening"]
     assert not listening.window(time.time() + 120, path=p)["listening"]
@@ -149,9 +156,9 @@ def test_speak_opens_the_window_after_the_sound_and_mutes_during_it(monkeypatch,
             during.append(listening.window())
     monkeypatch.setattr(subprocess, "run", run)
     body.speak("hello")
-    assert during == [{"listening": False, "speaking": True, "always": False, "muted": None}], "muted while its own voice plays"
+    assert [_core(w) for w in during] == [{"listening": False, "speaking": True, "always": False, "muted": None}], "muted while its own voice plays"
     after = listening.window(time.time() + 1)
-    assert after == {"listening": True, "speaking": False, "always": False, "muted": None}
+    assert _core(after) == {"listening": True, "speaking": False, "always": False, "muted": None}
     assert not listening.window(time.time() + body.LISTEN_WINDOW_S + 1)["listening"]
 
 
@@ -231,7 +238,7 @@ def test_a_failed_playback_or_synthesis_opens_no_window(monkeypatch, tmp_path):
         monkeypatch.setattr(subprocess, "run", run)
         with pytest.raises(subprocess.CalledProcessError):
             body.speak("hello")
-        assert listening.window(time.time() + 1) == {"listening": False, "speaking": False, "always": False, "muted": None}, fails
+        assert _core(listening.window(time.time() + 1)) == {"listening": False, "speaking": False, "always": False, "muted": None}, fails
 
 
 def test_the_mic_that_heard_is_named_not_the_first_one_listed():

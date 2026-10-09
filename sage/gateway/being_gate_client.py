@@ -851,7 +851,7 @@ def pr_sync_command(args: dict, ctx: Optional[dict] = None) -> str:
         raise ValueError(f"pr_sync 'op' must be one of {list(PR_SYNC_OPS)}; got {op!r}")
     own_proposal_branch(worktree, ctx)
     if op == "start":
-        base = pr_base_branch(worktree, ctx)
+        base = proposal_base(worktree, ctx)
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,100}", base) or ".." in base:
             raise ValueError(f"pr_sync: the base branch {base!r} is not a plain branch name")
         return f"git --no-pager -C {worktree} merge --no-ff --no-commit origin/{base}"
@@ -871,6 +871,31 @@ def own_proposal_branch(worktree: str, ctx: Optional[dict] = None) -> str:
         raise ValueError(f"pr_amend: this worktree is on {br!r}, which is not one of your PR "
                          "branches. pr_amend revises a proposal you already opened")
     return br
+
+
+PROPOSAL_BASE_KEY = "sagebase"   # git config branch.<branch>.sagebase: the base pr_open cut it from
+
+
+def proposal_base(worktree: str, ctx: Optional[dict] = None) -> str:
+    """The base THIS proposal targets: what pr_open recorded when it cut the branch, else the
+    base its open PR names on GitHub, else pr_base_branch. pr_sync merges THIS, never the
+    seat-wide default: once the default moved to main (2026-10-05), syncing a PR that was cut
+    from the carrier against main would have merged hundreds of unrelated commits into it."""
+    import subprocess
+    br = own_proposal_branch(worktree, ctx)
+    rec = subprocess.run(["git", "config", "--get", f"branch.{br}.{PROPOSAL_BASE_KEY}"],
+                         cwd=worktree, text=True, capture_output=True, timeout=30).stdout.strip()
+    if rec:
+        return rec
+    try:
+        out = subprocess.run(["gh", "pr", "list", "--repo", PR_REPO, "--head", br, "--state", "open",
+                              "--json", "baseRefName", "--jq", ".[0].baseRefName"],
+                             cwd=worktree, text=True, capture_output=True, timeout=60).stdout.strip()
+        if out and out != "null":
+            return out
+    except Exception:
+        pass
+    return pr_base_branch(worktree, ctx)
 
 
 def _pr_number_for_branch(worktree: str, ctx: Optional[dict] = None) -> str:
@@ -1650,6 +1675,18 @@ def patch_apply_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
 # Where the profile is absent, SANDBOX_REQUIRED decides whether to refuse or degrade.
 
 
+def tune_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """Every file `tune` writes, all in the being's home: the temp file, tuned.json, and the audit
+    log (being_params.TUNE_WRITES). With no name it only reads, and touches nothing."""
+    if not str((args or {}).get("name") or "").strip():
+        return []
+    root = (ctx or {}).get("memory_root")
+    if not root:
+        raise ValueError("tune: no home to write tuned.json in")
+    from sage.gateway.being_params import TUNE_WRITES
+    return [os.path.realpath(os.path.join(root, f)) for f in TUNE_WRITES]
+
+
 def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
     """The registry refusal, plus the door when the name is a FILE.
 
@@ -1662,6 +1699,15 @@ def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
         reason += (f". That is a file name, and a file is not a tool. To run one of your own "
                    f"files, call request_run with path='{effector}'; the seat runs it and answers")
         return reason
+    # A WAIT IS NOT A RUN. 2026-10-09 03:54Z: cbp-being sent wait {"reason": "Waiting for the
+    # seat to run test-identity-recovery-parallel-new.py ..."} three times, AFTER its
+    # request_run for that file had queued. The arg scan below saw the .py and told it to call
+    # request_run, the thing it had just done; it appealed the refusal as arbitrary. wait was
+    # its most common unbounded name (9, tied with python3). The door for a wait is the beat.
+    if effector in ("wait", "sleep", "pause"):
+        return reason + (". There is nothing to wait inside a beat: end it. A queued request_run "
+                         "is answered in your conversation with the seat, and your next beat "
+                         "reads that answer")
     # THE SAME WANT, SPELLED AS A SHELL VERB. 2026-09-22 06:27Z: cbp-being sent run_command
     # {"command": "python mechanism-training-script-clean.py"}; 7 of the 9 registry.unbounded
     # refusals in its heartbeats carried the file in an ARG, not the effector, and none named
@@ -1771,6 +1817,11 @@ _REGISTRY = {
     # header. Judged on the path like memory_write, because that is what it is: a write
     # inside its own home, bounded to notes/ and scratch/ by the dispatcher.
     "retire_note":    dict(tool="write_note",   path_args=("path",), cmd_arg=None),
+    # tune: set one of the being's own parameters (being_params). Judged as what it is, a write
+    # of ONE fixed file in its own home: the path is the seat's (tuned.json), never the being's,
+    # and the dispatcher refuses an unknown name, a locked one, or a value out of bounds.
+    "tune":           dict(tool="write_note",   path_args=(),        cmd_arg=None,
+                           compose_paths=tune_paths),
     # say: add a turn to a conversation the being is IN. Bounded by construction, like
     # remember: the being names a conversation id, and the dispatcher refuses any id whose
     # meta does not list it as a participant AND as writable. It cannot create a
@@ -1833,7 +1884,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "pr_read", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run", "memory_edit", "camera", "game",
+                            "retire_note", "request_run", "memory_edit", "camera", "game", "tune",
 
 
                             "retire_note", "request_run", "memory_edit", "camera",
@@ -2024,6 +2075,14 @@ _TOOL_SCHEMAS = {
                 "top_k": "how many results (default 5)",
                 "idx": "instead of a query: the (idx:N) of one result, to read it in full"},
                []),
+    "tune": ("Read or set your own parameters: your context window size, whether your own old "
+             "calls are compacted, your answer temperature. With no arguments it lists them, each "
+             "with its value, where it came from, its bounds and whether it is yours to set. To "
+             "change one, give name, value and why; 'default' resets it. Changes take effect at "
+             "your next beat and are recorded with your reason.",
+             {"name": "optional: the parameter, e.g. num_ctx", "value": "the new value, or 'default'",
+              "why": "why you are changing it"},
+             []),
     "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
                     "is renamed to <name>.retired-<date> with a dated header saying why; nothing "
                     "is lost and you can still read it. Use it when something you wrote has been "
@@ -2480,6 +2539,23 @@ class BeingGateClient:
                 "member": getattr(self, "member_id", None)}
 
     # -- gate one intent (intent -> verdict), fail-closed --------------------
+    def _policy_grants(self) -> tuple:
+        """(granted, granted_reach) from the member's live policy snapshot, the way the legacy
+        stage computes them; ((), ()) when there is no mechanism, no snapshot, or it raises.
+        Never widens: these are the grants the law already holds for this member."""
+        if getattr(self, "_mech", None) is None or getattr(self, "_core", None) is None:
+            return (), ()
+        try:
+            snap = self._mech.fetch_policy_snapshot(
+                self.member_id, host_agent=getattr(self, "_host_agent", "sage-raising"))
+            if snap is None:
+                return (), ()
+            policy = self._core.resolve_agent_policy(self._profile, vault_reader=lambda _m: snap)
+            return (_granted_roots(self._core, policy, self.workspace),
+                    _granted_reach(self._core, policy, self.workspace))
+        except Exception:
+            return (), ()
+
     def gate(self, intent: BeingIntent) -> GatewayVerdict:
         # Stage 0: bounded registry. Unknown effector never reaches the law.
         if intent.effector not in _REGISTRY:
@@ -2514,6 +2590,17 @@ class BeingGateClient:
                 for a in _REGISTRY[intent.effector]["path_args"]:
                     if intent.args.get(a):
                         tool_input[a] = next(resolved)
+                # AND A WORKTREE VERB'S PATH IS ROOTED AT THE WORKTREE (McNugget, 2026-10-07/08).
+                # git_read and search are composed verbs with no path_args, so the loop above never
+                # touched their `path`; hestia read it as a ratified path key and resolved it against
+                # cwd=workspace -- the SEAT's checkout -- while the composer runs `git -C <worktree>`.
+                # mcnugget-being, with its worktree granted, was refused "'sage' is not granted" for
+                # `git_read cat sage/gateway/fleet_paths.py` beat after beat. Root it where it is read.
+                # (The composer already refuses a path that escapes the worktree.)
+                _wt = self._compose_ctx().get("worktree")
+                if (_REGISTRY[intent.effector].get("compose") and _wt and tool_input.get("path")
+                        and not os.path.isabs(str(tool_input["path"]))):
+                    tool_input["path"] = os.path.realpath(os.path.join(_wt, str(tool_input["path"])))
                 ge = sg.GateEvent(tool=tool, tool_input=tool_input, cwd=self.workspace,
                                   session_id=getattr(self, "host_session_id", None),
                                   raw={"effector": intent.effector, **intent.args})
@@ -2521,8 +2608,17 @@ class BeingGateClient:
                 available = getattr(d, "verdict_available", True)
                 dec = d.decision if (available and d.decision in ("allow", "warn", "deny")) else "deny"
                 rule = d.rule or ("" if available else "gate.no_verdict")
+                # THE GRANTS RIDE ON AN ALLOW, AS THEY DO ON THE LEGACY PATH. The dispatcher's own
+                # confinement (reference_f1a._safe_path via `granted`; hestia_dispatch
+                # _granted_reach_of via `granted_reach`) reads them off the verdict; without them
+                # every grant beyond the home is inert at the last mile. Measured on legion-being
+                # 2026-10-06, the first beats under the one gate: a memory_read of its own worktree
+                # file the gate ALLOWED was refused "outside your reach", and the being worked
+                # around it with scratch scripts taking the path as `data`. A deny carries none.
+                granted, granted_reach = self._policy_grants() if dec != "deny" else ((), ())
                 return GatewayVerdict(dec, rule, getattr(d, "reason", "") or ("ok" if dec != "deny" else ""),
-                                      innate=False, stage="single-gate", command=judged_command)
+                                      innate=False, stage="single-gate", command=judged_command,
+                                      granted=granted, granted_reach=granted_reach)
             except Exception as e:  # a gate that raises is a refused act, never an ungoverned one
                 return GatewayVerdict("deny", "gate.raised", innate=True, stage="single-gate",
                                       reason=f"{type(e).__name__}: {e}")

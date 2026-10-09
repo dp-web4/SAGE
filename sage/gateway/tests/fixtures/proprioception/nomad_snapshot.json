@@ -1,0 +1,115 @@
+{
+ "schema": "sage.body/1",
+ "sampled_at": 1791350180.018,
+ "host": "nomad",
+ "platform": {
+  "os": "linux",
+  "kind": "wsl2",
+  "detail": "6.6.87.2-microsoft-standard-WSL2"
+ },
+ "memory_topology": "discrete",
+ "memory_topology_why": "every GPU has its own VRAM pool",
+ "gpus": [
+  {
+   "vendor": "nvidia",
+   "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+   "topology": "discrete",
+   "utilization_pct": {
+    "value": 0.0,
+    "source": "nvidia-smi"
+   },
+   "memory_used_bytes": {
+    "value": 0,
+    "source": "nvidia-smi"
+   },
+   "memory_total_bytes": {
+    "value": 8585740288,
+    "source": "nvidia-smi"
+   },
+   "temperature_c": {
+    "value": 39.0,
+    "source": "nvidia-smi"
+   },
+   "shared_memory_used_bytes": {
+    "value": null,
+    "unavailable": "discrete GPU: its memory is VRAM"
+   }
+  }
+ ],
+ "cpu": {
+  "cores": 20,
+  "model": "13th Gen Intel(R) Core(TM) i7-13700H",
+  "utilization_pct": {
+   "value": 0.3,
+   "source": "/proc/stat over 0.5 s"
+  },
+  "load_1m": {
+   "value": 0.02,
+   "source": "getloadavg"
+  },
+  "load_5m": {
+   "value": 0.09,
+   "source": "getloadavg"
+  },
+  "temperature_c": {
+   "value": null,
+   "unavailable": "not exposed inside WSL"
+  }
+ },
+ "memory": {
+  "pool": "system",
+  "scope": "wsl guest (its cap, not the host)",
+  "total_bytes": {
+   "value": 16604377088,
+   "source": "/proc/meminfo MemTotal"
+  },
+  "used_bytes": {
+   "value": 2471919616,
+   "source": "/proc/meminfo MemTotal-MemAvailable"
+  },
+  "swap_used_bytes": {
+   "value": 5279744,
+   "source": "/proc/meminfo"
+  },
+  "swap_total_bytes": {
+   "value": 4294967296,
+   "source": "/proc/meminfo"
+  }
+ },
+ "disks": [
+  {
+   "labels": [
+    "sage",
+    "models"
+   ],
+   "path": "/home/dp/ai-agents/SAGE",
+   "mount": "/",
+   "total_bytes": {
+    "value": 1081101176832,
+    "source": "statvfs"
+   },
+   "free_bytes": {
+    "value": 872882855936,
+    "source": "statvfs"
+   },
+   "used_pct": {
+    "value": 14.9,
+    "source": "statvfs"
+   }
+  }
+ ],
+ "wsl_host": {
+  "sampled_at": 1791350182.1094477,
+  "memory_total_bytes": {
+   "value": 34029113344,
+   "source": "Windows Win32_OperatingSystem"
+  },
+  "memory_used_bytes": {
+   "value": 18728382464,
+   "source": "Windows Win32_OperatingSystem"
+  }
+ },
+ "sample_ms": 3190.9,
+ "cpu_window_ms": 500,
+ "line": "GPU 0% \u00b7 VRAM 0.0/8.0 GiB \u00b7 39\u00b0C | CPU 0% \u00b7 RAM 2.3/15.5 GiB (WSL cap; Windows host 17.4/31.7) | disk 15% (813 GiB free) | memory: discrete | unavailable: CPU temp: not exposed inside WSL"
+}

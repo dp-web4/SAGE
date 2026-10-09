@@ -659,6 +659,34 @@ class HestiaF1aDispatcher:
             return roster[derived] + sep + rest
         return (alias or base) + sep + rest
 
+    def _to_self(self, to: str) -> Optional[str]:
+        """The refusal when `to` is the being itself.
+
+        Measured 2026-10-08 on Sprout: two peer_asks to="sprout-being" passed every check (its own name is on the
+        roster), were published to the fleet forum as "sprout-being-asks-sprout-being-...", and spent its ask
+        limit. Both bodies addressed someone it had just been talking with ("what you said about this car
+        thing"), so the act it wanted was a reply, and the door for that is `say`. Refused BEFORE publishing,
+        with the way forward: the conversations it is in, and its own files for a thought it wants to keep."""
+        me = str(self.member or "").strip().lower()
+        if not me:
+            return None
+        base = (to or "").split("/", 1)[0].strip().lower()
+        try:
+            resolved = self.resolve_peer(to).split("/", 1)[0].strip().lower()
+        except Exception:
+            resolved = base
+        if me not in (base, resolved):
+            return None
+        try:
+            from sage.gateway import conversations as _conv
+            convs = [m["id"] for m in _conv.listing(self.memory_root) if self.member in m.get("participants", [])]
+        except Exception:
+            convs = []
+        door = (f" To answer someone you are talking with, use say to one of your conversations "
+                f"({', '.join(sorted(convs))}).") if convs else ""
+        return (f"'{to}' is you: a question addressed to yourself goes to no one, so nothing was sent or "
+                f"published.{door} To keep a thought for later, write it in your own files (memory_write).")
+
     def _unknown_peer(self, to: str) -> Optional[str]:
         """The refusal text when `to` names no peer this seat can reach, else None."""
         peers = self.known_peers()
@@ -782,6 +810,9 @@ class HestiaF1aDispatcher:
         if not pointer:
             # the daemon would refuse this as hestia.member_notify_missing_pointer; say it first
             return ResultEnvelope(ok=False, error="hestia.member_notify_missing_pointer: mesh needs a 'pointer' (content lives AT the pointer, never in the notice)")
+        to_self = self._to_self(to)
+        if to_self:
+            return ResultEnvelope(ok=False, error=to_self)
         # A peer that exists nowhere is refused HERE, in the being's own turn. The daemon parks
         # any name and the drain fails it later, silently: sprout-being asked "sage" on
         # 2026-09-09, the row failed egress five beats running, then vanished, and the being
@@ -840,6 +871,9 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, pending=True,
                                   note="peer_ask needs a publisher: the question must live at a pointer "
                                        "the peer can read (forum doc / hub thread); none configured on this seat")
+        to_self = self._to_self(to)
+        if to_self:
+            return ResultEnvelope(ok=False, error=to_self)
         redirect = self._say_instead(to)
         if redirect:
             return ResultEnvelope(ok=False, error=redirect)
@@ -1200,7 +1234,7 @@ class HestiaF1aDispatcher:
         import shlex
         import subprocess
         from sage.gateway.being_gate_client import (own_proposal_branch, pr_attribution,
-                                                    pr_base_branch, pr_sync_command,
+                                                    pr_base_branch, pr_sync_command, proposal_base,
                                                     NO_WORKTREE_REFUSAL)
         if not self.worktree or not os.path.isdir(self.worktree):
             return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["pr_sync"])
@@ -1258,7 +1292,7 @@ class HestiaF1aDispatcher:
                     "pr_sync: conflict markers remain, so nothing was committed: " + where
                     + ". Each <<<<<<< ... ======= ... >>>>>>> block must become the text you want"))
 
-        target = f"{branch} <- origin/{pr_base_branch(self.worktree, self._git_ctx())}" \
+        target = f"{branch} <- origin/{proposal_base(self.worktree, self._git_ctx())}" \
             if op == "start" else branch
         begin = self._call("hestia_begin_action", {"tool_name": "pr_sync", "target": target})
         err = _hestia_error(begin)
@@ -1319,7 +1353,7 @@ class HestiaF1aDispatcher:
                 "note": "your PR now contains its base; re-run check, then ask for review"})
 
         # op == start
-        base = pr_base_branch(self.worktree, self._git_ctx())
+        base = proposal_base(self.worktree, self._git_ctx())
         f = git("fetch", "-q", "origin", base, timeout=300)
         if f.returncode != 0:
             outcome(False, "fetch")
@@ -1418,10 +1452,39 @@ class HestiaF1aDispatcher:
                                   error=f"pr_open failed at {stage}: {detail}",
                                   result={"steps": steps, "branch": branch})
 
-        r = git("checkout", "-b", branch)
+        # CUT FROM THE BASE, NOT FROM WHEREVER THE WORKTREE IS. This was `checkout -b <branch>`
+        # from HEAD, and after a PR the worktree stays on that PR's branch (no verb goes back):
+        # every proposal stacked on the last one and on the carrier under it. #360 was cut from
+        # #272's branch; both ran 400+ commits ahead of main for a two-file change (GPT seat,
+        # 2026-10-05). `checkout -b <branch> origin/<base>` carries the uncommitted change
+        # across when it applies to the base unchanged; when a changed file differs between
+        # here and the base, git refuses and nothing moves: the being is told which files.
+        from sage.gateway.being_gate_client import pr_base_branch, PROPOSAL_BASE_KEY
+        base = pr_base_branch(self.worktree, self._git_ctx())
+        f = git("fetch", "-q", "origin", base)
+        if f.returncode != 0:
+            return fail("fetch", f)
+        r = git("checkout", "-b", branch, f"origin/{base}")
         if r.returncode != 0:
+            clash = [ln.strip() for ln in (r.stderr or "").splitlines()
+                     if ln.startswith(("\t", " ")) and ln.strip()]
+            if clash:
+                try:
+                    self._call("hestia_record_outcome", {"action_id": action_id, "success": False,
+                                                         "magnitude": 0.0, "error": "branch: base differs"})
+                except Exception:
+                    pass
+                return ResultEnvelope(ok=False, witness_id=action_id, error=(
+                    f"pr_open: your change cannot be carried onto origin/{base} as it stands: "
+                    f"{', '.join(clash[:8])} differ between your worktree's branch and {base}, "
+                    "so a proposal cut from it would carry unrelated history. Nothing moved: you "
+                    "are still on the same branch with your change intact. Make the same change "
+                    f"against {base}'s version of those files (read them with git_read show "
+                    f"origin/{base}:<path>), or ask the seat to cut the branch for you."),
+                    result={"steps": steps, "branch": branch, "base": base, "files": clash})
             return fail("branch", r)
-        steps.append(f"branch {branch}")
+        git("config", f"branch.{branch}.{PROPOSAL_BASE_KEY}", base)
+        steps.append(f"branch {branch} from origin/{base}")
         r = git("add", "-A")
         if r.returncode != 0:
             return fail("add", r)
@@ -1965,6 +2028,18 @@ class HestiaF1aDispatcher:
         return ResultEnvelope(ok=True, result={"connected": bool(r.get("ok")), "outcome": r.get("outcome"),
                                                "report": said},
                               witness_id=self._local._witness(f"pair_audio: {r.get('outcome')}"))
+
+    def _do_tune(self, intent: BeingIntent) -> ResultEnvelope:
+        """The being's own parameters (being_params): list them, or set one within its bounds."""
+        from sage.gateway import being_params
+        a = intent.args or {}
+        name = str(a.get("name") or "").strip() or None
+        ok, text = being_params.tune(Path(self.memory_root), name, a.get("value"), a.get("why") or "")
+        if not ok:
+            return ResultEnvelope(ok=False, error=text)
+        return ResultEnvelope(ok=True, result=text,
+                              witness_id=(self._local._witness(f"tune {name}: {text[:120]}")
+                                          if name else None))
 
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()

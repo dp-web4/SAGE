@@ -121,7 +121,7 @@ def test_run_ollama_tool_turn_with_fake_llm():
     # request_run and memory_edit, one layer out. It sends a unified diff; the seat parses every
     # path the diff touches OUT OF THE DIFF and the law rules on each under mrh.path, exactly as
     # for a memory_write. See test_patch_apply_is_governed.py for what is judged and what is not.
-    assert len(ollama_tools()) == 33   # + git_clean (2026-10-05)   # + describe (2026-10-03)   # + pr_sync (2026-10-01)   # + stay_awake (SAGE #295)   # + pr_read (2026-09-29)   # + pair_audio (2026-09-27)   # + game (#56 slice 6)   # + pr_open, pr_amend, git_restore (#56 slice 5)   # + patch_apply (2026-09-25)
+    assert len(ollama_tools()) == 34   # + tune (2026-10-07)   # + git_clean (2026-10-05)   # + describe (2026-10-03)   # + pr_sync (2026-10-01)   # + stay_awake (SAGE #295)   # + pr_read (2026-09-29)   # + pair_audio (2026-09-27)   # + game (#56 slice 6)   # + pr_open, pr_amend, git_restore (#56 slice 5)   # + patch_apply (2026-09-25)
 
     calls = {"n": 0}
 
@@ -167,7 +167,7 @@ def test_generate_stats_record_the_window_wall_and_the_retry():
     assert r.reply == "done" and calls["n"] == 2
     # num_predict: the retry's budget (no window declared -> the 6000 floor), not the first 1024
     assert r.generates == [{"done_reason": "stop", "prompt_eval_count": 5000, "eval_count": 40, "retried": 1,
-                            "num_predict": 6000}]
+                            "num_predict": 6000, "retry_cause": "length"}]   # no num_ctx on this fake: not guessed
 
 
 def test_length_retry_gets_the_room_the_window_has_left_via_the_override():
@@ -200,7 +200,8 @@ def test_length_retry_gets_the_room_the_window_has_left_via_the_override():
     assert llm.num_predict_override is None                  # restored
     assert llm.max_response_tokens == 3000                   # untouched: it is not the lever
     assert r.generates == [{"done_reason": "stop", "prompt_eval_count": 6721, "eval_count": 700, "retried": 1,
-                            "num_predict": 16384 - 6721 - RETRY_MARGIN}]
+                            "num_predict": 16384 - 6721 - RETRY_MARGIN,
+                            "retry_cause": "output_budget"}]   # 6721 + 6000 < 16384: num_predict ran out
 
 
 def test_length_retry_without_a_window_falls_back_to_the_think_budget():
@@ -1071,6 +1072,51 @@ def test_speech_twice_in_the_room_is_one_utterance():
             {"content": "done", "intents": []}]
     r = run_tool_turn(c, lambda convo: outs.pop(0), [], max_steps=3)
     assert len(c.calls) == 1 and r.duplicates[0]["conversation"] == "room"
+import pytest as _pytest
+
+
+@_pytest.mark.parametrize("prompt,evalc,cause,says,never", [
+    (5192, 3000, "window", "the window cut it", "output budget"),           # 5192 + 3000 = 8192: the wall
+    (2000, 3000, "output_budget", "output budget", "the window cut it"),    # room left: num_predict ran out
+])
+def test_a_length_stop_names_the_limit_it_actually_hit(prompt, evalc, cause, says, never):
+    """legion-being 2026-10-07: its last 400 empty first attempts were 189 window wall and 209
+    output budget, and every one was told "the window cut it". It then read its wall cuts
+    (25,204 + 7,564 = 32,768) as budget cuts. The nudge and the record now say which."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 8192
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            seen.append(str(messages[-1].get("content", "")))
+            if len(seen) == 1:
+                return {"content": "", "tool_calls": [],
+                        "raw": {"done_reason": "length", "prompt_eval_count": prompt, "eval_count": evalc,
+                                "message": {"content": "", "thinking": "drafting a long function ..."}}}
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": prompt + 50, "eval_count": 20,
+                            "message": {}}}
+
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(), [{"role": "user", "content": "hi"}])
+    assert len(seen) == 2
+    assert says in seen[1] and never not in seen[1], seen[1]
+    assert r.generates[0]["retry_cause"] == cause
+
+
+def test_retry_cause_of_reads_the_counts_not_the_reason_alone():
+    from types import SimpleNamespace
+    from sage.gateway.being_tool_loop import retry_cause_of
+    llm = SimpleNamespace(num_ctx=32768)
+    assert retry_cause_of(llm, {"done_reason": "length", "prompt_eval_count": 25204, "eval_count": 7564}) == "window"
+    assert retry_cause_of(llm, {"done_reason": "length", "prompt_eval_count": 22983, "eval_count": 8000}) == "output_budget"
+    assert retry_cause_of(llm, {"done_reason": "stop", "prompt_eval_count": 1000, "eval_count": 183}) == "stopped_thinking"
+    assert retry_cause_of(SimpleNamespace(), {"done_reason": "length", "eval_count": 8000}) == "length"   # no window: not guessed
+
 
 
 def test_a_collapsed_check_result_still_names_its_failing_tests():

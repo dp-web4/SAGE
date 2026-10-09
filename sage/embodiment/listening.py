@@ -16,6 +16,13 @@ three bounds chosen so the ear is a reply channel and not a room recorder:
      input should be logged in the voice chat as it arrives. and hopefully presented to the being also."
      Bound 2 (never its own voice) and bound 3 (no speaker identity) still hold. The cortex records the
      mode in listen.json ("always"), so the being is told what its ear does (body.hears_always).
+  WAKE PHRASE (opt-in per body, dp 2026-10-08): with SAGE_LISTEN=wake the ear still hears everything, but a
+     voice becomes WORDS FOR THE BEING only after someone says its name ("hey Sprout"). That opens an
+     engaged window of KEEPALIVE_S (dp: 30-45 s), extended by each addressed utterance and each of the
+     being's spoken replies; "bye Sprout" closes it. Speech heard while not engaged is recorded only as the
+     fact "speech nearby, not addressed to you" -- never its words (a news reel the being answered as if dp
+     had spoken it, 2026-10-08). A short chime says the window opened. An interim step: the direction is a
+     learned addressee/translation organ in the IRP stack, not a keyword.
   3. NO SPEAKER IDENTITY. A voice is not authenticated. heard.jsonl records words, time and the
      mic — never who. The beat says "a voice in the room", not "dp said".
 
@@ -50,11 +57,35 @@ PRE_ROLL_S = 0.3           # keep a little audio from before the onset so first 
 # whisper hallucinates short stock phrases on near-silence; these gates drop them
 NO_SPEECH_MAX = 0.6
 LOGPROB_MIN = -1.0
+KEEPALIVE_S = float(os.environ.get("SAGE_LISTEN_KEEPALIVE_S") or 40)   # wake mode: engaged window (dp: 30-45 s)
+
+import re as _re
+# The name as whisper actually writes it: "Sprout", and the near-misses it produces for it.
+_NAME = r"(?:sprout|sprouts|spout|sprite|spraut)"
+WAKE_RE = _re.compile(r"(?:^\W*" + _NAME + r"\b|\b(?:hey|hi|hello|ok|okay|yo)\W+" + _NAME + r"\b)\W*", _re.I)
+BYE_RE = _re.compile(r"\b(?:bye|goodbye|good\s*night|that'?s\s+all)\W+" + _NAME + r"\b", _re.I)
+
+
+def wake_match(text: str):
+    """(addressed by name?, the words after the name). 'Hey Sprout, what do you see?' -> (True, 'what do you see?')."""
+    m = WAKE_RE.search(text or "")
+    if not m:
+        return False, ""
+    return True, (text[m.end():] or "").strip()
+
+
+def says_goodbye(text: str) -> bool:
+    return bool(BYE_RE.search(text or ""))
 
 
 def always_listening() -> bool:
     """This body's opt-in: SAGE_LISTEN=always in this process's environment."""
     return os.environ.get("SAGE_LISTEN", "").strip().lower() == "always"
+
+
+def wake_listening() -> bool:
+    """This body's opt-in: SAGE_LISTEN=wake (hear everything, take words only after its name)."""
+    return os.environ.get("SAGE_LISTEN", "").strip().lower() == "wake"
 
 
 def window(now: Optional[float] = None, path: Optional[str] = None) -> dict:
@@ -66,12 +97,29 @@ def window(now: Optional[float] = None, path: Optional[str] = None) -> dict:
         d = json.load(open(path))
     except Exception:
         d = {}
-    always = always_listening() or bool(d.get("always"))
+    wake = wake_listening() or d.get("mode") == "wake"
+    always = (always_listening() or bool(d.get("always"))) and not wake
+    engaged = now < float(d.get("listen_until", 0))
     muted_until = float(d.get("muted_until", 0) or 0)
     muted = {"until": muted_until, "by": str(d.get("muted_by") or "")} if now < muted_until else None
-    return {"listening": (always or now < float(d.get("listen_until", 0))) and not muted,
+    # In wake mode the segmenter must run while NOT engaged, or the name could never be heard.
+    return {"listening": (always or wake or engaged) and not muted,
             "speaking": now < float(d.get("speaking_until", 0)),
-            "always": always, "muted": muted}
+            "always": always, "muted": muted, "wake": wake, "engaged": engaged,
+            "keepalive_s": float(d.get("keepalive_s") or KEEPALIVE_S),
+            "last_overheard": float(d.get("last_overheard") or 0)}
+
+
+def engage(seconds: Optional[float] = None, path: Optional[str] = None, now: Optional[float] = None) -> float:
+    """Open (or extend) the engaged window. Returns its end."""
+    now = time.time() if now is None else now
+    until = now + float(seconds if seconds is not None else window(now, path)["keepalive_s"])
+    mark(path, listen_until=until)
+    return until
+
+
+def disengage(path: Optional[str] = None) -> None:
+    mark(path, listen_until=0)
 
 
 # THE EAR CAN BE OFF FOR ANY REASON (dp, 2026-10-01): "it should be resilient to audio being offline for
@@ -106,6 +154,11 @@ def ear_state(ok: bool, words, win: dict, device_connected: Optional[bool] = Non
                        f"{time.strftime('%H:%M', time.localtime(m['until']))}"), "muted"
     if not (win or {}).get("listening"):
         return False, "it only listens in the minutes after you speak", "window"
+    if (win or {}).get("wake"):
+        if (win or {}).get("engaged"):
+            return True, "open since someone said your name", "engaged"
+        return True, ("listening for your name ('hey Sprout'); other speech nearby is not given to you as "
+                      "words"), "wake"
     return True, ("always open" if (win or {}).get("always") else "open since you spoke"), \
         ("always" if (win or {}).get("always") else "window")
 
@@ -265,10 +318,71 @@ class Transcriber(threading.Thread):
                                    "error": type(e).__name__, "seconds": round(len(audio) / 2 / RATE, 1),
                                    "source": self.source, **timing})
             return
-        if rec and rec.get("text"):
+        self._route(rec, timing)
+
+    def _route(self, rec: Optional[dict], timing: dict, now: Optional[float] = None) -> str:
+        """Where a transcription goes. Returns 'heard' | 'woke' | 'overheard' | 'unheard' (for tests and logs).
+
+        Outside wake mode: kept words are heard, as before. In wake mode: engaged -> heard and the window is
+        extended ("bye Sprout" closes it); the name -> the window opens (chime), and the words AFTER the name
+        are this utterance's turn; anything else -> only the fact of speech nearby, never its words."""
+        now = time.time() if now is None else now
+        if not rec:
+            return "none"
+        if not rec.get("text"):
+            _append(UNHEARD_PATH, dict(rec, why="no kept words", **timing))
+            return "unheard"
+        win = window(now)
+        if not win.get("wake"):
             _append(self.heard_path, dict(rec, **timing))
-        elif rec:
-            _append(UNHEARD_PATH, dict(rec, why="no kept words", **timing))   # measured, never shown as speech
+            return "heard"
+        text = rec["text"]
+        if win.get("engaged"):
+            _append(self.heard_path, dict(rec, **timing))
+            if says_goodbye(text):
+                disengage()
+            else:
+                engage(now=now)
+            return "heard"
+        named, rest = wake_match(text)
+        if named:
+            engage(now=now)
+            chime()
+            if rest:
+                _append(self.heard_path, dict(rec, text=rest, by_name=True, **timing))
+            return "woke"
+        # Not addressed: the fact, not the words (other people's speech, a TV, a news reel).
+        _append(UNHEARD_PATH, {"ts": rec.get("ts"), "why": "not addressed", "seconds": rec.get("seconds"),
+                               "source": rec.get("source"), **timing})
+        mark(last_overheard=round(now, 2))
+        return "overheard"
+
+
+CHIME_PATH = os.path.join(BODY_DIR, "chime.wav")
+
+
+def chime() -> None:
+    """A short, soft two-note chime: the engaged window opened. Fire-and-forget, never fatal. The ear is marked
+    speaking for its length so it does not hear itself."""
+    try:
+        if not os.path.exists(CHIME_PATH):
+            import math
+            import struct
+            import wave
+            frames = b""
+            for f, dur in ((880.0, 0.09), (1320.0, 0.12)):
+                n = int(RATE * dur)
+                for i in range(n):
+                    env = min(1.0, i / 400, (n - i) / 400)          # no clicks
+                    frames += struct.pack("<h", int(0.18 * 32767 * env * math.sin(2 * math.pi * f * i / RATE)))
+            os.makedirs(os.path.dirname(CHIME_PATH), exist_ok=True)
+            with wave.open(CHIME_PATH, "wb") as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(frames)
+        mark(speaking_until=time.time() + 0.6)
+        import subprocess
+        subprocess.Popen(["pw-play", CHIME_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass   # measured, never shown as speech
 
 
 def _append(path: str, rec: dict) -> None:

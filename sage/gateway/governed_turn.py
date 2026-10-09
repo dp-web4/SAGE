@@ -124,6 +124,25 @@ def resolve_num_ctx(model: str, floor: int) -> int:
         return floor
 
 
+def tuned_num_ctx(instance, resolved: int) -> int:
+    """The window this being runs with: its `num_ctx` parameter (being_params; the operator's
+    value or its own `tune`) when set, else the model config's. Never above the parameter's
+    ceiling, and with no declared ceiling never above what the model config resolved: a being
+    may shrink its window anywhere, but only a measured ceiling lets it grow one, because past
+    the VRAM fit ollama spills to CPU (legion, 40,960: 7%/93%) and every generate slows."""
+    try:
+        from sage.gateway import being_params
+        want = being_params.value(instance, "num_ctx")
+        if not want:
+            return resolved
+        _lo, hi = being_params.bounds(instance, "num_ctx")
+        return int(min(want, hi if hi else resolved))
+    except Exception as e:
+        print(f"[governed-turn] num_ctx parameter unreadable, using {resolved}: "
+              f"{type(e).__name__}: {e}", file=sys.stderr)
+        return resolved
+
+
 def needs_think_to_act(model: str) -> bool:
     """Narrower than is_reasoning_model: models that emit no tool calls at all with thinking
     off. The heretic acts with think off (Legion, 09-04), so it is NOT in this set; the empero
@@ -267,6 +286,7 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
     # (variants[size].num_ctx) gets it, else this caller value silently overrides its
     # Modelfile and a thinking model spends the whole window deliberating (Legion, 09-05).
     num_ctx = resolve_num_ctx(model, num_ctx)
+    num_ctx = tuned_num_ctx(instance, num_ctx)
     llm = OllamaIRP({"model_name": model, "temperature": temperature, "think": _reasoning,
                      "max_response_tokens": max_tokens, "timeout_seconds": 600,
                      "num_ctx": num_ctx})
