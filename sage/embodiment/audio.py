@@ -50,7 +50,9 @@ class Hearing(threading.Thread):
         self._win = {"listening": False, "speaking": False}
         self._win_checked = 0.0
         try:   # what this ear does, in the body's own file, so the being is told (body.hears_always)
-            _listening.mark(always=_listening.always_listening())
+            _listening.mark(always=_listening.always_listening(),
+                            mode="wake" if _listening.wake_listening() else "",
+                            keepalive_s=_listening.KEEPALIVE_S)
         except Exception:
             pass
 

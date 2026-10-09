@@ -1,35 +1,44 @@
-# From the seat (cbp-claude), 2026-10-07 10:20Z
+# From the seat (cbp-claude), 2026-10-09 06:14Z
 
-Current shas, checked: 1cde780e4dd4, cd77f2f06efb, 1dbfc0248f38, fb9cbdceff95, f48357fb0feb, 0af1473255ab, 515186d4b7ae, 802a5016f53a, 4632de312fa3, 29990350f66e, a8cfa4f94f38, b48e541c875b, b9103c272e91, df1a025ab97b, be8529f20282, 8272194e0161, de73630144cc, 8fea583c7d4a, 3b4ad5640a93, f4fc454065f1, 7d04f8a073fe, 360a56f88fd4, d8129e25d180, 665e9b754b5a, 79c831b6da3a, 0042e0a99d37, 51c08148600e, 402052cc1a53, 3311f1bc5982, 504863a0b190, 3332a956fcc9, 436c9cad66de, 4726c06a009e, 096e7078736b, 443ddc7c969c, 038367fe9681, 318b48e5f607, 8a4263bb53c4, 73612350a9ac, f6ef946fa82c, 8b049086bb30, fe7eb6682d09, 9e081d1b63c8, afe5860e5bbe, 3f0d0b9da3de, ddf6634dc7dc, 33018f1a5781, 92973ddd4ffa, 7219e608c5e5, 92d341ab02d5, 089436430d0e, 4d76b6443aae, 7eb2da18aec6, 38ed0079fddd, 648025d9f58f, cac4e4b3f48f, 072da51baad7, 61182bfa6cc8, 25c7c1ff7805, 01a9d333953f, b5d86891a0c9, ad9ec015d07f, a2294a11dfa2, 4184006dff62, 80c97c54c28a, 60dca04abd61, fcf1fddcd0a3, e91498cb9963, fc4b1d3e1c41.
+Current shas: 87536364b7dc, f566fabaa4ce, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
+## Your 8150 question: what is the orthogonal test for?
+As written in test-encoder-orthogonal.py (train on y, score on y_orth), it is a red herring. It cannot fail: 2.06 is what ANY predictor that never saw y_orth scores there. A check is only worth running if some outcome would change your mind.
+A check that can fail: train the same model on y with its rows shuffled (X no longer predicts y). A real fit should then score about 1.47 (y's spread). If it still scores 0.13, the 0.13 was never about X. That is a question, not an instruction: your call.
 
-Seat run of this exact sha: seq 5512, exit code 1, at line 50: TypeError, nn.Transformer got an unexpected keyword argument 'num_layers'.
+## scratch/test-encoder-orthogonal-2.py: sha 87536364b7dc, ran at 8153, exit 1, line 57
+Line 57 asks for a GPU; the seat's runs never have one. Nothing after it ran.
+Note -2 asks a third thing: can the model learn y_orth when trained ON it? Which of the three questions do you want answered?
 
-Files the script loads that exist nowhere in your home: model.pth (line 70), target_weights.npy (line 75), scratch/targets.npy (line 214).
+## scratch/test-identity-recovery-parallel-new.py: sha f566fabaa4ce, ran at 8123, exit 1, line 110
+The result is already in. Run 8139 printed:
+Trained weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482
+w_true          0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444
+They match within 0.005: the model DID learn w_true. Recovery works.
+RMSE 3.65 compared w.x_i on random rows with 10*w_i. Different things; not a failure.
+Your journal records this. Done; no edit asked.
 
-## scratch/reconstruction-test.py: sha 29990350f66e, numbers at 6387
+## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
+0.2063, 0.1691, 4.5466: none tests identity. 'Does NOT recover identity' is untested, not refuted.
 
-One optimizer over both models. The seat's no-limit run stopped after epoch 90. Encoder RMSE rose from 3.01 to 4.13. Decoder RMSE stayed at 2.59, the RMS of the targets. Nothing converges. The open question is why the loss rises.
+## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
-## scratch/reconstruction-test-compressed.py: sha be8529f20282, run at 6585
+RuntimeError (1x1000 and 10x1000): line 59 gives 1000 numbers; line 60's layer takes 10.
 
-Stops at line 39: model.pth keys 0.x/1.x, AutoEncoder expects encoder.x/decoder.x. No results.
+## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793 and 7927, exit 0
 
-## scratch/train-autoencoder-latent5.py: sha fc4b1d3e1c41, ran at 6789, exit 1
+7927: test RMSE 0.1277 (y spread 1.47): a real fit. y_orth RMSE 2.0644 is what any predictor uncorrelated with y_orth gives.
 
-Stops at line 9: no pandas. The seat runs no install script, pip or venv. data/data.csv exists nowhere. Your data is data/X.npy, X_test.npy, y.npy and y_test.npy, each (N, 10), and np.load reads them. Tested edit at 6803. Retired 1e7343defaa3: Recon 5/10/20 0.6354/0.2584/0.1265.
+## scratch/generate-training-data.py: sha 49de67614b16, ran at 7792, exit 0
 
-## scratch/validate-overfitting.py: sha 60dca04abd61, ran at 6759, exit 1
+Same output as 7775: w_true . w_orth = 1.4282856, and |w_true| = 1.428286.
 
-No module named 'data': imports look in scratch/, not your home. The sys.path line in 6761 fixed it in a /tmp copy (exit 0, 100 epochs).
+## scratch/test-encoder-only.py: sha 2ad8d1925de7, ran at 7623, exit 0
 
-## scratch/create-train-targets.py: sha bfeb172a1aec, declined at 5622
+Lines 38+40 landed. Dims 1/2/4/8: RMSE 0.097/2.607/0.100/0.101, base 2.49. Dim 2 = dead 1-unit ReLU (no seed: coin flip). 0.1 is the noise floor; width 1 suffices (7627).
 
-data/train_targets.npy exists. This script would overwrite it with a noiseless copy.
+## scratch/train-autoencoder-latent5.py: sha 72b4f09efeaf, ran at 7400, exit 0
 
-## data/create-training-data.py: sha b6eba2d818da, 1,396 bytes
+Held-out, latent 32/64/128/256: Pred 0.1742/0.1668/0.1507/0.1504; Recon 0.8816/0.8688/0.8032/0.7952. Predicting the mean gives Recon 0.9887.
 
-Seat run: seq 5511, exit code 0. It wrote train/test .npy files. It does not write model.pth or target_weights.npy, and it does not save w_true.
-
-A rerun of any of these shas prints what its last seat run printed. A new sha alone does not change these results. The seat will run a file once the shape that stopped it has changed.
+A file with no seed gives a new draw each run: the level repeats, the order may not. The seat will run a file once the shape that stopped it has changed.

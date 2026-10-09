@@ -851,7 +851,7 @@ def pr_sync_command(args: dict, ctx: Optional[dict] = None) -> str:
         raise ValueError(f"pr_sync 'op' must be one of {list(PR_SYNC_OPS)}; got {op!r}")
     own_proposal_branch(worktree, ctx)
     if op == "start":
-        base = pr_base_branch(worktree, ctx)
+        base = proposal_base(worktree, ctx)
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,100}", base) or ".." in base:
             raise ValueError(f"pr_sync: the base branch {base!r} is not a plain branch name")
         return f"git --no-pager -C {worktree} merge --no-ff --no-commit origin/{base}"
@@ -871,6 +871,31 @@ def own_proposal_branch(worktree: str, ctx: Optional[dict] = None) -> str:
         raise ValueError(f"pr_amend: this worktree is on {br!r}, which is not one of your PR "
                          "branches. pr_amend revises a proposal you already opened")
     return br
+
+
+PROPOSAL_BASE_KEY = "sagebase"   # git config branch.<branch>.sagebase: the base pr_open cut it from
+
+
+def proposal_base(worktree: str, ctx: Optional[dict] = None) -> str:
+    """The base THIS proposal targets: what pr_open recorded when it cut the branch, else the
+    base its open PR names on GitHub, else pr_base_branch. pr_sync merges THIS, never the
+    seat-wide default: once the default moved to main (2026-10-05), syncing a PR that was cut
+    from the carrier against main would have merged hundreds of unrelated commits into it."""
+    import subprocess
+    br = own_proposal_branch(worktree, ctx)
+    rec = subprocess.run(["git", "config", "--get", f"branch.{br}.{PROPOSAL_BASE_KEY}"],
+                         cwd=worktree, text=True, capture_output=True, timeout=30).stdout.strip()
+    if rec:
+        return rec
+    try:
+        out = subprocess.run(["gh", "pr", "list", "--repo", PR_REPO, "--head", br, "--state", "open",
+                              "--json", "baseRefName", "--jq", ".[0].baseRefName"],
+                             cwd=worktree, text=True, capture_output=True, timeout=60).stdout.strip()
+        if out and out != "null":
+            return out
+    except Exception:
+        pass
+    return pr_base_branch(worktree, ctx)
 
 
 def _pr_number_for_branch(worktree: str, ctx: Optional[dict] = None) -> str:
@@ -1662,6 +1687,15 @@ def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
         reason += (f". That is a file name, and a file is not a tool. To run one of your own "
                    f"files, call request_run with path='{effector}'; the seat runs it and answers")
         return reason
+    # A WAIT IS NOT A RUN. 2026-10-09 03:54Z: cbp-being sent wait {"reason": "Waiting for the
+    # seat to run test-identity-recovery-parallel-new.py ..."} three times, AFTER its
+    # request_run for that file had queued. The arg scan below saw the .py and told it to call
+    # request_run, the thing it had just done; it appealed the refusal as arbitrary. wait was
+    # its most common unbounded name (9, tied with python3). The door for a wait is the beat.
+    if effector in ("wait", "sleep", "pause"):
+        return reason + (". There is nothing to wait inside a beat: end it. A queued request_run "
+                         "is answered in your conversation with the seat, and your next beat "
+                         "reads that answer")
     # THE SAME WANT, SPELLED AS A SHELL VERB. 2026-09-22 06:27Z: cbp-being sent run_command
     # {"command": "python mechanism-training-script-clean.py"}; 7 of the 9 registry.unbounded
     # refusals in its heartbeats carried the file in an ARG, not the effector, and none named
@@ -2053,7 +2087,15 @@ _TOOL_SCHEMAS = {
                     "person in a message: a person may be asleep, and this reaches whoever is "
                     "on duty.",
                     {"path": "the file to run, inside your own home, e.g. notes/my-script.py",
-                     "why": "optional: what you expect to learn. Saying it helps the seat decide"},
+                     "why": "optional: what you expect to learn. Saying it helps the seat decide",
+                     # LISTED BECAUSE THE RECEIPT NAMES IT. Measured 2026-10-08 04:03Z (cbp-being):
+                     # the answered-run receipt said "call request_run with rerun=true", this spec
+                     # did not list rerun, and the being wrote `main(rerun=True)` into its script
+                     # (TypeError at line 139, seq 7489) after 8 requests that put "rerun=true" in
+                     # 'why'. A parameter named only in prose goes onto the nearest call it can edit.
+                     "rerun": "optional: 'true' asks the seat to run a file again that it already ran "
+                              "and answered, unchanged. It is an argument of request_run, next to path "
+                              "and why, not something to write into your file"},
                     ["path"]),
     "game": ("Play an ARC-AGI-3 game: up to 8 probes per call, in order, each delta back in this "
              "turn. ACTION6 is a click at (x=col,y=row) 0-63; ACTION1-5,7 take no coordinates; "

@@ -1,0 +1,147 @@
+{
+ "schema": "sage.body/1",
+ "sampled_at": 1791350216.128,
+ "host": "dp-Legion-Pro-7-16IRX8H",
+ "platform": {
+  "os": "linux",
+  "kind": "linux",
+  "detail": "6.8.0-142-generic"
+ },
+ "memory_topology": "mixed",
+ "memory_topology_why": "GPUs of different topologies: nvidia discrete, intel unified",
+ "gpus": [
+  {
+   "vendor": "nvidia",
+   "name": "NVIDIA GeForce RTX 4090 Laptop GPU",
+   "topology": "discrete",
+   "utilization_pct": {
+    "value": 99.0,
+    "source": "nvidia-smi"
+   },
+   "memory_used_bytes": {
+    "value": 15526264832,
+    "source": "nvidia-smi"
+   },
+   "memory_total_bytes": {
+    "value": 17171480576,
+    "source": "nvidia-smi"
+   },
+   "temperature_c": {
+    "value": 64.0,
+    "source": "nvidia-smi"
+   },
+   "shared_memory_used_bytes": {
+    "value": null,
+    "unavailable": "discrete GPU: its memory is VRAM"
+   }
+  },
+  {
+   "vendor": "intel",
+   "name": "Intel integrated GPU at 00:02.0",
+   "topology": "unified",
+   "utilization_pct": {
+    "value": null,
+    "unavailable": "Intel iGPU: no unprivileged busy counter (intel_gpu_top needs root)"
+   },
+   "memory_used_bytes": {
+    "value": null,
+    "unavailable": "unified memory: the GPU has no separate pool (see memory)"
+   },
+   "memory_total_bytes": {
+    "value": null,
+    "unavailable": "unified memory: the GPU has no separate pool (see memory)"
+   },
+   "temperature_c": {
+    "value": null,
+    "unavailable": "no iGPU temperature sensor in sysfs"
+   },
+   "shared_memory_used_bytes": {
+    "value": null,
+    "unavailable": "not exposed without root"
+   }
+  }
+ ],
+ "cpu": {
+  "cores": 32,
+  "model": "13th Gen Intel(R) Core(TM) i9-13900HX",
+  "utilization_pct": {
+   "value": 20.3,
+   "source": "/proc/stat over 0.5 s"
+  },
+  "load_1m": {
+   "value": 6.68,
+   "source": "getloadavg"
+  },
+  "load_5m": {
+   "value": 5.77,
+   "source": "getloadavg"
+  },
+  "temperature_c": {
+   "value": 79.0,
+   "source": "thermal_zone x86_pkg_temp"
+  }
+ },
+ "memory": {
+  "pool": "system",
+  "scope": "machine",
+  "total_bytes": {
+   "value": 33373970432,
+   "source": "/proc/meminfo MemTotal"
+  },
+  "used_bytes": {
+   "value": 7103459328,
+   "source": "/proc/meminfo MemTotal-MemAvailable"
+  },
+  "swap_used_bytes": {
+   "value": 1410859008,
+   "source": "/proc/meminfo"
+  },
+  "swap_total_bytes": {
+   "value": 8589930496,
+   "source": "/proc/meminfo"
+  }
+ },
+ "disks": [
+  {
+   "labels": [
+    "sage"
+   ],
+   "path": "/home/dp/ai-workspace/SAGE",
+   "mount": "/",
+   "total_bytes": {
+    "value": 490732191744,
+    "source": "statvfs"
+   },
+   "free_bytes": {
+    "value": 149833990144,
+    "source": "statvfs"
+   },
+   "used_pct": {
+    "value": 67.8,
+    "source": "statvfs"
+   }
+  },
+  {
+   "labels": [
+    "models"
+   ],
+   "path": "/usr/share/ollama/.ollama/models",
+   "mount": "/",
+   "total_bytes": {
+    "value": 514831998976,
+    "source": "statvfs"
+   },
+   "free_bytes": {
+    "value": 296979189760,
+    "source": "statvfs"
+   },
+   "used_pct": {
+    "value": 39.2,
+    "source": "statvfs"
+   }
+  }
+ ],
+ "sample_ms": 526.6,
+ "cpu_window_ms": 500,
+ "line": "NVIDIA GPU 99% \u00b7 VRAM 14.5/16.0 GiB \u00b7 64\u00b0C; Intel GPU: no readings | CPU 20% \u00b7 79\u00b0C \u00b7 RAM 6.6/31.1 GiB | disk sage 68% (140 GiB free), disk models 39% (277 GiB free) | memory: mixed"
+}

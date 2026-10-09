@@ -1200,7 +1200,7 @@ class HestiaF1aDispatcher:
         import shlex
         import subprocess
         from sage.gateway.being_gate_client import (own_proposal_branch, pr_attribution,
-                                                    pr_base_branch, pr_sync_command,
+                                                    pr_base_branch, pr_sync_command, proposal_base,
                                                     NO_WORKTREE_REFUSAL)
         if not self.worktree or not os.path.isdir(self.worktree):
             return ResultEnvelope(ok=False, pending=True, note=NO_WORKTREE_REFUSAL["pr_sync"])
@@ -1258,7 +1258,7 @@ class HestiaF1aDispatcher:
                     "pr_sync: conflict markers remain, so nothing was committed: " + where
                     + ". Each <<<<<<< ... ======= ... >>>>>>> block must become the text you want"))
 
-        target = f"{branch} <- origin/{pr_base_branch(self.worktree, self._git_ctx())}" \
+        target = f"{branch} <- origin/{proposal_base(self.worktree, self._git_ctx())}" \
             if op == "start" else branch
         begin = self._call("hestia_begin_action", {"tool_name": "pr_sync", "target": target})
         err = _hestia_error(begin)
@@ -1319,7 +1319,7 @@ class HestiaF1aDispatcher:
                 "note": "your PR now contains its base; re-run check, then ask for review"})
 
         # op == start
-        base = pr_base_branch(self.worktree, self._git_ctx())
+        base = proposal_base(self.worktree, self._git_ctx())
         f = git("fetch", "-q", "origin", base, timeout=300)
         if f.returncode != 0:
             outcome(False, "fetch")
@@ -1418,10 +1418,39 @@ class HestiaF1aDispatcher:
                                   error=f"pr_open failed at {stage}: {detail}",
                                   result={"steps": steps, "branch": branch})
 
-        r = git("checkout", "-b", branch)
+        # CUT FROM THE BASE, NOT FROM WHEREVER THE WORKTREE IS. This was `checkout -b <branch>`
+        # from HEAD, and after a PR the worktree stays on that PR's branch (no verb goes back):
+        # every proposal stacked on the last one and on the carrier under it. #360 was cut from
+        # #272's branch; both ran 400+ commits ahead of main for a two-file change (GPT seat,
+        # 2026-10-05). `checkout -b <branch> origin/<base>` carries the uncommitted change
+        # across when it applies to the base unchanged; when a changed file differs between
+        # here and the base, git refuses and nothing moves: the being is told which files.
+        from sage.gateway.being_gate_client import pr_base_branch, PROPOSAL_BASE_KEY
+        base = pr_base_branch(self.worktree, self._git_ctx())
+        f = git("fetch", "-q", "origin", base)
+        if f.returncode != 0:
+            return fail("fetch", f)
+        r = git("checkout", "-b", branch, f"origin/{base}")
         if r.returncode != 0:
+            clash = [ln.strip() for ln in (r.stderr or "").splitlines()
+                     if ln.startswith(("\t", " ")) and ln.strip()]
+            if clash:
+                try:
+                    self._call("hestia_record_outcome", {"action_id": action_id, "success": False,
+                                                         "magnitude": 0.0, "error": "branch: base differs"})
+                except Exception:
+                    pass
+                return ResultEnvelope(ok=False, witness_id=action_id, error=(
+                    f"pr_open: your change cannot be carried onto origin/{base} as it stands: "
+                    f"{', '.join(clash[:8])} differ between your worktree's branch and {base}, "
+                    "so a proposal cut from it would carry unrelated history. Nothing moved: you "
+                    "are still on the same branch with your change intact. Make the same change "
+                    f"against {base}'s version of those files (read them with git_read show "
+                    f"origin/{base}:<path>), or ask the seat to cut the branch for you."),
+                    result={"steps": steps, "branch": branch, "base": base, "files": clash})
             return fail("branch", r)
-        steps.append(f"branch {branch}")
+        git("config", f"branch.{branch}.{PROPOSAL_BASE_KEY}", base)
+        steps.append(f"branch {branch} from origin/{base}")
         r = git("add", "-A")
         if r.returncode != 0:
             return fail("add", r)
@@ -3095,8 +3124,11 @@ class HestiaF1aDispatcher:
         # output of a byte-identical notes/other.py -- a file that prints a different path,
         # and whose relative imports and data are not new.py's. A prior run is evidence for
         # this request only when it ran this path, these bytes, and these arguments.
+        # rerun="false" is the default spelled out, not a request to rerun: now that the spec lists
+        # rerun, a being may pass it on every call, and any `rerun:` line wakes the seat.
         arg_lines = [f"{k}: {str(v).strip()}" for k, v in intent.args.items()
-                     if k not in ("path", "why", "reason", "to") and str(v).strip()]
+                     if k not in ("path", "why", "reason", "to") and str(v).strip()
+                     and not (k == "rerun" and str(v).strip().lower() in ("false", "no", "0", "none"))]
 
         def _seat_names(text: str):
             """(verb, path, argument phrase) of a seat run/decline receipt's first line."""
@@ -3179,9 +3211,7 @@ class HestiaF1aDispatcher:
         # which is always this conversation. The seat passes flags it chooses to accept after
         # `--` (seat_run_requests.py, #175); this is how it sees them. The first line stays
         # "[request_run] <rel>", which the unchanged check above and the seat's reader key on.
-        for k, v in intent.args.items():
-            if k not in ("path", "why", "reason", "to") and str(v).strip():
-                lines.append(f"{k}: {str(v).strip()}")
+        lines.extend(arg_lines)
         if unchanged and unchanged[0] is None:
             lines.append(f"UNCHANGED since the seat ran this exact file at seq {unchanged[1]}.")
         elif unchanged:
@@ -3225,7 +3255,8 @@ class HestiaF1aDispatcher:
             note = ("The request was recorded in "
                     f"'{seat_conv}', but the seat was NOT woken for it: it already answered this "
                     "same file, unchanged, and that answer is above. NOTHING HAS RUN. To have it "
-                    "run again anyway, call request_run with rerun=true.")
+                    "run again anyway, call request_run again with its argument rerun set to "
+                    "'true', next to path and why. It is not a line in your file.")
         return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
             **result,
             "requested": rel,

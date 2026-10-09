@@ -147,8 +147,8 @@
       "federation_port": 0,
       "model_default": "granite4:h-tiny",
       "device": "vulkan",
-      "hardware": "AMD Radeon Pro W5500 8GB, WSL2",
-      "note": "Fleet's only AMD GPU. Cross-network (reached over the tailnet by host name \u2014 not on 10.0.0.x). GPU compute via Mesa Dozen (Vulkan-on-D3D12); ROCm unavailable on WSL2. LLM = llama.cpp-Vulkan behind an Ollama-API shim. Also the web4 community-hub host."
+      "hardware": "Intel i7-11700, 64 GB host RAM (WSL2 guest capped at ~31 GiB), AMD Radeon Pro W5500 8GB + Intel UHD Graphics 750 on the Windows host (measured 2026-10-07, SAGE #379: Win32_VideoController; neither is visible as sysfs inside WSL)",
+      "note": "One of two AMD GPU machines (pub also has a W5500, measured 2026-10-07). Cross-network (reached over the tailnet by host name \u2014 not on 10.0.0.x). GPU compute via Mesa Dozen (Vulkan-on-D3D12); ROCm unavailable on WSL2. LLM = llama.cpp-Vulkan behind an Ollama-API shim. Also the web4 community-hub host."
     },
     "pub": {
       "pool": "infra",
@@ -161,7 +161,7 @@
       "federation_port": 0,
       "model_default": "llama3.1:8b",
       "device": "cpu",
-      "hardware": "CPU society-host",
+      "hardware": "Dell Precision 3650 (tl-Precision-3650-Tower), Intel i7-11700, 32 GB, AMD Radeon Pro W5500 8GB (amdgpu, discrete) + Intel UHD Graphics 750, native Ubuntu 26.04 (measured 2026-10-07, SAGE #379 proprioception run)",
       "note": "Society-host (2 of 2, with hub) \u2014 not a cognition node. Runs its own autonomous raising session (pub-llama3.1-8b, Llama family). Network coords TBD; added 2026-08-28 to reconcile the fleet registry to 8 machines."
     }
   }
