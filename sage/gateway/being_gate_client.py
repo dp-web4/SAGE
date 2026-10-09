@@ -1904,7 +1904,11 @@ _TOOL_SCHEMAS = {
                     "whole lines; if it does not reach the end it says so and names the "
                     "start_line that reads on.",
                     {"path": "path to your note",
-                     "start_line": "optional: the line number to start from (default 1)"}, ["path"]),
+                     "start_line": "optional: the line number to start from (default 1)",
+                     "end_line": ("optional: the last line to show, inclusive, as memory_read "
+                                  "numbers lines. To look at one line, give it as both. Without "
+                                  "it the read runs to the window's end, about 8,000 characters, "
+                                  "which is most of a short file.")}, ["path"]),
     # SAY IT APPENDS, AT THE MOMENT OF CHOICE (2026-09-26). This description was "Write a note
     # into your own memory." Only memory_edit's description said memory_write appends, and a model
     # choosing memory_write never reads that one. cbp-being meant to rewrite

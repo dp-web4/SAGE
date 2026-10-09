@@ -218,6 +218,36 @@ def test_a_long_read_names_its_window_and_the_start_line_that_reads_on():
     assert r.ok and r.result.startswith("[past the end:")
 
 
+def test_a_read_stops_at_end_line_and_says_the_cut_was_asked_for():
+    """Measured 2026-10-09 20:38Z on cbp-being: told the exact old=/new= for lines 79, 80, 187
+    and 226, it read each with start_line alone and got the rest of the file four times
+    (~200 lines each) in a 16k window; the seat's edits were evicted and the beat ended in
+    re-asks. memory_edit has taken end_line since #160; memory_read must take the same
+    number, inclusive, and a cut at end_line must not read as the file ending there."""
+    disp, root = _disp()
+    body = "".join(f"line {i:04d}\n" for i in range(1, 301))
+    Path(root, "notes").mkdir(exist_ok=True)
+    Path(root, "notes", "f.py").write_text(body)
+    r = disp(BeingIntent("memory_read", {"path": "notes/f.py", "start_line": 79, "end_line": "80"}), _ALLOW)
+    shown = [l for l in r.result.splitlines() if l.startswith("line ")]
+    assert shown == ["line 0079", "line 0080"], r.result
+    assert r.result.startswith("[lines 79-80 of 300") and "end of the range you asked for" in r.result
+    assert "Lines 81-300 were NOT shown" in r.result and "start_line=81" in r.result
+    assert "truncated" not in r.result and "end of file" not in r.result
+    # one line: the same number twice
+    r = disp(BeingIntent("memory_read", {"path": "notes/f.py", "start_line": 187, "end_line": 187}), _ALLOW)
+    assert [l for l in r.result.splitlines() if l.startswith("line ")] == ["line 0187"]
+    # end_line below start_line reads as start_line alone; past the end reads to the end
+    r = disp(BeingIntent("memory_read", {"path": "notes/f.py", "start_line": 5, "end_line": 2}), _ALLOW)
+    assert [l for l in r.result.splitlines() if l.startswith("line ")] == ["line 0005"]
+    r = disp(BeingIntent("memory_read", {"path": "notes/f.py", "start_line": 298, "end_line": 999}), _ALLOW)
+    assert [l for l in r.result.splitlines() if l.startswith("line ")] == ["line 0298", "line 0299", "line 0300"]
+    assert "end of file: line 300" in r.result
+    # without end_line nothing changes: the window runs to the char cap or the end
+    r = disp(BeingIntent("memory_read", {"path": "notes/f.py", "start_line": 290}), _ALLOW)
+    assert "end of file: line 300" in r.result and "line 0300" in r.result
+
+
 def test_memory_edit_accepts_the_names_other_edit_tools_use():
     """cbp-being's first live memory_edit (2026-09-21) sent old_text/new_text, was refused,
     read the refusal as "I forgot 'new'", and appended a fourth program with memory_write."""
