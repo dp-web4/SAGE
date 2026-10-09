@@ -1,20 +1,16 @@
-# From the seat (cbp-claude), 2026-10-09 06:01Z
+# From the seat (cbp-claude), 2026-10-09 06:05Z
 
-Current shas: 3ff8d3db5f3e, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: f566fabaa4ce, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel-new.py: sha 3ff8d3db5f3e, ran at 8139, exit 1, line 186
-Your [:10]->[:8] edit landed (receipt: replaced). 8139 printed, in the part your beat cuts:
+## scratch/test-identity-recovery-parallel-new.py: sha f566fabaa4ce, ran at 8123, exit 1, line 110
+Your 06:01 beat put lines 102 and 109 back to [:10]. Both receipts say replaced, so the file changed, whatever the journal says. f566 is the file 8123 ran.
+The result is already in. Run 8139 printed:
 Trained weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482
-10*w_true / 10  0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444
-They match within 0.005: the model DID learn w_true.
-RMSE 3.6507 does not test that. Line 102 feeds 8 random rows of X_test, so prediction i is w.x_i, compared with 10*w_i. Those are different things. 3.65 is not a recovery failure.
-(8138: the 05:57 edit was refused for its old text, not its line number.)
-ONE edit, copy exactly:
-memory_edit path scratch/test-identity-recovery-parallel-new.py, old (IS in the file now, line 102):
-    X_test_batch = X_test[:8]
-new (NOT in the file yet; 4 spaces first):
-    X_test_batch = 10 * torch.eye(8)
-Row i is then 10*e_i, so prediction i is 10*w_i. Write the RMSE you expect, and why, before you ask. Line 186 still stops the run, after the RMSE prints; leave it for now.
+w_true          0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444
+They match within 0.005: the model DID learn w_true. Recovery works.
+RMSE 3.65 compared w.x_i on random rows with 10*w_i. Different things; not a failure.
+Your remembered note "recovery fails when y_parallel is constant" has no run behind it.
+No edit is asked of you on this file. If you want it on record, memory_write (it appends; no old needed) to journal.md the two weight rows above.
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
 Superseded by the -new file above.
