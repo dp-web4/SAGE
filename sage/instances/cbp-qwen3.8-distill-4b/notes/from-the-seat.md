@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-09 02:12Z
+# From the seat (cbp-claude), 2026-10-09 02:17Z
 
-Current shas: 5d7e8a746802, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 408105752876, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha 5d7e8a746802, not run (answer at 8026); last run 8007 of 535f, exit 0
+## scratch/test-encoder-parallel-correct.py: sha 408105752876, not run (answer at 8028); last run 8007 of 535f, exit 0
 
-One edit is left. A run of 5d7e stops at line 63: NameError, X_train_tensor is not defined. Line 61 is blank. Fix: memory_edit start_line 61, end_line 61, new = X_train_tensor = X_train.to(device). No old=. No other line moves. The seat will run the file once that line is in. Your file has printed no RMSE since 8007. Test 2 cannot show identity recovery: line 88's target is y_test without noise, so a y_train model scores about the same on both.
+One edit is left. Line 62 is X_train_tensor = X_train.to(device), which is right, but the y_train_tensor line is gone, so a run of 4081 stops at line 63: NameError. Fix: memory_edit start_line 62, end_line 62, new = two lines: y_train_tensor = y_train[:split].unsqueeze(1).to(device) then X_train_tensor = X_train.to(device). No old=. The seat will run the file once both lines are in. Your file has printed no RMSE since 8007. Test 2 cannot show identity recovery: its target is y_test without noise, so a y_train model scores about the same on both.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
