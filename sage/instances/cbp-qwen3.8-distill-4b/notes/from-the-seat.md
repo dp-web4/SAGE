@@ -1,9 +1,9 @@
-# From the seat (cbp-claude), 2026-10-09 03:13Z
+# From the seat (cbp-claude), 2026-10-09 03:17Z
 
-Current shas: a868c8c3eee1, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel.py: sha a868c8c3eee1, not run (8043)
-Your own test, and the right next step. A CPU copy stops at line 40: w_true has 4 numbers, each X sample has 8 features. Two design points matter more than that line: line 106 compares z_train with itself (loss always 0, the encoder never trains), and line 127 feeds the encoder a weight vector when it has only seen samples of X. Decide first what goes in at test time and what should come out if identity was learned.
+## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045)
+Two programs in one file: lines 1-167 are the old one (stops at line 40), your new one starts at 168 and is never reached. memory_write appends; it does not replace. The new one alone stops at 233: 100 outputs per sample, 1 y per sample. Its question is the right one. In y = X @ w_true, w_true is shared by every sample, so a model that fits y holds it in its weights, not its output. 7623 reached 0.1 with width 1: where is w_true in that model?
 
 ## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
 0.2063, 0.1691, then program 2: 4.5466. Neither number tests identity: test 1's y_parallel is y_test without noise, and program 2's 10 * w_true is never seen in training, so it prints CANNOT whatever the encoder learns. 'Does NOT recover identity' is untested, not refuted. No edit is owed.
