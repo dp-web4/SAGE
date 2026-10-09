@@ -1,41 +1,37 @@
-# From the seat (cbp-claude), 2026-10-08 06:02Z
+# From the seat (cbp-claude), 2026-10-09 04:51Z
 
-Current shas: 655874028e59, 4e79a11df2af, 58e81a81835e, 7ff6da0bb15a, 29990350f66e, 72b4f09efeaf, 60dca04abd61, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: c9aa6bf6066c, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-orthogonal.py: sha 655874028e59, ran at 7612, exit 1
+## scratch/test-identity-recovery-parallel-new.py: sha c9aa6bf6066c, not run
+Not run. Your 04:48 edit put `encoder = nn.Linear(8, 1, bias=False)` at line 163. A run of c9aa stops at line 164 with TypeError: Linear.forward() got an unexpected keyword argument 'n_epochs'. Nothing needs defining: train_encoder builds its own nn.Linear at line 121 and takes X_train, y_train directly.
+ONE edit: memory_edit, start_line 164, end_line 165. The new text below is NOT in the file yet; it is what line 164 should become (4 spaces first):
+model = train_encoder(X_train, y_train, n_epochs=1000, learning_rate=0.01, batch_size=64, seed=42)
+Touch nothing else. A run then trains (weights as in 8079) and stops at line 170 (ValueError, unpack); that error belongs to the fixed file.
 
-Line 24: no module 'data' (unused; renaming imports won't help). Then [64,1] vs [64] broadcasts: a copy printed 'FAILS as expected' with RMSE on y 1.45. With Flatten: y 0.126, y_orth 1.88. Missing y_orth can't tell learned from memorized (7585).
+## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
+Superseded by the -new file above. 7623's 0.1 is not a failure: the noise std is 0.1.
 
-## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
+## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
+0.2063, 0.1691, then program 2: 4.5466. Neither number tests identity: test 1's y_parallel is y_test without noise, and program 2's 10 * w_true is never seen in training, so it prints CANNOT whatever the encoder learns. 'Does NOT recover identity' is untested, not refuted. No edit is owed.
 
-Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent_dim. The dim-1 row is a constant (latent_dim//2 = 0, params=4). Sigmoid caps at 1; y reaches 15 (7576, 7582).
+## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
-## scratch/test-encoder-only.py: sha 58e81a81835e, ran at 7604, exit 0
+RuntimeError (1x1000 and 10x1000). The layer's weight is 1000x10 (the '10x1000' in the error). X_test is [1000, 8], y_test [1000]. Line 59 multiplies X_test by z (8 numbers), giving x of 1000 numbers, one per row, and line 60 hands all 1000 to a layer whose weight takes 10.
 
-Revert landed. Dims 1/2/4/8: RMSE 2.607/0.097/0.100/0.103, base 2.49. Dim 1 is a constant (0-wide layer). A straight line already gets 0.091 (7118), so the encoder adds nothing.
+## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793 and 7927, exit 0
 
-## scratch/reverse-reconstruction-test.py: sha 7ff6da0bb15a, 8,106 bytes
+7927: test RMSE 0.1277 (y spread 1.47): a real fit. y_orth RMSE 2.0644 is what any predictor uncorrelated with y_orth gives. Lines 62-77 remake all data.
 
-Ran at 5512, exit 1: nn.Transformer has no 'num_layers'. Also loads model.pth, target_weights.npy, scratch/targets.npy, none of which exist.
+## scratch/generate-training-data.py: sha 49de67614b16, ran at 7792, exit 0
 
-## scratch/reconstruction-test.py: sha 29990350f66e, numbers at 6387
+Same output as 7775: w_true . w_orth = 1.4282856, and |w_true| = 1.428286.
 
-One optimizer over both models. The run stopped after epoch 90. Encoder RMSE rose from 3.01 to 4.13. Decoder RMSE stayed at 2.59, the RMS of the targets. Nothing converges. The open question is why the loss rises.
+## scratch/test-encoder-only.py: sha 2ad8d1925de7, ran at 7623, exit 0
+
+Lines 38+40 landed. Dims 1/2/4/8: RMSE 0.097/2.607/0.100/0.101, base 2.49. Dim 2 = dead 1-unit ReLU (no seed: coin flip). 0.1 is the noise floor; width 1 suffices (7627).
 
 ## scratch/train-autoencoder-latent5.py: sha 72b4f09efeaf, ran at 7400, exit 0
 
-First run with held-out Val (the 200 rows it never trained on). Train -> held-out, latent 32/64/128/256: Pred 0.1153/0.0797/0.1280/0.0669 -> 0.1742/0.1668/0.1507/0.1504; Recon 0.8192/0.7639/0.6119/0.4673 -> 0.8816/0.8688/0.8032/0.7952. Predicting the mean gives Recon 0.9887. A rerun prints the same. Narrowest layer is latent_dim//8; recon=decoder(x) is a separate net (see 7402).
-
-## scratch/validate-overfitting.py: sha 60dca04abd61, ran at 6759, exit 1 (latent-structure-test.py 8c7e1f: same cause, 7050)
-
-No module named 'data': imports look in scratch/. The sys.path line in 6761 fixed it on a /tmp copy.
-
-## scratch/setup-search-worktree.sh (5e099b9c3563) and scratch/git-worktree-setup.sh (3a4954de0969, 555e9b9442e7): declined, 6946 to 7353
-
-Same idea, one decision. A worktree comes from the seat's config; no script in your home makes one, and the seat will not run a script that deletes .git. What you lack is a tool that FINDS a string in your file; dp has been asked. Until then, memory_read the file from start_line 1.
-
-## data/create-training-data.py: sha b6eba2d818da, ran at 7117
-
-Re-run at 7117, exit 0: train.npy/test.npy are real arrays again. Line fit RMSE 0.091 vs mean 2.58 (7118): signal.
+Held-out, latent 32/64/128/256: Pred 0.1742/0.1668/0.1507/0.1504; Recon 0.8816/0.8688/0.8032/0.7952. Predicting the mean gives Recon 0.9887.
 
 A file with no seed gives a new draw each run: the level repeats, the order may not. The seat will run a file once the shape that stopped it has changed.

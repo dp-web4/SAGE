@@ -197,6 +197,10 @@
   .conv-state.readonly { color: var(--warn, #d29922); }
   .conv-note { padding: 6px 10px; font-size: 10px; color: var(--text-dim);
     border-top: 1px solid var(--border); }
+  /* a REFUSAL is not an empty list: shown at reading size, in the warning colour (dp 2026-10-08:
+     over Tailscale the dropdown looked blank and the 10px dim note went unseen) */
+  .conv-note.refused { font-size: 12px; color: #e8c060; background: #3a2f10; border-top: 1px solid #6a5420; }
+  .conv-note.refused code { color: #f0d890; }
   .chat-msg.dp .sender { color: #a371f7; }
   .chat-msg.seat .sender { color: var(--accent); }
   .chat-msg.pending { opacity: 0.75; font-style: italic; }
@@ -263,6 +267,14 @@
             <div class="snarc-row"><span class="name">reward</span><div class="mini-bar"><div class="mini-fill" id="snarc-reward" style="width:0%"></div></div><span class="val" id="val-reward">-</span></div>
             <div class="snarc-row"><span class="name">conflict</span><div class="mini-bar"><div class="mini-fill" id="snarc-conflict" style="width:0%"></div></div><span class="val" id="val-conflict">-</span></div>
           </div>
+        </div>
+
+        <!-- The machine body (proprioception): the daemon's last sample, the same `line` the being
+             reads in its beat, so the indicator and the being cannot disagree. An indicator only. -->
+        <div class="stat-compact">
+          <label title="GPU, CPU, memory and disk, sampled by the daemon every few seconds. Gaps are named, never filled.">Body</label>
+          <div id="body-rows"><div class="sub">not sensed yet</div></div>
+          <div class="sub" id="body-age">--</div>
         </div>
 
         <div class="stat-compact">
@@ -447,6 +459,31 @@ async function refreshPeers() {
   } catch(e) {}
 }
 
+// The machine body. Renders the snapshot's own `line` (one renderer, in the sampler) as rows,
+// and says how old it is: a reading that cannot say its age reads as current.
+async function refreshBody() {
+  const rows = document.getElementById('body-rows');
+  const age = document.getElementById('body-age');
+  try {
+    const r = await fetch(BASE + '/body');
+    const d = await r.json();
+    if (!r.ok || !d.line) {
+      rows.innerHTML = '<div class="sub">not sensed: ' + escapeHtml(d.unavailable || ('HTTP ' + r.status)) + '</div>';
+      age.textContent = '--';
+      return;
+    }
+    rows.innerHTML = d.line.split(' | ').map(p =>
+      '<div class="sub" style="color:' + (p.startsWith('unavailable:') ? 'var(--text-dim)' : 'var(--text)') + '">' +
+      escapeHtml(p) + '</div>').join('');
+    const s = d.served_age_s;
+    const err = d.sampler && d.sampler.last_error ? ' · last sample failed: ' + d.sampler.last_error.error : '';
+    age.textContent = (s == null ? 'age unknown' : 'sampled ' + fmtAge(s) + ' ago') + err;
+  } catch (e) {
+    rows.innerHTML = '<div class="sub">not sensed: the daemon did not answer /body</div>';
+    age.textContent = '--';
+  }
+}
+
 function updateSnarc(salience) {
   // No salience is not zero salience: the being has processed nothing yet, or the loop is not
   // publishing. Say so rather than drawing five empty bars that look like a measurement.
@@ -528,12 +565,25 @@ async function loadConversations() {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) {
       convs = []; convId = null; convSelect.innerHTML = '';
+      const o = document.createElement('option');
+      o.textContent = '(not readable from this device)'; o.disabled = true; o.selected = true;
+      convSelect.appendChild(o);
+      convNote.classList.add('refused');
       convNote.textContent = 'Conversations are not shown from here: ' + (d.error || ('HTTP ' + r.status)) +
         (d.hint ? ' ' + d.hint + '.' : '') + ' This is not "none" -- the machine did not say.';
+      if (r.status === 403 || /loopback/.test(d.error || '')) {
+        // the one way that works from another device: arrive as loopback through an SSH tunnel
+        const port = location.port || '8760', host = location.hostname;
+        const tip = document.createElement('div');
+        tip.innerHTML = 'From another device: <code>ssh -N -L ' + port + ':127.0.0.1:' + port + ' &lt;user&gt;@' +
+          escapeHtml(host) + '</code> then open <code>http://localhost:' + port + '</code>';
+        convNote.appendChild(tip);
+      }
       convRefused = true;
       return;
     }
     convRefused = false;
+    convNote.classList.remove('refused');
     convs = d.conversations || [];
     const keep = convId;
     convSelect.innerHTML = '';
@@ -655,6 +705,8 @@ async function init() {
   if (!convId && !convRefused) loadChatHistory();
   refreshHealth();
   refreshStatus();
+  refreshBody();
+  setInterval(refreshBody, 10000);
   setInterval(refreshHealth, 5000);
   setInterval(refreshStatus, 3000);
   setInterval(refreshPeers, 15000);

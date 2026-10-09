@@ -1,4 +1,5 @@
 mod activity;
+mod body;
 mod conversations;
 mod ollama;
 mod consciousness;
@@ -52,6 +53,8 @@ struct AppState {
     /// What the being is doing, as reported (SAGE #291). This, not the ATP controller, is
     /// what `/status`, `/health` and the dashboard show as its state.
     activity: activity::SharedActivity,
+    /// The machine body, sampled on a cadence by `body::run` and served at `GET /body`.
+    body: body::SharedBody,
     consciousness: ConsciousnessHandle,
     ollama: OllamaClient,
     fleet: Option<FleetRegistry>,
@@ -421,6 +424,15 @@ async fn status(State(state): State<Arc<AppState>>) -> Json<StatusResponse> {
         loop_published_age_secs: if snap.published_at > 0 { Some(age) } else { None },
         build: build_stamp(),
     })
+}
+
+/// The machine body (proprioception): the last snapshot and its age, or 503 with the reason.
+async fn body_view(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_json::Value>) {
+    let (code, v) = match state.body.lock() {
+        Ok(st) => body::view(&st, now_secs()),
+        Err(_) => (503, serde_json::json!({"unavailable": "the body cell is poisoned"})),
+    };
+    (StatusCode::from_u16(code).unwrap_or(StatusCode::SERVICE_UNAVAILABLE), Json(v))
 }
 
 async fn snarc_observe(
@@ -1109,6 +1121,14 @@ async fn main() {
         (None, None)
     };
 
+    // Proprioception: the body is sampled off every request path and served from this cell.
+    let body_cell: body::SharedBody = Arc::new(std::sync::Mutex::new(body::BodyState::default()));
+    let being_instance = conversations::being_instance(&root, &machine, &model);
+    {
+        let (cell, r, inst, sd) = (body_cell.clone(), root.clone(), being_instance.clone(), shutdown_rx.clone());
+        tokio::spawn(async move { body::run(cell, r, inst, sd).await; });
+    }
+
     let state = Arc::new(AppState {
         surprise: Mutex::new(SurpriseDetector::with_defaults()),
         novelty: Mutex::new(NoveltyDetector::with_defaults()),
@@ -1118,6 +1138,7 @@ async fn main() {
         probe_metabolic: Mutex::new(MetabolicController::with_defaults()),
         loop_state: loop_state.clone(),
         activity: activity_cell.clone(),
+        body: body_cell.clone(),
         consciousness: consciousness_handle,
         ollama: OllamaClient::default_local(&model),
         fleet,
@@ -1129,7 +1150,7 @@ async fn main() {
         chat_history_file: chat_path,
         images_dir: root.join("images"),
         being: std::env::var("SAGE_BEING").unwrap_or_else(|_| format!("{machine}-being")),
-        being_instance: conversations::being_instance(&root, &machine, &model),
+        being_instance,
         root: root.clone(),
     });
 
@@ -1137,6 +1158,7 @@ async fn main() {
         .route("/", get(dashboard))
         .route("/health", get(health))
         .route("/status", get(status))
+        .route("/body", get(body_view))
         .route("/snarc/observe", post(snarc_observe))
         .route("/metabolic/cycle", post(metabolic_cycle))
         // Canonical: talking to the BEING. /chat is the being's conversation; the raw

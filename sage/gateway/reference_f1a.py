@@ -71,8 +71,10 @@ def _named_file_stamps(content: str, root: Path, written: Path) -> str:
 
     Reads mtimes only, executes nothing, and never looks outside the home: a name that
     resolves outside it is treated as not found. A bare name is looked for at the top of the
-    home and in notes/ only, and a miss says exactly that, not "no such file" (the 09-28
-    review found a bare train.py living in experiments/ reported as absent)."""
+    home, in notes/ and in scratch/, and a miss says exactly that, not "no such file" (the 09-28
+    review found a bare train.py living in experiments/ reported as absent). scratch/ is where
+    request_run files live: on 2026-10-08 a journal naming test-encoder-only.py got "not found"
+    on every write, and the being told the seat "the seat also says it was not found"."""
     out, seen = [], set()
     home = root.resolve()
     for name in re.findall(r"[\w./-]+\.py\b", content or ""):
@@ -80,7 +82,8 @@ def _named_file_stamps(content: str, root: Path, written: Path) -> str:
         if not name or name in seen or len(out) >= 3:
             continue
         seen.add(name)
-        cand = [root / name] + ([root / "notes" / name] if "/" not in name else [])
+        cand = [root / name] + ([root / d / name for d in ("notes", "scratch")]
+                                if "/" not in name else [])
         hit = None
         for c in cand:
             try:
@@ -91,11 +94,15 @@ def _named_file_stamps(content: str, root: Path, written: Path) -> str:
             if rc.is_file() and rc != written.resolve():
                 hit = rc
                 break
+        if hit is not None and hit in seen:
+            continue
         if hit is None:
-            where = "at the top of your home or in notes/" if "/" not in name else "in your home"
+            where = ("at the top of your home, in notes/ or in scratch/" if "/" not in name
+                     else "in your home")
             out.append(f"{name} was not found {where}")
             continue
         t = datetime.fromtimestamp(hit.stat().st_mtime, timezone.utc)
+        seen.add(hit)
         out.append(f"{hit.relative_to(home)} was last changed at {t:%Y-%m-%d %H:%M} UTC")
     return (" Files this names: " + "; ".join(out) + ".") if out else ""
 
@@ -272,6 +279,45 @@ def _indent_changed(removed: str, new: str, first_line: int) -> str:
         return ""
     return (f". Line {first_line} now starts with {nb} spaces; the line it replaced started "
             f"with {na}. In Python those spaces decide which block a line belongs to")
+
+
+def _head_and_tail(removed: str, budget: int = 400) -> str:
+    """A long removal is quoted by its first AND last lines, with the count of the middle.
+
+    Measured on cbp-being, 2026-10-07 19:03Z: told to delete a 13-line duplicate decoder
+    block, it deleted lines 75-107 (33 lines), also taking the class's forward and the start
+    of train_model. The receipt quoted only the first 400 chars, which was the decoder block
+    it meant to delete, then '...'. The overreach was in the cut. A range that runs too far
+    runs too far at its END, so the end is what the receipt must show."""
+    if len(removed) <= budget:
+        return removed
+    lines = removed.splitlines(keepends=True)
+    head, tail = [], []
+    used = 0
+    for ln in lines:
+        if used + len(ln) > budget // 2 and head:
+            break
+        head.append(ln)
+        used += len(ln)
+    used = 0
+    for ln in reversed(lines[len(head):]):
+        if used + len(ln) > budget // 2 and tail:
+            break
+        tail.insert(0, ln)
+        used += len(ln)
+    hidden = len(lines) - len(head) - len(tail)
+    if hidden <= 0:
+        return removed
+    return "".join(head) + f"[... {hidden} more removed lines not shown ...]\n" + "".join(tail)
+
+
+def _defs_removed(removed: str) -> str:
+    """Name every def/class line a removal took, since a quote can be cut but a name list is short."""
+    names = [ln.strip().split("(")[0].rstrip(":") for ln in removed.splitlines()
+             if ln.lstrip().startswith(("def ", "class ", "async def "))]
+    if not names:
+        return ""
+    return "\nThis removed " + ", ".join(f"'{n}'" for n in names) + "."
 
 
 def _not_python(content: str, before: str) -> str:
@@ -462,7 +508,24 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
         # spaces); ranking with the indentation counted made line 212 (12 spaces, one word
         # different, dead code after main()) the "closest", and its next edit changed 212.
         import difflib
+        import re
         bare = [line.strip() for line in have]
+        # A def/class line is anchored by its NAME, which is the few characters difflib weighs
+        # least. Measured 2026-10-08 on cbp-being: it sent 'def main(latent_dim: int = 100):',
+        # the closest line was 'def create_decoder(latent_dim: int = 100):' (line 28), and its
+        # next edit rewrote create_decoder's signature, breaking the call at line 87; main was
+        # line 74 all along. Name the line that defines the name it sent, or say none does.
+        head = re.compile(r"(?:async\s+)?(def|class)\s+(\w+)")
+        sent = head.match(want[0].strip())
+        if sent:
+            same = [i for i, b in enumerate(bare)
+                    if (m := head.match(b)) and m.group(2) == sent.group(2)]
+            if same:
+                where = "; ".join(f"line {i + 1}: {cut(have[i])!r}" for i in same)
+                return (f" Your first line is not in the file. {sent.group(2)} is defined at "
+                        f"{where}; you sent {cut(want[0])!r}.")
+            return (f" Your first line is not in the file, and no line defines "
+                    f"{sent.group(2)}; you sent {cut(want[0])!r}.")
         near = difflib.get_close_matches(want[0].strip(), bare, n=1, cutoff=0.6)
         if not near:
             return f" Not even your first line ({cut(want[0])!r}) is in the file."
@@ -1290,8 +1353,7 @@ class ReferenceF1aDispatcher:
                 repl += "\n"
             new_text = "".join(lines[:s0 - 1]) + repl + "".join(lines[s1:])
             what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)" + _indent_changed(removed, new, s0)
-            shown = removed if len(removed) <= 400 else removed[:400] + "..."
-            gone = f" The lines removed were:\n{shown}"
+            gone = f" The lines removed were:\n{_head_and_tail(removed)}" + _defs_removed(removed)
             return self._commit_edit(p, path, text, new_text, what, gone)
         hits = text.count(old)
         if hits == 0:
@@ -1405,6 +1467,14 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(ok=True, result=f"{p.name} is already retired; nothing changed")
         stamp = datetime.now(timezone.utc)
         dest = p.with_name(f"{p.stem}.retired-{stamp:%Y-%m-%d}{p.suffix}")
+        # A SECOND RETIRE OF THE SAME NAME ON THE SAME DAY MUST NOT REPLACE THE FIRST. Measured
+        # 2026-10-07 on cbp-being: validate-overfitting.py was retired at 04:47Z, rewritten under
+        # the same name and retired again at 07:50Z; both mapped to one .retired-2026-10-07.py and
+        # the second write_text destroyed the first while the receipt said ok.
+        n = 2
+        while dest.exists():
+            dest = p.with_name(f"{p.stem}.retired-{stamp:%Y-%m-%d}-{n}{p.suffix}")
+            n += 1
         body = p.read_text(errors="replace")
         dest.write_text(
             f"> RETIRED {stamp:%Y-%m-%d %H:%M}Z by cbp-being. No longer current: {reason}\n"

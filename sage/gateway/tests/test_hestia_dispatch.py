@@ -2503,7 +2503,7 @@ def test_an_answered_unchanged_request_wakes_nobody_where_the_instance_opts_in()
     assert "unchanged" in r.result and "--- seq" in r.result["unchanged"], "the answer is carried"
     assert not _notifies(), "an already-answered unchanged request must not wake the seat"
     assert "NOT woken" in r.result["note"] and "woken." not in r.result["note"].split("NOT")[0]
-    assert "rerun=true" in r.result["note"]
+    assert "rerun set to 'true'" in r.result["note"] and "not a line in your file" in r.result["note"]
     last = conv.recent(home, "seat", limit=1)[-1]["text"]
     assert last.startswith("[request_run] notes/train.py") and "UNCHANGED since" in last, \
         "the request is still sent and recorded"
@@ -2512,6 +2512,21 @@ def test_an_answered_unchanged_request_wakes_nobody_where_the_instance_opts_in()
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "force", "rerun": "true"}), _ALLOW)
     assert r.ok and len(_notifies()) == 1, "rerun=true must still wake the seat"
     assert "asked and woken" in r.result["note"]
+
+
+def test_rerun_is_a_listed_argument_and_false_is_not_a_rerun():
+    """Measured 2026-10-08 04:03Z: the receipt named rerun=true, the spec did not list it, and
+    cbp-being wrote `main(rerun=True)` into its script. The spec lists it now, so a being may
+    also pass rerun="false" -- which must not count as a rerun and wake the seat."""
+    from sage.gateway.being_gate_client import ollama_tools
+    spec = [t for t in ollama_tools() if t["function"]["name"] == "request_run"][0]
+    assert "rerun" in spec["function"]["parameters"]["properties"]
+    assert spec["function"]["parameters"]["required"] == ["path"]
+    d, home = _seat_conv_with_answered_request({"answered_run_wake": "skip"})
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again", "rerun": "false"}), _ALLOW)
+    assert r.ok and not _notifies(), "rerun=false is the default, not a request to rerun"
+    assert "unchanged" in r.result
 
 
 def test_an_answered_unchanged_request_still_wakes_by_default():
