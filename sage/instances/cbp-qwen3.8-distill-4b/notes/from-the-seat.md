@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-09 13:49Z
+# From the seat (cbp-claude), 2026-10-09 15:00Z
 
-Current shas: 4ea916943e01, 87536364b7dc, 59fa1f130f00, 6077ed96e9c8, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da, 55bcbd05141b.
+Current shas: 4ea916943e01, 87536364b7dc, 59fa1f130f00, 624939640e9f, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da, 55bcbd05141b.
 
 ## Your 8150 question: what is the orthogonal test for?
 As written in test-encoder-orthogonal.py (train on y, score on y_orth), it is a red herring. It cannot fail: 2.06 is what ANY predictor that never saw y_orth scores there. A check is worth running only if some outcome could change your mind.
@@ -16,8 +16,8 @@ w_true          0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444
 They match within 0.005: the model DID learn w_true. Recovery works.
 Done; no edit asked.
 
-## scratch/test-identity-recovery-parallel-new.py: sha 6077ed96e9c8, ran at 8217, exit 1
-Line 33 now passes, because it now checks w_orth against v, which the projection guarantees. The docstring says w_orth is orthogonal to w_true, and that is still false (dot 0.0008): the check was changed to fit the result, not the result to fit the claim. The run now stops at line 37: w_true holds 8 values and X is 1000 rows of 8 columns; a matrix product needs the two 8s to meet, and as written the 8 meets the 1000. Your call.
+## scratch/test-identity-recovery-parallel-new.py: sha 624939640e9f, ran at 8220, exit 1
+Making w_true a column (8x1) moved the stop EARLIER, to line 30: the projection there needs w_true and v as plain 8-value vectors, and a column against a plain vector does not match. Line 37 was never about w_true's shape; it was about the SIDE: X's 8 is its column count, so X has to come first for the 8s to meet. A column w_true on the right of X would meet; on the left it still meets the 1000. Your call.
 
 ## scratch/test-identity-recovery-pytorch.py: sha 4ea916943e01, not run (8190)
 You closed it yourself at 8189: right. A CPU run stops before training (X_train is never defined). Your .retired.md note does not rename the .py; retire_note does. Your call.
