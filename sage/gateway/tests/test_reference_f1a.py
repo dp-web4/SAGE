@@ -1190,3 +1190,86 @@ def test_a_range_edit_whose_old_is_elsewhere_says_where():
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 4,
                                          "old": "zzz", "new": "y"}), _ALLOW)
     assert not r.ok and "IS in the file" not in r.error, r.error
+
+
+def _scratch(root, text, name="train.py"):
+    (Path(root) / "scratch").mkdir(exist_ok=True)
+    (Path(root) / "scratch" / name).write_text(text)
+    return f"scratch/{name}"
+
+
+def test_memory_read_find_lists_the_line_numbers_where_the_text_is():
+    """#351: cbp-being wanted the line `head = nn.Linear` in scratch/train-autoencoder-latent5.py,
+    was refused at search 120 times, and memory_read could only read from a start_line. With
+    `find` it gets the line numbers, literal and case-sensitive, and start_line is set aside."""
+    disp, root = _disp()
+    src = ("import torch.nn as nn\n"
+           "class M(nn.Module):\n"
+           "    def __init__(self):\n"
+           "        self.enc = nn.Linear(8, 5)\n"
+           "        head = nn.Linear(5, 8)\n"
+           "        HEAD = nn.Linear(1, 1)\n"
+           "        x = 'nn.Linearity'\n")
+    rel = _scratch(root, src)
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "head = nn.Linear"}), _ALLOW)
+    assert r.ok and r.witness_id
+    assert "[found 1 line of 7 in 'scratch/train.py'" in r.result, r.result
+    assert "line 5:         head = nn.Linear(5, 8)" in r.result, r.result
+    assert "line 6" not in r.result, "case-sensitive: HEAD is not head"
+    # literal, not regex: '.' does not match any character, '(' needs no escaping
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "nn.Linear("}), _ALLOW)
+    assert "[found 3 lines of 7" in r.result and "line 7" not in r.result, r.result
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "nn Linear"}), _ALLOW)
+    assert r.result.startswith("[found none:"), r.result
+    # start_line does not narrow a find, and the answer says it was set aside
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "nn.Linear(", "start_line": 6}),
+             _ALLOW)
+    assert "line 4:" in r.result and "start_line=6 was ignored" in r.result, r.result
+    # blank find is a plain read
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "  "}), _ALLOW)
+    assert r.result.startswith("import torch.nn"), r.result
+
+
+def test_memory_read_find_with_no_match_says_it_is_about_this_file_only():
+    """An empty answer must say why it is empty: zero matches is a true answer about this one
+    file, and no evidence about any other."""
+    disp, root = _disp()
+    rel = _scratch(root, "a = 1\nb = 2\n")
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "head = nn.Linear"}), _ALLOW)
+    assert r.ok and r.witness_id
+    assert r.result.startswith("[found none: no line of 'scratch/train.py' contains "
+                               "'head = nn.Linear'"), r.result
+    assert "all 2 lines were looked at" in r.result
+    assert "true answer about this one file only" in r.result
+    assert "nothing about any other file" in r.result
+    # missing / directory / empty keep their own answers when find is given
+    r = disp(BeingIntent("memory_read", {"path": "scratch/nope.py", "find": "x"}), _ALLOW)
+    assert r.result.startswith("[no such path:"), r.result
+    r = disp(BeingIntent("memory_read", {"path": "scratch", "find": "x"}), _ALLOW)
+    assert r.result.startswith("[directory:"), r.result
+    _scratch(root, "", "empty.py")
+    r = disp(BeingIntent("memory_read", {"path": "scratch/empty.py", "find": "x"}), _ALLOW)
+    assert r.result.startswith("[empty file:"), r.result
+
+
+def test_memory_read_find_whose_spaces_kept_it_from_matching_says_so():
+    """A being cannot see the whitespace it sends: a find copied with indentation the file does not
+    have finds nothing exact, and the answer says the trimmed text is there, and where."""
+    disp, root = _disp()
+    rel = _scratch(root, "x = 1\n  head = nn.Linear(5, 8)\n")
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "    head = nn.Linear"}), _ALLOW)
+    assert "line 2:   head = nn.Linear(5, 8)" in r.result, r.result
+    assert "exactly as sent" in r.result, r.result
+
+
+def test_memory_read_find_caps_the_list_and_says_how_many_more():
+    disp, root = _disp()
+    rel = _scratch(root, "".join(f"loss{i} = 0\n" for i in range(1, 101)))
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "loss"}), _ALLOW)
+    assert "[found 100 lines of 100" in r.result, r.result
+    assert "line 40: loss40 = 0" in r.result and "line 41:" not in r.result, r.result
+    assert "and 60 more matching lines not listed" in r.result, r.result
+    # an over-long matching line is cut, and the answer says so
+    rel = _scratch(root, "head = " + "x" * 1000 + "\n", "long.py")
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "head"}), _ALLOW)
+    assert "was cut at 240 characters" in r.result and len(r.result) < 800, r.result

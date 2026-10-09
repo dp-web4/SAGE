@@ -242,26 +242,34 @@ _REV = (r"(?:[0-9a-fA-F]{7,40}|HEAD|[A-Za-z][A-Za-z0-9._/-]{0,60})"
 # worktree was missing, and asked dp three times to configure one so search could find lines
 # in its files. But search is `git grep` over a code-repository checkout and cannot see the
 # being's home at all: a worktree would not have helped, and the tool it needed (memory_read
-# with start_line) was already in its hands. Configuring a worktree would also have turned on
-# git_read, check and camera (see camera_command), which is a policy decision dp has not made.
+# with start_line) was already in its hands. (Until #351 that was only half true: memory_read
+# could read from a line but not find one, and finding was what it wanted. It now takes `find`.)
+# Configuring a worktree would also have turned on git_read, check and camera (see camera_command), which is a policy decision dp has not made.
 #
 # So each refusal now says what the verb is FOR, that it does not read the being's home, and
 # which tool serves the likely need there. None of them tells the being to ask for a worktree.
-# Every tool and parameter named here must exist as named: memory_read takes `path` and
-# `start_line` (no end_line; a long file comes back in windows that say how to read on), and
+# Every tool and parameter named here must exist as named: memory_read takes `path`,
+# `start_line` (no end_line; a long file comes back in windows that say how to read on) and
+# `find` (the line numbers where literal text occurs in that one file, #351), and
 # request_run takes `path`. Pinned by test_no_worktree_refusals_say_what_the_verb_is_for, which
 # checks each named parameter against _TOOL_SCHEMAS. The dispatcher (hestia_dispatch) and the
 # toolset's availability line say the same text, so the being hears one answer however it asks.
 NO_WORKTREE_REFUSAL = {
-    # "read lines", never "find": memory_read shows a file from a line on; it does not search.
-    # #354 first said "To find or read lines ... use memory_read", which hands a being that
-    # wants to locate a string a tool that cannot locate one (Codex, #354 follow-up). Pinned by
-    # test_no_home_tool_is_credited_with_finding.
+    # "find" is credited to memory_read only with its `find` parameter (#351). #357 (the #354
+    # follow-up) said "read lines, never find", because memory_read then searched nothing and #354's
+    # "To find or read lines ... use memory_read" handed a being a tool that could not locate a
+    # string (Codex). memory_read now takes `find`, so the claim is true when that parameter is
+    # named. test_no_home_tool_is_credited_with_finding now requires exactly that.
+    #
+    # NO "and this seat has none" HERE (#351). That clause names a missing thing, and to cbp-being
+    # it read as a job: after this refusal it was refused at search 120 times (76 on 2026-10-07)
+    # and asked the seat to run git-worktree setup scripts 15 times, the last force-deleting a .git.
+    # The refusal says what search reads and where finding in its own files is served instead.
     "search": (
-        "search reads a code-repository checkout (a worktree), not your home, and this seat "
-        "has none. To read lines in your own files (notes/, scratch/, todo.md, "
-        "journal.md), use memory_read with the file's path and start_line: it shows the file "
-        "from that line on and says which lines it covered."),
+        "search reads a code-repository checkout (a worktree), not your home. To find a line in "
+        "your own files (notes/, scratch/, todo.md, journal.md), use memory_read with the "
+        "file's path and find: it lists the line numbers in that file where the text occurs. "
+        "Then memory_read with start_line reads from there."),
     "git_read": (
         "git_read reads the git history of a code-repository checkout (a worktree): its "
         "commits, diffs, blame, and files as they were at an earlier commit. It does not read "
@@ -1849,11 +1857,18 @@ _TOOL_SCHEMAS = {
                  {"to": "the being's name, e.g. 'legion'", "body": "your message"}, ["to", "body"]),
     "witness": ("Record a witnessed note of something you did or noticed.",
                 {"event": "what to witness"}, ["event"]),
-    "memory_read": ("Read one of your own memory notes. A long file comes back in windows of "
-                    "whole lines; if it does not reach the end it says so and names the "
-                    "start_line that reads on.",
+    # IT CAN FIND (#351). Given `find`, memory_read lists the line numbers in that one file where
+    # the literal text occurs. The being had no other way to locate a line in its own files on a
+    # seat without a worktree, and wrote worktree setup scripts trying to make `search` work.
+    "memory_read": ("Read one of your own memory notes, or find a line in one. A long file comes "
+                    "back in windows of whole lines; if it does not reach the end it says so and "
+                    "names the start_line that reads on. Give find to locate text in the file "
+                    "instead: you get back each line number where it occurs.",
                     {"path": "path to your note",
-                     "start_line": "optional: the line number to start from (default 1)"}, ["path"]),
+                     "start_line": "optional: the line number to start from (default 1)",
+                     "find": ("optional: literal text to look for (exact, case-sensitive, not a "
+                              "pattern); the answer lists the line numbers where it occurs")},
+                    ["path"]),
     # SAY IT APPENDS, AT THE MOMENT OF CHOICE (2026-09-26). This description was "Write a note
     # into your own memory." Only memory_edit's description said memory_write appends, and a model
     # choosing memory_write never reads that one. cbp-being meant to rewrite
