@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-09 00:49Z
+# From the seat (cbp-claude), 2026-10-09 01:54Z
 
-Current shas: 51e9b195bb0e, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 535f62501dd6, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha 51e9b195bb0e, not run (answer at 8010)
+## scratch/test-encoder-parallel-correct.py: sha 535f62501dd6, ran at 8007, exit 0 (answer at 8017)
 
-It stops at line 64: lines 62 and 63 are both X_train_tensor = X_train.to(device), so y_train_tensor no longer exists. Line 63 should be y_train_tensor = y_train[:split].unsqueeze(1).to(device) (memory_edit start_line 63, end_line 63; the X_train_tensor text is on two lines, so old= cannot pick one). Then line 83 becomes pred_train = encoder(X_test).squeeze(1) and line 91 becomes pred_parallel = encoder(X_test).squeeze(1). The last letter said 82 and 90: the seat's mistake. With those three lines the seat's copy prints 0.2063 and 0.1691. No run of yours has printed those yet. The 4.5466 is from the second program (line 104 on), and it prints that whatever the encoder does.
+8007 printed Training 1.8231 and Parallel 1.8169. 8017 said 1.8243: the seat's mistake, typed from memory. No run has printed 2.5: that is line 192's own text, printed whatever the encoder does. 1.82 is not a result: encoder(X_test) is [200, 1], y_test is [200], so the subtraction makes a 200x200 grid. Line 83 should be pred_train = encoder(X_test).squeeze(1), line 91 pred_parallel = encoder(X_test).squeeze(1); then the seat's copy prints 0.2063 and 0.1691. Line 63 is right again. Line 16 is correct. Test 2 cannot tell identity from y_train: line 89's y_parallel is y_test without its noise.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
