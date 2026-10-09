@@ -5,9 +5,11 @@
 
 set -e
 
-SAGE_DIR="/home/dp/ai-workspace/SAGE"
+# Overridable only so the pull/restore step can be driven against a throwaway repo in tests
+# (sage/gateway/tests/test_cbp_raising_restore.py); cron sets neither.
+SAGE_DIR="${SAGE_DIR:-/home/dp/ai-workspace/SAGE}"
 export PYTHONPATH="$SAGE_DIR"
-LOG_DIR="/tmp/cbp-raising-logs"
+LOG_DIR="${CBP_RAISING_LOG_DIR:-/tmp/cbp-raising-logs}"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/raising-$(date +%Y%m%d-%H%M).log"
 
@@ -16,6 +18,16 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 echo "[CBP-Raising] $(date -u +'%Y-%m-%d %H:%M UTC') — Starting raising session"
 
 cd "$SAGE_DIR"
+
+# --- Step 0: never raise on top of a failed restore ---
+# A conflicted `git stash pop` (Step 1, below) leaves unmerged paths in this tree and the being's
+# live state in the stash. A later firing must not raise on that tree either: refuse until a
+# person has resolved it. Failed restore => no raising, on this run and every run after it.
+if [ -n "$(git ls-files -u)" ]; then
+    echo "[CBP-Raising] ERROR: $SAGE_DIR has unmerged paths (a failed stash restore?)." >&2
+    echo "[CBP-Raising] ERROR: NOT raising. Check 'git -C $SAGE_DIR status' and 'git -C $SAGE_DIR stash list'." >&2
+    exit 3
+fi
 
 # --- Step 1: Pull latest code ---
 echo "[CBP-Raising] Pulling latest code..."
@@ -31,10 +43,34 @@ git pull --ff-only origin main 2>&1 || {
         # A conflicted rebase left in place blocks the pop below, so the
         # being's uncommitted state stays in the stash and it runs on the
         # committed (old) files. Happened 2026-10-08 14:00Z for ~2h.
-        git rebase --abort 2>/dev/null
+        # Only when a rebase is actually in progress: a pull that failed before
+        # rebasing (network, auth) has nothing to abort, and a bare `--abort`
+        # would then fail and kill the run under `set -e`.
+        if [ -d "$(git rev-parse --git-path rebase-merge)" ] || \
+           [ -d "$(git rev-parse --git-path rebase-apply)" ]; then
+            git rebase --abort
+        fi
     }
     if [ "$(git stash list | wc -l)" -gt "$STASH_BEFORE" ]; then
-        git stash pop -q || echo "[CBP-Raising] ERROR: stash pop failed; being state is in stash@{0}"
+        # Named by sha, which does not move when another stash is pushed; stash@{0} does.
+        STASH_SHA=$(git rev-parse -q --verify 'stash@{0}')
+        if ! git stash pop -q; then
+            # FAILED RESTORE => NO RAISING (GPT HOLD on #395 at d1a32c808). Going on would run the
+            # being on committed/old state while its live state sits stranded in the stash: the
+            # dangerous state this step exists to prevent. Stop before any beat, leave the stash
+            # exactly where it is (git keeps a conflicted pop's entry; nothing here drops it), and
+            # say where it is and how to get it back. Step 0 refuses later firings until resolved.
+            {
+                echo "[CBP-Raising] ERROR: FAILED RESTORE: git stash pop conflicted after the pull."
+                echo "[CBP-Raising] ERROR: the being's live state is preserved in stash $STASH_SHA (stash@{0} now)."
+                echo "[CBP-Raising] ERROR: the working tree holds a partial, conflicted restore. NOT raising."
+                echo "[CBP-Raising] ERROR: recover: cd $SAGE_DIR && git status   # resolve the conflicted files, then"
+                echo "[CBP-Raising] ERROR:          git reset -q, and only once its content is in the tree:"
+                echo "[CBP-Raising] ERROR:          git stash drop stash@{N}   # the entry whose 'git rev-parse stash@{N}' is $STASH_SHA"
+                echo "[CBP-Raising] ERROR:   or restart the restore: git reset --merge && git stash apply $STASH_SHA"
+            } >&2
+            exit 2
+        fi
     fi
 }
 
