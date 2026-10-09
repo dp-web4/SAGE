@@ -1135,3 +1135,98 @@ def test_a_collapsed_check_result_still_names_its_failing_tests():
     assert _COLLAPSED_SIGIL in out[3]["content"], "the oldest result is collapsed in this setup"
     for n in names:
         assert n in out[3]["content"], (n, out[3]["content"][:400])
+
+
+def test_convo_composition_splits_the_floor_by_what_compaction_did():
+    from sage.gateway.being_tool_loop import convo_composition, _ELIDED_SIGIL, _COLLAPSED_SIGIL, _convo_chars
+    msgs = [{"role": "system", "content": "s" * 100}, {"role": "user", "content": "u" * 200},
+            {"role": "assistant", "content": "a" * 50, "tool_calls": []},
+            {"role": "tool", "content": "w" * 300},
+            {"role": "tool", "content": f"head [… 9 {_ELIDED_SIGIL} …] tail"},
+            {"role": "tool", "content": f"[result {_COLLAPSED_SIGIL} ...]"},
+            {"role": "user", "content": "[harness] note"}]
+    c = convo_composition(msgs)
+    assert c["seed"] == 300 and c["results_whole"] == 300 and c["n_results"] == 3
+    assert (c["n_stubs"], c["n_pointers"]) == (1, 1) and c["notes"] == len("[harness] note")
+    parts = ("seed", "results_whole", "results_stub", "results_pointer", "own_turns", "notes")
+    assert sum(c[k] for k in parts) == _convo_chars(msgs)   # it accounts for every char
+
+
+def test_a_window_cut_is_retried_after_compaction_not_as_the_same_prompt(tmp_path):
+    """legion-being 2026-10-08 09:52Z: 26,241 + 6,527 = 32,768 (the window); the retry was the same
+    prompt plus a nudge, its memory_write was cut mid-JSON at the wall, and the 500 became the
+    beat's reply. A window-cut retry now compacts first, against the server's own count."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    sent = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 32768
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            sent.append(sum(len(m.get("content") or "") for m in messages))
+            if len(sent) == 1:
+                # the wall: prompt + eval == num_ctx, nothing said
+                return {"content": "", "tool_calls": [],
+                        "raw": {"done_reason": "length", "prompt_eval_count": 30768, "eval_count": 2000,
+                                "message": {"content": "", "thinking": "drafting ..."}}}
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 3000, "eval_count": 20, "message": {}}}
+
+    big = "x" * 6000
+    seed = [{"role": "system", "content": "s"}, {"role": "user", "content": "go"}]
+    for i in range(4):
+        seed += [{"role": "assistant", "content": "", "tool_calls": [
+                     {"function": {"name": "memory_read", "arguments": {"path": f"f{i}"}}}]},
+                 {"role": "tool", "content": big}]
+    c = _client(OK_DISPATCH)
+    c.memory_root = str(tmp_path)
+    r = run_ollama_tool_turn(c, FakeLLM(), seed)
+    assert len(sent) == 2 and r.reply == "done"
+    assert sent[1] < sent[0], f"the retry must be smaller than what hit the wall: {sent}"
+    assert r.generates[0]["retry_cause"] == "window"
+    assert any(x.get("before_retry") for x in r.compacted), r.compacted
+
+
+def test_the_answer_reserve_is_the_beings_parameter(tmp_path):
+    """2026-10-08: legion-being's floor was 52-55% seed, 0% pointers -- the plateau was compaction's
+    TARGET (num_ctx - 6,144), and its 8,000-token thinking hit the wall above it. answer_reserve
+    moves the target; the default is unchanged."""
+    import json as _json
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    sent = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 32768
+        num_predict_override = None
+        think = False
+
+        def get_chat_response(self, messages, tools=None):
+            sent.append(sum(len(m.get("content") or "") for m in messages))
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 25000, "eval_count": 20, "message": {}}}
+
+    def seed():
+        s = [{"role": "system", "content": "s"}, {"role": "user", "content": "go"}]
+        for i in range(10):
+            s += [{"role": "assistant", "content": "", "tool_calls": [
+                      {"function": {"name": "memory_read", "arguments": {"path": f"f{i}"}}}]},
+                  {"role": "tool", "content": "x" * 7000}]
+        return s
+
+    def run(params):
+        (tmp_path / "instance.json").write_text(_json.dumps({"params": params}))
+        sent.clear()
+        c = _client(OK_DISPATCH)
+        c.memory_root = str(tmp_path)
+        r = run_ollama_tool_turn(c, FakeLLM(), seed())
+        return sent[0], r
+    default, _ = run({})
+    larger, r = run({"answer_reserve": 12288})
+    assert larger < default, (default, larger)
+    # each per-step pass records what the window is made of after it (convo_composition)
+    assert r.compacted and all(set(x.get("after") or {}) >= {"seed", "results_whole", "results_stub"}
+                               for x in r.compacted), r.compacted
