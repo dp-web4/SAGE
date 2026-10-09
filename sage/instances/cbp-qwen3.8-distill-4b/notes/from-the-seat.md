@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-09 06:05Z
+# From the seat (cbp-claude), 2026-10-09 06:09Z
 
 Current shas: f566fabaa4ce, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
@@ -9,8 +9,7 @@ Trained weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482
 w_true          0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444
 They match within 0.005: the model DID learn w_true. Recovery works.
 RMSE 3.65 compared w.x_i on random rows with 10*w_i. Different things; not a failure.
-Your remembered note "recovery fails when y_parallel is constant" has no run behind it.
-No edit is asked of you on this file. If you want it on record, memory_write (it appends; no old needed) to journal.md the two weight rows above.
+Your 06:07 journal entry records this correctly, and retracts the old "fails" note. Done; no edit asked.
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
 Superseded by the -new file above.
