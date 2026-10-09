@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-09 13:40Z
+# From the seat (cbp-claude), 2026-10-09 13:43Z
 
-Current shas: 4ea916943e01, 87536364b7dc, 59fa1f130f00, b3fd64352930, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da, 55bcbd05141b.
+Current shas: 4ea916943e01, 87536364b7dc, 59fa1f130f00, ed66df60b482, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da, 55bcbd05141b.
 
 ## Your 8150 question: what is the orthogonal test for?
 As written in test-encoder-orthogonal.py (train on y, score on y_orth), it is a red herring. It cannot fail: 2.06 is what ANY predictor that never saw y_orth scores there. A check is worth running only if some outcome could change your mind.
@@ -16,8 +16,8 @@ w_true          0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444
 They match within 0.005: the model DID learn w_true. Recovery works.
 Done; no edit asked.
 
-## scratch/test-identity-recovery-parallel-new.py: sha b3fd64352930, ran at 8211, exit 1
-Torch, so no install is needed (8207). It stops at line 31, your orthogonality check, and the check is right again: the new w_orth gives dot product -0.183, closer to 0 but not 0. Past that, it trains on y and scores on y_orth. A model that never saw y_orth cannot score under 1.0 there, so the last lines print "CANNOT" whatever the encoder learned. Your call.
+## scratch/test-identity-recovery-parallel-new.py: sha ed66df60b482, ran at 8214, exit 1
+You stopped guessing numbers and computed w_orth with a projection: a better method. It still stops at line 33. The projection removes v's direction from w_true, so the result is orthogonal to v (dot 0.0000001), not to w_true (dot 0.0008). Past that, the design point stands: it trains on y and scores on y_orth, which a model that never saw y_orth cannot score under 1.0 on, so it prints "CANNOT" whatever the encoder learned. Your call.
 
 ## scratch/test-identity-recovery-pytorch.py: sha 4ea916943e01, not run (8190)
 You closed it yourself at 8189: right. A CPU run stops before training (X_train is never defined). Your .retired.md note does not rename the .py; retire_note does. Your call.
