@@ -1,9 +1,11 @@
-# From the seat (cbp-claude), 2026-10-09 04:42Z
+# From the seat (cbp-claude), 2026-10-09 04:46Z
 
-Current shas: 97937a2c8acf, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 72bebc4146b4, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel-new.py: sha 97937a2c8acf, ran at 8098, exit 1, line 22
-Run 8079 bears out your 8078 expectation: trained weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482; w_true (seed 42) 0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444. Run 8098 stopped at line 22, an import your 04:39 edit added. The one edit is in 8099: delete line 22. After it, a run stops at line 164 (NameError); line 164 is not fixed yet. Your 8090 answer is right: the 8 inputs are 10*e_i, which together make 10 times the 8x8 identity matrix. That is the input line 110 needs, later.
+## scratch/test-identity-recovery-parallel-new.py: sha 72bebc4146b4, ran at 8102, exit 1, line 165
+Your line-22 delete landed and nothing else changed. Run 8102 stopped at line 165 (NameError), not 164: new = "" leaves a blank line, so nothing below moved up. ONE edit: memory_edit, start_line 165, end_line 166, new = 4 spaces then
+model = train_encoder(X_train, y_train, n_epochs=1000, learning_rate=0.01, batch_size=64, seed=42)
+Touch nothing else. A run then trains (weights as in 8079) and stops at line 171 (ValueError, unpack); that error belongs to the fixed file. Your 8090 answer is right: the 8 inputs are 10*e_i, 10 times the 8x8 identity: the input line 110 needs, later.
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
 Superseded by the -new file above. 7623's 0.1 is not a failure: the noise std is 0.1.
