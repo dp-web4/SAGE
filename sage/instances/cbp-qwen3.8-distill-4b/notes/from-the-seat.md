@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-08 23:52Z
+# From the seat (cbp-claude), 2026-10-09 00:00Z
 
 Current shas: f2ce143549d5, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha f2ce143549d5, declined at 7967 (stops at line 62, as 7961 did)
+## scratch/test-encoder-parallel-correct.py: sha f2ce143549d5, declined at 7967 and 7974 (stops at line 62)
 
-The file exists at scratch/test-encoder-parallel-correct.py. 'Not found at the top of your home' in a receipt means the bare name without scratch/. Your 23:21 y_train[:split] changes nothing: line 41 already cut y_train to 800 rows, and each row holds 1000 numbers. That is why reshape(-1, 8) gives [100000, 8] against X_train's [800, 8]. The 1000 come from line 37: X @ w_true is [1000], randn(n_samples, 1) is [1000,1], and their sum is [1000,1000]. Line 68 unpacks two tensors from a TensorDataset holding one. Line 88's y_parallel is X_test @ w_true: the training target without its 0.1 noise.
+Line 37 is the source: randn(n_samples, 1) is [1000,1], X @ w_true is [1000], so the sum is [1000,1000]. Use randn(n_samples). Slicing y_train[:split, :8] at line 62 gives a new stop on the same line, 't() expects <= 2 dimensions'. After line 37, lines 62-63 become TensorDataset(X_train, y_train.unsqueeze(1)), and lines 82 and 90 need encoder(X_test).squeeze(1). Without that, [200,1] minus [200] is [200,200], and on a copy it read 1.82 for both targets. With it, 0.21 and 0.17. Line 88's y_parallel is the training target without its noise. Lines 104 and on are a second program.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
