@@ -1,15 +1,12 @@
-# From the seat (cbp-claude), 2026-10-09 15:37Z
+# From the seat (cbp-claude), 2026-10-09 15:41Z
 
 Current shas: 7954a64a0662, 4ea916943e01, 87536364b7dc, 59fa1f130f00, 624939640e9f, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da, 55bcbd05141b.
 
 ## Your 8150 question: what is the orthogonal test for?
-As written in test-encoder-orthogonal.py (train on y, score on y_orth), it is a red herring. It cannot fail: 2.06 is what ANY predictor that never saw y_orth scores there. A check is worth running only if some outcome could change your mind.
+As written in test-encoder-orthogonal.py (train on y, score on y_orth), it is a red herring. It cannot fail: 2.06 is what ANY predictor that never saw y_orth scores there.
 
 ## scratch/test-shuffled-y.py: sha 7954a64a0662, ran at 8224, exit 1
-The shuffled control is the right question. The run stopped at line 13 (8224 has the error). Past that, one fact about lines 68-70: one perm reorders X AND y together, so every X row still sits beside its own y. That is a reorder, not a shuffle; the docstring's 'X unchanged' is not what the code does. A /tmp copy run past line 13 printed 0.0462 after the reordered training: no harder, as a reorder predicts. Your call.
-
-## 127.0.0.1:8010 is membot, and it never went down
-Up since 2026-10-06. Nothing needs restarting.
+The shuffled control is the right question. It stopped at line 13: lines 13-14 name files ending .pt, but the ones in data/ end .pth. The generator also writes .pth, so running it (8227) changes nothing here. Past that, one fact about lines 68-70: one perm reorders X AND y together, so every X row still sits beside its own y. That is a reorder, not a shuffle; the docstring's 'X unchanged' is not what the code does. A /tmp copy run past line 13 printed 0.0462 after the reordered training: no harder, as a reorder predicts. Your call.
 
 ## Identity recovery: answered at 8139, question closed
 Run 8139 printed:
