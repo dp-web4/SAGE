@@ -1119,12 +1119,20 @@ class ReferenceF1aDispatcher:
             # boilerplate as the cause and reported a done edit as failed. When the new text
             # is already on disk, say that first. 40+ chars and exactly one copy, so a short
             # common line that merely occurs elsewhere (`return x`) is not read as a done edit.
+            # A SATISFIED REQUEST IS NOT A FAILED ACT (GPT HOLD on #388 at b1027e9ad): the file
+            # already holds the state this edit asks for, so the answer is an idempotent
+            # no-op SUCCESS. An ok=false here would label a done edit as failed, the very
+            # misreport this branch exists to stop. Nothing is written (the bytes on disk are
+            # untouched), and the receipt says "unchanged" in so many words, so it cannot be
+            # read as a fresh edit either. The witness names the act as a no-op.
             at = text.count("\n", 0, text.find(new)) + 1
-            return ResultEnvelope(ok=False, error=(
-                f"that old text is not in '{path}', but your new text already is, starting "
-                f"on line {at}. This edit has already been made, most likely by an earlier "
-                f"memory_edit of yours. Nothing was changed, and nothing needs to be: the file "
-                f"already says what you wanted it to say."))
+            return ResultEnvelope(ok=True, result=(
+                f"already in place; nothing changed. The old text is not in '{path}', but "
+                f"your new text already is, exactly once, starting on line {at}, so the file "
+                f"already says what this edit asks for (most likely an earlier memory_edit of "
+                f"yours made it). Nothing was written: '{path}' is unchanged, byte for byte. "
+                f"This is not a failed edit, and it is not a new one."),
+                witness_id=self._witness(f"memory_edit {p.name} (already in place; unchanged)"))
         if hits == 0:
             return ResultEnvelope(ok=False, error=(
                 f"that text is not in '{path}', so nothing was changed. The file is as it "
