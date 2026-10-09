@@ -137,6 +137,25 @@ def _leading_spaces(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
 
 
+def _whole_lines_once(text: str, new: str) -> bool:
+    """True when `new` is in `text` exactly once AND that copy runs from a line start to a line
+    end. A substring count alone is not "already in place". Measured 2026-10-09 22:16Z:
+    cbp-being's line 103 held a spliced tail ('np.linalg.pinv(X_tX)g.pinv(X_tX)'); it sent a
+    4-line old= that was not on disk and a 4-line new= whose last line was the FIXED line.
+    The fixed line is a prefix of the unfixed one, so text.count(new) was 1 and this branch
+    said "already in place ... the file already says what this edit asks for" while the
+    SyntaxError was still there. The being read that as done and asked its seat to run the
+    unfixed bytes (seq 8481). A match that stops mid-line is the same cut the mid-line old=
+    refusal catches, seen from the other side."""
+    if text.count(new) != 1:
+        return False
+    i = text.find(new)
+    j = i + len(new)
+    at_line_start = i == 0 or text[i - 1] == "\n"
+    at_line_end = j == len(text) or text[j] == "\n" or new.endswith("\n")
+    return at_line_start and at_line_end
+
+
 def _indent_only_miss(have: str, old: str, new: str, first_line: int) -> str:
     """A range edit refused because old differs from the lines only in leading spaces says so,
     in counts. (_indent_changed covers the edit that LANDS; this covers the refusal.)
@@ -1111,7 +1130,7 @@ class ReferenceF1aDispatcher:
             gone = f" The lines removed were:\n{_head_and_tail(removed)}" + _defs_removed(removed)
             return self._commit_edit(p, path, text, new_text, what, gone)
         hits = text.count(old)
-        if hits == 0 and len(new.strip()) >= 40 and new not in old and text.count(new) == 1:
+        if hits == 0 and len(new.strip()) >= 40 and new not in old and _whole_lines_once(text, new):
             # ALREADY MADE. Measured 2026-10-07 10:20Z: cbp-being's pandas-import edit landed
             # (ok=true), then the same beat sent it twice more. Both retries got the
             # copy-it-exactly refusal below, and the being told its seat "the file edits I

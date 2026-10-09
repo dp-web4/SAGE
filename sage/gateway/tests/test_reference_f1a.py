@@ -1240,6 +1240,40 @@ def test_memory_edit_old_absent_and_new_absent_is_still_a_failure():
     assert f.read_bytes() == before
 
 
+def test_memory_edit_new_text_that_is_a_prefix_of_a_longer_line_is_not_already_in_place():
+    """Measured 2026-10-09 22:16Z on cbp-being: line 103 held a spliced tail; the being sent a
+    4-line old= not on disk and a 4-line new= whose last line was the fixed line. The fixed
+    line is a prefix of the unfixed one, so a substring count found new once and the editor
+    said 'already in place' while the SyntaxError was still there (the being then asked its
+    seat to run the unfixed bytes). A copy of new that stops mid-line is not the edit made."""
+    disp, root = _disp()
+    f = Path(root) / "notes" / "s.py"
+    src = ("    residual = y - est\n"
+           "    try:\n"
+           "        w_true_est = residual @ np.linalg.pinv(X_tX)\n"
+           "    except np.linalg.LinAlgError:\n"
+           "        w_true_est = residual @ np.linalg.pinv(X_tX)g.pinv(X_tX)\n")
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": src}), _ALLOW)
+    before = f.read_bytes()
+    old = ("    try:\n"
+           "        w_true_est = residual @ np.linalg.pinv(X_tX)g.pinv(X_tX)\n"
+           "    except np.linalg.LinAlgError:\n"
+           "        w_true_est = residual @ np.linalg.pinv(X_tX)g.pinv(X_tX)")
+    new = ("    try:\n"
+           "        w_true_est = residual @ np.linalg.pinv(X_tX)\n"
+           "    except np.linalg.LinAlgError:\n"
+           "        w_true_est = residual @ np.linalg.pinv(X_tX)")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": old, "new": new}), _ALLOW)
+    assert not r.ok, r.result
+    assert "already in place" not in r.error and "not in" in r.error, r.error
+    assert f.read_bytes() == before
+    # the same new= ending at a line end, once, IS already in place
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz not here either",
+                                         "new": "    residual = y - est\n    try:\n        w_true_est = residual @ np.linalg.pinv(X_tX)\n"}), _ALLOW)
+    assert r.ok and r.result.startswith("already in place"), (r.ok, r.error, r.result)
+    assert f.read_bytes() == before
+
+
 def test_memory_edit_ambiguous_matches_are_still_failures():
     disp, root = _disp()
     f = Path(root) / "notes" / "s.py"
