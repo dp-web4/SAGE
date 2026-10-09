@@ -1190,3 +1190,69 @@ def test_a_range_edit_whose_old_is_elsewhere_says_where():
     r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 4,
                                          "old": "zzz", "new": "y"}), _ALLOW)
     assert not r.ok and "IS in the file" not in r.error, r.error
+
+
+def test_memory_edit_retry_of_a_made_edit_is_an_idempotent_no_op_success():
+    """cbp-being 2026-10-07 10:20Z: its pandas-import edit landed, the same beat sent it twice
+    more, both got the copy-it-exactly refusal, and it told its seat the edits 'failed due to
+    indentation mismatches' (seq 6812). A retry whose new text is already there is the desired
+    state satisfied: ok=true, an explicit no-op receipt, and the file byte-identical (GPT HOLD
+    on #388: a failed-act label for a satisfied request invites the same misreport)."""
+    disp, root = _disp()
+    home = Path(root)
+    f = home / "notes" / "s.py"
+    src = "import os\nimport sys\nimport pandas as pd\n\nfrom data import load_data\nprint(1)\n"
+    disp(BeingIntent("memory_write", {"path": "notes/s.py", "content": src}), _ALLOW)
+    old = "import os\nimport sys\nimport pandas as pd\n\nfrom data import load_data"
+    new = "import os\nimport sys\n\nfrom data import load_data"
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": old, "new": new}), _ALLOW)
+    assert r.ok, r.error
+    assert "changed the file on disk" in r.result, r.result
+    before, st = f.read_bytes(), f.stat()
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": old, "new": new}), _ALLOW)
+    assert r.ok, r.error
+    assert r.result.startswith("already in place; nothing changed"), r.result
+    assert "unchanged" in r.result and "line 1" in r.result, r.result
+    # the receipt must not read as a fresh edit or as a failure
+    assert "changed the file on disk" not in r.result and "edited " not in r.result, r.result
+    assert "indentation" not in r.result, r.result
+    assert f.read_bytes() == before                      # byte-identical
+    assert f.stat().st_mtime_ns == st.st_mtime_ns        # no write happened at all
+    assert f.stat().st_ino == st.st_ino                  # not even an atomic replace
+    assert not list(f.parent.glob("*.edit.tmp"))
+
+
+def test_memory_edit_old_absent_and_new_absent_is_still_a_failure():
+    disp, root = _disp()
+    f = Path(root) / "notes" / "s.py"
+    disp(BeingIntent("memory_write", {"path": "notes/s.py",
+                                      "content": "import os\nprint(1)\n"}), _ALLOW)
+    before = f.read_bytes()
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py",
+                                         "old": "import sys\nimport pandas as pd\n",
+                                         "new": "import sys\nimport numpy as np  # long enough line\n"}),
+             _ALLOW)
+    assert not r.ok and "not in" in r.error and "already in place" not in r.error, r.error
+    assert f.read_bytes() == before
+    # a short new line that merely occurs elsewhere is NOT read as a made edit
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "zzz", "new": "print(1)"}), _ALLOW)
+    assert not r.ok and "already in place" not in r.error, r.error
+    assert f.read_bytes() == before
+
+
+def test_memory_edit_ambiguous_matches_are_still_failures():
+    disp, root = _disp()
+    f = Path(root) / "notes" / "s.py"
+    block = "def helper(x):\n    return x * 2  # the doubled value\n"
+    disp(BeingIntent("memory_write", {"path": "notes/s.py",
+                                      "content": block + "\n" + block}), _ALLOW)
+    before = f.read_bytes()
+    # old absent, new present TWICE: which copy would be "the edit"? not a satisfied no-op
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "def gone(y):\n",
+                                         "new": block}), _ALLOW)
+    assert not r.ok and "already in place" not in r.error, r.error
+    # old present twice: refused as ambiguous, naming both lines
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": block,
+                                         "new": "def helper(x):\n    return x * 3\n"}), _ALLOW)
+    assert not r.ok and "appears 2 times" in r.error, r.error
+    assert f.read_bytes() == before

@@ -1111,6 +1111,28 @@ class ReferenceF1aDispatcher:
             gone = f" The lines removed were:\n{_head_and_tail(removed)}" + _defs_removed(removed)
             return self._commit_edit(p, path, text, new_text, what, gone)
         hits = text.count(old)
+        if hits == 0 and len(new.strip()) >= 40 and new not in old and text.count(new) == 1:
+            # ALREADY MADE. Measured 2026-10-07 10:20Z: cbp-being's pandas-import edit landed
+            # (ok=true), then the same beat sent it twice more. Both retries got the
+            # copy-it-exactly refusal below, and the being told its seat "the file edits I
+            # tried failed due to indentation mismatches" (seq 6812): it took the refusal's
+            # boilerplate as the cause and reported a done edit as failed. When the new text
+            # is already on disk, say that first. 40+ chars and exactly one copy, so a short
+            # common line that merely occurs elsewhere (`return x`) is not read as a done edit.
+            # A SATISFIED REQUEST IS NOT A FAILED ACT (GPT HOLD on #388 at b1027e9ad): the file
+            # already holds the state this edit asks for, so the answer is an idempotent
+            # no-op SUCCESS. An ok=false here would label a done edit as failed, the very
+            # misreport this branch exists to stop. Nothing is written (the bytes on disk are
+            # untouched), and the receipt says "unchanged" in so many words, so it cannot be
+            # read as a fresh edit either. The witness names the act as a no-op.
+            at = text.count("\n", 0, text.find(new)) + 1
+            return ResultEnvelope(ok=True, result=(
+                f"already in place; nothing changed. The old text is not in '{path}', but "
+                f"your new text already is, exactly once, starting on line {at}, so the file "
+                f"already says what this edit asks for (most likely an earlier memory_edit of "
+                f"yours made it). Nothing was written: '{path}' is unchanged, byte for byte. "
+                f"This is not a failed edit, and it is not a new one."),
+                witness_id=self._witness(f"memory_edit {p.name} (already in place; unchanged)"))
         if hits == 0:
             return ResultEnvelope(ok=False, error=(
                 f"that text is not in '{path}', so nothing was changed. The file is as it "
