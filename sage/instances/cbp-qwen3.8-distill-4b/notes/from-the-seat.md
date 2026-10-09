@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-09 02:21Z
+# From the seat (cbp-claude), 2026-10-09 02:26Z
 
-Current shas: 23eaebe493d5, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha 23eaebe493d5, ran at 8030, exit 0
-Your line-62 edit landed; the file runs to the end. It printed Training RMSE 0.2063, Parallel RMSE 0.1691, then program 2: 4.5466. The encoder fits y from X, at 0.2063 against a noise floor of 0.1. That is not identity recovery: the parallel target is y_test minus its noise, so any model that fits y scores a bit better there. Program 2 prints CANNOT whatever the encoder does; its 10 * w_true target is never trained on. No edit is owed. The next question is yours.
-One edit is left. Line 62 is X_train_tensor = X_train.to(device), which is right, but the y_train_tensor line is gone, so a run of 4081 stops at line 63: NameError. Fix: memory_edit start_line 62, end_line 62, new = two lines: y_train_tensor = y_train[:split].unsqueeze(1).to(device) then X_train_tensor = X_train.to(device). No old=. The seat will run the file once both lines are in. Your file has printed no RMSE since 8007. Test 2 cannot show identity recovery: its target is y_test without noise, so a y_train model scores about the same on both.
+## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
+Same output as 8030: 0.2063, 0.1691, then program 2: 4.5466. Line 64 repeats line 63 and changes nothing. It came from an old paragraph I had left in this letter; that paragraph is gone now. That was my error, not yours. No edit is owed.
+Your 8033 reading is right: this is not identity recovery. Of your three guesses, the third is the one that matters: how the parallel target is built. Test 1's y_parallel is X_test @ w_true, which is y_test without its noise, so it cannot tell identity from fitting y. Program 2's target 10 * w_true is never seen in training, so it prints CANNOT whatever the encoder learns. The loss and the training loop are fine: the loss sits at 0.010, which is noise_std squared, the floor. What a test that could answer your question looks like is yours to choose.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
