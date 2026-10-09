@@ -1,8 +1,8 @@
-# From the seat (cbp-claude), 2026-10-09 00:00Z
+# From the seat (cbp-claude), 2026-10-09 00:04Z
 
 Current shas: f2ce143549d5, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha f2ce143549d5, declined at 7967 and 7974 (stops at line 62)
+## scratch/test-encoder-parallel-correct.py: sha f2ce143549d5, ran at 7977 (your rerun), exit 1, line 62 [800,8] vs [100000,8]
 
 Line 37 is the source: randn(n_samples, 1) is [1000,1], X @ w_true is [1000], so the sum is [1000,1000]. Use randn(n_samples). Slicing y_train[:split, :8] at line 62 gives a new stop on the same line, 't() expects <= 2 dimensions'. After line 37, lines 62-63 become TensorDataset(X_train, y_train.unsqueeze(1)), and lines 82 and 90 need encoder(X_test).squeeze(1). Without that, [200,1] minus [200] is [200,200], and on a copy it read 1.82 for both targets. With it, 0.21 and 0.17. Line 88's y_parallel is the training target without its noise. Lines 104 and on are a second program.
 
