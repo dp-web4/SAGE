@@ -43,6 +43,8 @@ BODY_DIR = os.environ.get("SAGE_BODY_DIR") or os.path.expanduser("~/.sprout")
 PERCEPTION_PATH = os.path.join(BODY_DIR, "perception.json")
 GAZE_PATH = os.path.join(BODY_DIR, "gaze.json")
 DAEMON_STATUS = f"http://127.0.0.1:{os.environ.get('SAGE_PORT', '8760')}/status"
+# The machine body (proprioception): sampled by the daemon on a cadence, never by the beat.
+DAEMON_BODY = DAEMON_STATUS.rsplit("/", 1)[0] + "/body"
 FRESH_S = 15.0          # perception older than this = the organ is not live
 GAZE_MODES = ("open", "avert", "dwell", "closed")
 
@@ -129,6 +131,30 @@ def metabolism(timeout: float = 3.0) -> Dict:
             "felt_source": d.get("salience_source"), "felt_total": s.get("total")}
 
 
+def machine_body(timeout: float = 2.0) -> Dict:
+    """The daemon's last snapshot of the machine body (GPU, CPU, memory, disk), or why there is none.
+
+    READ, NEVER SAMPLED HERE. The daemon samples on a cadence (sage-rs body.rs runs
+    sage.gateway.proprioception) and this is one loopback request for the cached result, so the
+    beat never waits on nvidia-smi or a /proc/stat window. The dashboard reads the same snapshot
+    and shows the same `line`, so what the being senses and what the indicator shows cannot differ.
+    -> {"snapshot": {...}} or {"snapshot": None, "why": "..."}"""
+    import urllib.error
+    try:
+        with urllib.request.urlopen(DAEMON_BODY, timeout=timeout) as r:
+            return {"snapshot": json.loads(r.read())}
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {"snapshot": None, "why": "this daemon build does not serve /body yet"}
+        try:
+            why = json.loads(e.read()).get("unavailable") or f"HTTP {e.code}"
+        except Exception:
+            why = f"HTTP {e.code}"
+        return {"snapshot": None, "why": str(why)}
+    except Exception as e:
+        return {"snapshot": None, "why": f"the daemon did not answer /body ({type(e).__name__})"}
+
+
 def gaze() -> Dict:
     """The being's current stance as the cortex will read it."""
     g = _read_json(GAZE_PATH) or {}
@@ -144,15 +170,24 @@ def reading(now: Optional[float] = None) -> Dict:
     now = time.time() if now is None else now
     heard = _heard_since(now - HEARD_LOOKBACK_S)
     return {"perception": perception(now), "metabolism": metabolism(), "gaze": gaze(),
+            "machine": machine_body(),
             "inventory": inventory(now), "heard": heard,
             "heard_until": max([float(h.get("ts", 0)) for h in heard] or [0.0])}
 
 
-def render(cur: Dict, prev: Optional[Dict], name: str = "") -> str:
+def render(cur: Dict, prev: Optional[Dict], name: str = "", proprioception: bool = True) -> str:
     """The body block. Words only; every number is one the being can act on; a stale source says
-    so rather than presenting the past as the present (SMALL_MODEL_LEGIBILITY 1.3)."""
+    so rather than presenting the past as the present (SMALL_MODEL_LEGIBILITY 1.3).
+
+    `proprioception` (instance.json "proprioception": false turns it off; on by default, because
+    it is universal body sense): one line of the machine body -- GPU, CPU, memory, disk -- with its
+    age, and the gaps named as gaps. Shown only when the reading was taken ("machine" in cur)."""
     p, m, g = cur.get("perception") or {}, cur.get("metabolism") or {}, cur.get("gaze") or {}
     lines = ["## Your body, measured now"]
+    if proprioception and "machine" in cur:
+        from sage.gateway import proprioception as _prop
+        mb = cur.get("machine") or {}
+        lines.append(_prop.being_line(mb.get("snapshot"), why_missing=mb.get("why") or ""))
     if p.get("live"):
         eyes = f"{p.get('eyes_live', 0)} of {p.get('eyes', 0)} eyes live"
         ears = "hearing on" if p.get("audio_ok") else "hearing off"
