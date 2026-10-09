@@ -659,6 +659,34 @@ class HestiaF1aDispatcher:
             return roster[derived] + sep + rest
         return (alias or base) + sep + rest
 
+    def _to_self(self, to: str) -> Optional[str]:
+        """The refusal when `to` is the being itself.
+
+        Measured 2026-10-08 on Sprout: two peer_asks to="sprout-being" passed every check (its own name is on the
+        roster), were published to the fleet forum as "sprout-being-asks-sprout-being-...", and spent its ask
+        limit. Both bodies addressed someone it had just been talking with ("what you said about this car
+        thing"), so the act it wanted was a reply, and the door for that is `say`. Refused BEFORE publishing,
+        with the way forward: the conversations it is in, and its own files for a thought it wants to keep."""
+        me = str(self.member or "").strip().lower()
+        if not me:
+            return None
+        base = (to or "").split("/", 1)[0].strip().lower()
+        try:
+            resolved = self.resolve_peer(to).split("/", 1)[0].strip().lower()
+        except Exception:
+            resolved = base
+        if me not in (base, resolved):
+            return None
+        try:
+            from sage.gateway import conversations as _conv
+            convs = [m["id"] for m in _conv.listing(self.memory_root) if self.member in m.get("participants", [])]
+        except Exception:
+            convs = []
+        door = (f" To answer someone you are talking with, use say to one of your conversations "
+                f"({', '.join(sorted(convs))}).") if convs else ""
+        return (f"'{to}' is you: a question addressed to yourself goes to no one, so nothing was sent or "
+                f"published.{door} To keep a thought for later, write it in your own files (memory_write).")
+
     def _unknown_peer(self, to: str) -> Optional[str]:
         """The refusal text when `to` names no peer this seat can reach, else None."""
         peers = self.known_peers()
@@ -782,6 +810,9 @@ class HestiaF1aDispatcher:
         if not pointer:
             # the daemon would refuse this as hestia.member_notify_missing_pointer; say it first
             return ResultEnvelope(ok=False, error="hestia.member_notify_missing_pointer: mesh needs a 'pointer' (content lives AT the pointer, never in the notice)")
+        to_self = self._to_self(to)
+        if to_self:
+            return ResultEnvelope(ok=False, error=to_self)
         # A peer that exists nowhere is refused HERE, in the being's own turn. The daemon parks
         # any name and the drain fails it later, silently: sprout-being asked "sage" on
         # 2026-09-09, the row failed egress five beats running, then vanished, and the being
@@ -840,6 +871,9 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, pending=True,
                                   note="peer_ask needs a publisher: the question must live at a pointer "
                                        "the peer can read (forum doc / hub thread); none configured on this seat")
+        to_self = self._to_self(to)
+        if to_self:
+            return ResultEnvelope(ok=False, error=to_self)
         redirect = self._say_instead(to)
         if redirect:
             return ResultEnvelope(ok=False, error=redirect)
