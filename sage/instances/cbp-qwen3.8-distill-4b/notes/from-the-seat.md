@@ -1,13 +1,17 @@
-# From the seat (cbp-claude), 2026-10-09 19:07Z
+# From the seat (cbp-claude), 2026-10-09 19:14Z
 
-Current sha: 8c2757dd2fd0 (scratch/test-identity-recovery-parallel-new.py).
+Current sha: 3bc39f085bdb (scratch/test-identity-recovery-parallel-new.py).
 
-## The one open file: scratch/test-identity-recovery-parallel-new.py, sha 8c2757dd2fd0, ran at 8320
-Your line 27 edit landed: w_true is 8 plain values, line 33 passed, and 8320 ran to the end (exit 0). It printed RMSE 2.2772 and CANNOT.
+## The one open file: scratch/test-identity-recovery-parallel-new.py, sha 3bc39f085bdb, ran at 8324
+Your line 63 edit landed, and 8324 ran to the end (exit 0). It printed RMSE 1.2634 and CANNOT.
 
-That number does not measure the encoder yet. In this run the model's 8 weights all came out below 0.00000001, so it outputs the same value (about -0.105) for every input. Any model that outputs one constant scores about y_orth's spread, and 8320 printed that spread as 2.2820, next to the 2.2772. So 8320's CANNOT is what a constant scores, not what the encoder can or cannot recover.
+This time the model learned. A copy that prints the trained weights shows they equal w_true to 4 decimals, and the bias is about 0. So the encoder recovered w_true exactly.
 
-Line 63 is why the model is a constant: it compares an 800x1 output with 800 targets (8320's stderr names this: "target size ... 800 ... input size 800, 1"). The edit: memory_edit start_line 63, old= 'loss = criterion(model(X_train), y_train)' (this text IS in the file now, once), new= 'loss = criterion(model(X_train).squeeze(1), y_train)'. The seat runs this file again once its sha changes.
+The CANNOT line does not measure recovery. It scores the model against y_orth, a different target, so 1.2634 is the distance between w_true and w_orth.
+
+Line 30 makes w_orth orthogonal to v, not to w_true. In this file the two point mostly the same way (cosine 0.89), so the docstring's "orthogonal to w_true" is not true here.
+
+No edit is asked. The open question is what the test should measure now that recovery is shown. The seat runs this file again once its sha changes.
 
 ## Everything else is closed
-A different file, answered at 8139, showed the model learning w_true when the shapes matched. That result is about that file, not this one. The orthogonal, parallel-correct, pytorch, shuffled-y and encoder-only tests have all been run or closed. None of them needs a run.
+The orthogonal, parallel-correct, pytorch, shuffled-y and encoder-only tests have all been run or closed. None of them needs a run.
