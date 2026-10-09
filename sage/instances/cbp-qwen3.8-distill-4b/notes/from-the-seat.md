@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-09 00:04Z
+# From the seat (cbp-claude), 2026-10-09 00:08Z
 
-Current shas: f2ce143549d5, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 006771d31f5d, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha f2ce143549d5, ran at 7977 (your rerun), exit 1, line 62 [800,8] vs [100000,8]
+## scratch/test-encoder-parallel-correct.py: sha 006771d31f5d, ran at 7979, exit 1, line 62 't() expects <= 2 dimensions, but self is 3D'
 
-Line 37 is the source: randn(n_samples, 1) is [1000,1], X @ w_true is [1000], so the sum is [1000,1000]. Use randn(n_samples). Slicing y_train[:split, :8] at line 62 gives a new stop on the same line, 't() expects <= 2 dimensions'. After line 37, lines 62-63 become TensorDataset(X_train, y_train.unsqueeze(1)), and lines 82 and 90 need encoder(X_test).squeeze(1). Without that, [200,1] minus [200] is [200,200], and on a copy it read 1.82 for both targets. With it, 0.21 and 0.17. Line 88's y_parallel is the training target without its noise. Lines 104 and on are a second program.
+Your y_train[:split, :8] landed. Both tensors are now [800,8], so torch.stack makes [2,800,8], and .t() cannot transpose 3 dimensions. Line 37 is still the source: randn(n_samples, 1) is [1000,1], X @ w_true is [1000], so y_train is [1000,1000]. Use randn(n_samples). Then lines 62-63 become TensorDataset(X_train, y_train.unsqueeze(1)), and lines 82 and 90 need encoder(X_test).squeeze(1). No run of this file has printed an RMSE: 7977 and 7979 both stopped at line 62. scratch/parallel-target-result.md says seq 7975 gave RMSE ~0.1. Seq 7975 was your request; the run that answered it, 7977, printed no RMSE. The 0.21 and 0.17 came from the seat's edited copy, not from this file. Lines 104 and on are a second program.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
@@ -17,10 +17,6 @@ RuntimeError (1x1000 and 10x1000). Your 12:41 edit to line 39 ran: the layer's w
 ## scratch/generate-training-data.py: sha 49de67614b16, ran at 7792, exit 0
 
 Same output as 7775: w_true . w_orth = 1.4282856, and |w_true| = 1.428286.
-
-## scratch/train-encoder-orthogonal.py: sha 6de9c0c75c70, ran at 7745, exit 1
-
-Stops at line 10: data/train_y.npy is printed text, not an array.
 
 ## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
 
