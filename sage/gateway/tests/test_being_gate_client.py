@@ -655,3 +655,23 @@ def test_check_runs_exactly_one_test_in_one_file(tmp_path):
             assert False, f"should have refused {bad!r}"
         except ValueError as e:
             assert expect in str(e), f"{bad!r} -> {e}"
+
+
+def test_single_gate_judges_a_worktree_verbs_path_at_the_worktree(tmp_path=None):
+    """McNugget, 2026-10-07/08: git_read and search have no path_args, so their `path` reached
+    the single gate raw and hestia resolved it against cwd=workspace (the seat's checkout), while
+    the composer reads it from the being's worktree. A being with its worktree granted was refused
+    "'sage' is not granted" for every `git_read cat`. The path must reach the gate rooted where it is
+    read; an absolute path and a verb with no worktree are left alone."""
+    import tempfile
+    wt = os.path.realpath(tempfile.mkdtemp(prefix="wt-"))
+    c, calls = _sg_client("allow")
+    c.worktree = wt
+    c.gate(BeingIntent("git_read", {"op": "cat", "path": "sage/gateway/fleet_paths.py"}))
+    ev, _ = calls[-1]
+    assert ev["tool_input"]["path"] == os.path.join(wt, "sage/gateway/fleet_paths.py"), ev["tool_input"]
+    assert ev["cwd"] == "/tmp/ws", "cwd stays the workspace; only the worktree verb's own path moves"
+    c.gate(BeingIntent("search", {"pattern": "x", "path": "sage"}))
+    assert calls[-1][0]["tool_input"]["path"] == os.path.join(wt, "sage")
+    c.gate(BeingIntent("git_read", {"op": "log"}))
+    assert "path" not in calls[-1][0]["tool_input"], "no path given, none invented"

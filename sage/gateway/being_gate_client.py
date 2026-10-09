@@ -2573,6 +2573,17 @@ class BeingGateClient:
                 for a in _REGISTRY[intent.effector]["path_args"]:
                     if intent.args.get(a):
                         tool_input[a] = next(resolved)
+                # AND A WORKTREE VERB'S PATH IS ROOTED AT THE WORKTREE (McNugget, 2026-10-07/08).
+                # git_read and search are composed verbs with no path_args, so the loop above never
+                # touched their `path`; hestia read it as a ratified path key and resolved it against
+                # cwd=workspace -- the SEAT's checkout -- while the composer runs `git -C <worktree>`.
+                # mcnugget-being, with its worktree granted, was refused "'sage' is not granted" for
+                # `git_read cat sage/gateway/fleet_paths.py` beat after beat. Root it where it is read.
+                # (The composer already refuses a path that escapes the worktree.)
+                _wt = self._compose_ctx().get("worktree")
+                if (_REGISTRY[intent.effector].get("compose") and _wt and tool_input.get("path")
+                        and not os.path.isabs(str(tool_input["path"]))):
+                    tool_input["path"] = os.path.realpath(os.path.join(_wt, str(tool_input["path"])))
                 ge = sg.GateEvent(tool=tool, tool_input=tool_input, cwd=self.workspace,
                                   session_id=getattr(self, "host_session_id", None),
                                   raw={"effector": intent.effector, **intent.args})
