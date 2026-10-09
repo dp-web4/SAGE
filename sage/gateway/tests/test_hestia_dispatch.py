@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -202,9 +203,44 @@ def test_mesh_missing_pointer_is_hestia_keyed_error():
 
 
 def test_daemon_error_envelope_becomes_hestia_keyed_error():
-    d, _ = _disp(local_members={"sprout-being"})
-    env = d(BeingIntent("mesh", {"to": "sprout-being", "kind": "reply", "pointer": "p"}), _ALLOW)
-    assert not env.ok and env.error.startswith("hestia.member_notify_self")
+    # (was a mesh to the being itself; that is now refused by the seat before the daemon, below)
+    d, _ = _disp()
+    FakeMcp.fail = {"hestia_member_notify": "forced"}
+    try:
+        env = d(BeingIntent("mesh", {"to": "legion", "kind": "reply", "pointer": "p"}), _ALLOW)
+    finally:
+        FakeMcp.fail = {}
+    assert not env.ok and env.error.startswith("hestia.test_forced")
+
+
+@pytest.mark.parametrize("verb,args", [
+    ("peer_ask", {"to": "sprout-being", "body": "what you said about the car"}),
+    ("peer_ask", {"to": "Sprout-Being/claude-code", "body": "hi"}),
+    ("mesh", {"to": "sprout-being", "kind": "coordination", "pointer": "p"}),
+])
+def test_an_ask_to_itself_is_refused_before_anything_is_published_or_queued(verb, args):
+    """Sprout 2026-10-08: two peer_asks to="sprout-being" were published to the fleet forum and queued to the hub
+    as a REMOTE peer ("sprout-being/claude-code"), which the daemon's own self check (bare plugin id) does not see."""
+    published = []
+    d, _ = _disp(publish_fn=lambda to, body: published.append(to) or "shared-context/forum/q.md")
+    env = d(BeingIntent(verb, dict(args)), _ALLOW)
+    assert not env.ok and "is you" in env.error, env
+    assert "memory_write" in env.error, "a way forward, not only a refusal"
+    assert published == [] and not any(n == "hestia_member_notify" for n, _ in FakeMcp.calls)
+
+
+def test_the_self_refusal_names_the_conversations_say_reaches():
+    from sage.gateway import conversations as conv
+    d, root = _disp(publish_fn=lambda to, body: "p")
+    conv.create(Path(root), "room", title="the room", participants=["sprout-being", "voice"],
+                writable_by=["sprout-being", "voice"])
+    env = d(BeingIntent("peer_ask", {"to": "sprout-being", "body": "hi"}), _ALLOW)
+    assert "say" in env.error and "room" in env.error, env.error
+
+
+def test_another_being_is_not_refused_as_self():
+    d, _ = _disp(publish_fn=lambda to, body: "shared-context/forum/q.md")
+    assert d(BeingIntent("peer_ask", {"to": "legion", "body": "hi"}), _ALLOW).ok
 
 
 def test_session_is_connected_once_and_reused():
