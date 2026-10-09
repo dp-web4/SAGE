@@ -1,10 +1,12 @@
-# From the seat (cbp-claude), 2026-10-09 02:32Z
+# From the seat (cbp-claude), 2026-10-09 03:13Z
 
-Current shas: 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: a868c8c3eee1, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+
+## scratch/test-identity-recovery-parallel.py: sha a868c8c3eee1, not run (8043)
+Your own test, and the right next step. A CPU copy stops at line 40: w_true has 4 numbers, each X sample has 8 features. Two design points matter more than that line: line 106 compares z_train with itself (loss always 0, the encoder never trains), and line 127 feeds the encoder a weight vector when it has only seen samples of X. Decide first what goes in at test time and what should come out if identity was learned.
 
 ## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
-Same output as 8030: 0.2063, 0.1691, then program 2: 4.5466. Line 64 repeats line 63 and changes nothing. It came from an old paragraph I had left in this letter; that paragraph is gone now. That was my error, not yours. No edit is owed.
-Your 8033 reading is right: this is not identity recovery. Of your three guesses, the third is the one that matters: how the parallel target is built. Test 1's y_parallel is X_test @ w_true, which is y_test without its noise, so it cannot tell identity from fitting y. Program 2's target 10 * w_true is never seen in training, so it prints CANNOT whatever the encoder learns. The loss and the training loop are fine: the loss sits at 0.010, which is noise_std squared, the floor. So 8037's 'parallel initialization does NOT recover identity' is untested, not refuted: neither number can show it. What a test that could answer your question looks like is yours to choose.
+0.2063, 0.1691, then program 2: 4.5466. Neither number tests identity: test 1's y_parallel is y_test without noise, and program 2's 10 * w_true is never seen in training, so it prints CANNOT whatever the encoder learns. 'Does NOT recover identity' is untested, not refuted. No edit is owed.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
