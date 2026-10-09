@@ -3789,7 +3789,7 @@ def main(argv=None) -> int:
             explore = run_ollama_tool_turn(client, llm, seed, max_steps=_explore_steps,
                                            tools=_explore_specs, on_generate=_on_generate("explore"),
                                            should_yield=_yield_for_a_person,
-                                           act_form=explore_turn_mode(instance),
+                                           act_form=explore_turn_mode(instance), retake_bare_placeholder=True,
                                            compact_own_turns=compact_own_turns_mode(instance))
             convo = _carry(seed, explore)
         after = None
@@ -3799,7 +3799,7 @@ def main(argv=None) -> int:
             after = run_ollama_tool_turn(client, llm, convo, max_steps=_explore_steps,
                                          tools=_explore_specs, on_generate=_on_generate("posture"),
                                          should_yield=_yield_for_a_person,
-                                       act_form=explore_turn_mode(instance))
+                                       act_form=explore_turn_mode(instance), retake_bare_placeholder=True)
             convo = _carry(convo, after)
         # S1 own account: ASK, DO NOT OFFER. A plain turn (no tools), verbatim kept.
         # generates: the same per-generate entry the tool turns record, because the ACCOUNT ask
@@ -4030,6 +4030,9 @@ def main(argv=None) -> int:
         for jf in (getattr(res, "json_arg_failures", None) or []):
             interventions.append({"kind": "json_arg_failure", "phase": ph, **jf,
                                   "suppressed": "an act whose arguments could not be formed (no act; not empty args)"})
+        for pl in (getattr(res, "placeholders", None) or []):
+            interventions.append({"kind": "placeholder", "phase": ph, **pl,
+                                  "suppressed": "a bare template reply; the step was retaken as a JSON act"})
         for sv in (getattr(res, "salvaged", None) or []):
             interventions.append({"kind": "salvage", "phase": ph, "effector": sv.get("effector"), "form": sv.get("form"),
                                   "suppressed": "text-channel narration in place of a native tool call"})

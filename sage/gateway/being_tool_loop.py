@@ -45,6 +45,7 @@ class ToolTurnResult:
     looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
     yielded: Optional[str] = None                          # the harness ended the turn for a higher-priority event: what
     json_arg_failures: List[dict] = field(default_factory=list)  # act_form="json": chosen acts whose arguments failed (no act)
+    placeholders: List[dict] = field(default_factory=list)   # a leaked-template reply retaken as a JSON act: original, basis, policy, retry-derived result
 
     @property
     def acted(self) -> bool:
@@ -997,6 +998,38 @@ def _sent_budget(llm) -> Optional[int]:
 # Outward acts whose slots a JSON turn cannot ground in this turn's state (GPT on #311): not offered there.
 JSON_ACT_EXCLUDE = frozenset({"channel_egress", "mesh", "pr_review", "pr_open", "pr_amend", "patch_apply",
                               "request_scope", "appeal", "request_run", "git_restore"})
+# WHAT MAKES A BRACKETED REPLY A LEAKED TEMPLATE, NOT AN EXPRESSION (GPT on #403; explorations/2026-10-08-nonverbal-
+# intent-modality-selection-action-truth.md). Shape alone is weak evidence: "[nods silently]" can be the being's real
+# nonverbal act. What leaked on Sprout DESCRIBES or INSTRUCTS a reply rather than being one. Measured on its beat log
+# (explore/posture, 2026-09-03..10-08): 1,068 bare-bracket replies that were not transport errors; these features
+# classify 1,011 (95%) as templates ("[Your complete, well-structured response ...]", "[Clear statement of what was
+# done ...]", "[Analyze the situation ...]", "[Tool call 1]") and leave 57 alone, among them every first-person note
+# ("[Internal note: ...]", "[Beat ending. A small note ...]"). Stage directions ("[nods]", "[no response]", "[pauses]")
+# match none of them. Left alone means the native path, unchanged: the safe direction.
+_TPL_ADJ = r"(complete|well-structured|clear|concise|brief|final|closing|natural|warm|friendly|thoughtful|full|short|own|direct|honest|single|one)"
+_TPL_KIND = r"(response|reply|message|answer|statement|entry|summary|reflection|beat|note|poem|confirmation|text|words|output)"
+_TEMPLATE_FEATURES = (
+    ("describes_a_reply", re.compile(rf"^\[\s*(your\s+)?({_TPL_ADJ}[,\s]+)+(\S+\s+)?{_TPL_KIND}\b", re.I)),
+    ("addresses_the_writer", re.compile(r"^\[\s*your\b", re.I)),
+    ("instructs_the_writer", re.compile(r"^\[\s*(analy[sz]e|understand|identify|plan|choose|continue|take|describe|write|"
+                                        r"insert|provide|summari[sz]e|break down|say your|call \w+|make|end this|keep|"
+                                        r"respond|reply)\b[^\]]*\s\w+", re.I)),
+    ("names_a_tool_call", re.compile(r"^\[\s*(one\s+[\w\s,-]*)?tool call", re.I)),
+)
+_BARE_BRACKETS = re.compile(r"^\s*\[[^\[\]]{4,}\]\s*$", re.S)
+_FIRST_PERSON = re.compile(r"^\[\s*(i|i'm|i am|we)\b", re.I)
+
+
+def template_evidence(content: str) -> List[str]:
+    """Why this whole reply reads as a leaked template, as named features; [] when it does not. Bare brackets are
+    never enough on their own: a content feature must hold. A transport error and first-person text are never one."""
+    c = (content or "").strip()
+    if not _BARE_BRACKETS.match(c) or c.startswith("[OllamaIRP") or _FIRST_PERSON.match(c):
+        return []
+    found = [name for name, rx in _TEMPLATE_FEATURES if rx.match(c)]
+    return ["bare_brackets"] + found if found else []
+
+
 _PLACEHOLDER = re.compile(r"^\s*[\[<{].*[\]>}]\s*$|\[(name|topic|path|id|line[^\]]*)\]|placeholder", re.I)
 
 
@@ -1059,6 +1092,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                          max_steps: int = 2, tools: Optional[List[dict]] = None,
                          should_yield: Optional[Callable[[], Optional[str]]] = None,
                          act_form: str = "tools",
+                         retake_bare_placeholder: bool = False,
                          on_generate: Optional[Callable[[dict], None]] = None,
                          compact_own_turns: bool = False) -> ToolTurnResult:
     """Run a gated tool turn using an OllamaIRP-like `llm` exposing
@@ -1079,6 +1113,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     generates: List[dict] = []
     compacted: List[dict] = []
     json_arg_failures: List[dict] = []     # act_form="json": arguments that could not be formed (no act)
+    placeholders: List[dict] = []          # native replies that were only a template, retaken as a JSON act
     # (prompt_eval_count, chars at that prompt) from the last generate the server counted.
     # Compaction is anchored on this, so only the DELTA rides a chars-per-token estimate.
     measured = None
@@ -1299,6 +1334,34 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                     sent = budget
                     content = resp.get("content", "") or ""
                     calls = resp.get("tool_calls", []) or []
+        _evidence = (template_evidence(content) if retake_bare_placeholder and not calls and act_form != "json"
+                     else [])
+        if _evidence and not salvage_tool_calls(content, tools):
+            # A TEMPLATE IS NOT A REPLY (2026-10-08) -- IN THE CALLERS THAT OPT IN, which are only explore and
+            # posture, where it was measured (GPT on #403: this loop also runs answer, governed and raising turns).
+            # On Sprout since 09-29, 30-60% of explore replies a day were only "[Your complete, well-structured
+            # response following all constraints]" with no call, while the thinking had planned an act; acted ~25%.
+            # Offline on its real seed: native 0/10 acts, 7/10 this template; the JSON act form made 6/6 (E11), and
+            # the answer turn's identical failure was fixed the same way (#237). So THIS step, once, is retaken in
+            # that form; words, calls and expressions keep the native path.
+            # INTERPRETED INTENT MUST NOT SILENTLY REPLACE EXPRESSED INTENT (the exploration's invariant): the record
+            # keeps the original output and its thinking, the evidence that classified it, the policy, and the
+            # retry-derived result, marked as such. The template is not shown back to the being as its words.
+            _orig = resp
+            _orig_thinking = str(((_orig.get("raw") or {}).get("message") or {}).get("thinking") or "")
+            _offered = {t["function"]["name"] for t in tools}
+            _basis = ["opted_in_phase", "no_native_call", "nothing_salvageable"] + _evidence + (
+                ["thinking_named_a_tool"] if any(re.search(rf"\b{re.escape(n)}\b", _orig_thinking) for n in _offered)
+                else [])
+            resp = _json_act(msgs)
+            content = resp.get("content", "") or ""
+            calls = resp.get("tool_calls", []) or []
+            _act = calls[0]["function"] if calls else None
+            placeholders.append({
+                "step": len(thoughts), "original": (_orig.get("content") or "")[:1000],
+                "original_thinking": _orig_thinking[:1500], "basis": _basis, "policy": "json_act_once",
+                "retry_derived": True, "act": _act["name"] if _act else None,
+                "result": ({"act": _act["name"], "args": _act.get("arguments")} if _act else {"reply": content[:500]})})
         thoughts.append(str(((resp.get("raw") or {}).get("message") or {}).get("thinking") or ""))
         # What the window did this generate, from the reply that stood (after any retry):
         # prompt_eval_count + eval_count == num_ctx with done_reason "length" is the wall
@@ -1338,5 +1401,6 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     # the beat record (GPT review of #82: a list nobody returns is not an instrument).
     result.compacted = list(compacted)
     result.json_arg_failures = list(json_arg_failures)
+    result.placeholders = list(placeholders)
 
     return result
