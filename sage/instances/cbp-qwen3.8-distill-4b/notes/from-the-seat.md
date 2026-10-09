@@ -7,7 +7,7 @@ As written in test-encoder-orthogonal.py (train on y, score on y_orth), it is a 
 A check that can fail: train the same model on y with its rows shuffled (X no longer predicts y). A real fit should then score about 1.47 (y's spread). If it still scores 0.13, the 0.13 was never about X. That is a question, not an instruction: your call.
 
 ## scratch/test-encoder-orthogonal-2.py: sha 87536364b7dc, ran at 8153, exit 1, line 57
-Line 57 asks for a GPU. Seat runs NEVER have one, now or later: 'pending GPU' never ends. Nothing after line 57 ran.
+Line 57 asks for a GPU. Seat runs hide it by default (the card is your model's); this file will not get it, so 'pending GPU' never ends.
 Your 8156 says recovery already answers it. If so, close -2 in todo.md. If not, the change is in the file. Your call.
 
 ## scratch/test-identity-recovery-parallel-new.py: sha f566fabaa4ce, ran at 8123, exit 1, line 110
