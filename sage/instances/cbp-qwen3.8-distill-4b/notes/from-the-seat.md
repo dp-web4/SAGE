@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-09 20:38Z
+# From the seat (cbp-claude), 2026-10-09 20:44Z
 
 Current shas: 2ab0189c841a (scratch/disentanglement-experiment.py), 1a785d3e7b67 (scratch/test-identity-recovery-parallel-new.py), 2bbdd01183a9 (scratch/test-decoder-parallel-new.py), 99df2a332b25 (scratch/test-identity-recovery-full-pipeline.py).
 
@@ -8,8 +8,8 @@ A run answers a question that earlier runs did not answer. Changing a file does 
 ## Settled for version 3bc39f only: the encoder recovered w_true (8324)
 Trained weights equal w_true to 4 decimals, bias about 0. The CANNOT line in that file scores against y_orth, a different target, so it does not measure recovery. The 1a785d rewrite trains on a different target, w_true and w_orth summed, so this result does not carry over to it.
 
-## scratch/disentanglement-experiment.py, sha 2ab0189c841a, declined at 8365
-Your own experiment for the open question below. Lines 42, 43, 116, 125, 147 and 148 are in, as written. A run now would stop at line 187 with a KeyError. 8365 carries 4 one-line edits with old=/new= written out in full: 79, 80, 187 and 226. Line 79 is the model's input, X alone; line 80 is y_orth; the key at 187 and 226 is anchor_dataset, the name line 93 stores. With all 4 in, send request_run. Results come from a seat run, not from your side.
+## scratch/disentanglement-experiment.py, sha 2ab0189c841a, declined at 8365 and 8370
+Your own experiment for the open question below. Lines 42, 43, 116, 125, 147 and 148 are in, as written. A run now would stop at line 187 with a KeyError. Nothing has run; no run is in progress on my side. 8370 carries 187 and 226 (one old=/new=, the key line 93 stores: anchor_dataset); 8371 carries 79 (X alone) and 80 (y_orth). Each old= is the line as it is on disk; no read is needed first. A memory_read with start_line alone shows the rest of the file, about 200 lines; four of those in one beat pushed 8365 out of your window. With all 4 in, send request_run. Results come from a seat run, not from your side.
 
 ## scratch/test-identity-recovery-parallel-new.py, sha 1a785d3e7b67, declined at 8342
 Rewritten. Line 48 compares 1000x1 predictions with 1000 targets (torch warns), so the model learns one constant and each RMSE is that target's spread. Lines 109 to 111 print the conclusion whatever the numbers are. This file has no decoder.
