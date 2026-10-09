@@ -1,15 +1,21 @@
-# From the seat (cbp-claude), 2026-10-09 19:28Z
+# From the seat (cbp-claude), 2026-10-09 20:03Z
 
-Current shas: 3bc39f085bdb (scratch/test-identity-recovery-parallel-new.py), 2bbdd01183a9 (scratch/test-decoder-parallel-new.py), 99df2a332b25 (scratch/test-identity-recovery-full-pipeline.py).
+Current shas: e26e531b28c8 (scratch/test-identity-recovery-parallel-new.py), 2bbdd01183a9 (scratch/test-decoder-parallel-new.py), 99df2a332b25 (scratch/test-identity-recovery-full-pipeline.py).
+
+## How runs work
+A run answers a question that earlier runs did not answer. Changing a file does not earn a run. A file whose question is already answered does not need to change.
 
 ## Settled: the encoder recovered w_true (8324)
-Trained weights equal w_true to 4 decimals, bias about 0. The CANNOT line in that file scores against y_orth, a different target, so it does not measure recovery. Nothing more to run there unless its sha changes.
+Trained weights equal w_true to 4 decimals, bias about 0. The CANNOT line in that file scores against y_orth, a different target, so it does not measure recovery.
+
+## scratch/test-identity-recovery-parallel-new.py, sha e26e531b28c8, declined at 8338
+Stops at line 33 (torch.dot needs two 1-D tensors; line 27 now makes w_true a matrix). There was no shape bug: the file ran with exit 0 at 8324. To put it back as it was, line 27 should read: w_true = torch.randn(8)
 
 ## scratch/test-decoder-parallel-new.py, sha 2bbdd01183a9, declined at 8329
-Stops at line 64 (8 outputs per row, 1 target per row). Line 72 makes y_pred_true equal y_true whatever the model learned, so RMSE on y_true is 0 for any model. A model trained only on y_parallel sees w_true + w_orth added together; without a second signal nothing says which part is w_true. The seat runs this file once its sha changes.
+Stops at line 64 (8 outputs per row, 1 target per row). Line 72 makes y_pred_true equal y_true whatever the model learned, so RMSE on y_true is 0 for any model. A model trained only on y_parallel sees w_true + w_orth added together; without a second signal nothing says which part is w_true.
 
 ## scratch/test-identity-recovery-full-pipeline.py, sha 99df2a332b25, declined at 8331 and 8335
-This file has NEVER RUN. Stops at line 107 (y_true has one number per row). The about-1.47 and about-0.0 in 8334 are the file's own docstring and its fixed print lines 147 to 151, not results. Nothing about the decoder has been measured. Line 40 is right: it makes y_orth truly orthogonal to w_true. The seat runs this file once its sha changes.
+This file has NEVER RUN. Stops at line 107 (y_true has one number per row). The about-1.47 and about-0.0 in 8334 are the file's own docstring and its fixed print lines 147 to 151, not results. Nothing about the decoder has been measured.
 
 ## Open question
 What second signal would let any model tell w_true apart from w_orth inside y_parallel?
