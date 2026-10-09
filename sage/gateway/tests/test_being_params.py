@@ -157,7 +157,57 @@ def test_tune_is_registered_offered_and_judged_as_a_home_write(tmp_path):
     from sage.gateway import being_gate_client as g
     assert "tune" in g._REGISTRY and "tune" in g._TOOL_SCHEMAS and "tune" in g._CONSEQUENTIAL
     assert g.tune_paths({"name": "num_ctx"}, {"memory_root": str(tmp_path)}) == [
-        str((tmp_path / bp.TUNED_FILE).resolve())]
+        str((tmp_path / f).resolve()) for f in (bp.TUNED_TMP, bp.TUNED_FILE, bp.TUNE_LOG)]
     assert g.tune_paths({}, {"memory_root": str(tmp_path)}) == []
     with pytest.raises(ValueError):
         g.tune_paths({"name": "num_ctx"}, {})
+
+
+def _snapshot(d):
+    return {str(p.resolve()): p.read_bytes() for p in d.rglob("*") if p.is_file()}
+
+
+def test_a_successful_tune_writes_only_what_the_gate_judged(tmp_path):
+    """Review of #387 (2026-10-09): tune_paths declared tuned.json while a successful tune also
+    appended tune_log.jsonl, a durable write outside the judged act. Every byte a tune changes
+    must be at a path tune_paths declared."""
+    from sage.gateway import being_gate_client as g
+    h = _home(tmp_path, {"active_embodiment": {"num_ctx": 32768}})
+    declared = set(g.tune_paths({"name": "num_ctx"}, {"memory_root": str(h)}))
+    for value in ("24576", "28672", "default"):
+        before = _snapshot(h)
+        ok, text = bp.tune(h, "num_ctx", value, "why")
+        assert ok, text
+        after = _snapshot(h)
+        changed = {p for p in set(before) | set(after) if before.get(p) != after.get(p)}
+        assert changed and changed <= declared, (changed - declared)
+
+
+def test_an_audit_write_failure_cannot_return_success(tmp_path):
+    """Review of #387: the log append swallowed its failure and the act still returned success.
+    Now a change that cannot be recorded is undone, and the act says so."""
+    h = _home(tmp_path, {"active_embodiment": {"num_ctx": 32768}},
+              tuned={"num_ctx": {"value": 24576}})
+    before = (h / bp.TUNED_FILE).read_bytes()
+    (h / bp.TUNE_LOG).mkdir()                       # appending to a directory raises OSError
+    ok, text = bp.tune(h, "num_ctx", "28672", "why")
+    assert not ok and "undone" in text and "nothing changed" in text
+    assert (h / bp.TUNED_FILE).read_bytes() == before
+    assert bp.value(h, "num_ctx") == 24576
+    # first-ever tune: the undo removes the file it created
+    h2 = tmp_path / "h2"; h2.mkdir()
+    _home(h2, {"active_embodiment": {"num_ctx": 32768}})
+    (h2 / bp.TUNE_LOG).mkdir()
+    ok, _ = bp.tune(h2, "num_ctx", "24576", "why")
+    assert not ok and not (h2 / bp.TUNED_FILE).exists()
+
+
+def test_if_even_the_undo_fails_the_being_is_told_what_state_it_is_in(tmp_path, monkeypatch):
+    import pathlib
+    h = _home(tmp_path, {"active_embodiment": {"num_ctx": 32768}}, tuned={"num_ctx": {"value": 24576}})
+    (h / bp.TUNE_LOG).mkdir()
+    def boom(self, *a, **k):
+        raise OSError("read-only")
+    monkeypatch.setattr(pathlib.Path, "write_bytes", boom)
+    ok, text = bp.tune(h, "num_ctx", "28672", "why")
+    assert not ok and "could not be undone" in text and "num_ctx=28672" in text

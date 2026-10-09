@@ -46,6 +46,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 TUNED_FILE = "tuned.json"
 TUNE_LOG = "tune_log.jsonl"
+TUNED_TMP = TUNED_FILE + ".tmp"
+# EVERY PATH A `tune` WRITES, for the gate (being_gate_client.tune_paths). The act is judged on what
+# it touches, and it touches three: the temp file, the parameter file it is renamed onto, and the
+# audit log. Declaring only tuned.json let a judged act make a second, unjudged durable write
+# (review of #387, 2026-10-09).
+TUNE_WRITES = (TUNED_TMP, TUNED_FILE, TUNE_LOG)
 RESET_WORDS = ("default", "reset", "unset", "none")
 
 
@@ -331,17 +337,38 @@ def tune(instance, name: Optional[str] = None, raw: Any = None, why: str = "",
                 return False, f"{name} must be within [{_fmt(lo)}..{_fmt(hi)}] for you; {_fmt(new)} is not"
         tuned[name] = {"value": new, "at": _iso(now), "why": why[:500]}
     path = Path(instance) / TUNED_FILE
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(tuned, indent=2, sort_keys=True) + "\n")
-    os.replace(tmp, path)
+    tmp = Path(instance) / TUNED_TMP
+    prev = path.read_bytes() if path.exists() else None
+    try:
+        tmp.write_text(json.dumps(tuned, indent=2, sort_keys=True) + "\n")
+        os.replace(tmp, path)
+    except OSError as e:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return False, f"could not write {TUNED_FILE} ({type(e).__name__}: {e}); nothing changed"
     after = resolve(instance, name)
+    # AN UNAUDITED CHANGE DOES NOT STAND (review of #387). The log append used to swallow its own
+    # failure and the act returned success with no record of the change. Now a failed append undoes
+    # the change and says so; if even the undo fails, the being is told exactly what state it is in.
     try:
         with open(Path(instance) / TUNE_LOG, "a") as f:
             f.write(json.dumps({"at": _iso(now), "name": name, "from": before["value"],
                                 "from_source": before["source"], "to": after["value"],
                                 "to_source": after["source"], "why": why[:500]}) + "\n")
-    except Exception:
-        pass                                            # the change happened; the log is the extra
+    except OSError as e:
+        try:
+            if prev is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(prev)
+        except OSError as e2:
+            return False, (f"{name} was changed but the change could not be recorded in {TUNE_LOG} "
+                           f"({type(e).__name__}: {e}) and could not be undone ({type(e2).__name__}: "
+                           f"{e2}): {TUNED_FILE} now holds {name}={_fmt(after['value'])}. Tell your seat.")
+        return False, (f"the change could not be recorded in {TUNE_LOG} ({type(e).__name__}: {e}), "
+                       f"so it was undone; nothing changed")
     return True, (f"{name}: {_fmt(before['value'])} ({before['source']}) -> {_fmt(after['value'])} "
                   f"({after['source']}). Takes effect: {p.effect}."
                   + (f" Note: {after['note']}" if after["note"] else ""))

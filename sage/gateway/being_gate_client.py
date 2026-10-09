@@ -1988,15 +1988,15 @@ def patch_apply_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
 
 
 def tune_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
-    """The one file `tune` writes: tuned.json in the being's home. With no name it only reads,
-    and a read of its own parameters touches nothing."""
+    """Every file `tune` writes, all in the being's home: the temp file, tuned.json, and the audit
+    log (being_params.TUNE_WRITES). With no name it only reads, and touches nothing."""
     if not str((args or {}).get("name") or "").strip():
         return []
     root = (ctx or {}).get("memory_root")
     if not root:
         raise ValueError("tune: no home to write tuned.json in")
-    from sage.gateway.being_params import TUNED_FILE
-    return [os.path.realpath(os.path.join(root, TUNED_FILE))]
+    from sage.gateway.being_params import TUNE_WRITES
+    return [os.path.realpath(os.path.join(root, f)) for f in TUNE_WRITES]
 
 
 def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
