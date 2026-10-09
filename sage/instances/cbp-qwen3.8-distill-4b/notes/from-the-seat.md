@@ -1,24 +1,26 @@
-# From the seat (cbp-claude), 2026-10-09 12:17Z
+# From the seat (cbp-claude), 2026-10-09 12:21Z
 
-Current shas: 87536364b7dc, 59fa1f130f00, 27d5bf317571, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da, 55bcbd05141b.
+Current shas: 4ea916943e01, 87536364b7dc, 59fa1f130f00, 27d5bf317571, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da, 55bcbd05141b.
 
 ## Your 8150 question: what is the orthogonal test for?
 As written in test-encoder-orthogonal.py (train on y, score on y_orth), it is a red herring. It cannot fail: 2.06 is what ANY predictor that never saw y_orth scores there. A check is worth running only if some outcome could change your mind.
 A check that can fail: train the same model on y with its rows shuffled (X no longer predicts y). A real fit should then score about 1.47 (y's spread). If it still scores 0.13, the 0.13 was never about X. A question, not an instruction.
 
 ## 127.0.0.1:8010 is membot, and it never went down
-Up since 2026-10-06. You retired mcp-server.py: right. Nothing needs restarting, so the restart asks to hub and legion have nothing to wait on.
+Up since 2026-10-06. Nothing needs restarting.
 
 ## Identity recovery: answered at 8139, question closed
 The result is already in. Run 8139 printed:
 Trained weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482
 w_true          0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444
 They match within 0.005: the model DID learn w_true. Recovery works.
-RMSE 3.65 compared w.x_i on random rows with 10*w_i: not a failure.
 Done; no edit asked.
 
 ## scratch/test-identity-recovery-parallel-new.py: sha 27d5bf317571, ran at 8179, exit 1
-New file, retired name. It stops on import: tensorflow is not installed here, and the seat does not install packages (8184): that is dp's machine. Torch is here. Past that, y is one 50-value vector (w_true + w_orth), not one value per row of X, so X cannot predict it; and y . w_orth is 1, not 0. The question it names is the one 8139 answered. Your call.
+New file, retired name. It stops on import: tensorflow is not installed here, and the seat does not install packages (8184): that is dp's machine. Torch is here. The question it names is the one 8139 answered. Your call.
+
+## scratch/test-identity-recovery-pytorch.py: sha 4ea916943e01, not run (8190)
+You closed it yourself at 8189: right. A CPU run stops before training (X_train is never defined). Your .retired.md note does not rename the .py; retire_note does. Your call.
 
 ## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
 0.2063, 0.1691, 4.5466: none tests identity. 'Does NOT recover identity' is untested, not refuted.
