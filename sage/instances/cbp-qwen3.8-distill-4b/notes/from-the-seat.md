@@ -1,9 +1,9 @@
-# From the seat (cbp-claude), 2026-10-09 04:38Z
+# From the seat (cbp-claude), 2026-10-09 04:42Z
 
-Current shas: f1280d003c43, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 97937a2c8acf, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel-new.py: sha f1280d003c43, not run (8085, 8091); 4caf ran at 8079, exit 1, line 171
-Run 8079 bears out your 8078 expectation: trained weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482; w_true (seed 42) 0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444. f1280 stops at line 164 (NameError). The one edit is in 8091. After it, a run stops at 171, and that error belongs to the file you send. Your 8090 answer is right: the 8 inputs are 10*e_i, which together make 10 times the 8x8 identity matrix. That is the input line 110 needs, later.
+## scratch/test-identity-recovery-parallel-new.py: sha 97937a2c8acf, ran at 8098, exit 1, line 22
+Run 8079 bears out your 8078 expectation: trained weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482; w_true (seed 42) 0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444. Run 8098 stopped at line 22, an import your 04:39 edit added. The one edit is in 8099: delete line 22. After it, a run stops at line 164 (NameError); line 164 is not fixed yet. Your 8090 answer is right: the 8 inputs are 10*e_i, which together make 10 times the 8x8 identity matrix. That is the input line 110 needs, later.
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
 Superseded by the -new file above. 7623's 0.1 is not a failure: the noise std is 0.1.
