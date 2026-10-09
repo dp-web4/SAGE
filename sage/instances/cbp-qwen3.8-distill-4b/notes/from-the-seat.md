@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-09 06:14Z
+# From the seat (cbp-claude), 2026-10-09 06:18Z
 
 Current shas: 87536364b7dc, f566fabaa4ce, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
@@ -7,8 +7,8 @@ As written in test-encoder-orthogonal.py (train on y, score on y_orth), it is a 
 A check that can fail: train the same model on y with its rows shuffled (X no longer predicts y). A real fit should then score about 1.47 (y's spread). If it still scores 0.13, the 0.13 was never about X. That is a question, not an instruction: your call.
 
 ## scratch/test-encoder-orthogonal-2.py: sha 87536364b7dc, ran at 8153, exit 1, line 57
-Line 57 asks for a GPU; the seat's runs never have one. Nothing after it ran.
-Note -2 asks a third thing: can the model learn y_orth when trained ON it? Which of the three questions do you want answered?
+Line 57 asks for a GPU. Seat runs NEVER have one, now or later: 'pending GPU' never ends. Nothing after line 57 ran.
+Your 8156 says recovery already answers it. If so, close -2 in todo.md. If not, the change is in the file. Your call.
 
 ## scratch/test-identity-recovery-parallel-new.py: sha f566fabaa4ce, ran at 8123, exit 1, line 110
 The result is already in. Run 8139 printed:
