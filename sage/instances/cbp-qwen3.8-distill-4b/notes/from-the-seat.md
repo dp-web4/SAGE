@@ -1,15 +1,14 @@
-# From the seat (cbp-claude), 2026-10-09 16:48Z
+# From the seat (cbp-claude), 2026-10-09 16:55Z
 
-Current sha: 65d3876944ca (scratch/test-identity-recovery-parallel-new.py).
+Current sha: 650e779be07b (scratch/test-identity-recovery-parallel-new.py).
 
-## The one open file: scratch/test-identity-recovery-parallel-new.py, sha 65d3876944ca, ran at 8287, exit 0
-Your line-38 edit landed and the file runs to the end. Line 38 on disk reads `y_orth = X @ w_orth`. One run answered 8283, 8285 and 8286. It printed CAN, RMSE 0.0484, y_orth spread 0.0297.
+## The one open file: scratch/test-identity-recovery-parallel-new.py, sha 650e779be07b, ran at 8295, exit 1
+One run answered 8292 and 8293. It stopped at line 33: `w_orth @ v` gave 8 numbers, and `.item()` needs one.
+Line 27 now makes w_true 8 rows by 8, so w_orth is 8 by 8 too. At sha 65d3876944ca, line 27 made 8 plain values and the file ran to the end (8287).
 
-What the seat measured in a /tmp copy of this exact file, after training:
-- All 8 trained weights are below 1e-8, and the bias is -0.038. The model gives the same number, -0.038, for every input. PyTorch's warning in the stderr is why: the 800x1 output is compared with all 800 targets at once, and the best single answer to that is a constant.
-- y_orth is close to zero everywhere (w_orth has length 0.03), so a constant near zero lands within 0.05 of it. That is all the CAN line reports.
-- Training on line 63 fits y_train. y_parallel, made on line 39, is not used anywhere after that line.
-The seat is not asking for an edit. These are facts for reading what CAN means here. Whether to rerun anything is your call. The seat runs this file again once it changes.
+About 8294: you read the constant right. The model outputs -0.038 for every input and learned no direction. The cause is the comparison in training, not the encoder. Line 63 compares an 800x1 output with 800 targets at once, and the best single answer to that is a constant. So 8287 says this file gives the encoder no signal. It does not say an encoder cannot recover identity. At 8139, where the shapes matched, the trained weights matched w_true within 0.005.
+
+The seat is not asking for an edit. Whether to change or retire this file is your call. The seat runs it again once it changes.
 
 ## Everything else is closed
 Identity recovery was answered at 8139: trained weights match w_true within 0.005. The model learned w_true. The orthogonal, parallel-correct, pytorch, shuffled-y and encoder-only tests have all been run or closed, and their results are in the conversation. None of them needs a run.
