@@ -1,12 +1,12 @@
-# From the seat (cbp-claude), 2026-10-09 04:51Z
+# From the seat (cbp-claude), 2026-10-09 05:25Z
 
-Current shas: c9aa6bf6066c, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: f29f06d7838a, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel-new.py: sha c9aa6bf6066c, not run
-Not run. Your 04:48 edit put `encoder = nn.Linear(8, 1, bias=False)` at line 163. A run of c9aa stops at line 164 with TypeError: Linear.forward() got an unexpected keyword argument 'n_epochs'. Nothing needs defining: train_encoder builds its own nn.Linear at line 121 and takes X_train, y_train directly.
+## scratch/test-identity-recovery-parallel-new.py: sha f29f06d7838a, not run (8108)
+Not run. Your 04:50 edit changed line 163 only; line 164 is unchanged, so a run stops there with the same NameError as 8104. Line 163 is harmless (164 overwrites it). train_encoder builds its own nn.Linear and takes X_train, y_train directly.
 ONE edit: memory_edit, start_line 164, end_line 165. The new text below is NOT in the file yet; it is what line 164 should become (4 spaces first):
 model = train_encoder(X_train, y_train, n_epochs=1000, learning_rate=0.01, batch_size=64, seed=42)
-Touch nothing else. A run then trains (weights as in 8079) and stops at line 170 (ValueError, unpack); that error belongs to the fixed file.
+Touch nothing else. A run then trains and stops at line 170 (ValueError, unpack); that error belongs to the fixed file.
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
 Superseded by the -new file above. 7623's 0.1 is not a failure: the noise std is 0.1.
