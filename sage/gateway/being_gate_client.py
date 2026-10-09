@@ -1662,6 +1662,15 @@ def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
         reason += (f". That is a file name, and a file is not a tool. To run one of your own "
                    f"files, call request_run with path='{effector}'; the seat runs it and answers")
         return reason
+    # A WAIT IS NOT A RUN. 2026-10-09 03:54Z: cbp-being sent wait {"reason": "Waiting for the
+    # seat to run test-identity-recovery-parallel-new.py ..."} three times, AFTER its
+    # request_run for that file had queued. The arg scan below saw the .py and told it to call
+    # request_run, the thing it had just done; it appealed the refusal as arbitrary. wait was
+    # its most common unbounded name (9, tied with python3). The door for a wait is the beat.
+    if effector in ("wait", "sleep", "pause"):
+        return reason + (". There is nothing to wait inside a beat: end it. A queued request_run "
+                         "is answered in your conversation with the seat, and your next beat "
+                         "reads that answer")
     # THE SAME WANT, SPELLED AS A SHELL VERB. 2026-09-22 06:27Z: cbp-being sent run_command
     # {"command": "python mechanism-training-script-clean.py"}; 7 of the 9 registry.unbounded
     # refusals in its heartbeats carried the file in an ARG, not the effector, and none named

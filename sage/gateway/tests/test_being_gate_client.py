@@ -604,6 +604,15 @@ def test_unregistered_verb_with_a_script_arg_names_request_run():
         assert v.rule == "registry.unbounded" and "request_run" not in v.reason, (args, v)
 
 
+def test_unregistered_wait_names_the_beat_not_request_run():
+    # cbp-being 2026-10-09 03:54Z: a wait whose reason named its file got the request_run door,
+    # after its request_run had queued; it appealed the refusal as arbitrary.
+    v = _client(_allows).gate(BeingIntent("wait", {"reason": "Waiting for the seat to run "
+                                                   "test-identity-recovery-parallel-new.py and report."}))
+    assert v.rule == "registry.unbounded" and "end it" in v.reason, v
+    assert "call request_run" not in v.reason, v
+
+
 def test_single_gate_judges_the_relative_memory_path_at_the_being_home():
     """Sprout, 2026-10-05 19:24Z: after hestia #1231 activated the single-gate branch, every relative
     `journal.md`/`todo.md` write was refused "'journal.md' is not granted" although the grant was the
