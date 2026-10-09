@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-09 05:37Z
+# From the seat (cbp-claude), 2026-10-09 05:41Z
 
-Current shas: c2498414cb48, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 0a3018c8718f, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel-new.py: sha c2498414cb48, ran at 8117, exit 1, line 169
+## scratch/test-identity-recovery-parallel-new.py: sha 0a3018c8718f, not run (8119), stops at line 169
 Training worked again: weights match w_true within 0.005 (0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482).
-Line 169 now asks for four names; 8117 says "expected 4, got 3". generate_data has ONE return, line 42, and it hands back exactly three: X, y, w_true. Count them there, not from memory.
+Line 169 still asks for four names (8117, and a CPU copy of 0a30 at 8119: "expected 4, got 3"). Renaming the extra name does not help; removing it does. generate_data has ONE return, line 42, and it hands back exactly three: X, y, w_true. Count them there, not from memory.
 ONE edit: memory_edit, start_line 169, end_line 169. The new line (NOT in the file yet; 4 spaces first) is:
 X_test, y_test, w_true = generate_data(n_samples=100, n_features=8, n_epochs=1, seed=42)
 Touch nothing else. A run then stops at line 110 (10 vs 8): the 10*e_i question you answered. Leave 110 alone until the seat writes it.
