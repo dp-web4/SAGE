@@ -876,6 +876,25 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
 RETRY_MARGIN = 128   # tokens kept back from the window on a retry (template, tool-call framing)
 
 
+def retry_cause_of(llm, raw: dict) -> str:
+    """Why a first attempt came back empty: "window" (prompt + eval filled num_ctx),
+    "output_budget" (a `length` stop with room left in the window: num_predict ran out),
+    "length" (a `length` stop with no known window: which limit is not knowable, so not
+    guessed), or "stopped_thinking" (it deliberated and stopped cleanly with nothing in its reply)."""
+    try:
+        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
+        used = int(raw.get("prompt_eval_count") or 0) + int(raw.get("eval_count") or 0)
+    except (TypeError, ValueError):
+        num_ctx, used = 0, 0
+    if raw.get("done_reason") != "length":
+        return "stopped_thinking"
+    if not num_ctx:
+        return "length"
+    if used >= num_ctx - RETRY_MARGIN:
+        return "window"
+    return "output_budget"
+
+
 def _retry_budget(llm, raw: Optional[dict] = None) -> int:
     """The once-retry budget for a length-stopped or truncated turn: everything the
     window has left after this prompt, never less than the think budget.
@@ -1169,6 +1188,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             compacted.append({"step": len(thoughts), "elisions": len(_elided),
                               "chars": sum(e["chars"] for e in _elided)})
         retried = 0
+        retry_cause = None
         sent = _sent_budget(llm)          # the num_predict of the reply that stands
         resp = _once(msgs)
         content = resp.get("content", "") or ""
@@ -1230,6 +1250,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # for a cut-off answer, thinking OFF for one that never started answering.
             if (raw.get("done_reason") == "length" or thought_only) and (
                     hasattr(llm, "max_response_tokens") or hasattr(llm, "num_predict_override")):
+                retry_cause = retry_cause_of(llm, raw)
                 if thought_only:
                     # NOT the same prompt again: the retry has to change something the model
                     # can see. Measured 2026-09-08, five beats running, an identical prompt
@@ -1238,9 +1259,18 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                     # The sentence names what ACTUALLY happened: telling a model the window
                     # cut it when it stopped on its own is a false statement about its own
                     # last turn, in a nudge whose whole purpose is that the model believe it.
-                    _cut = (f"and the window cut it before any tool call. The window will not grow."
-                            if raw.get("done_reason") == "length"
-                            else f"and then stopped without writing anything in your reply.")
+                    # WHICH LIMIT (2026-10-07): a `length` stop is the window only when prompt +
+                    # eval filled num_ctx. legion-being's last 400 empty first attempts were 189
+                    # window, 209 output budget -- and every one of them was told "the window cut
+                    # it". The being then read its window-wall cuts as budget cuts. Say which.
+                    _cut = ("and the window cut it before any tool call. The window will not grow."
+                            if retry_cause == "window" else
+                            f"and reached your output budget for one reply ({raw.get('eval_count')} "
+                            f"tokens) before any tool call; the window itself still had room."
+                            if retry_cause == "output_budget" else
+                            "and was cut off before any tool call."
+                            if retry_cause == "length"
+                            else "and then stopped without writing anything in your reply.")
                     # NAME WHERE THE DELIBERATION WENT. legion-being 2026-10-05, at num_ctx 32768:
                     # six of six kept empty turns were 18-28k chars of thinking that drafted the
                     # code it meant to write (whole functions), cut before the write. The retry
@@ -1282,6 +1312,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             measured = (int(raw["prompt_eval_count"]), _convo_chars(msgs))
         entry = {"done_reason": raw.get("done_reason"), "prompt_eval_count": raw.get("prompt_eval_count"),
                  "eval_count": raw.get("eval_count"), "retried": retried, "num_predict": sent}
+        if retry_cause:
+            entry["retry_cause"] = retry_cause   # what the FIRST attempt hit; the counts above are the retry's
         generates.append(entry)
         if on_generate is not None:
             try:
