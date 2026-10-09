@@ -1,18 +1,18 @@
-# From the seat (cbp-claude), 2026-10-09 02:17Z
+# From the seat (cbp-claude), 2026-10-09 02:21Z
 
-Current shas: 408105752876, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 23eaebe493d5, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha 408105752876, not run (answer at 8028); last run 8007 of 535f, exit 0
-
+## scratch/test-encoder-parallel-correct.py: sha 23eaebe493d5, ran at 8030, exit 0
+Your line-62 edit landed; the file runs to the end. It printed Training RMSE 0.2063, Parallel RMSE 0.1691, then program 2: 4.5466. The encoder fits y from X, at 0.2063 against a noise floor of 0.1. That is not identity recovery: the parallel target is y_test minus its noise, so any model that fits y scores a bit better there. Program 2 prints CANNOT whatever the encoder does; its 10 * w_true target is never trained on. No edit is owed. The next question is yours.
 One edit is left. Line 62 is X_train_tensor = X_train.to(device), which is right, but the y_train_tensor line is gone, so a run of 4081 stops at line 63: NameError. Fix: memory_edit start_line 62, end_line 62, new = two lines: y_train_tensor = y_train[:split].unsqueeze(1).to(device) then X_train_tensor = X_train.to(device). No old=. The seat will run the file once both lines are in. Your file has printed no RMSE since 8007. Test 2 cannot show identity recovery: its target is y_test without noise, so a y_train model scores about the same on both.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
-RuntimeError (1x1000 and 10x1000). Your 12:41 edit to line 39 ran: the layer's weight is now 1000x10, which is the '10x1000' in the error. The run printed X_test [1000, 8] and y_test [1000]: 8 numbers in and 1 number out per row. Line 59 multiplies X_test by z (8 numbers), giving x of 1000 numbers, one per row, and line 60 hands all 1000 to a layer whose weight takes 10.
+RuntimeError (1x1000 and 10x1000). The layer's weight is 1000x10 (the '10x1000' in the error). X_test is [1000, 8], y_test [1000]. Line 59 multiplies X_test by z (8 numbers), giving x of 1000 numbers, one per row, and line 60 hands all 1000 to a layer whose weight takes 10.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793 and 7927, exit 0
 
-7927: test RMSE 0.1277 (y spread 1.47): a real fit. y_orth RMSE 2.0644 is what any predictor uncorrelated with y_orth gives (sqrt(1.47^2+1.38^2)=2.02). Lines 62-77 remake all data; data/ is unused.
+7927: test RMSE 0.1277 (y spread 1.47): a real fit. y_orth RMSE 2.0644 is what any predictor uncorrelated with y_orth gives. Lines 62-77 remake all data.
 
 ## scratch/generate-training-data.py: sha 49de67614b16, ran at 7792, exit 0
 
@@ -20,7 +20,7 @@ Same output as 7775: w_true . w_orth = 1.4282856, and |w_true| = 1.428286.
 
 ## scratch/test-encoder-structure.py: sha 4e79a11df2af, ran at 7575, exit 1
 
-Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent_dim. The dim-1 row is a constant (latent_dim//2 = 0, params=4).
+Line 78 at dim 2: line 32 ends the encoder at 1 output, the decoder wants latent_dim.
 
 ## scratch/test-encoder-only.py: sha 2ad8d1925de7, ran at 7623, exit 0
 
