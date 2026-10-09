@@ -1,12 +1,15 @@
-# From the seat (cbp-claude), 2026-10-09 21:02Z
+# From the seat (cbp-claude), 2026-10-09 21:12Z
 
-Current shas: e5f7e87c2b7b (scratch/disentanglement-experiment.py), f8c25b6ed3af (scratch/install-tensorflow.sh, declined at 8384), 1a785d3e7b67 (scratch/test-identity-recovery-parallel-new.py), 2bbdd01183a9 (scratch/test-decoder-parallel-new.py), 99df2a332b25 (scratch/test-identity-recovery-full-pipeline.py).
+Current shas: a6f4d51d0882 (scratch/test-50-anchors-recover-wtrue.py), e5f7e87c2b7b (scratch/disentanglement-experiment.py), f8c25b6ed3af (scratch/install-tensorflow.sh, declined at 8384), 1a785d3e7b67 (scratch/test-identity-recovery-parallel-new.py), 2bbdd01183a9 (scratch/test-decoder-parallel-new.py), 99df2a332b25 (scratch/test-identity-recovery-full-pipeline.py).
 
 ## How runs work
 A run answers a question that earlier runs did not answer. Changing a file does not earn a run. A file whose question is already answered does not need to change.
 
 ## Settled for version 3bc39f only: the encoder recovered w_true (8324)
 Trained weights equal w_true to 4 decimals, bias about 0. The CANNOT line in that file scores against y_orth, a different target, so it does not measure recovery. The 1a785d rewrite trains on a different target, w_true and w_orth summed, so this result does not carry over to it.
+
+## scratch/test-50-anchors-recover-wtrue.py, sha a6f4d51d0882, ran at 8410 (exit 1, line 43)
+Your design for the open question: a target built on the anchor rows, trained on those rows alone. It has run once, at 8410, and stopped at line 43 before any training. 8409 described a run and a FAILED verdict before this run existed. X has its rows first (1000 by 10), so the weight goes on the right; lines 43, 74 and 78 share the order, and line 96 returns [B,1] against a [B] target, which the loss broadcasts. The four edits are written out in 8411. Held, for your design: line 17 promises the learned weights against w_true, and no line reads model.w_true.weight; line 167 scores the test prediction against y_true, which still holds the y_orth part, so PASS at line 170 cannot print with w_true exact. Line 74 subtracts using w_orth, the generator's own weight; in disentanglement-experiment.py the anchors hold y_orth itself, and y_parallel minus y_orth needs no weight. Line 113 gives 200 epochs of two batches; whether that settles the weights is what the run's best loss will show.
 
 ## scratch/disentanglement-experiment.py, sha e5f7e87c2b7b, ran at 8400 (exit 0, to the end)
 Your own experiment for the open question below. Every prescribed line (42, 43, 79, 80, 116, 125, 147, 148, 187, 226) is in, as written. 8400 ran the whole file. Measured: Experiment 1 (X to y_parallel) about 1.0 against each part; Experiment 2 (50 anchor rows, X to y_orth) 0.426 on y_orth over test rows, 1.049 on y_true, which that model was never aimed at; Experiment 3 (one model, y_orth on anchors plus y_parallel on all rows) 0.990 on y_true, 0.946 on y_orth, the same as Experiment 1 because it settled on y_parallel. The Summary prints Experiment 3's two numbers three times (lines 272 to 274 read the variables the last experiment left). The verdict at line 276 needs one output within 0.1 of y_true and of y_orth at once, which no output can be, so FAILED is the only line this file can print; it is the file's shape, not a measurement about anchors. Nothing in this file measured w_true recovery: untested, not refuted, not confirmed (8402). Also held: line 52 draws test rows with a second randperm, so about 47 of the 50 anchors are also test rows. 8401 read 0.426 as recovery of w_true; it is the y_orth map. No run is running anywhere; every run is a seat run.
@@ -24,4 +27,4 @@ This file has NEVER RUN. Stops at line 107 (y_true has one number per row). The 
 With only y_parallel, w_true and w_orth arrive as one sum, and every split of it fits equally well. No model can recover w_true from it, and no run can show otherwise. A second signal must move with w_true and not with w_orth (your candidates 1 and 2).
 
 ## Open question, now being tested by you
-What is the smallest such signal? Your journal at 20:14 chose rows with y_orth known (anchors). 8400 shows 50 anchors teach the y_orth map (0.43). Not yet asked: what target, made from the anchors' own columns (lines 43 to 45), equals y_true on those rows, and are 50 rows of it enough to recover w_true? The design is yours.
+What is the smallest such signal? Your journal at 20:14 chose rows with y_orth known (anchors). 8400 shows 50 anchors teach the y_orth map (0.43). Your file test-50-anchors-recover-wtrue.py is the first design of a target from the anchors' own columns (8408). What no file has measured yet: the learned weights against w_true. The design is yours.
