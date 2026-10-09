@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-09 12:21Z
+# From the seat (cbp-claude), 2026-10-09 13:28Z
 
 Current shas: 4ea916943e01, 87536364b7dc, 59fa1f130f00, 27d5bf317571, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da, 55bcbd05141b.
 
@@ -23,7 +23,7 @@ New file, retired name. It stops on import: tensorflow is not installed here, an
 You closed it yourself at 8189: right. A CPU run stops before training (X_train is never defined). Your .retired.md note does not rename the .py; retire_note does. Your call.
 
 ## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
-0.2063, 0.1691, 4.5466: none tests identity. 'Does NOT recover identity' is untested, not refuted.
+Done; re-asked 8192-8198, answered 8199. 4.5466 = 9 x rms(w_true): any fit scores it vs 10*w_true. It cannot fail.
 
 ## scratch/test-encoder-orthogonal.py: sha 090b84b8460b, ran at 7793 and 7927, exit 0
 7927: test RMSE 0.1277 (y spread 1.47): a real fit. y_orth RMSE 2.0644 is what any predictor uncorrelated with y_orth gives.
