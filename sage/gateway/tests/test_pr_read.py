@@ -219,3 +219,40 @@ def test_combined_over_cap_regression():
     assert "c" * 1200 in out, "the newest item is cut to its real rendered size"
     assert "more chars]" in out, "both cut markers are present"
     assert "4 in all, newest last" in out, "the count line reports what was actually rendered"
+
+
+def test_the_newest_item_is_sized_to_the_leftover_room():
+    # RULE (locked 2026-10-09, the leftover-to-the-newest follow-up to dp's #360
+    # policy, confirmed by the seat): when the newest item is long enough to be cut,
+    # it is cut to the room left over the header + description + the older items
+    # actually rendered (marker included) -- NOT to the flat PR_READ_ITEM_CHARS (1200)
+    # cap. The older items are admitted newest-to-oldest at their REAL rendered size
+    # (header + cut body + marker), and pass 1 reserves 1200 for the newest so the
+    # room it frees when it is cut is never spent on older items. So the newest's
+    # rendered size is min(PR_READ_ITEM_CHARS, room), and when the leftover room is
+    # clearly above 1200 the newest comes out cut ABOVE the flat 1200 cap.
+    #
+    # Fixture: the exact live shape of #360 -- an 800-char description, two 3000-char
+    # older comments (each cut to 1200), and a 2111-char newest comment. The room
+    # left over the header, the description, and the two older items' real rendered
+    # sizes is ~1580, so the newest is cut to ~1580 -- above the flat 1200 cap it
+    # would have been cut to before this fix. Red against the merged head
+    # d133f7aa9 (newest_budget cut it to a flat 1200); green after the leftover fix.
+    pr = dict(PR,
+        body="x" * 800,
+        comments=[
+            {"author": {"login": "gpt"}, "createdAt": "2026-10-05T09:00:00Z", "body": "a" * 3000},
+            {"author": {"login": "cbp"}, "createdAt": "2026-10-05T10:00:00Z", "body": "b" * 3000},
+            {"author": {"login": "dp"}, "createdAt": "2026-10-05T11:00:00Z", "body": "z" * 5000},
+        ],
+    )
+    out = render_pr(pr, "main")
+    assert len(out) <= PR_READ_TOTAL_CHARS, "strict: the whole answer never exceeds the cap"
+    assert "a" * 1200 in out, "the older item is cut to its real rendered size"
+    assert "b" * 1200 in out, "the second older item is cut to its real rendered size"
+    assert "z" * 5000 not in out, "the newest is cut (5000 > the leftover room), not whole"
+    # The newest's rendered body is cut ABOVE the flat 1200 cap: the leftover room
+    # over the header + description + the two older items is ~1580, so the newest's
+    # cut body is ~1580, not 1200.
+    assert "z" * 1300 in out, "the newest is cut to the leftover room (~1580), above the flat 1200 cap"
+    assert "4 in all, newest last" in out, "the count line reports what was actually rendered"

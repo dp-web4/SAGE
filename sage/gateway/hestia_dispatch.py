@@ -131,7 +131,7 @@ def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
             return body_len
         # Cut to the flat PR_READ_ITEM_CHARS cap (not the whole room): the room it
         # frees then admits older items at their real rendered size (dp, #360 policy).
-        n = min(PR_READ_ITEM_CHARS, room)
+        n = room
         while True:
             marker = f" \u2026[{body_len - n} more chars]"
             if n + len(marker) <= room:
@@ -181,18 +181,24 @@ def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
             # goes to the newest item. Subtract what was reserved, not the len(shown) form:
             # the two differ by exactly the room the dropped items free.
             base_for_newest = base - reserved_count + len(count_line(1))
-            n = newest_budget(base_for_newest, len(header), len(body or ""))
-            rendered.append(header + (cut(body, n) or "(no text)"))
+            body_len = len(body or "")
+            whole = base_for_newest + 1 + len(header) + body_len <= PR_READ_TOTAL_CHARS
+            # Reserve the newest's room first: its whole size when it fits, else a 1200 floor
+            # (+ header + marker). Older items fill newest-to-oldest at their real rendered size
+            # in what remains; then the newest gets everything left (newest_budget, marker exact).
+            reserve = (1 + len(header) + body_len if whole else
+                       1 + len(header) + PR_READ_ITEM_CHARS + len(f" …[{body_len} more chars]"))
             older = []
-            base_after_newest = base_for_newest + len(rendered[-1]) + 1
-            for ts, kind, body in reversed(shown[:-1]):
-                header = f"--- {ts[:16].replace('T', ' ')}Z {kind}\n"
-                rendered_body = cut(body, PR_READ_ITEM_CHARS) or "(no text)"
-                size = len(header) + len(rendered_body)
-                if base_after_newest + 1 + size > PR_READ_TOTAL_CHARS:
+            used = base_for_newest
+            for ts2, kind2, body2 in reversed(shown[:-1]):
+                h2 = f"--- {ts2[:16].replace('T', ' ')}Z {kind2}\n"
+                rb = cut(body2, PR_READ_ITEM_CHARS) or "(no text)"
+                if used + 1 + len(h2) + len(rb) + reserve > PR_READ_TOTAL_CHARS:
                     break
-                older.append((header, rendered_body))
-                base_after_newest += size + 1
+                older.append((h2, rb))
+                used += len(h2) + len(rb) + 1
+            n = newest_budget(used, len(header), body_len)
+            rendered.append(header + (cut(body, n) or "(no text)"))
             rendered.extend(h + b for h, b in older)
         rendered.reverse()
         # The count line reports what was actually rendered, not what was asked for:
