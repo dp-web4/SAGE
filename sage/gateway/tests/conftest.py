@@ -49,6 +49,7 @@ def _no_systemd_and_no_live_pending_set(monkeypatch, tmp_path_factory):
     from sage.gateway import arousal, being_join
     monkeypatch.setattr(arousal, "PENDING_PATH", pend)
     _isolate_wake_marker(monkeypatch, tmp_path_factory, being_join)
+    _isolate_the_ear(monkeypatch, tmp_path_factory)
     real_run = subprocess.run
 
     def guarded(args, *a, **k):
@@ -68,3 +69,15 @@ def _isolate_wake_marker(monkeypatch, tmp_path_factory, being_join):
                         lambda d, s, path=marker: real_write(d, s, path=path))
     monkeypatch.setattr(being_join, "consume_wake_marker",
                         lambda path=marker, **k: real_consume(path=path, **k))
+
+
+def _isolate_the_ear(monkeypatch, tmp_path_factory):
+    """Every path the ear writes, routed to a temp body dir. Measured on Sprout 2026-10-09: a full-suite run built a real
+    audio.Hearing(), whose start-up mark() wrote mode "" into the LIVE ~/.sprout/listen.json, and the cortex (run with
+    SAGE_LISTEN=wake) silently stopped listening for its name until the file was put back. speak() marks it too."""
+    from sage.embodiment import listening
+    body = tmp_path_factory.mktemp("body")
+    for attr, name in (("LISTEN_PATH", "listen.json"), ("HEARD_PATH", "heard.jsonl"), ("EAR_LOG", "ear.jsonl"),
+                       ("UNHEARD_PATH", "unheard.jsonl"), ("CHIME_PATH", "chime.wav")):
+        monkeypatch.setattr(listening, attr, str(body / name))
+    monkeypatch.setattr(listening, "BODY_DIR", str(body))
