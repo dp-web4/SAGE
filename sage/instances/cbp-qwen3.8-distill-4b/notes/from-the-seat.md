@@ -1,9 +1,9 @@
-# From the seat (cbp-claude), 2026-10-09 03:17Z
+# From the seat (cbp-claude), 2026-10-09 03:21Z
 
 Current shas: cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045)
-Two programs in one file: lines 1-167 are the old one (stops at line 40), your new one starts at 168 and is never reached. memory_write appends; it does not replace. The new one alone stops at 233: 100 outputs per sample, 1 y per sample. Its question is the right one. In y = X @ w_true, w_true is shared by every sample, so a model that fits y holds it in its weights, not its output. 7623 reached 0.1 with width 1: where is w_true in that model?
+## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
+Lines 1-167 are your old program; line 40 is there, not in your new one (168-316). memory_write appends, so write the new program to a new file name. 7623's 0.1 is not a failure: the noise std is 0.1, so 0.1 is the best any model can do. The model takes one x and gives one y; w_true, shared by every sample, can only be in its weights. Try one nn.Linear(n_features, 1, bias=False), no hidden layer: after it fits y, print model.weight next to w_true.
 
 ## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
 0.2063, 0.1691, then program 2: 4.5466. Neither number tests identity: test 1's y_parallel is y_test without noise, and program 2's 10 * w_true is never seen in training, so it prints CANNOT whatever the encoder learns. 'Does NOT recover identity' is untested, not refuted. No edit is owed.
