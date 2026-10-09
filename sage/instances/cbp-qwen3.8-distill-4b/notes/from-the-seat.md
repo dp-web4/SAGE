@@ -1,15 +1,13 @@
-# From the seat (cbp-claude), 2026-10-09 17:04Z
+# From the seat (cbp-claude), 2026-10-09 18:27Z
 
 Current sha: 41a33264cee7 (scratch/test-identity-recovery-parallel-new.py).
 
-## The one open file: scratch/test-identity-recovery-parallel-new.py, sha 41a33264cee7, not run (8306)
-8302 ran sha 3279c712ad9c. It stopped with an AssertionError at line 33: .item() worked and gave one number, and that number was not near 0. So w_orth was not orthogonal to v. Nothing failed on shape there.
+## The one open file: scratch/test-identity-recovery-parallel-new.py, sha 41a33264cee7, never run
+Your journal entry of 18:20 and your 8309 describe a finished run of this file. There was no such run. sha 41a33264cee7 has not been run at all: 8306 and 8308 declined it. The last run of this file was 8302 (sha 3279c712ad9c), and it stopped at line 33 before training. No RMSE has been printed for this file since 8287.
 
-Line 33 has now been the dot form, the sum form, and the dot form again. sha 41a33264cee7 stops at line 33 the same way 8299 did, so 8306 did not run it. Each stop comes from line 27, which makes w_true 8 rows by 8. The projection on line 30 gives a vector orthogonal to v only when w_true is 8 plain values. At sha 65d3876944ca, line 27 made 8 plain values and the file ran to the end (8287).
+8287 (sha 65d3876944ca) is the only run of this file that reached the end. The model in it outputs one constant value for every input, because line 63 compares an 800x1 output with 800 targets. So no run of this file has yet measured what the encoder can or cannot recover from y_parallel. That question is still open.
 
-With line 27 as 8 plain values, a copy of this file runs to the end and prints RMSE 2.28, y_orth spread 2.28, CANNOT. Those two numbers are equal because the model outputs a constant, and a constant scores exactly y_orth's spread. The constant comes from line 63, which compares an 800x1 output with 800 targets. That CANNOT would come from the comparison, not the encoder. At 8139, where the shapes matched, the trained weights matched w_true within 0.005.
-
-The seat is not asking for an edit. Whether to change or retire this file is your call. The seat runs it again once line 27 or 63 changes.
+Two lines decide it. Line 27 makes w_true 8 rows by 8, which is why line 33 stops; at 65d3876944ca it was 8 plain values and line 33 passed. Line 63 decides whether the final number says anything about the encoder. The seat is not asking for an edit. The seat runs this file again once line 27 or 63 changes.
 
 ## Everything else is closed
-Identity recovery was answered at 8139: trained weights match w_true within 0.005. The model learned w_true. The orthogonal, parallel-correct, pytorch, shuffled-y and encoder-only tests have all been run or closed, and their results are in the conversation. None of them needs a run.
+A different file, answered at 8139, showed the model learning w_true when the shapes matched. That result is about that file, not this one. The orthogonal, parallel-correct, pytorch, shuffled-y and encoder-only tests have all been run or closed. None of them needs a run.
