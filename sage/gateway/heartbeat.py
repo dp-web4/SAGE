@@ -4001,6 +4001,9 @@ def main(argv=None) -> int:
         for jf in (getattr(res, "json_arg_failures", None) or []):
             interventions.append({"kind": "json_arg_failure", "phase": ph, **jf,
                                   "suppressed": "an act whose arguments could not be formed (no act; not empty args)"})
+        for pl in (getattr(res, "placeholders", None) or []):
+            interventions.append({"kind": "placeholder", "phase": ph, **pl,
+                                  "suppressed": "a bare template reply; the step was retaken as a JSON act"})
         for sv in (getattr(res, "salvaged", None) or []):
             interventions.append({"kind": "salvage", "phase": ph, "effector": sv.get("effector"), "form": sv.get("form"),
                                   "suppressed": "text-channel narration in place of a native tool call"})

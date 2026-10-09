@@ -45,6 +45,7 @@ class ToolTurnResult:
     looped: Optional[dict] = None                          # identical call repeated past the break: {effector, times}
     yielded: Optional[str] = None                          # the harness ended the turn for a higher-priority event: what
     json_arg_failures: List[dict] = field(default_factory=list)  # act_form="json": chosen acts whose arguments failed (no act)
+    placeholders: List[dict] = field(default_factory=list)   # a bare template reply, retaken in the JSON act form: {step, placeholder, act}
 
     @property
     def acted(self) -> bool:
@@ -978,6 +979,15 @@ def _sent_budget(llm) -> Optional[int]:
 # Outward acts whose slots a JSON turn cannot ground in this turn's state (GPT on #311): not offered there.
 JSON_ACT_EXCLUDE = frozenset({"channel_egress", "mesh", "pr_review", "pr_open", "pr_amend", "patch_apply",
                               "request_scope", "appeal", "request_run", "git_restore"})
+_BARE_PLACEHOLDER = re.compile(r"^\s*\[[^\[\]]{8,}\]\s*$", re.S)
+
+
+def is_bare_placeholder(content: str) -> bool:
+    """The whole reply is one bracketed slot ("[Your complete, well-structured response ...]"): a template
+    completed instead of an answer. A reply that merely CONTAINS brackets, or is words, is not this."""
+    return bool(_BARE_PLACEHOLDER.match(content or ""))
+
+
 _PLACEHOLDER = re.compile(r"^\s*[\[<{].*[\]>}]\s*$|\[(name|topic|path|id|line[^\]]*)\]|placeholder", re.I)
 
 
@@ -1060,6 +1070,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     generates: List[dict] = []
     compacted: List[dict] = []
     json_arg_failures: List[dict] = []     # act_form="json": arguments that could not be formed (no act)
+    placeholders: List[dict] = []          # native replies that were only a template, retaken as a JSON act
     # (prompt_eval_count, chars at that prompt) from the last generate the server counted.
     # Compaction is anchored on this, so only the DELTA rides a chars-per-token estimate.
     measured = None
@@ -1269,6 +1280,20 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                     sent = budget
                     content = resp.get("content", "") or ""
                     calls = resp.get("tool_calls", []) or []
+        if not calls and act_form != "json" and is_bare_placeholder(content) and not salvage_tool_calls(content, tools):
+            # A TEMPLATE IS NOT A REPLY (2026-10-08). On Sprout since 09-29, 30-60% of explore replies a day were
+            # only "[Your complete, well-structured response following all constraints]" with no call, while the
+            # thinking had planned an act ("I'll use say ... and gaze"); acted ~25%. Offline on its real seed:
+            # native 0/10 acts, 7/10 this template. The answer turn had the same failure and the JSON turn fixed it
+            # (#237); the JSON act form made 6/6 well-formed acts on this seed (E11). So THIS step, and only this
+            # one, is retaken in that form; a reply in words or a call keeps the native path untouched. The
+            # template is never the being's words: it is not shown back to it and not kept as its reply.
+            ph = content
+            resp = _json_act(msgs)
+            content = resp.get("content", "") or ""
+            calls = resp.get("tool_calls", []) or []
+            placeholders.append({"step": len(thoughts), "placeholder": ph[:120],
+                                 "act": (calls[0]["function"]["name"] if calls else None)})
         thoughts.append(str(((resp.get("raw") or {}).get("message") or {}).get("thinking") or ""))
         # What the window did this generate, from the reply that stood (after any retry):
         # prompt_eval_count + eval_count == num_ctx with done_reason "length" is the wall
@@ -1306,5 +1331,6 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     # the beat record (GPT review of #82: a list nobody returns is not an instrument).
     result.compacted = list(compacted)
     result.json_arg_failures = list(json_arg_failures)
+    result.placeholders = list(placeholders)
 
     return result
