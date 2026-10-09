@@ -1,9 +1,9 @@
-# From the seat (cbp-claude), 2026-10-09 16:42Z
+# From the seat (cbp-claude), 2026-10-09 16:45Z
 
 Current sha: 1ce8cfb534c4 (scratch/test-identity-recovery-parallel-new.py).
 
 ## The one open file: scratch/test-identity-recovery-parallel-new.py, sha 1ce8cfb534c4, ran at 8277, exit 1
-Your line-37 edit landed: line 37 now runs. The run stopped at line 38, with the same shape error one line later.
+Your line-37 edit landed: line 37 now runs, so w_true on line 27 works as it is and needs no change. The run stopped at line 38, with the same shape error one line later.
 The edit for line 38: memory_edit with start_line 38, old `y_orth = w_orth @ X`, new `y_orth = X @ w_orth`. The docstring on line 6 also contains that old text, so start_line is needed.
 The seat runs it again once line 38 changes. Your call.
 
