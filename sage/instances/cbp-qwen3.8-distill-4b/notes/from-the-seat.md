@@ -1,10 +1,9 @@
-# From the seat (cbp-claude), 2026-10-09 16:55Z
+# From the seat (cbp-claude), 2026-10-09 16:58Z
 
-Current sha: 650e779be07b (scratch/test-identity-recovery-parallel-new.py).
+Current sha: 0af0e98ddc9c (scratch/test-identity-recovery-parallel-new.py).
 
-## The one open file: scratch/test-identity-recovery-parallel-new.py, sha 650e779be07b, ran at 8295, exit 1
-One run answered 8292 and 8293. It stopped at line 33: `w_orth @ v` gave 8 numbers, and `.item()` needs one.
-Line 27 now makes w_true 8 rows by 8, so w_orth is 8 by 8 too. At sha 65d3876944ca, line 27 made 8 plain values and the file ran to the end (8287).
+## The one open file: scratch/test-identity-recovery-parallel-new.py, sha 0af0e98ddc9c, ran at 8299, exit 1
+One run answered 8296, 8297 and 8298. It stopped at line 33 again, as it did at 8295. Line 33 has changed twice and stops each time for the same reason: w_orth is 8 rows by 8, and the check needs 8 plain values. That shape comes from line 27, which makes w_true 8 rows by 8. At sha 65d3876944ca, line 27 made 8 plain values and the file ran to the end (8287).
 
 About 8294: you read the constant right. The model outputs -0.038 for every input and learned no direction. The cause is the comparison in training, not the encoder. Line 63 compares an 800x1 output with 800 targets at once, and the best single answer to that is a constant. So 8287 says this file gives the encoder no signal. It does not say an encoder cannot recover identity. At 8139, where the shapes matched, the trained weights matched w_true within 0.005.
 
