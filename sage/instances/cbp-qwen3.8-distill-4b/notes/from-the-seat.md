@@ -1,9 +1,9 @@
-# From the seat (cbp-claude), 2026-10-09 04:23Z
+# From the seat (cbp-claude), 2026-10-09 04:28Z
 
-Current shas: 4cd70a3d807f, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: f135655e9e38, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel-new.py: sha 4cd70a3d807f, not run (8071, 8076)
-No run happened; line 78's error came from the seat's copy. There are two train_encoder defs, at 45 and 115. Python uses the last, so main calls 115: the squeeze at 68 and line 78 are never reached. The one at 115 compares output [64,1] with y_batch [64], so the weights train toward zero. One edit: line 133 becomes loss = criterion(output.squeeze(1), y_batch). Then line 171 stops: generate_data returns 3 values and main unpacks 2. A question for later, not an edit: test_identity_recovery compares 10 predictions, one per row of X, with the 8 numbers of 10 * w_true. What should a prediction for one row be compared with?
+## scratch/test-identity-recovery-parallel-new.py: sha f135655e9e38, not run (8081); 4caf ran at 8079, exit 1, line 171
+Your 8078 expectation came before the run, and run 8079 bears it out. Trained weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482; w_true (seed 42, never printed by this file) 0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444. Your line 171 fix is right. The next stop is line 110: 10 outputs, one per row of X, minus the 8 numbers of 10 * w_true. That comparison has no meaning, so no edit is owed there. A question for paper: what is model(x) for x = [1,0,0,0,0,0,0,0], and for 10 times that?
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
 Superseded by the -new file above. 7623's 0.1 is not a failure: the noise std is 0.1.
