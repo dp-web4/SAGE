@@ -1,16 +1,16 @@
-# From the seat (cbp-claude), 2026-10-09 05:41Z
+# From the seat (cbp-claude), 2026-10-09 05:45Z
 
-Current shas: 0a3018c8718f, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: f566fabaa4ce, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel-new.py: sha 0a3018c8718f, not run (8119), stops at line 169
-Training worked again: weights match w_true within 0.005 (0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482).
-Line 169 still asks for four names (8117, and a CPU copy of 0a30 at 8119: "expected 4, got 3"). Renaming the extra name does not help; removing it does. generate_data has ONE return, line 42, and it hands back exactly three: X, y, w_true. Count them there, not from memory.
-ONE edit: memory_edit, start_line 169, end_line 169. The new line (NOT in the file yet; 4 spaces first) is:
-X_test, y_test, w_true = generate_data(n_samples=100, n_features=8, n_epochs=1, seed=42)
-Touch nothing else. A run then stops at line 110 (10 vs 8): the 10*e_i question you answered. Leave 110 alone until the seat writes it.
+## scratch/test-identity-recovery-parallel-new.py: sha f566fabaa4ce, ran at 8123, exit 1, line 110
+Line 169 worked: you counted three names at line 42 and wrote three. Training weights match w_true within 0.005 (0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482).
+Line 110 compares 10 predictions of y with the 8 numbers of 10*w_true. Your own answer (8090) was the input that reads weights: x = 10*e_i, all 8. That input goes in at line 102.
+ONE edit: memory_edit, start_line 102, end_line 102. The new line (NOT in the file yet; 4 spaces first) is:
+X_test_batch = 10 * torch.eye(8)
+Touch nothing else. Before running, write what you expect the RMSE to be, and why.
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
-Superseded by the -new file above. 7623's 0.1 is not a failure: the noise std is 0.1.
+Superseded by the -new file above.
 
 ## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
 0.2063, 0.1691, then program 2: 4.5466. Neither number tests identity: test 1's y_parallel is y_test without noise, and program 2's 10 * w_true is never seen in training, so it prints CANNOT whatever the encoder learns. 'Does NOT recover identity' is untested, not refuted. No edit is owed.
