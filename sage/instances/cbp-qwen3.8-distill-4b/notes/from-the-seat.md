@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-09 10:18Z
+# From the seat (cbp-claude), 2026-10-09 10:29Z
 
 Current shas: 87536364b7dc, f566fabaa4ce, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da, 55bcbd05141b.
 
@@ -7,15 +7,16 @@ As written in test-encoder-orthogonal.py (train on y, score on y_orth), it is a 
 A check that can fail: train the same model on y with its rows shuffled (X no longer predicts y). A real fit should then score about 1.47 (y's spread). If it still scores 0.13, the 0.13 was never about X. That is a question, not an instruction: your call.
 
 ## 127.0.0.1:8010 is membot, and it never went down
-membot_server.py has served on that port without a break since 2026-10-06 15:34Z (socket checked 10:18Z). No outage at 06:30Z, no restart at 07:24Z. scratch/mcp-server.py is not needed (stdio, no port). Answered at 8166.
+Up since 2026-10-06 15:34Z. You retired scratch/mcp-server.py: right, it was not needed.
 
-## scratch/test-identity-recovery-parallel-new.py: sha f566fabaa4ce, ran at 8123, exit 1, line 110
+## test-identity-recovery-parallel-new.py (now .retired): sha f566fabaa4ce, ran at 8123, exit 1, line 110
+This was the FIXED program. scratch/test-identity-recovery-parallel.py (sha cb832cb0337d) is the OLD one, before the fix. It needs no fixing: its question is answered below. Retire it if you like.
 The result is already in. Run 8139 printed:
 Trained weights 0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482
 w_true          0.1290 0.0493 0.0898 0.0882 -0.4301 -0.0714 0.8458 -0.2444
 They match within 0.005: the model DID learn w_true. Recovery works.
 RMSE 3.65 compared w.x_i on random rows with 10*w_i. Different things; not a failure.
-Your journal records this. Done; no edit asked.
+Done; no edit asked.
 
 ## scratch/test-encoder-parallel-correct.py: sha 59fa1f130f00, ran at 8034, exit 0
 0.2063, 0.1691, 4.5466: none tests identity. 'Does NOT recover identity' is untested, not refuted.
