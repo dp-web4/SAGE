@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -202,9 +203,44 @@ def test_mesh_missing_pointer_is_hestia_keyed_error():
 
 
 def test_daemon_error_envelope_becomes_hestia_keyed_error():
-    d, _ = _disp(local_members={"sprout-being"})
-    env = d(BeingIntent("mesh", {"to": "sprout-being", "kind": "reply", "pointer": "p"}), _ALLOW)
-    assert not env.ok and env.error.startswith("hestia.member_notify_self")
+    # (was a mesh to the being itself; that is now refused by the seat before the daemon, below)
+    d, _ = _disp()
+    FakeMcp.fail = {"hestia_member_notify": "forced"}
+    try:
+        env = d(BeingIntent("mesh", {"to": "legion", "kind": "reply", "pointer": "p"}), _ALLOW)
+    finally:
+        FakeMcp.fail = {}
+    assert not env.ok and env.error.startswith("hestia.test_forced")
+
+
+@pytest.mark.parametrize("verb,args", [
+    ("peer_ask", {"to": "sprout-being", "body": "what you said about the car"}),
+    ("peer_ask", {"to": "Sprout-Being/claude-code", "body": "hi"}),
+    ("mesh", {"to": "sprout-being", "kind": "coordination", "pointer": "p"}),
+])
+def test_an_ask_to_itself_is_refused_before_anything_is_published_or_queued(verb, args):
+    """Sprout 2026-10-08: two peer_asks to="sprout-being" were published to the fleet forum and queued to the hub
+    as a REMOTE peer ("sprout-being/claude-code"), which the daemon's own self check (bare plugin id) does not see."""
+    published = []
+    d, _ = _disp(publish_fn=lambda to, body: published.append(to) or "shared-context/forum/q.md")
+    env = d(BeingIntent(verb, dict(args)), _ALLOW)
+    assert not env.ok and "is you" in env.error, env
+    assert "memory_write" in env.error, "a way forward, not only a refusal"
+    assert published == [] and not any(n == "hestia_member_notify" for n, _ in FakeMcp.calls)
+
+
+def test_the_self_refusal_names_the_conversations_say_reaches():
+    from sage.gateway import conversations as conv
+    d, root = _disp(publish_fn=lambda to, body: "p")
+    conv.create(Path(root), "room", title="the room", participants=["sprout-being", "voice"],
+                writable_by=["sprout-being", "voice"])
+    env = d(BeingIntent("peer_ask", {"to": "sprout-being", "body": "hi"}), _ALLOW)
+    assert "say" in env.error and "room" in env.error, env.error
+
+
+def test_another_being_is_not_refused_as_self():
+    d, _ = _disp(publish_fn=lambda to, body: "shared-context/forum/q.md")
+    assert d(BeingIntent("peer_ask", {"to": "legion", "body": "hi"}), _ALLOW).ok
 
 
 def test_session_is_connected_once_and_reused():
@@ -1716,7 +1752,7 @@ def test_an_answered_unchanged_request_wakes_nobody_where_the_instance_opts_in()
     assert "unchanged" in r.result and "--- seq" in r.result["unchanged"], "the answer is carried"
     assert not _notifies(), "an already-answered unchanged request must not wake the seat"
     assert "NOT woken" in r.result["note"] and "woken." not in r.result["note"].split("NOT")[0]
-    assert "rerun=true" in r.result["note"]
+    assert "rerun set to 'true'" in r.result["note"] and "not a line in your file" in r.result["note"]
     last = conv.recent(home, "seat", limit=1)[-1]["text"]
     assert last.startswith("[request_run] notes/train.py") and "UNCHANGED since" in last, \
         "the request is still sent and recorded"
@@ -1725,6 +1761,21 @@ def test_an_answered_unchanged_request_wakes_nobody_where_the_instance_opts_in()
     r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "force", "rerun": "true"}), _ALLOW)
     assert r.ok and len(_notifies()) == 1, "rerun=true must still wake the seat"
     assert "asked and woken" in r.result["note"]
+
+
+def test_rerun_is_a_listed_argument_and_false_is_not_a_rerun():
+    """Measured 2026-10-08 04:03Z: the receipt named rerun=true, the spec did not list it, and
+    cbp-being wrote `main(rerun=True)` into its script. The spec lists it now, so a being may
+    also pass rerun="false" -- which must not count as a rerun and wake the seat."""
+    from sage.gateway.being_gate_client import ollama_tools
+    spec = [t for t in ollama_tools() if t["function"]["name"] == "request_run"][0]
+    assert "rerun" in spec["function"]["parameters"]["properties"]
+    assert spec["function"]["parameters"]["required"] == ["path"]
+    d, home = _seat_conv_with_answered_request({"answered_run_wake": "skip"})
+    FakeMcp.calls.clear()
+    r = d(BeingIntent("request_run", {"path": "notes/train.py", "why": "again", "rerun": "false"}), _ALLOW)
+    assert r.ok and not _notifies(), "rerun=false is the default, not a request to rerun"
+    assert "unchanged" in r.result
 
 
 def test_an_answered_unchanged_request_still_wakes_by_default():

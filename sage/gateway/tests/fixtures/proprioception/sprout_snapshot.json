@@ -1,0 +1,104 @@
+{
+ "schema": "sage.body/1",
+ "sampled_at": 1791350201.973,
+ "host": "sprout",
+ "platform": {
+  "os": "linux",
+  "kind": "jetson",
+  "detail": "NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super"
+ },
+ "memory_topology": "unified",
+ "memory_topology_why": "the GPU and CPU share one memory pool",
+ "gpus": [
+  {
+   "vendor": "nvidia",
+   "name": "Orin (nvgpu)",
+   "topology": "unified",
+   "utilization_pct": {
+    "value": 10.3,
+    "source": "/sys/devices/platform/gpu.0/load"
+   },
+   "memory_used_bytes": {
+    "value": null,
+    "unavailable": "unified memory: the GPU has no separate pool (see memory)"
+   },
+   "memory_total_bytes": {
+    "value": null,
+    "unavailable": "unified memory: the GPU has no separate pool (see memory)"
+   },
+   "temperature_c": {
+    "value": 59.4,
+    "source": "thermal_zone gpu-thermal"
+   },
+   "shared_memory_used_bytes": {
+    "value": null,
+    "unavailable": "the GPU's share of the unified pool needs root (nvmap debugfs)"
+   }
+  }
+ ],
+ "cpu": {
+  "cores": 6,
+  "model": null,
+  "utilization_pct": {
+   "value": 40.5,
+   "source": "/proc/stat over 0.5 s"
+  },
+  "load_1m": {
+   "value": 2.31,
+   "source": "getloadavg"
+  },
+  "load_5m": {
+   "value": 6.36,
+   "source": "getloadavg"
+  },
+  "temperature_c": {
+   "value": 60.5,
+   "source": "thermal_zone cpu-thermal"
+  }
+ },
+ "memory": {
+  "pool": "unified",
+  "scope": "machine",
+  "total_bytes": {
+   "value": 7912361984,
+   "source": "/proc/meminfo MemTotal"
+  },
+  "used_bytes": {
+   "value": 4335026176,
+   "source": "/proc/meminfo MemTotal-MemAvailable"
+  },
+  "swap_used_bytes": {
+   "value": 4368039936,
+   "source": "/proc/meminfo"
+  },
+  "swap_total_bytes": {
+   "value": 10737410048,
+   "source": "/proc/meminfo"
+  }
+ },
+ "disks": [
+  {
+   "labels": [
+    "sage",
+    "models"
+   ],
+   "path": "/home/dp/ai-workspace/SAGE",
+   "mount": "/",
+   "total_bytes": {
+    "value": 981772816384,
+    "source": "statvfs"
+   },
+   "free_bytes": {
+    "value": 771168800768,
+    "source": "statvfs"
+   },
+   "used_pct": {
+    "value": 17.2,
+    "source": "statvfs"
+   }
+  }
+ ],
+ "sample_ms": 558.6,
+ "cpu_window_ms": 500,
+ "line": "GPU 10% \u00b7 59\u00b0C | CPU 40% \u00b7 60\u00b0C \u00b7 RAM 4.0/7.4 GiB (one pool, GPU included) | disk 17% (718 GiB free) | memory: unified"
+}
