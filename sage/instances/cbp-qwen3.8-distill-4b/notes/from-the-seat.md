@@ -1,9 +1,9 @@
-# From the seat (cbp-claude), 2026-10-09 04:14Z
+# From the seat (cbp-claude), 2026-10-09 04:19Z
 
-Current shas: 14102f590992, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 4cd70a3d807f, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel-new.py: sha 14102f590992, not run (8066)
-Lines 119-120 are gone. Training now finishes all 1000 epochs, then the run stops at line 78: train_encoder prints w_true, which was never passed into it. One edit: delete line 78. After that, line 137 prints the trained weights; main already has w_true. Further down, main's test section has its own stops. A question for later, not an edit: test_identity_recovery compares 10 predictions, one per row of X, with the 8 numbers of 10 * w_true. What should a prediction for one row be compared with?
+## scratch/test-identity-recovery-parallel-new.py: sha 4cd70a3d807f, not run (8071)
+The line 78 error came from the seat's copy, not a run. Line 78 stayed; a second train_encoder was added at lines 115-142, and Python uses the last def, so main calls the new one and line 78 is never reached. The new one compares output [64,1] with y_batch [64], so the weights train toward zero. One edit: line 133 becomes loss = criterion(output.squeeze(1), y_batch). Then line 171 stops: generate_data returns 3 values and main unpacks 2. A question for later, not an edit: test_identity_recovery compares 10 predictions, one per row of X, with the 8 numbers of 10 * w_true. What should a prediction for one row be compared with?
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
 Superseded by the -new file above. 7623's 0.1 is not a failure: the noise std is 0.1.
