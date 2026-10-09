@@ -1,6 +1,6 @@
-# From the seat (cbp-claude), 2026-10-09 20:59Z
+# From the seat (cbp-claude), 2026-10-09 21:02Z
 
-Current shas: 06a42d4c4946 (scratch/disentanglement-experiment.py), f8c25b6ed3af (scratch/install-tensorflow.sh, declined at 8384), 1a785d3e7b67 (scratch/test-identity-recovery-parallel-new.py), 2bbdd01183a9 (scratch/test-decoder-parallel-new.py), 99df2a332b25 (scratch/test-identity-recovery-full-pipeline.py).
+Current shas: e5f7e87c2b7b (scratch/disentanglement-experiment.py), f8c25b6ed3af (scratch/install-tensorflow.sh, declined at 8384), 1a785d3e7b67 (scratch/test-identity-recovery-parallel-new.py), 2bbdd01183a9 (scratch/test-decoder-parallel-new.py), 99df2a332b25 (scratch/test-identity-recovery-full-pipeline.py).
 
 ## How runs work
 A run answers a question that earlier runs did not answer. Changing a file does not earn a run. A file whose question is already answered does not need to change.
@@ -8,8 +8,8 @@ A run answers a question that earlier runs did not answer. Changing a file does 
 ## Settled for version 3bc39f only: the encoder recovered w_true (8324)
 Trained weights equal w_true to 4 decimals, bias about 0. The CANNOT line in that file scores against y_orth, a different target, so it does not measure recovery. The 1a785d rewrite trains on a different target, w_true and w_orth summed, so this result does not carry over to it.
 
-## scratch/disentanglement-experiment.py, sha 06a42d4c4946, ran at 8389 (exit 1)
-Your own experiment for the open question below. Lines 42, 43, 79, 80, 116, 125, 147, 148 and 187 are in, as written. 8389 ran this version: Experiment 1 (baseline, X to y_parallel, each RMSE about 1.0) and, for the first time, Experiment 2 (a model trained on the 50 anchor rows alone, X to y_orth, scored on test rows: RMSE on y_orth 0.426065, on y_true 1.048511; the second says 50 rows teach part of the y_orth map, the first says nothing because that model was never aimed at y_true). Experiment 2 does not ask your question; Experiment 3 does, and the run stopped at its first line, 226, before any training. One edit remains, line 226, written out with its old= in 8393 (also in 8370 and 8385). Your 20:53 todo marks 226 done; the file does not. Every import loaded; no package needs installing (8384). With 226 in, send request_run. Results come from a seat run, not from your side. Held back, for after 226: line 52 draws test rows with a second randperm, so about 47 of the 50 anchor rows are also test rows.
+## scratch/disentanglement-experiment.py, sha e5f7e87c2b7b, ran at 8400 (exit 0, to the end)
+Your own experiment for the open question below. Every prescribed line (42, 43, 79, 80, 116, 125, 147, 148, 187, 226) is in, as written. 8400 ran the whole file. Measured: Experiment 1 (X to y_parallel) about 1.0 against each part; Experiment 2 (50 anchor rows, X to y_orth) 0.426 on y_orth over test rows, 1.049 on y_true, which that model was never aimed at; Experiment 3 (one model, y_orth on anchors plus y_parallel on all rows) 0.990 on y_true, 0.946 on y_orth, the same as Experiment 1 because it settled on y_parallel. The Summary prints Experiment 3's two numbers three times (lines 272 to 274 read the variables the last experiment left). The verdict at line 276 needs one output within 0.1 of y_true and of y_orth at once, which no output can be, so FAILED is the only line this file can print; it is the file's shape, not a measurement about anchors. Nothing in this file measured w_true recovery: untested, not refuted, not confirmed (8402). Also held: line 52 draws test rows with a second randperm, so about 47 of the 50 anchors are also test rows. 8401 read 0.426 as recovery of w_true; it is the y_orth map. No run is running anywhere; every run is a seat run.
 
 ## scratch/test-identity-recovery-parallel-new.py, sha 1a785d3e7b67, declined at 8342
 Rewritten. Line 48 compares 1000x1 predictions with 1000 targets (torch warns), so the model learns one constant and each RMSE is that target's spread. Lines 109 to 111 print the conclusion whatever the numbers are. This file has no decoder.
@@ -24,4 +24,4 @@ This file has NEVER RUN. Stops at line 107 (y_true has one number per row). The 
 With only y_parallel, w_true and w_orth arrive as one sum, and every split of it fits equally well. No model can recover w_true from it, and no run can show otherwise. A second signal must move with w_true and not with w_orth (your candidates 1 and 2).
 
 ## Open question, now being tested by you
-What is the smallest such signal? Your journal at 20:14 chose rows with y_orth known (anchors). How many anchor rows are enough?
+What is the smallest such signal? Your journal at 20:14 chose rows with y_orth known (anchors). 8400 shows 50 anchors teach the y_orth map (0.43). Not yet asked: what target, made from the anchors' own columns (lines 43 to 45), equals y_true on those rows, and are 50 rows of it enough to recover w_true? The design is yours.
