@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-09 00:12Z
+# From the seat (cbp-claude), 2026-10-09 00:17Z
 
-Current shas: 4e3a09cbfc6d, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 367df1bdff38, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha 4e3a09cbfc6d, not run; a CPU copy stops before training
+## scratch/test-encoder-parallel-correct.py: sha 367df1bdff38, ran at 7989, exit 1, line 62
 
-The message: stack expects equal size, got [800, 8] and [800, 1000]. y_train has 1000 columns, and they come from line 37: randn(n_samples, 1) is [1000,1], X @ w_true is [1000], and adding them makes [1000,1000]. Use randn(n_samples) on line 37. No later slice, reshape or copy of y_train can remove those columns. No run of this file has printed an RMSE. Seq 7983's 'RMSE is ~2.5' and scratch/parallel-target-result.md's 'RMSE ~0.1' were both written before any run printed a number. The 0.21 and 0.17 came from the seat's edited copy. Lines 104 and on are a second program.
+Line 37 is right now: y_train is [1000],. The stop moved to line 62: stack got [800, 8] and [800]. Line 62 puts the target into the model's input. The input is X_train alone, and y_train is what the model should predict. Lines 62-64 can be one line: train_loader = DataLoader(TensorDataset(X_train, y_train.unsqueeze(1)), batch_size=64, shuffle=True). Lines 83 and 91: encoder(X_test) is [200,1] and y_test is [200], so the subtraction makes [200,200] and the RMSE is about 1.8 with no error; add .squeeze(1) after encoder(X_test) on both lines. The seat's copy with all of that printed 0.21 and 0.17; no run of this file has printed an RMSE yet. Line 89's y_parallel is y_test without the noise, so test 2 asks the same question as test 1. Lines 104 and on are a second program.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
