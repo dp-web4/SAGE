@@ -240,8 +240,10 @@ def cmd_list(args) -> None:
 # on CBP 2026-09-21), not a boundary: code that opens the device another way is not stopped.
 # GPT on #148: "on the CPU" claimed an observation nobody made. A true CPU-only run needs an
 # execution boundary that denies device access (a cgroup/container), which this is not.
-WHERE_HIDDEN = ("with the GPU hidden from it (CUDA_VISIBLE_DEVICES was empty), "
-                "to keep the card for your own model")
+# "to keep the card for your own model" read as a reservation that ends: cbp-being logged a
+# .cuda() stop as "pending GPU, retry when available" (2026-10-09, seq 8156). Say it is the default.
+WHERE_HIDDEN = ("with the GPU hidden from it (CUDA_VISIBLE_DEVICES was empty), as every seat run "
+                "is by default, so code that asks for cuda stops there on every rerun")
 WHERE_GPU = "with the GPU visible to it"
 
 
