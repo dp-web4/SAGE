@@ -337,6 +337,88 @@ def test_a_refused_home_file_names_the_right_path_in_the_refusal_itself():
     assert "no grant is needed" not in e3.error
 
 
+def _grants_core():
+    """A fake core whose policy is the snapshot it is handed (as resolve_agent_policy reads the
+    vault), and whose scope resolvers read `path:` grants (recursive iff spelled `/**`)."""
+    def roots(scopes):
+        return [(s[5:-3] if s.endswith("/**") else s[5:], s.endswith("/**"))
+                for s in scopes if s.startswith("path:")]
+    return SimpleNamespace(
+        resolve_agent_policy=lambda prof, vault_reader=None: SimpleNamespace(
+            scope=list((vault_reader("member") or {}).get("scope", ()))),
+        _scope_roots_with_reach=lambda scopes, ws: roots(scopes),
+        _scope_parts=lambda scopes, ws: ((), tuple(r for r, _ in roots(scopes))),
+        NormalizedEvent=lambda **kw: SimpleNamespace(**{"paths": (), "command": None, **kw}))
+
+
+def test_single_gate_allow_carries_the_members_grants_to_the_dispatcher():
+    """legion-being 2026-10-06, first beats under the one gate: a memory_read of its own
+    worktree file was ALLOWED by the gate and then refused by the dispatcher "outside your
+    reach", because the single-gate verdict carried no granted roots (the legacy one did)."""
+    c, _ = _sg_client("allow")
+    snap = {"scope": ["path:/w/being-worktrees/x/**"]}
+    c._mech = SimpleNamespace(fetch_policy_snapshot=lambda member, host_agent=None: snap,
+                              query_society_safety=lambda raw: SimpleNamespace(decision="allow"))
+    c._core = _grants_core()
+    v = c.gate(WRITE)
+    assert v.decision == "allow" and v.stage == "single-gate", v
+    assert v.granted_reach == (("/w/being-worktrees/x", True),), v.granted_reach
+    assert v.granted == ("/w/being-worktrees/x",), v.granted
+    cw, _ = _sg_client("warn", "some.warn")
+    cw._mech, cw._core = c._mech, c._core
+    assert cw.gate(WRITE).granted == ("/w/being-worktrees/x",), "a warn proceeds, so it carries the grants too"
+
+
+def test_single_gate_deny_carries_no_grants_and_a_missing_snapshot_widens_nothing():
+    c, _ = _sg_client("deny", "mrh.path")
+    c._mech = SimpleNamespace(fetch_policy_snapshot=lambda *a, **k: {"scope": ["path:/w/**"]})
+    c._core = _grants_core()
+    v = c.gate(WRITE)
+    assert v.decision == "deny" and v.granted == () and v.granted_reach == (), v
+    c2, _ = _sg_client("allow")
+    c2._mech = SimpleNamespace(fetch_policy_snapshot=lambda *a, **k: None)
+    c2._core = _grants_core()
+    v = c2.gate(WRITE)
+    assert v.decision == "allow" and v.granted == () and v.granted_reach == (), v
+    c3, _ = _sg_client("allow")
+    def boom(*a, **k): raise RuntimeError("daemon down")
+    c3._mech = SimpleNamespace(fetch_policy_snapshot=boom)
+    c3._core = _grants_core()
+    v = c3.gate(WRITE)
+    assert v.decision == "allow" and v.granted == () and v.granted_reach == (), "a failed snapshot widens nothing"
+    c4, _ = _sg_client("allow")
+    c4._mech = None
+    assert c4.gate(READ).granted_reach == (), "no mechanism, no grants"
+
+
+def test_single_gate_allowed_read_of_a_granted_worktree_is_not_refused_by_the_real_dispatcher():
+    """End to end through the REAL dispatcher (HestiaF1aDispatcher -> ReferenceF1aDispatcher
+    confinement): the single gate allows a memory_read of a file in a granted worktree that is
+    OUTSIDE the being's home. Before the recut, the verdict carried no roots and the dispatcher
+    refused it "outside your reach"; now the read returns the file."""
+    import tempfile
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+    home = os.path.realpath(tempfile.mkdtemp(prefix="being-home-"))
+    wt = os.path.realpath(tempfile.mkdtemp(prefix="being-wt-"))
+    with open(os.path.join(wt, "README.md"), "w") as f:
+        f.write("worktree readme\n")
+    c, _ = _sg_client("allow")
+    c.memory_root = home
+    snap = {"scope": [f"path:{wt}/**"]}
+    c._mech = SimpleNamespace(fetch_policy_snapshot=lambda *a, **k: snap)
+    c._core = _grants_core()
+    c._dispatcher = HestiaF1aDispatcher(plugin_id="test-being", memory_root=home,
+                                        mcp_factory=lambda *a, **k: None)
+    env = c.dispatch(BeingIntent("memory_read", {"path": os.path.join(wt, "README.md")}))
+    assert env.verdict.stage == "single-gate" and env.verdict.decision == "allow", env.verdict
+    assert env.ok, env.error
+    assert "worktree readme" in str(env.result), env.result
+    # control: the same allow with no grant in the snapshot is still confined to the home
+    c._mech = SimpleNamespace(fetch_policy_snapshot=lambda *a, **k: {"scope": []})
+    env = c.dispatch(BeingIntent("memory_read", {"path": os.path.join(wt, "README.md")}))
+    assert not env.ok and "reach" in (env.error or ""), env
+
+
 if __name__ == "__main__":
     n = 0
     for name, fn in sorted(globals().items()):
