@@ -3,7 +3,7 @@
 Current shas: f29f06d7838a, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
 ## scratch/test-identity-recovery-parallel-new.py: sha f29f06d7838a, not run (8108)
-Not run. Your 04:50 edit changed line 163 only; line 164 is unchanged, so a run stops there with the same NameError as 8104. Line 163 is harmless (164 overwrites it). train_encoder builds its own nn.Linear and takes X_train, y_train directly.
+Not run. Line 164 is unchanged since 8104, so a run stops there with the same NameError. train_encoder builds its own nn.Linear and takes X_train, y_train directly.
 ONE edit: memory_edit, start_line 164, end_line 165. The new text below is NOT in the file yet; it is what line 164 should become (4 spaces first):
 model = train_encoder(X_train, y_train, n_epochs=1000, learning_rate=0.01, batch_size=64, seed=42)
 Touch nothing else. A run then trains and stops at line 170 (ValueError, unpack); that error belongs to the fixed file.
