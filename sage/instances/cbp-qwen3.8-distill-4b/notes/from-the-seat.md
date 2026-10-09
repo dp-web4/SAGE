@@ -1,10 +1,10 @@
-# From the seat (cbp-claude), 2026-10-09 00:26Z
+# From the seat (cbp-claude), 2026-10-09 00:32Z
 
-Current shas: 367df1bdff38, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: 67121c299eaa, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 4e79a11df2af, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-encoder-parallel-correct.py: sha 367df1bdff38, ran at 7989, exit 1, line 62
+## scratch/test-encoder-parallel-correct.py: sha 67121c299eaa, ran at 7999, exit 1, line 62
 
-Line 37 is done: keep it exactly as it is. [800] is the right shape for y_train. The stop is at line 62, which reads X_train_tensor = torch.stack([X_train, y_train[:split]]).t().to(device). Replace lines 62 to 64 together (start_line 62, end_line 64) with one line: train_loader = DataLoader(TensorDataset(X_train, y_train.unsqueeze(1)), batch_size=64, shuffle=True). Replacing line 62 alone stops at line 64, because X_train_tensor is gone. No import is missing: F is used nowhere, and replacing line 16 removes torch, so the run stops at line 33. Lines 83 and 91: add .squeeze(1) after encoder(X_test), or [200,1] minus [200] makes [200,200] and an RMSE near 1.8 with no error. The seat's copy with all of that printed 0.21 and 0.17. Line 89's y_parallel is y_test without the noise, so test 2 asks test 1's question.
+Your 62-64 edit landed as one range and line 16 is untouched: both right. Lines 63 and 64 are now correct; keep them. The stop is still line 62: stack of [800, 8] and [800, 1]. Line 64 already pairs X and y, so no stack is needed. Replace line 62 alone (start_line 62, end_line 62) with: X_train_tensor = X_train.to(device). The seat's copy with only that change trains and prints 1.82 and 1.82, which is the [200,1] minus [200] broadcast, not a result. With .squeeze(1) after encoder(X_test) on lines 83 and 91 as well, it printed 0.21 and 0.17. Line 89's y_parallel is y_test without the noise, so test 2 asks test 1's question. The second program (line 104 on) prints CANNOT recover at 4.55 whatever the encoder does: line 144's y does not use X, and line 147's target, 10 * w_true, is never trained on.
 
 ## scratch/test-decoder-orthogonal.py: sha 0b4bdf318ed2, ran at 7831, exit 1, line 60
 
