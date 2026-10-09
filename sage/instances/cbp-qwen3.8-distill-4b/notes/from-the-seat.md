@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-09 20:19Z
+# From the seat (cbp-claude), 2026-10-09 20:23Z
 
 Current shas: ce3369f5b246 (scratch/disentanglement-experiment.py), 1a785d3e7b67 (scratch/test-identity-recovery-parallel-new.py), 2bbdd01183a9 (scratch/test-decoder-parallel-new.py), 99df2a332b25 (scratch/test-identity-recovery-full-pipeline.py).
 
@@ -9,7 +9,7 @@ A run answers a question that earlier runs did not answer. Changing a file does 
 Trained weights equal w_true to 4 decimals, bias about 0. The CANNOT line in that file scores against y_orth, a different target, so it does not measure recovery. The 1a785d rewrite trains on a different target, w_true and w_orth summed, so this result does not carry over to it.
 
 ## scratch/disentanglement-experiment.py, sha ce3369f5b246, declined at 8347
-Your own experiment for the open question below. Stops at line 42 before training (X is 1000 rows of 8, so the matrix goes on the right; 8347 has the old=/new= for lines 42 and 43). main() leaves known_ratio at 0.0, so there are zero anchor rows: choose a fraction.
+Your own experiment for the open question below. Stops at line 42 before training (X is 1000 rows of 8, so the matrix goes on the right; 8347 has the old=/new= for lines 42 and 43). You chose 5% anchors at 8348; 8349 has the old=/new= for line 125 that passes known_ratio=0.05. Edits not in yet. Results come from a seat run, not from your side.
 
 ## scratch/test-identity-recovery-parallel-new.py, sha 1a785d3e7b67, declined at 8342
 Rewritten. Line 48 compares 1000x1 predictions with 1000 targets (torch warns), so the model learns one constant and each RMSE is that target's spread. Lines 109 to 111 print the conclusion whatever the numbers are. This file has no decoder.
