@@ -946,13 +946,29 @@ class ReferenceF1aDispatcher:
             start = max(1, int(str(intent.args.get("start_line", 1)).strip() or 1))
         except ValueError:
             start = 1
+        # A ONE-LINE LOOK COST THE REST OF THE FILE. Measured 2026-10-09 20:38Z on cbp-being
+        # (beat heartbeat-65351614df15): the seat named four lines (79, 80, 187, 226) with
+        # their exact old=/new=. The being read each with start_line alone and got lines
+        # 79-283, 80-283, 187-283 and 226-283 of a 9,121-char file -- about 200 lines, four
+        # times, in a 16,384-token window -- and the seat's message holding the edits was
+        # evicted; the beat ended with three request_run re-asks and no edit. The elision
+        # marker in being_tool_loop.py had been saying "memory_read a narrow range" since
+        # 2026-09-13, and memory_edit has taken end_line since #160, but memory_read had no
+        # way to say where to stop. `end_line` (inclusive, as memory_edit counts it) is that
+        # way. The char cap still applies inside the range; with no end_line nothing changes.
+        try:
+            stop = int(str(intent.args.get("end_line", "")).strip() or 0)
+        except ValueError:
+            stop = 0
+        stop = max(stop, start) if stop else 0
         if start > len(lines):
             return ResultEnvelope(ok=True, result=(
                 f"[past the end: '{shown}' has {len(lines)} lines, so start_line={start} shows "
                 f"nothing. Read from start_line=1.]"),
                 witness_id=self._witness(f"memory_read {p.name} (past end)"))
         end, size = start - 1, 0
-        while end < len(lines) and size + len(lines[end]) <= self.max_read_chars:
+        limit = min(len(lines), stop) if stop else len(lines)
+        while end < limit and size + len(lines[end]) <= self.max_read_chars:
             size += len(lines[end]); end += 1
         if end == start - 1:          # one line longer than the whole window: show its head
             content, end = lines[end][: self.max_read_chars], end + 1
@@ -979,11 +995,18 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(ok=True, result=dated + content + whole_note,
                                   witness_id=self._witness(f"memory_read {p.name}"))
         head = dated + (f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else "")
-        tail = (f"\n[… truncated: this shows lines {start}-{end} of {len(lines)} "
-                f"({len(whole)} characters in all). Lines {end + 1}-{len(lines)} were NOT shown, so "
-                f"absence here is not evidence of absence in the file. To read on, call "
-                f"memory_read with path '{shown}' and start_line={end + 1}. …]"
-                if end < len(lines) else f"\n[end of file: line {len(lines)} is the last line.]")
+        if stop and end == stop and end < len(lines):
+            # Cut where the being asked, not where the window ran out: say so in those words,
+            # so a short result is not read as the file running out of lines.
+            tail = (f"\n[end of the range you asked for: lines {start}-{end} of {len(lines)}. "
+                    f"Lines {end + 1}-{len(lines)} were NOT shown. To read on, call memory_read "
+                    f"with path '{shown}' and start_line={end + 1}.]")
+        else:
+            tail = (f"\n[… truncated: this shows lines {start}-{end} of {len(lines)} "
+                    f"({len(whole)} characters in all). Lines {end + 1}-{len(lines)} were NOT shown, so "
+                    f"absence here is not evidence of absence in the file. To read on, call "
+                    f"memory_read with path '{shown}' and start_line={end + 1}. …]"
+                    if end < len(lines) else f"\n[end of file: line {len(lines)} is the last line.]")
         return ResultEnvelope(ok=True, result=head + content + tail + parse,
                               witness_id=self._witness(f"memory_read {p.name} (lines {start}-{end})"))
 

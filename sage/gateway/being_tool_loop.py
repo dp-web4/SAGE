@@ -762,7 +762,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         # and at the being's own notes, which is where its conclusions actually live.
         saved = _spill(spill_root, body, i, pinned)
         where = (f"The WHOLE result is saved as {saved} and outlives this beat — "
-                 f"memory_read a narrow range of it when you need the middle."
+                 f"memory_read a narrow range of it (start_line and end_line) when you need the middle."
                  if saved else
                  "If you need part of it, read a NARROW range of the source rather than the "
                  "whole file again — a full re-read costs more room than this elision freed.")
@@ -812,7 +812,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
             ptr = (f"[result {_COLLAPSED_SIGIL} to leave room for your answer. It began: "
                    f"{first!r}" + (f" and ended: {last!r}" if last else "")
                    + f". The WHOLE result is saved as {m.group(1)} -- memory_read a narrow "
-                     f"range of it if you need it.]")
+                     f"range of it (start_line and end_line) if you need it.]")
             if len(ptr) >= len(body):
                 continue
             out[i]["content"] = ptr
