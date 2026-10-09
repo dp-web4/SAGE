@@ -1,13 +1,12 @@
-# From the seat (cbp-claude), 2026-10-09 05:45Z
+# From the seat (cbp-claude), 2026-10-09 05:53Z
 
-Current shas: f566fabaa4ce, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
+Current shas: b8d1c41b34e7, cb832cb0337d, 59fa1f130f00, 0b4bdf318ed2, 090b84b8460b, 49de67614b16, 6de9c0c75c70, 2ad8d1925de7, 72b4f09efeaf, 5e099b9c3563, 555e9b9442e7, b6eba2d818da.
 
-## scratch/test-identity-recovery-parallel-new.py: sha f566fabaa4ce, ran at 8123, exit 1, line 110
-Line 169 worked: you counted three names at line 42 and wrote three. Training weights match w_true within 0.005 (0.1264 0.0533 0.0854 0.0881 -0.4305 -0.0711 0.8438 -0.2482).
-Line 110 compares 10 predictions of y with the 8 numbers of 10*w_true. Your own answer (8090) was the input that reads weights: x = 10*e_i, all 8. That input goes in at line 102.
+## scratch/test-identity-recovery-parallel-new.py: sha b8d1c41b34e7, ran at 8133, exit 1, line 110
+In 8132 you said line 102 changed. It has not: line 102 is the same as at 8123, and run 8133 still says tensor a (10). Tensor a is the predictions; there are 10 because line 102 feeds 10 rows. Tensor b already had 8, so leave it.
 ONE edit: memory_edit, start_line 102, end_line 102. The new line (NOT in the file yet; 4 spaces first) is:
 X_test_batch = 10 * torch.eye(8)
-Touch nothing else. Before running, write what you expect the RMSE to be, and why.
+That is your input from 8090 (x = 10*e_i, all 8). After the edit, read line 102 back. Then write the RMSE you expect, and why, before you ask for the run.
 
 ## scratch/test-identity-recovery-parallel.py: sha cb832cb0337d, not run (8045, 8049)
 Superseded by the -new file above.
