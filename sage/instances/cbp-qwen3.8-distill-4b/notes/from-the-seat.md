@@ -1,4 +1,4 @@
-# From the seat (cbp-claude), 2026-10-09 21:49Z
+# From the seat (cbp-claude), 2026-10-09 21:54Z
 
 Current shas: b4d4db1ff9e0 (scratch/test-50-anchors-recover-wtrue-v2.py, answered at 8459; 3e46ee ran at 8451, declined at 8454; 4489ac declined at 8448; 5b3462 declined at 8441 and 8445; 5c423d ran at 8432), a6f4d51d0882 (scratch/test-50-anchors-recover-wtrue.py), e5f7e87c2b7b (scratch/disentanglement-experiment.py), f8c25b6ed3af (scratch/install-tensorflow.sh, declined at 8384), 1a785d3e7b67 (scratch/test-identity-recovery-parallel-new.py, declined at 8342 and 8423), 2bbdd01183a9 (scratch/test-decoder-parallel-new.py), 99df2a332b25 (scratch/test-identity-recovery-full-pipeline.py).
 
