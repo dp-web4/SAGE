@@ -80,6 +80,9 @@ PARAMS: Dict[str, Param] = {p.name: p for p in (
     Param("floor_handoff_after", "int", 2, lo=1, hi=8,
           doc="steps at the window floor before the harness writes scratch/handoff.md for you "
               "and starts the next beat with an empty window"),
+    Param("established_note", "choice", "off", choices=("off", "on", "alternate"), self_tunable=False,
+          doc="the EGAI re-read trial (seat-run): whether your state points at notes/established.md "
+              "every beat (on), never (off), or on alternate beats (alternate)"),
     Param("answer_reserve", "int", 6144, lo=2048, hi=16384,
           doc="tokens compaction keeps free for your next reply, thinking included. More holds "
               "less of your earlier work in view and gives each reply more room before it hits the "

@@ -3794,6 +3794,14 @@ def main(argv=None) -> int:
             record_entrustment_seen(instance, entrusted)
     except Exception:
         pass
+    # EGAI re-read trial (2026-10-10, pre-registered in private-context/legion/egai/PREREG.md): on an
+    # ON beat the state carries a short pointer to the being's own established-facts note. A POINTER,
+    # not the content: the seed is this being's binding cost (measured 10-07/08), so the note is
+    # retrieved by the being when it wants it. The arm is recorded on the beat record either way.
+    _egai = egai_arm(instance, log)
+    if _egai["arm"] == "on":
+        state_block += "\n\n" + ESTABLISHED_POINTER.format(
+            exists="it exists" if (instance / ESTABLISHED_NOTE).exists() else "not written yet")
     _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + _template_guess
     blocks, fit_interventions = fit_to_window(
         num_ctx=_num_ctx, num_predict=_num_predict,
@@ -4360,6 +4368,7 @@ def main(argv=None) -> int:
     except Exception as _e:
         record["late_turns"] = {"error": f"{type(_e).__name__}: {_e}"}
     record["stay_awake"] = stay_awake_reason(explore, after, reflect, answer)
+    record["egai"] = _egai
     try:
         from sage.gateway import arousal as _arousal
         record["next_beat"] = _arousal.after_beat(stay_awake=record["stay_awake"])
@@ -4735,6 +4744,34 @@ def record_entrustment_seen(instance: Path, text: str, now: Optional[float] = No
             "sha": hashlib.sha256(text.encode()).hexdigest()[:16]}) + "\n")
     except OSError:
         pass
+
+
+ESTABLISHED_NOTE = "notes/established.md"
+ESTABLISHED_POINTER = (
+    "## What you have established (notes/established.md, yours; {exists})\n"
+    "Before you re-read a file you have read in recent beats, memory_read notes/established.md: what you "
+    "have already established (with the file and lines it came from), what is still OPEN (the competing "
+    "explanations), and the one probe that would tell them apart. When you settle something or open a "
+    "question, add it there in a line.")
+
+
+def egai_arm(instance: Path, log: Path) -> dict:
+    """The EGAI trial arm for this beat, from being_params `established_note` (off | on | alternate).
+    alternate = ON on even-numbered beats (by the count of lines already in heartbeats.jsonl), OFF on
+    odd: an ABAB design on one being, so drift over days hits both arms alike. Never raises."""
+    try:
+        from sage.gateway import being_params as _bp
+        mode = _bp.value(instance, "established_note", "off")
+    except Exception:
+        mode = "off"
+    if mode == "alternate":
+        try:
+            with open(log, "rb") as f:
+                n = sum(1 for _ in f)
+        except OSError:
+            n = 0
+        return {"mode": mode, "beat_index": n, "arm": "on" if n % 2 == 0 else "off"}
+    return {"mode": mode, "arm": "on" if mode == "on" else "off"}
 
 
 def entrustment(instance: Path) -> str:
