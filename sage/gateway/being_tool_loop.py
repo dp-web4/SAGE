@@ -482,6 +482,12 @@ def _est_tokens(chars_now: int, measured) -> float:
 # num_predict, which is a ceiling the model has never approached.
 _ANSWER_RESERVE = 6144
 
+# Room held back for the ANSWER on a retry of a turn that filled the window. Larger than the
+# ordinary reserve on purpose: the thing that did not fit is the thing being asked for again, so
+# the retry must have strictly MORE room than the attempt it replaces (the carrier's cut-call
+# retry has used this reserve since 2026-09-13; on main the window-cut length retry is its user).
+_RETRY_RESERVE = 8192
+
 
 # Compaction keeps this many chars of an elided tool result and reports exactly the rest.
 COMPACT_KEEP_CHARS = 400
@@ -673,6 +679,41 @@ def _convo_chars(msgs) -> int:
                + sum(len(json.dumps((tc.get("function") or {}).get("arguments") or {}))
                      for tc in (m.get("tool_calls") or ()))
                for m in msgs)
+
+
+def convo_composition(msgs: List[Dict[str, Any]]) -> Dict[str, int]:
+    """What the conversation is MADE OF after a compaction pass, in estimator chars (the same
+    _convo_chars every site uses). Instrumentation only: it changes nothing it measures.
+
+    2026-10-08: with the seed cut to ~15k tokens, legion-being's beats ran longer and then sat
+    on a compaction floor of ~26-27k tokens, where 13 of 15 retries were window cuts. Whether
+    that floor is pointers, stubs, its own trimmed calls or the seed decides the next remedy,
+    and nothing recorded it (measured once recorded: seed 52-55%, whole results 20-25%, stubs
+    5-10%, own calls 12-14%, pointers 0% -- which is what made answer_reserve the remedy).
+    seed = everything before the first assistant turn; results are split by what compaction
+    has done to them; notes = harness/user turns after the seed."""
+    out = {"seed": 0, "results_whole": 0, "results_stub": 0, "results_pointer": 0,
+           "own_turns": 0, "notes": 0, "n_results": 0, "n_pointers": 0, "n_stubs": 0}
+    first_asst = next((i for i, m in enumerate(msgs) if m.get("role") == "assistant"), len(msgs))
+    for i, m in enumerate(msgs):
+        c = _convo_chars([m])
+        role = m.get("role")
+        if i < first_asst:
+            out["seed"] += c
+        elif role == "assistant":
+            out["own_turns"] += c
+        elif role == "tool":
+            body = m.get("content") or ""
+            out["n_results"] += 1
+            if _COLLAPSED_SIGIL in body:
+                out["results_pointer"] += c; out["n_pointers"] += 1
+            elif _ELIDED_SIGIL in body:
+                out["results_stub"] += c; out["n_stubs"] += 1
+            else:
+                out["results_whole"] += c
+        else:
+            out["notes"] += c
+    return out
 
 
 def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
@@ -1105,6 +1146,19 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     a killed beat still leaves (the record itself is written at beat end).
     """
     from sage.gateway.being_gate_client import ollama_tools, parse_tool_calls
+    # THE ANSWER RESERVE IS PER BEING (being_params `answer_reserve`, 2026-10-08). It is what
+    # compaction leaves free for the next reply, and 6,144 is a p99 of ANSWERS. A thinking
+    # model deliberates first: legion-being's think budget is 8,000, so with the default its
+    # compaction target sat at 26,624 of 32,768 and any turn that thought past ~6k hit the wall
+    # (measured 10-08: the floor was 52-55% seed, 20-25% whole results, 0% pointers -- the
+    # plateau was the TARGET, not an irreducible floor). More reserve = less held, more room.
+    # On the carrier, 8,704 took legion-being's window retries from 4-13 a beat to 0.
+    try:
+        from sage.gateway import being_params as _bp
+        _root = getattr(client, "memory_root", None)
+        reserve = int(_bp.value(_root, "answer_reserve", _ANSWER_RESERVE)) if _root else _ANSWER_RESERVE
+    except Exception:
+        reserve = _ANSWER_RESERVE
     tools = tools if tools is not None else ollama_tools()
     # Keep the think block per generate: when a small model narrates instead of acting,
     # whether it decided not to call or failed to format the call is only visible here.
@@ -1216,12 +1270,13 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # 506 generates ended with prompt + eval == num_ctx exactly, and one beat lost its
         # closing words nine times in a day. Anchored on the server's own count from the
         # previous generate, so only the delta rides an estimate.
-        msgs, _elided = compact_convo(msgs, llm, measured=measured,
+        msgs, _elided = compact_convo(msgs, llm, reserve=reserve, measured=measured,
                                       spill_root=getattr(client, "memory_root", None),
                                       own_turns=compact_own_turns)
         if _elided:
             compacted.append({"step": len(thoughts), "elisions": len(_elided),
-                              "chars": sum(e["chars"] for e in _elided)})
+                              "chars": sum(e["chars"] for e in _elided),
+                              "after": convo_composition(msgs)})
         retried = 0
         retry_cause = None
         sent = _sent_budget(llm)          # the num_predict of the reply that stands
@@ -1286,6 +1341,9 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             if (raw.get("done_reason") == "length" or thought_only) and (
                     hasattr(llm, "max_response_tokens") or hasattr(llm, "num_predict_override")):
                 retry_cause = retry_cause_of(llm, raw)
+                # the server's count of what failed, against the list it counted (before any nudge)
+                _failed = ((int(raw["prompt_eval_count"]), _convo_chars(msgs))
+                           if raw.get("prompt_eval_count") else None)
                 if thought_only:
                     # NOT the same prompt again: the retry has to change something the model
                     # can see. Measured 2026-09-08, five beats running, an identical prompt
@@ -1321,9 +1379,28 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                         f"({raw.get('eval_count')} tokens) {_cut} "
                         f"{_where}Act now: one tool call. The "
                         f"deliberation belongs in journal.md, after the act.")})
+                # A WINDOW CUT IS RETRIED WITH ROOM, OR IT IS THE SAME CUT AGAIN (2026-10-08). This
+                # retry never compacted, so a turn that filled the window was re-sent as the same
+                # prompt (plus a nudge when it only thought). legion-being 09:52Z, on the carrier:
+                # 26,241 + 6,527 = 32,768, retried at "num_predict=8000" with ~6.4k actually left;
+                # thinking off, it wrote its #360 code into memory_write, the call was cut mid-JSON
+                # at the wall, llama-server returned 500, and that error became the beat's last reply
+                # (6 generates). So: compact against the server's own count of what failed, to leave
+                # the retry _RETRY_RESERVE, and size the retry from what is left after that.
+                # Output-budget and stopped-thinking retries are unchanged: the window had room.
+                _budget_raw = raw
+                if retry_cause == "window" and _failed:
+                    msgs, _re = compact_convo(msgs, llm, reserve=_RETRY_RESERVE, measured=_failed,
+                                              spill_root=getattr(client, "memory_root", None),
+                                              own_turns=compact_own_turns)
+                    if _re:
+                        compacted.append({"step": len(thoughts), "elisions": len(_re),
+                                          "chars": sum(e["chars"] for e in _re), "before_retry": True,
+                                          "after": convo_composition(msgs)})
+                    _budget_raw = dict(raw, prompt_eval_count=int(_est_tokens(_convo_chars(msgs), _failed)))
                 from contextlib import ExitStack
                 with ExitStack() as _stack:
-                    budget = _stack.enter_context(_retry_room(llm, _retry_budget(llm, raw)))
+                    budget = _stack.enter_context(_retry_room(llm, _retry_budget(llm, _budget_raw)))
                     unthought = bool(thought_only and _stack.enter_context(_no_think(llm)))
                     print(f"[tool-loop] retrying once with num_predict={budget}"
                           f"{' , thinking OFF and a nudge' if unthought else ''} "

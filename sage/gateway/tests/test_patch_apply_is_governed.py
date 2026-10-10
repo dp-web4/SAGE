@@ -674,6 +674,33 @@ def test_a_stale_diff_is_an_answer_about_the_tree():
               open(os.path.join(tmp, "f.py")).read(), "something else entirely\n")
 
 
+def test_a_miscounted_hunk_refusal_names_the_verb_that_needs_no_counts():
+    """legion-being 2026-10-08: six hand-written #360 patches in one beat, four refused for
+    miscounted hunk headers, each told only to "send a diff produced by git diff" -- which it
+    cannot do for an edit not yet made. The counts stay exact; the refusal names memory_edit.
+    Above TESTS, so the standalone runner runs it too."""
+    diff = ("diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n"
+            "@@ -1,3 +1,3 @@\n a\n-b\n+c\n")
+    try:
+        B.patch_targets(diff)
+    except ValueError as e:
+        msg = str(e)
+    else:
+        msg = ""
+    check("a miscounted hunk is refused", "ends inside a hunk" in msg)
+    check("the refusal names memory_edit and its line arguments",
+          "memory_edit" in msg and "start_line" in msg and "end_line" in msg)
+
+
+def test_a_patch_that_did_not_apply_names_memory_edit_too():
+    """The context-drift failure (git apply refused) gets the same pointer. A source pin: the
+    dispatcher arm needs the gate core, and this string is the whole change."""
+    with open(os.path.join(os.path.dirname(B.__file__), "hestia_dispatch.py")) as f:
+        src = f.read()
+    i = src.index("that patch did not apply")
+    check("the did-not-apply error names memory_edit", "memory_edit" in src[i:i + 600])
+
+
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
 
 
