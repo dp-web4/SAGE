@@ -3899,6 +3899,14 @@ def main(argv=None) -> int:
     # per instance (RESEARCH_GENERALIZATION_RULE): "brief" shortens available verbs' descriptions
     _tool_desc_mode = _toolset.tool_descriptions_mode(instance_config(instance))
     _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief")
+    # EXPECT TRIAL (2026-10-10; private-context legion/egai/PREREG-expect.md): `expect` on game is
+    # offered on ON beats only, so its effect can be compared; the arm is recorded on every beat.
+    _expect_arm = trial_arm(instance, instance / "heartbeats.jsonl", "expect_trial")
+    if _expect_arm["arm"] != "on":
+        for _sp in _explore_specs:
+            _fn = _sp.get("function") or {}
+            if _fn.get("name") == "game":
+                ((_fn.get("parameters") or {}).get("properties") or {}).pop("expect", None)
     # the names are DERIVED from the specs offered, never kept beside them: the seed's tool list
     # and the window's schema measurement must describe exactly what the model is handed
     _explore_tools = [t["function"]["name"] for t in _explore_specs]
@@ -4473,6 +4481,7 @@ def main(argv=None) -> int:
     except Exception as _e:
         record["late_turns"] = {"error": f"{type(_e).__name__}: {_e}"}
     record["stay_awake"] = stay_awake_reason(explore, after, reflect, answer)
+    record["expect_trial"] = _expect_arm
     try:
         from sage.gateway import arousal as _arousal
         record["next_beat"] = _arousal.after_beat(stay_awake=record["stay_awake"])
@@ -4681,6 +4690,24 @@ def body_line(model: str, instance, num_ctx=None, former_homes=None) -> str:
     return (f"Your body: model {model}.{ctx} Your home directory ({instance.name}) carries an "
             f"older name; it is YOURS, not another being's, and the model is the fact to "
             f"attribute findings to.")
+
+
+def trial_arm(instance: Path, log: Path, param: str) -> dict:
+    """A seat-run trial's arm for this beat from being_params `param` (off | on | alternate):
+    alternate = ON on even beat indices (lines already in heartbeats.jsonl). Never raises."""
+    try:
+        from sage.gateway import being_params as _bp
+        mode = _bp.value(instance, param, "off")
+    except Exception:
+        mode = "off"
+    if mode == "alternate":
+        try:
+            with open(log, "rb") as f:
+                n = sum(1 for _ in f)
+        except OSError:
+            n = 0
+        return {"mode": mode, "beat_index": n, "arm": "on" if n % 2 == 0 else "off"}
+    return {"mode": mode, "arm": "on" if mode == "on" else "off"}
 
 
 def harness_revision(workspace: str) -> dict:

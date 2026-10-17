@@ -1694,6 +1694,40 @@ def patch_apply_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
 # Where the profile is absent, SANDBOX_REQUIRED decides whether to refuse or degrade.
 
 
+GAME_SOURCE_MARKER = "environment_files/"
+GAME_SOURCE_CLOSED = (
+    "Refused for this trial, not by the law: the game engines' source (environment_files/) is "
+    "closed until the expect trial ends. dp's rationale: reality does not usually give you source, "
+    "and the skill being trained is discovering how a world works by acting in it and checking your "
+    "predictions. Your game probes, LOOKs and `expect` are all open; your own notes are yours. When "
+    "the trial ends, access is restored as before.")
+
+
+GAME_SOURCE_PATH_ARGS = ("path", "data", "paths", "file", "target", "rev_path")
+
+
+def trial_game_source_refusal(intent, memory_root) -> Optional[str]:
+    """The Phase B refusal text when `game_source` is closed and the act names game-engine source;
+    None otherwise. The `game` verb itself is never refused here: playing is the point."""
+    if intent.effector == "game" or not memory_root:
+        return None
+    try:
+        from sage.gateway import being_params as _bp
+        if _bp.value(memory_root, "game_source", "open") != "closed":
+            return None
+    except Exception:
+        return None
+    # PATHS ONLY, NEVER CONTENT (2026-10-11): the first version scanned every argument, so the
+    # being's own handoff note was refused for MENTIONING the closed path in its text, and it began
+    # rewording its notes to avoid the words -- the trial censoring the being's writing, which it
+    # promised not to do. Only arguments that name what an act TOUCHES are checked.
+    for k in GAME_SOURCE_PATH_ARGS:
+        v = (intent.args or {}).get(k)
+        if v is not None and GAME_SOURCE_MARKER in str(v):
+            return GAME_SOURCE_CLOSED
+    return None
+
+
 def tune_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
     """Every file `tune` writes, all in the being's home: the temp file, tuned.json, and the audit
     log (being_params.TUNE_WRITES). With no name it only reads, and touches nothing."""
@@ -2156,7 +2190,13 @@ _TOOL_SCHEMAS = {
              "Predict before you read.",
              {"probes": "list of probes, at most 8, e.g. [[\"ACTION6\",36,36],[\"LOOK\",30,30,45,45],[\"RESET\"]]",
               "game": ("optional: which game (default ft09). Yours to choose: " + ", ".join(GAME_PLAYABLE)
-                       + ". Each keeps its own move log; switching loses nothing.")},
+                       + ". Each keeps its own move log; switching loses nothing."),
+              "expect": ("optional: what you predict, checked against the result and reported back as "
+                         "confirmed / CONTRADICTED / unverifiable. A JSON list of: "
+                         '{"probe": 1, "changes": true} (that move changes the board), '
+                         '{"levels_completed": 2}, {"state": "WIN"}, '
+                         '{"cell": [x, y], "value": 5} (checked against a LOOK in this same batch). '
+                         "A contradiction is the most informative thing a probe can return.")},
              ["probes"]),
     "camera": ("Capture ONE frame from this machine's camera into your own scratch — no "
               "stream, nothing persists across beats. The seat runs ffmpeg against /dev/"
@@ -2595,6 +2635,13 @@ class BeingGateClient:
         # RAISES over a missing optional field would turn every act into an exception instead
         # of a decision -- the opposite of fail-closed, which is to DENY with a reason.
         judged_command = None
+        # A SEAT-RUN TRIAL CONDITION, not law (expect trial Phase B, private-context
+        # legion/egai/PREREG-expect.md). When being_params `game_source` is "closed", any act whose
+        # arguments name the offline game engines' code is refused with the reason, before the law.
+        closed = trial_game_source_refusal(intent, getattr(self, "memory_root", None))
+        if closed:
+            return GatewayVerdict("deny", "trial.game_source_closed", stage="trial", reason=closed,
+                                  command=judged_command)
         # --- Single gate (#934): the shim contract. The registry stage above is harness
         # syntax (which verbs exist); everything law-bearing happens in decide(). ---
         sg = getattr(self, "_single_gate", None)
