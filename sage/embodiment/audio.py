@@ -26,8 +26,14 @@ RESPAWN_COOLDOWN_S = 5.0  # min seconds between pw-record respawns (avoid thrash
 
 
 def _pw_record_cmd():
-    return ["pw-record", "--target", SOURCE, "--rate", str(RATE),
-            "--channels", "1", "--format", "s16", "-"]
+    """The capture argv for this platform (platform_av): pw-record on Linux, ffmpeg/AVFoundation on a Mac."""
+    from sage.embodiment import platform_av
+    return platform_av.capture_cmd(SOURCE, RATE)[0]
+
+
+def _capture_has_header() -> bool:
+    from sage.embodiment import platform_av
+    return platform_av.capture_cmd(SOURCE, RATE)[1]
 
 
 class Hearing(threading.Thread):
@@ -46,7 +52,8 @@ class Hearing(threading.Thread):
         from sage.embodiment import listening as _listening
         self._listening = _listening
         self.segmenter = _listening.Segmenter(win_s=WIN / RATE)
-        self.transcriber = _listening.Transcriber(source=SOURCE)
+        from sage.embodiment import platform_av as _pav
+        self.transcriber = _listening.Transcriber(source=_pav.capture_source(SOURCE))
         self._win = {"listening": False, "speaking": False}
         self._win_checked = 0.0
         try:   # what this ear does, in the body's own file, so the being is told (body.hears_always)
@@ -110,7 +117,7 @@ class Hearing(threading.Thread):
                     time.sleep(0.5); continue
                 if not self._spawn():
                     time.sleep(1.0); continue
-                header_done = False; leftover = b""; self._warmed = False
+                header_done = not _capture_has_header(); leftover = b""; self._warmed = False
             # pw-record writes a WAV header before the PCM; skip past the 'data' chunk once per spawn
             if not header_done:
                 head = self._read_exact(64)

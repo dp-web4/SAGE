@@ -139,6 +139,16 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     if source == "cortex":
         # the look client publishes by temp + rename itself, like image2's atomic_writing below
         return f"python3 -m sage.embodiment.look {shlex.quote(full)}"
+    # A MAC'S CAMERA (2026-10-15). On whenever one is attached (dp: "it should be on. i can always
+    # turn off or disconnect the camera, which it should see as lapsed availability"). There is no
+    # /dev/video node; the seat picks the camera by name from the AVFoundation list with the screens
+    # removed, so the being's `device` is not used here, and no spelling of it can reach a screen.
+    from sage.embodiment import platform_av
+    if platform_av.backend() == "avfoundation":
+        cam = platform_av.mac_camera()
+        if not cam:
+            raise ValueError("this body has no camera attached right now (measured: AVFoundation lists none)")
+        return shlex.join(platform_av.mac_camera_cmd(cam, full))
     device = args.get("device", "/dev/video0")
     return (f"ffmpeg -hide_banner -loglevel error -y -f v4l2 -i {shlex.quote(device)} "
             f"-frames:v 1 -qscale:v 3 -f image2 -atomic_writing 1 {shlex.quote(full)}")

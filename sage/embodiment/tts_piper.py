@@ -45,10 +45,11 @@ def main(argv=None) -> int:
             prev.join()
         if errors:
             return
-        r = subprocess.run(["pw-play"] + (["--target", a.target] if a.target else []) + [str(path)],
-                           capture_output=True, timeout=120)
+        from sage.embodiment.platform_av import play_cmd
+        cmd = play_cmd(str(path), a.target or None)
+        r = subprocess.run(cmd, capture_output=True, timeout=120)
         if r.returncode != 0:
-            errors.append(f"pw-play exit {r.returncode}: {r.stderr.decode(errors='replace')[:200]}")
+            errors.append(f"{cmd[0]} exit {r.returncode}: {r.stderr.decode(errors='replace')[:200]}")
 
     for i, s in enumerate(sentences(" ".join(a.text))):
         f = tmp / f"{i:02d}.wav"

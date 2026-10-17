@@ -44,7 +44,9 @@ def _no_systemd_and_no_live_pending_set(monkeypatch, tmp_path_factory):
     # Pin the systemd path so these tests read the same on a Mac (arousal picks launchd where
     # there is launchctl and no systemctl); the launchd tests set it themselves.
     monkeypatch.setenv("SAGE_WAKE_BACKEND", "systemd")
-    pend = str(tmp_path_factory.mktemp("pending") / "pending_events.json")
+    # And the PipeWire audio path (platform_av picks avfoundation on a Mac).
+    monkeypatch.setenv("SAGE_AUDIO_BACKEND", "pipewire")
+    pend =str(tmp_path_factory.mktemp("pending") / "pending_events.json")
     monkeypatch.setenv("SAGE_PENDING_EVENTS", pend)
     from sage.gateway import arousal, being_join
     monkeypatch.setattr(arousal, "PENDING_PATH", pend)

@@ -435,7 +435,8 @@ def chime() -> None:
                 w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(frames)
         mark(speaking_until=time.time() + 0.6)
         import subprocess
-        subprocess.Popen(["pw-play", CHIME_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        from sage.embodiment.platform_av import play_cmd
+        subprocess.Popen(play_cmd(CHIME_PATH), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass   # measured, never shown as speech
 
