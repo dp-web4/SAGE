@@ -8,6 +8,13 @@ pub struct OllamaClient {
     base_url: String,
     model: String,
     client: Client,
+    /// The context window every request asks for (SAGE_NUM_CTX), or None for Ollama's default.
+    ///
+    /// WHY (Sprout 2026-10-13): the daemon and the being's heartbeat share one model. The heartbeat
+    /// sends num_ctx 16384; the daemon sent none, and Ollama reloads a loaded model whenever a request
+    /// asks for a different context, so every noticing would have reloaded the being's 4B (10-30 s)
+    /// and the next beat reloaded it back. Same window, one load.
+    num_ctx: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -27,6 +34,13 @@ struct GenerateRequest<'a> {
 #[derive(Serialize)]
 struct GenOpts {
     num_predict: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    num_ctx: Option<u32>,
+}
+
+#[derive(Serialize)]
+struct CtxOpts {
+    num_ctx: u32,
 }
 
 #[derive(Serialize)]
@@ -34,6 +48,8 @@ struct ChatRequest<'a> {
     model: &'a str,
     messages: &'a [ChatMessage],
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<CtxOpts>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,7 +98,18 @@ impl OllamaClient {
                 .timeout(std::time::Duration::from_secs(120))
                 .build()
                 .unwrap(),
+            num_ctx: num_ctx_from(std::env::var("SAGE_NUM_CTX").ok().as_deref()),
         }
+    }
+
+    /// The same client asking for a specific context window (tests; callers normally use SAGE_NUM_CTX).
+    pub fn with_num_ctx(mut self, num_ctx: Option<u32>) -> Self {
+        self.num_ctx = num_ctx;
+        self
+    }
+
+    pub fn num_ctx(&self) -> Option<u32> {
+        self.num_ctx
     }
 
     pub fn default_local(model: &str) -> Self {
@@ -101,7 +128,7 @@ impl OllamaClient {
             stream: false,
             think: false,
             system,
-            options: GenOpts { num_predict: 300 },
+            options: GenOpts { num_predict: 300, num_ctx: self.num_ctx },
         };
 
         let resp = self.client
@@ -127,6 +154,7 @@ impl OllamaClient {
             model: &self.model,
             messages,
             stream: false,
+            options: self.num_ctx.map(|n| CtxOpts { num_ctx: n }),
         };
 
         let resp = self.client
@@ -159,7 +187,7 @@ impl OllamaClient {
             stream: true,
             think: false,
             system,
-            options: GenOpts { num_predict: 512 },
+            options: GenOpts { num_predict: 512, num_ctx: self.num_ctx },
         };
 
         let resp = self.client
@@ -205,6 +233,7 @@ impl OllamaClient {
             model: &self.model,
             messages,
             stream: true,
+            options: self.num_ctx.map(|n| CtxOpts { num_ctx: n }),
         };
 
         let resp = self.client
@@ -255,6 +284,18 @@ impl OllamaClient {
         Ok(body.models)
     }
 
+    /// The models Ollama has loaded right now (/api/ps), by name. Err if Ollama cannot be asked.
+    pub async fn loaded_models(&self) -> Result<Vec<String>, String> {
+        let resp = self.client
+            .get(format!("{}/api/ps", self.base_url))
+            .send()
+            .await
+            .map_err(|e| format!("ollama ps failed: {e}"))?;
+        let body: ModelListResponse = resp.json().await
+            .map_err(|e| format!("ollama ps parse error: {e}"))?;
+        Ok(body.models.into_iter().map(|m| m.name).collect())
+    }
+
     /// Check if Ollama is reachable.
     pub async fn is_available(&self) -> bool {
         self.client
@@ -262,5 +303,38 @@ impl OllamaClient {
             .send()
             .await
             .is_ok()
+    }
+}
+
+
+/// SAGE_NUM_CTX as a context window: a positive integer, else None (Ollama's default). Never panics.
+pub fn num_ctx_from(raw: Option<&str>) -> Option<u32> {
+    raw.and_then(|v| v.trim().parse::<u32>().ok()).filter(|n| *n > 0)
+}
+
+#[cfg(test)]
+mod num_ctx_tests {
+    use super::*;
+
+    #[test]
+    fn sage_num_ctx_parses_or_is_absent() {
+        assert_eq!(num_ctx_from(Some("16384")), Some(16384));
+        assert_eq!(num_ctx_from(Some(" 8192 ")), Some(8192));
+        assert_eq!(num_ctx_from(Some("0")), None);
+        assert_eq!(num_ctx_from(Some("lots")), None);
+        assert_eq!(num_ctx_from(None), None);
+    }
+
+    #[test]
+    fn requests_carry_num_ctx_only_when_set() {
+        let g = GenOpts { num_predict: 300, num_ctx: Some(16384) };
+        assert_eq!(serde_json::to_value(&g).unwrap(), serde_json::json!({"num_predict": 300, "num_ctx": 16384}));
+        let g = GenOpts { num_predict: 300, num_ctx: None };
+        assert_eq!(serde_json::to_value(&g).unwrap(), serde_json::json!({"num_predict": 300}));
+        let msgs: Vec<ChatMessage> = vec![];
+        let c = ChatRequest { model: "m", messages: &msgs, stream: false, options: Some(CtxOpts { num_ctx: 16384 }) };
+        assert_eq!(serde_json::to_value(&c).unwrap()["options"], serde_json::json!({"num_ctx": 16384}));
+        let c = ChatRequest { model: "m", messages: &msgs, stream: false, options: None };
+        assert!(serde_json::to_value(&c).unwrap().get("options").is_none());
     }
 }
