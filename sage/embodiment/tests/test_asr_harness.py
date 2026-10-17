@@ -97,6 +97,86 @@ def test_every_candidate_is_registered_with_its_guard_status():
     assert h.CANDIDATES["parakeet_mlx"].guarded is False
 
 
+def test_the_ane_candidate_maps_verbose_json_and_counts_an_uninformative_no_speech_prob():
+    """WhisperKit (Core ML, Apple Neural Engine) answers OpenAI verbose_json. Its segments carry
+    avg_logprob and no_speech_prob, so it is judged by the ear's guard -- but measured on McNugget
+    its no_speech_prob is 0 on near-silence, which disables the guard's silence test. The candidate
+    must pass the fields through as given and report how often no_speech_prob was nonzero."""
+    import http.server
+    import json as _j
+    import threading
+    replies = [{"segments": [{"text": " You", "avg_logprob": -0.77, "no_speech_prob": 0}]},
+               {"segments": [{"text": " Hello there.", "avg_logprob": -0.2, "no_speech_prob": 0.01}]}]
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            body = _j.dumps(replies.pop(0) if replies else {"segments": []}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        c = h.WhisperKitAne()
+        c.url = f"http://127.0.0.1:{srv.server_address[1]}"
+        audio = [0.0] * h.RATE
+        segs = c.segments(audio, "")
+        assert segs == [{"text": " You", "no_speech_prob": 0, "avg_logprob": -0.77}], segs
+        c.segments(audio, "")
+        meta = c.extra_meta()
+        assert meta["segments_seen"] == 2 and meta["no_speech_prob_nonzero"] == 1, meta
+        assert h.CANDIDATES["whisperkit_ane"].guarded is True
+    finally:
+        srv.shutdown()
+
+
+def test_the_native_audio_candidate_is_unguarded_and_keeps_what_the_model_said(tmp_path=None):
+    """The being's own model hearing raw audio (gemma4 via Ollama): no confidences, so UNGUARDED,
+    and its reply is kept as said -- including a refusal sentence on silence, which the harness must
+    then count as words kept on a no-word clip rather than quietly treat as silence."""
+    import http.server
+    import json as _j
+    import tempfile
+    import threading
+    replies = ["Mr. Quilter is the apostle.", "", "I cannot fulfill this request."]
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            req = _j.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            assert req["images"] and req["options"]["temperature"] == 0 and req["think"] is False
+            body = _j.dumps({"response": replies.pop(0)}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    wav = Path(tempfile.mkdtemp()) / "c.wav"
+    wav.write_bytes(b"RIFF....WAVE")
+    try:
+        c = h.GemmaNativeAudio()
+        c.model, c.url = "gemma4:12b", f"http://127.0.0.1:{srv.server_address[1]}"
+        assert c.segments(None, str(wav)) == [{"text": "Mr. Quilter is the apostle."}]
+        assert c.segments(None, str(wav)) == []
+        r = h.run_one(c, {"id": "s", "wav": str(wav), "text": "", "category": "near_silence"}, [0.0] * h.RATE)
+        assert r["unguarded"] is True and r["hallucination"] is True, r
+        assert h.CANDIDATES["gemma_native_audio"].guarded is False
+    finally:
+        srv.shutdown()
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in sorted(globals().items()):

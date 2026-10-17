@@ -178,10 +178,97 @@ class WhisperCppTinyFit(WhisperCppTiny):
     name, full_ctx = "whispercpp_tiny_fitctx", False
 
 
+class WhisperKitAne(Candidate):
+    """Whisper base.en compiled with Core ML and run on the Apple Neural Engine (WhisperKit, Argmax),
+    the third compute rail on Apple Silicon: the CPU (whisper_ref) and GPU (mlx_whisper) rails ran
+    with the ANE at 0 J (McNugget, 2026-10-11). Called through `whisperkit-cli serve` (encoder and
+    decoder default to cpuAndNeuralEngine), OpenAI-compatible verbose_json, whose segments carry
+    Whisper's own avg_logprob / no_speech_prob: guarded, judged by the ear's guard like the
+    reference. The server is started outside the harness (it compiles the model on first load);
+    its URL is $SAGE_WHISPERKIT_URL, default http://127.0.0.1:50060."""
+    name, model_name = "whisperkit_ane", "base.en"
+
+    def load(self):
+        import os
+        self.url = os.environ.get("SAGE_WHISPERKIT_URL", "http://127.0.0.1:50060").rstrip("/")
+        import numpy as np
+        self.segments(np.zeros(RATE, dtype=np.float32), "")      # fails here, not mid-run, if it is down
+
+    def segments(self, audio, wav_path):
+        import io
+        import uuid
+        import urllib.request
+        import wave
+        import numpy as np
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE)
+            w.writeframes((np.clip(audio, -1, 1) * 32767).astype("<i2").tobytes())
+        b = uuid.uuid4().hex
+        fields = {"model": self.model_name, "language": "en", "temperature": "0",
+                  "response_format": "verbose_json"}
+        body = b"".join(f'--{b}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
+                        for k, v in fields.items())
+        body += (f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="clip.wav"\r\n'
+                 f"Content-Type: audio/wav\r\n\r\n").encode() + buf.getvalue() + f"\r\n--{b}--\r\n".encode()
+        req = urllib.request.Request(self.url + "/v1/audio/transcriptions", data=body,
+                                     headers={"Content-Type": f"multipart/form-data; boundary={b}"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            out = json.loads(r.read())
+        segs = out.get("segments") or []
+        # WHAT THE GUARD CAN USE IS MEASURED, NOT ASSUMED (McNugget, 2026-10-14): WhisperKit returns
+        # no_speech_prob as 0 on near-silence, where the reference reports it high, so the ear's
+        # silence test cannot fire and only its logprob test remains. A field that is always 0 would
+        # read as "guarded" while guarding nothing; extra_meta says how often it was informative.
+        self.seen = getattr(self, "seen", 0) + len(segs)
+        self.ns_nonzero = getattr(self, "ns_nonzero", 0) + sum(1 for s in segs if s.get("no_speech_prob"))
+        return [{"text": s.get("text", ""), "no_speech_prob": s.get("no_speech_prob", 0.0),
+                 "avg_logprob": s.get("avg_logprob", 0.0)} for s in segs]
+
+    def extra_meta(self) -> dict:
+        return {"model": self.model_name, "compute_units": "cpuAndNeuralEngine (encoder and decoder)",
+                "server": "whisperkit-cli serve (separate process; its memory is not in peak_rss_mb)",
+                "segments_seen": getattr(self, "seen", 0),
+                "no_speech_prob_nonzero": getattr(self, "ns_nonzero", 0)}
+
+
+class GemmaNativeAudio(Candidate):
+    """The being's OWN model hearing raw audio: gemma4 lists native audio, and Ollama takes the WAV in
+    `images` (its `audio` field does not reach the model; measured on McNugget 2026-10-14). The
+    question is whether a being can hear in its own model instead of reading a transcript. It
+    returns no per-segment confidences, so the ear's guard cannot judge it: UNGUARDED, and its
+    behaviour on silence is exactly what this run measures. It shares the GPU with the being's beats;
+    run it in a quiet window. Model: $SAGE_NATIVE_AUDIO_MODEL (default gemma4:12b)."""
+    name, guarded = "gemma_native_audio", False
+    PROMPT = ("Transcribe exactly the words spoken in this audio. Output only those words, with no "
+              "commentary, quotes or description. If no one speaks, output nothing at all.")
+
+    def load(self):
+        import os
+        self.model = os.environ.get("SAGE_NATIVE_AUDIO_MODEL", "gemma4:12b")
+        self.url = os.environ.get("SAGE_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+
+    def segments(self, audio, wav_path):
+        import base64
+        import urllib.request
+        req = {"model": self.model, "prompt": self.PROMPT, "stream": False, "think": False,
+               "keep_alive": "-1m", "images": [base64.b64encode(open(wav_path, "rb").read()).decode()],
+               "options": {"temperature": 0, "num_predict": 200}}
+        r = urllib.request.urlopen(urllib.request.Request(
+            self.url + "/api/generate", data=json.dumps(req).encode(),
+            headers={"Content-Type": "application/json"}), timeout=300)
+        text = str(json.loads(r.read()).get("response") or "").strip()
+        return [{"text": text}] if text else []
+
+    def extra_meta(self) -> dict:
+        return {"model": self.model, "via": "ollama /api/generate, WAV in images, temperature 0, think off"}
+
+
 CANDIDATES: Dict[str, Callable[[], Candidate]] = {
     "whisper_ref": WhisperRef, "mlx_whisper": MlxWhisper, "parakeet_mlx": ParakeetMlx,
     "whispercpp_base": WhisperCpp, "whispercpp_tiny": WhisperCppTiny,
     "whispercpp_base_fitctx": WhisperCppBaseFit, "whispercpp_tiny_fitctx": WhisperCppTinyFit,
+    "whisperkit_ane": WhisperKitAne, "gemma_native_audio": GemmaNativeAudio,
 }
 
 
