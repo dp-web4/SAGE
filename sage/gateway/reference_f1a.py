@@ -870,6 +870,9 @@ class ReferenceF1aDispatcher:
         reach = tuple(getattr(verdict, "granted_reach", ()) or ())
         self._extra_reach = (tuple((Path(r).resolve(), bool(rec)) for r, rec, *_ in reach) if reach
                              else tuple((r, True) for r in self._extra_roots))
+        # AND IN WHICH MODES (hestia #1345 part B): a grant narrowed below rwed carries them as a
+        # third element. A root without one is full-mode, as every grant was before modes.
+        self._extra_modes = {Path(r).resolve(): str(md[0]) for r, rec, *md in reach if md}
         handler = getattr(self, f"_do_{intent.effector}", None)
         if handler is None:
             # a consequential network act the reference won't run — real F1a's job
@@ -939,10 +942,23 @@ class ReferenceF1aDispatcher:
                     f"notes/{p.name} is what was said TO you, and it stays as it was said. Your "
                     "reply belongs in your journal, in a conversation with `say`, or in an "
                     "appeal, all of which are read")
-        reach =((self.memory_root, True),) + tuple(
-            getattr(self, "_extra_reach", None)
-            or ((r, True) for r in (getattr(self, "_extra_roots", ()) or ())))
+        held = tuple(getattr(self, "_extra_reach", None)
+                     or ((r, True) for r in (getattr(self, "_extra_roots", ()) or ())))
+        # The dispatcher confines by the same modes the gate judged by: reading needs r, writing
+        # w. A grant without the mode is not reach for this act (the home is always all four).
+        need = "w" if writing else "r"
+        modes = getattr(self, "_extra_modes", None) or {}
+        reach = ((self.memory_root, True),) + tuple(
+            (r, rec) for r, rec in held if need in modes.get(r, "rwed"))
         if not any(p == r or (recursive and r in p.parents) for r, recursive in reach):
+            narrowed = [modes[r] for r, rec in held if r in modes and need not in modes[r]
+                        and (p == r or (rec and r in p.parents))]
+            if narrowed:
+                raise ValueError(
+                    f"'{p}' is under a grant of yours narrowed to {narrowed[0]}, and "
+                    f"{'writing' if writing else 'reading'} needs {need}. Nothing was "
+                    f"{'changed' if writing else 'read'}. memory_read hestia://reach/{p} shows "
+                    f"what you hold there")
             # A NEAR MISS OF ITS OWN HOUSE IS NOT A TRESPASS. dp, 2026-09-25, fleet directive:
             # "each being has a home ... i want each to feel at home there ... addressing
             # unnecessary frictions."
@@ -979,9 +995,12 @@ class ReferenceF1aDispatcher:
 
     def _reach_pairs(self) -> tuple:
         """((root, recursive), ...) beyond the home for this verdict. `_extra_reach` when the
-        verdict carried reach; otherwise the bare roots, read by prefix as _safe_path reads them."""
-        return tuple(getattr(self, "_extra_reach", None) or (
+        verdict carried reach; otherwise the bare roots, read by prefix as _safe_path reads them.
+        Only grants that include r (#1345 part B): every caller names a place to READ."""
+        modes = getattr(self, "_extra_modes", None) or {}
+        return tuple((r, rec) for r, rec in (getattr(self, "_extra_reach", None) or (
             (r, True) for r in (getattr(self, "_extra_roots", ()) or ())))
+            if "r" in modes.get(r, "rwed"))
 
     def _within_reach(self, p: Path) -> bool:
         p = p.resolve()

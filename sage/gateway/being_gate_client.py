@@ -3245,6 +3245,14 @@ def _granted_reach(core, policy, workspace: str, granted_paths=()) -> tuple:
     if policy is None:
         return ()
     try:
+        # A CORE THAT ENFORCES MODES (hestia #1345 part B) says which grants it admits and in
+        # which modes, narrowed ones included, as (root, recursive, modes). Taken whole, so the
+        # dispatcher confines by exactly the modes the gate judged by.
+        with_modes = getattr(core, "scope_roots_with_modes", None)
+        if with_modes is not None:
+            scopes = list(getattr(policy, "scope", ()) or ())
+            return (tuple((str(r), bool(rec), str(md)) for r, rec, md in with_modes(policy, workspace))
+                    + tuple((r, True) for r in _repo_name_roots(core, scopes, workspace, granted_paths)))
         reach = getattr(core, "_scope_roots_with_reach", None)
         if reach is not None:
             scopes = list(getattr(policy, "scope", ()) or ())
