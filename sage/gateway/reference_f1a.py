@@ -921,6 +921,12 @@ class ReferenceF1aDispatcher:
                         f"was changed. If you meant to change one of your own files, "
                         f"{sub}/ is not its path: give that file's path instead (a `say` "
                         "does not change any file)")
+            from sage.gateway.being_self import SELF_WRITES
+            if p.parent == self.memory_root and p.name in SELF_WRITES:
+                raise ValueError(
+                    f"{p.name} is changed only with identity_edit, which keeps every earlier "
+                    "version and your reason in self_log.jsonl. A direct write would leave no "
+                    "record of what it replaced. Nothing was changed")
             if p.parent == self.memory_root and p.name in SEAT_OWNED:
                 raise ValueError(
                     f"{p.name} is yours to read and not to edit: it is what you were entrusted "

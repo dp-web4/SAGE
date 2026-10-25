@@ -2633,6 +2633,18 @@ class HestiaF1aDispatcher:
                               witness_id=(self._local._witness(f"tune {name}: {text[:120]}")
                                           if name else None))
 
+    def _do_identity_edit(self, intent: BeingIntent) -> ResultEnvelope:
+        """The being's own words about itself (being_self): show them, or replace one field."""
+        from sage.gateway import being_self
+        a = intent.args or {}
+        field = str(a.get("field") or "").strip() or None
+        ok, text = being_self.edit(Path(self.memory_root), field, a.get("text"), a.get("why") or "")
+        if not ok:
+            return ResultEnvelope(ok=False, error=text)
+        return ResultEnvelope(ok=True, result=text,
+                              witness_id=(self._local._witness(f"identity_edit {field}: {text[:120]}")
+                                          if field and not text.endswith("nothing changed.") else None))
+
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
         if not content:
