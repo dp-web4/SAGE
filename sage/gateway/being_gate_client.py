@@ -2429,7 +2429,8 @@ def self_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
     if not root:
         raise ValueError("identity_edit: no home to write self.json in")
     from sage.gateway.being_self import SELF_WRITES
-    return [os.path.realpath(os.path.join(root, f)) for f in SELF_WRITES]
+    from sage.gateway.reference_f1a import HOME_LOCK   # taken, as memory_write takes it (#544)
+    return [os.path.realpath(os.path.join(root, f)) for f in SELF_WRITES + (HOME_LOCK,)]
 
 
 def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
