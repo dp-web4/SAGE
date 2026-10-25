@@ -61,7 +61,12 @@ SEAT_OWNED = ("entrustment.md",)
 # readers fall back silently). The raising pipeline and the identity provider write them as trusted
 # Python, not through these verbs, so they are unaffected. What the being says of ITSELF is
 # self.json, written by identity_edit (being_self, #541); it is not one of these.
-GOVERNANCE_OWNED = ("identity.json", "identity.sealed", "identity.attest.json", "instance.json")
+# The identity family is matched by PREFIX, not by name: the provider keeps identity.sealed.v1 as
+# the only original of a v1 seal after migration, and writes .tmp / .retired-* siblings beside the
+# live files. A list would leave each of those writable (legion's review of #545). Nothing the
+# being writes starts with "identity." (its own words are self.json).
+GOVERNANCE_OWNED_PREFIX = "identity."
+GOVERNANCE_OWNED = ("instance.json",)
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
@@ -933,7 +938,8 @@ class ReferenceF1aDispatcher:
                         f"was changed. If you meant to change one of your own files, "
                         f"{sub}/ is not its path: give that file's path instead (a `say` "
                         "does not change any file)")
-            if p.parent == self.memory_root and p.name in GOVERNANCE_OWNED:
+            if p.parent == self.memory_root and (p.name in GOVERNANCE_OWNED
+                                                or p.name.startswith(GOVERNANCE_OWNED_PREFIX)):
                 raise ValueError(
                     f"{p.name} is a governance record: it says who you are to the society (your "
                     "id, your machine, which seat hears your escalations, your trust ceiling), so "

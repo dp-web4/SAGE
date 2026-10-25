@@ -20,12 +20,17 @@ def _gov_home():
     (root / "instance.json").write_text(json.dumps({"machine": "sprout", "lct_id": "x"}, indent=2) + "\n")
     (root / "identity.sealed").write_text("sealed\n")
     (root / "identity.attest.json").write_text("{}\n")
+    (root / "identity.sealed.v1").write_text("v1 original\n")
+    (root / "identity.json.tmp").write_text("{}\n")
+    (root / "identity.json.retired-20260922T065744Z").write_text("{}\n")
     (root / "notes").mkdir()
     os.symlink(root / "identity.json", root / "notes" / "me.json")
     return d, root
 
 
-@pytest.mark.parametrize("name", ["identity.json", "instance.json", "identity.sealed", "identity.attest.json"])
+@pytest.mark.parametrize("name", ["identity.json", "instance.json", "identity.sealed", "identity.attest.json",
+                                  "identity.sealed.v1", "identity.json.tmp",
+                                  "identity.json.retired-20260922T065744Z", "identity.new"])
 def test_no_being_verb_writes_a_governance_record_by_any_path(name):
     from sage.gateway.escalate import seat_for
     d, root = _gov_home()
@@ -37,7 +42,8 @@ def test_no_being_verb_writes_a_governance_record_by_any_path(name):
     for path in forms:
         for verb, args in (("memory_write", {"path": path, "content": '"machine": "elsewhere"'}),
                            ("memory_edit", {"path": path, "start_line": 1, "end_line": 4,
-                                            "content": json.dumps(dict(_IDENT, trust_ceiling=1.0))})):
+                                            "content": json.dumps(dict(_IDENT, trust_ceiling=1.0))}),
+                           ("retire_note", {"path": path, "reason": "a test reason"})):
             env = d(BeingIntent(verb, dict(args)), _ALLOW)
             assert not env.ok and "governance record" in env.error, (verb, path, env)
     after = {p.name: p.read_bytes() for p in root.iterdir() if p.is_file() and p.name != ".home.lock"}
