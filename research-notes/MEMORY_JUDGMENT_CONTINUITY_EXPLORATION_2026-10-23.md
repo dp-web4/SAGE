@@ -195,7 +195,7 @@ Retire the broad claim *“Web4 lacks an architectural way to assign responsibil
 - **External law:** The society collectively maintains the environment, applicable rules, grant/role relationships, enforcement and appeals. Responsibility for evolving that environment is distributed through contextual MRH roles, not assigned categorically to “humans” or “AIs”.
 - **Across the membrane:** When internally chosen plans become consequential external actions, applicable external law and scoped authority govern the act; witnessed results return information to both participant and society. That feedback can motivate **either** personal revision or collective environmental correction. Authority to understand or propose a change is not equivalent to authority to unilaterally implement it.
 
-**Bidirectional example:** In the CBP-being scope-request loops, the being carried mistaken or obsolete assumptions, but later examination also identified operator-provided paths/grant identifiers and misleading tool replies as contributing causes. Society-side responses included improving scope inspection and correcting guidance. This does not establish successful or persistent being-side belief revision; that requires new action evidence.
+**Bidirectional example:** In the CBP-being scope-request loops, the being carried mistaken or obsolete assumptions, but later examination also identified operator-provided paths/grant identifiers and misleading tool replies as contributing causes. Society-side responses included improving scope inspection and correcting guidance (named, with what was not yet done, in the 2026-10-24 evening section below). This does not establish successful or persistent being-side belief revision; that requires new action evidence.
 
 ### Research implications and test obligations
 
@@ -205,7 +205,7 @@ Retire the broad claim *“Web4 lacks an architectural way to assign responsibil
 4. Treat a spoken admission of correction, including NOVA's correction in this conversation, as **stated revision**, not proof of persistent changed behavior. Look for subsequent choices under renewed challenge.
 5. Avoid universalizing responsibility: MRH membership/roles and applicable law determine who undertook what obligation; a society cannot create authority over an outsider merely by claiming it.
 
-**Updated interpretation:** Web4/SAGE is not only aspiring to assign maintenance responsibility; it is already using role-based, collective governance and being-side self-management to develop and observe the interaction. What remains to be established empirically is reliability, coverage, lawful execution, feedback quality and persistence. This is a research-status correction, not a new normative Web4 specification.
+**Updated interpretation:** Web4/SAGE is not only aspiring to assign maintenance responsibility; maintenance is already being exercised through existing operator and seat roles (issues filed, governed escalations approved under the previously effective law, peer and Nova review), alongside being-side self-management. **No dedicated law-maintenance role with the fields in item 1 has yet been issued**, so item 1 is untested. What remains to be established empirically is reliability, coverage, lawful execution, feedback quality and persistence. This is a research-status correction, not a new normative Web4 specification.
 
 
 ## 2026-10-24 evening — where the re-requested paths came from, and the first post-correction window
@@ -233,7 +233,7 @@ Most of what looked like invented facts had been supplied by the society, and st
   - three corrections at 19:25–19:31Z. The operator first said the grants "may not be working, hang on", then "continue there". The seat said there was nothing to re-issue, named the two in-grant paths, and said "aged out" was the tool's guess.
 - **Not done:** the `hestia://scope` wording itself.
 
-### First post-correction window (19:32–20:58Z, 15 beats)
+### First post-correction window (19:32–20:58Z, 15 beats) — reported preliminary behavior, not durable learning
 
 - No re-issue asks.
 - Every gate-source read went to the in-grant snapshot and succeeded.
