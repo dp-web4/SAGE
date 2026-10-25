@@ -139,3 +139,43 @@ def test_the_entrustment_is_rendered_whole_and_named_in_the_record():
     assert got.startswith("# What you are entrusted with") and len(got) > 5000, "read whole"
     state = own_state(home, "t-being", got, mark_conversations=False)
     assert "## What you are entrusted with" in state and "**Entrusted by:**" in state
+
+
+def test_the_being_cannot_write_its_identity_record_by_any_spelling():
+    """identity.json's `machine` picks the seat that rules on the being's escalations
+    (escalate.seat_for); measured on SAGE #541, a memory_edit of it moved the arbiter. The
+    attestation and sealed copies are the same claim signed, so the whole family is the seat's."""
+    tmp = Path(tempfile.mkdtemp())
+    r, home = _being(tmp)
+    names = ("identity.json", "identity.attest.json", "identity.sealed",
+             "identity.json.tmp", "identity.sealed.sealed-for-other")
+    for name in names:
+        (home / name).write_text('{"identity": {"machine": "sprout"}}\n')
+    for name in names:
+        for spelling in (name, "./" + name, "notes/../" + name, str(home / name)):
+            with pytest.raises(ValueError) as e:
+                r._safe_path(spelling, writing=True)
+            assert "the seat writes it" in str(e.value), spelling
+        assert r._safe_path(name, writing=False) == (home / name).resolve(), "still readable"
+    assert r._safe_path("notes/identity.md", writing=True), "its own words stay its own"
+
+
+@pytest.mark.parametrize("verb,args", [
+    ("memory_edit", {"path": "identity.json", "old": '"sprout"', "new": '"legion"'}),
+    ("memory_write", {"path": "identity.json", "content": '{"identity": {"machine": "cbp"}}'}),
+])
+def test_a_write_verb_leaves_the_arbiter_where_the_seat_put_it(verb, args):
+    import json
+    from sage.gateway import escalate
+    from sage.gateway.being_gate_client import BeingIntent
+    tmp = Path(tempfile.mkdtemp())
+    r, home = _being(tmp)
+    body = json.dumps({"identity": {"machine": "sprout"}})
+    (home / "identity.json").write_text(body)
+    try:
+        env = getattr(r, "_do_" + verb)(BeingIntent(verb, args))
+        assert not env.ok, env.result
+    except ValueError:
+        pass
+    assert (home / "identity.json").read_text() == body
+    assert escalate.seat_for("legion-being", str(home)) == "sprout"

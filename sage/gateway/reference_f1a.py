@@ -50,6 +50,14 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # GIVEN; if it could append to it, what was extended and what it decided would merge in the
 # record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
 SEAT_OWNED = ("entrustment.md",)
+# The being's identity record is the SEAT's to write (raising and the daemon write it with a
+# plain open(), not through this dispatcher). Its `machine` field picks the seat that rules on
+# the being's escalations (escalate.seat_for), so a memory_edit of it let a being choose its own
+# arbiter: measured on SAGE #541, legion -> cbp and sprout -> legion. A memory_write appended a
+# second object and left the file unparseable, which seat_for read as "no machine" silently.
+# The whole `identity.*` family: the attestation and sealed copies are the same claim signed.
+# Who the being says it is, in its own words, is `identity_edit` (self.json, SAGE #541), witnessed.
+SEAT_OWNED_IDENTITY_PREFIX = "identity."
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
@@ -927,6 +935,13 @@ class ReferenceF1aDispatcher:
                     "with, and it has to stay separable from what you decide. Your own reading "
                     "of it belongs in notes/plan.md, which is entirely yours. Disagree with it "
                     "there, in your journal, or in an appeal; that record is wanted")
+            if p.parent == self.memory_root and p.name.startswith(SEAT_OWNED_IDENTITY_PREFIX):
+                raise ValueError(
+                    f"{p.name} is your identity record, and the seat writes it: it names who you "
+                    "are to the fleet and which seat answers your escalations, so it cannot be "
+                    "something you set for yourself. Nothing was changed. You may read it. Who you "
+                    "say you are, in your own words, is yours to write in notes/ or your journal, "
+                    "and if you think a field in it is wrong, say so in an appeal or to the seat")
             # Nova, 99cfdb61b: the lock lives in the being's home, and a memory_edit of it
             # would os.replace its inode, so two writers would hold flocks on different files
             # and nothing would be serialized. No write verb may touch it.
