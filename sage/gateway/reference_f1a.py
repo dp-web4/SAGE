@@ -899,6 +899,9 @@ class ReferenceF1aDispatcher:
             k = (Path(r).resolve(), bool(rec))
             got = self._extra_modes.get(k, "") + (str(md[0]) if md else "rwed")
             self._extra_modes[k] = "".join(c for c in "rwed" if c in got)
+        # And BY WHICH RULE (hestia #1386): "nearest" when the gate decided by the nearest
+        # explicit grant (part C), so this confinement decides the same way.
+        self._reach_rule = getattr(verdict, "reach_rule", "union")
         handler = getattr(self, f"_do_{intent.effector}", None)
         if handler is None:
             # a consequential network act the reference won't run — real F1a's job
@@ -987,6 +990,18 @@ class ReferenceF1aDispatcher:
         # w. A grant without the mode is not reach for this act (the home is always all four).
         need = "w" if writing else "r"
         modes = getattr(self, "_extra_modes", None) or {}
+        if (getattr(self, "_reach_rule", "union") == "nearest"
+                and not (p == self.memory_root or self.memory_root in p.parents)):
+            near = self._nearest_modes(p, held, modes)
+            if near is not None:
+                if need in near:
+                    return p
+                raise ValueError(
+                    f"'{p}' is under a grant of yours narrowed to {near}, the nearest grant covering "
+                    f"it, and {'writing' if writing else 'reading'} needs {need}. A broader grant "
+                    f"above it does not apply here: the nearest explicit grant decides (hestia "
+                    f"#1386). Nothing was {'changed' if writing else 'read'}. memory_read "
+                    f"hestia://reach/{p} shows what you hold there")
         reach = ((self.memory_root, True),) + tuple(
             (r, rec) for r, rec in held if need in modes.get((r, rec), "rwed"))
         if not any(p == r or (recursive and r in p.parents) for r, recursive in reach):
@@ -1042,8 +1057,29 @@ class ReferenceF1aDispatcher:
             (r, True) for r in (getattr(self, "_extra_roots", ()) or ())))
             if "r" in modes.get((r, rec), "rwed"))
 
+    @staticmethod
+    def _nearest_modes(p: Path, held, modes) -> Optional[str]:
+        """The modes of the nearest held grant covering `p` (grants on one node union), or None.
+        The gate's rule (hestia #1386), over this verdict's (root, recursive) nodes."""
+        best, got = -1, set()
+        for r, rec in held:
+            if p == r or (rec and r in p.parents):
+                depth = len(r.parts)
+                m = modes.get((r, rec), "rwed")
+                if depth > best:
+                    best, got = depth, set(m)
+                elif depth == best:
+                    got |= set(m)
+        return None if best < 0 else "".join(c for c in "rwed" if c in got)
+
     def _within_reach(self, p: Path) -> bool:
         p = p.resolve()
+        if getattr(self, "_reach_rule", "union") == "nearest" and not (
+                p == self.memory_root or self.memory_root in p.parents):
+            held = tuple((Path(r).resolve(), rec) for r, rec in (getattr(self, "_extra_reach", None) or (
+                (r, True) for r in (getattr(self, "_extra_roots", ()) or ()))))
+            near = self._nearest_modes(p, held, getattr(self, "_extra_modes", None) or {})
+            return near is not None and "r" in near
         pairs = ((self.memory_root, True),) + tuple((Path(r).resolve(), rec) for r, rec in self._reach_pairs())
         return any(p == r or (rec and r in p.parents) for r, rec in pairs)
 

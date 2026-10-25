@@ -103,3 +103,70 @@ def test_two_grants_on_one_root_union_their_modes_as_the_gate_does():
     d = ReferenceF1aDispatcher(memory_root=home)
     r = d(BeingIntent("memory_read", {"path": os.path.join(forum, "u.md")}), v)
     assert not r.ok or "x" not in (r.result or ""), r
+
+
+# -- hestia #1386 (part C): the nearest explicit grant decides, exactly when the gate does -------
+
+def _nested(rule, child_modes="r", parent_modes="rwed"):
+    ws = os.path.realpath(tempfile.mkdtemp(prefix="near-ws-"))
+    home, proj = os.path.join(ws, "home"), os.path.join(ws, "proj")
+    os.makedirs(home)
+    os.makedirs(os.path.join(proj, "sub"))
+    os.makedirs(os.path.join(proj, "other"))
+    open(os.path.join(proj, "sub", "t.md"), "w").write("child\n")
+    reach = ((proj, True, parent_modes), (os.path.join(proj, "sub"), True, child_modes))
+    v = GatewayVerdict("allow", granted=(proj, os.path.join(proj, "sub")), granted_reach=reach,
+                       reach_rule=rule)
+    return ReferenceF1aDispatcher(memory_root=home), proj, v
+
+
+def test_under_the_union_rule_a_nested_narrowed_grant_is_part_b_parity():
+    """Part B's gate admits a write under an `r` child of a full parent; so must this."""
+    d, proj, v = _nested("union")
+    r = d(BeingIntent("memory_write", {"path": os.path.join(proj, "sub", "n.md"), "content": "x"}), v)
+    assert r.ok, r
+
+
+def test_under_the_nearest_rule_the_nearer_narrowed_grant_decides():
+    d, proj, v = _nested("nearest")
+    r = d(BeingIntent("memory_write", {"path": os.path.join(proj, "sub", "n.md"), "content": "x"}), v)
+    assert not r.ok and "nearest grant covering" in (r.error or "") and "#1386" in r.error, r
+    assert not os.path.exists(os.path.join(proj, "sub", "n.md"))
+    r = d(BeingIntent("memory_read", {"path": os.path.join(proj, "sub", "t.md")}), v)
+    assert r.ok and "child" in (r.result or ""), r
+    r = d(BeingIntent("memory_write", {"path": os.path.join(proj, "other", "n.md"), "content": "x"}), v)
+    assert r.ok, r
+
+
+def test_under_the_nearest_rule_a_write_only_child_cannot_be_read_through_its_parent():
+    d, proj, v = _nested("nearest", child_modes="w", parent_modes="r")
+    r = d(BeingIntent("memory_read", {"path": os.path.join(proj, "sub", "t.md")}), v)
+    assert not r.ok or "child" not in (r.result or ""), r
+    assert "narrowed to w" in (r.error or r.result or ""), r
+
+
+def test_the_rule_comes_from_the_core_the_verdict_was_judged_with():
+    from sage.gateway.being_gate_client import BeingGateClient
+    c = BeingGateClient.__new__(BeingGateClient)
+    c._core = SimpleNamespace()
+    assert c._reach_rule() == "union"
+    c._core = SimpleNamespace(nearest_grant_modes=lambda *a, **k: None)
+    assert c._reach_rule() == "nearest"
+
+
+def test_run_mounts_keep_a_stricter_child_and_mask_an_unreadable_one_under_the_nearest_rule():
+    from sage.gateway.being_gate_client import run_grant_mounts
+    ws = os.path.realpath(tempfile.mkdtemp(prefix="near-mnt-"))
+    home, proj = os.path.join(ws, "home"), os.path.join(ws, "proj")
+    for dd in (home, os.path.join(proj, "ro"), os.path.join(proj, "hidden")):
+        os.makedirs(dd)
+    reach = ((proj, True, "rwed"), (os.path.join(proj, "ro"), True, "r"),
+             (os.path.join(proj, "hidden"), True, "w"))
+    union, _s, _m = run_grant_mounts({"memory_root": home, "granted_reach": reach})
+    assert union == [(proj, "dir", "rw")], union
+    near, _s, _m = run_grant_mounts({"memory_root": home, "granted_reach": reach,
+                                     "reach_rule": "nearest"})
+    assert (proj, "dir", "rw") in near and (os.path.join(proj, "ro"), "dir", "ro") in near, near
+    assert (os.path.join(proj, "hidden"), "mask", "ro") in near, near
+    assert near.index((proj, "dir", "rw")) < near.index((os.path.join(proj, "ro"), "dir", "ro")), \
+        "a child's bind must come after its parent's, or the parent's bind hides it"

@@ -3284,7 +3284,9 @@ class HestiaF1aDispatcher:
                "workspace": getattr(self, "workspace", None),
                # the grants this verdict carries: run_grant_mounts composes the same mounts the
                # law judged from the gate's copy of them, or the line differs and nothing runs
-               "granted_reach": _granted_reach_of(getattr(self, "_verdict", None))}
+               "granted_reach": _granted_reach_of(getattr(self, "_verdict", None)),
+               # the rule the gate decided by (hestia #1386), so both sides compose one line
+               "reach_rule": getattr(getattr(self, "_verdict", None), "reach_rule", "union")}
         try:
             cmd = run_command(intent.args, ctx)
             names = run_names(intent.args, ctx)

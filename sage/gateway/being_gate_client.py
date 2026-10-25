@@ -1713,6 +1713,10 @@ def run_grant_mounts(ctx: Optional[dict] = None) -> tuple:
     ctx = ctx or {}
     home = os.path.realpath(ctx.get("memory_root") or "/nonexistent-home")
     found, skipped = {}, []          # real path -> (kind, "rw"|"ro")
+    # hestia #1386 (part C): the nearest grant decides, so a child grant stricter than the mount
+    # above it must be mounted after it, not folded into it. Off unless the gate decides that way.
+    nearest = (ctx or {}).get("reach_rule") == "nearest"
+    unreadable = []
     for item in ctx.get("granted_reach") or ():
         try:
             root, recursive = item[0], item[1]
@@ -1724,6 +1728,8 @@ def run_grant_mounts(ctx: Optional[dict] = None) -> tuple:
         if "r" not in modes:
             skipped.append((os.path.abspath(os.path.expanduser(root.strip())),
                             f"your grant there is '{modes}', without r (read)"))
+            if nearest and recursive:
+                unreadable.append(os.path.realpath(os.path.abspath(os.path.expanduser(root.strip()))))
             continue
         how = "rw" if ("w" in modes and "d" in modes) else "ro"
         lexical = os.path.abspath(os.path.expanduser(root.strip()))
@@ -1753,9 +1759,19 @@ def run_grant_mounts(ctx: Optional[dict] = None) -> tuple:
     # De-nesting by the union rule: a mount inside a directory mount adds nothing unless it
     # is WIDER there (rw inside ro). Kept ones bind after their parent (sorted), so they win.
     dirs = [(p, h) for p, (k, h) in found.items() if k == "dir"]
-    mounts = sorted((p, k, h) for p, (k, h) in found.items()
-                    if not any(p != d and p.startswith(d + os.sep) and (dh == "rw" or h == "ro")
-                               for d, dh in dirs))
+    if nearest:
+        # Keep a child unless it grants exactly what the mount above it already grants.
+        mounts = sorted((p, k, h) for p, (k, h) in found.items()
+                        if not any(p != d and p.startswith(d + os.sep) and dh == h for d, dh in dirs))
+        # A recursive grant without r beneath a mounted directory: the parent would show it, the
+        # gate would not. Masked with an empty read-only directory, like the home.
+        mounts += sorted((u, "mask", "ro") for u in unreadable
+                         if os.path.isdir(u) and any(u.startswith(d + os.sep) for d, _ in dirs))
+        mounts.sort()
+    else:
+        mounts = sorted((p, k, h) for p, (k, h) in found.items()
+                        if not any(p != d and p.startswith(d + os.sep) and (dh == "rw" or h == "ro")
+                                   for d, dh in dirs))
     mask_home = any(k == "dir" and home.startswith(p + os.sep) for p, k, _h in mounts)
     return mounts, sorted(set(skipped)), mask_home
 
@@ -1824,8 +1840,10 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
     # symlink inside a granted tree that points into the home resolves inside the sandbox, to
     # the mask.
     mounts, _skipped, mask_home = run_grant_mounts(ctx)
-    grant_binds = "".join(f" {'--bind' if h == 'rw' else '--ro-bind'} {shlex.quote(p)} {shlex.quote(p)}"
-                          for p, _k, h in mounts)
+    grant_binds = "".join(
+        f" --tmpfs {shlex.quote(p)} --remount-ro {shlex.quote(p)}" if k == "mask" else
+        f" {'--bind' if h == 'rw' else '--ro-bind'} {shlex.quote(p)} {shlex.quote(p)}"
+        for p, k, h in mounts)
     if mask_home:
         _qh = shlex.quote(_home)
         grant_binds += f" --tmpfs {_qh} --remount-ro {_qh}"
@@ -3322,6 +3340,11 @@ class GatewayVerdict:
     # said the invariant was being checked; nothing was. Found while writing patch_apply,
     # which had copied the same pattern faithfully enough to inherit the same hole.
     command: Optional[str] = None
+    # WHICH RULE THE GATE DECIDED BY, so the dispatcher confines by the same one (hestia #1386):
+    # "nearest" when the core exports nearest_grant_modes (part C: the deepest grant covering a path
+    # decides it), "union" otherwise (part B: any covering grant admits). Read once, here, from the
+    # core this verdict was judged with; the dispatcher never guesses it.
+    reach_rule: str = "union"
 
     @property
     def blocks(self) -> bool:
@@ -3542,7 +3565,14 @@ class BeingGateClient:
                 "member": getattr(self, "member_id", None),
                 # where `camera` gets a frame (instance.json camera_source; "cortex" or absent)
                 "camera_source": getattr(self, "camera_source", None),
-                **({"granted_reach": self._policy_grants()[1]} if effector == "run" else {})}
+                **({"granted_reach": self._policy_grants()[1], "reach_rule": self._reach_rule()}
+                   if effector == "run" else {})}
+
+    def _reach_rule(self) -> str:
+        """"nearest" when this seat's gate core decides by the nearest explicit grant (hestia #1386,
+        part C: it exports nearest_grant_modes), else "union" (part B). See GatewayVerdict."""
+        return "nearest" if callable(getattr(getattr(self, "_core", None), "nearest_grant_modes",
+                                             None)) else "union"
 
     # -- gate one intent (intent -> verdict), fail-closed --------------------
     def _policy_grants(self) -> tuple:
@@ -3658,7 +3688,8 @@ class BeingGateClient:
                 granted, granted_reach = self._policy_grants() if dec != "deny" else ((), ())
                 return GatewayVerdict(dec, rule, getattr(d, "reason", "") or ("ok" if dec != "deny" else ""),
                                       innate=False, stage="single-gate", command=judged_command,
-                                      granted=granted, granted_reach=granted_reach)
+                                      granted=granted, granted_reach=granted_reach,
+                                      reach_rule=self._reach_rule())
             except Exception as e:  # a gate that raises is a refused act, never an ungoverned one
                 return GatewayVerdict("deny", "gate.raised", innate=True, stage="single-gate",
                                       reason=f"{type(e).__name__}: {e}")
@@ -3738,7 +3769,8 @@ class BeingGateClient:
         # than recomposed by the caller, which is the whole point of the field.
         return GatewayVerdict(v.decision, v.rule, v.reason or "ok", v.innate, stage="local-law",
                               command=judged_command,
-                              granted=granted, granted_reach=granted_reach)
+                              granted=granted, granted_reach=granted_reach,
+                              reach_rule=self._reach_rule())
 
     # -- the F1a seam: gate, then dispatch, then consume the result ----------
     def _resolve_relative_to_grants(self, intent: BeingIntent):
