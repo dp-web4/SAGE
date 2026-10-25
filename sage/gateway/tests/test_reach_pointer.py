@@ -202,3 +202,19 @@ def test_the_beat_lists_grants_with_modes_and_keeps_narrowed_ones():
     assert f"{home}/** (rwe{narrowed}" in lines, lines
     old = scope_grant_lines(_status(ws, home, by_mode=False))
     assert f"{ws}/governance/**" in old and not any("(" in x for x in old), old
+
+
+def test_a_scope_id_not_in_the_list_states_what_is_known_and_never_guesses_aged_out():
+    """cbp-being, 2026-10-24: "it may have aged out" became "dp said it aged out, re-issue it"."""
+    ws, home = _world()
+    st = _status(ws, home)
+    st["requests"] = [{"request_id": "scope-aaaaaaaaaaaa", "path": f"{ws}/hestia", "status": "refused",
+                       "decided_by": "operator", "decision_reason": "use the snapshot"}]
+    d = _disp(st)
+    gone = _read(d, "hestia://scope/scope-5bc6ba977f74", _verdict(ws, home))
+    assert "aged out" not in gone and "may have" not in gone, gone
+    assert "not in your list" in gone and "nothing is waiting" in gone, gone
+    assert "hestia://reach" in gone and "request_scope" in gone, gone
+    assert "re-issue" in gone and "do not need to re-issue" in gone, gone
+    held = _read(d, "hestia://scope/scope-aaaaaaaaaaaa", _verdict(ws, home))
+    assert "status: refused" in held and "use the snapshot" in held, held

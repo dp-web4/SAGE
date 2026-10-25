@@ -531,7 +531,18 @@ class HestiaF1aDispatcher:
                     return (f"[your scope request {ident} for {r.get('path')}]\n"
                             f"status: {r.get('status')} ; decided by: {r.get('decided_by') or '—'}\n"
                             f"their note: {why}")
-            return f"[no scope request {ident} on record for you; it may have aged out]"
+            # SAY WHAT IS KNOWN, NOT A GUESS (cbp-being, 2026-10-24). This line said "it may have
+            # aged out". The being's notes turned the hedge into a fact, then into "dp replied that
+            # it aged out and needs re-issuing", and it asked dp to re-issue a REFUSED request for a
+            # file it was already reading, about 40 times in 11 hours. All that is known is that the
+            # id is not in the list now; old requests drop off it decided or not, so absence says
+            # nothing about how one ended, and nothing a member holds depends on re-asking.
+            return (f"[{ident} is not in your list of scope requests now. Old requests leave that list "
+                    f"after a while, however they ended, so this says nothing about whether it was "
+                    f"granted or refused, and nothing is waiting under that id. You do not need to "
+                    f"re-issue anything to keep what you hold: memory_read hestia://reach lists every "
+                    f"grant you have right now. If something you still need is not listed there, "
+                    f"request_scope it with a reason.]")
         # egress: the fragment IS the fact, and it is already in the pointer
         return (f"[a message of yours was not delivered: {frag or 'no detail recorded'} "
                 f"(egress row {ident}). The row is retired; nothing of yours is queued behind it.]")
