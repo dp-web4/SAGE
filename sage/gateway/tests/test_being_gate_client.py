@@ -971,3 +971,87 @@ def test_single_gate_translation_matches_what_hestia_reads():
     ev = sgm.normalized_event(sgm.GateEvent(tool="patch_apply", cwd="/tmp/wt", raw={},
                                              tool_input={"command": "git -C /tmp/wt apply -", "paths": ["/tmp/wt/a.py"]}))
     assert ev.command == "git -C /tmp/wt apply -" and "/tmp/wt/a.py" in ev.paths
+
+
+# --- A SANDBOXED VERB IS JUDGED BY WHAT ITS BOX EXPOSES (SAGE #441 replay, 2026-10-25) ---------
+# Handing the one gate a run's whole bwrap line refused all 271 of legion-being's runs on
+# /usr/bin/prlimit: every bind source of the box's own plumbing read as the being's reach.
+
+_BOXED = ("/usr/bin/prlimit --as=1 --fsize=2 -- /usr/bin/bwrap --clearenv --ro-bind /usr /usr"
+          " --ro-bind /lib /lib --ro-bind /home/dp/miniforge3 /home/dp/miniforge3"
+          " --ro-bind /srv/granted /srv/granted --chdir /work python3 s.py")
+
+
+def _boxed_client(effector, command, derived=(), reach=("/srv/granted",)):
+    import sage.gateway.being_gate_client as bgc
+    c, calls = _sg_client("allow")
+    c._normalize = lambda intent: SimpleNamespace(command=command, paths=list(derived), egress=None)
+    c._compose_ctx = lambda effector=None: {"worktree": None}
+    orig = bgc.sandbox_reach
+    bgc.sandbox_reach = lambda e, a, ctx=None: list(reach)
+    return c, calls, (lambda: setattr(bgc, "sandbox_reach", orig))
+
+
+def test_a_sandboxed_run_is_judged_by_what_its_box_exposes_and_its_line_is_swept():
+    c, calls, undo = _boxed_client("run", _BOXED, derived=["/home/h/scratch/s.py"])
+    try:
+        c.gate(BeingIntent("run", {"path": "scratch/s.py"}))
+    finally:
+        undo()
+    ev = calls[-1][0]
+    ti = ev["tool_input"]
+    assert "command" not in ti, "the box's plumbing is not handed to the scope check"
+    assert ti["paths"] == ["/home/h/scratch/s.py", "/srv/granted"], ti
+    assert ev["egress"] == [_BOXED], "the whole line is still swept for secrets"
+
+
+def test_an_unsandboxed_check_is_judged_as_the_command_it_is():
+    # sandbox_prefix returns "" where running unsandboxed is permitted: no box, no exemption.
+    line = "cd /wt && python3 -m pytest -q sage/gateway"
+    c, calls, undo = _boxed_client("check", line)
+    try:
+        c.gate(BeingIntent("check", {"target": "gateway"}))
+    finally:
+        undo()
+    ev = calls[-1][0]
+    assert ev["tool_input"]["command"] == line
+    assert "egress" not in ev and "paths" not in ev["tool_input"], ev
+
+
+def test_only_a_verb_the_registry_marks_sandboxed_gets_the_box_rule():
+    # a verb without the flag is judged on its composed line even if that line launches bwrap
+    from sage.gateway.being_gate_client import _REGISTRY
+    assert {e for e, spec in _REGISTRY.items() if spec.get("sandboxed")} == {"run", "check"}
+    c, calls, undo = _boxed_client("search", "/usr/bin/bwrap --bind / / cat /etc/shadow")
+    try:
+        c.gate(BeingIntent("search", {"pattern": "x"}))
+    finally:
+        undo()
+    assert calls[-1][0]["tool_input"]["command"].startswith("/usr/bin/bwrap --bind / /")
+
+
+def test_runs_in_sandbox_reads_only_a_real_launch():
+    from sage.gateway.being_gate_client import runs_in_sandbox, SANDBOX, SEATBELT, PRLIMIT
+    assert runs_in_sandbox(f"{SANDBOX} --clearenv true")
+    assert runs_in_sandbox(f"{SEATBELT} -p x true")
+    assert runs_in_sandbox(f"{PRLIMIT} --as=1 -- {SANDBOX} --clearenv true")
+    assert not runs_in_sandbox(f"{PRLIMIT} --as=1 {SANDBOX} true"), "no `--`: not prlimit's wrapper form"
+    assert not runs_in_sandbox(f"sh -c '{SANDBOX} true'")
+    assert not runs_in_sandbox(f"{PRLIMIT} --as=1 -- sh -c true")
+    assert not runs_in_sandbox("")
+    assert not runs_in_sandbox(None)
+    assert not runs_in_sandbox("'unbalanced")
+
+
+def test_sandbox_reach_names_every_granted_mount_and_the_worktree_never_the_plumbing(tmp_path):
+    from sage.gateway.being_gate_client import sandbox_reach
+    home = tmp_path / "home"; home.mkdir()
+    g = tmp_path / "granted"; g.mkdir()
+    wt = tmp_path / "wt"; wt.mkdir()
+    ctx = {"memory_root": str(home), "worktree": str(wt),
+           "granted_reach": [(str(g), True), (str(home), True), ("/usr", True)]}
+    got = sandbox_reach("run", {}, ctx)
+    assert os.path.realpath(g) in got and os.path.realpath(wt) in got, got
+    assert not any(p == "/usr" or p.startswith("/usr/") for p in got), "a sandbox-owned path is plumbing"
+    assert os.path.realpath(home) not in got, "the home is never mounted"
+    assert sandbox_reach("check", {}, ctx) == [os.path.realpath(wt)]
