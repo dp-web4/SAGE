@@ -2759,6 +2759,15 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
                      "file. Your own reading of it belongs in notes/plan.md)\n"
                      + entrustment_shown(instance, entrusted, _bp.value(instance, "entrustment_mode", "full"),
                                          mark=mark_conversations))
+    # Who it says it is (being_self), in its own words, before the records: shown only once it has
+    # written something. Fail-open.
+    try:
+        from sage.gateway import being_self as _self
+        _own = _self.render(instance)
+    except Exception:
+        _own = ""
+    if _own:
+        parts.append(_own)
     # Its files and runs, measured: also NOW, so beside the body and before every record that
     # narrates them (see files_and_runs). Fail-open: a measurement that errors adds nothing.
     try:
