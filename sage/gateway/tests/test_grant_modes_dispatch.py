@@ -170,3 +170,56 @@ def test_run_mounts_keep_a_stricter_child_and_mask_an_unreadable_one_under_the_n
     assert (os.path.join(proj, "hidden"), "mask", "ro") in near, near
     assert near.index((proj, "dir", "rw")) < near.index((os.path.join(proj, "ro"), "dir", "ro")), \
         "a child's bind must come after its parent's, or the parent's bind hides it"
+
+
+# -- the read-only floor reaches the dispatcher (dp, 2026-10-25: forum on the floor, modes rw) ----
+
+def _core_with_modes():
+    def _roots(entries, ws):
+        out = []
+        for e in entries:
+            if isinstance(e, str) and e.startswith("path:"):
+                raw = e[len("path:"):]
+                rec = raw.endswith("/**")
+                out.append((raw[:-3] if rec else raw, rec))
+        return tuple(out)
+
+    def _with_modes(policy, ws):
+        return tuple((r, rec, "rwed") for r, rec in _roots(policy.scope, ws))
+    return SimpleNamespace(scope_roots_with_modes=_with_modes, _scope_roots_with_reach=_roots,
+                           _scope_parts=lambda s, w: ((), ()))
+
+
+def test_a_read_only_floor_entry_is_reach_for_reading_and_never_for_writing():
+    ws = os.path.realpath(tempfile.mkdtemp(prefix="floor-ws-"))
+    home, forum = os.path.join(ws, "home"), os.path.join(ws, "shared-context", "forum")
+    os.makedirs(home)
+    os.makedirs(forum)
+    open(os.path.join(forum, "note.md"), "w").write("from sprout\n")
+    policy = SimpleNamespace(scope=(), read_scope=(f"path:{forum}/**",))
+    reach = _granted_reach(_core_with_modes(), policy, ws)
+    assert (forum, True, "r") in reach, reach
+    d = ReferenceF1aDispatcher(memory_root=home)
+    v = GatewayVerdict("allow", granted=tuple(r for r, *_ in reach), granted_reach=reach)
+    r = d(BeingIntent("memory_read", {"path": os.path.join(forum, "note.md")}), v)
+    assert r.ok and "from sprout" in (r.result or ""), r
+    r = d(BeingIntent("memory_write", {"path": os.path.join(forum, "x.md"), "content": "x"}), v)
+    assert not r.ok and not os.path.exists(os.path.join(forum, "x.md")), r
+
+
+def test_the_floor_steps_aside_where_an_own_grant_reaches():
+    ws = os.path.realpath(tempfile.mkdtemp(prefix="floor-ws-"))
+    sc = os.path.join(ws, "shared-context")
+    forum = os.path.join(sc, "forum")
+    os.makedirs(forum)
+    policy = SimpleNamespace(scope=(f"path:{sc}/**",), read_scope=(f"path:{forum}/**",))
+    reach = _granted_reach(_core_with_modes(), policy, ws)
+    assert (sc, True, "rwed") in reach and not [x for x in reach if x[0] == forum], reach
+
+
+def test_an_older_core_adds_no_floor_it_could_only_express_as_all_modes():
+    ws = os.path.realpath(tempfile.mkdtemp(prefix="floor-ws-"))
+    forum = os.path.join(ws, "forum")
+    core = SimpleNamespace(_scope_roots_with_reach=lambda e, w: (), _scope_parts=lambda s, w: ((), ()))
+    policy = SimpleNamespace(scope=(), read_scope=(f"path:{forum}/**",))
+    assert _granted_reach(core, policy, ws) == ()

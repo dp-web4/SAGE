@@ -3279,6 +3279,39 @@ def _granted_roots(core, policy, workspace: str, granted_paths=()) -> tuple:
         return ()
 
 
+
+def _floor_read_reach(core, policy, workspace: str, own) -> tuple:
+    """``((root, recursive, "r"), ...)`` for the society's READ-ONLY floor this member's gate is
+    served (`society_floor_read` -> policy.read_scope, hestia #1381), so the dispatcher's own
+    confinement admits the reads the gate admits there.
+
+    Measured 2026-10-25 (cbp-being): dp put shared-context/forum on the floor with modes rw, which
+    the daemon serves read-only. The gate admitted a read there; this list carried only the
+    member's own grants, so the dispatcher would have refused the same read "outside your reach".
+
+    THE FLOOR APPLIES ONLY WHERE NO OWN GRANT REACHES (dp, 2026-10-23/24; hestia #1386): a floor
+    root at or beneath one of the member's own grant roots is left out, so the member's grant
+    decides there. Only with a mode-aware core (the third element says "r"); an older consumer
+    reads a pair as all modes, so nothing is added for it."""
+    import os
+    if getattr(core, "scope_roots_with_modes", None) is None:
+        return ()
+    entries = list(getattr(policy, "read_scope", ()) or ())
+    if not entries:
+        return ()
+    ws = os.path.realpath(os.path.expanduser(workspace)).replace("\\", "/").rstrip("/")
+    roots = [(str(r), bool(rec)) for r, rec in core._scope_roots_with_reach(entries, workspace)]
+    roots += [(os.path.realpath(os.path.join(ws, e)).replace("\\", "/").rstrip("/"), True)
+              for e in entries if isinstance(e, str) and e and not e.startswith("path:")
+              and "/" not in e and "\\" not in e and e not in (".", "..", "*")]
+    covered = [(str(it[0]).rstrip("/"), bool(it[1])) for it in own]
+    out = []
+    for root, rec in roots:
+        if any(root == r or (orec and root.startswith(r + "/")) for r, orec in covered):
+            continue
+        out.append((root, rec, "r"))
+    return tuple(out)
+
 def _granted_reach(core, policy, workspace: str, granted_paths=()) -> tuple:
     """``((root, recursive), ...)`` for every path grant, via the core's own reach resolver
     (hestia_gate_core._scope_roots_with_reach, since #1002: exact unless spelled `/**`),
@@ -3295,8 +3328,9 @@ def _granted_reach(core, policy, workspace: str, granted_paths=()) -> tuple:
         with_modes = getattr(core, "scope_roots_with_modes", None)
         if with_modes is not None:
             scopes = list(getattr(policy, "scope", ()) or ())
-            return (tuple((str(r), bool(rec), str(md)) for r, rec, md in with_modes(policy, workspace))
-                    + tuple((r, True) for r in _repo_name_roots(core, scopes, workspace, granted_paths)))
+            own = (tuple((str(r), bool(rec), str(md)) for r, rec, md in with_modes(policy, workspace))
+                   + tuple((r, True) for r in _repo_name_roots(core, scopes, workspace, granted_paths)))
+            return own + _floor_read_reach(core, policy, workspace, own)
         reach = getattr(core, "_scope_roots_with_reach", None)
         if reach is not None:
             scopes = list(getattr(policy, "scope", ()) or ())
