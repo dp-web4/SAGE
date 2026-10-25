@@ -1,9 +1,10 @@
 """hestia #1345 part B, SAGE's side: the dispatcher confines by the modes the gate judged by.
 
 A core that enforces modes exports scope_roots_with_modes(); _granted_reach passes the modes
-through as a third element, the dispatcher's own confinement requires r to read and w to write,
-and a run mounts full-mode grants only (the gate cannot judge a run line that mounts a narrowed
-root yet)."""
+through as a third element, and the dispatcher's own confinement requires r to read and w to
+write. A run mounts every grant that holds r (`run_grant_mounts`: `--ro-bind` unless the grant
+holds both w and d); the live single gate judges a run by its script path, never by that line
+(hestia #1388 README, point 3)."""
 import os
 import sys
 import tempfile
@@ -78,3 +79,27 @@ def test_granted_reach_takes_the_cores_modes_when_it_has_them():
 
 def test_mode_has_reads_a_missing_third_element_as_full():
     assert _mode_has([], "r") and _mode_has(["r"], "r") and not _mode_has(["w"], "r")
+
+
+def test_two_grants_on_one_root_union_their_modes_as_the_gate_does():
+    """nomad review of #533, point 1: keyed on the root alone, a full recursive grant and an `r`
+    grant on the same root collapsed to whichever came last, so a write the gate (union) admitted
+    was refused here. Keyed on (root, recursive) with modes unioned, the two agree."""
+    ws = os.path.realpath(tempfile.mkdtemp(prefix="modes-ws-"))
+    home, forum = os.path.join(ws, "home"), os.path.join(ws, "forum")
+    os.makedirs(home)
+    os.makedirs(forum)
+    for reach in (((forum, True, "rwed"), (forum, True, "r")),
+                  ((forum, True, "r"), (forum, True, "rwed")),
+                  ((forum, True, "r"), (forum, True, "w"))):
+        v = GatewayVerdict("allow", granted=(forum,), granted_reach=reach)
+        d = ReferenceF1aDispatcher(memory_root=home)
+        r = d(BeingIntent("memory_write", {"path": os.path.join(forum, "u.md"), "content": "x"}), v)
+        assert r.ok, (reach, r)
+        r = d(BeingIntent("memory_read", {"path": os.path.join(forum, "u.md")}), v)
+        assert r.ok and "x" in r.result, (reach, r)
+    # An exact r grant on the root and a recursive w grant on it are different keys.
+    v = GatewayVerdict("allow", granted=(forum,), granted_reach=((forum, False, "r"), (forum, True, "w")))
+    d = ReferenceF1aDispatcher(memory_root=home)
+    r = d(BeingIntent("memory_read", {"path": os.path.join(forum, "u.md")}), v)
+    assert not r.ok or "x" not in (r.result or ""), r

@@ -889,7 +889,16 @@ class ReferenceF1aDispatcher:
                              else tuple((r, True) for r in self._extra_roots))
         # AND IN WHICH MODES (hestia #1345 part B): a grant narrowed below rwed carries them as a
         # third element. A root without one is full-mode, as every grant was before modes.
-        self._extra_modes = {Path(r).resolve(): str(md[0]) for r, rec, *md in reach if md}
+        # Keyed on (root, recursive), and two grants on the same key UNION their modes, as the
+        # gate does ("the law's reach is their union", run_grant_mounts): keyed on the root alone,
+        # a full `/f/**` and an `r` grant on `/f` collapsed to whichever came last, and a write the
+        # gate admitted was refused here (nomad review of #533, point 1). A grant without modes
+        # is full-mode.
+        self._extra_modes = {}
+        for r, rec, *md in reach:
+            k = (Path(r).resolve(), bool(rec))
+            got = self._extra_modes.get(k, "") + (str(md[0]) if md else "rwed")
+            self._extra_modes[k] = "".join(c for c in "rwed" if c in got)
         handler = getattr(self, f"_do_{intent.effector}", None)
         if handler is None:
             # a consequential network act the reference won't run — real F1a's job
@@ -979,9 +988,10 @@ class ReferenceF1aDispatcher:
         need = "w" if writing else "r"
         modes = getattr(self, "_extra_modes", None) or {}
         reach = ((self.memory_root, True),) + tuple(
-            (r, rec) for r, rec in held if need in modes.get(r, "rwed"))
+            (r, rec) for r, rec in held if need in modes.get((r, rec), "rwed"))
         if not any(p == r or (recursive and r in p.parents) for r, recursive in reach):
-            narrowed = [modes[r] for r, rec in held if r in modes and need not in modes[r]
+            narrowed = [modes[(r, rec)] for r, rec in held
+                        if (r, rec) in modes and need not in modes[(r, rec)]
                         and (p == r or (rec and r in p.parents))]
             if narrowed:
                 raise ValueError(
@@ -1030,7 +1040,7 @@ class ReferenceF1aDispatcher:
         modes = getattr(self, "_extra_modes", None) or {}
         return tuple((r, rec) for r, rec in (getattr(self, "_extra_reach", None) or (
             (r, True) for r in (getattr(self, "_extra_roots", ()) or ())))
-            if "r" in modes.get(r, "rwed"))
+            if "r" in modes.get((r, rec), "rwed"))
 
     def _within_reach(self, p: Path) -> bool:
         p = p.resolve()
