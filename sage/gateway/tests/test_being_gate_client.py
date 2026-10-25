@@ -5,6 +5,7 @@ this exercises the Stage-2 policy in isolation. Runnable under pytest or directl
 (`python3 test_being_gate_client.py`).
 """
 import os
+import pytest
 import sys
 from types import SimpleNamespace
 
@@ -208,6 +209,17 @@ def test_single_gate_deny_and_no_verdict_map_fail_closed():
     assert v.blocks and v.rule == "gate.raised" and v.innate
 
 
+def test_request_scope_path_reaches_the_single_gate_as_no_reach():
+    """The single-gate twin of test_request_scope_path_is_not_judged_under_mrh_path. hestia's
+    path_targets reads `path` from tool_input, so handing request_scope's raw args on made the
+    requested path a judged target and every request died mrh.path (cbp-being, 2026-10-19)."""
+    c, calls = _sg_client("allow")
+    v = c.gate(BeingIntent("request_scope", {"path": "/etc/somewhere/ungranted", "reason": "why"}))
+    assert not v.blocks, v
+    ti = calls[0][0]["tool_input"]
+    assert "path" not in ti and ti["requested_path"] == "/etc/somewhere/ungranted", ti
+
+
 def test_registry_refusal_precedes_the_single_gate():
     c, calls = _sg_client("allow")
     v = c.gate(BeingIntent("shell", {"command": "rm -rf /"}))
@@ -297,6 +309,54 @@ def test_a_refusal_is_witnessed_and_names_its_appeal_handle():
     c._dispatcher = None
     env = c.dispatch(BeingIntent("memory_write", {"path": "/etc/x", "content": "c"}))
     assert env.refused and env.witness_id is None and "cannot be appealed yet" in env.error
+
+
+def test_a_relative_path_resolves_to_an_existing_granted_file_before_the_gate():
+    """dp, 2026-10-21: "the harness should resolve relative paths to granted ones when they
+    exist." cbp-being asked for `governance/hestia/.../hestia_single_gate.py`, which is rooted at
+    its home, and was told the file did not exist, though it sat under its grant. The gate and
+    the dispatcher must both see the one resolved path; the home still wins; nothing ungranted
+    is reached; the receipt says what happened."""
+    import tempfile
+    from sage.gateway.being_gate_client import GatewayVerdict, ResultEnvelope
+    ws = os.path.realpath(tempfile.mkdtemp(prefix="ws-"))
+    home = os.path.join(ws, "SAGE", "sage", "instances", "b")
+    os.makedirs(home)
+    os.makedirs(os.path.join(ws, "governance", "hestia"))
+    os.makedirs(os.path.join(ws, "private"))
+    gate_src = os.path.join(ws, "governance", "hestia", "gate.py")
+    for f in (gate_src, os.path.join(ws, "private", "s.txt"), os.path.join(home, "todo.md"),
+              os.path.join(ws, "todo.md")):
+        open(f, "w").write("x")
+    judged, touched = [], []
+
+    def gate(intent):
+        judged.append(intent.args["path"])
+        return GatewayVerdict("allow", "", "ok", stage="single-gate")
+
+    def disp(intent, verdict):
+        touched.append(intent.args["path"])
+        return ResultEnvelope(ok=True, result="body")
+
+    c = BeingGateClient.__new__(BeingGateClient)
+    c.memory_root, c.workspace, c._dispatcher, c.gate = home, ws, disp, gate
+    c._policy_grants = lambda: ((), ((os.path.join(ws, "governance"), True),))
+    env = c.dispatch(BeingIntent("memory_read", {"path": "governance/hestia/gate.py"}))
+    assert judged[-1] == touched[-1] == gate_src, (judged, touched)
+    assert env.result.startswith("[") and gate_src in env.result and env.result.endswith("body")
+    # ungranted: left as asked (rooted at home), never reached
+    c.dispatch(BeingIntent("memory_read", {"path": "private/s.txt"}))
+    assert judged[-1] == touched[-1] == "private/s.txt"
+    # the home wins when the file is there
+    c.dispatch(BeingIntent("memory_read", {"path": "todo.md"}))
+    assert touched[-1] == "todo.md"
+    # an exact grant matches only itself
+    c._policy_grants = lambda: ((), ((gate_src, False),))
+    c.dispatch(BeingIntent("memory_read", {"path": "governance/hestia/gate.py"}))
+    assert touched[-1] == gate_src
+    c._policy_grants = lambda: ((), ((os.path.join(ws, "governance"), False),))
+    c.dispatch(BeingIntent("memory_read", {"path": "governance/hestia/gate.py"}))
+    assert touched[-1] == "governance/hestia/gate.py"
 
 
 def test_granted_roots_come_from_the_policy_scope():
@@ -443,6 +503,57 @@ def test_granted_reach_reads_the_cores_reach_resolver_and_an_older_core_is_recur
     older = _granted_reach(object(), Pol, "/ws")
     assert older and all(rec for _, rec in older)
     assert _granted_reach(Core, None, "/ws") == () and GatewayVerdict("allow").granted_reach == ()
+
+
+def test_a_recursive_grant_on_a_workspace_directory_reaches_the_dispatcher(tmp_path):
+    """cbp-being, 2026-10-22: dp widened governance/hestia/** to governance/**. hestia maps a
+    recursive grant on a workspace-direct directory to the bare name `governance`; the roots
+    were read from path: scopes only, so the gate allowed memory_read and the dispatcher
+    refused it "outside your reach" for 3.5 hours. The widening removed the reach."""
+    import importlib, sys
+    from sage.gateway.being_gate_client import _granted_roots, _granted_reach, GatewayVerdict
+    from sage.gateway.being_gate_client import BeingIntent
+    from sage.gateway.reference_f1a import ReferenceF1aDispatcher
+    shared = os.path.expanduser("~/ai-workspace/governance/hestia/plugins/_shared")
+    if not os.path.isfile(os.path.join(shared, "hestia_gate_core.py")):
+        pytest.skip("no hestia core on this machine")
+    sys.path.insert(0, shared)
+    try:
+        core = importlib.import_module("hestia_gate_core")
+        mech = importlib.import_module("hestia_gate_mechanism")
+    finally:
+        sys.path.remove(shared)
+    ws = tmp_path / "ws"
+    (ws / "governance" / "hestia").mkdir(parents=True)
+    target = ws / "governance" / "hestia" / "closure.py"
+    target.write_text("CLOSURE = 1\n")
+    home = tmp_path / "home"
+    home.mkdir()
+    orig = mech._workspace_root
+    mech._workspace_root = lambda: str(ws)
+    try:
+        entry = mech._scope_entry_for_grant(str(ws / "governance"), True)
+        exact = mech._scope_entry_for_grant(str(ws / "governance"), False)
+    finally:
+        mech._workspace_root = orig
+    assert entry == "governance"                        # the real mapping: a bare name
+    class Pol: scope = (entry, "repo:sage")
+    minted = (str(ws / "governance") + "/**",)          # the snapshot's scope_grants for it
+    assert _granted_roots(core, Pol, str(ws)) == ()     # a bare name no grant stands behind: nothing
+    roots = _granted_roots(core, Pol, str(ws), minted)
+    assert roots == (os.path.realpath(ws / "governance"),)          # repo:sage is not a dir
+    assert _granted_reach(core, Pol, str(ws), minted) == ((os.path.realpath(ws / "governance"), True),)
+    # an EXACT grant on the same directory keeps the path: form and stays exact
+    class Exact: scope = (exact,)
+    assert _granted_reach(core, Exact, str(ws)) == ((os.path.realpath(ws / "governance"), False),)
+    # the last mile: the dispatcher reads the file the gate allowed
+    d = ReferenceF1aDispatcher(str(home))
+    env = d(BeingIntent("memory_read", {"path": str(target)}),
+            GatewayVerdict("allow", granted=roots, granted_reach=_granted_reach(core, Pol, str(ws), minted)))
+    assert env.ok and "CLOSURE = 1" in str(env.result), env.error
+    # and without the grant it is still refused
+    env = d(BeingIntent("memory_read", {"path": str(target)}), GatewayVerdict("allow"))
+    assert not env.ok and "outside your reach" in str(env.error)
 
 
 def test_search_quotes_its_pattern_so_judged_equals_executed():
@@ -759,6 +870,42 @@ def test_single_gate_judges_a_worktree_verbs_path_at_the_worktree(tmp_path=None)
     assert "path" not in calls[-1][0]["tool_input"], "no path given, none invented"
 
 
+def test_single_gate_judges_a_runs_script_in_the_home():
+    """Sprout, 2026-10-20/21: run has no path_args, so `run scratch/test-v4l2-access.py` reached the
+    single gate raw and hestia resolved it against the seat's checkout -- refused "'scratch' is not
+    granted", with a scope request for a file that does not exist. The script is staged from the
+    being's home (run_names), so that is where the gate must judge it. Absolute paths are left alone."""
+    c, calls = _sg_client("allow")
+    c.memory_root = "/tmp/being-home"
+    c.member_id = "test-being"
+    c._core = SimpleNamespace(NormalizedEvent=lambda **kw: SimpleNamespace(**kw))
+    c.gate(BeingIntent("run", {"path": "scratch/t.py"}))
+    ev, _ = calls[-1]
+    assert ev["tool_input"]["path"] == os.path.realpath("/tmp/being-home/scratch/t.py"), ev["tool_input"]
+    assert ev["raw"]["path"] == "scratch/t.py", "raw keeps what the being said"
+    assert ev["cwd"] == "/tmp/ws"
+    c.gate(BeingIntent("run", {"path": "/tmp/being-home/scratch/t.py"}))
+    assert calls[-1][0]["tool_input"]["path"] == os.path.realpath("/tmp/being-home/scratch/t.py")
+
+
+def test_a_relative_write_is_never_redirected_to_a_granted_file():
+    """A relative write the home lacks is a create in the home, not an edit of a granted file."""
+    import tempfile
+    from sage.gateway.being_gate_client import GatewayVerdict, ResultEnvelope
+    ws = os.path.realpath(tempfile.mkdtemp(prefix="ws-"))
+    home = os.path.join(ws, "h")
+    os.makedirs(home)
+    os.makedirs(os.path.join(ws, "g"))
+    open(os.path.join(ws, "g", "f.md"), "w").write("theirs")
+    touched = []
+    c = BeingGateClient.__new__(BeingGateClient)
+    c.memory_root, c.workspace = home, ws
+    c.gate = lambda i: GatewayVerdict("allow", "", "ok", stage="single-gate")
+    c._dispatcher = lambda i, v: (touched.append(i.args["path"]), ResultEnvelope(ok=True, result="w"))[1]
+    c._policy_grants = lambda: ((), ((os.path.join(ws, "g"), True),))
+    for eff in ("memory_write", "memory_edit", "retire_note"):
+        c.dispatch(BeingIntent(eff, {"path": "g/f.md", "content": "mine", "old": "a", "new": "b"}))
+        assert touched[-1] == "g/f.md", (eff, touched)
 def test_single_gate_is_handed_the_composed_command_not_the_friendly_args():
     """GPT on #367: hestia_single_gate derives `command` only from tool_input["command"]. A composed verb's
     judged line must be there, or the one gate scopes the being's args instead of the act."""

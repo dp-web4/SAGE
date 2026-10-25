@@ -46,6 +46,8 @@ class ToolTurnResult:
     yielded: Optional[str] = None                          # the harness ended the turn for a higher-priority event: what
     json_arg_failures: List[dict] = field(default_factory=list)  # act_form="json": chosen acts whose arguments failed (no act)
     placeholders: List[dict] = field(default_factory=list)   # a leaked-template reply retaken as a JSON act: original, basis, policy, retry-derived result
+    window_full: Optional[dict] = None                     # the harness ended the tool phase: the next prompt would not fit the window
+    seed_measured: Optional[tuple] = None                  # (prompt_eval_count, chars) of the first prompt the server counted whole: the next phase's anchor
 
     @property
     def acted(self) -> bool:
@@ -137,7 +139,8 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
         intents = out.get("intents") or []
 
         if not intents:                                    # a spoken turn — the being is done
-            return ToolTurnResult(reply=content, trace=trace, steps=step, duplicates=duplicates, stay_awake=stay_awake)
+            return ToolTurnResult(reply=content, trace=trace, steps=step, duplicates=duplicates, stay_awake=stay_awake,
+                                  window_full=out.get("window_full"))
 
         convo.append({"role": "assistant", "content": content, "intents": intents})
         rested = None
@@ -226,13 +229,15 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
             out = generate(convo)
             return ToolTurnResult(reply=out.get("content") or "", trace=trace, steps=step + 1,
                                   looped={"effector": intents[0].effector, "times": repeats + 1},
-                                  duplicates=duplicates, stay_awake=stay_awake)
+                                  duplicates=duplicates, stay_awake=stay_awake,
+                                  window_full=out.get("window_full"))
 
     # Cap reached with tools still pending: force one final spoken close — we take its
     # words even if it wants more tools, so the being always ends its turn in language.
     out = generate(convo)
     return ToolTurnResult(reply=out.get("content") or "", trace=trace,
-                          steps=max_steps, capped=True, duplicates=duplicates, stay_awake=stay_awake)
+                          steps=max_steps, capped=True, duplicates=duplicates, stay_awake=stay_awake,
+                          window_full=out.get("window_full"))
 
 
 _FENCE = re.compile(r"```[A-Za-z0-9_+-]*[ \t]*\n(.*?)```", re.S)
@@ -917,6 +922,54 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
 
 RETRY_MARGIN = 128   # tokens kept back from the window on a retry (template, tool-call framing)
 
+# NEVER SEND WHAT THE WINDOW CANNOT HOLD (2026-10-15). Compaction only elides tool results; the
+# system prompt and the first user turn are never touched. On Sprout (num_ctx 16,384) those two
+# alone measured ~14k tokens, against a compaction target of 16,384 - 6,144 = 10,240, so an
+# explore loop grew past the window a step at a time. Ollama then dropped messages off the FRONT
+# of the request, the only user turn with them, and the qwen chat template raised "No user query
+# found in messages": an HTTP 400 whose text became the beat's reply. About 16 beats since 09-06,
+# every one at step 2-8 of an explore loop, never step 1. A prompt still over the window after
+# compaction is not sent; the tool phase ends and the beat closes as usual.
+WINDOW_SEND_MARGIN = 256
+
+# THE FIRST STEP HAS NO SERVER COUNT, SO IT IS JUDGED ON A PREFLIGHT ESTIMATE THAT ERRS HIGH.
+# Chars per token for a whole unanchored prompt: _CPT (2.9) sits below every ratio measured on
+# this being's seeds (3.026..3.152 over 60 beats), so it over-counts tokens by ~4-8%. Not lower:
+# Sprout's real step-1 prompts measured up to 14,306 tokens at num_ctx 16,384 (~32k content
+# chars), which 2.9 puts at ~15.5k, under the line; 2.5 would put them at ~18k and refuse beats
+# the heartbeat's own fitter (also 2.9) accepted. So the step-1 guard catches a seed that is
+# grossly over the window, not one that tokenizes denser than 2.9; that residue is what the
+# server_cut path below still catches after the fact.
+PREFLIGHT_CPT = _CPT
+
+# A count far below a server-anchored estimate means the server truncated what was sent: the
+# server's prompt_eval_count is then of what survived its own cut, not of the list we sent.
+# Stored as a measurement, it anchored the next step's estimate ~8k low (a window retry came back
+# at 8,172 for a list whose previous step the server had counted at 16,349) and compaction was
+# skipped on exactly the step that needed it.
+SERVER_CUT_RATIO = 0.75
+
+# SOME TEMPLATES SEND THE TOOLS ONLY WHEN THE LAST MESSAGE IS A USER TURN. Ollama's llama3.1
+# template renders the schemas inside the last user message ({{ if and $.Tools $last }}), so once
+# a tool result is last they are gone from the prompt. Measured on pub-being, 2026-10-21: step 1
+# counted ~10.0k, step 2 ~5.6k for a LONGER list (the ~4.3k of schemas gone). Judged against the
+# step-1 anchor that read as a server cut, and since the cut ends the phase, every explore and
+# reflect from 08:13Z ran exactly one act. Such a model (capabilities `tools_on_last_user_only`)
+# keeps one anchor per tail kind, and a count is called a cut only against its own kind.
+_TAIL_USER = "user"
+
+
+def _tail_kind(llm, msgs) -> Optional[str]:
+    """None for a template whose prompt has the same parts whatever comes last (one anchor, as
+    before); else whether the last message is a user turn (tools sent) or not (tools dropped)."""
+    if not getattr(llm, "tools_on_last_user_only", False):
+        return None
+    return _TAIL_USER if msgs and msgs[-1].get("role") == "user" else "after_turn"
+
+# The template's own words for a request whose user turn is gone. Re-sending the same list
+# cannot succeed, so this is never retried as a transport error.
+NO_USER_QUERY = "No user query found"
+
 
 def retry_cause_of(llm, raw: dict) -> str:
     """Why a first attempt came back empty: "window" (prompt + eval filled num_ctx),
@@ -1159,7 +1212,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                          act_form: str = "tools",
                          retake_bare_placeholder: bool = False,
                          on_generate: Optional[Callable[[dict], None]] = None,
-                         compact_own_turns: bool = False) -> ToolTurnResult:
+                         compact_own_turns: bool = False,
+                         anchor: Optional[tuple] = None) -> ToolTurnResult:
     """Run a gated tool turn using an OllamaIRP-like `llm` exposing
     get_chat_response(messages, tools=...) -> {"content", "tool_calls"}.
 
@@ -1168,6 +1222,9 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     `tools` narrows what is offered for this turn (default: the whole registry).
     `on_generate` sees each generates[] entry as it lands, so a caller can write a trace
     a killed beat still leaves (the record itself is written at beat end).
+    `anchor` is a previous phase's `seed_measured` over a PREFIX of `seed_messages`, sent with the
+    same `tools`: step 1 is then judged on the server's count instead of the preflight guess, and
+    a step-1 count far below it is caught as a server cut (posture after explore, CBP 2026-10-21).
     """
     from sage.gateway.being_gate_client import ollama_tools, parse_tool_calls
     # THE ANSWER RESERVE IS PER BEING (being_params `answer_reserve`, 2026-10-08). It is what
@@ -1192,9 +1249,13 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     compacted: List[dict] = []
     json_arg_failures: List[dict] = []     # act_form="json": arguments that could not be formed (no act)
     placeholders: List[dict] = []          # native replies that were only a template, retaken as a JSON act
-    # (prompt_eval_count, chars at that prompt) from the last generate the server counted.
+    # (prompt_eval_count, chars at that prompt) from the last generate the server counted, per
+    # TAIL KIND (_tail_kind: one kind unless the template drops the tools after a tool turn).
     # Compaction is anchored on this, so only the DELTA rides a chars-per-token estimate.
-    measured = None
+    anchors: Dict[Optional[str], tuple] = {}
+    if anchor:
+        anchors[_tail_kind(llm, [{"role": "user"}])] = tuple(anchor)   # a seed count: its tail is a user turn
+    first_measured = None    # this phase's own first whole count: what the next phase anchors on
     attempts: List[dict] = []
 
     def _model_call(phase: str, messages, **kwargs):
@@ -1267,8 +1328,27 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         error or a think-only reply). The retries' budget and think handling still wrap this call."""
         return _json_act(msgs) if act_form == "json" else _model_call("tools", msgs, tools=tools)
 
+    def _land(entry: dict) -> None:
+        generates.append(entry)
+        if on_generate is not None:
+            try:
+                on_generate(dict(entry))
+            except Exception as _e:
+                import sys as _sys
+                print(f"[tool-loop] on_generate failed: {type(_e).__name__}: {_e}", file=_sys.stderr)
+
+    def _window_full(cause: str, est: int, ctx) -> Dict[str, Any]:
+        """End the tool phase without a reply: the next prompt does not fit ("over_window" on a
+        server-anchored estimate, "preflight" on step 1's high-erring one; either way not sent) or
+        the server already cut its user turn ("server_cut"). No words in the being's name."""
+        thoughts.append("")
+        _land({"window_full": cause, "estimated_prompt": est, "num_ctx": ctx, "retried": 0,
+               "attempts": [dict(a) for a in attempts]})
+        return {"content": "", "intents": [],
+                "window_full": {"step": len(thoughts) - 1, "cause": cause, "estimated_prompt": est, "num_ctx": ctx}}
+
     def generate(convo: List[Dict[str, Any]]) -> Dict[str, Any]:
-        nonlocal measured
+        nonlocal first_measured
         attempts.clear()
         # Flatten the loop's convo (carries extra keys) to chat messages. An assistant
         # turn that emitted intents MUST keep them as tool_calls: Qwen's chat template
@@ -1295,6 +1375,14 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 out["tool_calls"] = [{"function": {"name": i.effector, "arguments": dict(i.args or {})}}
                                      for i in m["intents"]]
             msgs.append(out)
+        # The anchor for THIS prompt is a count of the same tail kind. With none yet (the first
+        # step after a tool turn, on a template that drops the tools there), the other kind's
+        # count stands in for the window arithmetic, but it is not a basis for calling a cut.
+        _tail = _tail_kind(llm, msgs)
+        measured = anchors.get(_tail)
+        _same_tail = measured is not None
+        if not _same_tail and anchors:
+            measured = next(iter(anchors.values()))
         # LEAVE ROOM FOR THE ANSWER BEFORE ASKING FOR ONE. Every tool result is appended,
         # so the prompt the loop ENDS on is not the seed it started from. Without this it
         # grows until the server cuts the generate mid-sentence: measured on Legion, 27 of
@@ -1308,12 +1396,37 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             compacted.append({"step": len(thoughts), "elisions": len(_elided),
                               "chars": sum(e["chars"] for e in _elided),
                               "after": convo_composition(msgs)})
+        try:
+            _ctx = int(getattr(llm, "num_ctx", None) or 0)
+        except (TypeError, ValueError):
+            _ctx = 0
+        # NEVER SEND WHAT THE WINDOW CANNOT HOLD (WINDOW_SEND_MARGIN). From step 2 on, judged on a
+        # server-anchored estimate (the previous step's prompt_eval_count plus the delta); on step 1,
+        # with no count yet, on the PREFLIGHT_CPT estimate, which errs high. Not sent means no cut,
+        # no 400, and nothing said in the being's name.
+        if _ctx > 0:
+            if measured is not None:
+                _est, _cause = _est_tokens(_convo_chars(msgs), measured), "over_window"
+                if not _same_tail and _tail == _TAIL_USER:
+                    # anchored on a count made WITHOUT the tool schemas, which this prompt carries
+                    _est = max(_est, (_convo_chars(msgs) + _UNCOUNTED_CHARS) / PREFLIGHT_CPT)
+            else:
+                _est, _cause = (_convo_chars(msgs) + _UNCOUNTED_CHARS) / PREFLIGHT_CPT, "preflight"
+            if _est > _ctx - WINDOW_SEND_MARGIN:
+                return _window_full(_cause, int(_est), _ctx)
         retried = 0
         retry_cause = None
         sent = _sent_budget(llm)          # the num_predict of the reply that stands
         resp = _once(msgs)
         content = resp.get("content", "") or ""
         calls = resp.get("tool_calls", []) or []
+        if content.startswith("[OllamaIRP:") and NO_USER_QUERY in content and not calls:
+            # The server cut the user turn off the front (WINDOW_SEND_MARGIN). The same list cannot
+            # succeed again, and the 400's text is not the being's reply: the window is full.
+            import sys as _sys
+            print(f"[tool-loop] the server cut this prompt's user turn; window full, not retried: "
+                  f"{content[:200]}", file=_sys.stderr)
+            return _window_full("server_cut", int(_est_tokens(_convo_chars(msgs), measured)), _ctx or None)
         if content.startswith("[OllamaIRP:") and not calls:
             # a transport failure is not the being's turn: retry once with a bigger budget,
             # then let the failure through as the visible reply rather than pretending.
@@ -1400,14 +1513,21 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                     # code it meant to write (whole functions), cut before the write. The retry
                     # said "act now" and nothing about the draft, so the next attempt derived it
                     # again from scratch. The draft is kept (keep_empty_thinking); say so.
-                    _where = (f"Your whole deliberation is saved as {_kept} -- memory_read a "
+                    # Provider token counts do not establish how much thinking survived
+                    # in the response. Preserve the returned text without calling it the
+                    # whole deliberation (observed: 6000 tokens, 149 returned characters).
+                    _where = (f"The thinking text returned by the provider is saved as {_kept} -- memory_read a "
                               f"narrow range of it to reuse what you drafted rather than "
                               f"deriving it again, and draft long code in a scratch file "
                               f"(memory_write) rather than in your thinking. "
                               if _kept else "")
+                    _usage = (f"The provider reported {raw['eval_count']} output tokens"
+                              if raw.get("eval_count") is not None else
+                              "The provider did not report an output token count")
                     msgs.append({"role": "user", "content": (
-                        f"[harness] Your previous attempt spent its whole budget deliberating "
-                        f"({raw.get('eval_count')} tokens) {_cut} "
+                        f"[harness] Your previous attempt returned thinking without a reply or tool call "
+                        f"{_cut} {_usage}; "
+                        f"{len(str(msg.get('thinking') or ''))} thinking characters were returned. "
                         f"{_where}Act now: one tool call. The "
                         f"deliberation belongs in journal.md, after the act.")})
                 # A WINDOW CUT IS RETRIED WITH ROOM, OR IT IS THE SAME CUT AGAIN (2026-10-08). This
@@ -1481,21 +1601,37 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # "did the retry have more room than the first attempt" reads from the file, not
         # from stderr (SAGE #45 sends the room; this says what it was).
         raw = resp.get("raw") or {}
+        _server_cut = None
         if raw.get("prompt_eval_count"):
             # re-measure from the list AS SENT: any nudge appended above is inside this count
-            measured = (int(raw["prompt_eval_count"]), _convo_chars(msgs))
+            _now = (int(raw["prompt_eval_count"]), _convo_chars(msgs))
+            # ... unless the count is of what survived a server cut (SERVER_CUT_RATIO): then the
+            # previous anchor stands, and the cut is recorded instead of believed.
+            _expected = _est_tokens(_now[1], measured) if _same_tail else None
+            if _expected and _now[0] < SERVER_CUT_RATIO * _expected:
+                _server_cut = {"counted": _now[0], "expected": int(_expected)}
+            else:
+                anchors[_tail] = _now
+                if first_measured is None and _tail in (None, _TAIL_USER):
+                    first_measured = _now
         entry = {"done_reason": raw.get("done_reason"), "prompt_eval_count": raw.get("prompt_eval_count"),
                  "eval_count": raw.get("eval_count"), "retried": retried, "num_predict": sent,
                  "attempts": [dict(a) for a in attempts]}
         if retry_cause:
             entry["retry_cause"] = retry_cause   # what the FIRST attempt hit; the counts above are the retry's
-        generates.append(entry)
-        if on_generate is not None:
-            try:
-                on_generate(dict(entry))
-            except Exception as _e:
-                import sys as _sys
-                print(f"[tool-loop] on_generate failed: {type(_e).__name__}: {_e}", file=_sys.stderr)
+        if _server_cut:
+            entry["server_cut"] = _server_cut
+            entry["window_full"] = "server_cut"
+        _land(entry)
+        if _server_cut:
+            # A REPLY TO A CUT PROMPT IS NOT THE BEING'S ACT. The server dropped part of what was
+            # sent (CBP 2026-10-21: posture counted 8,260 after explore's 16,150 -- its prompt holds
+            # the whole seed, so about half was gone), and the model answered without it. Its calls
+            # are not run and its words are not kept; the phase ends as a full window.
+            return {"content": "", "intents": [],
+                    "window_full": {"step": len(thoughts) - 1, "cause": "server_cut",
+                                    "estimated_prompt": _server_cut["expected"],
+                                    "num_ctx": getattr(llm, "num_ctx", None)}}
         if not calls and content:
             # the call in the wrong channel: lift it, gate it as normal, record that it was lifted
             calls = salvage_tool_calls(content, tools)
@@ -1514,5 +1650,6 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     result.compacted = list(compacted)
     result.json_arg_failures = list(json_arg_failures)
     result.placeholders = list(placeholders)
+    result.seed_measured = first_measured
 
     return result

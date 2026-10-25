@@ -38,5 +38,8 @@ Environment=HESTIA_HOME=%h/.hestia
 #ExecCondition=/bin/sh -c '/usr/bin/python3 -m sage.gateway.gpu_window check; test $$? -ne 3'
 ExecStart=/usr/bin/python3 -m sage.gateway.heartbeat --member <machine>-being --model <model> --instance sage/instances/<instance-dir> --max-steps 8
 TimeoutStartSec=1500
+# Declare the bound to the beat (run_budget_s, activity.BEAT_TTL_S): a run never outlives its
+# beat, and an undeclared bound is treated as none. Keep the two values equal.
+Environment=SAGE_BEAT_TIMEOUT_S=1500
 StandardOutput=append:/home/dp/ai-workspace/SAGE/sage/instances/<instance-dir>/heartbeat.log
 StandardError=inherit

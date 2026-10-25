@@ -3,7 +3,8 @@
 
 dp, 2026-10-08: "it's silly that something which only paints some text and bar graphs on the screen should take
 half a gig of ram". The web dashboard needed a browser (Firefox ~550 MB on a 7.5 GB Sprout already in swap).
-This paints the same facts in a terminal: state, ATP, SNARC salience, the current beat, conversations, and an
+This paints the same facts in a terminal: state, ATP, SNARC salience, the current beat, the machine body
+(memory first, then GPU/CPU/temperature/disk, as the console's /body panel), conversations, and an
 input line that speaks as dp through the same loopback route the dp console uses. Run it ON the machine (or over
 `ssh -t <machine> python3 -m sage.tools.sage_tui`): it reads 127.0.0.1, so the daemon's loopback-only rules hold.
 
@@ -64,6 +65,70 @@ def header_lines(health: dict, status: dict, width: int) -> list[str]:
     if sal:
         cols = [f"{k[:4]} {bar(v, 6)}" for k, v in sal.items() if k != "total" and isinstance(v, (int, float))]
         out.append("salience " + "  ".join(cols) + f"   total {float(sal.get('total') or 0):.2f}")
+    return [l[:width] for l in out]
+
+
+GIB = 1024 ** 3
+
+
+def _v(d: dict, *keys):
+    """A sampled value from the body snapshot ({"value": x, "source": ...}), or None when unsensed."""
+    for k in keys:
+        d = (d or {}).get(k) if isinstance(d, dict) else None
+    return d.get("value") if isinstance(d, dict) else None
+
+
+def _same_model(a: str, b: str) -> bool:
+    """The daemon's tag rule (sage-daemon same_model, #433): exact, with a bare name meaning `:latest`."""
+    norm = lambda m: m.strip() if ":" in m else m.strip() + ":latest"  # noqa: E731
+    return bool(a.strip()) and norm(a) == norm(b)
+
+
+def body_lines(body: dict, health: dict, width: int) -> list[str]:
+    """The machine's metabolism, as the web console shows it (dp 2026-10-18), memory first.
+
+    Memory is a bar, not a number: on a unified-memory machine the being's model, the cortex, the seat and
+    a browser all draw on one pool, and that pool is the first thing to run out (Firefox ~550 MB on a 7.5 GB
+    Sprout, the reason this TUI exists). The rest is the sampler's own `line` (one renderer, in the
+    sampler; the console renders the same string), minus its RAM part, which the bar replaces. A snapshot
+    that cannot be read says so; it is never drawn as zero."""
+    if not body or not body.get("line"):
+        why = (body or {}).get("unavailable") or "the daemon did not answer /body"
+        return [f"body: not sensed ({why})"[:width]]
+    mem = body.get("memory") or {}
+    total, used = _v(mem, "total_bytes"), _v(mem, "used_bytes")
+    out = []
+    if total and used is not None:
+        pool = " one pool, GPU incl." if mem.get("pool") == "unified" else ""
+        avail = _v(mem, "available_bytes")
+        swap_t, swap_u = _v(mem, "swap_total_bytes"), _v(mem, "swap_used_bytes")
+        frac = used / total
+        out.append(f"RAM  {bar(frac, 20)} {used / GIB:.1f}/{total / GIB:.1f} GiB {frac * 100:3.0f}%{pool}"
+                   + (f"  avail {avail / GIB:.1f}" if avail is not None else "")
+                   + (f"  swap {swap_u / GIB:.1f}/{swap_t / GIB:.1f}" if swap_t else ""))
+    else:
+        out.append("RAM  not sensed")
+    # The sampler writes RAM inside the CPU segment ("CPU 52% · 62°C · RAM 2.8/7.4 GiB (…) (+3.5 GiB swap)"):
+    # drop only that part, or the CPU reading goes with it.
+    rest = []
+    for seg in str(body["line"]).split(" | "):
+        if seg.startswith("memory:"):
+            continue
+        keep = [p for p in seg.split(" · ") if not p.startswith("RAM ")]
+        if keep:
+            rest.append(" · ".join(keep))
+    loaded = health.get("loaded_models")
+    if loaded is not None:
+        # The daemon's own answer (`model_loaded`, #433's same_model) is the contract. Its fallback is the same
+        # rule: exact identity, with only a bare name meaning `:latest` -- never the family before the colon,
+        # which reported qwen:2b as qwen:4b loaded (NOVA on #469).
+        here = health.get("model_loaded")
+        if here is None:
+            here = any(_same_model(str(m), str(health.get("model") or "")) for m in loaded)
+        rest.append(f"model {'loaded' if here else 'not loaded'}" + (f" ({', '.join(map(str, loaded))})" if loaded else ""))
+    age = body.get("served_age_s")
+    rest.append(f"sampled {age:.0f}s ago" if isinstance(age, (int, float)) else "age unknown")
+    out.append("  ".join(rest))
     return [l[:width] for l in out]
 
 
@@ -182,12 +247,15 @@ def run(stdscr) -> None:  # pragma: no cover - exercised by hand; TuiState and t
     st = TuiState()
     nlines = 0
     last = 0.0
-    health = status = listing = conv = {}
+    health = status = listing = conv = body = {}
     err = None
     while True:
         if time.time() - last >= REFRESH_S:
             health, _ = fetch("/health")
             status, _ = fetch("/status")
+            body, body_err = fetch("/body")
+            if body_err and not body.get("unavailable"):
+                body = {"unavailable": body_err}
             listing, err = fetch("/conversations")
             st.update(conversation_rows(listing))
             conv = fetch(f"/conversations/{st.sel_id}?limit={TURNS}")[0] if st.sel_id else {}
@@ -204,7 +272,7 @@ def run(stdscr) -> None:  # pragma: no cover - exercised by hand; TuiState and t
             if stdscr.getch() in (ord("q"), ord("Q")):
                 return
             continue
-        top = header_lines(health, status, w - 1)
+        top = header_lines(health, status, w - 1) + body_lines(body, health, w - 1)
         for i, l in enumerate(top):
             stdscr.addnstr(i, 0, l, w - 1, curses.A_BOLD if i == 0 else 0)
         y0 = len(top) + 1

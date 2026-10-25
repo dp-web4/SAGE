@@ -40,14 +40,18 @@ WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "
 # for a worktree so `search` could find lines in its own scratch file, which search can never
 # read. Each line says what the verb reads and which tool serves the being's own files. The
 # full refusal the verb itself returns is being_gate_client.NO_WORKTREE_REFUSAL.
+#: Worktree verbs that still work with no worktree, on another target, so they are NOT marked
+#: unavailable there. search reads a grant outside the home by absolute path (CBP, 2026-10-21:
+#: 15 refused searches in 12 beats on the governance snapshot it holds read grants for).
+REACH_VERBS = ("search",)
 NO_WORKTREE_HERE = {
-    "search": ("it searches a code-repository checkout (a worktree), not your home, and this "
-               "seat has none; to read lines in your own files use memory_read with "
-               "start_line"),
+    "search": ("it searches a code-repository checkout (a worktree), or with none a folder outside "
+               "your home that you hold a grant for, by absolute path; not your home: to find a "
+               "line in your own files use memory_read with path and find"),
     "git_read": ("it reads the git history of a code-repository checkout (a worktree), not "
                  "your home, and this seat has none; to read your own files use memory_read"),
     "check": ("it runs the test suites of a code-repository checkout (a worktree), not your "
-              "home, and this seat has none; to run one of your own files use request_run"),
+              "home, and this seat has none; to run one of your own files use run"),
     "patch_apply": ("it changes files in a code-repository checkout (a worktree), not your "
                     "home, and this seat has none; to change lines of your own files use "
                     "memory_edit"),
@@ -73,6 +77,19 @@ NO_WORKTREE_HERE = {
 # enabled on this seat". Availability now follows the gate's condition, which is unchanged; the
 # no-worktree reason wins over the body reason because it is the one calling the verb returns.
 WORKTREE_HELD_VERBS = ("camera",)
+
+
+_SANDBOX_HERE: Optional[bool] = None
+
+
+def _sandbox_here() -> bool:
+    """A sandbox `run` can use (being_gate_client.run_sandbox_kind: bwrap, or Seatbelt on a Mac), once
+    per process: it starts a real one."""
+    global _SANDBOX_HERE
+    if _SANDBOX_HERE is None:
+        from sage.gateway.being_gate_client import run_sandbox_kind
+        _SANDBOX_HERE = run_sandbox_kind() is not None
+    return _SANDBOX_HERE
 
 
 def canonical_toolset() -> List[str]:
@@ -102,7 +119,7 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
             out[v] = f"this machine's body has no {part} (measured)"
     if not worktree:
         for v in WORKTREE_VERBS + WORKTREE_HELD_VERBS:
-            if v in _TOOL_SCHEMAS:
+            if v in _TOOL_SCHEMAS and v not in REACH_VERBS:
                 out[v] = NO_WORKTREE_HERE.get(
                     v, "it works in a code-repository checkout (a worktree), and this seat has none")
     # A CORTEX-SOURCED CAMERA (instance.json camera_source "cortex", sage/embodiment/look.py) needs no
@@ -114,6 +131,11 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
             out["camera"] = "availability unknown: this machine's body was not measured this turn"
         elif not inv.get("cortex_live"):
             out["camera"] = "your eyes' organ (the cortex) is not running, so there is no frame to give you (measured)"
+    # run needs a sandbox: bubblewrap able to make a user namespace, or Seatbelt on a Mac; without one
+    # the verb refuses rather than run the being's code with the seat's authority, so say so here too.
+    if "run" in _TOOL_SCHEMAS and not _sandbox_here():
+        out["run"] = ("this machine has no usable sandbox (neither bubblewrap nor macOS Seatbelt), "
+                      "and your code is never run outside one; request_run asks the seat instead")
     if "game" in _TOOL_SCHEMAS and not (cfg or {}).get("game_stepper"):
         out["game"] = "no game is set up on this seat (instance.json has no game_stepper)"
     return out

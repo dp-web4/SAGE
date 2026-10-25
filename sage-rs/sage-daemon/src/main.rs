@@ -84,7 +84,16 @@ struct HealthResponse {
     /// Which build is answering (SAGE #111 finding 6).
     build: &'static str,
     port: u16,
+    /// The model this daemon is CONFIGURED to use (SAGE_MODEL).
     model: String,
+    /// What Ollama actually has loaded right now (/api/ps), embedding models included; None when
+    /// Ollama could not be asked. dp 2026-10-13: the console still said 2B after the being moved to
+    /// the 4B -- it showed the daemon's configuration, not what was running.
+    loaded_models: Option<Vec<String>>,
+    /// Whether the configured model is among them (None when that is unknown).
+    model_loaded: Option<bool>,
+    /// The context window this daemon asks for (SAGE_NUM_CTX), or None for Ollama's default.
+    num_ctx: Option<u32>,
     ollama_available: bool,
     consciousness_loop: bool,
     // THE FIELDS A PEER'S MONITOR ALREADY PARSES (SAGE #111 finding 4). `federation::monitor`
@@ -351,10 +360,28 @@ fn chat_history_path(root: &std::path::Path, machine: &str, model: &str) -> std:
     ))
 }
 
+/// Ollama names a model `name:tag` and treats a bare `name` as `name:latest`.
+fn same_model(a: &str, b: &str) -> bool {
+    let norm = |s: &str| if s.contains(':') { s.to_string() } else { format!("{s}:latest") };
+    norm(a) == norm(b)
+}
+
+#[cfg(test)]
+mod same_model_tests {
+    #[test]
+    fn tags_compare_with_latest_as_the_default() {
+        assert!(super::same_model("qwen3.8-distill:4b", "qwen3.8-distill:4b"));
+        assert!(super::same_model("nomic-embed-text", "nomic-embed-text:latest"));
+        assert!(!super::same_model("qwen3.8-distill:2b", "qwen3.8-distill:4b"));
+    }
+}
+
 // --- Handlers ---
 
 async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let available = state.ollama.is_available().await;
+    let loaded = if available { state.ollama.loaded_models().await.ok() } else { None };
+    let model_loaded = loaded.as_ref().map(|l| l.iter().any(|m| same_model(m, &state.model)));
     let snap = state.loop_state.lock().await.clone();
     let alive = snap.published_at > 0 && now_secs().saturating_sub(snap.published_at) <= LOOP_STALE_SECS;
     Json(HealthResponse {
@@ -364,6 +391,9 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
         build: build_stamp(),
         port: port(),
         model: state.model.clone(),
+        loaded_models: loaded,
+        model_loaded,
+        num_ctx: state.ollama.num_ctx(),
         ollama_available: available,
         consciousness_loop: alive,
         // The activity indicator (SAGE #291). It is not one of the loop's numbers: reports

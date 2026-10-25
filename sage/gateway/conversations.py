@@ -477,20 +477,41 @@ def notify_state_path(instance: Path, conv_id: str, speaker: str) -> Path:
     return Path(base) / Path(instance).resolve().name / f"{conv_id}.{speaker}.json"
 
 
+_REQUEST_SOURCE_HEADER = re.compile(r"\([0-9]+ bytes, sha256:([0-9a-f]{6,64}); [^\r\n]*\)")
+
+
+def _request_source(lines: list[str]) -> Optional[tuple[int, str]]:
+    """Locate one canonical source header, never a digest quoted in free text.
+
+    `why` may span lines, so a fixed index is not a boundary. Multiple header-shaped
+    lines (including one quoted in why or an extra field) are ambiguous and cannot
+    establish identity. Malformed header-shaped lines also fail closed.
+    """
+    if len(lines) < 3 or not lines[0].startswith("[request_run] ") \
+            or not lines[1].startswith("why:"):
+        return None
+    candidates = [(i, line) for i, line in enumerate(lines[2:], 2)
+                  if re.match(r"\([0-9]+ bytes, sha256:", line)]
+    if len(candidates) != 1:
+        return None
+    index, line = candidates[0]
+    match = _REQUEST_SOURCE_HEADER.fullmatch(line)
+    return (index, match.group(1)) if match else None
+
+
 def _request_digest(text: str) -> Optional[str]:
     """The bytes a `[request_run]` turn asks about (its `sha256:` tag), or None if it is not one.
     A request with no tag counts as its own bytes: it cannot be shown to repeat anything."""
     if not str(text or "").startswith("[request_run]"):
         return None
-    m = re.search(r"sha256:([0-9a-f]{6,64})", text)
-    return m.group(1) if m else f"untagged:{text}"
+    source = _request_source(str(text or "").splitlines())
+    return source[1] if source else f"untagged:{text}"
 
 
 # How a seat turn names the request it answers (seat_run_requests.py `answers_line`, and the
 # hand-written forms it still recognises). Kept in step with that script's `_NAMES`.
 _ANSWER_NAMES = re.compile(r"\b(?:request seq|answering your seq|about seq|on your seq)\s+"
                            r"(\d+(?:\s*(?:,|and)\s*(?:seq\s+)?\d+)*)", re.I)
-_RESULT_HEAD = re.compile(r"\[request_run\] I (?:ran|did not run) (\S+)(?: \(sha ([0-9a-f]+)\))?")
 
 
 def _request_key(text: str) -> Optional[tuple]:
@@ -501,14 +522,62 @@ def _request_key(text: str) -> Optional[tuple]:
     lines = str(text or "").splitlines()
     if not lines or not lines[0].startswith("[request_run] "):
         return None
-    m = re.search(r"sha256:([0-9a-f]{6,64})", text)
-    if not m:
+    source = _request_source(lines)
+    if source is None:
         return None
-    extra = tuple(sorted(x.strip() for x in lines[3:]
+    header_index, digest = source
+    extra = tuple(sorted(x.strip() for x in lines[header_index + 1:]
                          if x.strip() and not x.startswith("UNCHANGED since")))
     if any(x.lower().startswith("rerun:") for x in extra):
         return None
-    return (lines[0][len("[request_run] "):].strip(), m.group(1), extra)
+    return (lines[0][len("[request_run] "):].strip(), digest, extra)
+
+
+def _run_result_matches_request(text: str, key: Optional[tuple]) -> bool:
+    """Positive legacy run evidence for (path, digest, request argument lines).
+
+    Shared by wake suppression and the being-facing receipt. Unknown is not a
+    match: a decline, missing argument clause, opaque extra fields or a malformed
+    receipt needs explicit request binding instead. This does not predict another
+    run's outcome or identify its inputs/environment. It changes no queue history.
+
+    Only the existing `arguments: <shell-quoted argv>` request spelling is
+    interpreted; other spellings remain opaque. shlex parses words, never runs them.
+    The receipt must use the writer's canonical quoting and a complete verdict.
+    """
+    import shlex
+
+    if key is None:
+        return False
+    path, digest, extra = key
+    if not re.fullmatch(r"[0-9a-f]{12,64}", digest):
+        return False
+    if extra:
+        if len(extra) != 1 or not extra[0].startswith("arguments:"):
+            return False
+        try:
+            argv = shlex.split(extra[0].partition(":")[2].strip())
+        except ValueError:
+            return False
+    else:
+        argv = []
+    first = str(text or "").split("\n", 1)[0]
+    head = re.match(r"\[request_run\] I ran (\S+) \(sha ([0-9a-f]{12,64})\) ", first)
+    if not head or head.group(1) != path:
+        return False
+    ran_digest = head.group(2)
+    if not (digest.startswith(ran_digest) or ran_digest.startswith(digest)):
+        return False
+    phrase = (re.escape("with arguments: " + shlex.join(argv)) if argv else
+              r"with no arguments(?: \(the script's defaults\))?")
+    # Optional environment description emitted by seat_run_requests. It is not
+    # input identity. Recognize only its current grammar, not arbitrary prose.
+    where = (r"(?:, with the GPU (?:visible to it|hidden from it "
+             r"\(CUDA_VISIBLE_DEVICES was empty\), as every seat run is by default, "
+             r"so code that asks for cuda stops there on every rerun))?")
+    verdict = (r"\. (?:exit code -?\d+|timed out after \d+(?:\.\d+)?s "
+               r"— no exit code, so this is not a pass or a fail)\.")
+    return re.fullmatch(phrase + where + verdict, first[head.end():]) is not None
 
 
 def _already_answered(turns: list, speaker: str, idx: int) -> bool:
@@ -517,14 +586,13 @@ def _already_answered(turns: list, speaker: str, idx: int) -> bool:
     Bound to the request, not to "someone spoke since" (GPT's hold on #154: an unrelated seat
     message must not count as the answer). An earlier request with the same path, bytes and
     arguments is answered only by a later non-speaker turn, before this one, that either names
-    its seq ("Answers your request seq N") or is a `[request_run] I ran / I did not run` result
-    for the same path, which is how seat_run_requests.py closes a request. A run result that
-    states a different sha is not an answer about these bytes, and a result naming only seqs
-    older than the request does not answer it (the same exception as that script's pending())."""
+    its seq ("Answers your request seq N") or is a run result matching path, bytes AND
+    arguments. Declines and unknown legacy result identities require explicit binding.
+    A result naming only seqs older than the request does not answer it. This forward
+    wake decision deliberately does not migrate seat_run_requests.pending() history."""
     key = _request_key(turns[idx].get("text"))
     if key is None:
         return False
-    rel, digest = key[0], key[1]
     for i in range(idx):
         r = turns[i]
         if r.get("from") != speaker or _request_key(r.get("text")) != key:
@@ -538,14 +606,10 @@ def _already_answered(turns: list, speaker: str, idx: int) -> bool:
                      for n in re.findall(r"\d+", m.group(1))}
             if rseq in named:
                 return True
-            h = _RESULT_HEAD.match(text)
-            if not h or (named and rseq > max(named)):
+            if named and rseq > max(named):
                 continue
-            if h.group(1).rstrip(".,;:") != rel:
-                continue
-            if h.group(2) and not (digest.startswith(h.group(2)) or h.group(2).startswith(digest)):
-                continue
-            return True
+            if _run_result_matches_request(text, key):
+                return True
     return False
 
 
@@ -617,6 +681,89 @@ def record_wake(instance: Path, conv_id: str, speaker: str, run_start: int,
     os.replace(tmp, p)
 
 
+# A SEAT JUMPING IN PAUSES THE WAKES. Policy, dp 2026-10-16: mesh wakes answer beings by default;
+# a seat that wants to talk to the being directly pauses them while it does. Measured that day on
+# sprout: an interactive seat ran a request (seq 996) and a mesh wake for the same seat, knowing
+# nothing of it, ran the same file again (997) and answered a repeat the seat had left unanswered
+# on purpose (998). Both spoke as the seat. The pause is the one fact both can read: while it
+# holds, `_wake_addressee` sends no notice (the run stays owed, so the wake follows the pause),
+# and the seat's run/decline tool refuses any session that does not hold its token. It expires on
+# its own, so a seat that leaves without resuming cannot silence the being for long; the being's
+# next beat after a resume or expiry sends the wake still owed (`rearm_owed_wakes`), so the handoff
+# does not wait for the being to speak again.
+WAKE_PAUSE_DEFAULT_MINUTES = 120
+
+
+def wake_pause_path(instance: Path, conv_id: str) -> Path:
+    """Beside the wake ledger, outside the repository, for the same reason (`notify_state_path`)."""
+    return notify_state_path(instance, conv_id, "_").with_name(f"{conv_id}.wake-pause.json")
+
+
+class PauseHeld(Exception):
+    """Another session holds this conversation's pause; its token was not presented."""
+
+    def __init__(self, pause: dict):
+        super().__init__(f"held by {pause.get('by')} since {pause.get('since')} until {pause.get('until')}")
+        self.pause = pause
+
+
+def pause_wakes(instance: Path, conv_id: str, by: str,
+                minutes: int = WAKE_PAUSE_DEFAULT_MINUTES, reason: str = "",
+                token: Optional[str] = None, take_over: str = "") -> dict:
+    """Hold the conversation: no mesh wake for it until `resume_wakes` or the expiry. Returns the
+    pause, including the token the holder's tools must present.
+
+    THE HOLDER IS A SESSION, NOT A SEAT NAME. Every session acting for a seat speaks as the same
+    `by`, so ownership cannot ride on it (GPT on #461: the first version handed the existing token
+    to any process with the same seat id). Renewing a pause in force takes its token. Without it
+    the call raises `PauseHeld`, unless `take_over` names why the holder is being displaced (a
+    session that died holding it); the takeover is recorded in the pause it creates."""
+    import secrets
+    from datetime import timedelta
+    p = wake_pause_path(instance, conv_id)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc)
+    held = wake_pause(instance, conv_id)
+    renew = bool(held and token and token == held.get("token"))
+    if held and not renew and not take_over:
+        raise PauseHeld(held)
+    pause = {"by": by, "token": held["token"] if renew else secrets.token_hex(8), "reason": reason,
+             "since": held["since"] if renew else _now(),
+             "until": (now + timedelta(minutes=max(1, int(minutes)))).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    if held and not renew:
+        pause["took_over"] = {"from": held.get("by"), "since": held.get("since"), "why": take_over}
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(pause, indent=2) + "\n")
+    os.replace(tmp, p)
+    return pause
+
+
+def resume_wakes(instance: Path, conv_id: str, token: Optional[str] = None, force: str = "") -> bool:
+    """End the pause. True if one was held. Only its holder's token ends a pause in force; `force`
+    (a stated reason) is the recovery for a holder that is gone. A wake owed during the pause is
+    not sent from here: the being's next beat sends it (`HestiaF1aDispatcher.rearm_owed_wakes`)."""
+    p = wake_pause_path(instance, conv_id)
+    held = wake_pause(instance, conv_id)
+    if held and token != held.get("token") and not force:
+        raise PauseHeld(held)
+    try:
+        p.unlink()
+    except FileNotFoundError:
+        pass
+    return held is not None
+
+
+def wake_pause(instance: Path, conv_id: str) -> Optional[dict]:
+    """The pause in force, or None. An expired or unreadable pause is no pause: the failure that
+    matters is a being nobody answers, so doubt resolves toward waking."""
+    try:
+        pause = json.loads(wake_pause_path(instance, conv_id).read_text())
+        until = datetime.strptime(pause["until"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return pause if until > datetime.now(timezone.utc) else None
+
+
 def echo_of(instance: Path, conv_id: str, me: str, text: str, lookback: int = 4) -> Optional[dict]:
     """The recent turn by someone ELSE that `text` mostly repeats, or None.
 
@@ -651,6 +798,42 @@ def _provenance_tag(turn: dict) -> str:
     if via == "voice":
         return VOICE_TAG
     return UNSIGNED_TAG if via in UNSIGNED_VIA else ""
+
+
+# MUSIC THE TRANSCRIBER MARKED, SAID WHERE IT IS (dp 2026-10-19, "the music still confuses it"). The transcriber
+# writes `[Music]`, `[MUSIC PLAYING]`, `(upbeat music)` or `♪ … ♪` when it hears music, and nothing tied those marks
+# to the lines around them: room 315 ("No single voice could hold the need", 5 s after a `[Music]` at 314) came back
+# as the being's own opening line. The note says what the transcriber recorded, not what a line is. On the record,
+# dp's "Are you waking yourself up?" (room 272) came 7 s before a `[MUSIC PLAYING]`, so a person speaking over the
+# music is named as a possibility too. Shown at render time; the record is not changed.
+MUSIC_MARK = re.compile(r"[\[(][^\])]*\bmusic\b[^\])]*[\])]|[♪♫]", re.I)
+MUSIC_WINDOW_S = 60
+
+
+def _ts_seconds(turn: dict) -> Optional[float]:
+    try:
+        return datetime.fromisoformat(str(turn.get("ts", "")).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _music_notes(turns: list) -> dict:
+    """seq -> note, for picked-up lines the transcriber marked as music or that came within MUSIC_WINDOW_S of one."""
+    heard = [(t, _ts_seconds(t)) for t in turns if t.get("via") == "voice"]
+    marks = [(t, s) for t, s in heard if s is not None and MUSIC_MARK.search(str(t.get("text") or ""))]
+    notes = {}
+    for t, s in heard:
+        if s is None:
+            continue
+        if any(m is t for m, _ in marks):
+            notes[t.get("seq")] = " _(the transcriber marked music here)_"
+            continue
+        near = [m for m, ms in marks if abs(ms - s) <= MUSIC_WINDOW_S]
+        if near:
+            notes[t.get("seq")] = (f" _(music was playing within a minute: the transcriber marked it at seq "
+                                   f"{near[0].get('seq')}. This line may be song lyrics, or someone speaking over "
+                                   f"the music)_")
+    return notes
 
 
 def _shown_text(turn: dict, turn_chars: Optional[int], conv_id: str) -> str:
@@ -703,7 +886,10 @@ def drain_new_for(instance: Path, me: str, *, mark: bool = True) -> str:
         pend = awaiting(instance, m["id"], me)
         if not pend:
             continue
-        lines = [f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}: {t['text']}" for t in pend]
+        music = _music_notes(pend)
+        lines = [(f"- **the mic picked up** ({t['ts']}){music.get(t.get('seq'), '')}: {t['text']}"
+                  if t.get("via") == "voice" else
+                  f"- **{t['from']}** ({t['ts']}){_provenance_tag(t)}: {t['text']}") for t in pend]
         out.append(f"### {m['title']}  (id: {m['id']}; reply with say to=\"{m['id']}\")\n"
                    + "\n".join(lines))
         if mark:
@@ -849,19 +1035,35 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
         # attributed to the seat three appeal hashes the being itself had filed (seq 28) and
         # called them a possible fabrication. Same root as the echo (1.12): the being cannot
         # tell its own voice from another's when both are third-person names.
-        lines = [f"- **{t['from']}{' (you)' if t.get('from') == me else ''}** ({t['ts']})"
-                 + _provenance_tag(t)
+        # A HEARD LINE HAS NO SPEAKER (dp 2026-10-19, "'mic picked up' is good"). Headed `**voice**`, it read
+        # to a 4B as a person named voice, and its unanswered-turn marker asked for replies to TV lines, lyrics
+        # and transcriber noise. It is shown as what it is: something the mic picked up.
+        music = _music_notes(turns)
+        lines = [(f"- **the mic picked up** ({t['ts']}){music.get(t.get('seq'), '')}" if t.get("via") == "voice" else
+                  f"- **{t['from']}{' (you)' if t.get('from') == me else ''}** ({t['ts']})"
+                  + _provenance_tag(t))
                  + (_refuted_mark(t.get("text", ""), refuted) if t.get("from") == me else "")
                  + f": {_shown_text(t, _cap_for(t, me, answered_upto, turn_chars, answered_cap), m['id'])}"
                  for t in turns]
         pend = pend_before
         if turns and mark:
             mark_seen(instance, me, m["id"], max(int(t.get("seq", 0)) for t in turns))
-        if pend:
-            who = ", ".join(sorted({t["from"] for t in pend}))
-            lines.append(f"\n**{len(pend)} turn(s) from {who} since you last spoke here — "
+        heard = [t for t in pend if t.get("via") == "voice"]
+        spoken = [t for t in pend if t.get("via") != "voice"]
+        if heard and not spoken:
+            # Picked-up sound is not a turn owed an answer. Say what arrived and leave relevance to the being.
+            lines.append(f"\n_The mic picked up {len(heard)} line(s) here since you last spoke. Most room sound "
+                         f"is not addressed to you; answer only what is, with `say to=\"{m['id']}\"`._")
+        elif pend:
+            who = ", ".join(sorted({t["from"] for t in spoken}))
+            lines.append(f"\n**{len(spoken)} turn(s) from {who} since you last spoke here — "
                          f"unanswered. Reply with `say to=\"{m['id']}\"` if you have something "
-                         f"to say; saying nothing is also a choice, and it is recorded as one.**")
+                         f"to say; saying nothing is also a choice, and it is recorded as one.**"
+                         + (f" _(The mic also picked up {len(heard)} line(s); most room sound is not "
+                            f"addressed to you.)_" if heard else ""))
+        elif turns and turns[-1].get("via") == "voice":
+            lines.append(f"\n_The last thing here is something the mic picked up (seq {turns[-1].get('seq')}). "
+                         f"Nothing is owed unless it was addressed to you._")
         elif turns and turns[-1].get("from") != me:
             # SEEN is not ANSWERED. dp spoke at 16:30Z 2026-09-08; the turn was shown to the
             # being on eight beats that could not act (window overcommitted), was marked

@@ -204,7 +204,8 @@ def test_the_real_beat_reports_each_phase_before_it_runs():
         if isinstance(c, ast.Call) and getattr(c.func, "id", "") == "_phase":
             reports.append((c.lineno, c.args[0].value, c.args[1].value))
     reports.sort()
-    assert [(s, p) for _, s, p in reports] == BEAT, reports
+    # The ask turn (#459) runs only on an opt-in instance, so the fake beat above does not take it.
+    assert [(s, p) for _, s, p in reports] == BEAT + [("wrap-up", "ask")], reports
 
     line = {p: n for n, _, p in reports}
     turns = sorted(c.lineno for c in ast.walk(main) if isinstance(c, ast.Call)

@@ -1,6 +1,7 @@
 """An empty turn's whole thinking is kept where it can be read (being_tool_loop.keep_empty_thinking)."""
 import os
 import time
+import pytest
 
 from sage.gateway import being_tool_loop as btl
 
@@ -107,3 +108,39 @@ def test_no_root_no_claim(tmp_path):
     client.memory_root = None
     run_ollama_tool_turn(client, FakeLLM(), [{"role": "user", "content": "hi"}])
     assert "saved as" not in seen[1] and "one tool call" in seen[1]
+
+
+@pytest.mark.parametrize("token_count", [6000, None])
+def test_recovery_distinguishes_provider_token_count_from_returned_thinking(tmp_path, token_count):
+    """A large reported token count does not prove a long deliberation was returned."""
+    from sage.gateway.tests.test_being_tool_loop import _client, OK_DISPATCH
+    seen = []
+    draft = "x" * 149
+
+    class FakeLLM:
+        max_response_tokens = 6000
+        num_ctx = 32768
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            seen.append(messages[-1]["content"])
+            if len(seen) == 1:
+                return {"content": "", "tool_calls": [], "raw": {
+                    "done_reason": "length", "prompt_eval_count": 10045, "eval_count": token_count,
+                    "message": {"thinking": draft, "content": ""}}}
+            return {"content": "done", "tool_calls": [], "raw": {"done_reason": "stop"}}
+
+    client = _client(OK_DISPATCH)
+    client.memory_root = str(tmp_path)
+    result = btl.run_ollama_tool_turn(client, FakeLLM(), [{"role": "user", "content": "continue"}])
+    nudge = seen[1]
+    assert ("provider reported 6000 output tokens" if token_count is not None else
+            "provider did not report an output token count") in nudge
+    assert "149 thinking characters were returned" in nudge
+    assert "whole budget deliberating" not in nudge and "whole deliberation" not in nudge
+    assert "thinking text returned by the provider is saved as" in nudge
+    assert "memory_read" in nudge and "one tool call" in nudge
+    saved = list((tmp_path / btl.EMPTY_THINKING_DIR).iterdir())
+    assert len(saved) == 1 and saved[0].read_text().endswith(draft)
+    assert len(seen) == 2 and result.reply == "done" and result.trace == []

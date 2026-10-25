@@ -112,12 +112,24 @@ def test_the_answer_turn_is_told_what_it_can_do_and_that_it_has_no_internet():
     from sage.gateway import toolset as ts
     line = hb.abilities_line(ts.unavailable({"inventory": {"verbs": ["camera", "gaze", "speak"]}}, "/tmp/wt", {}))
     assert "look through your eyes" in line and "ask a sibling" in line
-    assert "search the code repository checked out on this seat (not your home)" in line
+    assert ("search the code repository checked out on this seat, or with none a folder you hold "
+            "a grant for outside your home (not your home)") in line
     for plumbing in ("tool", "say", "peer_ask", "camera"):
         assert plumbing not in line, f"harness word {plumbing!r} in the being's facts (LEGIBILITY 1.14)"
-    assert line.endswith("You have no internet access."), "true while no web verb is in the toolset"
+    # web_search is canonical (SAGE #335): the being is told it can search the web, and NOT that it has no internet
+    assert "search the web a few times an hour" in line and "no internet" not in line
     h, t = _home()
     assert "no internet" not in hb.answer_context_block(h, ME, hb.SelectedTurn("room", t)), "not tied to the option"
+
+
+def test_without_a_web_verb_the_being_is_told_it_has_no_internet(monkeypatch):
+    """The other arm: a toolset with no web verb says so, rather than leaving the being to guess."""
+    from sage.gateway import toolset as ts
+    full = ts.canonical_toolset()
+    monkeypatch.setattr(ts, "canonical_toolset", lambda: [v for v in full if v not in ("web_search", "web_read")])
+    line = hb.abilities_line(ts.unavailable({"inventory": {"verbs": ["camera", "gaze", "speak"]}}, "/tmp/wt", {}))
+    assert line.endswith("You have no internet access."), "true while no web verb is in the toolset"
+    assert "search the web" not in line
 
 
 def test_every_answer_prompt_carries_what_it_can_do_even_without_answer_context():

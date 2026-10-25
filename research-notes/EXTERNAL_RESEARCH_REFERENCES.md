@@ -63,6 +63,16 @@ All involve lattice-based representations for neural processing, similar to our 
 
 ---
 
+## Masaki Hoshino — AI Tuning, OBA, and SSE (2026-10-23)
+
+- **Sources:** https://doi.org/10.2139/ssrn.5907823 ; https://doi.org/10.2139/ssrn.5907943 ; https://doi.org/10.2139/ssrn.5907942 ; https://doi.org/10.5281/zenodo.22739182
+- **Relevance:** Behavioral bias taxonomy, iterative detection and adjustment, Template Absorption, operational SSE and Failure Migration. A preserved memory record may be interpreted or prioritized differently across wakes; durable records alone do not prove continuity of judgment.
+- **Status:** Three founding papers reviewed; Masaki's continuity proposal is a hypothesis, not a verified causal diagnosis of SAGE. CBP-being supplies an observational case, not a controlled experiment.
+- **Exploration:** [Memory, judgment and action continuity](MEMORY_JUDGMENT_CONTINUITY_EXPLORATION_2026-10-23.md). Follow the [Research Generalization Rule](../sage/docs/RESEARCH_GENERALIZATION_RULE.md); do not generalize one being's behavior into a fleet-wide conclusion.
+- **Contact:** `private-context/collaborators/masaki-hoshino.md`; exploratory exchange, no implementation commitment.
+
+---
+
 ## Additional External References
 
 *Add future research papers, articles, or resources here as discovered*

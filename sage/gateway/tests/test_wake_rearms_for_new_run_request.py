@@ -58,6 +58,16 @@ def test_asking_again_about_unchanged_bytes_wakes_nobody(inst):
     assert wake(inst) is None
 
 
+def test_new_bytes_rearm_even_when_why_repeats_an_old_digest(inst):
+    def body(digest):
+        return ("[request_run] notes/x.py\nwhy: last run was sha256:999999999999\n"
+                f"(10 bytes, sha256:{digest}; the seat decides)")
+    first = say(inst, BEING, body("a" * 12))
+    assert wake(inst) == first
+    say(inst, BEING, body("b" * 12))
+    assert wake(inst) == first, "a quoted digest must not hide new source from the wake ledger"
+
+
 def test_prose_repeats_still_cost_one_wake(inst):
     """The rule the run key exists for: six turns about one question, one session."""
     say(inst, SEAT, "answer")

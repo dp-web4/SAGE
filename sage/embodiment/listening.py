@@ -73,10 +73,15 @@ except ValueError:
     UNLOAD_IDLE_S = 0.0
 
 import re as _re
-# The name as whisper actually writes it: "Sprout", and the near-misses it produces for it.
-_NAME = r"(?:sprout|sprouts|spout|sprite|spraut)"
+# The name as whisper actually writes it: "Sprout", and the near-misses it produces for it. Per body
+# (2026-10-17, McNugget): SAGE_WAKE_NAME is the regex alternation for this body's name and SAGE_WAKE_SAY how
+# the being is told to be called. Measured on McNugget with base.en: "McNugget", "McNagut"; small.en: "McNigod";
+# "chicken nuggets" never matched, so the "Mc" is required.
+_NAME = "(?:" + (os.environ.get("SAGE_WAKE_NAME") or r"sprout|sprouts|spout|sprite|spraut").strip() + ")"
+WAKE_SAY = (os.environ.get("SAGE_WAKE_SAY") or "Sprout").strip()
 WAKE_RE = _re.compile(r"(?:^\W*" + _NAME + r"\b|\b(?:hey|hi|hello|ok|okay|yo)\W+" + _NAME + r"\b)\W*", _re.I)
-BYE_RE = _re.compile(r"\b(?:bye|goodbye|good\s*night|that'?s\s+all)\W+" + _NAME + r"\b", _re.I)
+# "by" too: whisper writes a spoken "bye McNugget" as "by McNugget" (base.en and small.en, 2026-10-17)
+BYE_RE = _re.compile(r"\b(?:bye|by|goodbye|good\s*night|that'?s\s+all)\W+" + _NAME + r"\b", _re.I)
 
 
 def wake_match(text: str):
@@ -120,6 +125,7 @@ def window(now: Optional[float] = None, path: Optional[str] = None) -> dict:
             "speaking": now < float(d.get("speaking_until", 0)),
             "always": always, "muted": muted, "wake": wake, "engaged": engaged,
             "keepalive_s": float(d.get("keepalive_s") or KEEPALIVE_S),
+            "wake_say": str(d.get("wake_say") or WAKE_SAY),
             "last_overheard": float(d.get("last_overheard") or 0)}
 
 
@@ -170,7 +176,7 @@ def ear_state(ok: bool, words, win: dict, device_connected: Optional[bool] = Non
     if (win or {}).get("wake"):
         if (win or {}).get("engaged"):
             return True, "open since someone said your name", "engaged"
-        return True, ("listening for your name ('hey Sprout'); other speech nearby is not given to you as "
+        return True, (f"listening for your name ('hey {(win or {}).get('wake_say') or WAKE_SAY}'); other speech nearby is not given to you as "
                       "words"), "wake"
     return True, ("always open" if (win or {}).get("always") else "open since you spoke"), \
         ("always" if (win or {}).get("always") else "window")
@@ -285,6 +291,19 @@ class Transcriber(threading.Thread):
 
     def _load(self):
         self.status = "loading"
+        if BACKEND == "mlx":
+            # Apple silicon (McNugget, 2026-10-17): the same whisper model through MLX on the GPU. Measured there:
+            # base.en ~0.1 s per short phrase warm. Its segments carry no_speech_prob / avg_logprob like torch's.
+            try:
+                import numpy as np
+                import mlx_whisper
+                repo = self.model_name if "/" in self.model_name else f"mlx-community/whisper-{self.model_name}-mlx"
+                mlx_whisper.transcribe(np.zeros(RATE // 2, np.float32), path_or_hf_repo=repo, language="en")
+                self.model, self._fp16, self.status = repo, True, "ready"
+            except Exception as e:
+                self.model = None
+                self.status = f"unavailable: {type(e).__name__}: {e}"[:160]
+            return
         if BACKEND == "whispercpp":
             try:
                 from sage.embodiment.whispercpp import WhisperCpp
@@ -312,6 +331,10 @@ class Transcriber(threading.Thread):
                                   source=self.source)
         import numpy as np
         a = np.frombuffer(audio, np.int16).astype(np.float32) / 32768.0
+        if BACKEND == "mlx":
+            import mlx_whisper
+            r = mlx_whisper.transcribe(a, path_or_hf_repo=self.model, language="en", condition_on_previous_text=False)
+            return judge_segments(r.get("segments") or [], seconds=round(len(a) / RATE, 1), source=self.source)
         r = self.model.transcribe(a, fp16=self._fp16, language="en", condition_on_previous_text=False)
         return judge_segments(r.get("segments") or [], seconds=round(len(a) / RATE, 1), source=self.source)
 
@@ -330,6 +353,15 @@ class Transcriber(threading.Thread):
             return True
         self.model = None
         self.status = "idle"
+        if BACKEND == "mlx":
+            try:   # mlx_whisper keeps the loaded model in its ModelHolder; drop it and MLX's buffer cache
+                from mlx_whisper.transcribe import ModelHolder
+                import mlx.core as mx
+                ModelHolder.model, ModelHolder.model_path = None, None
+                mx.clear_cache()
+            except Exception:
+                pass
+            return True
         try:
             import gc
             gc.collect()
@@ -435,7 +467,8 @@ def chime() -> None:
                 w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(frames)
         mark(speaking_until=time.time() + 0.6)
         import subprocess
-        subprocess.Popen(["pw-play", CHIME_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        from sage.embodiment.platform_av import play_cmd
+        subprocess.Popen(play_cmd(CHIME_PATH), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass   # measured, never shown as speech
 

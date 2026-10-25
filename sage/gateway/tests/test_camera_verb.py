@@ -131,6 +131,71 @@ def test_do_camera_success(tmp_path):
     assert Path(out_path).read_bytes() == b"\xff\xd8\xffNEW\xff\xd9"
 
 
+def test_a_capture_that_never_answers_is_stopped_not_waited_on(tmp_path):
+    """McNugget 2026-10-19: a capture waiting on macOS camera permission held a beat for 5 h 43 min, and no
+    other beat could start. The capture is now bounded: a hung one is killed and said as such."""
+    import time as _time
+    wt = str(tmp_path)
+    d = _dispatcher(wt)
+    d.CAMERA_TIMEOUT_S = 1
+    import sage.gateway.hestia_dispatch as hd
+    orig_run = hd.subprocess.run
+
+    def hanging_run(cmd, **kwargs):          # a real child that never answers, under the caller's timeout
+        return orig_run(["sleep", "30"], **kwargs)
+    hd.subprocess.run = hanging_run
+    t = _time.time()
+    try:
+        env = d._do_camera(BeingIntent("camera", {"out_path": "scratch/camera/last-frame.jpg"}))
+    finally:
+        hd.subprocess.run = orig_run
+    assert _time.time() - t < 10, "the beat waited on a capture that never answered"
+    assert env.ok is False and "did not answer within 1 s" in env.result["note"], env
+    assert env.result["output_status"] == "unverified"
+
+
+@pytest.mark.parametrize("file_state", ["absent", "unchanged", "replaced"])
+def test_camera_timeout_does_not_infer_output_state(tmp_path, monkeypatch, file_state):
+    """A child can publish its frame before failing to exit; timeout is not rollback."""
+    import subprocess
+    import sage.gateway.hestia_dispatch as hd
+
+    out = tmp_path / "scratch/camera/last-frame.jpg"
+    out.parent.mkdir(parents=True)
+    old, new = b"\xff\xd8\xffOLD\xff\xd9", b"\xff\xd8\xffNEW\xff\xd9"
+    if file_state != "absent":
+        out.write_bytes(old)
+    recorded = []
+
+    def witness(self, name, args):
+        recorded.append((name, args))
+        return {"actionId": "act-timeout"} if name == "hestia_begin_action" else {}
+
+    def timed_out(cmd, **kwargs):
+        if file_state == "replaced":
+            staged = out.with_suffix(".tmp")
+            staged.write_bytes(new)
+            staged.replace(out)
+        raise subprocess.TimeoutExpired(cmd, kwargs["timeout"])
+
+    monkeypatch.setattr(HestiaF1aDispatcher, "_call", witness)
+    monkeypatch.setattr(hd.subprocess, "run", timed_out)
+    env = _dispatcher(str(tmp_path))._do_camera(BeingIntent("camera", {}))
+    assert not env.ok and env.witness_id == "act-timeout"
+    assert env.result.get("capture_status") == "timed_out"
+    assert env.result.get("output_status") == "unverified"
+    assert env.result["exit_code"] is None
+    note = env.result["note"]
+    assert "no frame:" not in note and "untouched" not in note
+    assert "not verified" in note and "not a confirmed fresh frame" in note
+    assert ("hestia_record_outcome", {
+        "action_id": "act-timeout", "success": False, "magnitude": 0.0}) in recorded
+    if file_state == "absent":
+        assert not out.exists()
+    else:
+        assert out.read_bytes() == (new if file_state == "replaced" else old)
+
+
 def test_do_camera_device_busy(tmp_path):
     """Device busy: ffmpeg exits non-zero with a recognizable stderr. The envelope
     must be ok=False and the result must carry a checkable meaning (not just an error)."""

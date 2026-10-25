@@ -31,9 +31,11 @@ reads (being_join.presence_block) and the raising loop ingests.
 from __future__ import annotations
 import json, os, time, urllib.request
 
-PERCEPTION = os.path.expanduser("~/.sprout/perception.json")
-PRESENCE_LOG = os.path.expanduser("~/.sprout/presence_log.jsonl")
-HEARD = os.path.expanduser("~/.sprout/heard.jsonl")
+# the body's directory, as listening.py and body.py read it ($SAGE_BODY_DIR, else ~/.sprout: unchanged on Sprout)
+_BODY = os.environ.get("SAGE_BODY_DIR") or os.path.expanduser("~/.sprout")
+PERCEPTION = os.path.join(_BODY, "perception.json")
+PRESENCE_LOG = os.path.join(_BODY, "presence_log.jsonl")
+HEARD = os.path.join(_BODY, "heard.jsonl")
 # WORDS HEARD WAKE A BEAT (2026-09-26). Someone answered the being's voice; waiting up to ~31 min
 # for the timer turns a conversation into a letter. Each new heard line is an event (#295): it
 # starts a beat, or is queued behind the running one and starts the next as soon as it ends. The

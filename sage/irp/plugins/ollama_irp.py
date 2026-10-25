@@ -89,6 +89,8 @@ class OllamaIRP(IRPPlugin):
         from sage.irp.adapters.model_adapter import get_adapter
         self._adapter = get_adapter(self.model_name)
         print(f"  [OllamaIRP] Adapter: {type(self._adapter).__name__} for '{self.model_name}'")
+        # Read by the tool loop: which prompts carry the tool schemas (model_capabilities).
+        self.tools_on_last_user_only = bool(getattr(self._adapter.capabilities, 'tools_on_last_user_only', False))
         # Thinking: the caller's explicit choice wins; otherwise the model config decides
         # (ModelCapabilities.resolve_think: per size). Was a hard False since 2026-03.
         if self._think_cfg is None:

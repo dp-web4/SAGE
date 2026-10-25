@@ -113,7 +113,7 @@ def exact_root_above(env: ResultEnvelope, path: str) -> Optional[str]:
     v = env.verdict
     p = os.path.realpath(os.path.expanduser(path))
     best = None
-    for r, recursive in ((getattr(v, "granted_reach", ()) or ()) if v else ()):
+    for r, recursive, *_ in ((getattr(v, "granted_reach", ()) or ()) if v else ()):
         r = os.path.realpath(str(r))
         if recursive and (p == r or p.startswith(r + "/")):
             return None                                   # reachable after all; not this case
@@ -272,6 +272,8 @@ NEEDS_EXISTING = ("retire_note", "memory_read")
 # reference_f1a enforces it AFTER the gate has spoken: retire_note requires the parent to be
 # notes/ or scratch/ directly inside memory_root (reference_f1a.py:179-182).
 HOME_SUBTREE_ONLY = {"retire_note": ("notes", "scratch")}
+# ...and the home-root files each such effector may also act on (reference_f1a.RETIRABLE_RECORDS).
+HOME_ROOT_FILES = {"retire_note": ("todo.md", "journal.md")}
 
 
 def ungrantable(intent: BeingIntent, memory_root: str) -> Optional[Dict[str, Any]]:
@@ -306,7 +308,8 @@ def ungrantable(intent: BeingIntent, memory_root: str) -> Optional[Dict[str, Any
     subs = HOME_SUBTREE_ONLY.get(eff)
     if subs:
         parent = os.path.dirname(target)
-        if os.path.basename(parent) not in subs or os.path.dirname(parent) != root:
+        at_root = parent == root and os.path.basename(target) in HOME_ROOT_FILES.get(eff, ())
+        if not at_root and (os.path.basename(parent) not in subs or os.path.dirname(parent) != root):
             allowed = " or ".join(f"{root}/{x}/" for x in subs)
             reasons.append(f"{eff} only ever acts on a file directly inside {allowed}, "
                            f"whatever scope is granted")

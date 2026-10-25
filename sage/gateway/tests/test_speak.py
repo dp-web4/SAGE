@@ -46,6 +46,8 @@ def test_it_speaks_the_words_and_keeps_them_in_its_own_home(monkeypatch):
     assert "your turn in the room conversation" in env.result, "voice is a conversation: the room"
     assert "played aloud through AIRHUG 01" in env.result
     assert "heard it" not in env.result, "playback proves the sink got sound, not that anyone listened"
+    # sprout-being 2026-10-14 spoke a sudo command and then treated it as applied.
+    assert "nothing said aloud is executed" in env.result
     assert calls[-1][1]["outcome"] == "ok"
 
 
@@ -81,6 +83,30 @@ def test_an_overlong_utterance_is_refused_whole_not_truncated(monkeypatch):
     env = d._do_speak(BeingIntent("speak", {"text": "a" * (body.SPEAK_MAX_CHARS + 1)}))
     assert not env.ok and str(body.SPEAK_MAX_CHARS) in env.error and "Nothing was said" in env.error
     assert played == [] and calls == []
+
+
+def test_a_shell_command_is_not_played_and_the_refusal_says_speaking_runs_nothing(monkeypatch):
+    # sprout-being 2026-10-14 spoke these seven times through its headset, and then treated the
+    # sudo line as applied. Nothing opens, nothing plays, and the receipt names the real door.
+    played = []
+    d, home, calls = _dispatcher(monkeypatch, played)
+    for cmd in ("sudo usermod -aG video $USER && sudo systemctl restart systemd-udisks2.service",
+                "python3 scratch/test-cv2-video1.py 2>&1 | tee /tmp/cv2-output.txt",
+                "Done; sudo reboot"):
+        env = d._do_speak(BeingIntent("speak", {"text": cmd}))
+        assert not env.ok and env.error.startswith("Not said aloud: this reads as a shell command")
+        assert "runs nothing" in env.error and "request_run" in env.error
+    assert played == [] and calls == [] and not os.path.exists(os.path.join(home, "spoken.jsonl"))
+
+
+def test_speech_that_only_mentions_a_command_word_is_still_spoken(monkeypatch):
+    played = []
+    d, _, _ = _dispatcher(monkeypatch, played)
+    for words in ("I cannot sudo anything, and that is fine.",
+                  "Python is a language I keep returning to.",
+                  "I hear you. Maybe we can just sit here a while longer."):
+        assert d._do_speak(BeingIntent("speak", {"text": words})).ok
+    assert len(played) == 3
 
 
 def test_a_body_that_cannot_speak_refuses_before_any_action_opens(monkeypatch):
