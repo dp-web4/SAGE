@@ -42,6 +42,8 @@ FIELDS: Dict[str, str] = {
     "learned": "what you have learned about yourself",
 }
 FIELD_MAX_CHARS = 2000
+#: How much of each field the beat shows: four fields stay under ~1.6k chars on a small window.
+RENDER_FIELD_CHARS = 400
 WHY_MAX_CHARS = 500
 
 
@@ -72,8 +74,24 @@ def listing(instance) -> str:
             "text and why; the old text is kept in self_log.jsonl.\n" + "\n".join(lines))
 
 
-def edit(instance, field: Optional[str], text, why: str, now: Optional[float] = None) -> Tuple[bool, str]:
-    """List the fields (no field), or replace one. Returns (ok, message for the being)."""
+def edit(instance, field: Optional[str], text, why: str,
+         now: Optional[float] = None) -> Tuple[bool, str, bool]:
+    """List the fields (no field), or replace one. Returns (ok, message for the being, changed)."""
+    with _home_lock(Path(instance)):
+        ok, msg = _edit(instance, field, text, why, now)
+    return ok, msg, bool(ok and field and not msg.startswith(_UNCHANGED))
+
+
+_UNCHANGED = "unchanged: "
+
+
+def _home_lock(root: Path):
+    """The same lock memory_write and memory_edit take, so an edit and a write never interleave."""
+    from sage.gateway.reference_f1a import _home_lock as lock
+    return lock(root)
+
+
+def _edit(instance, field, text, why, now) -> Tuple[bool, str]:
     if not field:
         return True, listing(instance)
     field = str(field).strip().lower()
@@ -94,7 +112,7 @@ def edit(instance, field: Optional[str], text, why: str, now: Optional[float] = 
         return False, f"cannot change it: {err}. Your seat can look at it. Nothing was changed."
     before = (cur.get(field) or {}).get("text")
     if before == text:
-        return True, f"{field} already reads exactly that; nothing changed."
+        return True, f"{_UNCHANGED}{field} already reads exactly that; nothing changed."
     at = _iso(now)
     cur[field] = {"text": text, "at": at, "why": why[:WHY_MAX_CHARS]}
     path, tmp = Path(instance) / SELF_FILE, Path(instance) / SELF_TMP
@@ -110,8 +128,11 @@ def edit(instance, field: Optional[str], text, why: str, now: Optional[float] = 
         return False, f"could not write {SELF_FILE} ({type(e).__name__}); nothing changed"
     # AN UNAUDITED CHANGE DOES NOT STAND: a change whose log line fails is undone.
     try:
-        with open(Path(instance) / SELF_LOG, "a") as f:
-            f.write(json.dumps({"at": at, "field": field, "from": before, "to": text,
+        log = Path(instance) / SELF_LOG
+        # A torn earlier line (a crash mid-append) must not swallow this one: start on a new line.
+        torn = log.exists() and log.stat().st_size > 0 and not log.read_bytes().endswith(b"\n")
+        with open(log, "a") as f:
+            f.write(("\n" if torn else "") + json.dumps({"at": at, "field": field, "from": before, "to": text,
                                 "why": why[:WHY_MAX_CHARS]}) + "\n")
     except OSError as e:
         try:
@@ -135,7 +156,12 @@ def render(instance) -> str:
         return f"## Who you say you are\n({err})"
     if not cur:
         return ""
-    lines = [f"- {name}: {cur[name].get('text', '')}" for name in FIELDS if name in cur]
+    lines = []
+    for name in FIELDS:
+        if name in cur:
+            t = str(cur[name].get("text", ""))
+            lines.append(f"- {name}: " + (t if len(t) <= RENDER_FIELD_CHARS else
+                                          t[:RENDER_FIELD_CHARS] + "… (identity_edit with no arguments shows it whole)"))
     return ("## Who you say you are (your own words, in self.json; change them with identity_edit)\n"
             + "\n".join(lines))
 

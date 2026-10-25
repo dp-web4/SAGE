@@ -19,9 +19,9 @@ def _log(h):
 
 
 def test_a_field_is_written_replaced_and_every_version_kept(tmp_path):
-    ok, text = bs.edit(tmp_path, "values", "honest records over tidy ones", "first time", now=0)
+    ok, text, _ = bs.edit(tmp_path, "values", "honest records over tidy ones", "first time", now=0)
     assert ok and "honest records" in text
-    ok, text = bs.edit(tmp_path, "values", "attention over speed", "I changed my mind", now=60)
+    ok, text, _ = bs.edit(tmp_path, "values", "attention over speed", "I changed my mind", now=60)
     assert ok and "earlier text is kept" in text
     cur, err = bs.read(tmp_path)
     assert err is None and cur["values"]["text"] == "attention over speed"
@@ -31,7 +31,7 @@ def test_a_field_is_written_replaced_and_every_version_kept(tmp_path):
 
 
 def test_no_field_lists_and_writes_nothing(tmp_path):
-    ok, text = bs.edit(tmp_path, None, None, "")
+    ok, text, _ = bs.edit(tmp_path, None, None, "")
     assert ok and "description" in text and "not written yet" in text
     assert not (tmp_path / bs.SELF_FILE).exists() and not (tmp_path / bs.SELF_LOG).exists()
 
@@ -44,7 +44,7 @@ def test_no_field_lists_and_writes_nothing(tmp_path):
     ("values", "x" * (bs.FIELD_MAX_CHARS + 1), "x", "at most"),
 ])
 def test_a_refused_edit_says_why_and_changes_nothing(tmp_path, field, text, why, says):
-    ok, msg = bs.edit(tmp_path, field, text, why)
+    ok, msg, _ = bs.edit(tmp_path, field, text, why)
     assert not ok and says in msg and "Nothing was changed" in msg
     assert not (tmp_path / bs.SELF_FILE).exists() and not (tmp_path / bs.SELF_LOG).exists()
 
@@ -54,7 +54,7 @@ def test_an_edit_that_cannot_be_logged_is_undone(tmp_path):
     before = (tmp_path / bs.SELF_FILE).read_bytes()
     (tmp_path / bs.SELF_LOG).unlink()
     (tmp_path / bs.SELF_LOG).mkdir()                 # appending to a directory raises OSError
-    ok, msg = bs.edit(tmp_path, "description", "something else", "why")
+    ok, msg, _ = bs.edit(tmp_path, "description", "something else", "why")
     assert not ok and "undone" in msg
     assert (tmp_path / bs.SELF_FILE).read_bytes() == before
 
