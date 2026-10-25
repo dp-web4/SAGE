@@ -128,6 +128,22 @@ def test_the_being_cannot_write_its_entrustment_by_any_spelling():
     assert r._safe_path("notes/plan.md", writing=True), "its own reading stays writable"
 
 
+def test_the_being_cannot_write_the_seats_identity_record_by_any_spelling():
+    """identity.json names the machine that arbitrates the being (escalate.seat_for); review of
+    #541 measured a memory_edit moving that arbiter. Who it says it is goes in self.json."""
+    from sage.gateway.reference_f1a import SEAT_IDENTITY
+    tmp = Path(tempfile.mkdtemp())
+    r, home = _being(tmp)
+    for name in SEAT_IDENTITY:
+        (home / name).write_text("{}\n")
+        for spelling in (name, "./" + name, "notes/../" + name, str(home / name),
+                         "/wherever/" + name):
+            with pytest.raises(ValueError) as e:
+                r._safe_path(spelling, writing=True)
+            assert "record the seat keeps" in str(e.value) and "identity_edit" in str(e.value)
+        assert r._safe_path(name, writing=False) == (home / name).resolve(), "it may read it"
+
+
 def test_the_entrustment_is_rendered_whole_and_named_in_the_record():
     from sage.gateway.heartbeat import entrustment, own_state
     tmp = Path(tempfile.mkdtemp())

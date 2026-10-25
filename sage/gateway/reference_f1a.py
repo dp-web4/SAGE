@@ -50,6 +50,14 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # GIVEN; if it could append to it, what was extended and what it decided would merge in the
 # record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
 SEAT_OWNED = ("entrustment.md",)
+# The identity RECORD, as the seat keeps it (fleet review of SAGE #541, pub/cbp/legion,
+# 2026-10-24). escalate.seat_for reads `identity.machine` from identity.json to pick the seat
+# that arbitrates the being, and provider.py derives trust_ceiling from its anchor_type: a being
+# that could memory_edit it could choose its own arbiter (legion and cbp each measured exactly
+# that). The sealed root and its attestation sit beside it. The raising pipeline and provider
+# write these with plain open(), never through a being verb, so this guard does not touch them.
+# Who the being says it is lives in self.json, through identity_edit.
+SEAT_IDENTITY = ("identity.json", "identity.sealed", "identity.attest.json")
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
@@ -927,6 +935,12 @@ class ReferenceF1aDispatcher:
                     f"{p.name} is changed only with identity_edit, which keeps every earlier "
                     "version and your reason in self_log.jsonl. A direct write would leave no "
                     "record of what it replaced. Nothing was changed")
+            if p.parent == self.memory_root and p.name in SEAT_IDENTITY:
+                raise ValueError(
+                    f"{p.name} is the record the seat keeps of you: which machine arbitrates "
+                    "for you and how far you are trusted are read from it, so it cannot be "
+                    "yours to set. Who you are, in your own words, is self.json: change it "
+                    "with identity_edit, which keeps every earlier version. Nothing was changed")
             if p.parent == self.memory_root and p.name in SEAT_OWNED:
                 raise ValueError(
                     f"{p.name} is yours to read and not to edit: it is what you were entrusted "
