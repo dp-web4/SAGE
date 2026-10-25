@@ -527,7 +527,7 @@ class HestiaF1aDispatcher:
         acted. Peers' answers were delivered as forum replies a beat later (mcnugget, 10-22: "a Sprout
         side fault"). This states what hestia holds for each named id, from the being's own scope queue,
         and nothing else: no advice, no verdict on the ask."""
-        text = " ".join(str(intent.args.get(k, "")) for k in ("reason", "body", "why"))
+        text = " ".join(str(intent.args.get(k, "")) for k in ("reason", "body", "why", "text"))
         own = str((env.result or {}).get("request_id") or "") if isinstance(env.result, dict) else ""
         ids = [i for i in dict.fromkeys(_SCOPE_ID.findall(text)) if i != own][:3]
         if not ids:
@@ -2862,6 +2862,18 @@ class HestiaF1aDispatcher:
         return ResultEnvelope(ok=True, result=text,
                               witness_id=(self._local._witness(f"tune {name}: {text[:120]}")
                                           if name else None))
+
+    def _do_identity_edit(self, intent: BeingIntent) -> ResultEnvelope:
+        """The being's own words about itself (being_self): show them, or replace one field."""
+        from sage.gateway import being_self
+        a = intent.args or {}
+        field = str(a.get("field") or "").strip() or None
+        ok, text, changed = being_self.edit(Path(self.memory_root), field, a.get("text"), a.get("why") or "")
+        if not ok:
+            return ResultEnvelope(ok=False, error=text)
+        return ResultEnvelope(ok=True, result=text,
+                              witness_id=(self._local._witness(f"identity_edit {field}: {text[:120]}")
+                                          if changed else None))
 
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
@@ -5243,8 +5255,11 @@ _HARDWARE_DEV = re.compile(r"/dev/(?!" + _SANDBOX_DEV + r")[A-Za-z]")
 
 
 # Verbs whose free text may name a scope request; their receipts carry its status
-# (HestiaF1aDispatcher._attach_named_scope_status).
-_NAMES_SCOPE_IDS = ("request_scope", "peer_ask", "request_run")
+# (HestiaF1aDispatcher._attach_named_scope_status). `say` joined after #518's 24 h on Sprout
+# (2026-10-23..24): mentions of the expired id fell from ~65/day to 9, and the one that reached a
+# person went by `say`, after a peer_ask redirected it there, so it met no fact. The fact goes
+# on the being's receipt only; the turn it spoke is delivered as written.
+_NAMES_SCOPE_IDS = ("request_scope", "peer_ask", "request_run", "say")
 
 
 def _scope_next(request_id, daemon_next) -> str:

@@ -3470,6 +3470,21 @@ def test_a_scope_id_the_being_names_comes_back_with_its_status_in_the_same_recei
     assert "scope-0fefb5f67e46: pending" in env.to_tool_message()
 
 
+def test_a_scope_id_named_in_say_gets_its_status_on_the_receipt_not_in_the_turn():
+    """After #518, the expired id reached a person by `say` (a peer_ask had redirected it there)."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _qdisp()
+    conv.create(Path(root), "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    words = "scope-ef204d003703 has been pending for days; can you check?"
+    env = d(BeingIntent("say", {"to": "dp", "text": words}), _ALLOW)
+    assert env.ok, env.error
+    assert "scope-ef204d003703: expired" in env.to_tool_message()
+    assert conv.recent(Path(root), "dp", limit=1)[-1]["text"] == words     # the turn is untouched
+    assert len(_mb_calls("hestia_scope_status")) == 1
+
+
 def test_naming_no_scope_id_reads_nothing_and_adds_nothing():
     d, _ = _qdisp()
     env = d(BeingIntent("request_scope", {"path": _elsewhere(), "reason": "to read a peer's note"}), _ALLOW)
