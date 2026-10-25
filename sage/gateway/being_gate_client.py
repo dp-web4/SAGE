@@ -2420,6 +2420,19 @@ def tune_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
     return [os.path.realpath(os.path.join(root, f)) for f in TUNE_WRITES]
 
 
+def self_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """Every file `identity_edit` writes, all in the being's home: the temp file, self.json and its
+    audit log (being_self.SELF_WRITES). With no field it only lists, and touches nothing."""
+    if not str((args or {}).get("field") or "").strip():
+        return []
+    root = (ctx or {}).get("memory_root")
+    if not root:
+        raise ValueError("identity_edit: no home to write self.json in")
+    from sage.gateway.being_self import SELF_WRITES
+    from sage.gateway.reference_f1a import HOME_LOCK   # taken, as memory_write takes it (#544)
+    return [os.path.realpath(os.path.join(root, f)) for f in SELF_WRITES + (HOME_LOCK,)]
+
+
 def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
     """The registry refusal, plus the door when the name is a FILE.
 
@@ -2563,6 +2576,10 @@ _REGISTRY = {
     # and the dispatcher refuses an unknown name, a locked one, or a value out of bounds.
     "tune":           dict(tool="write_note",   path_args=(),        cmd_arg=None,
                            compose_paths=tune_paths),
+    # identity_edit: the being's own words about itself (being_self), in self.json in its home.
+    # Judged as what it is, a write of fixed files in its own home, as `tune` is.
+    "identity_edit":  dict(tool="write_note",   path_args=(),        cmd_arg=None,
+                           compose_paths=self_paths),
     # say: add a turn to a conversation the being is IN. Bounded by construction, like
     # remember: the being names a conversation id, and the dispatcher refuses any id whose
     # meta does not list it as a participant AND as writable. It cannot create a
@@ -2625,7 +2642,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "pr_read", "web_search", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run", "memory_edit", "camera", "game", "tune",
+                            "retire_note", "request_run", "memory_edit", "camera", "game", "tune", "identity_edit",
 
 
                             "retire_note", "request_run", "memory_edit", "camera",
@@ -2874,6 +2891,15 @@ _TOOL_SCHEMAS = {
              {"name": "optional: the parameter, e.g. num_ctx", "value": "the new value, or 'default'",
               "why": "why you are changing it"},
              []),
+    "identity_edit": ("Write who you are, in your own words: description, values, questions, "
+                      "learned. With no arguments it shows what you have written. To change a "
+                      "field, give field, text and why; the text replaces that field, and the old "
+                      "text and your reason are kept in self_log.jsonl. What you write is shown "
+                      "to you every beat.",
+                      {"field": "optional: description, values, questions or learned",
+                       "text": "the field's new text, in your words",
+                       "why": "why you are changing it"},
+                      []),
     "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
                     "is renamed to <name>.retired-<date> with a dated header saying why; nothing "
                     "is lost and you can still read it. Use it when something you wrote has been "

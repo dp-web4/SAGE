@@ -50,6 +50,23 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # GIVEN; if it could append to it, what was extended and what it decided would merge in the
 # record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
 SEAT_OWNED = ("entrustment.md",)
+# GOVERNANCE RECORDS IN THE HOME (SAGE #544). The being's home also holds the files that say who
+# it is to the society, and no being verb may write them:
+#   identity.json         the raising record: `identity.machine` picks the seat that arbitrates its
+#                         escalations (escalate.seat_for), beside lct, trust_ceiling, anchor_type;
+#   identity.sealed / identity.attest.json   the sealed identity and its attestation;
+#   instance.json         the operator's layer: lct_id, machine, and the parameter bounds and locks
+#                         the being's own `tune` layer sits under (being_params).
+# These were reachable by memory_edit (and memory_write's append could corrupt the JSON, and the
+# readers fall back silently). The raising pipeline and the identity provider write them as trusted
+# Python, not through these verbs, so they are unaffected. What the being says of ITSELF is
+# self.json, written by identity_edit (being_self, #541); it is not one of these.
+# The identity family is matched by PREFIX, not by name: the provider keeps identity.sealed.v1 as
+# the only original of a v1 seal after migration, and writes .tmp / .retired-* siblings beside the
+# live files. A list would leave each of those writable (legion's review of #545). Nothing the
+# being writes starts with "identity." (its own words are self.json).
+GOVERNANCE_OWNED_PREFIX = "identity."
+GOVERNANCE_OWNED = ("instance.json",)
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
@@ -924,6 +941,19 @@ class ReferenceF1aDispatcher:
                         f"was changed. If you meant to change one of your own files, "
                         f"{sub}/ is not its path: give that file's path instead (a `say` "
                         "does not change any file)")
+            if p.parent == self.memory_root and (p.name in GOVERNANCE_OWNED
+                                                or p.name.startswith(GOVERNANCE_OWNED_PREFIX)):
+                raise ValueError(
+                    f"{p.name} is a governance record: it says who you are to the society (your "
+                    "id, your machine, which seat hears your escalations, your trust ceiling), so "
+                    "no being verb writes it. Nothing was changed. Who you are in your own words "
+                    "is yours to write with identity_edit")
+            from sage.gateway.being_self import SELF_WRITES
+            if p.parent == self.memory_root and p.name in SELF_WRITES:
+                raise ValueError(
+                    f"{p.name} is changed only with identity_edit, which keeps every earlier "
+                    "version and your reason in self_log.jsonl. A direct write would leave no "
+                    "record of what it replaced. Nothing was changed")
             if p.parent == self.memory_root and p.name in SEAT_OWNED:
                 raise ValueError(
                     f"{p.name} is yours to read and not to edit: it is what you were entrusted "
