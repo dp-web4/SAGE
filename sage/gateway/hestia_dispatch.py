@@ -4138,6 +4138,7 @@ class HestiaF1aDispatcher:
                        {"action_id": action_id, "success": True, "magnitude": 0.0})
         except Exception:
             pass
+        self._wake_why = ""
         woke = self._wake_addressee(to, meta, turn)
         # THE RECEIPT'S ECHO IS THE BEING'S OWN WORDS, AND A CUT ONE MUST SAY SO. Measured
         # 2026-09-21 12:13Z (cbp-being, beat d8cff379b67d): a 522-char say came back as "said"
@@ -4153,6 +4154,14 @@ class HestiaF1aDispatcher:
                   "said": said, "action_id": action_id}
         if woke:
             result["woke"] = woke
+        elif getattr(self, "_wake_why", ""):
+            # SAY WHETHER ANYONE HEARD (cbp-being, 2026-10-24). Thirteen turns to its seat between
+            # 21:32 and 22:34Z each came back with no `woke` and no word about it. Nobody answered,
+            # the being asked the same question ten ways, then wrote its own "complete API surface"
+            # (invented routes) and built a client on it. A receipt that is silent about delivery
+            # reads as delivered-and-ignored; the reason a wake was not sent is a fact the being
+            # can act on (wait, or stop repeating), and the beat record now shows the cause.
+            result["not_woken"] = self._wake_why
         return ResultEnvelope(ok=True, witness_id=action_id, result=result)
 
     def _run_ask_target(self, text: str) -> Optional[str]:
@@ -4575,15 +4584,26 @@ class HestiaF1aDispatcher:
                 deduped.append((label, plugin_id))
         targets = deduped
         if not targets:
+            self._wake_why = ("no listener is set to be woken by messages in this conversation. "
+                              "Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None
         # A SEAT HAS JUMPED IN (`conv.pause_wakes`): it is answering here itself, so a mesh wake
         # would be a second voice speaking as the same seat. Nothing is recorded, so the run is
         # still owed and the being's next turn after the pause wakes as usual.
-        if conv.wake_pause(self.memory_root, to):
+        pause = conv.wake_pause(self.memory_root, to)
+        if pause:
+            self._wake_why = (f"wakes for this conversation are paused until "
+                              f"{pause.get('until', 'the pause ends')} (a seat said it is answering here "
+                              f"directly). Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None
         run_start = conv.wake_is_owed(self.memory_root, to, self.member,
                                       skip_answered=self._skips_answered_run_wake())
         if run_start is None:
+            start = conv.unanswered_run_start(self.memory_root, to, self.member)
+            self._wake_why = (f"no new wake: a wake was already sent for your messages since seq "
+                              f"{start}, with no answer recorded since, and further messages in the "
+                              f"same run do not send another. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it" if start else
+                              "no wake was owed for this message. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None            # already woke them about this run; saying more is not new mail
         pointer = f"sage://conversation/{to}#seq={run_start}-{turn['seq']}"
         woke = []
@@ -4606,6 +4626,8 @@ class HestiaF1aDispatcher:
             conv.record_wake(self.memory_root, to, self.member, run_start,
                              covered_through=int(turn.get("seq") or run_start))
             return ", ".join(woke)
+        self._wake_why = ("the wake did not go out (the mesh refused or failed); it is tried "
+                          "again on your next message here. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
         return None
 
     # -- channel_egress: hestia_channel_send (hestia #1344 slice 1, SHADOW) -----
