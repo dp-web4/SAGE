@@ -13,6 +13,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from sage.gateway.being_gate_client import BeingGateClient, BeingIntent  # noqa: E402
 
 
+def _full(reach):
+    """Reach as (root, recursive), each entry checked to be a full-mode grant. A core with hestia
+    #1383 (`scope_roots_with_modes`) adds the modes as a third element; an older one does not."""
+    for e in reach:
+        assert len(e) == 2 or e[2] == "rwed", e
+    return tuple(tuple(e[:2]) for e in reach)
+
+
 def _client(mech):
     """A client whose local law always ALLOWs, with an injected society mechanism."""
     c = BeingGateClient.__new__(BeingGateClient)
@@ -512,9 +520,14 @@ def test_a_recursive_grant_on_a_workspace_directory_reaches_the_dispatcher(tmp_p
     refused it "outside your reach" for 3.5 hours. The widening removed the reach."""
     import importlib, sys
     from sage.gateway.being_gate_client import _granted_roots, _granted_reach, GatewayVerdict
-    from sage.gateway.being_gate_client import BeingIntent
+    from sage.gateway.being_gate_client import BeingIntent, _resolve_hestia_shared
     from sage.gateway.reference_f1a import ReferenceF1aDispatcher
-    shared = os.path.expanduser("~/ai-workspace/governance/hestia/plugins/_shared")
+    # THE CORE THE CLIENT LOADS, not a fixed path. This read ~/ai-workspace/governance/..., the
+    # governance snapshot, while the client loads the deployed core (~/.hestia/shared on cbp).
+    # Both import as `hestia_gate_core`, so whichever loaded first answered for every later
+    # test: on cbp 2026-10-26 the snapshot lacked #1383 and the deployed core had it, and the
+    # #533 pins passed or failed by test order.
+    shared = _resolve_hestia_shared() or ""
     if not os.path.isfile(os.path.join(shared, "hestia_gate_core.py")):
         pytest.skip("no hestia core on this machine")
     sys.path.insert(0, shared)
@@ -542,10 +555,10 @@ def test_a_recursive_grant_on_a_workspace_directory_reaches_the_dispatcher(tmp_p
     assert _granted_roots(core, Pol, str(ws)) == ()     # a bare name no grant stands behind: nothing
     roots = _granted_roots(core, Pol, str(ws), minted)
     assert roots == (os.path.realpath(ws / "governance"),)          # repo:sage is not a dir
-    assert _granted_reach(core, Pol, str(ws), minted) == ((os.path.realpath(ws / "governance"), True),)
+    assert _full(_granted_reach(core, Pol, str(ws), minted)) == ((os.path.realpath(ws / "governance"), True),)
     # an EXACT grant on the same directory keeps the path: form and stays exact
     class Exact: scope = (exact,)
-    assert _granted_reach(core, Exact, str(ws)) == ((os.path.realpath(ws / "governance"), False),)
+    assert _full(_granted_reach(core, Exact, str(ws))) == ((os.path.realpath(ws / "governance"), False),)
     # the last mile: the dispatcher reads the file the gate allowed
     d = ReferenceF1aDispatcher(str(home))
     env = d(BeingIntent("memory_read", {"path": str(target)}),
