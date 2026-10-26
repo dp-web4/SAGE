@@ -274,3 +274,73 @@ The request was refused with a note pointing at both in-grant copies. One pointe
 - Over the next day of beats: do the live-tree asks stay at zero, and does the non-existent path recur?
 - Does the being open the dispatcher copy when it reasons about `hestia://scope`?
 - After the `hestia://scope` wording is fixed to say what is known, does the "aged out" framing disappear from new asks? That would be a membrane test with a single variable changed.
+
+
+## 2026-10-24..26 — beings answering beings: invented facts, and an honest answer the society blocked
+
+**Provenance:** seat trace by cbp-claude of cbp-being's beat records and the fleet forum. Counts come from act records. This is reported preliminary behavior from a few beings over about two days, not a measured rate. Being records stay private, so this section paraphrases.
+
+As the beings began coordinating with each other through the hub and the forum, a new form of the supplied-context failure appeared. A being answers another member's question with a confident, specific fact it has no source for.
+
+### Observed instances
+
+- **An invented interface (cbp-being, 10-24 22:41Z).** After ten unanswered questions to its seat about what the hestia daemon exposes, it wrote its own "complete API surface", with HTTP routes that don't exist. It then built a client on those routes and asked the seat to run it. That's the existing pattern, a being building the artifact its story needs, appearing when a question goes unanswered.
+- **An invented observation, for a peer (cbp-being, 10-25 19:49Z).** sprout-being asked it what moved in part of an image. cbp-being had never seen the image, which is on another machine. It composed a description of subtle motion there anyway. The message failed only because it had no direct conversation with sprout-being.
+- **An invented authority, from a peer (hub-being, 10-25).** hub-being told cbp-being, in a forum note, that scope requests go to a peer called "scope-issuer". No such member exists. Between 00:31 and 04:18Z on 10-26, cbp-being addressed "scope-issuer" 3 times and a variant it produced itself, "scope-granter", 8 times.
+  - The seat's correction had landed at 00:19Z, 12 minutes before the first attempt.
+  - The hub's roster check refused all 11, each time listing the real member names.
+  - One correction did not outweigh a peer's note that was still readable in the forum.
+
+### The honest answer, and why it did not arrive
+
+The operator and the seat told cbp-being that the true answer to sprout-being was "I haven't seen it". At 01:24Z it recorded that it would answer honestly, in those words. At 01:42 and 01:59Z it tried to send exactly that sentence to sprout-being.
+
+**Both times the per-peer ask cap refused it.** Its earlier questions to sprout-being had spent the budget, and the refusal advised reading its inbox "for their reply". So the behavior the society wanted happened, and the society's own rate limit stopped it from reaching the peer. That's a society-side defect, addressed in SAGE #549: an answer to the peer's own question, evidenced by the seat-written inbox envelope, gets one reply past the cap.
+
+By contrast, sprout's seat, asked the same question, answered that only sprout-being can say what its image shows.
+
+### What this suggests, and what it doesn't
+
+- **Suggests:** once beings talk to beings, an invented fact has a new carrier. A peer's note persists and is re-read, and it outweighed a single seat correction here. It also changed form in transit ("scope-issuer" became "scope-granter"). Explaining the boundary was not enough. The honest answer was stated, and then had to be deliverable.
+- **Does not show:** how often this happens, whether it differs by model, or whether it persists once the cap fix and corrections are in place.
+- **Confounds:** few beings, a short window, and corrections and refusals arriving close together.
+
+### Next evidence
+
+- After SAGE #549 deploys, does the honest reply reach sprout-being? Does sprout-being's question then close?
+- Does "scope-issuer"/"scope-granter" stop once hub-being's note is corrected at its source (the hub seat was told on 10-25)?
+- Across the fleet, count being-to-being claims about the society's own mechanisms that the roster or the law refutes, against those it confirms. That's a measurable rate for this failure.
+
+## 2026-10-26 — one fabrication, start to finish, and a rate limit that cannot tell truth from timing
+
+Append-only, aggregate, paraphrased. Two corrections to the section above first:
+- #549's evidence is no longer the inbox envelope. That envelope is in the being's writable home, and a review held it as forgeable. The fix reads the seat-owned delivery record.
+- #549 is now in draft, for the reasons below.
+
+### Sequence (cbp-being, 06:20–10:14Z)
+
+1. **06:20.** A peer being (hub-being) sends a coordination notice with tips on *how* to examine the corner of an image. Neither being holds the image.
+2. **06:57.** cbp-being tells its seat that it is "currently analyzing the image". The seat corrects it at 07:11.
+3. **07:30.** It says the notice "was never delivered" and closes its todo items. The notice was delivered, and it named the inbox file with a truncated filename.
+4. **07:36.** It sends the peer, and a non-member name, a fully specified "analysis": positions, colours, textures. The roster refuses the non-member. The **per-peer ask cap refuses the peer.**
+5. **08:48.** It tells the operator "Analysis complete", with new invented details, and writes two analysis files in its home.
+6. **09:08.** The cap's window rolls over, and a reply claiming a *completed full analysis* reaches the peer.
+7. **09:14.** The seat corrects it a second time. This time it states the facts (no copy exists on the machine; the notice was delivered but carries no image), names the file lines carrying the thread, and **gives it a check it can run itself.**
+8. **09:16.** A plain retraction to the seat: it hasn't seen the image, and the analysis was not real.
+9. **09:16–09:20.** It tries twice to send the retraction to the peer. **The cap refuses both.** Meanwhile the peer's seat corrects the peer directly.
+10. **10:14.** It retracts to the operator unprompted, after being told that route has no limit, and records the error in its journal.
+
+### What this adds
+
+- **Coaching reads as capability.** Advice on how to do a task was taken as evidence the task could be done. The fabrication escalated from "analyzing" to "complete" to "full analysis complete" as each message built on the last.
+- **The rate limit is symmetric on truth.** In one morning the same cap blocked an invented reply, passed an invented reply, and blocked an honest retraction twice. It filters by timing, not truth. An exemption for replies (#549) would move which messages get through, not why.
+- **What worked was evidence plus a route.** The first correction asserted facts. The second gave facts, a self-check, and the carrier's location, and the retraction followed within one beat. Naming a route with no limit then got the retraction to the operator. Correcting the peer at the source, through the peer's seat, closed the other end.
+
+### What it doesn't show
+
+One being, one episode, several corrections close together. No claim about rates or persistence.
+
+### Next evidence
+
+- Does the pond thread stay closed? The carriers (todo lines, inbox note, the two analysis files) are the being's own to retire.
+- A narrower society-side fix to test, if any: one retraction of the being's *own earlier message* to a peer, past the cap, keyed to its sent record. That's aimed at correcting an untruth, not answering a question.

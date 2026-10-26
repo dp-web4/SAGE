@@ -1720,6 +1720,42 @@ def run_source_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
             for n in run_names(args, ctx)]
 
 
+def runs_in_sandbox(command: Optional[str]) -> bool:
+    """True when a composed line IS a sandbox launch: bwrap or Seatbelt is its program, after at
+    most prlimit's own `prlimit <opts> --` wrapper. A line that runs unsandboxed (check on a box
+    that permits it: sandbox_prefix returns "") is not, and is judged as the command it is."""
+    import shlex
+    try:
+        toks = shlex.split(command or "")
+    except ValueError:
+        return False
+    if toks and toks[0] == PRLIMIT:
+        toks = toks[toks.index("--") + 1:] if "--" in toks else []
+    return bool(toks) and toks[0] in (SANDBOX, SEATBELT)
+
+
+def sandbox_reach(effector: str, args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """What a sandboxed verb's box exposes to the program, which is the being's reach for that act.
+
+    The rest of the line is the box's own plumbing, fixed by this module and not chosen by the
+    being: the wrapper (prlimit, bwrap), the system mounts (/usr, /lib, /bin, /etc/alternatives),
+    the interpreter, /proc, /dev and the tmpfs. Judging those as the being's reach refused every
+    run on Legion (SAGE #441 replay, 2026-10-25: 271/271 on /usr/bin/prlimit) and, before that,
+    every check and game (miniforge3, 2026-10-05). What the law must still see is what a grant
+    is about: for `run`, every grant the box mounts (run_grant_mounts) and the worktree; for
+    `check`, the worktree it binds. The sources a run reads come in through compose_paths."""
+    import os
+    ctx = ctx or {}
+    out: List[str] = []
+    if effector == "run":
+        mounts, _skipped, _mask = run_grant_mounts(ctx)
+        out += [m[0] for m in mounts]
+    wt = ctx.get("worktree")
+    if wt and os.path.isdir(wt):
+        out.append(os.path.realpath(wt))
+    return list(dict.fromkeys(out))
+
+
 def _run_command_seatbelt(interp: str, stage: str, script: str, worktree: Optional[str],
                           memory_root: str) -> str:
     """The Seatbelt form of a run: the same inputs, environment and worktree rule as the bwrap form.
@@ -2674,7 +2710,8 @@ _REGISTRY = {
     # run: execute code the being wrote, in a sandbox holding nothing of ours. Composed like
     # check; see run_command for why it is strictly weaker than the check the being already has.
     "run":            dict(tool="run",         path_args=(),       cmd_arg=None,
-                           compose=run_command, compose_paths=run_source_paths),
+                           compose=run_command, compose_paths=run_source_paths,
+                           sandboxed=True),
     # say: add a turn to a conversation the being is IN. Bounded by construction, like
     # remember: the being names a conversation id, and the dispatcher refuses any id whose
     # meta does not list it as a participant AND as writable. It cannot create a
@@ -2696,7 +2733,7 @@ _REGISTRY = {
     # target from an allow-list, the SEAT builds the command, the law judges THAT, and the
     # being never holds a shell. A failing check is a first-class result, not an error.
     "check":          dict(tool="check",       path_args=(),       cmd_arg=None,
-                           compose=check_command),
+                           compose=check_command, sandboxed=True),
     # pr_amend: revise a proposal already open. Composed like pr_open — the being supplies
     # a commit message and optionally a new PR body; the branch and the PR number are READ
     # from the worktree, so it can only ever revise its own open proposal, and the law
@@ -3949,10 +3986,42 @@ class BeingGateClient:
                 # The path stays visible to the law as data, under a key that carries no reach.
                 if intent.effector == "request_scope" and "path" in tool_input:
                     tool_input["requested_path"] = tool_input.pop("path")
+                # THE COMPOSED ACT, IN THE KEYS THE ONE GATE READS (GPT on #367). The legacy stage
+                # judged `command` (what a composed verb will run) and `compose_paths` (what a
+                # patch will touch); the single gate derives both ONLY from tool_input:
+                # _command_text() reads tool_input["command"], core.path_targets() reads its
+                # ratified path keys. Without these, game/search/check/git_* /pr_* were judged on
+                # the being's friendly args, and patch_apply's targets were not judged at all.
+                # No SAGE-only keys: "command" (no registry verb has a cmd_arg, pinned) and
+                # "paths" (a PATH_LIST_KEY), so SAGE stays a thin adapter into the one gate.
+                # A SANDBOXED VERB IS JUDGED BY WHAT ITS BOX EXPOSES (SAGE #441 replay, 2026-10-25).
+                # Its line is a bwrap/Seatbelt launch whose every bind source the law would read as
+                # the being's reach: all 271 of legion-being's runs were refused on
+                # /usr/bin/prlimit. The box is the confinement; the law rules on what it lets the
+                # program reach (sandbox_reach), and the full line is still SWEPT as egress (innate
+                # egress.secret, never scoped), so a composer bug that bound a secret is refused.
+                # Only when the line really is a sandbox launch: an unsandboxed check is judged as
+                # the command it is.
+                egress = list(getattr(ev, "egress", None) or [])
+                boxed = (bool(_REGISTRY[intent.effector].get("sandboxed"))
+                         and runs_in_sandbox(judged_command))
+                if judged_command is not None:
+                    if boxed:
+                        egress.append(judged_command)
+                    else:
+                        tool_input["command"] = judged_command
+                derived = list(resolved)          # what compose_paths added after the path args
+                if boxed:
+                    derived += sandbox_reach(intent.effector, intent.args,
+                                             self._compose_ctx(intent.effector))
+                if derived:
+                    prior = tool_input.get("paths")
+                    prior = [prior] if isinstance(prior, str) else list(prior or [])
+                    tool_input["paths"] = prior + derived
                 ge = sg.GateEvent(tool=tool, tool_input=tool_input, cwd=self.workspace,
                                   session_id=getattr(self, "host_session_id", None),
                                   raw={"effector": intent.effector, **intent.args},
-                                  **({"egress": list(ev.egress)} if getattr(ev, "egress", None) else {}))
+                                  **({"egress": egress} if egress else {}))
                 d = sg.decide(ge, gp)
                 available = getattr(d, "verdict_available", True)
                 dec = d.decision if (available and d.decision in ("allow", "warn", "deny")) else "deny"

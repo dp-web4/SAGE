@@ -23,6 +23,14 @@ from sage.gateway import being_gate_client as B  # noqa: E402
 from sage.gateway.reference_f1a import ReferenceF1aDispatcher  # noqa: E402
 
 
+def _full(reach):
+    """Reach as (root, recursive), each entry checked to be a full-mode grant. A core with hestia
+    #1383 (`scope_roots_with_modes`) adds the modes as a third element; an older one does not."""
+    for e in reach:
+        assert len(e) == 2 or e[2] == "rwed", e
+    return tuple(tuple(e[:2]) for e in reach)
+
+
 def _need_core():
     if B.BeingGateClient("probe-being", os.path.join(tempfile.mkdtemp(), "identity.json"),
                          tempfile.mkdtemp())._core is None:
@@ -68,7 +76,7 @@ def test_an_exact_grant_on_a_directory_reaches_nothing_beneath_it():
     ws, gov, home = _world()
     c = _client(ws, {"in_scope": ["path:" + gov], "scope_grants": [gov]})
     v, env = _act(c, home, "memory_read", {"path": os.path.join(gov, "closure.py")})
-    assert tuple(v.granted_reach) == ((gov, False),), v.granted_reach
+    assert _full(v.granted_reach) == ((gov, False),), v.granted_reach
     assert _refused(env), env and (env.ok, env.result, env.error)
     _, env = _act(c, home, "memory_write", {"path": os.path.join(gov, "new.py"), "content": "x = 1\n"})
     assert _refused(env), env and (env.ok, env.result, env.error)
@@ -104,7 +112,7 @@ def test_a_recursive_grant_still_reaches_its_subtree():
     ws, gov, home = _world()
     c = _client(ws, {"in_scope": ["path:" + gov + "/**"], "scope_grants": [gov]})
     v, env = _act(c, home, "memory_read", {"path": os.path.join(gov, "core", "http.rs")})
-    assert tuple(v.granted_reach) == ((gov, True),), v.granted_reach
+    assert _full(v.granted_reach) == ((gov, True),), v.granted_reach
     assert env.ok and "fn http" in str(env.result), env.error
     # Carrier: a grant is READ reach; writes stay in the being's home and worktree whatever the
     # gate grants (write + check would be code running as the seat). Main lets this write land.

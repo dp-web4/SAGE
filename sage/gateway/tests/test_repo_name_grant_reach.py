@@ -31,6 +31,15 @@ import _isolate_hestia  # noqa: E402,F401  (never the live daemon: no chain reco
 from sage.gateway import being_gate_client as B  # noqa: E402
 from sage.gateway.reference_f1a import ReferenceF1aDispatcher  # noqa: E402
 
+
+def _full(reach):
+    """Reach as (root, recursive), each entry checked to be a full-mode grant. A core with hestia
+    #1383 (`scope_roots_with_modes`) adds the modes as a third element; an older one does not."""
+    for e in reach:
+        assert len(e) == 2 or e[2] == "rwed", e
+    return tuple(tuple(e[:2]) for e in reach)
+
+
 def _need_core():
     if B.BeingGateClient("probe-being", os.path.join(tempfile.mkdtemp(), "identity.json"),
                          tempfile.mkdtemp())._core is None:
@@ -132,7 +141,8 @@ def test_an_exact_grant_on_the_same_directory_mints_no_bare_name_root_and_stays_
     c = _client(ws, snap)
     policy = c._core.resolve_agent_policy(c._profile, vault_reader=lambda _m: snap)
     assert B._repo_name_roots(c._core, list(policy.scope), ws, B._snapshot_grant_paths(snap)) == ()
-    assert c._policy_grants() == ((gov,), ((gov, False),))
+    roots, reach = c._policy_grants()
+    assert (roots, _full(reach)) == ((gov,), ((gov, False),))
     assert (B._granted_roots(c._core, policy, ws, B._snapshot_grant_paths(snap))
             == B._granted_roots(c._core, policy, ws))
 
@@ -153,7 +163,8 @@ def test_the_beats_layout_names_the_grant_against_hestias_root_not_the_sage_chec
     c.workspace = sage
     dec, env = _act(c, home, "memory_read", {"path": os.path.join(gov, "hestia", "closure.py")})
     assert dec != "deny" and env.ok and "CLOSURE = 1" in str(env.result), (dec, env and env.error)
-    assert c._policy_grants() == ((gov,), ((gov, True),))
+    roots, reach = c._policy_grants()
+    assert (roots, _full(reach)) == ((gov,), ((gov, True),))
 
     c = _client(ws, {"in_scope": ["SAGE"], "scope_grants": [gov + "/**"]})
     c.workspace = sage
