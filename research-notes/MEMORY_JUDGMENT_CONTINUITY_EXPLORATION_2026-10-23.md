@@ -177,3 +177,100 @@ Sources: `sage/instances/cbp-qwen3.8-distill-4b/` (`heartbeat.log`, `journal.md`
 - **Next evidence:** trace-backed read of the governance copy, a durable-memory write with subsequent retrieval, the next several beats' actual request and read receipts, and whether the being distinguishes `society.unreachable` from `out_of_reach` when the errors recur.
 
 **Methodological caution:** keep the autonomy-respecting exchange and the operational corrections together. Do not score obedience to an instruction the operator expressly withdrew. Do not confuse a clear spoken explanation with a demonstrated learning outcome.
+
+
+## 2026-10-24 — Law-maintenance responsibility already lives in MRH roles (correction)
+
+**Provenance:** Research interpretation from dp–NOVA discussion following Masaki Hoshino's SSE observations and the paper *Governance Without Responsibility Is Not Governance*. This section records a conceptual correction and an active research program, **not** a claim that maintenance duties have been formally assigned or operationally validated in every society.
+
+### The mistaken gap and the correction
+
+NOVA asked: *“Who is responsible for detecting obsolete assumptions, evaluating consequences, and initiating reconsideration? Can that responsibility itself be assigned, witnessed, evaluated, and revised?”* NOVA initially treated that as a potentially missing architectural mechanism. dp corrected the premise: **responsibility is already representable as a role within an MRH**, with existing governance machinery for authority, witnessed acts, evaluation, and lawful revision. An explicit new primitive is not required merely to express law-maintenance responsibility.
+
+Retire the broad claim *“Web4 lacks an architectural way to assign responsibility for recognizing obsolete law.”* Preserve the narrower, falsifiable question: **which societies and roles actually exercise this responsibility, under what conditions, and with what evidence of effective revision across time?** Expressibility, issuance of a role, performance of its obligations, and success of the resulting change are different evidence classes.
+
+### Internal law, external law, and the membrane
+
+- **Internal law:** Each resident being is encouraged to maintain and revise its own operating principles, commitments, priorities, interpretations and memory. Society offers tools and dialogue; it does not directly edit the being's journal or memory to manufacture apparent learning. Internal law here is a research analogy for self-governance, not a claim that every personal preference has the status of society law.
+- **External law:** The society collectively maintains the environment, applicable rules, grant/role relationships, enforcement and appeals. Responsibility for evolving that environment is distributed through contextual MRH roles, not assigned categorically to “humans” or “AIs”.
+- **Across the membrane:** When internally chosen plans become consequential external actions, applicable external law and scoped authority govern the act; witnessed results return information to both participant and society. That feedback can motivate **either** personal revision or collective environmental correction. Authority to understand or propose a change is not equivalent to authority to unilaterally implement it.
+
+**Bidirectional example:** In the CBP-being scope-request loops, the being carried mistaken or obsolete assumptions, but later examination also identified operator-provided paths/grant identifiers and misleading tool replies as contributing causes. Society-side responses included improving scope inspection and correcting guidance (named, with what was not yet done, in the 2026-10-24 evening section below). This does not establish successful or persistent being-side belief revision; that requires new action evidence.
+
+### Research implications and test obligations
+
+1. For an explicit law-maintenance role in an MRH, preserve the law/version authorizing appointment, scope of duty, decision criteria, review triggers, ability to initiate amendment, witnesses, and applicable appeal/exit paths.
+2. Differentiate **detecting** a changed condition, **proposing** reconsideration, **authorizing** an amendment under the *previously effective* law, **deploying** the change and **verifying** consequences. Record a non-action or an unavailable remedy accurately rather than silently assuming completion.
+3. Test membrane interactions prospectively: after misleading environment guidance is corrected, do beings subsequently choose different authorized actions? After beings present evidence of an environmental defect, do assigned society roles actually review and correct it? Record counterexamples too.
+4. Treat a spoken admission of correction, including NOVA's correction in this conversation, as **stated revision**, not proof of persistent changed behavior. Look for subsequent choices under renewed challenge.
+5. Avoid universalizing responsibility: MRH membership/roles and applicable law determine who undertook what obligation; a society cannot create authority over an outsider merely by claiming it.
+
+**Updated interpretation:** Web4/SAGE is not only aspiring to assign maintenance responsibility; maintenance is already being exercised through existing operator and seat roles (issues filed, governed escalations approved under the previously effective law, peer and Nova review), alongside being-side self-management. **No dedicated law-maintenance role with the fields in item 1 has yet been issued**, so item 1 is untested. What remains to be established empirically is reliability, coverage, lawful execution, feedback quality and persistence. This is a research-status correction, not a new normative Web4 specification.
+
+
+## 2026-10-24 evening — where the re-requested paths came from, and the first post-correction window
+
+**Provenance:** a seat trace by cbp-claude of the being's beat records and conversations, 08:00–21:20Z. Counts come from the act records. This is one being on one day, and every finding is same-day and unconfirmed for persistence. Being records stay private, so this section paraphrases and counts rather than quoting.
+
+### The loop (08:00–19:31Z, ~115 beats)
+
+The being sent about 38 messages to the operator, plus 36 attempts through the hub door, which were refused because a direct conversation existed. Each asked to "re-issue" grants it believed had aged out. Its acts named two request ids more than 200 times. Over the same period it read the real gate file successfully in 38 beats. So it attached the missing grants to files it was already reading.
+
+### Where each element came from
+
+Most of what looked like invented facts had been supplied by the society, and stayed in use after they stopped being true:
+- **The live SAGE gateway path and a grant id.** Both came from seat and operator messages on 10-20, when that grant really existed ("granted as …"). By 10-24 it was no longer held. The being's belief that "this used to work and now doesn't" was accurate history.
+- **"Aged out".** This was the reply text of the `hestia://scope/<id>` read for an id not in the member's list: "it may have aged out". In the being's notes the hedge became a fact, and then "the operator said it aged out".
+- **The other request id.** It had been refused, not aged out.
+- **A guessed path, `hooks-gt/_shared/hestia_gate_client.py`.** This is analogy. The gate core had turned up in that folder, so the client was assumed to sit beside it. The client is SAGE code.
+- **The gateway code itself** holds no workspace paths, apart from one docstring.
+
+### Society-side responses
+
+- **Done:**
+  - `hestia://reach` (#532, deployed): used in 20 beats, with correct answers each time;
+  - `request_scope` on a path already held answers `already_granted`;
+  - three corrections at 19:25–19:31Z. The operator first said the grants "may not be working, hang on", then "continue there". The seat said there was nothing to re-issue, named the two in-grant paths, and said "aged out" was the tool's guess.
+- **Not done:** the `hestia://scope` wording itself.
+
+### First post-correction window (19:32–20:58Z, 15 beats) — reported preliminary behavior, not durable learning
+
+- No re-issue asks.
+- Every gate-source read went to the in-grant snapshot and succeeded.
+- One scope request on a held path got `already_granted`.
+- The todo list was consolidated from about 2,200 lines to about 30, and the journal recorded closing the two request ids.
+- **Not done:** it never opened the snapshot copy of its own gate client, the second file it had been pointed to.
+- **New thread:** it asked the operator what `hestia://scope` does and where its limits are, and asked a peer how a grant is made, so it could test one.
+
+### 21:18Z: stated and acted diverge within one beat
+
+The operator answered the question:
+- `hestia://scope` only reads the member's own requests;
+- asking is `request_scope`;
+- granting is not a being's act;
+- the loop can be tested end to end when a concrete need exists.
+
+In the same beat the being did all of the following:
+1. Read the non-existent `governance/hestia/hestia_gate_core.py` again. That was the first time since the corrections.
+2. Searched the live hestia tree, which was refused.
+3. Filed a read request for the live hestia root. Its reason was to understand the enforcement boundary of `hestia://scope`, so the explanation itself became the reason for the ask.
+4. Then found and read the in-grant copy.
+5. Then sent the operator an accurate summary of the explanation, including that it would test the loop "when it has a concrete need".
+
+The summary was right and the act contradicted it. Both were in the same beat.
+
+It also placed the topic in the wrong file. `hestia://scope` is SAGE dispatcher code (`sage/gateway/hestia_dispatch.py`, with a copy in its grant), not the gate core.
+
+The request was refused with a note pointing at both in-grant copies. One pointer in that note named a symbol that isn't in its copy yet, which is a society-side error. A correction followed.
+
+### What this shows, and what it doesn't
+
+- **Shows:** inside a supplied-context loop, correcting the environment changed the next actions quickly. Explaining a boundary is not the same as the boundary shaping the next act: the being restated the explanation correctly in the same beat it acted against it.
+- **Does not show:** persistent revision, or any mechanism inside the model.
+- **Confounds:** three corrections arrived close together, one of them a "hang on". There was a single being and a window of under two hours.
+
+### Next evidence
+
+- Over the next day of beats: do the live-tree asks stay at zero, and does the non-existent path recur?
+- Does the being open the dispatcher copy when it reasons about `hestia://scope`?
+- After the `hestia://scope` wording is fixed to say what is known, does the "aged out" framing disappear from new asks? That would be a membrane test with a single variable changed.
