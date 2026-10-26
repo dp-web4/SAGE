@@ -520,9 +520,14 @@ def test_a_recursive_grant_on_a_workspace_directory_reaches_the_dispatcher(tmp_p
     refused it "outside your reach" for 3.5 hours. The widening removed the reach."""
     import importlib, sys
     from sage.gateway.being_gate_client import _granted_roots, _granted_reach, GatewayVerdict
-    from sage.gateway.being_gate_client import BeingIntent
+    from sage.gateway.being_gate_client import BeingIntent, _resolve_hestia_shared
     from sage.gateway.reference_f1a import ReferenceF1aDispatcher
-    shared = os.path.expanduser("~/ai-workspace/governance/hestia/plugins/_shared")
+    # THE CORE THE CLIENT LOADS, not a fixed path. This read ~/ai-workspace/governance/..., the
+    # governance snapshot, while the client loads the deployed core (~/.hestia/shared on cbp).
+    # Both import as `hestia_gate_core`, so whichever loaded first answered for every later
+    # test: on cbp 2026-10-26 the snapshot lacked #1383 and the deployed core had it, and the
+    # #533 pins passed or failed by test order.
+    shared = _resolve_hestia_shared() or ""
     if not os.path.isfile(os.path.join(shared, "hestia_gate_core.py")):
         pytest.skip("no hestia core on this machine")
     sys.path.insert(0, shared)
