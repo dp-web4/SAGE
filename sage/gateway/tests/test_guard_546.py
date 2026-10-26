@@ -35,7 +35,9 @@ def test_another_beings_records_are_not_writable_through_a_grant():
         env = d(BeingIntent("memory_write", {"path": str(other / name), "content": "x"}), reach)
         assert not env.ok, (name, env)
     # the seat-owned records and the home's lock are that home's too (cbp review of #551)
-    for rel in (".home.lock", "entrustment.md", "notes/from-dp.md", "notes/from-the-seat.md"):
+    # and so are its conversation store and its ask record (legion review of #551)
+    for rel in (".home.lock", "entrustment.md", "notes/from-dp.md", "notes/from-the-seat.md",
+                "conversations/c1.jsonl", "asks_sent.jsonl"):
         env = d(BeingIntent("memory_write", {"path": str(other / rel), "content": "x"}), reach)
         assert not env.ok, (rel, env)
         assert not (other / rel).exists(), rel

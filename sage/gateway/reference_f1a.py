@@ -936,9 +936,11 @@ class ReferenceF1aDispatcher:
             p = self.memory_root / p
         p = p.resolve()
         if writing:
+            # Any home's store, not only its own (legion's review of #551): a grant into another
+            # being's home must not let a turn appear in that being's conversations either.
             for sub in RESERVED_SUBTREES:
-                reserved = self.memory_root / sub
-                if p == reserved or reserved in p.parents:
+                if any(r.name == sub and (r.parent == self.memory_root or _looks_like_a_home(r.parent))
+                       for r in (p, *p.parents)):
                     raise ValueError(
                         f"{sub}/ is reserved: a turn enters a conversation only through `say`, "
                         "which checks who may speak, witnesses the act and numbers it. Writing "

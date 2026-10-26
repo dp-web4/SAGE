@@ -30,6 +30,13 @@ def test_a_field_is_written_replaced_and_every_version_kept(tmp_path):
         ("honest records over tidy ones", "attention over speed", "I changed my mind")]
 
 
+def test_a_torn_last_line_does_not_swallow_the_next_record(tmp_path):
+    (tmp_path / bs.SELF_LOG).write_text('{"torn": ')
+    ok, _, _ = bs.edit(tmp_path, "values", "attention over speed", "after a crash", now=0)
+    lines = (tmp_path / bs.SELF_LOG).read_text().splitlines()
+    assert ok and lines[0] == '{"torn": ' and json.loads(lines[1])["why"] == "after a crash"
+
+
 def test_no_field_lists_and_writes_nothing(tmp_path):
     ok, text, _ = bs.edit(tmp_path, None, None, "")
     assert ok and "description" in text and "not written yet" in text
