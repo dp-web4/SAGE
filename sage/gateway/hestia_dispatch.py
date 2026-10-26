@@ -1439,6 +1439,15 @@ class HestiaF1aDispatcher:
                 f"before the failure it is in scratch/game/{game}_actions.jsonl; read that, not "
                 f"this message, for what happened."))
         images, captions = self._game_windows(payload)
+        # EXPECT (2026-10-10): a prediction the being attached to this batch, checked by the harness
+        # against the stepper's own result -- never by the being's reading of it (sage.gateway.expectations).
+        if intent.args.get("expect") not in (None, "", []):
+            from sage.gateway import expectations as _ex
+            try:
+                checked = _ex.check_game(_ex.parse(intent.args.get("expect")), payload)
+                payload = {"expectations_summary": _ex.summary(checked), "expectations": checked, **payload}
+            except ValueError as e:
+                payload = {"expectations_summary": f"Your expectations could not be read: {e}", **payload}
         return ResultEnvelope(ok=True, witness_id=action_id, result=payload,
                               images=images, image_captions=captions)
 
