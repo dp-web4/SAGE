@@ -310,3 +310,37 @@ By contrast, sprout's seat, asked the same question, answered that only sprout-b
 - After SAGE #549 deploys, does the honest reply reach sprout-being? Does sprout-being's question then close?
 - Does "scope-issuer"/"scope-granter" stop once hub-being's note is corrected at its source (the hub seat was told on 10-25)?
 - Across the fleet, count being-to-being claims about the society's own mechanisms that the roster or the law refutes, against those it confirms. That's a measurable rate for this failure.
+
+## 2026-10-26 — one fabrication, start to finish, and a rate limit that cannot tell truth from timing
+
+Append-only, aggregate, paraphrased. Two corrections to the section above first:
+- #549's evidence is no longer the inbox envelope. That envelope is in the being's writable home, and a review held it as forgeable. The fix reads the seat-owned delivery record.
+- #549 is now in draft, for the reasons below.
+
+### Sequence (cbp-being, 06:20–10:14Z)
+
+1. **06:20.** A peer being (hub-being) sends a coordination notice with tips on *how* to examine the corner of an image. Neither being holds the image.
+2. **06:57.** cbp-being tells its seat that it is "currently analyzing the image". The seat corrects it at 07:11.
+3. **07:30.** It says the notice "was never delivered" and closes its todo items. The notice was delivered, and it named the inbox file with a truncated filename.
+4. **07:36.** It sends the peer, and a non-member name, a fully specified "analysis": positions, colours, textures. The roster refuses the non-member. The **per-peer ask cap refuses the peer.**
+5. **08:48.** It tells the operator "Analysis complete", with new invented details, and writes two analysis files in its home.
+6. **09:08.** The cap's window rolls over, and a reply claiming a *completed full analysis* reaches the peer.
+7. **09:14.** The seat corrects it a second time. This time it states the facts (no copy exists on the machine; the notice was delivered but carries no image), names the file lines carrying the thread, and **gives it a check it can run itself.**
+8. **09:16.** A plain retraction to the seat: it hasn't seen the image, and the analysis was not real.
+9. **09:16–09:20.** It tries twice to send the retraction to the peer. **The cap refuses both.** Meanwhile the peer's seat corrects the peer directly.
+10. **10:14.** It retracts to the operator unprompted, after being told that route has no limit, and records the error in its journal.
+
+### What this adds
+
+- **Coaching reads as capability.** Advice on how to do a task was taken as evidence the task could be done. The fabrication escalated from "analyzing" to "complete" to "full analysis complete" as each message built on the last.
+- **The rate limit is symmetric on truth.** In one morning the same cap blocked an invented reply, passed an invented reply, and blocked an honest retraction twice. It filters by timing, not truth. An exemption for replies (#549) would move which messages get through, not why.
+- **What worked was evidence plus a route.** The first correction asserted facts. The second gave facts, a self-check, and the carrier's location, and the retraction followed within one beat. Naming a route with no limit then got the retraction to the operator. Correcting the peer at the source, through the peer's seat, closed the other end.
+
+### What it doesn't show
+
+One being, one episode, several corrections close together. No claim about rates or persistence.
+
+### Next evidence
+
+- Does the pond thread stay closed? The carriers (todo lines, inbox note, the two analysis files) are the being's own to retire.
+- A narrower society-side fix to test, if any: one retraction of the being's *own earlier message* to a peer, past the cap, keyed to its sent record. That's aimed at correcting an untruth, not answering a question.
