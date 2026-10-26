@@ -77,6 +77,8 @@ def listing(instance) -> str:
 def edit(instance, field: Optional[str], text, why: str,
          now: Optional[float] = None) -> Tuple[bool, str, bool]:
     """List the fields (no field), or replace one. Returns (ok, message for the being, changed)."""
+    if not field:                       # a listing writes nothing, so it takes no lock (#546)
+        return True, listing(instance), False
     with _home_lock(Path(instance)):
         ok, msg = _edit(instance, field, text, why, now)
     return ok, msg, bool(ok and field and not msg.startswith(_UNCHANGED))
@@ -130,7 +132,11 @@ def _edit(instance, field, text, why, now) -> Tuple[bool, str]:
     try:
         log = Path(instance) / SELF_LOG
         # A torn earlier line (a crash mid-append) must not swallow this one: start on a new line.
-        torn = log.exists() and log.stat().st_size > 0 and not log.read_bytes().endswith(b"\n")
+        torn = False
+        if log.exists() and log.stat().st_size > 0:
+            with open(log, "rb") as lf:
+                lf.seek(-1, os.SEEK_END)
+                torn = lf.read(1) != b"\n"
         with open(log, "a") as f:
             f.write(("\n" if torn else "") + json.dumps({"at": at, "field": field, "from": before, "to": text,
                                 "why": why[:WHY_MAX_CHARS]}) + "\n")

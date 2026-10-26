@@ -792,6 +792,14 @@ HOME_LOCK = ".home.lock"
 HOME_WRITE_VERBS = ("memory_write", "memory_edit", "retire_note")
 
 
+def _looks_like_a_home(d: Path) -> bool:
+    """A being's home is recognised by its records, wherever it sits (#546)."""
+    try:
+        return (d / "identity.json").exists() or (d / "instance.json").exists()
+    except OSError:
+        return False
+
+
 @contextlib.contextmanager
 def _home_lock(root: Path):
     if fcntl is None:           # no flock on this platform: the old, unserialized behaviour
@@ -943,9 +951,11 @@ class ReferenceF1aDispatcher:
             p = self.memory_root / p
         p = p.resolve()
         if writing:
+            # Any home's store, not only its own (legion's review of #551): a grant into another
+            # being's home must not let a turn appear in that being's conversations either.
             for sub in RESERVED_SUBTREES:
-                reserved = self.memory_root / sub
-                if p == reserved or reserved in p.parents:
+                if any(r.name == sub and (r.parent == self.memory_root or _looks_like_a_home(r.parent))
+                       for r in (p, *p.parents)):
                     raise ValueError(
                         f"{sub}/ is reserved: a turn enters a conversation only through `say`, "
                         "which checks who may speak, witnesses the act and numbers it. Writing "
@@ -953,20 +963,29 @@ class ReferenceF1aDispatcher:
                         f"was changed. If you meant to change one of your own files, "
                         f"{sub}/ is not its path: give that file's path instead (a `say` "
                         "does not change any file)")
-            if p.parent == self.memory_root and (p.name in GOVERNANCE_OWNED
-                                                or p.name.startswith(GOVERNANCE_OWNED_PREFIX)):
+            # ANY HOME, NOT ONLY ITS OWN (#546): a grant that ever reached another being's home must
+            # not make that home's records writable either. A home is the being's own root or any
+            # directory that holds a home's records (identity.json or instance.json).
+            _home = p.parent == self.memory_root or _looks_like_a_home(p.parent)
+            if _home and (p.name in GOVERNANCE_OWNED or p.name.startswith(GOVERNANCE_OWNED_PREFIX)):
                 raise ValueError(
                     f"{p.name} is a governance record: it says who you are to the society (your "
                     "id, your machine, which seat hears your escalations, your trust ceiling), so "
                     "no being verb writes it. Nothing was changed. Who you are in your own words "
                     "is yours to write with identity_edit")
             from sage.gateway.being_self import SELF_WRITES
-            if p.parent == self.memory_root and p.name in SELF_WRITES:
+            from sage.gateway.being_params import TUNE_WRITES
+            if _home and p.name in TUNE_WRITES:
+                raise ValueError(
+                    f"{p.name} is changed only with tune, which checks the value against its bounds "
+                    "and keeps every change with your reason in tune_log.jsonl. A direct write would "
+                    "leave no record of it. Nothing was changed")
+            if _home and p.name in SELF_WRITES:
                 raise ValueError(
                     f"{p.name} is changed only with identity_edit, which keeps every earlier "
                     "version and your reason in self_log.jsonl. A direct write would leave no "
                     "record of what it replaced. Nothing was changed")
-            if p.parent == self.memory_root and p.name in SEAT_OWNED:
+            if _home and p.name in SEAT_OWNED:
                 raise ValueError(
                     f"{p.name} is yours to read and not to edit: it is what you were entrusted "
                     "with, and it has to stay separable from what you decide. Your own reading "
@@ -975,11 +994,12 @@ class ReferenceF1aDispatcher:
             # Nova, 99cfdb61b: the lock lives in the being's home, and a memory_edit of it
             # would os.replace its inode, so two writers would hold flocks on different files
             # and nothing would be serialized. No write verb may touch it.
-            if p.parent == self.memory_root and p.name == HOME_LOCK:
+            if _home and p.name == HOME_LOCK:
                 raise ValueError(
                     f"{HOME_LOCK} is not a note: it is the lock that keeps two writes to your home "
                     "from landing on top of each other, and it holds no text. Nothing was changed")
-            if p.parent == self.memory_root / "notes" and p.name in SEAT_OWNED_NOTES:
+            if (p.parent.name == "notes" and p.name in SEAT_OWNED_NOTES
+                    and (p.parent.parent == self.memory_root or _looks_like_a_home(p.parent.parent))):
                 raise ValueError(
                     f"notes/{p.name} is what was said TO you, and it stays as it was said. Your "
                     "reply belongs in your journal, in a conversation with `say`, or in an "
