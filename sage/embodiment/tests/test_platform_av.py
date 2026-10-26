@@ -93,6 +93,21 @@ def test_the_mac_fallback_voice_never_puts_the_words_in_argv():
     assert "rm -rf / ; hello" not in " ".join(argv) and text == "rm -rf / ; hello"
 
 
+def test_system_profiler_is_called_by_absolute_path():
+    """A launchd job's PATH has no /usr/sbin: called by name, the speaker went unseen and every spoken answer was
+    refused (McNugget, 2026-10-24..26)."""
+    seen = []
+    real = subprocess.run
+    subprocess.run = lambda argv, **kw: (seen.append(list(argv)),
+                                         subprocess.CompletedProcess(argv, 0, stdout=REAL_SP, stderr=""))[1]
+    try:
+        inv = pav.mac_audio()
+    finally:
+        subprocess.run = real
+    assert seen[0][0] == "/usr/sbin/system_profiler", seen
+    assert "Mac mini Speakers" in [s["name"] for s in inv["sinks"]]
+
+
 def test_the_mac_inventory_has_pw_dumps_shape():
     inv = pav.mac_audio(raw=REAL_SP)
     sinks = {s["name"]: s for s in inv["sinks"]}

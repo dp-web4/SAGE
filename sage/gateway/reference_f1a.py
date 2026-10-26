@@ -858,6 +858,14 @@ HOME_LOCK = ".home.lock"
 HOME_WRITE_VERBS = ("memory_write", "memory_edit", "retire_note")
 
 
+def _looks_like_a_home(d: Path) -> bool:
+    """A being's home is recognised by its records, wherever it sits (#546)."""
+    try:
+        return (d / "identity.json").exists() or (d / "instance.json").exists()
+    except OSError:
+        return False
+
+
 @contextlib.contextmanager
 def _home_lock(root: Path):
     if fcntl is None:           # no flock on this platform: the old, unserialized behaviour
@@ -971,6 +979,18 @@ class ReferenceF1aDispatcher:
                 roots.append((Path(str(g)).resolve(), False))
         self._extra_roots = tuple(roots)
         self._extra_reach = self._extra_roots     # main's name for the same pairs (#519)
+        # AND IN WHICH MODES (main, hestia #1345 part B): a grant narrowed below rwed carries them
+        # as a third element; a root without one is full-mode. Keyed on (root, recursive), and two
+        # grants on one key UNION their modes, as the gate does (nomad review of #533, point 1).
+        self._extra_modes = {}
+        for g in (getattr(verdict, "granted_reach", ()) or ()):
+            if isinstance(g, (tuple, list)) and len(g) >= 2:
+                k = (Path(str(g[0])).resolve(), bool(g[1]))
+                got = self._extra_modes.get(k, "") + (str(g[2]) if len(g) > 2 else "rwed")
+                self._extra_modes[k] = "".join(c for c in "rwed" if c in got)
+        # And BY WHICH RULE (hestia #1386): "nearest" when the gate decided by the nearest
+        # explicit grant (part C), so this confinement decides the same way.
+        self._reach_rule = getattr(verdict, "reach_rule", "union")
         handler = getattr(self, f"_do_{intent.effector}", None)
         if handler is None:
             # a consequential network act the reference won't run — real F1a's job
@@ -1029,9 +1049,11 @@ class ReferenceF1aDispatcher:
             p = self.memory_root / p
         p = p.resolve()
         if writing:
+            # Any home's store, not only its own (legion's review of #551): a grant into another
+            # being's home must not let a turn appear in that being's conversations either.
             for sub in RESERVED_SUBTREES:
-                reserved = self.memory_root / sub
-                if p == reserved or reserved in p.parents:
+                if any(r.name == sub and (r.parent == self.memory_root or _looks_like_a_home(r.parent))
+                       for r in (p, *p.parents)):
                     raise ValueError(
                         f"{sub}/ is reserved: a turn enters a conversation only through `say`, "
                         "which checks who may speak, witnesses the act and numbers it. Writing "
@@ -1075,28 +1097,37 @@ class ReferenceF1aDispatcher:
                         f"tree, so a file there would run as the seat outside your sandbox. This is "
                         f"not about you; no being may write there. Everything else in the worktree "
                         f"is yours to change.")
-        if writing and p.parent == self.memory_root / "notes" and p.name in SEAT_OWNED_NOTES:
+        if (writing and p.parent.name == "notes" and p.name in SEAT_OWNED_NOTES
+                and (p.parent.parent == self.memory_root or _looks_like_a_home(p.parent.parent))):
             raise ValueError(
                 f"notes/{p.name} is what was said TO you, and it stays as it was said. Your "
                 "reply belongs in your journal, notes/plan.md, or an appeal — all of which "
                 "are read")
-        # SAGE #545 (main): governance records in the home, and self.json's family, are not
-        # written by any generic verb.
-        if writing and p.parent == self.memory_root and (p.name in GOVERNANCE_OWNED
-                                                         or p.name.startswith(GOVERNANCE_OWNED_PREFIX)):
+        # SAGE #545/#546 (main): governance records, self.json's and tune's families are not
+        # written by any generic verb, in ANY home: a grant that ever reached another being's home
+        # must not make that home's records writable either (_looks_like_a_home).
+        _home = writing and (p.parent == self.memory_root or _looks_like_a_home(p.parent))
+        if _home and (p.name in GOVERNANCE_OWNED or p.name.startswith(GOVERNANCE_OWNED_PREFIX)):
             raise ValueError(
                 f"{p.name} is a governance record: it says who you are to the society (your "
                 "id, your machine, which seat hears your escalations, your trust ceiling), so "
                 "no being verb writes it. Nothing was changed. Who you are in your own words "
                 "is yours to write with identity_edit")
-        if writing and p.parent == self.memory_root:
+        if _home:
+            from sage.gateway.being_params import TUNE_WRITES
+            if p.name in TUNE_WRITES:
+                raise ValueError(
+                    f"{p.name} is changed only with tune, which checks the value against its bounds "
+                    "and keeps every change with your reason in tune_log.jsonl. A direct write would "
+                    "leave no record of it. Nothing was changed")
+        if _home:
             from sage.gateway.being_self import SELF_WRITES
             if p.name in SELF_WRITES:
                 raise ValueError(
                     f"{p.name} is changed only with identity_edit, which keeps every earlier "
                     "version and your reason in self_log.jsonl. A direct write would leave no "
                     "record of what it replaced. Nothing was changed")
-        if writing and p.parent == self.memory_root and p.name in SEAT_OWNED:
+        if _home and p.name in SEAT_OWNED:
             raise ValueError(
                 f"{p.name} is yours to read and not to edit: it is what you were entrusted "
                 "with, and it has to stay separable from what you decide. Your own reading "
@@ -1105,7 +1136,7 @@ class ReferenceF1aDispatcher:
         # Nova, 99cfdb61b: the lock lives in the being's home, and a memory_edit of it
         # would os.replace its inode, so two writers would hold flocks on different files
         # and nothing would be serialized. No write verb may touch it.
-        if writing and p.parent == self.memory_root and p.name == HOME_LOCK:
+        if _home and p.name == HOME_LOCK:
             raise ValueError(
                 f"{HOME_LOCK} is not a note: it is the lock that keeps two writes to your home "
                 "from landing on top of each other, and it holds no text. Nothing was changed")
@@ -1114,6 +1145,53 @@ class ReferenceF1aDispatcher:
             # Separator-aware by construction (Path.parents): /a never fronts for /ab.
             return path == root or (recursive and root in path.parents)
 
+        # READS FOLLOW THE GATE'S MODES (main #533, hestia #1345 part B / #1386). _reach_pairs()
+        # already holds only grants with r; under the "nearest" rule the nearest explicit grant
+        # covering the path decides, so a broader grant above an r-less one does not apply.
+        # Writes keep the carrier's rule above: home and worktree only, whatever a grant says.
+        # AND A WRITE OUTSIDE THE HOME NEEDS w IN THE GRANTS THAT COVER IT (main #533 on the
+        # carrier). The carrier writes its worktree whatever a grant there says; with the gate's
+        # mode half not yet active (hestia #1383), this layer is the one that enforces modes, so
+        # an r-only grant over the worktree must refuse the write. A path no grant covers keeps
+        # the carrier's rule below (home and worktree only).
+        if writing and not (p == self.memory_root or self.memory_root in p.parents):
+            held = self._all_pairs()
+            modes = getattr(self, "_extra_modes", None) or {}
+            if getattr(self, "_reach_rule", "union") == "nearest":
+                near = self._nearest_modes(p, held, modes)
+                if near is not None and "w" not in near:
+                    raise ValueError(
+                        f"'{p}' is under a grant of yours narrowed to {near}, the nearest grant "
+                        f"covering it, and writing needs w. A broader grant above it does not apply "
+                        f"here: the nearest explicit grant decides (hestia #1386). Nothing was "
+                        f"changed. memory_read hestia://reach/{p} shows what you hold there")
+            else:
+                cover = [modes.get(k, "rwed") for k in held if _covered(p, k[0], k[1])]
+                if cover and not any("w" in m for m in cover):
+                    raise ValueError(
+                        f"'{p}' is under a grant of yours narrowed to {cover[0]}, and writing "
+                        f"needs w. Nothing was changed. memory_read hestia://reach/{p} shows what "
+                        f"you hold there")
+        if not writing:
+            held = self._all_pairs()
+            modes = getattr(self, "_extra_modes", None) or {}
+            if (getattr(self, "_reach_rule", "union") == "nearest"
+                    and not (p == self.memory_root or self.memory_root in p.parents)):
+                near = self._nearest_modes(p, held, modes)
+                if near is not None and "r" not in near:
+                    raise ValueError(
+                        f"'{p}' is under a grant of yours narrowed to {near}, the nearest grant "
+                        f"covering it, and reading needs r. A broader grant above it does not apply "
+                        f"here: the nearest explicit grant decides (hestia #1386). Nothing was read. "
+                        f"memory_read hestia://reach/{p} shows what you hold there")
+            if not any(_covered(p, r, rec) for r, rec in roots):
+                narrowed = [modes[k] for k in held if k in modes and "r" not in modes[k]
+                            and _covered(p, k[0], k[1])]
+                if narrowed:
+                    raise ValueError(
+                        f"'{p}' is under a grant of yours narrowed to {narrowed[0]}, and reading "
+                        f"needs r. Nothing was read. memory_read hestia://reach/{p} shows what you "
+                        f"hold there")
         if not any(_covered(p, r, rec) for r, rec in roots):
             if writing:
                 # A home that was renamed leaves absolute paths to the OLD one in the being's
@@ -1164,7 +1242,13 @@ class ReferenceF1aDispatcher:
 
     def _reach_pairs(self) -> tuple:
         """((root, recursive), ...) beyond the home for this verdict. `_extra_reach` when the
-        verdict carried reach; otherwise the bare roots, read by prefix as _safe_path reads them."""
+        verdict carried reach; otherwise the bare roots, read by prefix as _safe_path reads them.
+        Only grants that include r (main, #1345 part B): every caller names a place to READ."""
+        modes = getattr(self, "_extra_modes", None) or {}
+        return tuple(k for k in self._all_pairs() if "r" in modes.get(k, "rwed"))
+
+    def _all_pairs(self) -> tuple:
+        """Every held (root, recursive), whatever its modes."""
         # Carrier: `_extra_roots` holds PAIRS (set in __call__); main and main's tests set bare
         # Paths there beside pairs in `_extra_reach`. Accept both, and always yield resolved pairs.
         items = getattr(self, "_extra_reach", None) or tuple(
@@ -1172,8 +1256,29 @@ class ReferenceF1aDispatcher:
             for g in (getattr(self, "_extra_roots", ()) or ()))
         return tuple((Path(g[0]).resolve(), bool(g[1])) for g in items)
 
+    @staticmethod
+    def _nearest_modes(p: Path, held, modes) -> Optional[str]:
+        """The modes of the nearest held grant covering `p` (grants on one node union), or None.
+        The gate's rule (hestia #1386), over this verdict's (root, recursive) nodes."""
+        best, got = -1, set()
+        for r, rec in held:
+            if p == r or (rec and r in p.parents):
+                depth = len(r.parts)
+                m = modes.get((r, rec), "rwed")
+                if depth > best:
+                    best, got = depth, set(m)
+                elif depth == best:
+                    got |= set(m)
+        return None if best < 0 else "".join(c for c in "rwed" if c in got)
+
     def _within_reach(self, p: Path) -> bool:
         p = p.resolve()
+        if getattr(self, "_reach_rule", "union") == "nearest" and not (
+                p == self.memory_root or self.memory_root in p.parents):
+            held = tuple((Path(r).resolve(), rec) for r, rec in (getattr(self, "_extra_reach", None) or (
+                (r, True) for r in (getattr(self, "_extra_roots", ()) or ()))))
+            near = self._nearest_modes(p, held, getattr(self, "_extra_modes", None) or {})
+            return near is not None and "r" in near
         pairs = ((self.memory_root, True),) + tuple((Path(r).resolve(), rec) for r, rec in self._reach_pairs())
         return any(p == r or (rec and r in p.parents) for r, rec in pairs)
 

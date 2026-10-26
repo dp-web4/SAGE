@@ -106,3 +106,74 @@ def test_the_closure_never_refuses_the_beings_own_writing_for_its_words(tmp_path
     assert trial_game_source_refusal(note, str(tmp_path)) is None
     edit = BeingIntent("memory_edit", {"path": "notes/established.md", "new": "see environment_files/ar25"})
     assert trial_game_source_refusal(edit, str(tmp_path)) is None
+
+
+# ---- THE SCHEMA IS TYPED (NOVA HOLD at 3a4c2d7a): red arms that the truthy/suffix checks confirmed ----
+
+@pytest.mark.parametrize("pred", [
+    {"probe": 2, "changes": "false"},    # bool("false") is True: probe 2 changed 0 cells, "confirmed" before
+    {"probe": 1, "changes": "true"},
+    {"probe": 1, "changes": 1},
+    {"probe": 1, "changes": None},
+    {"probe": True, "changes": True},    # True is an int in Python; it is not a move number
+    {"probe": "1", "changes": True},
+    {"probe": None, "changes": True},
+])
+def test_a_probe_predicate_needs_json_types(pred):
+    got = ex.check_game([pred], PAYLOAD)[0]
+    assert got["outcome"] == "unrecognized" and got["observed"].startswith("malformed:"), got
+
+
+@pytest.mark.parametrize("state", [
+    "",                       # "GameState.NOT_FINISHED".endswith("") is True
+    "FINISHED",               # a suffix of NOT_FINISHED
+    "D",
+    "STATE.NOT_FINISHED",     # a different prefix is not the game's own spelling
+    "not_finished",           # case is not folded
+    None, 3, ["NOT_FINISHED"],
+])
+def test_a_state_predicate_is_exact_never_a_suffix(state):
+    got = ex.check_game([{"state": state}], PAYLOAD)[0]
+    assert got["outcome"] == "unrecognized", got
+
+
+def test_the_games_own_state_spelling_is_canonical():
+    assert outcomes([{"state": "NOT_FINISHED"}, {"state": "GameState.NOT_FINISHED"}, {"state": "WIN"}]) == [
+        "confirmed", "confirmed", "contradicted"]
+
+
+@pytest.mark.parametrize("reported", [None, "", "GameState.", "GameState.PAUSED", "NOT_FINISHED_SOON", 7])
+def test_an_unknown_reported_state_is_unverifiable_not_matched(reported):
+    payload = dict(PAYLOAD, state_after={"state": reported, "levels_completed": 1})
+    for want in ("NOT_FINISHED", "WIN"):
+        got = ex.check_game([{"state": want}], payload)[0]
+        assert got["outcome"] == "unverifiable", (reported, want, got)
+
+
+@pytest.mark.parametrize("pred", [
+    {"levels_completed": "1"}, {"levels_completed": True}, {"levels_completed": 1.0}, {"levels_completed": None},
+    {"cell": [20], "value": 5}, {"cell": "20,15", "value": 5}, {"cell": [20, 15, 0], "value": 5},
+    {"cell": [20, None], "value": 5}, {"cell": [20, 15], "value": "5"}, {"cell": [20, 15], "value": True},
+    {"cell": None, "value": 5},
+])
+def test_malformed_or_null_shapes_are_unrecognized(pred):
+    got = ex.check_game([pred], PAYLOAD)[0]
+    assert got["outcome"] == "unrecognized", got
+
+
+@pytest.mark.parametrize("pred", [
+    {"probe": 1, "changes": True, "note": "x"},          # an extra key
+    {"state": "NOT_FINISHED", "levels_completed": 1},    # two predicates in one object
+    {"probe": 1},                                        # half a predicate
+    {},
+])
+def test_a_predicate_is_exactly_one_key_set(pred):
+    got = ex.check_game([pred], PAYLOAD)[0]
+    assert got["outcome"] == "unrecognized" and "exactly one of" in got["observed"], got
+
+
+def test_a_reported_count_that_is_not_a_number_is_unverifiable():
+    payload = dict(PAYLOAD, probes=[{"move": 1, "cells_changed": "670"}],
+                   state_after={"state": "GameState.WIN", "levels_completed": "1"})
+    assert [c["outcome"] for c in ex.check_game(
+        [{"probe": 1, "changes": True}, {"levels_completed": 1}], payload)] == ["unverifiable", "unverifiable"]

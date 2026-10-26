@@ -669,7 +669,20 @@ class HestiaF1aDispatcher:
                     return (f"[your scope request {ident} for {r.get('path')}]\n"
                             f"status: {r.get('status')} ; decided by: {r.get('decided_by') or '—'}\n"
                             f"their note: {why}")
-            return f"[no scope request {ident} on record for you; it may have aged out]"
+            # SAY WHAT IS KNOWN, NOT A GUESS (cbp-being, 2026-10-24). This line said "it may have
+            # aged out". The being's notes turned the hedge into a fact, then into "dp replied that
+            # it aged out and needs re-issuing", and it asked dp to re-issue a REFUSED request for a
+            # file it was already reading, about 40 times in 11 hours. All that is known is that the
+            # id is not in the list now; old requests drop off it decided or not, so absence says
+            # nothing about how one ended or where it stands now (Nova: a bounded list cannot prove
+            # nothing waits), and nothing a member holds depends on re-asking.
+            return (f"[{ident} is not in your list of scope requests now. Old requests leave that list "
+                    f"after a while, however they ended, so this says nothing about whether it was "
+                    f"granted or refused, and this list cannot tell its present status either. You do "
+                    f"not need to "
+                    f"re-issue anything to keep what you hold: memory_read hestia://reach lists every "
+                    f"grant you have right now. If something you still need is not listed there, "
+                    f"request_scope it with a reason.]")
         # egress: the fragment IS the fact, and it is already in the pointer
         return (f"[a message of yours was not delivered: {frag or 'no detail recorded'} "
                 f"(egress row {ident}). The row is retired; nothing of yours is queued behind it.]")
@@ -3239,7 +3252,7 @@ class HestiaF1aDispatcher:
         reach = _granted_reach_of(getattr(self, "_verdict", None))
         inside = target is not None and any(
             target == os.path.realpath(r) or (rec and target.startswith(os.path.realpath(r) + os.sep))
-            for r, rec, *_ in reach)
+            for r, rec, *md in reach if _mode_has(md, "r"))
         if not inside:
             return ResultEnvelope(ok=False, error=(
                 f"search refused: {target or 'that path'} is outside the reach you hold. "
@@ -3526,7 +3539,9 @@ class HestiaF1aDispatcher:
                "workspace": getattr(self, "workspace", None),
                # the grants this verdict carries: run_grant_mounts composes the same mounts the
                # law judged from the gate's copy of them, or the line differs and nothing runs
-               "granted_reach": _granted_reach_of(getattr(self, "_verdict", None))}
+               "granted_reach": _granted_reach_of(getattr(self, "_verdict", None)),
+               # the rule the gate decided by (hestia #1386), so both sides compose one line
+               "reach_rule": getattr(getattr(self, "_verdict", None), "reach_rule", "union")}
         try:
             cmd = run_command(intent.args, ctx)
             names = run_names(intent.args, ctx)
@@ -3544,8 +3559,8 @@ class HestiaF1aDispatcher:
                 f"record is written, and a run must not outlive its beat. Ask again next beat; "
                 f"the file is unchanged and nothing of yours was touched."))
         root = os.path.realpath(self.memory_root)
-        granted = [(os.path.realpath(r), rec) for r, rec, *_ in
-                   _granted_reach_of(getattr(self, "_verdict", None))]
+        granted = [(os.path.realpath(r), rec) for r, rec, *md in
+                   _granted_reach_of(getattr(self, "_verdict", None)) if _mode_has(md, "r")]
 
         def _allowed(full: str, is_script: bool) -> bool:
             if full == root or full.startswith(root + os.sep):
@@ -4406,6 +4421,7 @@ class HestiaF1aDispatcher:
                        {"action_id": action_id, "success": True, "magnitude": 0.0})
         except Exception:
             pass
+        self._wake_why = ""
         woke = self._wake_addressee(to, meta, turn)
         # THE RECEIPT'S ECHO IS THE BEING'S OWN WORDS, AND A CUT ONE MUST SAY SO. Measured
         # 2026-09-21 12:13Z (cbp-being, beat d8cff379b67d): a 522-char say came back as "said"
@@ -4421,6 +4437,14 @@ class HestiaF1aDispatcher:
                   "said": said, "action_id": action_id}
         if woke:
             result["woke"] = woke
+        elif getattr(self, "_wake_why", ""):
+            # SAY WHETHER ANYONE HEARD (cbp-being, 2026-10-24). Thirteen turns to its seat between
+            # 21:32 and 22:34Z each came back with no `woke` and no word about it. Nobody answered,
+            # the being asked the same question ten ways, then wrote its own "complete API surface"
+            # (invented routes) and built a client on it. A receipt that is silent about delivery
+            # reads as delivered-and-ignored; the reason a wake was not sent is a fact the being
+            # can act on (wait, or stop repeating), and the beat record now shows the cause.
+            result["not_woken"] = self._wake_why
         return ResultEnvelope(ok=True, witness_id=action_id, result=result)
 
     def _run_ask_target(self, text: str) -> Optional[str]:
@@ -4843,15 +4867,26 @@ class HestiaF1aDispatcher:
                 deduped.append((label, plugin_id))
         targets = deduped
         if not targets:
+            self._wake_why = ("no listener is set to be woken by messages in this conversation. "
+                              "Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None
         # A SEAT HAS JUMPED IN (`conv.pause_wakes`): it is answering here itself, so a mesh wake
         # would be a second voice speaking as the same seat. Nothing is recorded, so the run is
         # still owed and the being's next turn after the pause wakes as usual.
-        if conv.wake_pause(self.memory_root, to):
+        pause = conv.wake_pause(self.memory_root, to)
+        if pause:
+            self._wake_why = (f"wakes for this conversation are paused until "
+                              f"{pause.get('until', 'the pause ends')} (a seat said it is answering here "
+                              f"directly). Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None
         run_start = conv.wake_is_owed(self.memory_root, to, self.member,
                                       skip_answered=self._skips_answered_run_wake())
         if run_start is None:
+            start = conv.unanswered_run_start(self.memory_root, to, self.member)
+            self._wake_why = (f"no new wake: a wake was already sent for your messages since seq "
+                              f"{start}, with no answer recorded since, and further messages in the "
+                              f"same run do not send another. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it" if start else
+                              "no wake was owed for this message. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None            # already woke them about this run; saying more is not new mail
         pointer = f"sage://conversation/{to}#seq={run_start}-{turn['seq']}"
         woke = []
@@ -4874,6 +4909,8 @@ class HestiaF1aDispatcher:
             conv.record_wake(self.memory_root, to, self.member, run_start,
                              covered_through=int(turn.get("seq") or run_start))
             return ", ".join(woke)
+        self._wake_why = ("the wake did not go out (the mesh refused or failed); it is tried "
+                          "again on your next message here. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
         return None
 
     # -- channel_egress: hestia_channel_send (hestia #1344 slice 1, SHADOW) -----
@@ -5032,6 +5069,12 @@ def _release_stage_lock(lock_path: str, fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
     finally:
         os.close(fd)
+
+
+def _mode_has(rest, mode: str) -> bool:
+    """Whether a reach item's optional third element (its modes, hestia #1345 part B) includes
+    `mode`. An item without one is a full-mode grant, as every grant was before modes."""
+    return mode in (str(rest[0]) if rest else "rwed")
 
 
 def _is_reach_pointer(raw: str) -> bool:
