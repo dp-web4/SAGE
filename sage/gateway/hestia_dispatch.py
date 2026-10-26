@@ -536,10 +536,12 @@ class HestiaF1aDispatcher:
             # it aged out and needs re-issuing", and it asked dp to re-issue a REFUSED request for a
             # file it was already reading, about 40 times in 11 hours. All that is known is that the
             # id is not in the list now; old requests drop off it decided or not, so absence says
-            # nothing about how one ended, and nothing a member holds depends on re-asking.
+            # nothing about how one ended or where it stands now (Nova: a bounded list cannot prove
+            # nothing waits), and nothing a member holds depends on re-asking.
             return (f"[{ident} is not in your list of scope requests now. Old requests leave that list "
                     f"after a while, however they ended, so this says nothing about whether it was "
-                    f"granted or refused, and nothing is waiting under that id. You do not need to "
+                    f"granted or refused, and this list cannot tell its present status either. You do "
+                    f"not need to "
                     f"re-issue anything to keep what you hold: memory_read hestia://reach lists every "
                     f"grant you have right now. If something you still need is not listed there, "
                     f"request_scope it with a reason.]")

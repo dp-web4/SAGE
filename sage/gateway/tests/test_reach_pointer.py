@@ -213,7 +213,8 @@ def test_a_scope_id_not_in_the_list_states_what_is_known_and_never_guesses_aged_
     d = _disp(st)
     gone = _read(d, "hestia://scope/scope-5bc6ba977f74", _verdict(ws, home))
     assert "aged out" not in gone and "may have" not in gone, gone
-    assert "not in your list" in gone and "nothing is waiting" in gone, gone
+    assert "not in your list" in gone and "cannot tell its present status" in gone, gone
+    assert "nothing is waiting" not in gone, "a bounded list cannot prove nothing waits (Nova)"
     assert "hestia://reach" in gone and "request_scope" in gone, gone
     assert "re-issue" in gone and "do not need to re-issue" in gone, gone
     held = _read(d, "hestia://scope/scope-aaaaaaaaaaaa", _verdict(ws, home))
