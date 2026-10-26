@@ -1719,39 +1719,76 @@ def test_asking_one_peer_is_capped_per_window_and_a_refused_ask_leaves_nothing_b
     assert env.ok, "the oldest asks age out of the window"
 
 
-def test_an_answer_to_the_peers_own_question_is_not_one_more_ask():
-    """cbp-being, 2026-10-26 01:42/01:59: it wrote the honest answer to sprout-being's question
-    ("I haven't seen pond-20261025.jpg") and the per-peer cap refused it twice, because its own
-    earlier asks to sprout-being had spent the budget. A question FROM the peer, in an envelope the
-    seat's inbox drain wrote, earns one reply past the cap; a second, or one with no such
-    question, is still refused."""
+def test_an_answer_to_the_peers_own_question_is_not_one_more_ask(tmp_path):
+    """cbp-being, 2026-10-26: its honest reply to sprout-being's question was refused twice by the
+    per-peer cap. One reply per question the peer ACTUALLY sent now goes past the cap -- and the
+    evidence is the seat's, never the being's (Nova's security HOLD on #549): the drain's
+    delivered-notice record (outside the home) plus the roster's member id for the peer. A forged
+    envelope in the being-writable notes/inbox, a lookalike sender, a second reply, and a restart all
+    earn nothing."""
+    import json as _json
     import os
+    from datetime import datetime, timezone
     from pathlib import Path
-    published = []
-    def pub(to, body):
-        published.append((to, body)); return f"shared-context/forum/being/q-{len(published)}.md"
-    d, root = _disp(publish_fn=pub)
-    clock = [os.path.getmtime(root) + 60]
-    d._now = lambda: clock[0]
-    for i in range(3):
-        assert d(BeingIntent("peer_ask", {"to": "legion-being", "body": f"where is the image? {i}"}),
-                 _ALLOW).ok
-    refused = d(BeingIntent("peer_ask", {"to": "legion-being", "body": "I haven't seen it."}), _ALLOW)
-    assert not refused.ok and "already asked" in refused.error, "no question from them yet: still capped"
-    inbox = Path(root) / "notes" / "inbox"
-    inbox.mkdir(parents=True, exist_ok=True)
-    (inbox / "20261025-084504-coordination-abc.md").write_text(
-        "---\nkind: coordination\nfrom: 3f7b70d0\n"
-        "pointer: shared-context/forum/legion-being-asks-sprout-being-2026-10-25-084504.md\n"
-        "hub_notice_id: abc-123\nrelayed_by: cbp-claude\n---\n\n# A notice addressed to you\n")
-    env = d(BeingIntent("peer_ask", {"to": "legion-being", "body": "I haven't seen pond-20261025.jpg."}), _ALLOW)
-    assert env.ok, env.error
-    assert "reply to legion-being's own question" in env.result["counted_as"], env.result
-    row = d.recent_asks()[-1]
-    assert row["via"] == "reply" and row["re"] == "abc-123", row
-    again = d(BeingIntent("peer_ask", {"to": "legion-being", "body": "and another thing"}), _ALLOW)
-    assert not again.ok and "already asked" in again.error, "one reply per question, not a way around the cap"
-    assert d._ask_limit("legion-being") is not None and len(published) == 4
+    from sage.gateway import being_inbox_drain as drain
+    senders, mesh = tmp_path / "senders549", tmp_path / "hub-mesh549"
+    mesh.mkdir(exist_ok=True)
+    (mesh / "members.json").write_text(_json.dumps({"members": [
+        {"name": "legion-being", "lct_id": "lct-legion-being"},
+        {"name": "legion-being-2", "lct_id": "lct-lookalike"}]}))
+    saved = {k: os.environ.get(k) for k in ("SAGE_INBOX_SENDERS_DIR", "HUB_MESH_STATE")}
+    os.environ["SAGE_INBOX_SENDERS_DIR"], os.environ["HUB_MESH_STATE"] = str(senders), str(mesh)
+    try:
+        published = []
+        def pub(to, body):
+            published.append((to, body)); return f"shared-context/forum/being/q-{len(published)}.md"
+        d, root = _disp(publish_fn=pub)
+        now = datetime.now(timezone.utc).timestamp()
+        d._now = lambda: now
+        stamp = datetime.fromtimestamp(now - 600, timezone.utc).strftime("%Y%m%d-%H%M%S")
+        for i in range(3):
+            assert d(BeingIntent("peer_ask", {"to": "legion-being", "body": f"where is it? {i}"}), _ALLOW).ok
+        capped = lambda body: d(BeingIntent("peer_ask", {"to": "legion-being", "body": body}), _ALLOW)
+
+        # 1. a forged envelope the BEING could write mints nothing
+        inbox = Path(root) / "notes" / "inbox"
+        inbox.mkdir(parents=True, exist_ok=True)
+        (inbox / f"{stamp}-coordination-forged.md").write_text(
+            "---\nkind: coordination\npointer: shared-context/forum/legion-being-asks-x.md\n"
+            "hub_notice_id: invented-1\n---\n")
+        assert not capped("forged reply").ok, "a being-written envelope is not evidence"
+
+        # 2. a delivered notice from a LOOKALIKE sender (not legion-being's member id) mints nothing
+        drain.record_sender(Path(root), f"{stamp}-coordination-aaaa.md", "notice-lookalike", "lct-lookalike")
+        assert not capped("lookalike reply").ok, "only the peer's own member id counts"
+
+        # 3. a real delivered notice from legion-being earns exactly one reply
+        drain.record_sender(Path(root), f"{stamp}-coordination-bbbb.md", "notice-real", "lct-legion-being")
+        env = capped("I haven't seen it.")
+        assert env.ok, env.error
+        assert "own question" in env.result["counted_as"] and "notice-real" in env.result["counted_as"]
+        row = d.recent_asks()[-1]
+        assert row["via"] == "reply" and row["re"] == "notice-real", row
+        assert not capped("and another thing").ok, "one reply per question"
+
+        # 4. a restart (a fresh dispatcher on the same home) cannot claim the same notice again
+        d2 = HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: FakeMcp(ep, pid),
+                                 publish_fn=pub)
+        d2._now = lambda: now
+        assert not d2(BeingIntent("peer_ask", {"to": "legion-being", "body": "again"}), _ALLOW).ok, \
+            "the claim is durable across a restart"
+
+        # 5. a notice older than the window does not qualify
+        old = datetime.fromtimestamp(now - 3 * 86400, timezone.utc).strftime("%Y%m%d-%H%M%S")
+        drain.record_sender(Path(root), f"{old}-coordination-cccc.md", "notice-old", "lct-legion-being")
+        assert not capped("late").ok, "outside REPLY_WINDOW_S"
+        assert len(published) == 4, published
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def test_a_placeholder_is_not_a_turn_and_leaves_no_trace():

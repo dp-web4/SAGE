@@ -1048,41 +1048,47 @@ class HestiaF1aDispatcher:
         sprout-being had spent the budget, so the honest answer to sprout-being's own question could
         not be sent.
 
-        The evidence is the seat's, never the being's word: an envelope the seat's inbox drain wrote
-        into notes/inbox (kind coordination), whose forum pointer is named `<sender>-asks-...`, inside
-        REPLY_WINDOW_S. One reply per such notice (recorded with `re`), so this cannot become a way
-        around the cap."""
-        import re as _re
-        key = self._peer_key(to)
-        inbox = Path(self.memory_root or "") / "notes" / "inbox"
-        if not key or not inbox.is_dir():
+        THE EVIDENCE IS THE SEAT'S, NEVER THE BEING'S (Nova's security HOLD on #549). The envelope note
+        in notes/inbox is in the being's writable home, so its front matter (kind, pointer, notice id)
+        can be forged with memory_write. Eligibility is read only from:
+          * the drain's DELIVERED-NOTICE record (being_inbox_drain.delivered_notices: seat-owned, outside
+            the home, one row per notice with the member id the hub AUTHENTICATED it from), and
+          * the hub roster cache (seat-owned), which binds the peer's name to that member id.
+        A notice qualifies when its authenticated sender is `to`'s member id, its note (named by the
+        drain, `<UTC ts>-coordination-...`) is inside REPLY_WINDOW_S, and no reply has claimed it yet.
+        Claims live in asks_sent.jsonl, which _safe_path reserves from every being write."""
+        from sage.gateway import being_inbox_drain as drain
+        from datetime import datetime, timezone
+        lct = self._roster_lct(self.resolve_peer(to))
+        if not lct or not self.memory_root:
             return None
         replied = {r.get("re") for r in self.recent_asks(window_s=self.REPLY_WINDOW_S)
                    if r.get("via") == "reply"}
         cutoff = self._now() - self.REPLY_WINDOW_S
-        try:
-            files = sorted(inbox.glob("*.md"), reverse=True)
-        except OSError:
-            return None
-        for f in files:
+        for row in reversed(drain.delivered_notices(Path(self.memory_root))):
+            note, nid = str(row["note"]), str(row["hub_notice_id"])
+            if str(row["from"]) != lct or nid in replied or "-coordination-" not in note:
+                continue
             try:
-                if f.stat().st_mtime < cutoff:
-                    continue
-                head = f.read_text(encoding="utf-8", errors="replace")[:2000]
-            except OSError:
+                at = datetime.strptime(note[:15], "%Y%m%d-%H%M%S").replace(tzinfo=timezone.utc).timestamp()
+            except ValueError:
                 continue
-            if not head.startswith("---"):
-                continue
-            fm = head.split("---", 2)[1] if head.count("---") >= 2 else ""
-            kind = _re.search(r"(?m)^kind:\s*(\S+)", fm)
-            ptr = _re.search(r"(?m)^pointer:\s*(\S+)", fm)
-            nid = _re.search(r"(?m)^hub_notice_id:\s*(\S+)", fm)
-            if not (kind and ptr and nid) or kind.group(1) != "coordination":
-                continue
-            sender = _re.match(r"(.+?)-asks-", ptr.group(1).rsplit("/", 1)[-1])
-            if sender and self._peer_key(sender.group(1)) == key and nid.group(1) not in replied:
-                return nid.group(1)
+            if at >= cutoff:
+                return nid
         return None
+
+    def _roster_lct(self, name: str) -> str:
+        """The roster member id (lct_id) for `name` from the seat-owned roster cache; "" if unknown."""
+        path = os.path.expanduser(os.environ.get("HUB_MESH_STATE", "~/.local/state/hub-mesh")) + "/members.json"
+        try:
+            m = json.load(open(path))
+            ms = m.get("members", m) if isinstance(m, dict) else m
+            for x in ms:
+                if str(x.get("name") or "").strip().lower() == (name or "").strip().lower():
+                    return str(x.get("lct_id") or "")
+        except Exception:
+            pass
+        return ""
 
     def _record_ask(self, to: str, via: str, text: str, queued_id: Any, in_reply_to_notice: Optional[str] = None) -> None:
         row = {"t": self._now(), "peer": self._peer_key(to), "to": to, "via": via,
@@ -1183,11 +1189,43 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=unknown)
         limited = self._ask_limit(to)
         reply_to = None
+        claim = None
         if limited:
-            # The cap is for questions. An answer to the peer's OWN unanswered question still goes.
+            # The cap is for questions. An answer to the peer's OWN unanswered question still goes,
+            # once: the claim lock is held from the eligibility check until the reply is recorded, so
+            # two sessions cannot both spend the same notice.
+            claim = self._claim_lock()
             reply_to = self._unanswered_inbound(to)
             if not reply_to:
+                self._release_claim(claim)
                 return ResultEnvelope(ok=False, error=limited)
+        try:
+            return self._send_peer_ask(to, body, reply_to)
+        finally:
+            self._release_claim(claim)
+
+    def _claim_lock(self):
+        """An exclusive lock beside the asks log (reserved from being writes); None if unavailable."""
+        try:
+            import fcntl
+            fd = os.open(str(self._asks_path()) + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            return fd
+        except Exception:
+            return None
+
+    @staticmethod
+    def _release_claim(fd) -> None:
+        if fd is None:
+            return
+        try:
+            import fcntl
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+        except Exception:
+            pass
+
+    def _send_peer_ask(self, to: str, body: str, reply_to: Optional[str]) -> ResultEnvelope:
         annotation = self._ask_provenance(body)
         pointer = self._publish(to, body + annotation if annotation else body)
         if not pointer:
