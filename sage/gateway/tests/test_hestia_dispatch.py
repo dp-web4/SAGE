@@ -1719,6 +1719,41 @@ def test_asking_one_peer_is_capped_per_window_and_a_refused_ask_leaves_nothing_b
     assert env.ok, "the oldest asks age out of the window"
 
 
+def test_an_answer_to_the_peers_own_question_is_not_one_more_ask():
+    """cbp-being, 2026-10-26 01:42/01:59: it wrote the honest answer to sprout-being's question
+    ("I haven't seen pond-20261025.jpg") and the per-peer cap refused it twice, because its own
+    earlier asks to sprout-being had spent the budget. A question FROM the peer, in an envelope the
+    seat's inbox drain wrote, earns one reply past the cap; a second, or one with no such
+    question, is still refused."""
+    import os
+    from pathlib import Path
+    published = []
+    def pub(to, body):
+        published.append((to, body)); return f"shared-context/forum/being/q-{len(published)}.md"
+    d, root = _disp(publish_fn=pub)
+    clock = [os.path.getmtime(root) + 60]
+    d._now = lambda: clock[0]
+    for i in range(3):
+        assert d(BeingIntent("peer_ask", {"to": "legion-being", "body": f"where is the image? {i}"}),
+                 _ALLOW).ok
+    refused = d(BeingIntent("peer_ask", {"to": "legion-being", "body": "I haven't seen it."}), _ALLOW)
+    assert not refused.ok and "already asked" in refused.error, "no question from them yet: still capped"
+    inbox = Path(root) / "notes" / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    (inbox / "20261025-084504-coordination-abc.md").write_text(
+        "---\nkind: coordination\nfrom: 3f7b70d0\n"
+        "pointer: shared-context/forum/legion-being-asks-sprout-being-2026-10-25-084504.md\n"
+        "hub_notice_id: abc-123\nrelayed_by: cbp-claude\n---\n\n# A notice addressed to you\n")
+    env = d(BeingIntent("peer_ask", {"to": "legion-being", "body": "I haven't seen pond-20261025.jpg."}), _ALLOW)
+    assert env.ok, env.error
+    assert "reply to legion-being's own question" in env.result["counted_as"], env.result
+    row = d.recent_asks()[-1]
+    assert row["via"] == "reply" and row["re"] == "abc-123", row
+    again = d(BeingIntent("peer_ask", {"to": "legion-being", "body": "and another thing"}), _ALLOW)
+    assert not again.ok and "already asked" in again.error, "one reply per question, not a way around the cap"
+    assert d._ask_limit("legion-being") is not None and len(published) == 4
+
+
 def test_a_placeholder_is_not_a_turn_and_leaves_no_trace():
     """The reflect prompt once showed `say to="dp", text="..."` as an example and cbp-being
     executed the example: three turns to dp whose whole text was "..", 2026-09-18/19, read by

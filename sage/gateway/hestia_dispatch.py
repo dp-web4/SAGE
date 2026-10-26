@@ -979,6 +979,8 @@ class HestiaF1aDispatcher:
     # against that record, 3 per peer per 6 h lets 31 of the 92 sends through.
     ASK_WINDOW_S = 6 * 3600
     ASK_CAP_PER_PEER = 3
+    # How far back an unanswered question FROM a peer still earns one reply past the cap.
+    REPLY_WINDOW_S = 48 * 3600
     ASKS_LOG = "asks_sent.jsonl"
 
     def _now(self) -> float:
@@ -1013,7 +1015,8 @@ class HestiaF1aDispatcher:
         Checked BEFORE anything is published or notified, so a refused ask leaves nothing
         behind: no forum file, no notice, no wake on the peer's side."""
         key = self._peer_key(to)
-        mine = [r for r in self.recent_asks() if r.get("peer") == key]
+        # A reply to the peer's own question (_unanswered_inbound) is not an ask and is not counted.
+        mine = [r for r in self.recent_asks() if r.get("peer") == key and r.get("via") != "reply"]
         if len(mine) < self.ASK_CAP_PER_PEER:
             return None
         now = self._now()
@@ -1035,9 +1038,57 @@ class HestiaF1aDispatcher:
                 f"still wrong, check it yourself this beat (recall, memory_read), or say what you "
                 f"found in a conversation.{convs} You can ask {to!r} again in about {frees_min} min.")
 
-    def _record_ask(self, to: str, via: str, text: str, queued_id: Any) -> None:
+    def _unanswered_inbound(self, to: str) -> Optional[str]:
+        """The hub notice id of a question FROM `to` that this being has not yet replied to, or None.
+
+        AN ANSWER IS NOT ONE MORE ASK (cbp-being, 2026-10-26). sprout-being asked it about an image;
+        dp and the seat told it the true answer was "I haven't seen it". It wrote exactly that at
+        01:42 and 01:59, and both times the per-peer cap refused it -- "you have already asked
+        'sprout-being' 3 times ... read your inbox for their reply first": its earlier asks to
+        sprout-being had spent the budget, so the honest answer to sprout-being's own question could
+        not be sent.
+
+        The evidence is the seat's, never the being's word: an envelope the seat's inbox drain wrote
+        into notes/inbox (kind coordination), whose forum pointer is named `<sender>-asks-...`, inside
+        REPLY_WINDOW_S. One reply per such notice (recorded with `re`), so this cannot become a way
+        around the cap."""
+        import re as _re
+        key = self._peer_key(to)
+        inbox = Path(self.memory_root or "") / "notes" / "inbox"
+        if not key or not inbox.is_dir():
+            return None
+        replied = {r.get("re") for r in self.recent_asks(window_s=self.REPLY_WINDOW_S)
+                   if r.get("via") == "reply"}
+        cutoff = self._now() - self.REPLY_WINDOW_S
+        try:
+            files = sorted(inbox.glob("*.md"), reverse=True)
+        except OSError:
+            return None
+        for f in files:
+            try:
+                if f.stat().st_mtime < cutoff:
+                    continue
+                head = f.read_text(encoding="utf-8", errors="replace")[:2000]
+            except OSError:
+                continue
+            if not head.startswith("---"):
+                continue
+            fm = head.split("---", 2)[1] if head.count("---") >= 2 else ""
+            kind = _re.search(r"(?m)^kind:\s*(\S+)", fm)
+            ptr = _re.search(r"(?m)^pointer:\s*(\S+)", fm)
+            nid = _re.search(r"(?m)^hub_notice_id:\s*(\S+)", fm)
+            if not (kind and ptr and nid) or kind.group(1) != "coordination":
+                continue
+            sender = _re.match(r"(.+?)-asks-", ptr.group(1).rsplit("/", 1)[-1])
+            if sender and self._peer_key(sender.group(1)) == key and nid.group(1) not in replied:
+                return nid.group(1)
+        return None
+
+    def _record_ask(self, to: str, via: str, text: str, queued_id: Any, in_reply_to_notice: Optional[str] = None) -> None:
         row = {"t": self._now(), "peer": self._peer_key(to), "to": to, "via": via,
                "text": (text or "")[:300], "queued_id": queued_id}
+        if in_reply_to_notice:
+            row["re"] = in_reply_to_notice
         try:
             with open(self._asks_path(), "a", encoding="utf-8") as f:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -1131,8 +1182,12 @@ class HestiaF1aDispatcher:
             # sat in the fleet forum for an ask that went nowhere.
             return ResultEnvelope(ok=False, error=unknown)
         limited = self._ask_limit(to)
+        reply_to = None
         if limited:
-            return ResultEnvelope(ok=False, error=limited)
+            # The cap is for questions. An answer to the peer's OWN unanswered question still goes.
+            reply_to = self._unanswered_inbound(to)
+            if not reply_to:
+                return ResultEnvelope(ok=False, error=limited)
         annotation = self._ask_provenance(body)
         pointer = self._publish(to, body + annotation if annotation else body)
         if not pointer:
@@ -1140,7 +1195,13 @@ class HestiaF1aDispatcher:
         env = self._do_mesh(BeingIntent("mesh", {"to": to, "kind": "coordination", "pointer": pointer}),
                             _count=False)
         if env.ok and isinstance(env.result, dict):
-            self._record_ask(to, "peer_ask", body, env.result.get("queued_id"))
+            if reply_to:
+                self._record_ask(to, "reply", body, env.result.get("queued_id"), in_reply_to_notice=reply_to)
+                env.result["counted_as"] = (f"a reply to {to}'s own question (hub notice {reply_to}): it "
+                                            f"does not count against your asks to {to}, and that question "
+                                            f"has now had its one reply")
+            else:
+                self._record_ask(to, "peer_ask", body, env.result.get("queued_id"))
             env.result["question_at"] = pointer
             env.result["answer_via"] = "hestia_member_inbox (drain_inbox)"
             if annotation:
