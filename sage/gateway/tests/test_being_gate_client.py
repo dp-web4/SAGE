@@ -13,6 +13,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from sage.gateway.being_gate_client import BeingGateClient, BeingIntent  # noqa: E402
 
 
+def _full(reach):
+    """Reach as (root, recursive), each entry checked to be a full-mode grant. A core with hestia
+    #1383 (`scope_roots_with_modes`) adds the modes as a third element; an older one does not."""
+    for e in reach:
+        assert len(e) == 2 or e[2] == "rwed", e
+    return tuple(tuple(e[:2]) for e in reach)
+
+
 def _client(mech):
     """A client whose local law always ALLOWs, with an injected society mechanism."""
     c = BeingGateClient.__new__(BeingGateClient)
@@ -542,10 +550,10 @@ def test_a_recursive_grant_on_a_workspace_directory_reaches_the_dispatcher(tmp_p
     assert _granted_roots(core, Pol, str(ws)) == ()     # a bare name no grant stands behind: nothing
     roots = _granted_roots(core, Pol, str(ws), minted)
     assert roots == (os.path.realpath(ws / "governance"),)          # repo:sage is not a dir
-    assert _granted_reach(core, Pol, str(ws), minted) == ((os.path.realpath(ws / "governance"), True),)
+    assert _full(_granted_reach(core, Pol, str(ws), minted)) == ((os.path.realpath(ws / "governance"), True),)
     # an EXACT grant on the same directory keeps the path: form and stays exact
     class Exact: scope = (exact,)
-    assert _granted_reach(core, Exact, str(ws)) == ((os.path.realpath(ws / "governance"), False),)
+    assert _full(_granted_reach(core, Exact, str(ws))) == ((os.path.realpath(ws / "governance"), False),)
     # the last mile: the dispatcher reads the file the gate allowed
     d = ReferenceF1aDispatcher(str(home))
     env = d(BeingIntent("memory_read", {"path": str(target)}),
