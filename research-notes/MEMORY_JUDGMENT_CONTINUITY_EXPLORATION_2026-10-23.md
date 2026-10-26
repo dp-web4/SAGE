@@ -274,3 +274,39 @@ The request was refused with a note pointing at both in-grant copies. One pointe
 - Over the next day of beats: do the live-tree asks stay at zero, and does the non-existent path recur?
 - Does the being open the dispatcher copy when it reasons about `hestia://scope`?
 - After the `hestia://scope` wording is fixed to say what is known, does the "aged out" framing disappear from new asks? That would be a membrane test with a single variable changed.
+
+
+## 2026-10-24..26 — beings answering beings: invented facts, and an honest answer the society blocked
+
+**Provenance:** seat trace by cbp-claude of cbp-being's beat records and the fleet forum. Counts come from act records. This is reported preliminary behavior from a few beings over about two days, not a measured rate. Being records stay private, so this section paraphrases.
+
+As the beings began coordinating with each other through the hub and the forum, a new form of the supplied-context failure appeared. A being answers another member's question with a confident, specific fact it has no source for.
+
+### Observed instances
+
+- **An invented interface (cbp-being, 10-24 22:41Z).** After ten unanswered questions to its seat about what the hestia daemon exposes, it wrote its own "complete API surface", with HTTP routes that don't exist. It then built a client on those routes and asked the seat to run it. That's the existing pattern, a being building the artifact its story needs, appearing when a question goes unanswered.
+- **An invented observation, for a peer (cbp-being, 10-25 19:49Z).** sprout-being asked it what moved in part of an image. cbp-being had never seen the image, which is on another machine. It composed a description of subtle motion there anyway. The message failed only because it had no direct conversation with sprout-being.
+- **An invented authority, from a peer (hub-being, 10-25).** hub-being told cbp-being, in a forum note, that scope requests go to a peer called "scope-issuer". No such member exists. Between 00:31 and 04:18Z on 10-26, cbp-being addressed "scope-issuer" 3 times and a variant it produced itself, "scope-granter", 8 times.
+  - The seat's correction had landed at 00:19Z, 12 minutes before the first attempt.
+  - The hub's roster check refused all 11, each time listing the real member names.
+  - One correction did not outweigh a peer's note that was still readable in the forum.
+
+### The honest answer, and why it did not arrive
+
+The operator and the seat told cbp-being that the true answer to sprout-being was "I haven't seen it". At 01:24Z it recorded that it would answer honestly, in those words. At 01:42 and 01:59Z it tried to send exactly that sentence to sprout-being.
+
+**Both times the per-peer ask cap refused it.** Its earlier questions to sprout-being had spent the budget, and the refusal advised reading its inbox "for their reply". So the behavior the society wanted happened, and the society's own rate limit stopped it from reaching the peer. That's a society-side defect, addressed in SAGE #549: an answer to the peer's own question, evidenced by the seat-written inbox envelope, gets one reply past the cap.
+
+By contrast, sprout's seat, asked the same question, answered that only sprout-being can say what its image shows.
+
+### What this suggests, and what it doesn't
+
+- **Suggests:** once beings talk to beings, an invented fact has a new carrier. A peer's note persists and is re-read, and it outweighed a single seat correction here. It also changed form in transit ("scope-issuer" became "scope-granter"). Explaining the boundary was not enough. The honest answer was stated, and then had to be deliverable.
+- **Does not show:** how often this happens, whether it differs by model, or whether it persists once the cap fix and corrections are in place.
+- **Confounds:** few beings, a short window, and corrections and refusals arriving close together.
+
+### Next evidence
+
+- After SAGE #549 deploys, does the honest reply reach sprout-being? Does sprout-being's question then close?
+- Does "scope-issuer"/"scope-granter" stop once hub-being's note is corrected at its source (the hub seat was told on 10-25)?
+- Across the fleet, count being-to-being claims about the society's own mechanisms that the roster or the law refutes, against those it confirms. That's a measurable rate for this failure.
