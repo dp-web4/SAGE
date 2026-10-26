@@ -1055,3 +1055,110 @@ def test_sandbox_reach_names_every_granted_mount_and_the_worktree_never_the_plum
     assert not any(p == "/usr" or p.startswith("/usr/") for p in got), "a sandbox-owned path is plumbing"
     assert os.path.realpath(home) not in got, "the home is never mounted"
     assert sandbox_reach("check", {}, ctx) == [os.path.realpath(wt)]
+
+
+# --- NEGATIVE BIND-TARGET ROWS (Nova on #547: every being-controllable run source and sandbox
+# mount still reaches Gate 1b; an unexpected bind target is refused, not laundered into egress).
+# Unlike _boxed_client these compose the REAL line: _normalize, run_command, run_grant_mounts
+# and sandbox_reach all run; only decide() and the policy grants are fakes.
+
+def _real_run_client(tmp_path, monkeypatch, granted_reach=()):
+    import sage.gateway.being_gate_client as bgc
+    monkeypatch.setattr(bgc, "run_sandbox_kind", lambda: "bwrap")
+    c, calls = _sg_client("allow")
+    home = tmp_path / "home"; (home / "scratch").mkdir(parents=True)
+    wt = tmp_path / "wt"; wt.mkdir()
+    c.member_id, c.workspace = "test-being", str(tmp_path)
+    c.memory_root, c.worktree = str(home), str(wt)
+    c._policy_grants = lambda: ((), list(granted_reach))
+    return c, calls, home, wt
+
+
+def _line_bind_sources(line):
+    import shlex
+    toks, out = shlex.split(line), []
+    for i, t in enumerate(toks):
+        if t in ("--bind", "--ro-bind", "--ro-bind-try", "--bind-try"):
+            out.append(toks[i + 1])
+    return out
+
+
+def _assert_every_bind_is_judged_or_plumbing(ev):
+    import sys
+    from sage.gateway.being_gate_client import STAGE_ROOT
+    line = ev["egress"][-1]
+    judged = set(ev["tool_input"].get("paths") or [])
+    interp = os.path.dirname(os.path.dirname(sys.executable))
+    plumbing = {"/usr", "/lib", "/lib64", "/bin", "/etc/alternatives", interp}
+    for src in _line_bind_sources(line):
+        if src in plumbing or src.startswith(STAGE_ROOT + "-"):
+            continue
+        assert src in judged, f"{src!r} is bound into the box but only the egress sweep sees it"
+
+
+def test_every_bind_a_real_run_line_makes_is_judged_or_is_the_boxs_own(tmp_path, monkeypatch):
+    rw = tmp_path / "granted-rw"; rw.mkdir()
+    ro = tmp_path / "granted-ro"; ro.mkdir()
+    c, calls, home, wt = _real_run_client(
+        tmp_path, monkeypatch, [(str(rw), True, "rwed"), (str(ro), True, "r")])
+    (wt / "in.csv").write_text("1\n")       # an absolute data path reaches the worktree only
+    (home / "scratch" / "s.py").write_text("print(1)\n")
+    v = c.gate(BeingIntent("run", {"path": "scratch/s.py", "data": [str(wt / "in.csv")]}))
+    assert v.decision == "allow", v
+    ev = calls[-1][0]
+    assert "command" not in ev["tool_input"]
+    _assert_every_bind_is_judged_or_plumbing(ev)
+    judged = ev["tool_input"]["paths"]
+    for p in (home / "scratch" / "s.py", wt / "in.csv", rw, ro, wt):
+        assert os.path.realpath(p) in judged, (p, judged)
+
+
+def test_a_symlink_in_the_home_is_judged_at_its_target_not_at_the_link(tmp_path, monkeypatch):
+    # The line binds the STAGED COPY (seat plumbing, egress only) and the staging follows the
+    # link, so the law must be handed the target: else a link to a credential file outside the
+    # reach is laundered through the stage.
+    out = tmp_path / "outside"; out.mkdir()
+    (out / "target.txt").write_text("k\n")
+    (out / "other.py").write_text("print(2)\n")
+    c, calls, home, _wt = _real_run_client(tmp_path, monkeypatch)
+    (home / "scratch" / "s.py").symlink_to(out / "other.py")
+    (home / "scratch" / "k.md").symlink_to(out / "target.txt")
+    c.gate(BeingIntent("run", {"path": "scratch/s.py", "data": ["scratch/k.md"]}))
+    ev = calls[-1][0]
+    judged = ev["tool_input"]["paths"]
+    assert os.path.realpath(out / "other.py") in judged, judged
+    assert os.path.realpath(out / "target.txt") in judged, judged
+    _assert_every_bind_is_judged_or_plumbing(ev)
+
+
+@pytest.mark.xfail(strict=True, reason="pre-existing (on main too): the worktree-rooting block runs "
+                   "before the run-in-home block, so with a worktree a run's `path` is judged at "
+                   "<worktree>/<path>, a file that is not what runs. The real sources still reach "
+                   "`paths`, so nothing goes unjudged; a phantom path can only add a false deny.")
+def test_a_runs_script_path_is_judged_in_the_home_when_the_being_has_a_worktree(tmp_path, monkeypatch):
+    c, calls, home, _wt = _real_run_client(tmp_path, monkeypatch)
+    (home / "scratch" / "s.py").write_text("print(1)\n")
+    c.gate(BeingIntent("run", {"path": "scratch/s.py"}))
+    assert calls[-1][0]["tool_input"]["path"] == os.path.realpath(home / "scratch" / "s.py")
+
+
+def test_a_grant_that_is_a_symlink_is_not_bound_so_nothing_unjudged_enters_the_box(tmp_path, monkeypatch):
+    real = tmp_path / "elsewhere"; real.mkdir()
+    link = tmp_path / "granted-link"; link.symlink_to(real)
+    c, calls, home, _wt = _real_run_client(tmp_path, monkeypatch, [(str(link), True, "rwed")])
+    (home / "scratch" / "s.py").write_text("print(1)\n")
+    c.gate(BeingIntent("run", {"path": "scratch/s.py"}))
+    ev = calls[-1][0]
+    binds = _line_bind_sources(ev["egress"][-1])
+    assert str(real) not in binds and str(link) not in binds, binds
+    _assert_every_bind_is_judged_or_plumbing(ev)
+
+
+@pytest.mark.parametrize("data", [["--bind"], ["a b"], ["../x.md"], ["/etc/hostname"],
+                                  ["scratch/a.md --bind / /"]])
+def test_a_run_name_that_could_add_a_bind_never_reaches_the_law(tmp_path, monkeypatch, data):
+    c, calls, home, _wt = _real_run_client(tmp_path, monkeypatch)
+    (home / "scratch" / "s.py").write_text("print(1)\n")
+    v = c.gate(BeingIntent("run", {"path": "scratch/s.py", "data": data}))
+    assert v.blocks, v
+    assert not calls, "refused at composition, before any decide()"

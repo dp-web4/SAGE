@@ -62,7 +62,7 @@ def judge(a):
     from sage.gateway.being_gate_client import BeingIntent
     inst = Path(a.live) / "sage" / "instances" / a.instance
     model = a.model or json.loads((inst / "identity.json").read_text()).get("model", "replay")
-    built = gt.build_client(a.instance, inst, model, a.live, None, "replay-gate-parity",
+    built = gt.build_client(a.member or a.instance, inst, model, a.live, None, "replay-gate-parity",
                             0.7, 256, gate_only=True)
     c = [x for x in built if hasattr(x, "gate")][0]
     if a.force_local_law:
@@ -85,7 +85,7 @@ def judge(a):
         except Exception as ex:  # a crash is a verdict too: report it, don't drop the call
             rows.append([k, "EXC", type(ex).__name__, str(ex)[:300], ""])
     Path(a.judge_out).write_text(json.dumps(rows))
-    print(f"{a.tree}: calls={len(rows)} path={getattr(c, 'gate_path', '?')}"
+    print(f"{a.tree}: gateway={gt.__file__} cwd={os.getcwd()} calls={len(rows)} path={getattr(c, 'gate_path', '?')}"
           f" core={sys.modules['hestia_gate_core'].__file__} claims_suppressed={len(stubbed)}",
           file=sys.stderr)
 
@@ -100,6 +100,7 @@ def main():
                    help="live SAGE checkout holding sage/instances/<instance>")
     p.add_argument("--hestia-shared",
                    default=os.path.expanduser("~/ai-workspace/hestia/plugins/_shared"))
+    p.add_argument("--member", help="hestia member id when it differs from the instance dir name (cbp: cbp-being in cbp-qwen3.8-distill-4b). Wrong member = no grants = every call denied in both trees")
     p.add_argument("--model", help="model name for the client; gate_only never calls it, so a missing one only warns")
     p.add_argument("--only", help="comma-separated effectors to replay")
     p.add_argument("--force-local-law", action="store_true",
@@ -127,10 +128,17 @@ def main():
                "--hestia-shared", a.hestia_shared]
         if a.model:
             cmd += ["--model", a.model]
+        if a.member:
+            cmd += ["--member", a.member]
         if force:
             cmd.append("--force-local-law")
-        # cwd=tree so a tree-relative import can't pick up the other tree
-        subprocess.run(cmd, check=True, cwd=os.path.abspath(tree))
+        # cwd=--live, AS THE DAEMON RUNS (cbp-claude, #547, 2026-10-26): the gate reads its workspace
+        # (.hestia-workspace marker walk) and the launch repo's dynamic grant from cwd. With cwd=tree
+        # under /tmp both were wrong and 1308/1695 of cbp-being's calls, its own journal writes among
+        # them, were denied mrh.path in BOTH trees: a parity of two wrong judges. Imports cannot cross
+        # trees: sys.path[0] is this script's dir and the child inserts --tree ahead of it; the
+        # child prints the sage.gateway it loaded so that is checkable on every run.
+        subprocess.run(cmd, check=True, cwd=a.live)
         runs[label] = {r[0]: r for r in json.loads((tmp / f"{label}.json").read_text())}
 
     A, B = runs["A"], runs["B"]
