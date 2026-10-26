@@ -968,7 +968,7 @@ class ReferenceF1aDispatcher:
                     f"{p.name} is changed only with identity_edit, which keeps every earlier "
                     "version and your reason in self_log.jsonl. A direct write would leave no "
                     "record of what it replaced. Nothing was changed")
-            if p.parent == self.memory_root and p.name in SEAT_OWNED:
+            if _home and p.name in SEAT_OWNED:
                 raise ValueError(
                     f"{p.name} is yours to read and not to edit: it is what you were entrusted "
                     "with, and it has to stay separable from what you decide. Your own reading "
@@ -977,11 +977,12 @@ class ReferenceF1aDispatcher:
             # Nova, 99cfdb61b: the lock lives in the being's home, and a memory_edit of it
             # would os.replace its inode, so two writers would hold flocks on different files
             # and nothing would be serialized. No write verb may touch it.
-            if p.parent == self.memory_root and p.name == HOME_LOCK:
+            if _home and p.name == HOME_LOCK:
                 raise ValueError(
                     f"{HOME_LOCK} is not a note: it is the lock that keeps two writes to your home "
                     "from landing on top of each other, and it holds no text. Nothing was changed")
-            if p.parent == self.memory_root / "notes" and p.name in SEAT_OWNED_NOTES:
+            if (p.parent.name == "notes" and p.name in SEAT_OWNED_NOTES
+                    and (p.parent.parent == self.memory_root or _looks_like_a_home(p.parent.parent))):
                 raise ValueError(
                     f"notes/{p.name} is what was said TO you, and it stays as it was said. Your "
                     "reply belongs in your journal, in a conversation with `say`, or in an "
