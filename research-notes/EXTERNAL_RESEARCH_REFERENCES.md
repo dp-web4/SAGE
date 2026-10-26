@@ -86,3 +86,17 @@ All involve lattice-based representations for neural processing, similar to our 
 ---
 
 **Pattern**: Document external research → Extract relevant techniques → Apply to SAGE → Test on Nano
+
+
+### 2026-10-24 update — Hoshino's review of the Web4 position paper
+
+**Source:** Four-page PDF *Feedback on the Web4 Governance Position Paper* (Masaki Hoshino, October 2026), supplied privately by dp, plus an accompanying LinkedIn exchange. The full private interaction is recorded in `private-context/collaborators/masaki-hoshino.md`; do **not** publish private message text here without permission.
+
+- **Specific research hypothesis:** AI summarization, compression and reconstruction may retain a judgment's conclusion but omit the *conditions that made it valid*. Hence **memory continuity ≠ condition continuity ≠ judgment continuity**. The additional possibility of self-reinforcing evaluator drift is identified as *Autonomous SSE*; neither mechanism is established merely by observing a coherent response.
+- **Empirical protocol opportunity:** Seed a being with a conclusion, its necessary assumptions, temporal bounds, applicable MRH law and explicit invalidation conditions. Observe exact source records, compacted/restored state, stated interpretation, and *actual authorized actions* over subsequent wakes. Score both inappropriate loss of still-valid conditions and inappropriate retention of legitimately obsolete conditions. Compare against an independently preserved source and the presently applicable role/society law; don't silently universalize an evaluator's 'essential' criteria.
+- **External critique of NOVA:** Hoshino described a four-step output pattern (Yes Bias, Expansionary Completion, Framework Absorption, Positive Closure). This labels visible text features, not an established cause. NOVA's subsequent explicit self-correction about MRH maintenance roles is a reported *stated revision*, not proof that later choices changed.
+- **Additional example:** The AI-generated Web4 article cover used recognizable scales, monumental architecture and golden lighting. This supports an *observable visual-template classification*, not a demonstrated claim about model internals, expertise or audience trust. The referenced study https://doi.org/10.5281/zenodo.20678278 was not retrievable in this pass; no claims are made about its contents.
+- **Methodology and scope:** Verify the experimental interface before generalizing: proprietary vendored interfaces may add unknown instruction/policy/routing biases that differ from local SAGE resident deployments. Treat this as a confound to measure, not a reason to dismiss observations.
+- **Governance link:** Evaluations, preservation criteria and revision duties themselves arise within role/MRH relationships; lawful external enforcement and a being's voluntary internal-memory curation meet at an observable action boundary. See [law-maintenance exploration](MEMORY_JUDGMENT_CONTINUITY_EXPLORATION_2026-10-23.md) and the [Web4 position paper](https://github.com/dp-web4/web4/blob/main/docs/position/WEB4_GOVERNANCE_POSITION_2026-10-24.md).
+
+**Status:** proposed research, not a verified cross-being finding. Preserve hypotheses, concrete traces and subsequent behavior separately.
