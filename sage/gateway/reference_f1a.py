@@ -84,6 +84,43 @@ _FIND_SHOWN = 40
 _FIND_LINE_CHARS = 240
 
 
+_MAGIC = ((b"\xff\xd8\xff", "a JPEG image"), (b"\x89PNG\r\n\x1a\n", "a PNG image"),
+          (b"GIF8", "a GIF image"), (b"RIFF", "a RIFF file (WAV audio or WebP image)"),
+          (b"%PDF", "a PDF document"), (b"PK\x03\x04", "a zip archive"),
+          (b"\x93NUMPY", "a NumPy array (.npy)"), (b"\x7fELF", "a compiled program (ELF)"))
+_IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp")
+
+
+def _binary_kind(p: Path) -> str:
+    """What a non-text file is ('' for text): known magic first, then a NUL byte in its first 8 KiB."""
+    try:
+        with open(p, "rb") as f:
+            head = f.read(8192)
+    except OSError:
+        return ""
+    for magic, kind in _MAGIC:
+        if head.startswith(magic):
+            return kind
+    if b"\x00" in head:
+        return "binary data"
+    return ""
+
+
+def _binary_said(shown: str, p: Path, kind: str) -> str:
+    try:
+        st = p.stat()
+        when = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).strftime("%Y-%m-%d %H:%MZ")
+        size = f"{st.st_size} bytes, written {when}"
+    except OSError:
+        size = "size unknown"
+    line = (f"[not text: '{shown}' is {kind} ({size}). Its bytes were not returned: read as text they "
+            f"are noise, and they would fill your window with it.")
+    if kind.endswith("image") or p.suffix.lower() in _IMAGE_SUFFIXES:
+        line += (" You see images as pictures, not as bytes: a frame you capture with camera is "
+                 "shown to you at your next beat. To see the scene again, capture a new frame.")
+    return line + "]"
+
+
 def _named_file_stamps(content: str, root: Path, written: Path) -> str:
     """For a record write (journal, todo, a note): when each code file it names last changed.
 
@@ -1347,6 +1384,16 @@ class ReferenceF1aDispatcher:
                 result=(f"[directory: '{shown}' holds {len(names)} entr{'y' if len(names) == 1 else 'ies'}]\n"
                         + (listing + more if names else "(empty directory)") + unrun),
                 witness_id=self._witness(f"memory_read {p.name}/ (directory)"))
+        # A BINARY FILE IS NOT READ AS TEXT. Measured on sprout-being, 2026-10-12..26: 21 memory_reads
+        # of its own camera frames (.jpg) returned the JPEG's bytes decoded as text ("\ufffd\ufffd...JFIF..."),
+        # 10 of them from 10-25 19:20Z on. In the same window its model began emitting byte soup and JPEG
+        # headers as its own thinking: 6000-token empty turns, 1-2 a day the week before, 6 on 10-25 and
+        # 12 by 08:00Z on 10-26, with beats killed mid-turn. The bytes carry nothing a reader can use; the
+        # file is said instead: what kind, how big, when, and how images do reach the being.
+        kind = _binary_kind(p)
+        if kind:
+            return ResultEnvelope(ok=True, result=_binary_said(shown, p, kind),
+                                  witness_id=self._witness(f"memory_read {p.name} (binary: {kind})"))
         whole = p.read_text(errors="replace")
         if not whole:
             return ResultEnvelope(ok=True, result=f"[empty file: '{shown}' exists and has no content]",
