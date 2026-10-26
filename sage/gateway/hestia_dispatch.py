@@ -995,6 +995,8 @@ class HestiaF1aDispatcher:
     # How far back an unanswered question FROM a peer still earns one reply past the cap.
     REPLY_WINDOW_S = 48 * 3600
     ASKS_LOG = "asks_sent.jsonl"
+    # Rows in ASKS_LOG that are not asks: a reply's claim, and the release of a claim whose send failed.
+    REPLY_VIAS = ("reply", "reply-release")
 
     def _now(self) -> float:
         return time.time()
@@ -1029,7 +1031,7 @@ class HestiaF1aDispatcher:
         behind: no forum file, no notice, no wake on the peer's side."""
         key = self._peer_key(to)
         # A reply to the peer's own question (_unanswered_inbound) is not an ask and is not counted.
-        mine = [r for r in self.recent_asks() if r.get("peer") == key and r.get("via") != "reply"]
+        mine = [r for r in self.recent_asks() if r.get("peer") == key and r.get("via") not in self.REPLY_VIAS]
         if len(mine) < self.ASK_CAP_PER_PEER:
             return None
         now = self._now()
@@ -1075,8 +1077,12 @@ class HestiaF1aDispatcher:
         lct = self._roster_lct(self.resolve_peer(to))
         if not lct or not self.memory_root:
             return None
-        replied = {r.get("re") for r in self.recent_asks(window_s=self.REPLY_WINDOW_S)
-                   if r.get("via") == "reply"}
+        # A claim spends the notice; a later release (the send failed) un-spends it. In file order.
+        state: Dict[str, str] = {}
+        for r in self.recent_asks(window_s=self.REPLY_WINDOW_S):
+            if r.get("via") in self.REPLY_VIAS and r.get("re"):
+                state[str(r["re"])] = r["via"]
+        replied = {nid for nid, via in state.items() if via == "reply"}
         cutoff = self._now() - self.REPLY_WINDOW_S
         for row in reversed(drain.delivered_notices(Path(self.memory_root))):
             note, nid = str(row["note"]), str(row["hub_notice_id"])
@@ -1103,11 +1109,9 @@ class HestiaF1aDispatcher:
             pass
         return ""
 
-    def _record_ask(self, to: str, via: str, text: str, queued_id: Any, in_reply_to_notice: Optional[str] = None) -> None:
+    def _record_ask(self, to: str, via: str, text: str, queued_id: Any) -> None:
         row = {"t": self._now(), "peer": self._peer_key(to), "to": to, "via": via,
                "text": (text or "")[:300], "queued_id": queued_id}
-        if in_reply_to_notice:
-            row["re"] = in_reply_to_notice
         try:
             with open(self._asks_path(), "a", encoding="utf-8") as f:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -1201,24 +1205,58 @@ class HestiaF1aDispatcher:
             # sat in the fleet forum for an ask that went nowhere.
             return ResultEnvelope(ok=False, error=unknown)
         limited = self._ask_limit(to)
-        reply_to = None
-        claim = None
-        if limited:
-            # The cap is for questions. An answer to the peer's OWN unanswered question still goes,
-            # once: the claim lock is held from the eligibility check until the reply is recorded, so
-            # two sessions cannot both spend the same notice.
-            claim = self._claim_lock()
+        if not limited:
+            return self._send_peer_ask(to, body, None)
+        # The cap is for questions. An answer to the peer's OWN unanswered question still goes, once.
+        # THE CLAIM IS THE AUTHORITY SPENT (Nova's HOLD on #549 at a82327b64), so it fails closed:
+        #   * no lock, no reply: without a held lock two sessions could both spend one notice;
+        #   * the claim is written and fsynced BEFORE anything is published, and a reply whose claim
+        #     could not be written is not sent;
+        #   * a send that fails writes a release, so the notice can be answered again. If the
+        #     release cannot be written the notice stays spent: one reply lost, never two sent.
+        claim = self._claim_lock()
+        if claim is None:
+            return ResultEnvelope(ok=False, error=limited + (
+                " (Whether this is a reply to their own question could not be checked safely just now, "
+                "so it was not sent as one. Nothing was published.)"))
+        try:
             reply_to = self._unanswered_inbound(to)
             if not reply_to:
-                self._release_claim(claim)
                 return ResultEnvelope(ok=False, error=limited)
-        try:
-            return self._send_peer_ask(to, body, reply_to)
+            if not self._append_claim(self._claim_row(to, "reply", body, reply_to)):
+                return ResultEnvelope(ok=False, error=(
+                    f"not sent: this would be your one reply to {to}'s question (hub notice {reply_to}), "
+                    f"but the record that spends that reply could not be written, so nothing was "
+                    f"published or sent. Try again next beat."))
+            sent = False
+            try:
+                env = self._send_peer_ask(to, body, reply_to)
+                sent = env.ok
+                return env
+            finally:
+                if not sent:
+                    self._append_claim(self._claim_row(to, "reply-release", "", reply_to))
         finally:
             self._release_claim(claim)
 
+    def _claim_row(self, to: str, via: str, text: str, notice: str) -> Dict[str, Any]:
+        return {"t": self._now(), "peer": self._peer_key(to), "to": to, "via": via,
+                "text": (text or "")[:300], "queued_id": None, "re": notice}
+
+    def _append_claim(self, row: Dict[str, Any]) -> bool:
+        """Append one claim row durably (flushed and fsynced); False if it is not on disk."""
+        try:
+            with open(self._asks_path(), "a", encoding="utf-8") as f:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            return True
+        except OSError:
+            return False
+
     def _claim_lock(self):
-        """An exclusive lock beside the asks log (reserved from being writes); None if unavailable."""
+        """An exclusive lock beside the asks log (reserved from being writes); None if it was not
+        acquired, and the caller must then not send a reply."""
         try:
             import fcntl
             fd = os.open(str(self._asks_path()) + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
@@ -1247,7 +1285,7 @@ class HestiaF1aDispatcher:
                             _count=False)
         if env.ok and isinstance(env.result, dict):
             if reply_to:
-                self._record_ask(to, "reply", body, env.result.get("queued_id"), in_reply_to_notice=reply_to)
+                # the claim was written before publishing (_do_peer_ask); nothing more to record
                 env.result["counted_as"] = (f"a reply to {to}'s own question (hub notice {reply_to}): it "
                                             f"does not count against your asks to {to}, and that question "
                                             f"has now had its one reply")
