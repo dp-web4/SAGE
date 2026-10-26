@@ -1,7 +1,5 @@
 """SAGE #546: the #545 guard extended to the tune records and to any home a grant reaches."""
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -23,9 +21,10 @@ def test_the_tune_records_are_written_only_by_tune(name):
     assert (root / bp.TUNE_LOG).read_bytes() == before
 
 
-def test_another_beings_records_are_not_writable_through_a_grant():
+def test_another_beings_records_are_not_writable_through_a_grant(tmp_path):
     d, root = _disp()
-    other = Path(tempfile.mkdtemp(prefix="other-home-"))
+    other = tmp_path / "other-home"
+    other.mkdir()
     (other / "identity.json").write_text(json.dumps({"identity": {"machine": "elsewhere"}}) + "\n")
     (other / "instance.json").write_text("{}\n")
     (other / "notes").mkdir()
