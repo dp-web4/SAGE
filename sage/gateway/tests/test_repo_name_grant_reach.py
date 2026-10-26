@@ -132,7 +132,8 @@ def test_an_exact_grant_on_the_same_directory_mints_no_bare_name_root_and_stays_
     c = _client(ws, snap)
     policy = c._core.resolve_agent_policy(c._profile, vault_reader=lambda _m: snap)
     assert B._repo_name_roots(c._core, list(policy.scope), ws, B._snapshot_grant_paths(snap)) == ()
-    assert c._policy_grants() == ((gov,), ((gov, False),))
+    roots, reach = c._policy_grants()
+    assert (roots, tuple(it[:2] for it in reach)) == ((gov,), ((gov, False),))
     assert (B._granted_roots(c._core, policy, ws, B._snapshot_grant_paths(snap))
             == B._granted_roots(c._core, policy, ws))
 

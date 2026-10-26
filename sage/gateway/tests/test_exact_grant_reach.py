@@ -68,7 +68,7 @@ def test_an_exact_grant_on_a_directory_reaches_nothing_beneath_it():
     ws, gov, home = _world()
     c = _client(ws, {"in_scope": ["path:" + gov], "scope_grants": [gov]})
     v, env = _act(c, home, "memory_read", {"path": os.path.join(gov, "closure.py")})
-    assert tuple(v.granted_reach) == ((gov, False),), v.granted_reach
+    assert tuple(it[:2] for it in v.granted_reach) == ((gov, False),), v.granted_reach
     assert _refused(env), env and (env.ok, env.result, env.error)
     _, env = _act(c, home, "memory_write", {"path": os.path.join(gov, "new.py"), "content": "x = 1\n"})
     assert _refused(env), env and (env.ok, env.result, env.error)
@@ -104,7 +104,7 @@ def test_a_recursive_grant_still_reaches_its_subtree():
     ws, gov, home = _world()
     c = _client(ws, {"in_scope": ["path:" + gov + "/**"], "scope_grants": [gov]})
     v, env = _act(c, home, "memory_read", {"path": os.path.join(gov, "core", "http.rs")})
-    assert tuple(v.granted_reach) == ((gov, True),), v.granted_reach
+    assert tuple(it[:2] for it in v.granted_reach) == ((gov, True),), v.granted_reach
     assert env.ok and "fn http" in str(env.result), env.error
     _, env = _act(c, home, "memory_write", {"path": os.path.join(gov, "new.py"), "content": "x = 1\n"})
     assert env.ok, env.error
