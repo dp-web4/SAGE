@@ -3030,7 +3030,7 @@ class HestiaF1aDispatcher:
         reach = _granted_reach_of(getattr(self, "_verdict", None))
         inside = target is not None and any(
             target == os.path.realpath(r) or (rec and target.startswith(os.path.realpath(r) + os.sep))
-            for r, rec, *_ in reach)
+            for r, rec, *md in reach if _mode_has(md, "r"))
         if not inside:
             return ResultEnvelope(ok=False, error=(
                 f"search refused: {target or 'that path'} is outside the reach you hold. "
@@ -3306,7 +3306,9 @@ class HestiaF1aDispatcher:
                "workspace": getattr(self, "workspace", None),
                # the grants this verdict carries: run_grant_mounts composes the same mounts the
                # law judged from the gate's copy of them, or the line differs and nothing runs
-               "granted_reach": _granted_reach_of(getattr(self, "_verdict", None))}
+               "granted_reach": _granted_reach_of(getattr(self, "_verdict", None)),
+               # the rule the gate decided by (hestia #1386), so both sides compose one line
+               "reach_rule": getattr(getattr(self, "_verdict", None), "reach_rule", "union")}
         try:
             cmd = run_command(intent.args, ctx)
             names = run_names(intent.args, ctx)
@@ -3324,8 +3326,8 @@ class HestiaF1aDispatcher:
                 f"record is written, and a run must not outlive its beat. Ask again next beat; "
                 f"the file is unchanged and nothing of yours was touched."))
         root = os.path.realpath(self.memory_root)
-        granted = [(os.path.realpath(r), rec) for r, rec, *_ in
-                   _granted_reach_of(getattr(self, "_verdict", None))]
+        granted = [(os.path.realpath(r), rec) for r, rec, *md in
+                   _granted_reach_of(getattr(self, "_verdict", None)) if _mode_has(md, "r")]
 
         def _allowed(full: str, is_script: bool) -> bool:
             if full == root or full.startswith(root + os.sep):
@@ -4786,6 +4788,12 @@ def _release_stage_lock(lock_path: str, fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
     finally:
         os.close(fd)
+
+
+def _mode_has(rest, mode: str) -> bool:
+    """Whether a reach item's optional third element (its modes, hestia #1345 part B) includes
+    `mode`. An item without one is a full-mode grant, as every grant was before modes."""
+    return mode in (str(rest[0]) if rest else "rwed")
 
 
 def _is_reach_pointer(raw: str) -> bool:
