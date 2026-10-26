@@ -132,12 +132,19 @@ def mac_camera_cmd(camera: str, out_path: str) -> List[str]:
             "-f", "image2", "-atomic_writing", "1", out_path]
 
 
+# BY ABSOLUTE PATH: system_profiler is in /usr/sbin, which a launchd job's PATH does not carry (the heartbeat's is
+# /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin). Called by name it failed in every beat, mac_audio returned {}, and
+# speak_provider said "no audio output is connected": every spoken answer mcnugget-being gave the room from
+# 2026-10-24 ("I can hear you clearly") was refused, with the Mac mini speaker connected (2026-10-26).
+SYSTEM_PROFILER = "/usr/sbin/system_profiler"
+
+
 def mac_audio(timeout: float = 6.0, raw: Optional[str] = None) -> Dict:
     """Audio sinks and sources as macOS sees them, in the shape pw-dump gives: {} when unreadable.
     `raw` is a test seam (system_profiler's JSON)."""
     try:
         if raw is None:
-            raw = subprocess.run(["system_profiler", "-json", "SPAudioDataType"],
+            raw = subprocess.run([SYSTEM_PROFILER, "-json", "SPAudioDataType"],
                                  capture_output=True, text=True, timeout=timeout).stdout
         data = json.loads(raw)
     except Exception:

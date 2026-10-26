@@ -2793,3 +2793,51 @@ def test_already_granted_on_a_device_names_the_verb_not_a_direct_read():
     env = d(BeingIntent("request_scope", {"path": root + "/config.json", "reason": "my config"}),
             GatewayVerdict("allow", granted=(root,)))
     assert "read or write it directly" in env.result["next"]
+
+
+def test_a_say_that_wakes_nobody_says_why():
+    """cbp-being, 2026-10-24 21:32-22:34Z: thirteen turns to its seat came back with no `woke` and
+    no word about it. Nobody answered; it asked one question ten ways, then wrote its own "complete
+    API surface" with invented routes and built a client on it. A receipt silent about delivery
+    reads as delivered-and-ignored. Each reason a wake is not sent is now in the receipt."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+
+    FakeMcp.calls.clear()
+    first = d(BeingIntent("say", {"to": "seat", "text": "What does the daemon do?"}), _ALLOW)
+    assert first.ok and first.result.get("woke") == "seat" and "not_woken" not in first.result
+    again = d(BeingIntent("say", {"to": "seat", "text": "What endpoints does it expose?"}), _ALLOW)
+    why = again.result.get("not_woken", "")
+    assert "already sent" in why and f"seq {first.result['seq']}" in why, why
+    # Nova on #539: the receipt states what is RECORDED, never who reads it or when.
+    assert "recorded in the conversation" in why and "does not confirm" in why, why
+    assert "will be read" not in why and "delivered" not in why, why
+
+    # A seat answering here itself: the receipt names the pause, not silence.
+    conv.append(home, "seat", speaker="seat", text="Answering.", via="seat")
+    conv.pause_wakes(home, "seat", by="seat", minutes=30)
+    paused = d(BeingIntent("say", {"to": "seat", "text": "Thanks."}), _ALLOW)
+    pw = paused.result.get("not_woken", "")
+    assert "paused until" in pw and "does not confirm" in pw and "will see" not in pw, paused.result
+    conv.resume_wakes(home, "seat", force="test")
+
+    # A conversation with no listener says so.
+    conv.create(home, "quiet", title="q", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    q = d(BeingIntent("say", {"to": "quiet", "text": "Hello."}), _ALLOW)
+    qw = q.result.get("not_woken", "")
+    assert "no listener" in qw and "does not confirm" in qw and "will be read" not in qw, q.result
+
+    # A wake that fails to leave says it will be retried.
+    conv.append(home, "seat", speaker="seat", text="Back.", via="seat")
+    FakeMcp.fail = {"hestia_member_notify": "mesh down"}
+    failed = d(BeingIntent("say", {"to": "seat", "text": "One more question."}), _ALLOW)
+    FakeMcp.fail = {}
+    assert "did not go out" in failed.result.get("not_woken", "") and "woke" not in failed.result, \
+        failed.result

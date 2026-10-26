@@ -75,6 +75,12 @@ PARAMS: Dict[str, Param] = {p.name: p for p in (
           doc="your context window in tokens: what one beat can hold. Larger costs VRAM and holds "
               "more; smaller reloads faster and fills sooner. The ceiling is what this machine "
               "measured as fitting (active_embodiment.num_ctx) unless your seat sets another"),
+    Param("game_source", "choice", "open", choices=("open", "closed"), self_tunable=False,
+          doc="seat-run trial condition: whether acts naming the offline game engines' source "
+              "(environment_files/) are refused for the duration of the expect trial"),
+    Param("expect_trial", "choice", "off", choices=("off", "on", "alternate"), self_tunable=False,
+          doc="the expect trial (seat-run): whether game's `expect` (a checked prediction) is offered "
+              "every beat (on), never (off), or on alternate beats (alternate)"),
     Param("answer_reserve", "int", 6144, lo=2048, hi=16384,
           doc="tokens compaction keeps free for your next reply, thinking included. More holds "
               "less of your earlier work in view and gives each reply more room before it hits the "

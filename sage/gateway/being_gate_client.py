@@ -1713,6 +1713,10 @@ def run_grant_mounts(ctx: Optional[dict] = None) -> tuple:
     ctx = ctx or {}
     home = os.path.realpath(ctx.get("memory_root") or "/nonexistent-home")
     found, skipped = {}, []          # real path -> (kind, "rw"|"ro")
+    # hestia #1386 (part C): the nearest grant decides, so a child grant stricter than the mount
+    # above it must be mounted after it, not folded into it. Off unless the gate decides that way.
+    nearest = (ctx or {}).get("reach_rule") == "nearest"
+    unreadable = []
     for item in ctx.get("granted_reach") or ():
         try:
             root, recursive = item[0], item[1]
@@ -1724,6 +1728,8 @@ def run_grant_mounts(ctx: Optional[dict] = None) -> tuple:
         if "r" not in modes:
             skipped.append((os.path.abspath(os.path.expanduser(root.strip())),
                             f"your grant there is '{modes}', without r (read)"))
+            if nearest and recursive:
+                unreadable.append(os.path.realpath(os.path.abspath(os.path.expanduser(root.strip()))))
             continue
         how = "rw" if ("w" in modes and "d" in modes) else "ro"
         lexical = os.path.abspath(os.path.expanduser(root.strip()))
@@ -1753,9 +1759,19 @@ def run_grant_mounts(ctx: Optional[dict] = None) -> tuple:
     # De-nesting by the union rule: a mount inside a directory mount adds nothing unless it
     # is WIDER there (rw inside ro). Kept ones bind after their parent (sorted), so they win.
     dirs = [(p, h) for p, (k, h) in found.items() if k == "dir"]
-    mounts = sorted((p, k, h) for p, (k, h) in found.items()
-                    if not any(p != d and p.startswith(d + os.sep) and (dh == "rw" or h == "ro")
-                               for d, dh in dirs))
+    if nearest:
+        # Keep a child unless it grants exactly what the mount above it already grants.
+        mounts = sorted((p, k, h) for p, (k, h) in found.items()
+                        if not any(p != d and p.startswith(d + os.sep) and dh == h for d, dh in dirs))
+        # A recursive grant without r beneath a mounted directory: the parent would show it, the
+        # gate would not. Masked with an empty read-only directory, like the home.
+        mounts += sorted((u, "mask", "ro") for u in unreadable
+                         if os.path.isdir(u) and any(u.startswith(d + os.sep) for d, _ in dirs))
+        mounts.sort()
+    else:
+        mounts = sorted((p, k, h) for p, (k, h) in found.items()
+                        if not any(p != d and p.startswith(d + os.sep) and (dh == "rw" or h == "ro")
+                                   for d, dh in dirs))
     mask_home = any(k == "dir" and home.startswith(p + os.sep) for p, k, _h in mounts)
     return mounts, sorted(set(skipped)), mask_home
 
@@ -1824,8 +1840,10 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
     # symlink inside a granted tree that points into the home resolves inside the sandbox, to
     # the mask.
     mounts, _skipped, mask_home = run_grant_mounts(ctx)
-    grant_binds = "".join(f" {'--bind' if h == 'rw' else '--ro-bind'} {shlex.quote(p)} {shlex.quote(p)}"
-                          for p, _k, h in mounts)
+    grant_binds = "".join(
+        f" --tmpfs {shlex.quote(p)} --remount-ro {shlex.quote(p)}" if k == "mask" else
+        f" {'--bind' if h == 'rw' else '--ro-bind'} {shlex.quote(p)} {shlex.quote(p)}"
+        for p, k, h in mounts)
     if mask_home:
         _qh = shlex.quote(_home)
         grant_binds += f" --tmpfs {_qh} --remount-ro {_qh}"
@@ -2408,6 +2426,40 @@ def patch_apply_argv(args: dict, ctx: Optional[dict] = None) -> List[str]:
 # scripts/enable_bwrap_userns.sh installs that profile (operator, sudo; Sprout 2026-10-20).
 
 
+GAME_SOURCE_MARKER = "environment_files/"
+GAME_SOURCE_CLOSED = (
+    "Refused for this trial, not by the law: the game engines' source (environment_files/) is "
+    "closed until the expect trial ends. dp's rationale: reality does not usually give you source, "
+    "and the skill being trained is discovering how a world works by acting in it and checking your "
+    "predictions. Your game probes, LOOKs and `expect` are all open; your own notes are yours. When "
+    "the trial ends, access is restored as before.")
+
+
+GAME_SOURCE_PATH_ARGS = ("path", "data", "paths", "file", "target", "rev_path")
+
+
+def trial_game_source_refusal(intent, memory_root) -> Optional[str]:
+    """The Phase B refusal text when `game_source` is closed and the act names game-engine source;
+    None otherwise. The `game` verb itself is never refused here: playing is the point."""
+    if intent.effector == "game" or not memory_root:
+        return None
+    try:
+        from sage.gateway import being_params as _bp
+        if _bp.value(memory_root, "game_source", "open") != "closed":
+            return None
+    except Exception:
+        return None
+    # PATHS ONLY, NEVER CONTENT (2026-10-11): the first version scanned every argument, so the
+    # being's own handoff note was refused for MENTIONING the closed path in its text, and it began
+    # rewording its notes to avoid the words -- the trial censoring the being's writing, which it
+    # promised not to do. Only arguments that name what an act TOUCHES are checked.
+    for k in GAME_SOURCE_PATH_ARGS:
+        v = (intent.args or {}).get(k)
+        if v is not None and GAME_SOURCE_MARKER in str(v):
+            return GAME_SOURCE_CLOSED
+    return None
+
+
 def tune_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
     """Every file `tune` writes, all in the being's home: the temp file, tuned.json, and the audit
     log (being_params.TUNE_WRITES). With no name it only reads, and touches nothing."""
@@ -2954,7 +3006,13 @@ _TOOL_SCHEMAS = {
              "Predict before you read.",
              {"probes": "list of probes, at most 8, e.g. [[\"ACTION6\",36,36],[\"LOOK\",30,30,45,45],[\"RESET\"]]",
               "game": ("optional: which game (default ft09). Yours to choose: " + ", ".join(GAME_PLAYABLE)
-                       + ". Each keeps its own move log; switching loses nothing.")},
+                       + ". Each keeps its own move log; switching loses nothing."),
+              "expect": ("optional: what you predict, checked against the result and reported back as "
+                         "confirmed / CONTRADICTED / unverifiable. A JSON list of: "
+                         '{"probe": 1, "changes": true} (that move changes the board), '
+                         '{"levels_completed": 2}, {"state": "WIN"}, '
+                         '{"cell": [x, y], "value": 5} (checked against a LOOK in this same batch). '
+                         "A contradiction is the most informative thing a probe can return.")},
              ["probes"]),
     "camera": ("Capture ONE frame from this machine's camera into your own scratch — no "
               "stream, nothing persists across beats. The seat runs ffmpeg against /dev/"
@@ -3261,6 +3319,46 @@ def _granted_roots(core, policy, workspace: str, granted_paths=()) -> tuple:
         return ()
 
 
+
+def _floor_read_reach(core, policy, workspace: str, own) -> tuple:
+    """``((root, recursive, "r"), ...)`` for the society's READ-ONLY floor this member's gate is
+    served (`society_floor_read` -> policy.read_scope, hestia #1381), so the dispatcher's own
+    confinement admits the reads the gate admits there.
+
+    Measured 2026-10-25 (cbp-being): dp put shared-context/forum on the floor with modes rw, which
+    the daemon serves read-only. The gate admitted a read there; this list carried only the
+    member's own grants, so the dispatcher would have refused the same read "outside your reach".
+
+    THE FLOOR APPLIES ONLY WHERE NO OWN GRANT REACHES (dp, 2026-10-23/24; hestia #1386): a floor
+    root at or beneath one of the member's own grant roots is left out, so the member's grant
+    decides there. Only with a mode-aware core (the third element says "r"); an older consumer
+    reads a pair as all modes, so nothing is added for it."""
+    import os
+    if getattr(core, "scope_roots_with_modes", None) is None:
+        return ()
+    entries = list(getattr(policy, "read_scope", ()) or ())
+    if not entries:
+        return ()
+    ws = os.path.realpath(os.path.expanduser(workspace)).replace("\\", "/").rstrip("/")
+    roots = [(str(r), bool(rec)) for r, rec in core._scope_roots_with_reach(entries, workspace)]
+    roots += [(os.path.realpath(os.path.join(ws, e)).replace("\\", "/").rstrip("/"), True)
+              for e in entries if isinstance(e, str) and e and not e.startswith("path:")
+              and "/" not in e and "\\" not in e and e not in (".", "..", "*")]
+    covered = [(str(it[0]).rstrip("/"), bool(it[1])) for it in own]
+    out = []
+    for root, rec in roots:
+        # Suppressed only where an own grant reaches EVERYTHING the floor entry reaches (nomad's
+        # counterexample, Nova's HOLD on #533): an own RECURSIVE grant at or above the floor's root
+        # covers its whole subtree; an own EXACT grant covers only its one path, so it suppresses
+        # an exact floor entry on that same path and never a recursive one (whose children it does
+        # not reach).
+        if any((orec and (root == r or root.startswith(r + "/")))
+               or (not orec and not rec and root == r)
+               for r, orec in covered):
+            continue
+        out.append((root, rec, "r"))
+    return tuple(out)
+
 def _granted_reach(core, policy, workspace: str, granted_paths=()) -> tuple:
     """``((root, recursive), ...)`` for every path grant, via the core's own reach resolver
     (hestia_gate_core._scope_roots_with_reach, since #1002: exact unless spelled `/**`),
@@ -3271,6 +3369,15 @@ def _granted_reach(core, policy, workspace: str, granted_paths=()) -> tuple:
     if policy is None:
         return ()
     try:
+        # A CORE THAT ENFORCES MODES (hestia #1345 part B) says which grants it admits and in
+        # which modes, narrowed ones included, as (root, recursive, modes). Taken whole, so the
+        # dispatcher confines by exactly the modes the gate judged by.
+        with_modes = getattr(core, "scope_roots_with_modes", None)
+        if with_modes is not None:
+            scopes = list(getattr(policy, "scope", ()) or ())
+            own = (tuple((str(r), bool(rec), str(md)) for r, rec, md in with_modes(policy, workspace))
+                   + tuple((r, True) for r in _repo_name_roots(core, scopes, workspace, granted_paths)))
+            return own + _floor_read_reach(core, policy, workspace, own)
         reach = getattr(core, "_scope_roots_with_reach", None)
         if reach is not None:
             scopes = list(getattr(policy, "scope", ()) or ())
@@ -3314,6 +3421,11 @@ class GatewayVerdict:
     # said the invariant was being checked; nothing was. Found while writing patch_apply,
     # which had copied the same pattern faithfully enough to inherit the same hole.
     command: Optional[str] = None
+    # WHICH RULE THE GATE DECIDED BY, so the dispatcher confines by the same one (hestia #1386):
+    # "nearest" when the core exports nearest_grant_modes (part C: the deepest grant covering a path
+    # decides it), "union" otherwise (part B: any covering grant admits). Read once, here, from the
+    # core this verdict was judged with; the dispatcher never guesses it.
+    reach_rule: str = "union"
 
     @property
     def blocks(self) -> bool:
@@ -3534,7 +3646,14 @@ class BeingGateClient:
                 "member": getattr(self, "member_id", None),
                 # where `camera` gets a frame (instance.json camera_source; "cortex" or absent)
                 "camera_source": getattr(self, "camera_source", None),
-                **({"granted_reach": self._policy_grants()[1]} if effector == "run" else {})}
+                **({"granted_reach": self._policy_grants()[1], "reach_rule": self._reach_rule()}
+                   if effector == "run" else {})}
+
+    def _reach_rule(self) -> str:
+        """"nearest" when this seat's gate core decides by the nearest explicit grant (hestia #1386,
+        part C: it exports nearest_grant_modes), else "union" (part B). See GatewayVerdict."""
+        return "nearest" if callable(getattr(getattr(self, "_core", None), "nearest_grant_modes",
+                                             None)) else "union"
 
     # -- gate one intent (intent -> verdict), fail-closed --------------------
     def _policy_grants(self) -> tuple:
@@ -3579,6 +3698,13 @@ class BeingGateClient:
         # RAISES over a missing optional field would turn every act into an exception instead
         # of a decision -- the opposite of fail-closed, which is to DENY with a reason.
         judged_command = None
+        # A SEAT-RUN TRIAL CONDITION, not law (expect trial Phase B, private-context
+        # legion/egai/PREREG-expect.md). When being_params `game_source` is "closed", any act whose
+        # arguments name the offline game engines' code is refused with the reason, before the law.
+        closed = trial_game_source_refusal(intent, getattr(self, "memory_root", None))
+        if closed:
+            return GatewayVerdict("deny", "trial.game_source_closed", stage="trial", reason=closed,
+                                  command=judged_command)
         # --- Single gate (#934): the shim contract. The registry stage above is harness
         # syntax (which verbs exist); everything law-bearing happens in decide(). ---
         sg = getattr(self, "_single_gate", None)
@@ -3650,7 +3776,8 @@ class BeingGateClient:
                 granted, granted_reach = self._policy_grants() if dec != "deny" else ((), ())
                 return GatewayVerdict(dec, rule, getattr(d, "reason", "") or ("ok" if dec != "deny" else ""),
                                       innate=False, stage="single-gate", command=judged_command,
-                                      granted=granted, granted_reach=granted_reach)
+                                      granted=granted, granted_reach=granted_reach,
+                                      reach_rule=self._reach_rule())
             except Exception as e:  # a gate that raises is a refused act, never an ungoverned one
                 return GatewayVerdict("deny", "gate.raised", innate=True, stage="single-gate",
                                       reason=f"{type(e).__name__}: {e}")
@@ -3730,7 +3857,8 @@ class BeingGateClient:
         # than recomposed by the caller, which is the whole point of the field.
         return GatewayVerdict(v.decision, v.rule, v.reason or "ok", v.innate, stage="local-law",
                               command=judged_command,
-                              granted=granted, granted_reach=granted_reach)
+                              granted=granted, granted_reach=granted_reach,
+                              reach_rule=self._reach_rule())
 
     # -- the F1a seam: gate, then dispatch, then consume the result ----------
     def _resolve_relative_to_grants(self, intent: BeingIntent):
