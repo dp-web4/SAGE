@@ -792,6 +792,14 @@ HOME_LOCK = ".home.lock"
 HOME_WRITE_VERBS = ("memory_write", "memory_edit", "retire_note")
 
 
+def _looks_like_a_home(d: Path) -> bool:
+    """A being's home is recognised by its records, wherever it sits (#546)."""
+    try:
+        return (d / "identity.json").exists() or (d / "instance.json").exists()
+    except OSError:
+        return False
+
+
 @contextlib.contextmanager
 def _home_lock(root: Path):
     if fcntl is None:           # no flock on this platform: the old, unserialized behaviour
@@ -938,15 +946,24 @@ class ReferenceF1aDispatcher:
                         f"was changed. If you meant to change one of your own files, "
                         f"{sub}/ is not its path: give that file's path instead (a `say` "
                         "does not change any file)")
-            if p.parent == self.memory_root and (p.name in GOVERNANCE_OWNED
-                                                or p.name.startswith(GOVERNANCE_OWNED_PREFIX)):
+            # ANY HOME, NOT ONLY ITS OWN (#546): a grant that ever reached another being's home must
+            # not make that home's records writable either. A home is the being's own root or any
+            # directory that holds a home's records (identity.json or instance.json).
+            _home = p.parent == self.memory_root or _looks_like_a_home(p.parent)
+            if _home and (p.name in GOVERNANCE_OWNED or p.name.startswith(GOVERNANCE_OWNED_PREFIX)):
                 raise ValueError(
                     f"{p.name} is a governance record: it says who you are to the society (your "
                     "id, your machine, which seat hears your escalations, your trust ceiling), so "
                     "no being verb writes it. Nothing was changed. Who you are in your own words "
                     "is yours to write with identity_edit")
             from sage.gateway.being_self import SELF_WRITES
-            if p.parent == self.memory_root and p.name in SELF_WRITES:
+            from sage.gateway.being_params import TUNE_WRITES
+            if _home and p.name in TUNE_WRITES:
+                raise ValueError(
+                    f"{p.name} is changed only with tune, which checks the value against its bounds "
+                    "and keeps every change with your reason in tune_log.jsonl. A direct write would "
+                    "leave no record of it. Nothing was changed")
+            if _home and p.name in SELF_WRITES:
                 raise ValueError(
                     f"{p.name} is changed only with identity_edit, which keeps every earlier "
                     "version and your reason in self_log.jsonl. A direct write would leave no "
