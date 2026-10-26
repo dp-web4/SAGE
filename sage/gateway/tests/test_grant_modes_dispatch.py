@@ -223,3 +223,49 @@ def test_an_older_core_adds_no_floor_it_could_only_express_as_all_modes():
     core = SimpleNamespace(_scope_roots_with_reach=lambda e, w: (), _scope_parts=lambda s, w: ((), ()))
     policy = SimpleNamespace(scope=(), read_scope=(f"path:{forum}/**",))
     assert _granted_reach(core, policy, ws) == ()
+
+
+def _floor_world():
+    ws = os.path.realpath(tempfile.mkdtemp(prefix="floor-ws-"))
+    home, forum = os.path.join(ws, "home"), os.path.join(ws, "shared-context", "forum")
+    os.makedirs(home)
+    os.makedirs(forum)
+    open(os.path.join(forum, "note.md"), "w").write("from sprout\n")
+    return ws, home, forum
+
+
+def _dispatch_read_and_write(home, forum, reach):
+    d = ReferenceF1aDispatcher(memory_root=home)
+    v = GatewayVerdict("allow", granted=tuple(r for r, *_ in reach), granted_reach=reach)
+    read = d(BeingIntent("memory_read", {"path": os.path.join(forum, "note.md")}), v)
+    write = d(BeingIntent("memory_write", {"path": os.path.join(forum, "x.md"), "content": "x"}), v)
+    return read, write
+
+
+def test_an_exact_own_grant_never_suppresses_a_recursive_floor_beneath_it():
+    """nomad's counterexample (Nova HOLD on #533): an EXACT own grant on /f does not reach /f/child,
+    so it must not drop a RECURSIVE read floor on /f/** -- the gate admits that read."""
+    ws, home, forum = _floor_world()
+    policy = SimpleNamespace(scope=(f"path:{forum}",), read_scope=(f"path:{forum}/**",))
+    reach = _granted_reach(_core_with_modes(), policy, ws)
+    assert (forum, True, "r") in reach, reach
+    read, write = _dispatch_read_and_write(home, forum, reach)
+    assert read.ok and "from sprout" in (read.result or ""), read
+    assert not write.ok and not os.path.exists(os.path.join(forum, "x.md")), write
+
+
+def test_a_recursive_own_grant_covers_the_floor_and_decides_there():
+    ws, home, forum = _floor_world()
+    sc = os.path.dirname(forum)
+    policy = SimpleNamespace(scope=(f"path:{sc}/**",), read_scope=(f"path:{forum}/**",))
+    reach = _granted_reach(_core_with_modes(), policy, ws)
+    assert not [x for x in reach if x[0] == forum], f"the own grant covers the floor's subtree: {reach}"
+    read, write = _dispatch_read_and_write(home, forum, reach)
+    assert read.ok and write.ok, (read, write)
+
+
+def test_an_exact_own_grant_suppresses_only_an_exact_floor_on_the_same_path():
+    ws, home, forum = _floor_world()
+    policy = SimpleNamespace(scope=(f"path:{forum}",), read_scope=(f"path:{forum}",))
+    reach = _granted_reach(_core_with_modes(), policy, ws)
+    assert not [x for x in reach if x[0] == forum and len(x) > 2 and x[2] == "r"], reach

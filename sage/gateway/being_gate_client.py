@@ -3307,7 +3307,14 @@ def _floor_read_reach(core, policy, workspace: str, own) -> tuple:
     covered = [(str(it[0]).rstrip("/"), bool(it[1])) for it in own]
     out = []
     for root, rec in roots:
-        if any(root == r or (orec and root.startswith(r + "/")) for r, orec in covered):
+        # Suppressed only where an own grant reaches EVERYTHING the floor entry reaches (nomad's
+        # counterexample, Nova's HOLD on #533): an own RECURSIVE grant at or above the floor's root
+        # covers its whole subtree; an own EXACT grant covers only its one path, so it suppresses
+        # an exact floor entry on that same path and never a recursive one (whose children it does
+        # not reach).
+        if any((orec and (root == r or root.startswith(r + "/")))
+               or (not orec and not rec and root == r)
+               for r, orec in covered):
             continue
         out.append((root, rec, "r"))
     return tuple(out)
