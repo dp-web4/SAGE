@@ -2727,20 +2727,25 @@ def test_a_say_that_wakes_nobody_says_why():
     assert first.ok and first.result.get("woke") == "seat" and "not_woken" not in first.result
     again = d(BeingIntent("say", {"to": "seat", "text": "What endpoints does it expose?"}), _ALLOW)
     why = again.result.get("not_woken", "")
-    assert "already woken" in why and f"seq {first.result['seq']}" in why and "delivered" in why, why
+    assert "already sent" in why and f"seq {first.result['seq']}" in why, why
+    # Nova on #539: the receipt states what is RECORDED, never who reads it or when.
+    assert "recorded in the conversation" in why and "does not confirm" in why, why
+    assert "will be read" not in why and "delivered" not in why, why
 
     # A seat answering here itself: the receipt names the pause, not silence.
     conv.append(home, "seat", speaker="seat", text="Answering.", via="seat")
     conv.pause_wakes(home, "seat", by="seat", minutes=30)
     paused = d(BeingIntent("say", {"to": "seat", "text": "Thanks."}), _ALLOW)
-    assert "answering this conversation itself" in paused.result.get("not_woken", ""), paused.result
+    pw = paused.result.get("not_woken", "")
+    assert "paused until" in pw and "does not confirm" in pw and "will see" not in pw, paused.result
     conv.resume_wakes(home, "seat", force="test")
 
     # A conversation with no listener says so.
     conv.create(home, "quiet", title="q", participants=["dp", "sprout-being"],
                 writable_by=["dp", "sprout-being"])
     q = d(BeingIntent("say", {"to": "quiet", "text": "Hello."}), _ALLOW)
-    assert "nobody is woken" in q.result.get("not_woken", ""), q.result
+    qw = q.result.get("not_woken", "")
+    assert "no listener" in qw and "does not confirm" in qw and "will be read" not in qw, q.result
 
     # A wake that fails to leave says it will be retried.
     conv.append(home, "seat", speaker="seat", text="Back.", via="seat")

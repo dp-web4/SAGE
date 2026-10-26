@@ -4550,27 +4550,26 @@ class HestiaF1aDispatcher:
                 deduped.append((label, plugin_id))
         targets = deduped
         if not targets:
-            self._wake_why = ("nobody is woken by a message here; it will be read when they next "
-                              "look, which may be much later")
+            self._wake_why = ("no listener is set to be woken by messages in this conversation. "
+                              "Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None
         # A SEAT HAS JUMPED IN (`conv.pause_wakes`): it is answering here itself, so a mesh wake
         # would be a second voice speaking as the same seat. Nothing is recorded, so the run is
         # still owed and the being's next turn after the pause wakes as usual.
         pause = conv.wake_pause(self.memory_root, to)
         if pause:
-            self._wake_why = (f"no wake was sent: a seat is answering this conversation itself "
-                              f"until {pause.get('until', 'its pause ends')}, so it will see this "
-                              f"message without one")
+            self._wake_why = (f"wakes for this conversation are paused until "
+                              f"{pause.get('until', 'the pause ends')} (a seat said it is answering here "
+                              f"directly). Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None
         run_start = conv.wake_is_owed(self.memory_root, to, self.member,
                                       skip_answered=self._skips_answered_run_wake())
         if run_start is None:
             start = conv.unanswered_run_start(self.memory_root, to, self.member)
-            self._wake_why = (f"no new wake: the seat was already woken for your messages since "
-                              f"seq {start} and has not answered yet, and more messages about the "
-                              f"same thing do not wake it again. They are all delivered and will "
-                              f"be read together" if start else
-                              "no wake was owed for this message")
+            self._wake_why = (f"no new wake: a wake was already sent for your messages since seq "
+                              f"{start}, with no answer recorded since, and further messages in the "
+                              f"same run do not send another. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it" if start else
+                              "no wake was owed for this message. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None            # already woke them about this run; saying more is not new mail
         pointer = f"sage://conversation/{to}#seq={run_start}-{turn['seq']}"
         woke = []
@@ -4593,8 +4592,8 @@ class HestiaF1aDispatcher:
             conv.record_wake(self.memory_root, to, self.member, run_start,
                              covered_through=int(turn.get("seq") or run_start))
             return ", ".join(woke)
-        self._wake_why = ("the wake did not go out (the mesh refused or failed); your message is "
-                          "delivered, and the wake is tried again on your next message here")
+        self._wake_why = ("the wake did not go out (the mesh refused or failed); it is tried "
+                          "again on your next message here. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
         return None
 
     # -- channel_egress: hestia_channel_send (hestia #1344 slice 1, SHADOW) -----
