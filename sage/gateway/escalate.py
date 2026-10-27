@@ -220,13 +220,19 @@ def write_note(member: str, intent: BeingIntent, env: ResultEnvelope, kind: str,
                "- This is NOT a law verdict. The referee did not answer (`" + v.rule + "`), so there is no ruling\n"
                "  to approve, appeal or override, and nothing the seat decides makes this call land. The being\n"
                "  re-sends it.\n"
-               "- Two things are worth a seat's look. Was the daemon restarting or stalled at that second?\n"
-               "  `$HESTIA_HOME/telemetry/gate-unavailable.jsonl` carries the refusal's second and member when\n"
-               "  the query timed out. And did a refused WRITE lose content the being believes it kept? This\n"
+               # NOT the daemon's telemetry file (SAGE #577): it lives under the hestia home, outside every
+               # member's grant, so a seat following the note filed a scope ask a peer then had to refuse
+               # (cbp 10-27: scope-765d7b2baba1, scope-2771c4945557), and the question it served is answered
+               # in-grant. Whether the daemon stalled at that second is the operator's to read.
+               "- The one thing worth a seat's look: did a refused WRITE lose content the being believes it\n"
+               "  kept? Read the being's own `journal.md` and its `heartbeats.jsonl`, both in your grant. This\n"
                "  note names only the FIRST society refusal of the beat; that beat's record in the being's\n"
                "  heartbeats.jsonl lists every refused call, and a later one may be the one that lost something.\n"
                "- The `ts` above is when this note was written, after the turns ended. It is not when the call\n"
-               "  was refused.\n")
+               "  was refused.\n"
+               "- Whether the daemon was restarting or stalled then is in its own telemetry, which is the\n"
+               "  operator's to read: do not open it. It is outside every member's grant, and reading it files a\n"
+               "  scope request a peer must refuse.\n")
         protocol = ""
     p.write_text(body + how + "\n" + protocol)
     # Land it. An UNCOMMITTED note in a shared checkout is not just untidy: the same name
