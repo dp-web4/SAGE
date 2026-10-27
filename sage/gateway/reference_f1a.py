@@ -1727,6 +1727,49 @@ class ReferenceF1aDispatcher:
                     f"lines {s0}-{s1} are not all in '{path}': it has {len(lines)} lines. "
                     f"Nothing was changed. memory_read shows the current line numbers."))
             removed = "".join(lines[s0 - 1:s1])
+            # A SUBSTRING OLD INSIDE THE RANGE (SAGE #417). The no-range refusal tells the being to
+            # keep old "as a check" and add the range; then this branch compared old with the WHOLE
+            # range and said the lines "are not the text you gave" when the text was there twice.
+            # Measured on cbp-being 2026-10-10 02:25/02:27Z: line 5 held 'w_true.reshape(1, -1)'
+            # twice; both remedies failed and the journal recorded a mismatch that was not one.
+            # The range locates the line, old locates the text within it: once inside, replace that
+            # occurrence; more than once, say so and ask for the whole line.
+            # Only a token WITHIN a line: an old holding a newline claims whole lines, and that claim
+            # stays an exact check, or a range on the wrong line would edit wherever the text also
+            # occurs (the grounding probe's relative-numbering control, #450).
+            inner = removed.count(old) if old and old.strip() and "\n" not in old else 0
+            # Only a PART of the range: old that is the whole range bar its indentation means the
+            # whole line, and keeps the indentation-miss refusal below (replacing inside it would
+            # double an indent that new carries).
+            whole = removed.strip() == old.strip()
+            if old and removed.rstrip("\n") != old.rstrip("\n") and inner == 1 and not whole:
+                rest = removed.replace(old, "", 1).strip()
+                # ...or either SIDE of the line around old (mcnugget's HOLD on #569): a token in the
+                # middle leaves `rest` with a hole (`x = (a)`) that a whole-line new never contains,
+                # so `compute` -> `    x = compute2(a)` spliced to `    x =     x = compute2(a)(a)`, ok.
+                before, _, after = removed.partition(old)
+                sides = [x.strip() for x in (before, after) if len(x.strip()) >= 3]
+                if (len(rest) >= 3 and rest in new) or any(x in new for x in sides):
+                    # new carries the rest of the line too: it was meant as the whole line (#393's
+                    # doubling, here), so replacing old inside the line would hold that rest twice
+                    return ResultEnvelope(ok=False, error=(
+                        f"your old is part of lines {s0}-{s1} of '{path}', and your new already holds "
+                        f"the rest of those lines ({rest[:80]!r}), so replacing old inside them would "
+                        f"leave that text there twice. Nothing was changed. To replace the whole "
+                        f"line, send old as all of it (copied from the text shown), with the change "
+                        f"made in new. Those lines are now:\n{removed[:600]}"))
+                new_text = ("".join(lines[:s0 - 1]) + removed.replace(old, new, 1)
+                            + "".join(lines[s1:]))
+                what = (f"replaced 1 occurrence inside lines {s0}-{s1} (your old was part of the "
+                        f"range, and appears there once)")
+                return self._commit_edit(p, path, text, new_text, what, "")
+            if old and inner > 1:
+                where = f"line {s0}" if s0 == s1 else f"lines {s0}-{s1}"
+                return ResultEnvelope(ok=False, error=(
+                    f"your old appears {inner} times inside {where} of '{path}', so the range does "
+                    f"not say which one you mean, and nothing was changed. Your text IS there; it "
+                    f"is not a mismatch. Send old as the whole of {where} (copied from the text "
+                    f"shown), with the change made in new. Those lines are now:\n{removed[:600]}"))
             if old and removed.rstrip("\n") != old.rstrip("\n"):
                 shown = removed if len(removed) <= 600 else removed[:600] + "..."
                 return ResultEnvelope(ok=False, error=(
@@ -1783,6 +1826,15 @@ class ReferenceF1aDispatcher:
             while i != -1 and len(at) < 10:
                 at.append(str(text.count("\n", 0, i) + 1))
                 i = text.find(old, i + 1)
+            if len(set(at)) == 1 and hits <= 10:
+                # ALL ON ONE LINE (#417): neither a range nor a neighbouring line can pick one of
+                # two hits inside the same line. The whole line as old can.
+                return ResultEnvelope(ok=False, error=(
+                    f"that text appears {hits} times, all on line {at[0]} of '{path}', so it does "
+                    f"not say which one you mean, and nothing was changed. A range or a "
+                    f"neighbouring line cannot pick one inside a single line: send old as the "
+                    f"whole of line {at[0]} (memory_read start_line={at[0]} shows it), with the "
+                    f"change made in new."))
             return ResultEnvelope(ok=False, error=(
                 f"that text appears {hits} times in '{path}' (starting on lines "
                 f"{', '.join(at)}), so it does not say which one you mean, and nothing was "
