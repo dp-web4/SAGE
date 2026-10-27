@@ -10,8 +10,11 @@ HESTIA_GATE_SHARED unset, so being_gate_client resolves it exactly as the live g
 (HESTIA_GATE_SHARED, HESTIA_SHARED_DIR, $HESTIA_HOME/shared, ~/ai-workspace/hestia).
 Each child prints the law dir it loaded and the member's granted_reach with modes; if A
 and B loaded different law dirs or grant sets the replay exits 2 instead of reporting a
-parity, because a diff between two different judges is not a parity measurement. Each tree is judged in its own subprocess, because the two trees import
-different copies of sage.gateway.
+parity, because a diff between two different judges is not a parity measurement. It also
+exits 2 when the grant set is empty in both (unless --allow-empty-grants): zero reach is
+almost always a failed grant lookup, and a parity over it is a parity of an empty law.
+Each tree is judged in its own subprocess, because the two trees import different copies
+of sage.gateway.
 
 Nothing executes: the client is built gate_only, so an allowed intent comes back `pending`.
 `claim_scope` is stubbed so a deny files NO scope request in the being's name; the stub
@@ -119,11 +122,13 @@ def main():
     p.add_argument("--hestia-shared", default=None,
                    help="law dir to judge under. Default: none, so the child resolves it as the daemon does."
                         " Setting it judges under a law the being may not run under")
-    p.add_argument("--member", help="hestia member id when it differs from the instance dir name (cbp: cbp-being in cbp-qwen3.8-distill-4b). Wrong member = no grants = every call denied in both trees")
+    p.add_argument("--member", help="hestia member id when it differs from the instance dir name (cbp: cbp-being in cbp-qwen3.8-distill-4b). A wrong member gets only the floor grants (cbp 10-27: one, shared-context/forum r), not zero, so the empty-reach refusal does not catch it; check the printed grant lines")
     p.add_argument("--model", help="model name for the client; gate_only never calls it, so a missing one only warns")
     p.add_argument("--only", help="comma-separated effectors to replay")
     p.add_argument("--force-local-law", action="store_true",
                    help="judge B with the single gate disabled (A is always as-is)")
+    p.add_argument("--allow-empty-grants", action="store_true",
+                   help="report a parity even when the member has no granted_reach in either tree")
     p.add_argument("--out", help="write per-call rows of both runs here (JSON)")
     p.add_argument("--python", default=sys.executable)
     p.add_argument("--tree"), p.add_argument("--calls"), p.add_argument("--judge-out")
@@ -170,6 +175,15 @@ def main():
             print("  only A: " + " ".join(g), file=sys.stderr)
         for g in sorted(gb - ga):
             print("  only B: " + " ".join(g), file=sys.stderr)
+        return 2
+    # EMPTY REACH IS A LOOKUP FAILURE (legion-claude review of #579, 2026-10-27): _policy_grants()
+    # returns ((), ()) on no mechanism, no snapshot or any exception, and so does judge()'s getattr
+    # fallback for a tree without it. Two trees failing the same way pass the split check
+    # with granted_reach=0 and every call is denied in both: agreement on a wrong law.
+    if not loaded["A"][1] and not a.allow_empty_grants:
+        print(f"REFUSED: granted_reach is empty in both A and B (law={loaded['A'][0]}). Usually a missing"
+              " governance snapshot, a tree without _policy_grants, or a grant lookup that raised; pass"
+              " --allow-empty-grants if the member really has no reach", file=sys.stderr)
         return 2
     A, B = ({r[0]: r for r in runs[x]["rows"]} for x in ("A", "B"))
     matrix = collections.Counter(((A[k][1], A[k][2]), (B[k][1], B[k][2])) for k in calls)
