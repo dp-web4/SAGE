@@ -3,6 +3,8 @@
 cbp-being, 2026-10-10 02:25/02:27Z: line 5 held 'w_true.reshape(1, -1)' twice. The no-range refusal
 said to add the range and keep old as a check; the range branch then said the lines "are not the
 text you gave". Neither remedy could work, and the being journaled a mismatch that was not one."""
+import pytest
+
 from sage.gateway.being_gate_client import BeingIntent
 from sage.gateway.tests.test_being_self import _ALLOW, _disp
 
@@ -74,3 +76,24 @@ def test_an_old_that_holds_a_newline_is_still_an_exact_check_of_the_range():
     env = _edit(d, old="[x]\n", new="[y]\n", start_line=1, end_line=1)
     assert not env.ok and "not the text you gave as old" in env.error, env.error
     assert f.read_text() == before
+
+
+
+@pytest.mark.parametrize("line,old,new", [
+    ("    x = compute(a)\n", "compute", "    x = compute2(a)"),
+    ("result = f(a, b)\n", "f", "result = g(a, b)"),
+])
+def test_a_whole_line_new_with_a_middle_token_old_is_refused_not_spliced(line, old, new):
+    # mcnugget's HOLD on #569: these two went from refused on main to silently corrupted, ok=True
+    d, f = _file(["first\n", line])
+    before = f.read_text()
+    env = _edit(d, old=old, new=new, start_line=2, end_line=2)
+    assert not env.ok and "twice" in env.error, env.error
+    assert f.read_text() == before
+
+
+def test_a_real_middle_token_edit_still_lands():
+    d, f = _file(["first\n", "    x = compute(a)\n"])
+    env = _edit(d, old="compute", new="compute2", start_line=2, end_line=2)
+    assert env.ok, env.error
+    assert f.read_text().splitlines()[1] == "    x = compute2(a)"

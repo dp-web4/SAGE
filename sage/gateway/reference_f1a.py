@@ -1744,7 +1744,12 @@ class ReferenceF1aDispatcher:
             whole = removed.strip() == old.strip()
             if old and removed.rstrip("\n") != old.rstrip("\n") and inner == 1 and not whole:
                 rest = removed.replace(old, "", 1).strip()
-                if len(rest) >= 3 and rest in new:
+                # ...or either SIDE of the line around old (mcnugget's HOLD on #569): a token in the
+                # middle leaves `rest` with a hole (`x = (a)`) that a whole-line new never contains,
+                # so `compute` -> `    x = compute2(a)` spliced to `    x =     x = compute2(a)(a)`, ok.
+                before, _, after = removed.partition(old)
+                sides = [x.strip() for x in (before, after) if len(x.strip()) >= 3]
+                if (len(rest) >= 3 and rest in new) or any(x in new for x in sides):
                     # new carries the rest of the line too: it was meant as the whole line (#393's
                     # doubling, here), so replacing old inside the line would hold that rest twice
                     return ResultEnvelope(ok=False, error=(
