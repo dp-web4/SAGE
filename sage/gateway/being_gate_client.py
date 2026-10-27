@@ -2553,6 +2553,24 @@ def settled_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
     return [os.path.realpath(os.path.join(root, f)) for f in SETTLED_WRITES + (HOME_LOCK,)]
 
 
+def skill_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """Every file a `skill` WRITE touches, all in the being's home (being_skills.own_paths). Listing,
+    reading and searching touch nothing. A name that is not a plain skill name is refused here, before any
+    path is built from it."""
+    a = args or {}
+    if not (str(a.get("body") or "").strip() or str(a.get("description") or "").strip()):
+        return []
+    from sage.gateway.being_skills import NAME, own_paths
+    name = str(a.get("name") or "").strip().lower()
+    if not NAME.match(name):
+        raise ValueError(f"skill: {name!r} is not a skill name (lowercase letters, digits and dashes, 2-40)")
+    root = (ctx or {}).get("memory_root")
+    if not root:
+        raise ValueError("skill: no home to write a skill in")
+    from sage.gateway.reference_f1a import HOME_LOCK   # taken, as memory_write takes it (#544)
+    return [os.path.realpath(os.path.join(root, f)) for f in own_paths(name) + (HOME_LOCK,)]
+
+
 def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
     """The registry refusal, plus the door when the name is a FILE.
 
@@ -2705,6 +2723,11 @@ _REGISTRY = {
     # it is, a write of fixed files in its own home, as identity_edit is.
     "settle":         dict(tool="write_note",   path_args=(),        cmd_arg=None,
                            compose_paths=settled_paths),
+    # skill: list, read or search the skills (fleet ones shipped with SAGE, and the being's own), or write
+    # one of its own under skills/ in its home (being_skills). Reads touch no path the being names; a
+    # write is judged as what it is, a write of fixed files in its own home.
+    "skill":          dict(tool="write_note",   path_args=(),        cmd_arg=None,
+                           compose_paths=skill_paths),
     # say: add a turn to a conversation the being is IN. Bounded by construction, like
     # remember: the being names a conversation id, and the dispatcher refuses any id whose
     # meta does not list it as a participant AND as writable. It cannot create a
@@ -2767,7 +2790,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "pr_read", "web_search", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run", "memory_edit", "camera", "game", "tune", "identity_edit", "settle",
+                            "retire_note", "request_run", "memory_edit", "camera", "game", "tune", "identity_edit", "settle", "skill",
 
 
                             "retire_note", "request_run", "memory_edit", "camera",
@@ -3039,6 +3062,18 @@ _TOOL_SCHEMAS = {
                 "reopen": "optional: 'true' with id removes it",
                 "why": "optional: why you changed it"},
                []),
+    # SKILLS (dp, 2026-10-27: "a 'skills' structure, and membot-type index for them ... model it on your
+    # own skills in claude-code"). The beat lists them, the matching ones first (being_skills.render).
+    "skill": ("Read a skill: a short procedure for a kind of situation. No arguments lists them; name reads "
+              "one; query searches them. To write your own, give name, description and body (and when: "
+              "words that show up when it applies); writing it again replaces it, the old one is logged.",
+              {"name": "the skill, e.g. getting-code-run",
+               "query": "optional: words to search all skills for",
+               "description": "to write: what it is for and when it applies",
+               "when": "to write, optional: comma-separated words that appear when it applies",
+               "body": "to write: the procedure",
+               "why": "optional: kept with the version"},
+              []),
     "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
                     "is renamed to <name>.retired-<date> with a dated header saying why; nothing "
                     "is lost and you can still read it. Use it when something you wrote has been "
