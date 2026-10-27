@@ -159,11 +159,39 @@ CORTEX_CAMERA = (
                  "(default scratch/camera/last-frame.jpg)"})
 
 
-def here(cfg: Optional[dict]) -> Dict[str, tuple]:
-    """{verb: (description, params)} that replace the registry text on THIS seat (see CORTEX_CAMERA)."""
+# THE SAME FAULT ON A MAC (#575's follow-up). A Mac's camera has no device node: _do_camera sets device to
+# "avfoundation" and never reads `device`; camera_command picks the camera by NAME (platform_av.mac_camera).
+# The registry text told McNugget's being the ffmpeg/device-node story every beat. Measured on mcnugget-being,
+# 1,230 beats to 2026-10-27: 0 camera calls, 7,005 mentions of the Linux node in 234 beats, 191 in its todo
+# and 194 in its journal, a grant asked for and held on a node this body cannot have.
+MAC_CAMERA = (
+    "Take ONE frame from this Mac's camera, into your own scratch. A Mac's camera has no device node: the "
+    "seat finds the attached camera by its name and captures one JPEG after a short warm-up. The JPEG lands "
+    "at out_path (default scratch/camera/last-frame.jpg, replaced each time) and, if it lands under "
+    "scratch/camera/, is shown to you at your next beat. If no camera is attached, macOS has not given the "
+    "seat the camera, or it cannot be read (for example just unplugged), it says which and writes nothing.",
+    {"out_path": "optional: where the JPEG lands, a plain path inside your home "
+                 "(default scratch/camera/last-frame.jpg)"})
+
+
+def _av_backend() -> str:
+    """platform_av.backend(): which capture stack this seat's camera and microphone use. "" if unknown."""
+    try:
+        from sage.embodiment import platform_av
+        return platform_av.backend()
+    except Exception:
+        return ""
+
+
+def here(cfg: Optional[dict], backend: Optional[str] = None) -> Dict[str, tuple]:
+    """{verb: (description, params)} that replace the registry text on THIS seat (see CORTEX_CAMERA,
+    MAC_CAMERA). `backend` is platform_av.backend() unless given: the same test _do_camera makes, so the
+    text and the act cannot disagree about which camera this is."""
     out: Dict[str, tuple] = {}
     if (cfg or {}).get("camera_source") == "cortex":
         out["camera"] = CORTEX_CAMERA
+    elif (backend if backend is not None else _av_backend()) == "avfoundation":
+        out["camera"] = MAC_CAMERA
     return out
 
 
