@@ -1443,7 +1443,8 @@ def test_a_think_only_generate_that_stopped_cleanly_also_retries_without_thinkin
                             "eval_count": 20, "message": {}}}
 
     llm = FakeLLM()
-    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+    # tools=[]: this fake's num_ctx (8,192) cannot hold the full registry's schemas, which the step-1 preflight now counts (#490); the test is about how a stop is classified, and calls no tool
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}], tools=[])
 
     assert r.reply == "answered", "a think-only stop must not be recorded as the being's silence"
     assert len(seen) == 2, f"expected exactly one retry, got {len(seen)} generates"
@@ -1479,7 +1480,8 @@ def test_an_empty_stop_with_no_thinking_is_left_alone():
                             "message": {"content": "", "thinking": ""}}}
 
     llm = FakeLLM()
-    run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+    # tools=[]: this fake's num_ctx (8,192) cannot hold the full registry's schemas, which the step-1 preflight now counts (#490); the test is about how a stop is classified, and calls no tool
+    run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}], tools=[])
     assert len(seen) == 1, f"an empty stop with no thinking must not be retried, got {len(seen)}"
 
 
@@ -1716,7 +1718,8 @@ def test_a_length_stop_names_the_limit_it_actually_hit(prompt, evalc, cause, say
                     "raw": {"done_reason": "stop", "prompt_eval_count": prompt + 50, "eval_count": 20,
                             "message": {}}}
 
-    r = run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(), [{"role": "user", "content": "hi"}])
+    # tools=[]: this fake's num_ctx (8,192) cannot hold the full registry's schemas, which the step-1 preflight now counts (#490); the test is about how a stop is classified, and calls no tool
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(), [{"role": "user", "content": "hi"}], tools=[])
     assert len(seen) == 2
     assert says in seen[1] and never not in seen[1], seen[1]
     assert r.generates[0]["retry_cause"] == cause
@@ -1817,7 +1820,9 @@ def test_the_answer_reserve_is_the_beings_parameter(tmp_path):
         sent.clear()
         c = _client(OK_DISPATCH)
         c.memory_root = str(tmp_path)
-        r = run_ollama_tool_turn(c, FakeLLM(), seed())
+        # carrier: tools pinned (the carrier offers 38 verbs, 31.5k schema chars, vs main's 37 / 29.3k);
+        # since #560 the step-1 preflight counts the schemas sent, and this test is not about them
+        r = run_ollama_tool_turn(c, FakeLLM(), seed(), tools=[])
         return sent[0], r
     default, _ = run({})
     larger, r = run({"answer_reserve": 12288})

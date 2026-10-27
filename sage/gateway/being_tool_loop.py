@@ -737,7 +737,12 @@ _CPT = 2.9
 # real). This fallback is reached only before the server has counted anything, and it is set
 # from the same measurement rather than the disproven one: ~11,700 schema chars plus ~1,200
 # of template.
+# Since #490 the tool loop's preflight measures the schemas it actually sends (run_ollama_tool_turn:
+# `uncounted`), because this constant went stale the same way (12,900 assumed; 26,649 real at 35
+# verbs). It remains only as _est_tokens' fallback for a caller with no tools list in hand.
 _UNCOUNTED_CHARS = 12900
+# The chat template's share of _UNCOUNTED_CHARS: what a prompt carries beyond messages and schemas.
+_TEMPLATE_CHARS = 1200
 
 
 def _est_tokens(chars_now: int, measured) -> float:
@@ -1564,6 +1569,13 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     except Exception:
         reserve = _ANSWER_RESERVE
     tools = tools if tools is not None else ollama_tools()
+    # THE SCHEMAS THIS TURN ACTUALLY SENDS (#490). Step 1's preflight used _UNCOUNTED_CHARS, a constant
+    # set when the schemas were ~11,700 chars; by 2026-10-19 the 35 verbs measured 26,649 (full) and
+    # 17,781 (brief), so the preflight under-counted step 1 by up to ~4.9k tokens -- the direction the
+    # guard exists to prevent (a seed that passes, then is cut by the server). The tools list is in
+    # hand here, so it is measured, as heartbeat._schema_chars_for measures it (len of the JSON). In
+    # the JSON act form no schemas are sent with the request (_json_act), so only the template counts.
+    uncounted = (len(json.dumps(tools)) if act_form != "json" else 0) + _TEMPLATE_CHARS
     # Keep the think block per generate: when a small model narrates instead of acting,
     # whether it decided not to call or failed to format the call is only visible here.
     thoughts: List[str] = []
@@ -1732,9 +1744,9 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 _est, _cause = _est_tokens(_convo_chars(msgs), measured), "over_window"
                 if not _same_tail and _tail == _TAIL_USER:
                     # anchored on a count made WITHOUT the tool schemas, which this prompt carries
-                    _est = max(_est, (_convo_chars(msgs) + _UNCOUNTED_CHARS) / PREFLIGHT_CPT)
+                    _est = max(_est, (_convo_chars(msgs) + uncounted) / PREFLIGHT_CPT)
             else:
-                _est, _cause = (_convo_chars(msgs) + _UNCOUNTED_CHARS) / PREFLIGHT_CPT, "preflight"
+                _est, _cause = (_convo_chars(msgs) + uncounted) / PREFLIGHT_CPT, "preflight"
             if _est > _ctx - WINDOW_SEND_MARGIN:
                 return _window_full(_cause, int(_est), _ctx)
         try:

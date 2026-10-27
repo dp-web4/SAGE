@@ -1743,17 +1743,35 @@ def sandbox_reach(effector: str, args: dict, ctx: Optional[dict] = None) -> List
     run on Legion (SAGE #441 replay, 2026-10-25: 271/271 on /usr/bin/prlimit) and, before that,
     every check and game (miniforge3, 2026-10-05). What the law must still see is what a grant
     is about: for `run`, every grant the box mounts (run_grant_mounts) and the worktree; for
-    `check`, the worktree it binds. The sources a run reads come in through compose_paths."""
+    `check`, the worktree it binds. The sources a run reads come in through compose_paths.
+
+    These are the paths judged in the verb's own modes (`run`: re). A mount the box binds
+    READ-ONLY is not among them: it is judged as the read it is (sandbox_read_mounts), because
+    an r-only grant can never satisfy re, and every member holding one (the forum/escalations
+    floor, by default) could run nothing (cbp-being, SAGE #557). A mask (an empty read-only
+    tmpfs over a path the being may not read) exposes nothing and is judged as nothing."""
     import os
     ctx = ctx or {}
     out: List[str] = []
     if effector == "run":
         mounts, _skipped, _mask = run_grant_mounts(ctx)
-        out += [m[0] for m in mounts]
+        out += [m[0] for m in mounts if m[1] != "mask" and m[2] == "rw"]
     wt = ctx.get("worktree")
     if wt and os.path.isdir(wt):
         out.append(os.path.realpath(wt))
     return list(dict.fromkeys(out))
+
+
+def sandbox_read_mounts(effector: str, ctx: Optional[dict] = None) -> List[str]:
+    """The roots a sandboxed verb's box binds READ-ONLY (`--ro-bind`): judged by the gate as a read,
+    in their own event, so each mount is still in front of Gate 1b (Nova's hold on #547) but in the
+    mode the box actually gives it (SAGE #557). The bind is the enforcement of the missing w and d;
+    e is not enforceable on a bind (an interpreter in the box reads a file and runs what it read),
+    so r is the whole of what the mount uses."""
+    if effector != "run":
+        return []
+    mounts, _skipped, _mask = run_grant_mounts(ctx or {})
+    return list(dict.fromkeys(m[0] for m in mounts if m[1] != "mask" and m[2] == "ro"))
 
 
 def _run_command_seatbelt(interp: str, stage: str, script: str, worktree: Optional[str],
@@ -3369,6 +3387,62 @@ def _pattern_collision_hint(intent: "BeingIntent", reason: str) -> str:
     return ""
 
 
+#: The home records a being names by bare name and most often roots somewhere else.
+_MISROOTED_RECORDS = ("journal.md", "todo.md")
+
+
+def _misrooted_home_file(intent: "BeingIntent", memory_root, policy_grants) -> str:
+    """The refusal, or "", for a home record (journal.md, todo.md) named at a path that is not the
+    home's and that no grant reaches: refused HERE, before the law, so the gate opens no scope
+    request and no peer is woken to rule on it (SAGE #506).
+
+    Measured on cbp-being 2026-10-21 08:40Z: its journal entry landed in its real journal.md,
+    then it re-sent the same text to /home/dp/journal.md. The gate denied it (mrh.path) and
+    opened scope-537ea765b120 with a peer-decide invite, while the refusal the being read already
+    said "no grant is needed for this" (_home_hint) and SAGE's escalate side had called it moot.
+    A seat had to refuse a request nobody needed. Earlier (10-20) two such requests were GRANTED
+    once by a peer, uselessly: the content had already landed.
+
+    Only a refusal, never an allow, so it can only narrow the law. And only where the gate would
+    refuse too: outside the home, outside every root the member's policy grants (fetched as the
+    law holds them; with no snapshot this stands aside and the gate decides), and outside the temp
+    root the gate admits. Reroute was the alternative and was rejected: the measured retry had
+    already landed, so writing it again would have doubled the entry."""
+    spec = _REGISTRY.get(intent.effector) or {}
+    if "path" not in spec.get("path_args", ()) or not memory_root:
+        return ""
+    raw = str((intent.args or {}).get("path", "")).strip()
+    name = os.path.basename(raw.rstrip("/"))
+    if name not in _MISROOTED_RECORDS or not os.path.isabs(os.path.expanduser(raw)):
+        return ""
+    home = os.path.realpath(str(memory_root))
+    target = os.path.realpath(os.path.expanduser(raw))
+    if target == home or target.startswith(home + os.sep):
+        return ""
+    import tempfile
+    for t in {"/tmp", os.path.realpath(tempfile.gettempdir())}:
+        if target == t or target.startswith(t.rstrip(os.sep) + os.sep):
+            return ""
+    try:
+        reach = policy_grants()[1]
+    except Exception:
+        return ""
+    if not reach:
+        return ""
+    for item in reach:
+        try:
+            root = os.path.realpath(os.path.expanduser(str(item[0])))
+            recursive = bool(item[1])
+        except (TypeError, IndexError):
+            continue
+        if target == root or (recursive and target.startswith(root.rstrip(os.sep) + os.sep)):
+            return ""                                   # a grant reaches it: the law decides
+    return (f"'{raw}' is not your {name}: yours is at {os.path.join(home, name)}, and a bare "
+            f"'{name}' always means that one. Nothing was done, and no scope request was opened: "
+            f"no grant is needed for your own {name}. If you already wrote this there, it is in "
+            f"place; if not, send it again with path '{name}'.")
+
+
 def same_path_in_reach(p, reach) -> list:
     """Where the path `p` asks for already exists under a recursive grant, as sorted
     [(path, root)]; [] if nowhere.
@@ -3933,6 +4007,10 @@ class BeingGateClient:
         if closed:
             return GatewayVerdict("deny", "trial.game_source_closed", stage="trial", reason=closed,
                                   command=judged_command)
+        misrooted = _misrooted_home_file(intent, getattr(self, "memory_root", None), self._policy_grants)
+        if misrooted:
+            return GatewayVerdict("deny", "sage.home_file_misrooted", stage="client", reason=misrooted,
+                                  command=judged_command)
         # --- Single gate (#934): the shim contract. The registry stage above is harness
         # syntax (which verbs exist); everything law-bearing happens in decide(). ---
         sg = getattr(self, "_single_gate", None)
@@ -4011,9 +4089,9 @@ class BeingGateClient:
                     else:
                         tool_input["command"] = judged_command
                 derived = list(resolved)          # what compose_paths added after the path args
+                box_ctx = self._compose_ctx(intent.effector) if boxed else None
                 if boxed:
-                    derived += sandbox_reach(intent.effector, intent.args,
-                                             self._compose_ctx(intent.effector))
+                    derived += sandbox_reach(intent.effector, intent.args, box_ctx)
                 if derived:
                     prior = tool_input.get("paths")
                     prior = [prior] if isinstance(prior, str) else list(prior or [])
@@ -4026,6 +4104,27 @@ class BeingGateClient:
                 available = getattr(d, "verdict_available", True)
                 dec = d.decision if (available and d.decision in ("allow", "warn", "deny")) else "deny"
                 rule = d.rule or ("" if available else "gate.no_verdict")
+                reason = getattr(d, "reason", "") or ""
+                # A READ-ONLY MOUNT IS A READ (SAGE #557, cbp-being 2026-10-27). Judged with the run's
+                # own modes (re), an r-only floor grant the box binds --ro-bind refused every run:
+                # "narrowed to r; this act needs re". Each such mount is judged in its own event as
+                # the read the box allows, so the law still sees it (Nova's hold on #547); a refusal
+                # there refuses the run. Only after the act itself is allowed: a deny is already final.
+                if boxed and dec != "deny":
+                    ro = sandbox_read_mounts(intent.effector, box_ctx)
+                    if ro:
+                        rd = sg.decide(sg.GateEvent(
+                            tool=_REGISTRY["memory_read"]["tool"], tool_input={"paths": ro},
+                            cwd=self.workspace, session_id=getattr(self, "host_session_id", None),
+                            raw={"effector": intent.effector, "read_only_mounts": ro}), gp)
+                        r_ok = getattr(rd, "verdict_available", True)
+                        r_dec = rd.decision if (r_ok and rd.decision in ("allow", "warn", "deny")) else "deny"
+                        if r_dec == "deny":
+                            dec, rule = "deny", rd.rule or ("" if r_ok else "gate.no_verdict")
+                            reason = ("a directory this run's sandbox would show it read-only: "
+                                      + (getattr(rd, "reason", "") or "refused"))
+                        elif r_dec == "warn" and dec == "allow":
+                            dec, rule, reason = "warn", rd.rule or rule, getattr(rd, "reason", "") or reason
                 # THE GRANTS RIDE ON AN ALLOW, AS THEY DO ON THE LEGACY PATH. The dispatcher's own
                 # confinement (reference_f1a._safe_path via `granted`; hestia_dispatch
                 # _granted_reach_of via `granted_reach`) reads them off the verdict; without them
@@ -4034,7 +4133,7 @@ class BeingGateClient:
                 # file the gate ALLOWED was refused "outside your reach", and the being worked
                 # around it with scratch scripts taking the path as `data`. A deny carries none.
                 granted, granted_reach = self._policy_grants() if dec != "deny" else ((), ())
-                return GatewayVerdict(dec, rule, getattr(d, "reason", "") or ("ok" if dec != "deny" else ""),
+                return GatewayVerdict(dec, rule, reason or ("ok" if dec != "deny" else ""),
                                       innate=False, stage="single-gate", command=judged_command,
                                       granted=granted, granted_reach=granted_reach,
                                       reach_rule=self._reach_rule())
@@ -4216,7 +4315,8 @@ class BeingGateClient:
             v = _dc.replace(v, witness_id=wid)      # GatewayVerdict is frozen
             err = f"{v.rule}: {v.reason}"
             err += _pattern_collision_hint(intent, v.reason or "")
-            err += _home_hint(intent, self._dispatcher)
+            if v.rule != "sage.home_file_misrooted":       # that reason already says it
+                err += _home_hint(intent, self._dispatcher)
             # First, not appended: the gate's text runs to a grant list and a pending-request
             # note, and the being acted on those, not on anything after them.
             if intent.effector in _READS_A_PATH:

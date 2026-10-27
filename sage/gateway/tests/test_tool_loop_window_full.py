@@ -83,6 +83,39 @@ def test_a_seed_the_size_of_a_real_fitted_one_is_still_sent():
     assert len(llm.sent) == 1 and r.reply == "done" and r.window_full is None
 
 
+def _seed_between_the_constant_and_the_real_schemas(llm):
+    """Message chars that fit under the old constant but not under the schemas the turn really sends."""
+    import json
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import _TEMPLATE_CHARS
+    line = (llm.num_ctx - WINDOW_SEND_MARGIN) * PREFLIGHT_CPT       # chars the preflight lets through
+    real = len(json.dumps(ollama_tools())) + _TEMPLATE_CHARS
+    assert real > _UNCOUNTED_CHARS, "the registry's schemas outgrew the old constant (#490)"
+    return int(line - (real + _UNCOUNTED_CHARS) / 2), real
+
+
+def test_step_one_is_judged_on_the_schemas_it_actually_sends():
+    # #490 (McNugget, 2026-10-19): 35 verbs measured 26,649 schema chars, the preflight assumed 12,900.
+    # A seed the old constant would have sent is refused when the real schemas do not fit.
+    llm = _LLM([{"content": "should not be reached", "tool_calls": []}])
+    chars, real = _seed_between_the_constant_and_the_real_schemas(llm)
+    seed = [{"role": "system", "content": "s" * chars}, {"role": "user", "content": "go"}]
+    assert (chars + 2 + _UNCOUNTED_CHARS) / PREFLIGHT_CPT < llm.num_ctx - WINDOW_SEND_MARGIN, "old: sent"
+    r = run_ollama_tool_turn(_Client(), llm, seed, max_steps=2)          # tools=None: the whole registry
+    assert llm.sent == [] and r.window_full and r.window_full["cause"] == "preflight"
+    assert r.window_full["estimated_prompt"] == int((chars + 2 + real) / PREFLIGHT_CPT)
+
+
+def test_the_json_act_form_counts_no_schemas_because_it_sends_none():
+    # _json_act sends no tools with the request: the same seed is judged on messages + template only.
+    from sage.gateway.being_tool_loop import _TEMPLATE_CHARS
+    llm = _LLM([{"content": "should not be reached", "tool_calls": []}])
+    seed = [{"role": "system", "content": "s" * 60000}, {"role": "user", "content": "go"}]
+    r = run_ollama_tool_turn(_Client(), llm, seed, max_steps=2, act_form="json")
+    assert r.window_full and r.window_full["cause"] == "preflight"
+    assert r.window_full["estimated_prompt"] == int((60002 + _TEMPLATE_CHARS) / PREFLIGHT_CPT)
+
+
 def test_the_preflight_errs_high_against_every_ratio_measured_on_this_being():
     # 3.026..3.152 chars/token over 60 beats: an estimate at PREFLIGHT_CPT over-counts them all.
     assert PREFLIGHT_CPT < 3.026

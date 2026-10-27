@@ -71,6 +71,10 @@ def test_run_sandbox_denies_the_seat_falsified_from_inside(tmp_path):
         f"print('being-home:', 'REACHED' if os.path.isdir({str(home)!r}) else 'denied')\n"
         f"print('seat-checkout:', 'REACHED' if os.path.isdir({checkout!r}) else 'denied')\n"
         "try:\n"
+        f"    os.listdir({checkout!r}); print('seat-checkout-contents: REACHED')\n"
+        "except OSError:\n"
+        "    print('seat-checkout-contents: denied')\n"
+        "try:\n"
         "    socket.create_connection(('1.1.1.1', 53), timeout=3); print('network: REACHED')\n"
         "except Exception as e:\n"
         "    print('network: denied', type(e).__name__)\n"
@@ -80,9 +84,17 @@ def test_run_sandbox_denies_the_seat_falsified_from_inside(tmp_path):
     r = d._do_run(BeingIntent("run", {"path": "scratch/falsify.py"}))
     assert r.ok, r.error
     out = r.result["stdout"]
-    for line in ("operator-private: denied", "being-home: denied", "seat-checkout: denied",
+    for line in ("operator-private: denied", "being-home: denied", "seat-checkout-contents: denied",
                  "secret-in-environment: denied", "network: denied"):
         assert line in out, out
+    # WHERE THE INTERPRETER LIVES INSIDE THE CHECKOUT (a venv at <checkout>/.venv, McNugget's layout), the
+    # checkout's own path is an ancestor of the interpreter, and the run must be able to resolve that path
+    # (Seatbelt: without stat on it, python's realpath of its own bin/ fails and nothing runs; bwrap creates
+    # the same parents when it binds the interpreter). So the path's EXISTENCE is not hidden there; its
+    # contents, asserted above, still are. Elsewhere the checkout is not even seen to exist.
+    interp_inside = (os.path.realpath(sys.prefix) + os.sep).startswith(os.path.realpath(checkout) + os.sep)
+    if not interp_inside:
+        assert "seat-checkout: denied" in out, out
     assert "writable: ['falsify.py']" in out, "only the staged copy is in there: " + out
 
 
@@ -730,7 +742,9 @@ def _setup_script(d, parser_rc=0, parser_unloads=True, profile=None):
     fake = d / "fakebin"
     fake.mkdir()
     (fake / "id").write_text("#!/bin/sh\necho 0\n")
-    drop = f"sed -i '/^bwrap /d' {lst}" if parser_unloads else ":"
+    # grep + mv, not `sed -i`: BSD sed (macOS) takes the next argument as -i's backup suffix, so the stub
+    # failed there ("invalid command code") and this test failed on every Mac seat
+    drop = (f"grep -v '^bwrap ' {lst} > {lst}.new; mv {lst}.new {lst}" if parser_unloads else ":")
     (fake / "apparmor_parser").write_text(
         f"#!/bin/sh\necho \"$@\" >> {log}\n"
         f"if [ \"$1\" = -R ]; then {drop}; exit {parser_rc}; fi\nexit 0\n")

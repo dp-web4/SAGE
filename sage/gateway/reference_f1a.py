@@ -67,6 +67,19 @@ SEAT_OWNED = ("entrustment.md",)
 # being writes starts with "identity." (its own words are self.json).
 GOVERNANCE_OWNED_PREFIX = "identity."
 GOVERNANCE_OWNED = ("instance.json",)
+# THE RECORD NAMES THEMSELVES ARE REFUSED IN EVERY DIRECTORY (#552). A home is recognised by its records
+# (_looks_like_a_home), so a granted directory that holds none yet is not one, and a being could plant
+# `identity.json` (choosing `machine`, so its own arbiter) before a home is provisioned there. These
+# exact names, and their tmp/retired forms, are never a being's to write anywhere. The broader
+# `identity.` prefix stays tied to homes: `notes/identity.md` is a being writing about itself.
+# Compared casefolded (cbp review of #565): on a case-insensitive FS (WSL drvfs, default APFS)
+# `Identity.json` is the file the readers open as `identity.json`.
+GOVERNANCE_RECORD_NAMES = ("identity.json", "identity.sealed", "identity.attest.json", "instance.json")
+
+
+def _is_governance_record_name(name: str) -> bool:
+    name = name.casefold()
+    return any(name == n or name.startswith(n + ".") for n in GOVERNANCE_RECORD_NAMES)
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
@@ -121,7 +134,8 @@ def _binary_said(shown: str, p: Path, kind: str) -> str:
     return line + "]"
 
 
-def _named_file_stamps(content: str, root: Path, written: Path) -> str:
+def _named_file_stamps(content: str, root: Path, written: Path,
+                       granted: tuple = (), readable=None) -> str:
     """For a record write (journal, todo, a note): when each code file it names last changed.
 
     MEASURED 2026-09-22 over cbp-being's 114 beats on 09-21/22 (sage/scripts/being_act_ledger.py):
@@ -134,8 +148,19 @@ def _named_file_stamps(content: str, root: Path, written: Path) -> str:
     stamped where the claim is written, that the being can compare with what it just wrote.
     Whether that changes what it writes is a separate, open measurement (rerun the ledger).
 
-    Reads mtimes only, executes nothing, and never looks outside the home: a name that
-    resolves outside it is treated as not found. A bare name is looked for at the top of the
+    Reads mtimes only and executes nothing. A name is looked for in the home and, when the
+    caller passes them, in the being's granted roots (`granted`, each checked by `readable`, the
+    same reach memory_read uses), and nowhere else: a file the being cannot read is never
+    stamped, so the receipt is no oracle for what lies outside its reach.
+
+    A MISS SAYS NOTHING (SAGE #396). "x.py was not found in your home" was read as "x.py does not
+    exist" three times on cbp-being, the scope ("in your home") dropped each time: 2026-10-08 "the
+    file itself was never persisted to disk" (it was in scratch/); 2026-10-26 16:01Z a pending
+    scope request kept for a file in its own governance grant; 17:40Z "the file was not found at
+    the expected path. I need to write to the correct path", then a write_note of a model-written
+    gate core to the gate core's path, which only the governance closure refused. A miss gives the
+    being nothing to act on, and the act it reads into one can be that. So a miss is omitted. A
+    bare name is looked for at the top of the
     home, in notes/ and in scratch/, and a miss says exactly that, not "no such file" (the 09-28
     review found a bare train.py living in experiments/ reported as absent). scratch/ is where
     request_run files live: on 2026-10-08 a journal naming test-encoder-only.py got "not found"
@@ -159,16 +184,30 @@ def _named_file_stamps(content: str, root: Path, written: Path) -> str:
             if rc.is_file() and rc != written.resolve():
                 hit = rc
                 break
-        if hit is not None and hit in seen:
-            continue
-        if hit is None:
-            where = ("at the top of your home, in notes/ or in scratch/" if "/" not in name
-                     else "in your home")
-            out.append(f"{name} was not found {where}")
+        if hit is None and "/" in name and readable is not None:
+            # in a grant: absolute as written, or relative to a granted root, or to the root's
+            # parent when the name starts with the root's own name (`governance/hestia/...` under
+            # a grant on <ws>/governance), the spelling the seat and the being both use
+            first = Path(name).parts[0]
+            g_cand = ([Path(name)] if os.path.isabs(name) else
+                      [g / name for g in granted] + [g.parent / name for g in granted if g.name == first])
+            for c in g_cand:
+                try:
+                    rc = c.resolve()
+                except OSError:
+                    continue
+                if rc.is_file() and rc != written.resolve() and readable(rc):
+                    hit = rc
+                    break
+        if hit is None or hit in seen:
             continue
         t = datetime.fromtimestamp(hit.stat().st_mtime, timezone.utc)
         seen.add(hit)
-        out.append(f"{hit.relative_to(home)} was last changed at {t:%Y-%m-%d %H:%M} UTC")
+        try:
+            shown = f"{hit.relative_to(home)}"
+        except ValueError:
+            shown = f"{hit} (in your grant)"
+        out.append(f"{shown} was last changed at {t:%Y-%m-%d %H:%M} UTC")
     return (" Files this names: " + "; ".join(out) + ".") if out else ""
 
 
@@ -1144,7 +1183,10 @@ class ReferenceF1aDispatcher:
         # written by any generic verb, in ANY home: a grant that ever reached another being's home
         # must not make that home's records writable either (_looks_like_a_home).
         _home = writing and (p.parent == self.memory_root or _looks_like_a_home(p.parent))
-        if _home and (p.name in GOVERNANCE_OWNED or p.name.startswith(GOVERNANCE_OWNED_PREFIX)):
+        # SAGE #552/#565 (main): the record names themselves are refused in EVERY directory, so a
+        # record cannot be planted where no home is yet; the broad prefix stays tied to homes.
+        if ((writing and _is_governance_record_name(p.name))
+                or _home and (p.name in GOVERNANCE_OWNED or p.name.startswith(GOVERNANCE_OWNED_PREFIX))):
             raise ValueError(
                 f"{p.name} is a governance record: it says who you are to the society (your "
                 "id, your machine, which seat hears your escalations, your trust ceiling), so "
@@ -2384,7 +2426,10 @@ class ReferenceF1aDispatcher:
             result += where_line + "."
         result += repeat + _python_status(p)
         if p.suffix != ".py":
-            result += _named_file_stamps(content, self.memory_root, p)
+            result += _named_file_stamps(
+                content, self.memory_root, p,
+                granted=tuple(Path(r).resolve() for r, _rec in self._reach_pairs()),
+                readable=self._within_reach)
         if _rerouted:
             # THE REROUTE IS NEVER SILENT (main): the friction is gone, the fact is not hidden.
             rel = p.relative_to(self.memory_root)

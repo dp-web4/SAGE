@@ -102,7 +102,11 @@ def test_generate_marks_the_floor_from_the_servers_own_count(tmp_path):
                             "eval_count": 5, "message": {}}}
     c = _client(OK_DISPATCH)
     c.memory_root = str(tmp_path)
-    r = btl.run_ollama_tool_turn(c, LLM(), [{"role": "user", "content": "go " + "x" * 400}], max_steps=20)
+    # carrier: tools pinned (the carrier offers 38 verbs, 31.5k schema chars, vs main's 37 / 29.3k);
+    # since #560 the step-1 preflight counts the schemas sent, and this test is not about them
+    from sage.gateway.being_gate_client import ollama_tools
+    r = btl.run_ollama_tool_turn(c, LLM(), [{"role": "user", "content": "go " + "x" * 400}], max_steps=20,
+                                 tools=ollama_tools(["witness"]))
     assert any(i.get("nudge") == "floor" for i in r.interjected), r.interjected
     assert r.handoff == btl.HANDOFF_NOTE, r.interjected
     assert len(seen) <= 6
