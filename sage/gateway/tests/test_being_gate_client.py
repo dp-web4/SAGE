@@ -1096,11 +1096,13 @@ def _line_bind_sources(line):
     return out
 
 
-def _assert_every_bind_is_judged_or_plumbing(ev):
+def _assert_every_bind_is_judged_or_plumbing(calls):
+    # every decide() call of the act counts: a read-only mount is judged in its own read event (#557)
     import sys
     from sage.gateway.being_gate_client import STAGE_ROOT
-    line = ev["egress"][-1]
-    judged = set(ev["tool_input"].get("paths") or [])
+    events = [c[0] for c in calls]
+    line = next(e for e in events if e.get("egress"))["egress"][-1]
+    judged = {p for e in events for p in (e["tool_input"].get("paths") or [])}
     interp = os.path.dirname(os.path.dirname(sys.executable))
     plumbing = {"/usr", "/lib", "/lib64", "/bin", "/etc/alternatives", interp}
     for src in _line_bind_sources(line):
@@ -1118,12 +1120,15 @@ def test_every_bind_a_real_run_line_makes_is_judged_or_is_the_boxs_own(tmp_path,
     (home / "scratch" / "s.py").write_text("print(1)\n")
     v = c.gate(BeingIntent("run", {"path": "scratch/s.py", "data": [str(wt / "in.csv")]}))
     assert v.decision == "allow", v
-    ev = calls[-1][0]
+    assert len(calls) == 2, "the act, then its read-only mounts as a read (#557)"
+    ev, rd = calls[0][0], calls[1][0]
     assert "command" not in ev["tool_input"]
-    _assert_every_bind_is_judged_or_plumbing(ev)
+    _assert_every_bind_is_judged_or_plumbing(calls)
     judged = ev["tool_input"]["paths"]
-    for p in (home / "scratch" / "s.py", wt / "in.csv", rw, ro, wt):
+    for p in (home / "scratch" / "s.py", wt / "in.csv", rw, wt):
         assert os.path.realpath(p) in judged, (p, judged)
+    assert os.path.realpath(ro) not in judged, "an r-only mount is not judged as re"
+    assert rd["tool"] == "read_file" and rd["tool_input"]["paths"] == [os.path.realpath(ro)], rd
 
 
 def test_a_symlink_in_the_home_is_judged_at_its_target_not_at_the_link(tmp_path, monkeypatch):
@@ -1141,7 +1146,7 @@ def test_a_symlink_in_the_home_is_judged_at_its_target_not_at_the_link(tmp_path,
     judged = ev["tool_input"]["paths"]
     assert os.path.realpath(out / "other.py") in judged, judged
     assert os.path.realpath(out / "target.txt") in judged, judged
-    _assert_every_bind_is_judged_or_plumbing(ev)
+    _assert_every_bind_is_judged_or_plumbing(calls)
 
 
 @pytest.mark.xfail(strict=True, reason="pre-existing (on main too): the worktree-rooting block runs "
@@ -1164,7 +1169,7 @@ def test_a_grant_that_is_a_symlink_is_not_bound_so_nothing_unjudged_enters_the_b
     ev = calls[-1][0]
     binds = _line_bind_sources(ev["egress"][-1])
     assert str(real) not in binds and str(link) not in binds, binds
-    _assert_every_bind_is_judged_or_plumbing(ev)
+    _assert_every_bind_is_judged_or_plumbing(calls)
 
 
 @pytest.mark.parametrize("data", [["--bind"], ["a b"], ["../x.md"], ["/etc/hostname"],

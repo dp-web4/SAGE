@@ -1653,17 +1653,35 @@ def sandbox_reach(effector: str, args: dict, ctx: Optional[dict] = None) -> List
     run on Legion (SAGE #441 replay, 2026-10-25: 271/271 on /usr/bin/prlimit) and, before that,
     every check and game (miniforge3, 2026-10-05). What the law must still see is what a grant
     is about: for `run`, every grant the box mounts (run_grant_mounts) and the worktree; for
-    `check`, the worktree it binds. The sources a run reads come in through compose_paths."""
+    `check`, the worktree it binds. The sources a run reads come in through compose_paths.
+
+    These are the paths judged in the verb's own modes (`run`: re). A mount the box binds
+    READ-ONLY is not among them: it is judged as the read it is (sandbox_read_mounts), because
+    an r-only grant can never satisfy re, and every member holding one (the forum/escalations
+    floor, by default) could run nothing (cbp-being, SAGE #557). A mask (an empty read-only
+    tmpfs over a path the being may not read) exposes nothing and is judged as nothing."""
     import os
     ctx = ctx or {}
     out: List[str] = []
     if effector == "run":
         mounts, _skipped, _mask = run_grant_mounts(ctx)
-        out += [m[0] for m in mounts]
+        out += [m[0] for m in mounts if m[1] != "mask" and m[2] == "rw"]
     wt = ctx.get("worktree")
     if wt and os.path.isdir(wt):
         out.append(os.path.realpath(wt))
     return list(dict.fromkeys(out))
+
+
+def sandbox_read_mounts(effector: str, ctx: Optional[dict] = None) -> List[str]:
+    """The roots a sandboxed verb's box binds READ-ONLY (`--ro-bind`): judged by the gate as a read,
+    in their own event, so each mount is still in front of Gate 1b (Nova's hold on #547) but in the
+    mode the box actually gives it (SAGE #557). The bind is the enforcement of the missing w and d;
+    e is not enforceable on a bind (an interpreter in the box reads a file and runs what it read),
+    so r is the whole of what the mount uses."""
+    if effector != "run":
+        return []
+    mounts, _skipped, _mask = run_grant_mounts(ctx or {})
+    return list(dict.fromkeys(m[0] for m in mounts if m[1] != "mask" and m[2] == "ro"))
 
 
 def _run_command_seatbelt(interp: str, stage: str, script: str, worktree: Optional[str],
@@ -3820,9 +3838,9 @@ class BeingGateClient:
                     else:
                         tool_input["command"] = judged_command
                 derived = list(resolved)          # what compose_paths added after the path args
+                box_ctx = self._compose_ctx(intent.effector) if boxed else None
                 if boxed:
-                    derived += sandbox_reach(intent.effector, intent.args,
-                                             self._compose_ctx(intent.effector))
+                    derived += sandbox_reach(intent.effector, intent.args, box_ctx)
                 if derived:
                     prior = tool_input.get("paths")
                     prior = [prior] if isinstance(prior, str) else list(prior or [])
@@ -3835,6 +3853,27 @@ class BeingGateClient:
                 available = getattr(d, "verdict_available", True)
                 dec = d.decision if (available and d.decision in ("allow", "warn", "deny")) else "deny"
                 rule = d.rule or ("" if available else "gate.no_verdict")
+                reason = getattr(d, "reason", "") or ""
+                # A READ-ONLY MOUNT IS A READ (SAGE #557, cbp-being 2026-10-27). Judged with the run's
+                # own modes (re), an r-only floor grant the box binds --ro-bind refused every run:
+                # "narrowed to r; this act needs re". Each such mount is judged in its own event as
+                # the read the box allows, so the law still sees it (Nova's hold on #547); a refusal
+                # there refuses the run. Only after the act itself is allowed: a deny is already final.
+                if boxed and dec != "deny":
+                    ro = sandbox_read_mounts(intent.effector, box_ctx)
+                    if ro:
+                        rd = sg.decide(sg.GateEvent(
+                            tool=_REGISTRY["memory_read"]["tool"], tool_input={"paths": ro},
+                            cwd=self.workspace, session_id=getattr(self, "host_session_id", None),
+                            raw={"effector": intent.effector, "read_only_mounts": ro}), gp)
+                        r_ok = getattr(rd, "verdict_available", True)
+                        r_dec = rd.decision if (r_ok and rd.decision in ("allow", "warn", "deny")) else "deny"
+                        if r_dec == "deny":
+                            dec, rule = "deny", rd.rule or ("" if r_ok else "gate.no_verdict")
+                            reason = ("a directory this run's sandbox would show it read-only: "
+                                      + (getattr(rd, "reason", "") or "refused"))
+                        elif r_dec == "warn" and dec == "allow":
+                            dec, rule, reason = "warn", rd.rule or rule, getattr(rd, "reason", "") or reason
                 # THE GRANTS RIDE ON AN ALLOW, AS THEY DO ON THE LEGACY PATH. The dispatcher's own
                 # confinement (reference_f1a._safe_path via `granted`; hestia_dispatch
                 # _granted_reach_of via `granted_reach`) reads them off the verdict; without them
@@ -3843,7 +3882,7 @@ class BeingGateClient:
                 # file the gate ALLOWED was refused "outside your reach", and the being worked
                 # around it with scratch scripts taking the path as `data`. A deny carries none.
                 granted, granted_reach = self._policy_grants() if dec != "deny" else ((), ())
-                return GatewayVerdict(dec, rule, getattr(d, "reason", "") or ("ok" if dec != "deny" else ""),
+                return GatewayVerdict(dec, rule, reason or ("ok" if dec != "deny" else ""),
                                       innate=False, stage="single-gate", command=judged_command,
                                       granted=granted, granted_reach=granted_reach,
                                       reach_rule=self._reach_rule())
