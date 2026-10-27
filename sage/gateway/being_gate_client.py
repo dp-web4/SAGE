@@ -3198,6 +3198,62 @@ def _home_hint(intent: "BeingIntent", dispatcher) -> str:
         return ""
 
 
+#: The home records a being names by bare name and most often roots somewhere else.
+_MISROOTED_RECORDS = ("journal.md", "todo.md")
+
+
+def _misrooted_home_file(intent: "BeingIntent", memory_root, policy_grants) -> str:
+    """The refusal, or "", for a home record (journal.md, todo.md) named at a path that is not the
+    home's and that no grant reaches: refused HERE, before the law, so the gate opens no scope
+    request and no peer is woken to rule on it (SAGE #506).
+
+    Measured on cbp-being 2026-10-21 08:40Z: its journal entry landed in its real journal.md,
+    then it re-sent the same text to /home/dp/journal.md. The gate denied it (mrh.path) and
+    opened scope-537ea765b120 with a peer-decide invite, while the refusal the being read already
+    said "no grant is needed for this" (_home_hint) and SAGE's escalate side had called it moot.
+    A seat had to refuse a request nobody needed. Earlier (10-20) two such requests were GRANTED
+    once by a peer, uselessly: the content had already landed.
+
+    Only a refusal, never an allow, so it can only narrow the law. And only where the gate would
+    refuse too: outside the home, outside every root the member's policy grants (fetched as the
+    law holds them; with no snapshot this stands aside and the gate decides), and outside the temp
+    root the gate admits. Reroute was the alternative and was rejected: the measured retry had
+    already landed, so writing it again would have doubled the entry."""
+    spec = _REGISTRY.get(intent.effector) or {}
+    if "path" not in spec.get("path_args", ()) or not memory_root:
+        return ""
+    raw = str((intent.args or {}).get("path", "")).strip()
+    name = os.path.basename(raw.rstrip("/"))
+    if name not in _MISROOTED_RECORDS or not os.path.isabs(os.path.expanduser(raw)):
+        return ""
+    home = os.path.realpath(str(memory_root))
+    target = os.path.realpath(os.path.expanduser(raw))
+    if target == home or target.startswith(home + os.sep):
+        return ""
+    import tempfile
+    for t in {"/tmp", os.path.realpath(tempfile.gettempdir())}:
+        if target == t or target.startswith(t.rstrip(os.sep) + os.sep):
+            return ""
+    try:
+        reach = policy_grants()[1]
+    except Exception:
+        return ""
+    if not reach:
+        return ""
+    for item in reach:
+        try:
+            root = os.path.realpath(os.path.expanduser(str(item[0])))
+            recursive = bool(item[1])
+        except (TypeError, IndexError):
+            continue
+        if target == root or (recursive and target.startswith(root.rstrip(os.sep) + os.sep)):
+            return ""                                   # a grant reaches it: the law decides
+    return (f"'{raw}' is not your {name}: yours is at {os.path.join(home, name)}, and a bare "
+            f"'{name}' always means that one. Nothing was done, and no scope request was opened: "
+            f"no grant is needed for your own {name}. If you already wrote this there, it is in "
+            f"place; if not, send it again with path '{name}'.")
+
+
 def same_path_in_reach(p, reach) -> list:
     """Where the path `p` asks for already exists under a recursive grant, as sorted
     [(path, root)]; [] if nowhere.
@@ -3760,6 +3816,10 @@ class BeingGateClient:
         if closed:
             return GatewayVerdict("deny", "trial.game_source_closed", stage="trial", reason=closed,
                                   command=judged_command)
+        misrooted = _misrooted_home_file(intent, getattr(self, "memory_root", None), self._policy_grants)
+        if misrooted:
+            return GatewayVerdict("deny", "sage.home_file_misrooted", stage="client", reason=misrooted,
+                                  command=judged_command)
         # --- Single gate (#934): the shim contract. The registry stage above is harness
         # syntax (which verbs exist); everything law-bearing happens in decide(). ---
         sg = getattr(self, "_single_gate", None)
@@ -4063,7 +4123,8 @@ class BeingGateClient:
             import dataclasses as _dc
             v = _dc.replace(v, witness_id=wid)      # GatewayVerdict is frozen
             err = f"{v.rule}: {v.reason}"
-            err += _home_hint(intent, self._dispatcher)
+            if v.rule != "sage.home_file_misrooted":       # that reason already says it
+                err += _home_hint(intent, self._dispatcher)
             # First, not appended: the gate's text runs to a grant list and a pending-request
             # note, and the being acted on those, not on anything after them.
             if intent.effector in _READS_A_PATH:
