@@ -30,6 +30,17 @@ def test_every_fleet_skill_parses_with_a_name_a_description_and_when_words():
         assert meta["name"] == s["name"], "the header names the directory it is in"
 
 
+def test_the_seeing_seed_holds_on_a_seat_without_a_cortex():
+    """A fleet skill reaches every seat and cannot be shadowed (pub's review of #576): on a seat
+    whose camera reads a device, it must not describe a cortex gaze as this seat's, nor steer it
+    off the device that `camera` itself opens there."""
+    body = (sk.FLEET_DIR / "seeing-with-your-eyes" / "SKILL.md").read_text()
+    head, rest = body.split("**Where the frame comes from", 1)
+    assert "cortex" not in head.split("---", 2)[2], "the steps before the split hold on every seat"
+    assert "**A cortex runs your eyes**" in rest and "**No cortex**" in rest
+    assert "`camera` opens that device itself" in rest
+
+
 def test_a_skill_is_written_read_listed_and_replaced_with_every_version_kept(tmp_path):
     ok, msg, changed = _write(tmp_path)
     assert ok and changed and "wrote your skill probe-skill" in msg
