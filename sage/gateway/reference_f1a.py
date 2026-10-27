@@ -1062,6 +1062,12 @@ class ReferenceF1aDispatcher:
                     f"{p.name} is changed only with identity_edit, which keeps every earlier "
                     "version and your reason in self_log.jsonl. A direct write would leave no "
                     "record of what it replaced. Nothing was changed")
+            from sage.gateway.being_settled import SETTLED_WRITES
+            if _home and p.name in SETTLED_WRITES:
+                raise ValueError(
+                    f"{p.name} is changed only with settle, which keeps every earlier answer and "
+                    "your reason in settled_log.jsonl. A direct write would leave no record of what "
+                    "it replaced. Nothing was changed")
             if _home and p.name in SEAT_OWNED:
                 raise ValueError(
                     f"{p.name} is yours to read and not to edit: it is what you were entrusted "

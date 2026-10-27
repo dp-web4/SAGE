@@ -227,7 +227,11 @@ def _offered_explore_tools_before_the_canonical_toolset(body_reading: Optional[d
 # that is indistinguishable from choosing not to answer.
 # `stay_awake` is offered here because reflection is where the being says what it wants next;
 # asking for another beat right away is one answer to that (SAGE #295).
-REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "say", "stay_awake"]
+# `settle` is offered here because reflection is where a beat's conclusion is written down; a conclusion
+# written only in the journal did not reach the next beat (being_settled, measured on Sprout 10-14..27).
+# It is item 3's alternative in REFLECT, not a fourth item: the routine writes fill --reflect-steps (3)
+# exactly, so a fourth would be unreachable, and a fourth step would cost every being a generate a beat.
+REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "settle", "say", "stay_awake"]
 
 # The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
 # Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
@@ -998,7 +1002,7 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
 REFLECT = """The beat is ending. Call these tools, then stop:
 {say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": your message to your future self, as a dated block: added / done / still open (it appends; it replaces nothing).
-3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it.
+3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it. If this beat SETTLED a question (what works, what does not, what something is), settle it instead: the question and your answer, shown to you at the start of every beat.
 {say_line}Call the tools now; a reply in words alone writes nothing.
 """
 
@@ -2768,6 +2772,16 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
         _own = ""
     if _own:
         parts.append(_own)
+    # What it has settled (being_settled), in its own words, beside who it says it is and before every
+    # record: a conclusion has to reach the next beat ahead of the journal entries it supersedes. Shown
+    # only once it has settled something. Fail-open.
+    try:
+        from sage.gateway import being_settled as _settled
+        _known = _settled.render(instance)
+    except Exception:
+        _known = ""
+    if _known:
+        parts.append(_known)
     # Its files and runs, measured: also NOW, so beside the body and before every record that
     # narrates them (see files_and_runs). Fail-open: a measurement that errors adds nothing.
     try:

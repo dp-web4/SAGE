@@ -2667,6 +2667,50 @@ class HestiaF1aDispatcher:
                               witness_id=(self._local._witness(f"identity_edit {field}: {text[:120]}")
                                           if changed else None))
 
+    def _do_settle(self, intent: BeingIntent) -> ResultEnvelope:
+        """The being's own conclusions (being_settled): list them, or settle, re-settle or reopen one."""
+        from sage.gateway import being_settled
+        ok, text, changed = being_settled.settle(Path(self.memory_root), intent.args or {})
+        if not ok:
+            return ResultEnvelope(ok=False, error=text)
+        return ResultEnvelope(ok=True, result=text,
+                              witness_id=(self._local._witness(f"settle: {text[:160]}") if changed else None))
+
+    #: An earlier subject this often asked about, with nothing settled on it, gets one line naming settle.
+    SUBJECT_SETTLE_HINT_AT = 5
+
+    def _request_subject(self, seat_conv: str, rel: str, why: str, p: Path) -> dict:
+        """For a request_run receipt: earlier requests on the same subject and how they were answered
+        (`earlier_on_this`), and what the being has settled that bears on it (`you_settled`). Either key
+        is absent when there is nothing to say."""
+        from sage.gateway import being_settled, relevance
+        from sage.gateway import conversations as conv
+        try:
+            named = " ".join(sorted(relevance.ids(p.read_text(errors="replace")[:20000])))
+        except OSError:
+            named = ""
+        query = f"[request_run] {rel}\nwhy: {why}\n{named}"
+        out = {}
+        found = relevance.earlier_requests(
+            conv.recent(self.memory_root, seat_conv, limit=relevance.EARLIER_LOOKBACK_TURNS),
+            self.member, query)
+        entries, _, err = being_settled.read(self.memory_root)
+        mine = []
+        if entries and not err:
+            rk = relevance.Ranker([f"{e['question']} {e.get('answer', '')}" for e in entries])
+            mine = [entries[i] for _, i in rk.related(query)][:3]
+        if mine:
+            out["you_settled"] = ("You settled this, or something close to it, in your own words:\n"
+                                  + "\n".join("- " + being_settled._line(e, being_settled.RENDER_ENTRY_CHARS)
+                                              for e in mine))
+        if found:
+            said = relevance.earlier_requests_said(found)
+            if not mine and len(found) >= self.SUBJECT_SETTLE_HINT_AT:
+                said += ("\nIf you have concluded something about this, settle keeps it in your own words "
+                         "where every beat shows it.")
+            out["earlier_on_this"] = said
+        return out
+
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
         if not content:
@@ -4404,6 +4448,19 @@ class HestiaF1aDispatcher:
         elif unchanged:
             lines.append(f"UNCHANGED since the request at seq {unchanged[0]}; the seat answered "
                          f"at seq {unchanged[1]}.")
+        # THE SAME SUBJECT, NOT ONLY THE SAME FILE (dp, 2026-10-27: "so it can learn conclusively and not
+        # perseverate"). UNCHANGED and SAME AS above match these bytes. Measured on sprout-being 10-14..27:
+        # 612 of 1,010 requests were about one device, across 86 different files, and on each of those 14
+        # days its journal also said, in its own words, that its camera works through the cortex. Each new
+        # file looked new. Say what was asked before on this subject and how it was answered, and what the
+        # being itself settled about it (being_settled), so the history is in the receipt, not only in a
+        # journal it cannot carry. Facts only; nothing is blocked. Fail-open: a record that cannot be read
+        # adds nothing.
+        subject = {}
+        try:
+            subject = self._request_subject(seat_conv, rel, why, p)
+        except Exception:
+            subject = {}
         said = self._do_say(BeingIntent("say", {"to": seat_conv, "text": "\n".join(lines)}))
         if not said.ok:
             return ResultEnvelope(ok=False, error=f"could not hand the request to the seat: {said.error}")
@@ -4484,6 +4541,7 @@ class HestiaF1aDispatcher:
                 + f". The seat has not answered it yet. This request is recorded too, marked as the "
                 f"same one; it does not move it up or start anything. The seat answers once, in "
                 f"'{seat_conv}', and that answer covers every copy of this request.")
+        result.update(subject)
         note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
                 "a result. The seat may run it or decline, and either way it answers in "
                 f"'{seat_conv}'. Nothing is owed by you in the meantime.")

@@ -121,7 +121,7 @@ def test_run_ollama_tool_turn_with_fake_llm():
     # request_run and memory_edit, one layer out. It sends a unified diff; the seat parses every
     # path the diff touches OUT OF THE DIFF and the law rules on each under mrh.path, exactly as
     # for a memory_write. See test_patch_apply_is_governed.py for what is judged and what is not.
-    assert len(ollama_tools()) == 37   # + identity_edit (2026-10-24)   # + web_search (2026-10-02)   # + run (2026-10-18)   # + tune (2026-10-07)   # + git_clean (2026-10-05)   # + describe (2026-10-03)   # + pr_sync (2026-10-01)   # + stay_awake (SAGE #295)   # + pr_read (2026-09-29)   # + pair_audio (2026-09-27)   # + game (#56 slice 6)   # + pr_open, pr_amend, git_restore (#56 slice 5)   # + patch_apply (2026-09-25)
+    assert len(ollama_tools()) == 38   # + settle (2026-10-27)   # + identity_edit (2026-10-24)   # + web_search (2026-10-02)   # + run (2026-10-18)   # + tune (2026-10-07)   # + git_clean (2026-10-05)   # + describe (2026-10-03)   # + pr_sync (2026-10-01)   # + stay_awake (SAGE #295)   # + pr_read (2026-09-29)   # + pair_audio (2026-09-27)   # + game (#56 slice 6)   # + pr_open, pr_amend, git_restore (#56 slice 5)   # + patch_apply (2026-09-25)
 
     calls = {"n": 0}
 
@@ -1353,3 +1353,36 @@ def test_a_window_retry_increases_even_a_large_being_answer_reserve(tmp_path, mo
     assert llm.attempts == 2 and result.reply == "done"
     assert result.generates[0]["retry_cause"] == "window"
     assert seen[:2] == [12288, 13312], seen
+
+
+def test_compaction_counts_the_schemas_the_turn_sends_as_the_preflight_does(tmp_path):
+    """2026-10-27: #490 measured the schemas for step 1's preflight only. Compaction still assumed
+    _UNCOUNTED_CHARS (12,900), so with no server count yet and ~30k of schemas it stopped short and the
+    preflight refused the step it had just compacted for (32,762 estimated of 32,768). Both now use the
+    count of what is sent: a seed compaction CAN fit is compacted until it does, and is sent."""
+    import json
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn, _UNCOUNTED_CHARS
+    sent = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 32768
+        num_predict_override = None
+        think = False
+
+        def get_chat_response(self, messages, tools=None):
+            sent.append(len(json.dumps(tools or [])))
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 25000, "eval_count": 20, "message": {}}}
+
+    tools = [{"type": "function", "function": {"name": "memory_read", "description": "d" * (_UNCOUNTED_CHARS * 3),
+                                               "parameters": {"type": "object", "properties": {}}}}]
+    seed = [{"role": "system", "content": "s"}, {"role": "user", "content": "go"}]
+    for i in range(10):
+        seed += [{"role": "assistant", "content": "", "tool_calls": [
+                     {"function": {"name": "memory_read", "arguments": {"path": f"f{i}"}}}]},
+                 {"role": "tool", "content": "x" * 7000}]
+    c = _client(OK_DISPATCH)
+    c.memory_root = str(tmp_path)
+    r = run_ollama_tool_turn(c, FakeLLM(), seed, tools=tools)
+    assert sent and r.reply == "done" and not r.window_full, (r.window_full, r.generates)
