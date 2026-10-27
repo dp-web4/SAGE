@@ -69,9 +69,13 @@ def test_describe_returns_the_full_text_and_is_never_dispatched():
 
 def test_the_heartbeat_offers_and_measures_the_same_specs():
     from sage.gateway import heartbeat as hb
-    src = inspect.getsource(hb.main)
-    assert '_toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief")' in src
-    assert '_schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief")' in src
+    import re
+    src = re.sub(r"\s+", " ", inspect.getsource(hb.main))
+    # the same arguments to both, this seat's config included (toolset.here: what a verb says on this seat)
+    assert ('_toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief", cfg=instance_config(instance))'
+            in src)
+    assert ('_schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief", '
+            'cfg=instance_config(instance))' in src)
     assert '"tool_descriptions": _tool_desc_mode' in src, "the beat record says which mode ran"
 
 

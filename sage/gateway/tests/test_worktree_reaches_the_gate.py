@@ -400,7 +400,9 @@ def test_the_construction_sites_give_both_halves_the_same_tree():
           "from sage.gateway.governed_turn import worktree_for" in offer
           and "worktree = worktree_for(self.instance.root)" in offer)
     check("raising: not looked up twice", offer.count("worktree_for("), 1)
-    check("raising: handed to the real dispatcher", "worktree=worktree)" in offer)
+    # the property, not the spelling (as build_client above): #575 appended camera_source
+    rdisp = offer[offer.index("HestiaF1aDispatcher("):offer.index("except Exception as _e:")]
+    check("raising: handed to the real dispatcher", "worktree=worktree" in rdisp)
     check("raising: ...and to the gate client", "worktree=worktree," in offer)
 
 

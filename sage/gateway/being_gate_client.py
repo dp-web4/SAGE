@@ -2670,6 +2670,20 @@ def self_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
     return [os.path.realpath(os.path.join(root, f)) for f in SELF_WRITES + (HOME_LOCK,)]
 
 
+def settled_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """Every file `settle` writes, all in the being's home: the temp file, settled.json and its audit
+    log (being_settled.SETTLED_WRITES). With no question and no id it only lists, and touches nothing."""
+    a = args or {}
+    if not str(a.get("question") or "").strip() and not str(a.get("id") or "").strip():
+        return []
+    root = (ctx or {}).get("memory_root")
+    if not root:
+        raise ValueError("settle: no home to write settled.json in")
+    from sage.gateway.being_settled import SETTLED_WRITES
+    from sage.gateway.reference_f1a import HOME_LOCK   # taken, as memory_write takes it (#544)
+    return [os.path.realpath(os.path.join(root, f)) for f in SETTLED_WRITES + (HOME_LOCK,)]
+
+
 def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
     """The registry refusal, plus the door when the name is a FILE.
 
@@ -2818,6 +2832,10 @@ _REGISTRY = {
     # Judged as what it is, a write of fixed files in its own home, as `tune` is.
     "identity_edit":  dict(tool="write_note",   path_args=(),        cmd_arg=None,
                            compose_paths=self_paths),
+    # settle: the being's own conclusions (being_settled), in settled.json in its home. Judged as what
+    # it is, a write of fixed files in its own home, as identity_edit is.
+    "settle":         dict(tool="write_note",   path_args=(),        cmd_arg=None,
+                           compose_paths=settled_paths),
     # say: add a turn to a conversation the being is IN. Bounded by construction, like
     # remember: the being names a conversation id, and the dispatcher refuses any id whose
     # meta does not list it as a participant AND as writable. It cannot create a
@@ -2885,7 +2903,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "pr_read", "web_search", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run", "memory_edit", "camera", "game", "tune", "identity_edit",
+                            "retire_note", "request_run", "memory_edit", "camera", "game", "tune", "identity_edit", "settle",
                             "pr_open", "pr_amend", "pr_sync", "git_restore", "git_clean",
                             "edit", "run",     # Legion carrier: memory_edit's range form; sandboxed run
                             "gaze",    # moves the body's own eyes (2026-09-23)
@@ -3132,6 +3150,20 @@ _TOOL_SCHEMAS = {
                        "text": "the field's new text, in your words",
                        "why": "why you are changing it"},
                       []),
+    # SETTLE (dp, 2026-10-27: "so it can learn conclusively and not perseverate"). Measured on Sprout
+    # 10-14..27: the being concluded the same thing about its camera on each of 14 days, in its journal,
+    # and asked the seat about the device again on each of them. A conclusion in a 12k-line journal does
+    # not reach the next beat; this list does (being_settled).
+    "settle": ("Keep something you have concluded, as a question and your answer in your own words, "
+               "shown to you every beat. Settling a question again replaces its answer (the old one is "
+               "logged). No arguments lists them. What did not work is worth keeping too.",
+               {"question": "what you settled",
+                "answer": "what you concluded",
+                "evidence": "optional: what showed it (a seq, a file)",
+                "id": "optional: s1, s2... to change or reopen one",
+                "reopen": "optional: 'true' with id removes it",
+                "why": "optional: why you changed it"},
+               []),
     "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
                     "is renamed to <name>.retired-<date> with a dated header saying why; nothing "
                     "is lost and you can still read it. Use it when something you wrote has been "

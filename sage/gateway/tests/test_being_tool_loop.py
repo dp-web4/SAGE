@@ -125,7 +125,7 @@ def test_run_ollama_tool_turn_with_fake_llm():
     from sage.gateway.being_gate_client import _TOOL_SCHEMAS
     # Pinned against the schema table, not a literal: the count went 13 -> 16 -> 24 as verbs
     # landed on two branches, and a number here only ever recorded which branch wrote it.
-    assert len(ollama_tools()) == len(_TOOL_SCHEMAS) >= 33
+    assert len(ollama_tools()) == len(_TOOL_SCHEMAS) >= 38
 
     calls = {"n": 0}
 
@@ -892,10 +892,12 @@ def test_loop_feeds_the_previous_prompt_count_into_compaction():
     roots = []
     orig = L.compact_convo
 
-    def spy(msgs, llm, reserve=L._ANSWER_RESERVE, measured=None, spill_root=None, own_turns=False):
+    # **kw: main's compact_convo grew `uncounted` (#490 follow-up); a spy that names the keywords it
+    # takes breaks on every new one (carrier-only test, found carrying #570-#575)
+    def spy(msgs, llm, reserve=L._ANSWER_RESERVE, measured=None, spill_root=None, own_turns=False, **kw):
         seen.append(measured)
         roots.append(spill_root)
-        return orig(msgs, llm, reserve, measured, spill_root)
+        return orig(msgs, llm, reserve, measured, spill_root, **kw)
     L.compact_convo = spy
     try:
         class FakeLLM:
@@ -1878,3 +1880,36 @@ def test_a_window_retry_increases_even_a_large_being_answer_reserve(tmp_path, mo
     assert llm.attempts == 2 and result.reply == "done"
     assert result.generates[0]["retry_cause"] == "window"
     assert seen[:2] == [12288, 13312], seen
+
+
+def test_compaction_counts_the_schemas_the_turn_sends_as_the_preflight_does(tmp_path):
+    """2026-10-27: #490 measured the schemas for step 1's preflight only. Compaction still assumed
+    _UNCOUNTED_CHARS (12,900), so with no server count yet and ~30k of schemas it stopped short and the
+    preflight refused the step it had just compacted for (32,762 estimated of 32,768). Both now use the
+    count of what is sent: a seed compaction CAN fit is compacted until it does, and is sent."""
+    import json
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn, _UNCOUNTED_CHARS
+    sent = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 32768
+        num_predict_override = None
+        think = False
+
+        def get_chat_response(self, messages, tools=None):
+            sent.append(len(json.dumps(tools or [])))
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 25000, "eval_count": 20, "message": {}}}
+
+    tools = [{"type": "function", "function": {"name": "memory_read", "description": "d" * (_UNCOUNTED_CHARS * 3),
+                                               "parameters": {"type": "object", "properties": {}}}}]
+    seed = [{"role": "system", "content": "s"}, {"role": "user", "content": "go"}]
+    for i in range(10):
+        seed += [{"role": "assistant", "content": "", "tool_calls": [
+                     {"function": {"name": "memory_read", "arguments": {"path": f"f{i}"}}}]},
+                 {"role": "tool", "content": "x" * 7000}]
+    c = _client(OK_DISPATCH)
+    c.memory_root = str(tmp_path)
+    r = run_ollama_tool_turn(c, FakeLLM(), seed, tools=tools)
+    assert sent and r.reply == "done" and not r.window_full, (r.window_full, r.generates)

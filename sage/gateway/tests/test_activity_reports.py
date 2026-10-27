@@ -210,11 +210,16 @@ def test_the_real_beat_reports_each_phase_before_it_runs():
     line = {p: n for n, _, p in reports}
     turns = sorted(c.lineno for c in ast.walk(main) if isinstance(c, ast.Call)
                    and getattr(c.func, "id", "") == "run_ollama_tool_turn")
-    account = min(c.lineno for c in ast.walk(main) if isinstance(c, ast.Call)
-                  # the account generate: generate_with_evidence since #436 (attempt evidence),
-                  # llm.get_chat_response before it
-                  and (getattr(c.func, "attr", "") == "get_chat_response"
-                       or getattr(c.func, "id", "") == "generate_with_evidence"))
+    # the account turn's model call: generate_with_evidence(..., phase="account") since #436, which
+    # replaced the direct llm.get_chat_response this test looked for (red on main from then on)
+    # (either spelling of the call, mcnugget on #568; and a miss says what to update, nomad on #568:
+    # a bare min() on nothing raised the cryptic ValueError that hid this drift for two weeks)
+    account = min((c.lineno for c in ast.walk(main) if isinstance(c, ast.Call)
+                   and (getattr(c.func, "id", None) or getattr(c.func, "attr", None)) == "generate_with_evidence"
+                   and any(k.arg == "phase" and getattr(k.value, "value", None) == "account"
+                           for k in c.keywords)), default=None)
+    assert account is not None, ("the account turn's model call was not found in heartbeat.main "
+                                 "(generate_with_evidence(..., phase=\"account\")): update this test's matcher")
     assert line["explore"] < turns[0] and line["posture"] < turns[1]
     assert line["account"] < account < line["reflect"] < turns[2]
     assert line["answer"] < turns[-1]
