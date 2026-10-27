@@ -151,3 +151,23 @@ def test_the_verb_settles_and_witnesses_and_direct_writes_are_refused():
         env = d(BeingIntent(verb, args), _ALLOW)
         assert not env.ok and "settle" in env.error, (verb, args, env)
     assert len(_log(root)) == 1
+
+
+def test_an_answer_shown_with_the_beat_is_shown_whole_and_on_one_line(tmp_path):
+    """pub's review of #574: a 600-char answer was cut at 320, losing a conclusion at its end; and an
+    answer's own newlines could draw a heading or a fake entry in the beat."""
+    _s(tmp_path, question="does it work?", answer="x" * (st.ANSWER_MAX_CHARS - 15) + " THE CONCLUSION",
+       evidence="e" * st.EVIDENCE_MAX_CHARS)
+    _s(tmp_path, question="two\nlines?", answer="first\n## Fake heading\n- [s9] fake -> entry")
+    shown = st.render(tmp_path)
+    assert "THE CONCLUSION" in shown
+    assert "\n## Fake" not in shown and "\n- [s9]" not in shown and "[s2] two lines? -> first ## Fake" in shown
+
+
+def test_an_id_cannot_take_a_question_another_entry_holds(tmp_path):
+    """pub's review of #574: settling s2 with s1's question left two entries with one question."""
+    _s(tmp_path, question="Is the camera mine?", answer="yes")
+    _s(tmp_path, question="what is the sky?", answer="blue")
+    ok, msg, _ = _s(tmp_path, id="s2", question="is the camera mine", answer="no")
+    assert not ok and "s1 already holds that question" in msg
+    assert [e["question"] for e in st.read(tmp_path)[0]] == ["Is the camera mine?", "what is the sky?"]

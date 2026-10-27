@@ -2698,7 +2698,7 @@ class HestiaF1aDispatcher:
         mine = []
         if entries and not err:
             rk = relevance.Ranker([f"{e['question']} {e.get('answer', '')}" for e in entries])
-            mine = [entries[i] for _, i in rk.related(query)][:3]
+            mine = [entries[i] for _, i in rk.related(relevance.request_subject(query))][:3]
         if mine:
             out["you_settled"] = ("You settled this, or something close to it, in your own words:\n"
                                   + "\n".join("- " + being_settled._line(e, being_settled.RENDER_ENTRY_CHARS)
