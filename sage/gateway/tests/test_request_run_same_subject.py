@@ -76,3 +76,13 @@ def test_one_answer_covers_the_copies_of_a_repeated_request():
     found = rv.earlier_requests(turns, "b", "notes/y.py /dev/gadget7")
     assert [f["answer_seq"] for f in found] == [3, 3]
     assert "not answered" not in rv.earlier_requests_said(found)
+
+
+def test_dev_null_is_plumbing_not_a_subject():
+    """legion's repro on #574: two unrelated scripts that both silence errors scored 1.0 as one subject."""
+    assert rv.ids("2>/dev/null; cat /dev/urandom > /dev/stdout; ls /dev/shm") == set()
+    assert rv.ids("ffmpeg -i /dev/video0 2>/dev/null") == {"/dev/video0"}
+    score, shared = rv.Ranker(["[request_run] scripts/plot.py\nwhy: draw my temperature log, "
+                               "silence errors to /dev/null"]).score(
+        "[request_run] scripts/cam.py\nwhy: test camera\n/dev/null /dev/video0", 0)
+    assert "/dev/null" not in shared and score < 1.0

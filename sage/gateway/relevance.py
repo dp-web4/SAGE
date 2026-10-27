@@ -25,9 +25,15 @@ _IDS = re.compile(r"scope-[0-9a-f]{12}|/dev/[A-Za-z]+\d*", re.I)
 WORD_THRESHOLD = 0.3
 
 
+#: Not named things: plumbing nearly every script mentions (`2>/dev/null`). Counting them made any two
+#: scripts "the same subject" at full score (legion's review of #574).
+PSEUDO_DEVICES = frozenset(f"/dev/{n}" for n in (
+    "null", "zero", "full", "random", "urandom", "stdin", "stdout", "stderr", "tty", "shm", "fd", "pts", "ptmx"))
+
+
 def ids(text: str) -> Set[str]:
     """Exact named things in a text: device nodes and scope request ids, lowercased."""
-    return {m.group(0).lower() for m in _IDS.finditer(text or "")}
+    return {m.group(0).lower() for m in _IDS.finditer(text or "")} - PSEUDO_DEVICES
 
 
 class Ranker:

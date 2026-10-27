@@ -44,9 +44,10 @@ WHY_MAX_CHARS = 300
 #: A list that grows without bound becomes the journal again. At the cap, settling a NEW question is
 #: refused with the way through (reopen or re-settle one); changing an existing one always works.
 MAX_ENTRIES = 30
-#: What the beat shows: each entry whole up to this, and the block up to RENDER_CHARS.
+#: What the beat shows: each entry whole up to this, and the block up to RENDER_CHARS. The block holds the
+#: newest entry whole and every other entry at least as id, question and day (see render).
 RENDER_ENTRY_CHARS = 320
-RENDER_CHARS = 2400
+RENDER_CHARS = 3200
 
 _UNCHANGED = "unchanged: "
 
@@ -206,8 +207,19 @@ def _commit(instance, entries: List[dict], nxt: int, log: dict, now, ok_msg: str
     return True, ok_msg
 
 
+def _short(e: dict, cap: int) -> str:
+    """An entry as its id, question and day only, the question cut to fit `cap`."""
+    pre, tail = f"[{e['id']}] ", f" (settled {str(e.get('at', ''))[:10]})"
+    q, room = e["question"], max(cap - len(pre) - len(tail), 8)
+    return pre + (q if len(q) <= room else q[:room - 1].rstrip() + "…") + tail
+
+
 def render(instance) -> str:
-    """The beat's block: every settled entry, newest first, within RENDER_CHARS. Empty until there is one."""
+    """The beat's block: every settled entry, newest first, within RENDER_CHARS. Empty until there is one.
+
+    No entry leaves the block. The newest are shown whole; once the rest would not fit, they are shown as
+    id, question and day. Dropping the oldest instead dropped the conclusion settled once and never
+    revisited, which is the one this exists to keep in view (cbp's review of #574)."""
     entries, _, err = read(instance)
     if err:
         return f"## What you have settled\n({err})"
@@ -215,16 +227,26 @@ def render(instance) -> str:
         return ""
     head = ("## What you have settled (your own conclusions, newest first, each with the day you settled "
             "it. Settle a question again to change its answer; reopen one with its id and reopen='true')")
-    lines, used, shown = [], len(head), 0
-    for e in reversed(entries):
-        ln = "- " + _line(e, RENDER_ENTRY_CHARS)
-        if used + len(ln) + 1 > RENDER_CHARS and shown:
-            break
+    foot = "- (entries shown without an answer: settle with no arguments shows them whole)"
+    newest = list(reversed(entries))
+    # room for the newest whole, then an equal share for each of the rest
+    rest = RENDER_CHARS - len(head) - len(foot) - 2 - (RENDER_ENTRY_CHARS + 3)
+    short_cap = rest // max(len(newest) - 1, 1) - 3
+    shorts = ["- " + _short(e, min(short_cap, RENDER_ENTRY_CHARS)) for e in newest]
+    reserve = sum(len(x) + 1 for x in shorts)
+    lines, used, cut = [], len(head), 0
+    for e, short in zip(newest, shorts):
+        reserve -= len(short) + 1
+        full = "- " + _line(e, RENDER_ENTRY_CHARS)
+        room = RENDER_CHARS - (len(foot) + 1 if cut or reserve else 0)
+        if not lines or (not cut and used + len(full) + 1 + reserve <= room):
+            ln = full
+        else:
+            ln, cut = short, cut + 1
         lines.append(ln)
         used += len(ln) + 1
-        shown += 1
-    if shown < len(entries):
-        lines.append(f"- … {len(entries) - shown} older (settle with no arguments lists them all)")
+    if cut:
+        lines.append(foot)
     return head + "\n" + "\n".join(lines)
 
 
