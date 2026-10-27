@@ -17,7 +17,8 @@ def _granted_empty_dir(root):
 
 
 @pytest.mark.parametrize("name", ["identity.json", "identity.sealed", "identity.attest.json",
-                                  "instance.json", "identity.json.tmp", "instance.json.tmp"])
+                                  "instance.json", "identity.json.tmp", "instance.json.tmp",
+                                  "Identity.json", "INSTANCE.JSON", "identity.JSON"])
 def test_a_record_name_is_refused_where_no_home_exists_yet(name):
     d, root = _disp()
     other, reach = _granted_empty_dir(root)

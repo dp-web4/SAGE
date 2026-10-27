@@ -72,10 +72,13 @@ GOVERNANCE_OWNED = ("instance.json",)
 # `identity.json` (choosing `machine`, so its own arbiter) before a home is provisioned there. These
 # exact names, and their tmp/retired forms, are never a being's to write anywhere. The broader
 # `identity.` prefix stays tied to homes: `notes/identity.md` is a being writing about itself.
+# Compared casefolded (cbp review of #565): on a case-insensitive FS (WSL drvfs, default APFS)
+# `Identity.json` is the file the readers open as `identity.json`.
 GOVERNANCE_RECORD_NAMES = ("identity.json", "identity.sealed", "identity.attest.json", "instance.json")
 
 
 def _is_governance_record_name(name: str) -> bool:
+    name = name.casefold()
     return any(name == n or name.startswith(n + ".") for n in GOVERNANCE_RECORD_NAMES)
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
