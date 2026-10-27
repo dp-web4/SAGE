@@ -44,9 +44,10 @@ WHY_MAX_CHARS = 300
 #: A list that grows without bound becomes the journal again. At the cap, settling a NEW question is
 #: refused with the way through (reopen or re-settle one); changing an existing one always works.
 MAX_ENTRIES = 30
-#: What the beat shows: each entry whole up to this, and the block up to RENDER_CHARS. The block holds the
-#: newest entry whole and every other entry at least as id, question and day (see render).
-RENDER_ENTRY_CHARS = 320
+#: What the beat shows: the block up to RENDER_CHARS. It holds the newest entry whole and every other entry
+#: at least as id, question and day (see render). An entry shown with its answer is never cut: the cap is the
+#: longest line the field caps allow, since a conclusion often sits at the end of its answer (pub's review).
+RENDER_ENTRY_CHARS = 40 + QUESTION_MAX_CHARS + ANSWER_MAX_CHARS + EVIDENCE_MAX_CHARS
 RENDER_CHARS = 3200
 
 _UNCHANGED = "unchanged: "
@@ -74,10 +75,15 @@ def read(instance) -> Tuple[List[dict], int, Optional[str]]:
     return entries, nxt, None
 
 
+def _flat(s) -> str:
+    """One line: an answer's own newlines cannot draw a heading or an entry in the beat (pub's review)."""
+    return re.sub(r"\s+", " ", str(s or "")).strip()
+
+
 def _line(e: dict, cap: int = 0) -> str:
-    s = f"[{e['id']}] {e['question']} -> {e.get('answer', '')}"
+    s = f"[{e['id']}] {_flat(e['question'])} -> {_flat(e.get('answer', ''))}"
     if e.get("evidence"):
-        s += f" (evidence: {e['evidence']})"
+        s += f" (evidence: {_flat(e['evidence'])})"
     s += f" (settled {str(e.get('at', ''))[:10]})"
     if cap and len(s) > cap:
         s = s[:cap - 1].rstrip() + "…"
@@ -142,6 +148,11 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                             "settled. The earlier answer is kept in settled_log.jsonl.")
 
     question = a.get("question") or (target or {}).get("question", "")
+    other = next((e for e in entries if e is not target and _norm(e["question"]) == _norm(question)), None)
+    if other is not None:
+        # Two entries with one question: a later settle by question would reach only the first (pub's review).
+        return False, (f"{other['id']} already holds that question; settle {other['id']} (or the question "
+                       "alone) to change its answer. Nothing was changed.")
     answer = a.get("answer", "")
     if not answer:
         return False, ("give the answer too: what you have concluded, in your own words (what works, what does "
@@ -210,7 +221,7 @@ def _commit(instance, entries: List[dict], nxt: int, log: dict, now, ok_msg: str
 def _short(e: dict, cap: int) -> str:
     """An entry as its id, question and day only, the question cut to fit `cap`."""
     pre, tail = f"[{e['id']}] ", f" (settled {str(e.get('at', ''))[:10]})"
-    q, room = e["question"], max(cap - len(pre) - len(tail), 8)
+    q, room = _flat(e["question"]), max(cap - len(pre) - len(tail), 8)
     return pre + (q if len(q) <= room else q[:room - 1].rstrip() + "…") + tail
 
 
@@ -230,7 +241,7 @@ def render(instance) -> str:
     foot = "- (entries shown without an answer: settle with no arguments shows them whole)"
     newest = list(reversed(entries))
     # room for the newest whole, then an equal share for each of the rest
-    rest = RENDER_CHARS - len(head) - len(foot) - 2 - (RENDER_ENTRY_CHARS + 3)
+    rest = RENDER_CHARS - len(head) - len(foot) - 2 - (len(_line(newest[0], RENDER_ENTRY_CHARS)) + 3)
     short_cap = rest // max(len(newest) - 1, 1) - 3
     shorts = ["- " + _short(e, min(short_cap, RENDER_ENTRY_CHARS)) for e in newest]
     reserve = sum(len(x) + 1 for x in shorts)

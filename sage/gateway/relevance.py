@@ -20,9 +20,17 @@ from typing import Iterable, List, Sequence, Set, Tuple
 
 from sage.gateway.home_recall import _terms
 
-_IDS = re.compile(r"scope-[0-9a-f]{12}|/dev/[A-Za-z]+\d*", re.I)
+#: A file named by its basename with a known extension, at least 8 characters with it, so `hestia_gate_core.py`
+#: under five different roots is one subject (cbp's review of #574: each re-ask spelled the root differently).
+#: The extension list keeps method calls (`path.join`, `self.run`) out.
+_FILE_EXTS = "py|rs|sh|c|cc|cpp|h|js|ts|json|jsonl|toml|yaml|yml|md|txt|log|csv|jpg|jpeg|png"
+_IDS = re.compile(r"scope-[0-9a-f]{12}|/dev/[A-Za-z]+\d*"
+                  rf"|(?<![\w.-])(?=[\w.-]{{8,}}\b)[A-Za-z0-9_-][\w.-]*\.(?:{_FILE_EXTS})\b", re.I)
 #: The word-overlap bar (see the module docstring for how it was set).
 WORD_THRESHOLD = 0.3
+#: Shared words needed, when the shorter text has more than one: a single common word (`check`) made "check
+#: the sky colour" the same subject as "check disk usage of home" (pub's review of #574).
+WORD_MIN_SHARED = 2
 
 
 #: Not named things: plumbing nearly every script mentions (`2>/dev/null`). Counting them made any two
@@ -32,7 +40,7 @@ PSEUDO_DEVICES = frozenset(f"/dev/{n}" for n in (
 
 
 def ids(text: str) -> Set[str]:
-    """Exact named things in a text: device nodes and scope request ids, lowercased."""
+    """Exact named things in a text: device nodes, scope request ids and file basenames, lowercased."""
     return {m.group(0).lower() for m in _IDS.finditer(text or "")} - PSEUDO_DEVICES
 
 
@@ -60,7 +68,7 @@ class Ranker:
         q = set(_terms(query))
         d = self.terms[i]
         shared = q & d
-        if not shared:
+        if not shared or len(shared) < min(WORD_MIN_SHARED, len(q), len(d)):
             return 0.0, set()
         num = sum(self.idf(t) for t in shared)
         den = min(sum(self.idf(t) for t in q), sum(self.idf(t) for t in d)) or 1.0
@@ -79,6 +87,20 @@ class Ranker:
 
 #: How far back a subject is looked for: two weeks of a busy being's requests.
 EARLIER_LOOKBACK_TURNS = 3000
+
+
+def request_subject(text: str) -> str:
+    """What a `[request_run] <path>\\nwhy: ...` text is about: the file's stem as words, then the rest without
+    the `why:` label. The framing, the directory and the extension are on every request, so scoring them
+    made unrelated requests the same subject (pub's review of #574). The path is reduced to words, so the
+    request's own file name is not a named thing either: one sandbox/probe.py reused for everything is
+    not one subject."""
+    first, _, rest = (text or "").partition("\n")
+    if first.startswith("[request_run] "):
+        stem = first[len("[request_run] "):].strip().rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        first = re.sub(r"[._-]+", " ", stem)
+    rest = re.sub(r"(?m)^why:\s*", "", rest)
+    return f"{first}\n{rest}".strip()
 
 
 def earlier_requests(turns: Sequence[dict], member: str, query: str,
@@ -110,8 +132,8 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
                     by_file.setdefault(r["file"], []).append((t.get("seq"), first))
     if not reqs:
         return []
-    rk = Ranker([r["head"] for r in reqs])
-    hit = sorted(i for _, i in rk.related(query, threshold))
+    rk = Ranker([request_subject(r["head"]) for r in reqs])
+    hit = sorted(i for _, i in rk.related(request_subject(query), threshold))
     out = []
     for i in hit:
         r = reqs[i]

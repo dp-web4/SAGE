@@ -86,3 +86,38 @@ def test_dev_null_is_plumbing_not_a_subject():
                                "silence errors to /dev/null"]).score(
         "[request_run] scripts/cam.py\nwhy: test camera\n/dev/null /dev/video0", 0)
     assert "/dev/null" not in shared and score < 1.0
+
+
+def test_the_request_framing_is_not_a_subject():
+    """pub's repro on #574: with one earlier request and a short why, the words every request carries
+    ([request_run], why, the directory and extension) made 'check the sky colour' the same subject as
+    'test the camera'; and in a bigger record, one shared common word did."""
+    turns = [{"seq": 1, "from": "b", "text": "[request_run] sandbox/cam_test.py\nwhy: test the camera\n(size 10)"}]
+    assert rv.earlier_requests(turns, "b", "[request_run] sandbox/sky.py\nwhy: check the sky colour") == []
+    turns = [{"seq": i, "from": "b", "text": f"[request_run] sandbox/x{i}.py\nwhy: {w}"}
+             for i, w in enumerate(["check disk usage of home", "list my notes folder", "test the camera",
+                                    "count journal lines", "read the law hash", "plot temperature"])]
+    assert rv.earlier_requests(turns, "b", "[request_run] sandbox/sky.py\nwhy: check the sky colour") == []
+    found = rv.earlier_requests(turns, "b", "[request_run] sandbox/cam2.py\nwhy: test the camera again")
+    assert [f["seq"] for f in found] == [2]
+
+
+def test_one_sandbox_file_reused_for_everything_is_not_one_subject():
+    turns = [{"seq": 1, "from": "b", "text": "[request_run] sandbox/probe_all.py\nwhy: plot temperature"}]
+    assert rv.earlier_requests(turns, "b", "[request_run] sandbox/probe_all.py\nwhy: list my notes") == []
+
+
+def test_a_file_asked_about_under_many_roots_is_one_subject():
+    """cbp's review of #574: cbp-being asked about one file 21 times, spelling its root four or five ways,
+    each time with a new scope id. The basename is the subject."""
+    roots = ["/w/hestia/governance/", "/w/governance/hestia/", "/w/hestia/hestia/governance/",
+             "/h/hestia/governance/", "/w/w/hestia/governance/"]
+    turns = [{"seq": i + 1, "from": "b", "text": f"[request_run] sandbox/read{i}.py\nwhy: read "
+              f"{r}hestia_gate_core.py to see why it is pending"} for i, r in enumerate(roots)]
+    turns += [{"seq": 10 + i, "from": "b", "text": f"[request_run] sandbox/x{i}.py\nwhy: {w}"}
+              for i, w in enumerate(["check the hestia law hash", "list hestia governance files",
+                                     "how many hestia scope requests today", "test the camera frame"])]
+    found = rv.earlier_requests(turns, "b", "[request_run] sandbox/r6.py\nwhy: open "
+                                           "/z/hestia/governance/hestia_gate_core.py")
+    assert [f["seq"] for f in found] == [1, 2, 3, 4, 5]
+    assert rv.ids("os.path.join(x); self.run(); v1.2.3; hestia_gate_core.py") == {"hestia_gate_core.py"}
