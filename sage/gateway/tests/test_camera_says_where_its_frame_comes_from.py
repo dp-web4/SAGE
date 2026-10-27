@@ -57,3 +57,53 @@ def test_the_dispatcher_never_reads_device_on_a_cortex_seat():
     from sage.gateway.being_gate_client import camera_command
     cmd = camera_command({"device": "/dev/video9"}, {"memory_root": "/tmp/h", "camera_source": "cortex"})
     assert "/dev/video9" not in cmd and "sage.embodiment.look" in cmd
+
+
+def _raising_offer(tmp_path, monkeypatch, cfg):
+    """Run the raising session's tool offer far enough to see what both halves were built with.
+
+    `autonomous-sprout-sage.service` runs this path, not governed_turn (pub's review of #575):
+    the description followed `cfg` while both constructors were built without `camera_source`."""
+    import importlib.util
+    import json
+    from types import SimpleNamespace
+    from pathlib import Path
+    import sage.gateway.being_gate_client as bgc
+    import sage.gateway.being_tool_loop as btl
+    import sage.gateway.hestia_dispatch as hd
+
+    (tmp_path / "instance.json").write_text(json.dumps(cfg))
+    built = {}
+
+    class Rec:
+        def __init__(self, name):
+            self.name = name
+
+        def __call__(self, *a, **kw):
+            built[self.name] = kw
+            return SimpleNamespace(**kw)
+
+    monkeypatch.setattr(hd, "HestiaF1aDispatcher", Rec("dispatcher"))
+    monkeypatch.setattr(bgc, "BeingGateClient", Rec("client"))
+    monkeypatch.setattr(btl, "run_ollama_tool_turn", lambda *a, **kw: None)
+    monkeypatch.setenv("SAGE_TOOLS", "1")
+    script = Path(__file__).resolve().parents[2] / "raising" / "scripts" / "ollama_raising_session.py"
+    spec = importlib.util.spec_from_file_location("ollama_raising_session_camera", script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    me = SimpleNamespace(instance=SimpleNamespace(root=tmp_path, identity=tmp_path / "identity.json"),
+                         llm=None, machine="testseat", _record_tool_turn=lambda r: None)
+    mod.OllamaRaisingSession._maybe_offer_tools(me)
+    return built
+
+
+def test_the_raising_session_tells_both_halves_it_is_a_cortex_seat(tmp_path, monkeypatch):
+    built = _raising_offer(tmp_path, monkeypatch, {"camera_source": "cortex"})
+    assert built["dispatcher"]["camera_source"] == "cortex"
+    assert built["client"]["camera_source"] == "cortex"
+
+
+def test_the_raising_session_keeps_the_device_path_elsewhere(tmp_path, monkeypatch):
+    built = _raising_offer(tmp_path, monkeypatch, {})
+    assert built["dispatcher"]["camera_source"] is None
+    assert built["client"]["camera_source"] is None
