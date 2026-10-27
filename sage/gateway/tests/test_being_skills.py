@@ -37,8 +37,25 @@ def test_the_seeing_seed_holds_on_a_seat_without_a_cortex():
     body = (sk.FLEET_DIR / "seeing-with-your-eyes" / "SKILL.md").read_text()
     head, rest = body.split("**Where the frame comes from", 1)
     assert "cortex" not in head.split("---", 2)[2], "the steps before the split hold on every seat"
-    assert "**A cortex runs your eyes**" in rest and "**No cortex**" in rest
+    assert "**A cortex runs your eyes**" in rest and "**A device node, no cortex**" in rest
     assert "`camera` opens that device itself" in rest
+
+
+def test_the_seeing_seed_has_a_mac_branch_that_agrees_with_the_macs_camera_text():
+    """#578 (NOVA's hold): a Mac's `camera` text says the seat finds the camera by name and there is no
+    device node, and offers only out_path. The fleet skill every Mac being reads must not send it back to a
+    device node: its Mac branch keys on the same words and offers no device, and the device-node branch says
+    it is for a description that names one."""
+    from sage.gateway import toolset
+    rest = (sk.FLEET_DIR / "seeing-with-your-eyes" / "SKILL.md").read_text().split("**Where the frame comes from", 1)[1]
+    mac = rest.split("- **A Mac**", 1)[1].split("\n- **", 1)[0]
+    desc, params = toolset.MAC_CAMERA
+    assert "finds the camera by its name" in mac and "finds the attached camera by its name" in desc
+    assert "no device node" in mac and "no device node" in desc
+    assert "there is no device to\n    name" in mac and list(params) == ["out_path"]
+    assert "Name a different `device`" not in mac, "the Mac branch must not offer what the Mac does not read"
+    device = rest.split("- **A device node, no cortex**", 1)[1]
+    assert "ffmpeg reads a device node" in device
 
 
 def test_a_skill_is_written_read_listed_and_replaced_with_every_version_kept(tmp_path):
