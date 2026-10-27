@@ -210,8 +210,12 @@ def test_the_real_beat_reports_each_phase_before_it_runs():
     line = {p: n for n, _, p in reports}
     turns = sorted(c.lineno for c in ast.walk(main) if isinstance(c, ast.Call)
                    and getattr(c.func, "id", "") == "run_ollama_tool_turn")
+    # the account turn's model call: generate_with_evidence(..., phase="account") since #436, which
+    # replaced the direct llm.get_chat_response this test looked for (red on main from then on)
     account = min(c.lineno for c in ast.walk(main) if isinstance(c, ast.Call)
-                  and getattr(c.func, "attr", "") == "get_chat_response")
+                  and getattr(c.func, "id", "") == "generate_with_evidence"
+                  and any(k.arg == "phase" and getattr(k.value, "value", None) == "account"
+                          for k in c.keywords))
     assert line["explore"] < turns[0] and line["posture"] < turns[1]
     assert line["account"] < account < line["reflect"] < turns[2]
     assert line["answer"] < turns[-1]
