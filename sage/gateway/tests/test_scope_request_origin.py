@@ -63,6 +63,32 @@ def test_no_deny_hash_means_no_claim(monkeypatch):
         assert "origin" not in sent and "deny_witness" not in sent and "origin" not in out
 
 
+def _daemon_would_accept(asked: str, target: str, home: str) -> bool:
+    """hestia #1425's containment rule as nomad proposed it on #573: the deny's target t (from its chain row)
+    and the asked path a pass when a == t, a == dirname(t), or a is the member's home root with t under it.
+    Anything broader stays member-filed, so one deny cannot carry a wide ask into the quiet tier."""
+    return (asked == target or asked == os.path.dirname(target)
+            or (asked == home and (target == home or target.startswith(home.rstrip("/") + "/"))))
+
+
+def test_every_path_scope_path_files_is_one_the_daemon_containment_rule_accepts():
+    # The contract between the halves (nomad on #573): the dispatcher files _scope_path's answer, not the deny's
+    # target. Each shape it emits must pass #1425's rule against the deny it follows, or the claim silently fails.
+    home = "/x/instances/b"
+    shapes = [
+        ("notes/a.md", "/x/instances/b/notes/a.md", home),       # inside the home -> the home root
+        ("/other/dir/f.txt", "/other/dir/f.txt", "/other/dir"),  # a file elsewhere -> its directory
+        ("/other/dir", "/other/dir", "/other/dir"),              # a bare directory elsewhere -> itself
+    ]
+    for raw, target, expected in shapes:
+        asked = e._scope_path(BeingIntent("memory_read", {"path": raw}), home)
+        assert asked == expected, (raw, asked)
+        assert _daemon_would_accept(asked, target, home), (raw, asked, target)
+    # and the rule refuses what would be laundering: an ask wider than the deny's own reach
+    assert not _daemon_would_accept("/other", "/other/dir/f.txt", home)
+    assert not _daemon_would_accept("/", "/x/instances/b/notes/a.md", home)
+
+
 def test_route_threads_the_verdicts_witness_id(monkeypatch):
     seen = {}
     monkeypatch.setattr(e, "_file_scope_request",
