@@ -476,17 +476,18 @@ _UNCOUNTED_CHARS = 12900
 _TEMPLATE_CHARS = 1200
 
 
-def _est_tokens(chars_now: int, measured) -> float:
+def _est_tokens(chars_now: int, measured, uncounted: Optional[int] = None) -> float:
     """Tokens the next prompt will cost. With a measurement from the previous generate —
     (prompt_eval_count, content chars at that prompt) — the estimate is anchored on what
     the server actually counted and only the DELTA rides a chars-per-token guess:
     conservative in both directions (added chars counted dense, removed chars counted
-    light). Without one, the whole prompt rides the guess, plus the uncounted schema chars."""
+    light). Without one, the whole prompt rides the guess, plus the uncounted schema chars:
+    `uncounted` when the caller measured them (the tool loop does, #490), else _UNCOUNTED_CHARS."""
     if measured:
         tokens_at, chars_at = measured
         delta = chars_now - chars_at
         return tokens_at + (delta / _CPT_ADDED if delta > 0 else delta / _CPT)
-    return (chars_now + _UNCOUNTED_CHARS) / _CPT
+    return (chars_now + (_UNCOUNTED_CHARS if uncounted is None else uncounted)) / _CPT
 
 # What a real answer needs. Explore generations across 506 measured on Legion: median
 # 1,282 tokens, p90 3,909, p99 5,741. Reserve the p99 with headroom rather than
@@ -729,7 +730,7 @@ def convo_composition(msgs: List[Dict[str, Any]]) -> Dict[str, int]:
 
 def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
                   measured=None, spill_root: Optional[str] = None,
-                  own_turns: bool = False) -> tuple:
+                  own_turns: bool = False, uncounted: Optional[int] = None) -> tuple:
     """Shrink the OLDEST tool results until the prompt leaves room for an answer.
 
     THE SEED FITTING IS NOT ENOUGH. heartbeat.fit_to_window sizes the first prompt; this
@@ -758,7 +759,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # in the sum at all. The previous generate's prompt_eval_count IS the number; use it.
     size = _convo_chars
     room = num_ctx - reserve
-    if _est_tokens(size(msgs), measured) <= room:
+    if _est_tokens(size(msgs), measured, uncounted) <= room:
         return msgs, []
     budget = None  # decided per elision below, against the anchored estimate
     out = [dict(m) for m in msgs]
@@ -775,7 +776,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # prune may delete a file a marker or pointer the being is about to read still names.
     pinned = {r for m in out for r in _SPILL_REF.findall(m.get("content") or "")}
     for i in idx[:-1] if len(idx) > 1 else []:
-        if _est_tokens(size(out), measured) <= room:
+        if _est_tokens(size(out), measured, uncounted) <= room:
             break
         body = out[i].get("content") or ""
         if len(body) <= COMPACT_MIN_BODY:
@@ -836,12 +837,12 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # stubs, the OLDEST stubs are collapsed to a pointer: first line, last line, and the
     # saved file that holds the whole result. Only a stub whose result WAS saved (nothing is
     # lost), and never the newest COMPACT_STUBS_KEPT (what the being is still working with).
-    if _est_tokens(size(out), measured) > room:
+    if _est_tokens(size(out), measured, uncounted) > room:
         older = idx[:-1] if len(idx) > 1 else []
         stubs = [i for i in older if _ELIDED_SIGIL in (out[i].get("content") or "")
                  and _COLLAPSED_SIGIL not in (out[i].get("content") or "")]
         for i in stubs[:-COMPACT_STUBS_KEPT] if len(stubs) > COMPACT_STUBS_KEPT else []:
-            if _est_tokens(size(out), measured) <= room:
+            if _est_tokens(size(out), measured, uncounted) <= room:
                 break
             body = out[i].get("content") or ""
             m = re.search(r"saved as (" + re.escape(COMPACT_SPILL_DIR) + r"/\S+?)(?=[\s,;]|$)", body)
@@ -874,10 +875,10 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # window filled mid-beat at exactly 32,768 — my own turns fill it and compaction never trims
     # them". Results become stubs and then pointers; its own calls stayed whole forever, so a
     # long beat always ended at the wall. Oldest first, the newest kept.
-    if own_turns and _est_tokens(size(out), measured) > room:
+    if own_turns and _est_tokens(size(out), measured, uncounted) > room:
         own = [i for i, m in enumerate(out) if m.get("role") == "assistant"]
         for i in own[:-COMPACT_OWN_TURNS_KEPT] if len(own) > COMPACT_OWN_TURNS_KEPT else []:
-            if _est_tokens(size(out), measured) <= room:
+            if _est_tokens(size(out), measured, uncounted) <= room:
                 break
             freed = 0
             calls = []
@@ -906,7 +907,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # one is trimmed too, with a larger keep (the being is working from it right now),
     # rather than letting the window cut the generate at the wall (03:27Z 2026-09-09:
     # 24,466 + 110 == 24,576, done_reason length, nothing said).
-    if idx and _est_tokens(size(out), measured) > room:
+    if idx and _est_tokens(size(out), measured, uncounted) > room:
         i = idx[-1]
         body = out[i].get("content") or ""
         keep = COMPACT_KEEP_CHARS * 4
@@ -1402,9 +1403,13 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # 506 generates ended with prompt + eval == num_ctx exactly, and one beat lost its
         # closing words nine times in a day. Anchored on the server's own count from the
         # previous generate, so only the delta rides an estimate.
+        # THE SAME SCHEMA COUNT THE PREFLIGHT BELOW USES. #490 measured `uncounted` for the preflight
+        # only; compaction still assumed _UNCOUNTED_CHARS (12,900) against ~30,500 sent at 38 verbs, so
+        # with no server count yet it stopped ~17.6k chars short and the preflight then refused the step
+        # (estimated 32,762 of 32,768; found adding one verb, 2026-10-27).
         msgs, _elided = compact_convo(msgs, llm, reserve=reserve, measured=measured,
                                       spill_root=getattr(client, "memory_root", None),
-                                      own_turns=compact_own_turns)
+                                      own_turns=compact_own_turns, uncounted=uncounted)
         if _elided:
             compacted.append({"step": len(thoughts), "elisions": len(_elided),
                               "chars": sum(e["chars"] for e in _elided),

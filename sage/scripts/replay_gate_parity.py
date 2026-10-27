@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 WANT = {"search", "check", "git_read", "run", "edit", "patch_apply", "git_restore", "git_clean",
-        "camera", "game", "memory_read", "memory_write", "memory_edit", "identity_edit", "tune"}
+        "camera", "game", "memory_read", "memory_write", "memory_edit", "identity_edit", "settle", "tune"}
 
 
 def distinct_calls(heartbeats: Path, beats: int, only):

@@ -77,6 +77,13 @@ GOVERNANCE_OWNED = ("instance.json",)
 GOVERNANCE_RECORD_NAMES = ("identity.json", "identity.sealed", "identity.attest.json", "instance.json")
 
 
+def _named(p: Path, names) -> bool:
+    """Is p one of these verb-owned files, case aside? A case-insensitive filesystem (macOS, the fleet's CBP
+    and McNugget) opens `Settled.json` as `settled.json`, so an exact-case check would let memory_write past
+    the verb's audit log there (the reason #565 casefolds governance names)."""
+    return p.name.casefold() in {n.casefold() for n in names}
+
+
 def _is_governance_record_name(name: str) -> bool:
     name = name.casefold()
     return any(name == n or name.startswith(n + ".") for n in GOVERNANCE_RECORD_NAMES)
@@ -1052,16 +1059,22 @@ class ReferenceF1aDispatcher:
                     "is yours to write with identity_edit")
             from sage.gateway.being_self import SELF_WRITES
             from sage.gateway.being_params import TUNE_WRITES
-            if _home and p.name in TUNE_WRITES:
+            if _home and _named(p, TUNE_WRITES):
                 raise ValueError(
                     f"{p.name} is changed only with tune, which checks the value against its bounds "
                     "and keeps every change with your reason in tune_log.jsonl. A direct write would "
                     "leave no record of it. Nothing was changed")
-            if _home and p.name in SELF_WRITES:
+            if _home and _named(p, SELF_WRITES):
                 raise ValueError(
                     f"{p.name} is changed only with identity_edit, which keeps every earlier "
                     "version and your reason in self_log.jsonl. A direct write would leave no "
                     "record of what it replaced. Nothing was changed")
+            from sage.gateway.being_settled import SETTLED_WRITES
+            if _home and _named(p, SETTLED_WRITES):
+                raise ValueError(
+                    f"{p.name} is changed only with settle, which keeps every earlier answer and "
+                    "your reason in settled_log.jsonl. A direct write would leave no record of what "
+                    "it replaced. Nothing was changed")
             if _home and p.name in SEAT_OWNED:
                 raise ValueError(
                     f"{p.name} is yours to read and not to edit: it is what you were entrusted "
