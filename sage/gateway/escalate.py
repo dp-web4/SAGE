@@ -126,7 +126,22 @@ def exact_root_above(env: ResultEnvelope, path: str) -> Optional[str]:
     return best
 
 
-def _file_scope_request(member: str, path: str, why: str, endpoint: str) -> Dict[str, Any]:
+# The capability a daemon advertises in hestia_scope_status's `supports` list when it reads a request's
+# origin (hestia #1425). Only then are `origin`/`deny_witness` sent: a daemon that does not know them
+# must never see them, so a filing never fails on an argument it was not built to read (SAGE #572).
+REQUEST_ORIGIN_CAPABILITY = "request_origin"
+ORIGIN_AFTER_DENY = "dispatcher_after_deny"
+
+
+def _file_scope_request(member: str, path: str, why: str, endpoint: str,
+                        deny_witness: Optional[str] = None) -> Dict[str, Any]:
+    """File the scope ask the gate's deny implies, as the being (the daemon has no other way to receive it).
+
+    THIS IS NOT THE BEING ASKING (SAGE #572). The dispatcher files it after an `mrh.*` deny, so the daemon
+    classed it member-filed: peers could not decide it and it landed on the operator as a deliberate ask
+    (cbp-being, 2026-10-27: 14 pending, all of this shape). With the deny's chain hash in hand and a daemon
+    that advertises it can check one, the ask says where it came from; the daemon verifies the hash before
+    trusting the claim (hestia #1425). No hash means no claim: it stays member-filed, never asserted."""
     m = _Mcp(endpoint, member); m.init()
     conn = _unwrap(m.call("hestia_connect", {"plugin_id": member, "host_agent": "sage-escalate",
                                               "host_agent_version": "sage", "requested_role": "citizen"}))
@@ -135,10 +150,17 @@ def _file_scope_request(member: str, path: str, why: str, endpoint: str) -> Dict
     for r in st.get("requests") or []:
         if r.get("status") == "pending" and (r.get("path") or "").rstrip("/") == path.rstrip("/"):
             return {"request_id": r.get("request_id") or r.get("id"), "status": "already_pending"}
-    r = _unwrap(m.call("hestia_request_scope", {"plugin_id": member, "path": path, "reason": why[:400], "session_id": sid}))
+    args = {"plugin_id": member, "path": path, "reason": why[:400], "session_id": sid}
+    claimed = bool(deny_witness) and REQUEST_ORIGIN_CAPABILITY in (st.get("supports") or [])
+    if claimed:
+        args.update({"origin": ORIGIN_AFTER_DENY, "deny_witness": deny_witness})
+    r = _unwrap(m.call("hestia_request_scope", args))
     if "_hestia_error" in r:
         return {"error": r["_hestia_error"]}
-    return {"request_id": r.get("request_id"), "status": r.get("status"), "expires_at": r.get("expires_at")}
+    out = {"request_id": r.get("request_id"), "status": r.get("status"), "expires_at": r.get("expires_at")}
+    if claimed:
+        out["origin"] = ORIGIN_AFTER_DENY
+    return out
 
 
 def write_note(member: str, intent: BeingIntent, env: ResultEnvelope, kind: str, extra: Dict[str, Any]) -> str:
@@ -375,7 +397,9 @@ def escalate(member: str, intent: BeingIntent, env: ResultEnvelope, memory_root:
                 why = (f"{member} was refused {intent.effector} at {path} ({env.verdict.rule if env.verdict else ''}). "
                        f"Its seat's auto session will rule it under delegation if it holds one (hestia #952), "
                        f"else please rule as STANDING if it is the being's own memory.")
-                out["scope_request"] = _file_scope_request(member, path, why, endpoint)
+                out["scope_request"] = _file_scope_request(
+                    member, path, why, endpoint,
+                    deny_witness=(env.verdict.witness_id if env.verdict else None))
         # The note exists to be pointed at by the wake. Without a wake there is no reader, and a
         # beat with nine refused home writes would leave nine near-identical notes (Sprout, #38
         # review); the scope request above is still filed (the daemon dedups it on the path).
