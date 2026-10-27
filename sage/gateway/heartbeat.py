@@ -2843,6 +2843,15 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     parts.append(todo_view(instance))
     journal = _read(instance / "journal.md", 1200)
     parts.append("## journal.md (tail)\n" + (journal.strip() or "(empty: this is your first beat)"))
+    # SKILLS (being_skills), after the records they are matched against: a skill whose `when` words appear
+    # in this beat's state so far is listed first and marked. Fail-open.
+    try:
+        from sage.gateway import being_skills as _skills
+        _sk = _skills.render(instance, "\n\n".join(parts))
+    except Exception:
+        _sk = ""
+    if _sk:
+        parts.append(_sk)
     for d in ("scratch", "notes"):
         parts.append(dir_listing(instance, d, _bp.value(instance, "listing_limit", LISTING_LIMIT)))
     return "\n\n".join(parts)
