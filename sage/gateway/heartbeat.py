@@ -1249,7 +1249,7 @@ _SCHEMA_CHARS_FLOOR = 12_000   # at least the 18-verb measurement, for when the 
 
 
 def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[dict] = None,
-                      brief: bool = False) -> Optional[int]:
+                      brief: bool = False, cfg: Optional[dict] = None) -> Optional[int]:
     """Chars the offered verbs' schemas actually cost. None rather than a guess if it
     cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
     13 verbs to 18. Callers must route None through _schema_chars_fallback, never `or`
@@ -1263,7 +1263,7 @@ def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[d
             # here, so the cost is measured on THOSE specs, not on the full descriptions
             from sage.gateway import toolset
             names = set(offered)
-            return len(json.dumps([t for t in toolset.specs(unavail, enums, brief=brief)
+            return len(json.dumps([t for t in toolset.specs(unavail, enums, brief=brief, cfg=cfg)
                                    if t["function"]["name"] in names]))
         from sage.gateway.being_gate_client import ollama_tools
         return len(json.dumps(ollama_tools(list(offered))))
@@ -4303,7 +4303,8 @@ def main(argv=None) -> int:
     _enums = _enums or None
     # per instance (RESEARCH_GENERALIZATION_RULE): "brief" shortens available verbs' descriptions
     _tool_desc_mode = _toolset.tool_descriptions_mode(instance_config(instance))
-    _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief")
+    _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief",
+                                    cfg=instance_config(instance))
     # EXPECT TRIAL (2026-10-10; private-context legion/egai/PREREG-expect.md): `expect` on game is
     # offered on ON beats only, so its effect can be compared; the arm is recorded on every beat.
     _expect_arm = trial_arm(instance, instance / "heartbeats.jsonl", "expect_trial")
@@ -4316,7 +4317,8 @@ def main(argv=None) -> int:
     # and the window's schema measurement must describe exactly what the model is handed
     _explore_tools = [t["function"]["name"] for t in _explore_specs]
     entrusted = entrustment(instance)
-    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief")
+    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief",
+                                         cfg=instance_config(instance))
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
     _state_head = f"# Your own state\n\n"

@@ -50,6 +50,35 @@ def test_after_the_seat_answers_it_is_unchanged_not_pending():
     assert "unchanged" in r.result and "already_asked" not in r.result
 
 
+def test_an_answer_before_the_scan_window_is_not_reported_as_not_answered_yet(monkeypatch):
+    # #567 (cbp on #566): ask -> the seat answers -> the window scrolls -> the same ask again. The answer
+    # is out of view, so "not answered yet" would be false; the notes name the window they checked.
+    from sage.gateway import hestia_dispatch as hd
+    monkeypatch.setattr(hd, "_PENDING_SCAN", 6)
+    d, home = _seat_home()
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] Ran notes/probe.py: prints a.\n\nAnswers your request seq {asked}.")
+    for i in range(6):
+        conv.append(home, "seat", speaker="seat", via="seat", text=f"unrelated {i}")
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    second = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "and again"}), _ALLOW)
+    said = r.result["already_asked"]
+    assert f"seq {second}" in said and "not answered it yet" not in said
+    assert "in the last 6 turns of 'seat'" in said and "older turns were not checked" in said
+    assert "not answered in the last 6 turns" in conv.recent(home, "seat", limit=1)[-1]["text"]
+
+
+def test_a_short_conversation_still_says_not_yet():
+    # the whole conversation is inside the window: nothing older exists, so "yet" is true
+    d, home = _seat_home()
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    assert "has not answered it yet" in r.result["already_asked"] and "last 80" not in r.result["already_asked"]
+
+
 def test_a_different_file_or_an_edit_is_a_new_request():
     d, home = _seat_home()
     d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)

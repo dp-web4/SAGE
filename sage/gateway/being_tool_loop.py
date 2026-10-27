@@ -148,7 +148,8 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
             if intent.effector == "describe":
                 # Never dispatched: it reads the schema table and touches nothing (toolset.DESCRIBE).
                 from sage.gateway.toolset import full_text
-                env = ResultEnvelope(ok=True, result=full_text(str((intent.args or {}).get("verb") or "").strip()),
+                env = ResultEnvelope(ok=True, result=full_text(str((intent.args or {}).get("verb") or "").strip(),
+                                                               {"camera_source": getattr(client, "camera_source", None)}),
                                      note="describe")
                 trace.append((intent, env))
                 convo.append({"role": "tool", "effector": intent.effector, "content": env.to_tool_message()})
