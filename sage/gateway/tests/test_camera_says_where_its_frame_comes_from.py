@@ -29,9 +29,11 @@ def test_every_other_seat_keeps_the_registry_text():
 
 
 def test_brief_mode_and_an_unavailable_camera_still_follow_the_seat():
-    assert "ffmpeg" not in _camera(toolset.specs({}, brief=True, cfg=CORTEX))["description"]
+    # "ffmpeg" is absent from the registry's first sentence too, so these assert on the cortex text itself
+    brief = _camera(toolset.specs({}, brief=True, cfg=CORTEX))["description"]
+    assert brief.startswith("Take ONE frame from your own eye")
     gone = _camera(toolset.specs({"camera": "your eyes' organ (the cortex) is not running"}, cfg=CORTEX))
-    assert "CANNOT WORK" in gone["description"] and "ffmpeg" not in gone["description"]
+    assert "CANNOT WORK" in gone["description"] and gone["description"].startswith("Take ONE frame from your own eye")
 
 
 def test_describe_answers_as_this_seat_offers_it():

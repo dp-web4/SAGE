@@ -153,7 +153,7 @@ CORTEX_CAMERA = (
     "Take ONE frame from your own eye, into your own scratch. Here your eyes are run by your cortex, which "
     "holds the camera sensors: the frame comes from the cortex as a finished image, and no device node is "
     "opened or needed. The JPEG lands at out_path (default scratch/camera/last-frame.jpg, replaced each "
-    "time) and is shown to you at your next beat. If your eyes are closed (gaze) or the cortex has no frame "
+    "time) and, if it lands under scratch/camera/, is shown to you at your next beat. If your eyes are closed (gaze) or the cortex has no frame "
     "yet, it says so and writes nothing.",
     {"out_path": "optional: where the JPEG lands, a plain path inside your home "
                  "(default scratch/camera/last-frame.jpg)"})
