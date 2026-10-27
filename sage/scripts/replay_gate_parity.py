@@ -4,9 +4,17 @@
     replay_gate_parity.py <instance> <beats> <tree-a> <tree-b> [options]
 
 Every distinct (effector, args) the being issued in its last <beats> heartbeats is judged
-once under each tree, with the SAME law (--hestia-shared), the SAME grants and the same
-live instance dir. Each tree is judged in its own subprocess, because the two trees import
-different copies of sage.gateway.
+once under each tree, with the SAME law, the SAME grants and the same live instance dir.
+The law is the one the daemon would load: with no --hestia-shared the child leaves
+HESTIA_GATE_SHARED unset, so being_gate_client resolves it exactly as the live gate does
+(HESTIA_GATE_SHARED, HESTIA_SHARED_DIR, $HESTIA_HOME/shared, ~/ai-workspace/hestia).
+Each child prints the law dir it loaded and the member's granted_reach with modes; if A
+and B loaded different law dirs or grant sets the replay exits 2 instead of reporting a
+parity, because a diff between two different judges is not a parity measurement. It also
+exits 2 when the grant set is empty in both (unless --allow-empty-grants): zero reach is
+almost always a failed grant lookup, and a parity over it is a parity of an empty law.
+Each tree is judged in its own subprocess, because the two trees import different copies
+of sage.gateway.
 
 Nothing executes: the client is built gate_only, so an allowed intent comes back `pending`.
 `claim_scope` is stubbed so a deny files NO scope request in the being's name; the stub
@@ -56,7 +64,8 @@ def distinct_calls(heartbeats: Path, beats: int, only):
 
 def judge(a):
     """Child mode: judge every call under the tree at a.tree; write rows to a.judge_out."""
-    os.environ["HESTIA_GATE_SHARED"] = a.hestia_shared
+    if a.hestia_shared:
+        os.environ["HESTIA_GATE_SHARED"] = a.hestia_shared
     sys.path.insert(0, a.tree)
     from sage.gateway import governed_turn as gt
     from sage.gateway.being_gate_client import BeingIntent
@@ -84,10 +93,22 @@ def judge(a):
             rows.append([k, v.decision, v.rule, (v.reason or "")[:800], v.stage])
         except Exception as ex:  # a crash is a verdict too: report it, don't drop the call
             rows.append([k, "EXC", type(ex).__name__, str(ex)[:300], ""])
-    Path(a.judge_out).write_text(json.dumps(rows))
+    # WHAT THE JUDGE LOADED (legion-claude / cbp-claude, #559, 2026-10-27). The old default
+    # --hestia-shared was the dev hestia checkout; on cbp that law lacks cbp-being's r-only
+    # escalations floor, so pre-#559 A allowed all 15 runs the live gate refused "needs re"
+    # and A==B on a wrong judge (changed=2 instead of 29). Printing the law dir and the grants
+    # makes a missing grant visible; main() refuses to compare when A and B differ here.
+    core = os.path.dirname(os.path.abspath(sys.modules["hestia_gate_core"].__file__))
+    grants = getattr(c, "_policy_grants", lambda: ((), ()))()[1]
+    reach = sorted({tuple(str(x) for x in g) for g in grants})
+    Path(a.judge_out).write_text(json.dumps({"rows": rows, "shared": core, "granted_reach": reach}))
+    src = "--hestia-shared" if a.hestia_shared else next(
+        (k for k in ("HESTIA_GATE_SHARED", "HESTIA_SHARED_DIR", "HESTIA_HOME") if os.environ.get(k)), "fallback")
     print(f"{a.tree}: gateway={gt.__file__} cwd={os.getcwd()} calls={len(rows)} path={getattr(c, 'gate_path', '?')}"
-          f" core={sys.modules['hestia_gate_core'].__file__} claims_suppressed={len(stubbed)}",
+          f" shared={core} (via {src}) claims_suppressed={len(stubbed)} granted_reach={len(reach)}",
           file=sys.stderr)
+    for g in reach:
+        print("  grant " + " ".join(g), file=sys.stderr)
 
 
 def main():
@@ -98,13 +119,16 @@ def main():
     p.add_argument("tree_b", nargs="?", help="SAGE tree B (e.g. carrier + the PR)")
     p.add_argument("--live", default=os.path.expanduser("~/ai-workspace/SAGE"),
                    help="live SAGE checkout holding sage/instances/<instance>")
-    p.add_argument("--hestia-shared",
-                   default=os.path.expanduser("~/ai-workspace/hestia/plugins/_shared"))
-    p.add_argument("--member", help="hestia member id when it differs from the instance dir name (cbp: cbp-being in cbp-qwen3.8-distill-4b). Wrong member = no grants = every call denied in both trees")
+    p.add_argument("--hestia-shared", default=None,
+                   help="law dir to judge under. Default: none, so the child resolves it as the daemon does."
+                        " Setting it judges under a law the being may not run under")
+    p.add_argument("--member", help="hestia member id when it differs from the instance dir name (cbp: cbp-being in cbp-qwen3.8-distill-4b). A wrong member gets only the floor grants (cbp 10-27: one, shared-context/forum r), not zero, so the empty-reach refusal does not catch it; check the printed grant lines")
     p.add_argument("--model", help="model name for the client; gate_only never calls it, so a missing one only warns")
     p.add_argument("--only", help="comma-separated effectors to replay")
     p.add_argument("--force-local-law", action="store_true",
                    help="judge B with the single gate disabled (A is always as-is)")
+    p.add_argument("--allow-empty-grants", action="store_true",
+                   help="report a parity even when the member has no granted_reach in either tree")
     p.add_argument("--out", help="write per-call rows of both runs here (JSON)")
     p.add_argument("--python", default=sys.executable)
     p.add_argument("--tree"), p.add_argument("--calls"), p.add_argument("--judge-out")
@@ -124,8 +148,9 @@ def main():
     for label, tree, force in (("A", a.tree_a, False), ("B", a.tree_b, a.force_local_law)):
         cmd = [a.python, os.path.abspath(__file__), a.instance, str(a.beats), a.tree_a,
                "--tree", os.path.abspath(tree), "--calls", str(tmp / "calls.json"),
-               "--judge-out", str(tmp / f"{label}.json"), "--live", a.live,
-               "--hestia-shared", a.hestia_shared]
+               "--judge-out", str(tmp / f"{label}.json"), "--live", a.live]
+        if a.hestia_shared:
+            cmd += ["--hestia-shared", a.hestia_shared]
         if a.model:
             cmd += ["--model", a.model]
         if a.member:
@@ -139,13 +164,33 @@ def main():
         # trees: sys.path[0] is this script's dir and the child inserts --tree ahead of it; the
         # child prints the sage.gateway it loaded so that is checkable on every run.
         subprocess.run(cmd, check=True, cwd=a.live)
-        runs[label] = {r[0]: r for r in json.loads((tmp / f"{label}.json").read_text())}
+        runs[label] = json.loads((tmp / f"{label}.json").read_text())
 
-    A, B = runs["A"], runs["B"]
+    loaded = {lb: (r["shared"], r["granted_reach"]) for lb, r in runs.items()}
+    if loaded["A"] != loaded["B"]:
+        print(f"REFUSED: A and B loaded different law. A shared={loaded['A'][0]} B shared={loaded['B'][0]}",
+              file=sys.stderr)
+        ga, gb = ({tuple(g) for g in loaded[x][1]} for x in ("A", "B"))
+        for g in sorted(ga - gb):
+            print("  only A: " + " ".join(g), file=sys.stderr)
+        for g in sorted(gb - ga):
+            print("  only B: " + " ".join(g), file=sys.stderr)
+        return 2
+    # EMPTY REACH IS A LOOKUP FAILURE (legion-claude review of #579, 2026-10-27): _policy_grants()
+    # returns ((), ()) on no mechanism, no snapshot or any exception, and so does judge()'s getattr
+    # fallback for a tree without it. Two trees failing the same way pass the split check
+    # with granted_reach=0 and every call is denied in both: agreement on a wrong law.
+    if not loaded["A"][1] and not a.allow_empty_grants:
+        print(f"REFUSED: granted_reach is empty in both A and B (law={loaded['A'][0]}). Usually a missing"
+              " governance snapshot, a tree without _policy_grants, or a grant lookup that raised; pass"
+              " --allow-empty-grants if the member really has no reach", file=sys.stderr)
+        return 2
+    A, B = ({r[0]: r for r in runs[x]["rows"]} for x in ("A", "B"))
     matrix = collections.Counter(((A[k][1], A[k][2]), (B[k][1], B[k][2])) for k in calls)
     changed = [k for k in calls if (A[k][1], A[k][2]) != (B[k][1], B[k][2])]
     print(f"instance={a.instance} beats={a.beats} distinct_calls={len(calls)}")
     print(f"A={a.tree_a}\nB={a.tree_b}{' (local-law)' if a.force_local_law else ''}")
+    print(f"law={loaded['A'][0]} granted_reach={len(loaded['A'][1])} (identical in A and B)")
     print("count  A(decision,rule) -> B(decision,rule)")
     for (va, vb), n in sorted(matrix.items(), key=lambda x: -x[1]):
         print(f"{n:6d}  {va[0]}:{va[1]} -> {vb[0]}:{vb[1]}{'' if va == vb else '   CHANGED'}")
