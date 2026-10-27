@@ -1551,6 +1551,14 @@ RESPONSE STYLE:
             # included, so this is the path on which the being actually meets them.
             from sage.gateway.governed_turn import worktree_for
             worktree = worktree_for(self.instance.root)
+            # where `camera` gets a frame ("cortex" or absent), read once for both halves as
+            # governed_turn does: without it the description says "cortex" and the act still
+            # takes the device path (pub's review of #575).
+            try:
+                from sage.gateway.governed_turn import instance_config as _icfg0
+                camera_source = _icfg0(self.instance.root).get("camera_source") or None
+            except Exception:
+                camera_source = None
             try:
                 from sage.gateway.hestia_dispatch import HestiaF1aDispatcher, make_forum_publisher
                 _ppd = os.path.expanduser("~/ai-workspace/shared-context/forum")
@@ -1558,7 +1566,7 @@ RESPONSE STYLE:
                 dispatcher = HestiaF1aDispatcher(
                     _pid, memory_root=str(self.instance.root),
                     publish_fn=make_forum_publisher(_ppd, _pid) if os.path.isdir(_ppd) else None,
-                    worktree=worktree)
+                    worktree=worktree, camera_source=camera_source)
             except Exception as _e:
                 print(f"[tools] real F1a unavailable ({type(_e).__name__}); using reference dispatcher")
                 from sage.gateway.hestia_witness import make_hestia_witness_fn
@@ -1576,6 +1584,7 @@ RESPONSE STYLE:
                 workspace=workspace,
                 dispatcher=dispatcher,
                 worktree=worktree,
+                camera_source=camera_source,
             )
             seed = [
                 {"role": "system", "content":
@@ -1603,7 +1612,7 @@ RESPONSE STYLE:
             except Exception:
                 _cfg = {}
             result = run_ollama_tool_turn(client, self.llm, seed, max_steps=2,
-                                          tools=_toolset.specs(_toolset.unavailable(_reading, worktree, _cfg)))
+                                          tools=_toolset.specs(_toolset.unavailable(_reading, worktree, _cfg), cfg=_cfg))
             self._record_tool_turn(result)
         except Exception as e:
             try:

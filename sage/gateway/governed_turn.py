@@ -242,7 +242,8 @@ def offered_tools(tools_arg, instance):
         reading = _body.reading()
     except Exception:
         reading = None
-    return toolset.specs(toolset.unavailable(reading, worktree_for(instance), instance_config(instance)))
+    cfg = instance_config(instance)
+    return toolset.specs(toolset.unavailable(reading, worktree_for(instance), cfg), cfg=cfg)
 
 
 def build_client(member: str, instance: Path, model: str, workspace: str,
