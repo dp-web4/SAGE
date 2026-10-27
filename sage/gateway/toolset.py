@@ -141,6 +141,32 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
     return out
 
 
+# WHAT A VERB SAYS ON THIS MACHINE, where its registry text describes another machine's mechanism.
+# camera's registry text is the ffmpeg path: "The seat runs ffmpeg against /dev/video0 (or a plain device
+# node you name)", with a `device` parameter defaulting to /dev/video0. On a seat that declares
+# camera_source "cortex" none of that is true: the frame comes from the cortex (sage/embodiment/look.py) and
+# `device` is never read (camera_command; _do_camera). Measured on Sprout, 2026-10-14..27: 612 of the
+# being's 1,010 request_runs were about the device node, across 86 files, while its own tool text said, every
+# beat, that its camera reads that node. The text now says where its frame comes from, and offers only the
+# parameter that does something.
+CORTEX_CAMERA = (
+    "Take ONE frame from your own eye, into your own scratch. Here your eyes are run by your cortex, which "
+    "holds the camera sensors: the frame comes from the cortex as a finished image, and no device node is "
+    "opened or needed. The JPEG lands at out_path (default scratch/camera/last-frame.jpg, replaced each "
+    "time) and is shown to you at your next beat. If your eyes are closed (gaze) or the cortex has no frame "
+    "yet, it says so and writes nothing.",
+    {"out_path": "optional: where the JPEG lands, a plain path inside your home "
+                 "(default scratch/camera/last-frame.jpg)"})
+
+
+def here(cfg: Optional[dict]) -> Dict[str, tuple]:
+    """{verb: (description, params)} that replace the registry text on THIS seat (see CORTEX_CAMERA)."""
+    out: Dict[str, tuple] = {}
+    if (cfg or {}).get("camera_source") == "cortex":
+        out["camera"] = CORTEX_CAMERA
+    return out
+
+
 # BRIEF DESCRIPTIONS (opt-in per instance, `tool_descriptions: "brief"`; dp, 2026-10-03). Measured on
 # legion-being: the seed that compaction cannot touch grew 15.7k -> 17.1k tokens in a week, much of it
 # verb schemas (33 verbs, 23.8k chars, descriptions 47% of that), leaving ~1.3k tokens of a 18.4k
@@ -170,11 +196,15 @@ def brief_description(name: str, desc: str) -> str:
     return f"{first} (Full text: {DESCRIBE} {name}.)"
 
 
-def full_text(name: str) -> str:
-    """What `describe` answers: the verb's whole description and each parameter's, from the schema table."""
+def full_text(name: str, cfg: Optional[dict] = None) -> str:
+    """What `describe` answers: the verb's whole description and each parameter's, from the schema table,
+    as this seat offers it (here)."""
     if name not in _TOOL_SCHEMAS:
         return (f"there is no verb called {name!r}. Verbs: " + ", ".join(canonical_toolset()))
     desc, props, required = _TOOL_SCHEMAS[name]
+    if name in here(cfg):
+        desc, props = here(cfg)[name]
+        required = [r for r in required if r in props]
     lines = [f"{name}: {desc}"]
     for k, v in props.items():
         lines.append(f"  {k}{' (required)' if k in required else ''}: {v}")
@@ -182,7 +212,7 @@ def full_text(name: str) -> str:
 
 
 def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, list]] = None,
-          *, brief: bool = False) -> List[dict]:
+          *, brief: bool = False, cfg: Optional[dict] = None) -> List[dict]:
     """The Ollama tool specs for the whole canonical toolset. Available verbs carry their full
     description; an unavailable one carries one line and the reason, parameters intact."""
     unavail = unavail or {}
@@ -192,8 +222,12 @@ def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, 
     from sage.gateway.being_gate_client import _param_enums
     closed = {**_param_enums(), **(enums or {})}
     out = []
+    local = here(cfg)
     for name in canonical_toolset():
         desc, props, required = _TOOL_SCHEMAS[name]
+        if name in local:
+            desc, props = local[name]
+            required = [r for r in required if r in props]
         if name in unavail:
             first = desc.split(". ")[0].rstrip(".")
             desc = (f"{first}. ON THIS MACHINE IT CANNOT WORK: {unavail[name]}. Offered because "

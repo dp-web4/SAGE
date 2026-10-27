@@ -1603,7 +1603,7 @@ RESPONSE STYLE:
             except Exception:
                 _cfg = {}
             result = run_ollama_tool_turn(client, self.llm, seed, max_steps=2,
-                                          tools=_toolset.specs(_toolset.unavailable(_reading, worktree, _cfg)))
+                                          tools=_toolset.specs(_toolset.unavailable(_reading, worktree, _cfg), cfg=_cfg))
             self._record_tool_turn(result)
         except Exception as e:
             try:
