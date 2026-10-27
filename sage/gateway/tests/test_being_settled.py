@@ -171,3 +171,11 @@ def test_an_id_cannot_take_a_question_another_entry_holds(tmp_path):
     ok, msg, _ = _s(tmp_path, id="s2", question="is the camera mine", answer="no")
     assert not ok and "s1 already holds that question" in msg
     assert [e["question"] for e in st.read(tmp_path)[0]] == ["Is the camera mine?", "what is the sky?"]
+
+
+def test_a_case_variant_of_a_verb_owned_file_is_refused_too():
+    # macOS opens Settled.json as settled.json: an exact-case guard would let memory_write past the log there
+    d, root = _disp()
+    for name in ("Settled.json", "SETTLED_LOG.jsonl", "Self.json", "SELF_LOG.jsonl", "Tuned.json"):
+        env = d(BeingIntent("memory_write", {"path": name, "content": "{}"}), _ALLOW)
+        assert not env.ok and "changed only with" in env.error, (name, env)
