@@ -52,7 +52,7 @@ def test_no_wake_files_the_request_but_writes_no_note():
     d = tempfile.mkdtemp(); e.NOTE_DIR = d
     filed = []
     orig = e._file_scope_request
-    e._file_scope_request = lambda member, path, why, endpoint: (filed.append(path) or {"request_id": "scope-x", "status": "pending"})
+    e._file_scope_request = lambda member, path, why, endpoint, **kw: (filed.append(path) or {"request_id": "scope-x", "status": "pending"})
     try:
         r = e.escalate("b", BeingIntent("memory_write", {"path": "notes/a.md"}), _ref("mrh.path", "outside"), "/x/instances/b", wake=False)
     finally:
@@ -65,7 +65,7 @@ def test_reask_on_an_already_pending_request_writes_no_note_and_wakes_no_one():
     d = tempfile.mkdtemp(); e.NOTE_DIR = d
     woke = []
     orig_f, orig_w = e._file_scope_request, e.wake_seat
-    e._file_scope_request = lambda *a: {"request_id": "scope-x", "status": "already_pending"}
+    e._file_scope_request = lambda *a, **kw: {"request_id": "scope-x", "status": "already_pending"}
     e.wake_seat = lambda *a, **k: woke.append(a) or {"sent": True}
     try:
         r = e.escalate("b", BeingIntent("memory_read", {"path": "/var/log/x/daemon.log"}), _ref("mrh.path", "outside"), "/x/instances/b")
@@ -140,7 +140,7 @@ def test_bare_home_filename_is_the_home_file_and_a_real_ask(monkeypatch=None):
     assert block_census.classify("memory_write", "mrh.path", "journal.md", Path(root)) != "mis-rooted-home"
     assert block_census.classify("memory_write", "mrh.path", "/repo/sage/journal.md", Path(root)) == "mis-rooted-home"
     filed = {}
-    def _fake_file(member, path, why, endpoint):
+    def _fake_file(member, path, why, endpoint, **kw):
         filed.update({"member": member, "path": path}); return {"request_id": "scope-test", "status": "filed"}
     orig = esc._file_scope_request; esc._file_scope_request = _fake_file
     try:
@@ -282,7 +282,7 @@ def test_refusal_beneath_an_exact_home_grant_routes_to_the_operator_and_files_no
     assert e.exact_root_above(rec, os.path.join(real, "journal.md")) is None
     filed = []
     orig = e._file_scope_request
-    e._file_scope_request = lambda *a: (filed.append(a) or {"request_id": "scope-x", "status": "pending"})
+    e._file_scope_request = lambda *a, **kw: (filed.append(a) or {"request_id": "scope-x", "status": "pending"})
     try:
         r = e.escalate("cbp-being", i, env, root, wake=False)
     finally:

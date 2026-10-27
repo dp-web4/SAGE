@@ -125,7 +125,7 @@ def test_run_ollama_tool_turn_with_fake_llm():
     from sage.gateway.being_gate_client import _TOOL_SCHEMAS
     # Pinned against the schema table, not a literal: the count went 13 -> 16 -> 24 as verbs
     # landed on two branches, and a number here only ever recorded which branch wrote it.
-    assert len(ollama_tools()) == len(_TOOL_SCHEMAS) >= 38
+    assert len(ollama_tools()) == len(_TOOL_SCHEMAS) >= 39
 
     calls = {"n": 0}
 
