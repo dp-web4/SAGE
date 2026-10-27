@@ -103,13 +103,22 @@ def index(instance) -> List[dict]:
     return fleet + own
 
 
+def _pattern(w: str) -> str:
+    """An edge of the word that is itself punctuation needs no boundary, so a prefix such as `scope-` matches
+    the `scope-<id>` a refusal prints; a word that starts with `/` is a path and matches what extends it, so
+    `/dev/video` matches `/dev/video0` (cbp review of #576)."""
+    head = r"(?<![a-z0-9])" if w[:1].isalnum() else ""
+    tail = r"(?![a-z0-9])" if w[-1:].isalnum() and not w.startswith("/") else ""
+    return head + re.escape(w) + tail
+
+
 def match(skills: List[dict], situation: str) -> List[Tuple[int, dict, List[str]]]:
     """[(hits, skill, the `when` words found)] for every skill with at least one `when` word in the situation,
     most hits first. Whole-word, case-insensitive."""
     low = (situation or "").lower()
     out = []
     for s in skills:
-        found = [w for w in s["when"] if re.search(r"(?<![a-z0-9])" + re.escape(w) + r"(?![a-z0-9])", low)]
+        found = [w for w in s["when"] if re.search(_pattern(w), low)]
         if found:
             out.append((len(found), s, found))
     out.sort(key=lambda x: -x[0])

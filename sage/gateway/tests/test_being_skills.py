@@ -59,6 +59,15 @@ def test_when_words_match_whole_words_only():
     assert sk.match([s], "I will run it")[0][2] == ["run"]
 
 
+def test_a_when_word_ending_in_punctuation_matches_what_follows_it():
+    """cbp review of #576: `scope-` and `/dev/video` are prefixes of what a refusal and a device listing print."""
+    fleet = {s["name"]: s for s in sk._load(sk.FLEET_DIR, "fleet")}
+    assert "scope-" in sk.match([fleet["when-an-act-is-refused"]], "opened scope-ac881b894a24")[0][2]
+    assert "/dev/video" in sk.match([fleet["seeing-with-your-eyes"]], "ls /dev/video0 failed")[0][2]
+    s = {"name": "x", "description": "d", "when": ["scope-"], "source": "fleet", "body": ""}
+    assert sk.match([s], "telescope-ac88") == []
+
+
 def test_the_index_stays_within_its_budget_and_says_how_many_more(tmp_path):
     for i in range(40):
         _write(tmp_path, name=f"probe-{i:02d}", description="x" * 200)
@@ -135,3 +144,23 @@ def test_the_beat_lists_the_skills_and_matches_them_against_its_own_state(tmp_pa
     state = own_state(tmp_path, "sprout-being", body_reading={})
     block = state[state.index("## Skills"):]
     assert "- seeing-with-your-eyes:" in block.splitlines()[1] and "matches now: ffmpeg" in block
+
+
+def test_another_beings_skills_are_not_writable_through_a_grant(tmp_path):
+    """cbp review of #576: the skills guard reaches any home a grant reaches, as its neighbours do (#546)."""
+    d, root = _disp()
+    other = tmp_path / "other-home"
+    other.mkdir()
+    (other / "identity.json").write_text("{}\n")
+    reach = GatewayVerdict("allow", granted=(str(root), str(other)),
+                           granted_reach=((str(root), True), (str(other), True)))
+    env = d(BeingIntent("memory_write", {"path": str(other / "skills/x/SKILL.md"), "content": "x"}), reach)
+    assert not env.ok and "skill" in env.error, env
+    assert not (other / "skills").exists()
+    # a granted directory that is no home keeps its own skills/ writable: the guard is about records
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    reach = GatewayVerdict("allow", granted=(str(root), str(plain)),
+                           granted_reach=((str(root), True), (str(plain), True)))
+    env = d(BeingIntent("memory_write", {"path": str(plain / "skills/x/SKILL.md"), "content": "x"}), reach)
+    assert env.ok, env.error
