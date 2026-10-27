@@ -269,3 +269,63 @@ def test_an_exact_own_grant_suppresses_only_an_exact_floor_on_the_same_path():
     policy = SimpleNamespace(scope=(f"path:{forum}",), read_scope=(f"path:{forum}",))
     reach = _granted_reach(_core_with_modes(), policy, ws)
     assert not [x for x in reach if x[0] == forum and len(x) > 2 and x[2] == "r"], reach
+
+
+# ---- hestia #1398's write half (#1421): a NARROWED floor entry reaches with its modes -------------
+# Measured 2026-10-25 (cbp-being): dp put shared-context/forum on the floor as `rw`; the daemon served
+# it read-only and the being could not write a note there without a live rwed grant. Once the gate
+# consumes `floor_by_mode` (policy.floor_mode_scope), the dispatcher must admit the same writes.
+
+def test_a_narrowed_floor_entry_is_reach_in_its_modes():
+    ws, home, forum = _floor_world()
+    policy = SimpleNamespace(scope=(), read_scope=(), floor_mode_scope=((f"path:{forum}/**", "rw"),))
+    reach = _granted_reach(_core_with_modes(), policy, ws)
+    assert (forum, True, "rw") in reach, reach
+    read, write = _dispatch_read_and_write(home, forum, reach)
+    assert read.ok and "from sprout" in (read.result or ""), read
+    assert write.ok and os.path.exists(os.path.join(forum, "x.md")), write
+
+
+def test_the_narrowed_floor_steps_aside_where_an_own_grant_reaches():
+    ws, home, forum = _floor_world()
+    sc = os.path.dirname(forum)
+    policy = SimpleNamespace(scope=(f"path:{sc}/**",), read_scope=(),
+                             floor_mode_scope=((f"path:{forum}/**", "rw"),))
+    reach = _granted_reach(_core_with_modes(), policy, ws)
+    assert (sc, True, "rwed") in reach and not [x for x in reach if x[0] == forum], reach
+    # An EXACT own grant on the floor's root does not reach the children: the floor stays (nomad).
+    policy = SimpleNamespace(scope=(f"path:{forum}",), read_scope=(),
+                             floor_mode_scope=((f"path:{forum}/**", "rw"),))
+    reach = _granted_reach(_core_with_modes(), policy, ws)
+    assert (forum, True, "rw") in reach, reach
+
+
+def test_a_row_served_as_read_floor_and_by_mode_is_listed_once_with_its_modes():
+    ws, home, forum = _floor_world()
+    policy = SimpleNamespace(scope=(), read_scope=(f"path:{forum}/**",),
+                             floor_mode_scope=((f"path:{forum}/**", "r"),))
+    reach = _granted_reach(_core_with_modes(), policy, ws)
+    rows = [x for x in reach if x[0] == forum]
+    assert rows == [(forum, True, "r")], reach
+    read, write = _dispatch_read_and_write(home, forum, reach)
+    assert read.ok and not write.ok, (read, write)
+
+
+def test_a_bare_repo_name_floor_row_and_malformed_modes():
+    ws, home, forum = _floor_world()
+    gov = os.path.join(ws, "governance")
+    os.makedirs(gov, exist_ok=True)
+    policy = SimpleNamespace(scope=(), read_scope=(),
+                             floor_mode_scope=(("governance", "wr"), (f"path:{forum}/**", "x"), ("", "r")))
+    reach = _granted_reach(_core_with_modes(), policy, ws)
+    assert (os.path.realpath(gov), True, "rw") in reach, reach       # canonical order, repo name resolved
+    assert not [x for x in reach if x[0] == forum], reach            # a mode outside rwed reads as nothing
+
+
+def test_a_core_or_policy_without_the_field_adds_nothing():
+    ws, home, forum = _floor_world()
+    policy = SimpleNamespace(scope=(), read_scope=())                 # a gate that predates #1421
+    assert _granted_reach(_core_with_modes(), policy, ws) == ()
+    core = SimpleNamespace(_scope_roots_with_reach=lambda e, w: (), _scope_parts=lambda s, w: ((), ()))
+    policy = SimpleNamespace(scope=(), read_scope=(), floor_mode_scope=((f"path:{forum}/**", "rw"),))
+    assert _granted_reach(core, policy, ws) == ()                     # a mode-blind core

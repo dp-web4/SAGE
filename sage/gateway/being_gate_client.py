@@ -3470,6 +3470,55 @@ def _floor_read_reach(core, policy, workspace: str, own) -> tuple:
         out.append((root, rec, "r"))
     return tuple(out)
 
+def _floor_mode_reach(core, policy, workspace: str, own) -> tuple:
+    """``((root, recursive, modes), ...)`` for the society's NARROWED floor entries the member's
+    gate consumes with their modes (`floor_by_mode` -> policy.floor_mode_scope, hestia #1398's
+    write half, #1421), so the dispatcher's own confinement admits the writes the gate admits
+    there: an `rw` floor on shared-context/forum lets a being write a note the gate allowed,
+    instead of refusing it "outside your reach" after the law said yes.
+
+    Same suppression rule as `_floor_read_reach` (the floor fills only where no own grant
+    reaches, hestia #1386), and only with a mode-aware core. A core that predates the field
+    gives the policy no `floor_mode_scope`, so nothing is added: inert until the gate carries it."""
+    import os
+    if getattr(core, "scope_roots_with_modes", None) is None:
+        return ()
+    entries = list(getattr(policy, "floor_mode_scope", ()) or ())
+    if not entries:
+        return ()
+    ws = os.path.realpath(os.path.expanduser(workspace)).replace("\\", "/").rstrip("/")
+    covered = [(str(it[0]).rstrip("/"), bool(it[1])) for it in own]
+    out = []
+    for entry, modes in entries:
+        modes = "".join(c for c in "rwed" if c in str(modes or ""))
+        if not isinstance(entry, str) or not entry or not modes:
+            continue
+        if entry.startswith("path:"):
+            roots = [(str(r), bool(rec)) for r, rec in core._scope_roots_with_reach([entry], workspace)]
+        elif "/" not in entry and "\\" not in entry and entry not in (".", "..", "*"):
+            roots = [(os.path.realpath(os.path.join(ws, entry)).replace("\\", "/").rstrip("/"), True)]
+        else:
+            continue
+        for root, rec in roots:
+            if any((orec and (root == r or root.startswith(r + "/")))
+                   or (not orec and not rec and root == r)
+                   for r, orec in covered):
+                continue
+            out.append((root, rec, modes))
+    return tuple(out)
+
+
+def _floor_reach(core, policy, workspace: str, own) -> tuple:
+    """The read floor (#533) and the narrowed floor with its modes (#1421), as one list. An entry
+    served both ways (an `r` floor row arrives as `society_floor_read` AND in `floor_by_mode`) is
+    listed once, with the modes row, which holds at least `r`."""
+    by_mode = _floor_mode_reach(core, policy, workspace, own)
+    keyed = {(str(r).rstrip("/"), bool(rec)) for r, rec, *_ in by_mode}
+    read_only = tuple(row for row in _floor_read_reach(core, policy, workspace, own)
+                      if (str(row[0]).rstrip("/"), bool(row[1])) not in keyed)
+    return read_only + by_mode
+
+
 def _granted_reach(core, policy, workspace: str, granted_paths=()) -> tuple:
     """``((root, recursive), ...)`` for every path grant, via the core's own reach resolver
     (hestia_gate_core._scope_roots_with_reach, since #1002: exact unless spelled `/**`),
@@ -3488,7 +3537,7 @@ def _granted_reach(core, policy, workspace: str, granted_paths=()) -> tuple:
             scopes = list(getattr(policy, "scope", ()) or ())
             own = (tuple((str(r), bool(rec), str(md)) for r, rec, md in with_modes(policy, workspace))
                    + tuple((r, True) for r in _repo_name_roots(core, scopes, workspace, granted_paths)))
-            return own + _floor_read_reach(core, policy, workspace, own)
+            return own + _floor_reach(core, policy, workspace, own)
         reach = getattr(core, "_scope_roots_with_reach", None)
         if reach is not None:
             scopes = list(getattr(policy, "scope", ()) or ())
