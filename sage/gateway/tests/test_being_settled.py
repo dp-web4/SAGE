@@ -96,9 +96,23 @@ def test_the_beat_shows_them_newest_first_within_its_budget(tmp_path):
     shown = st.render(tmp_path)
     assert len(shown) <= st.RENDER_CHARS + 200
     assert shown.index("question number 29") < shown.index("question number 28")
-    assert "older (settle with no arguments lists them all)" in shown
+    assert "settle with no arguments shows them whole" in shown
     from sage.gateway.heartbeat import own_state
     assert "question number 29" in own_state(tmp_path, "sprout-being", body_reading={})
+
+
+def test_no_entry_leaves_the_beat_even_at_every_maximum(tmp_path):
+    """cbp's probe on #574: at realistic lengths only ~7 entries fit, so the oldest, the one settled once and
+    never revisited, dropped out of the beat. Every id stays, and the newest keeps its answer."""
+    for i in range(st.MAX_ENTRIES):
+        _s(tmp_path, question=f"q{i} " + "w" * (st.QUESTION_MAX_CHARS - 5),
+           answer="a" * st.ANSWER_MAX_CHARS, evidence="e" * st.EVIDENCE_MAX_CHARS)
+    entries, _, _ = st.read(tmp_path)
+    shown = st.render(tmp_path)
+    assert len(shown) <= st.RENDER_CHARS
+    for e in entries:
+        assert f"[{e['id']}] " in shown, e["id"]
+    assert f"[{entries[-1]['id']}] q29 " in shown and "aaaa" in shown.split("\n")[1]
 
 
 def test_it_is_registered_offered_and_judged_as_a_write_of_exactly_what_it_touches(tmp_path):
