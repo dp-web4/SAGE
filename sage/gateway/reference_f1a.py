@@ -67,6 +67,16 @@ SEAT_OWNED = ("entrustment.md",)
 # being writes starts with "identity." (its own words are self.json).
 GOVERNANCE_OWNED_PREFIX = "identity."
 GOVERNANCE_OWNED = ("instance.json",)
+# THE RECORD NAMES THEMSELVES ARE REFUSED IN EVERY DIRECTORY (#552). A home is recognised by its records
+# (_looks_like_a_home), so a granted directory that holds none yet is not one, and a being could plant
+# `identity.json` (choosing `machine`, so its own arbiter) before a home is provisioned there. These
+# exact names, and their tmp/retired forms, are never a being's to write anywhere. The broader
+# `identity.` prefix stays tied to homes: `notes/identity.md` is a being writing about itself.
+GOVERNANCE_RECORD_NAMES = ("identity.json", "identity.sealed", "identity.attest.json", "instance.json")
+
+
+def _is_governance_record_name(name: str) -> bool:
+    return any(name == n or name.startswith(n + ".") for n in GOVERNANCE_RECORD_NAMES)
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
@@ -1004,7 +1014,8 @@ class ReferenceF1aDispatcher:
             # not make that home's records writable either. A home is the being's own root or any
             # directory that holds a home's records (identity.json or instance.json).
             _home = p.parent == self.memory_root or _looks_like_a_home(p.parent)
-            if _home and (p.name in GOVERNANCE_OWNED or p.name.startswith(GOVERNANCE_OWNED_PREFIX)):
+            if (_is_governance_record_name(p.name)
+                    or _home and (p.name in GOVERNANCE_OWNED or p.name.startswith(GOVERNANCE_OWNED_PREFIX))):
                 raise ValueError(
                     f"{p.name} is a governance record: it says who you are to the society (your "
                     "id, your machine, which seat hears your escalations, your trust ceiling), so "
