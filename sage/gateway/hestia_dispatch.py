@@ -2676,6 +2676,15 @@ class HestiaF1aDispatcher:
         return ResultEnvelope(ok=True, result=text,
                               witness_id=(self._local._witness(f"settle: {text[:160]}") if changed else None))
 
+    def _do_skill(self, intent: BeingIntent) -> ResultEnvelope:
+        """Skills (being_skills): list, read or search them, or write one of the being's own."""
+        from sage.gateway import being_skills
+        ok, text, changed = being_skills.skill(Path(self.memory_root), intent.args or {})
+        if not ok:
+            return ResultEnvelope(ok=False, error=text)
+        return ResultEnvelope(ok=True, result=text,
+                              witness_id=(self._local._witness(f"skill: {text[:160]}") if changed else None))
+
     #: An earlier subject this often asked about, with nothing settled on it, gets one line naming settle.
     SUBJECT_SETTLE_HINT_AT = 5
 

@@ -1062,6 +1062,13 @@ class ReferenceF1aDispatcher:
                     f"{p.name} is changed only with identity_edit, which keeps every earlier "
                     "version and your reason in self_log.jsonl. A direct write would leave no "
                     "record of what it replaced. Nothing was changed")
+            from sage.gateway.being_skills import OWN_DIR as _SKILLS_DIR, SKILLS_LOG
+            if (_home and p.name == SKILLS_LOG) or (
+                    p.parent.parent.name == _SKILLS_DIR and p.parent.parent.parent == self.memory_root):
+                raise ValueError(
+                    f"{p.name} is changed only with skill, which keeps every earlier version and your "
+                    "reason in skills_log.jsonl. A direct write would leave no record of what it "
+                    "replaced. Nothing was changed")
             from sage.gateway.being_settled import SETTLED_WRITES
             if _home and p.name in SETTLED_WRITES:
                 raise ValueError(
