@@ -4289,6 +4289,7 @@ class HestiaF1aDispatcher:
         answer_text = ""   # what that answer SAID, to hand back rather than point at
         asked_at = None
         asked_seqs = []    # every earlier request for these bytes and arguments, oldest first
+        asked_ts = {}      # seq -> when it was asked
         # WHAT RAN IS (PATH, BYTES, ARGUMENTS), NOT BYTES ALONE. GPT HOLD on #276 at 6d7e98d5:
         # the unsolicited match keyed on the 12-char digest only, so notes/new.py holding
         # print(__file__) was told "running it again will give the same result" with the
@@ -4325,6 +4326,7 @@ class HestiaF1aDispatcher:
                             else None)
                 if asked_at is not None:
                     asked_seqs.append(asked_at)
+                    asked_ts[asked_at] = str(t.get("ts") or "")
                 continue
             if t.get("from") == self.member:
                 continue
@@ -4388,6 +4390,15 @@ class HestiaF1aDispatcher:
         # `--` (seat_run_requests.py, #175); this is how it sees them. The first line stays
         # "[request_run] <rel>", which the unchanged check above and the seat's reader key on.
         lines.extend(arg_lines)
+        # STILL WAITING IS NOT NEW. Measured on sprout-being, 2026-10-24..27: of 83 request_runs, 21
+        # repeated an identical request the seat had not answered yet (seqs 1878-1881: one file, four
+        # asks in 12 minutes). The receipt said only "asked and woken", the same as for a first ask,
+        # so nothing told it the first one was still in the queue. Say so, and mark the turn for the
+        # seat, so neither side reads a repeat as a new request.
+        pending = [a for a in asked_seqs if a is not None] if not unchanged else []
+        if pending:
+            lines.append(f"SAME AS the request at seq {pending[0]}, not yet answered"
+                         + (f" (asked {len(pending) + 1} times now)." if len(pending) > 1 else "."))
         if unchanged and unchanged[0] is None:
             lines.append(f"UNCHANGED since the seat ran this exact file at seq {unchanged[1]}.")
         elif unchanged:
@@ -4457,6 +4468,22 @@ class HestiaF1aDispatcher:
                     f"--- seq {unchanged[1]} ---\n{carried}\n--- end ---\n"
                     f"To change what runs: memory_edit the lines, or retire_note the file and then "
                     f"memory_write it anew.")
+        if pending:
+            from datetime import datetime, timezone
+            first = pending[0]
+            ago = ""
+            try:
+                t0 = datetime.fromisoformat(asked_ts.get(first, "").replace("Z", "+00:00"))
+                mins = int((datetime.now(timezone.utc) - t0).total_seconds() // 60)
+                ago = f", {mins} minute{'s' if mins != 1 else ''} ago" if mins >= 0 else ""
+            except (ValueError, TypeError):
+                pass
+            result["already_asked"] = (
+                f"You already asked for this exact file, with these arguments, at seq {first}{ago}"
+                + (f", and {len(pending) - 1} more time{'s' if len(pending) > 2 else ''} since" if len(pending) > 1 else "")
+                + f". The seat has not answered it yet. This request is recorded too, marked as the "
+                f"same one; it does not move it up or start anything. The seat answers once, in "
+                f"'{seat_conv}', and that answer covers every copy of this request.")
         note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
                 "a result. The seat may run it or decline, and either way it answers in "
                 f"'{seat_conv}'. Nothing is owed by you in the meantime.")
