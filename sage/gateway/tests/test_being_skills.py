@@ -175,3 +175,11 @@ def test_another_beings_skills_are_not_writable_through_a_grant(tmp_path):
                            granted_reach=((str(root), True), (str(plain), True)))
     env = d(BeingIntent("memory_write", {"path": str(plain / "skills/x/SKILL.md"), "content": "x"}), reach)
     assert env.ok, env.error
+
+
+def test_a_case_variant_of_the_skills_dir_or_log_is_refused_too():
+    # macOS opens Skills/x/SKILL.md as skills/x/SKILL.md: an exact-case guard would let memory_write past the log
+    d, root = _disp()
+    for path in ("Skills/probe-skill/SKILL.md", "SKILLS/probe-skill/SKILL.md", "Skills_Log.jsonl"):
+        env = d(BeingIntent("memory_write", {"path": path, "content": "x"}), _ALLOW)
+        assert not env.ok and "changed only with skill" in env.error, (path, env)

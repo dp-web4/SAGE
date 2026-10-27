@@ -1070,8 +1070,8 @@ class ReferenceF1aDispatcher:
                     "version and your reason in self_log.jsonl. A direct write would leave no "
                     "record of what it replaced. Nothing was changed")
             from sage.gateway.being_skills import OWN_DIR as _SKILLS_DIR, SKILLS_LOG
-            if (_home and p.name == SKILLS_LOG) or (
-                    p.parent.parent.name == _SKILLS_DIR and (
+            if (_home and _named(p, (SKILLS_LOG,))) or (
+                    p.parent.parent.name.casefold() == _SKILLS_DIR.casefold() and (
                         p.parent.parent.parent == self.memory_root or _looks_like_a_home(p.parent.parent.parent))):
                 raise ValueError(
                     f"{p.name} is changed only with skill, which keeps every earlier version and your "
