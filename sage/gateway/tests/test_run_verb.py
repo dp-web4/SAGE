@@ -730,7 +730,9 @@ def _setup_script(d, parser_rc=0, parser_unloads=True, profile=None):
     fake = d / "fakebin"
     fake.mkdir()
     (fake / "id").write_text("#!/bin/sh\necho 0\n")
-    drop = f"sed -i '/^bwrap /d' {lst}" if parser_unloads else ":"
+    # grep + mv, not `sed -i`: BSD sed (macOS) takes the next argument as -i's backup suffix, so the stub
+    # failed there ("invalid command code") and this test failed on every Mac seat
+    drop = (f"grep -v '^bwrap ' {lst} > {lst}.new; mv {lst}.new {lst}" if parser_unloads else ":")
     (fake / "apparmor_parser").write_text(
         f"#!/bin/sh\necho \"$@\" >> {log}\n"
         f"if [ \"$1\" = -R ]; then {drop}; exit {parser_rc}; fi\nexit 0\n")
