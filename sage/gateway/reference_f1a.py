@@ -67,6 +67,19 @@ SEAT_OWNED = ("entrustment.md",)
 # being writes starts with "identity." (its own words are self.json).
 GOVERNANCE_OWNED_PREFIX = "identity."
 GOVERNANCE_OWNED = ("instance.json",)
+# The records themselves are refused by NAME in EVERY directory, not only in a home (SAGE #552).
+# _looks_like_a_home sees a home only once its records exist, so in a granted dir holding neither,
+# `memory_write identity.json` succeeded (cbp's probe on #551): a being could plant the record that
+# later makes the dir a home, `machine` and all (#541). The broad `identity.` prefix stays tied to
+# homes: everywhere, it would refuse a being's own notes/identity.md.
+GOVERNANCE_RECORDS = ("identity.json", "identity.sealed", "identity.attest.json", "instance.json")
+
+
+def _is_governance_record(name: str) -> bool:
+    """A home record, or the provider's sibling of one (`identity.sealed.tmp`, `.v1`, `.retired-*`).
+    casefold: on a case-insensitive volume (APFS by default) `Identity.json` IS `identity.json`."""
+    n = name.casefold()
+    return any(n == r or n.startswith(r + ".") for r in GOVERNANCE_RECORDS)
 # The conversation store is RESERVED from generic writes (GPT review of #56, #4): a turn
 # reaches it only through `say`, which checks writable_by, witnesses the act and assigns
 # the sequence under the lock. A memory_write into conversations/<id>.jsonl or its meta
@@ -1004,7 +1017,8 @@ class ReferenceF1aDispatcher:
             # not make that home's records writable either. A home is the being's own root or any
             # directory that holds a home's records (identity.json or instance.json).
             _home = p.parent == self.memory_root or _looks_like_a_home(p.parent)
-            if _home and (p.name in GOVERNANCE_OWNED or p.name.startswith(GOVERNANCE_OWNED_PREFIX)):
+            if _is_governance_record(p.name) or (
+                    _home and (p.name in GOVERNANCE_OWNED or p.name.startswith(GOVERNANCE_OWNED_PREFIX))):
                 raise ValueError(
                     f"{p.name} is a governance record: it says who you are to the society (your "
                     "id, your machine, which seat hears your escalations, your trust ceiling), so "
