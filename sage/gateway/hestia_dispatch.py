@@ -53,6 +53,8 @@ from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 _RUN_MARKER = "[request_run]"
 # The first line of a seat run/decline receipt (seat_run_requests.py): the verb and the path.
 _SEAT_RUN_LINE = re.compile(r"\[request_run\] I (ran|did not run) (\S+)")
+# How many seat-conversation turns request_run reads for earlier asks and their answers.
+_PENDING_SCAN = 80
 
 # What `speak` will not play: text shaped like a shell command (see _do_speak). A leading command
 # word (lowercase, then an argument) or a shell operator. Prose that mentions sudo mid-sentence,
@@ -4283,7 +4285,9 @@ class HestiaF1aDispatcher:
         # why claimed "the fixes". The seat's reply could only be the same traceback, a
         # whole wake later. The digest makes the no-op visible NOW, in this beat, where the
         # being can still act on it. It does not block: a being may want a rerun.
-        rel = str(p.relative_to(self.memory_root))
+        # _safe_path RESOLVED p, so the root is resolved too: a home reached through a symlink (macOS
+        # /var -> /private/var, every temp dir) otherwise refused every request_run with a ValueError.
+        rel = str(p.relative_to(Path(self.memory_root).resolve()))
         digest = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
         unchanged = None  # (seq it asked at, seq the seat answered at)
         answer_text = ""   # what that answer SAID, to hand back rather than point at
@@ -4316,7 +4320,13 @@ class HestiaF1aDispatcher:
                 return None
             return m.group(1), m.group(2).rstrip("."), first
 
-        for t in conv.recent(self.memory_root, seat_conv, limit=80):
+        # THE SCAN SEES THE LAST _PENDING_SCAN TURNS, AND A PENDING NOTE SAYS SO (#567, cbp on #566). An
+        # answer to an EARLIER ask for these bytes answers this one (below), and that answer can sit
+        # before the window while a later ask is inside it. "Not answered yet" was then false. When the
+        # conversation is longer than the window, the notes name the window instead of claiming "yet".
+        window = conv.recent(self.memory_root, seat_conv, limit=_PENDING_SCAN + 1)
+        scan_truncated = len(window) > _PENDING_SCAN
+        for t in window[-_PENDING_SCAN:]:
             text = str(t.get("text", ""))
             if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
                 # The prior request counts only if it asked for these bytes WITH THESE
@@ -4396,8 +4406,10 @@ class HestiaF1aDispatcher:
         # so nothing told it the first one was still in the queue. Say so, and mark the turn for the
         # seat, so neither side reads a repeat as a new request.
         pending = [a for a in asked_seqs if a is not None] if not unchanged else []
+        unanswered = (f"not answered in the last {_PENDING_SCAN} turns" if scan_truncated
+                      else "not yet answered")
         if pending:
-            lines.append(f"SAME AS the request at seq {pending[0]}, not yet answered"
+            lines.append(f"SAME AS the request at seq {pending[0]}, {unanswered}"
                          + (f" (asked {len(pending) + 1} times now)." if len(pending) > 1 else "."))
         if unchanged and unchanged[0] is None:
             lines.append(f"UNCHANGED since the seat ran this exact file at seq {unchanged[1]}.")
@@ -4481,7 +4493,10 @@ class HestiaF1aDispatcher:
             result["already_asked"] = (
                 f"You already asked for this exact file, with these arguments, at seq {first}{ago}"
                 + (f", and {len(pending) - 1} more time{'s' if len(pending) > 2 else ''} since" if len(pending) > 1 else "")
-                + f". The seat has not answered it yet. This request is recorded too, marked as the "
+                + (f". The seat has not answered it in the last {_PENDING_SCAN} turns of '{seat_conv}' "
+                   f"(older turns were not checked)" if scan_truncated
+                   else ". The seat has not answered it yet")
+                + f". This request is recorded too, marked as the "
                 f"same one; it does not move it up or start anything. The seat answers once, in "
                 f"'{seat_conv}', and that answer covers every copy of this request.")
         note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
