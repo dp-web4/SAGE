@@ -3489,10 +3489,17 @@ def _floor_mode_reach(core, policy, workspace: str, own) -> tuple:
     ws = os.path.realpath(os.path.expanduser(workspace)).replace("\\", "/").rstrip("/")
     covered = [(str(it[0]).rstrip("/"), bool(it[1])) for it in own]
     out = []
-    for entry, modes in entries:
-        modes = "".join(c for c in "rwed" if c in str(modes or ""))
-        if not isinstance(entry, str) or not entry or not modes:
+    for item in entries:
+        # A row that is not a (entry, modes) pair is skipped alone, never the whole list.
+        if not isinstance(item, (tuple, list)) or len(item) != 2:
             continue
+        entry, modes = item
+        # A letter outside rwed DROPS the row, as hestia's _parse_mode_scope does: a mode set
+        # nobody wrote must not be repaired into one that admits something ("rwx" is not "rw").
+        modes = str(modes or "")
+        if not isinstance(entry, str) or not entry or not modes or set(modes) - set("rwed"):
+            continue
+        modes = "".join(c for c in "rwed" if c in modes)
         if entry.startswith("path:"):
             roots = [(str(r), bool(rec)) for r, rec in core._scope_roots_with_reach([entry], workspace)]
         elif "/" not in entry and "\\" not in entry and entry not in (".", "..", "*"):
@@ -3537,7 +3544,12 @@ def _granted_reach(core, policy, workspace: str, granted_paths=()) -> tuple:
             scopes = list(getattr(policy, "scope", ()) or ())
             own = (tuple((str(r), bool(rec), str(md)) for r, rec, md in with_modes(policy, workspace))
                    + tuple((r, True) for r in _repo_name_roots(core, scopes, workspace, granted_paths)))
-            return own + _floor_reach(core, policy, workspace, own)
+            # A malformed floor costs the floor only, never the member's own grants (legion on #571).
+            try:
+                floor = _floor_reach(core, policy, workspace, own)
+            except Exception:
+                floor = ()
+            return own + floor
         reach = getattr(core, "_scope_roots_with_reach", None)
         if reach is not None:
             scopes = list(getattr(policy, "scope", ()) or ())

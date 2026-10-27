@@ -320,6 +320,24 @@ def test_a_bare_repo_name_floor_row_and_malformed_modes():
     reach = _granted_reach(_core_with_modes(), policy, ws)
     assert (os.path.realpath(gov), True, "rw") in reach, reach       # canonical order, repo name resolved
     assert not [x for x in reach if x[0] == forum], reach            # a mode outside rwed reads as nothing
+    # A set with ANY letter outside rwed is dropped whole, as hestia's _parse_mode_scope does: "rwx"
+    # is not repaired into "rw" (legion on #571; "x" alone passed under both rules).
+    policy = SimpleNamespace(scope=(), read_scope=(), floor_mode_scope=((f"path:{forum}/**", "rwx"),))
+    assert not [x for x in _granted_reach(_core_with_modes(), policy, ws) if x[0] == forum]
+
+
+def test_a_malformed_floor_row_costs_the_floor_row_never_the_own_grants():
+    # Measured by legion on #571: one 3-tuple floor row emptied _granted_reach, own grants included.
+    ws, home, forum = _floor_world()
+    sc = os.path.dirname(forum)
+    policy = SimpleNamespace(scope=(f"path:{sc}/**",), read_scope=(),
+                             floor_mode_scope=((f"path:{forum}/**", "rw", "extra"), ("governance",)))
+    assert _granted_reach(_core_with_modes(), policy, ws) == ((sc, True, "rwed"),)
+    gov = os.path.join(ws, "governance")
+    os.makedirs(gov, exist_ok=True)
+    policy = SimpleNamespace(scope=(), read_scope=(),
+                             floor_mode_scope=((f"path:{forum}/**", "rw", "extra"), ("governance", "r")))
+    assert (os.path.realpath(gov), True, "r") in _granted_reach(_core_with_modes(), policy, ws)
 
 
 def test_a_core_or_policy_without_the_field_adds_nothing():
