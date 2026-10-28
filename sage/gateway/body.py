@@ -77,13 +77,32 @@ def _read_json(path: str) -> Optional[dict]:
         return None
 
 
+def _ear_only(now: float, perception_path: str) -> Dict:
+    """A body with no cortex: the ear's own state (sage/embodiment/ear.py writes ear.json beside where
+    perception.json would be). {} when there is none or it is stale. `ear_live` stands in for the cortex's
+    `live` for the ear only: it says nothing about eyes, so "your senses are offline" is not claimed."""
+    ep = os.path.join(os.path.dirname(perception_path), "ear.json")
+    a = _read_json(ep)
+    if not a:
+        return {}
+    try:
+        fresh = now - os.path.getmtime(ep) <= FRESH_S
+    except OSError:
+        return {}
+    if not fresh:
+        return {}
+    return {"ear_live": True, "audio_ok": bool(a.get("ok")), "audio_level": a.get("level"),
+            "audio_words": a.get("words"), "audio_hearing": a.get("hearing"),
+            "audio_ear": a.get("ear"), "audio_ear_key": a.get("ear_key")}
+
+
 def perception(now: Optional[float] = None, path: Optional[str] = None) -> Dict:
     """The cortex's latest state, or {'live': False, 'age_s': ...}."""
     now = time.time() if now is None else now
     path = path or PERCEPTION_PATH
     d = _read_json(path)
     if not d:
-        return {"live": False, "age_s": None}
+        return dict({"live": False, "age_s": None}, **_ear_only(now, path))
     try:
         age = now - os.path.getmtime(path)
     except OSError:
@@ -177,6 +196,27 @@ def reading(now: Optional[float] = None) -> Dict:
             "heard_until": max([float(h.get("ts", 0)) for h in heard] or [0.0])}
 
 
+def _no_cortex_body() -> bool:
+    from sage.embodiment import platform_av
+    return platform_av.backend() == "avfoundation"
+
+
+def camera_change(inv: Optional[Dict], prev_inv: Optional[Dict]) -> str:
+    """One line when a camera went away or arrived since the last beat, else "". Unplugging the
+    camera is how the operator takes sight away (dp 2026-10-15), so it is said, not just absent."""
+    if not inv or not prev_inv:
+        return ""
+    now, before = set(inv.get("video_devices") or []), set(prev_inv.get("video_devices") or [])
+    gone, came = sorted(before - now), sorted(now - before)
+    out = []
+    if gone:
+        out.append(f"your camera {', '.join(gone)} is no longer attached"
+                   + (" -- `camera` is unavailable until it comes back" if not now else ""))
+    if came:
+        out.append(f"camera {', '.join(came)} is now attached" + (" -- `camera` is available" if not before else ""))
+    return f"- Since your last beat: {'; '.join(out)}." if out else ""
+
+
 def render(cur: Dict, prev: Optional[Dict], name: str = "", proprioception: bool = True) -> str:
     """The body block. Words only; every number is one the being can act on; a stale source says
     so rather than presenting the past as the present (SMALL_MODEL_LEGIBILITY 1.3).
@@ -200,7 +240,8 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "", proprioception: bool
         if p.get("salience") is not None:
             lines.append(f"- How much that moment stood out: {float(p['salience']):.2f} of 1"
                          f"; how well your senses agree: {float(p.get('coherence') or 0):.2f} of 1")
-    elif (cur.get("inventory") or {}).get("video_devices") or p.get("age_s"):
+    elif p.get("age_s") or ((cur.get("inventory") or {}).get("video_devices") and not _no_cortex_body()):
+        # "offline" means a cortex that is not running; a Mac body has no cortex, its camera is on demand
         age = p.get("age_s")
         lines.append("- Your senses are offline this beat"
                      + (f" (last reading {int(age // 60)} min ago)" if age else "") + ".")
@@ -232,6 +273,9 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "", proprioception: bool
             lines.append(f"- The last thing you felt came from {m['felt_source']}.")
     else:
         lines.append("- Your daemon's loop is not reporting this beat.")
+    lapse = camera_change(inv, (prev or {}).get("inventory"))
+    if lapse:
+        lines.append(lapse)
     if inv:
         lines.append(render_inventory(inv))
     dev = inv.get("audio_device") or {}
@@ -248,7 +292,7 @@ def render(cur: Dict, prev: Optional[Dict], name: str = "", proprioception: bool
                      + ", which anyone in the room may hear. What you say aloud is your turn in "
                      "the room conversation, and `say` to room is spoken too. Nothing asks you to."
                      + ("" if ear_known(cur) else
-                        (" Words spoken in the room reach you after someone says your name (\"hey Sprout\"), and "
+                        (f" Words spoken in the room reach you after someone says your name (\"hey {wake_say()}\"), and "
                          "for a little while after each exchange; other speech nearby is noticed, but its words "
                          "are not given to you." if hears_by_name() else
                          " Words spoken in the room are heard through the mic and added to the room "
@@ -330,7 +374,11 @@ import subprocess
 
 
 def _pw_audio(timeout: float = 4.0) -> Dict:
-    """Audio sinks and sources as pipewire sees them. {} when pipewire is not there."""
+    """Audio sinks and sources as pipewire sees them, or as macOS does on a Mac (platform_av).
+    {} when neither can be read."""
+    from sage.embodiment import platform_av
+    if platform_av.backend() == "avfoundation":
+        return platform_av.mac_audio()
     try:
         out = subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=timeout).stdout
         nodes = json.loads(out)
@@ -353,7 +401,12 @@ def _pw_audio(timeout: float = 4.0) -> Dict:
 def inventory(now: Optional[float] = None) -> Dict:
     """Measure this machine's body. Every field is observed; absence is reported as absence."""
     now = time.time() if now is None else now
-    videos = sorted(glob.glob("/dev/video*"))
+    from sage.embodiment import platform_av
+    # a Mac's cameras are AVFoundation names (screens left out), not /dev/video nodes. On whenever
+    # one is attached (dp 2026-10-15): the operator turns it off by unplugging it, which the being
+    # sees as the camera going away (render, "since your last beat").
+    videos = (platform_av.mac_cameras() if platform_av.backend() == "avfoundation"
+              else sorted(glob.glob("/dev/video*")))
     serials = sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*"))
     p = perception(now)
     m = metabolism()
@@ -442,7 +495,8 @@ def speak_provider(audio: Optional[Dict] = None) -> Dict:
     audio = _pw_audio() if audio is None else audio
     if not (audio or {}).get("sinks"):
         return {"live": False, "why": "no audio output is connected"}
-    for tool in ("espeak-ng", "pw-play"):
+    from sage.embodiment.platform_av import voice_tools
+    for tool in voice_tools():
         if not shutil.which(tool):
             return {"live": False, "why": f"'{tool}' is not installed"}
     if SPEAK_SINK:
@@ -475,7 +529,8 @@ def speak(text: str, timeout: float = SPEAK_TIMEOUT_S) -> Dict:
     # opened after the being speaks; a failed synthesis or playback said nothing, so it opens
     # nothing. Either way the self-mute is lifted at once.
     played = False
-    engine, fallback = "espeak-ng", None
+    from sage.embodiment.platform_av import voice_tools as _voice_tools
+    engine, fallback = _voice_tools()[0], None
     target = (required_sink() or {}).get("node") if SPEAK_SINK else None
     try:
         voice = neural_voice()
@@ -495,10 +550,10 @@ def speak(text: str, timeout: float = SPEAK_TIMEOUT_S) -> Dict:
         if not played:
             with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
                 # argv, never a shell: the words are one argument and cannot become a command
-                subprocess.run(["espeak-ng", "-v", "en-us", "-s", "160", "-w", wav.name, "--", text],
-                               check=True, capture_output=True, timeout=timeout)
-                subprocess.run(["pw-play"] + (["--target", target] if target else []) + [wav.name],
-                               check=True, capture_output=True, timeout=timeout)
+                from sage.embodiment import platform_av
+                platform_av.synth_fallback(text, wav.name, timeout)
+                subprocess.run(platform_av.play_cmd(wav.name, target), check=True,
+                               capture_output=True, timeout=timeout)
                 played = True
     finally:
         end = time.time()
@@ -584,7 +639,7 @@ def ear_line(cur: Dict, inv: Optional[Dict] = None, now: Optional[float] = None)
     dev = (inv or {}).get("audio_device") or {}
     if not ear_known(cur) and not (dev and not dev.get("connected")):
         return ""
-    if not p.get("live"):
+    if not (p.get("live") or p.get("ear_live")):
         return ("- Your ear for words: unknown this beat (your senses are not reporting). Silence from it is "
                 "not evidence that nobody spoke.")
     hearing, reason, key = bool(p.get("audio_hearing")), str(p.get("audio_ear") or ""), p.get("audio_ear_key")
@@ -622,6 +677,14 @@ def hears_by_name() -> bool:
         return bool(_listening().window().get("wake"))
     except Exception:
         return False
+
+
+def wake_say() -> str:
+    """The name the ear answers to, as the ear recorded it in listen.json (the ear's SAGE_WAKE_SAY)."""
+    try:
+        return str(_listening().window().get("wake_say") or "Sprout")
+    except Exception:
+        return "Sprout"
 
 
 def hears_always() -> bool:

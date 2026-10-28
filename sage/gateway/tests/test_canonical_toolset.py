@@ -52,7 +52,8 @@ def test_availability_is_measured_not_assumed():
     everything = toolset.unavailable({"inventory": {"verbs": list(toolset.BODY_VERBS)}}, "/wt", {"game_stepper": "/s"})
     assert everything == {}, everything
     nothing = toolset.unavailable({"inventory": {"verbs": []}}, None, {})
-    assert set(nothing) == set(toolset.BODY_VERBS) | set(toolset.WORKTREE_VERBS) | {"game"}
+    assert set(nothing) == (set(toolset.BODY_VERBS) | set(toolset.WORKTREE_VERBS) | {"game"}) \
+        - set(toolset.REACH_VERBS)
 
 
 def test_camera_is_unavailable_where_the_gate_refuses_it():

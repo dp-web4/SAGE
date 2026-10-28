@@ -35,14 +35,34 @@ def _iso(ts: float) -> str:
     return datetime.fromtimestamp(float(ts), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# THE ROOM IS NOISY, AND THE BEING SHOULD KNOW IT (dp, 2026-10-19: "the room is noisy and random, being should
+# be aware of it but hopefully know when it's relevant and when it's not (most of the time the latter)"). The
+# earlier summary on Sprout said "the voice you hear is usually dp's". Measured against the record: song lyrics
+# transcribed as speech (room 270-275, 286-298), a line of unknown source that became a two-machine "shared
+# memory" (dev research CAR_CONVERSATION_TRAIL), and dp's "it's cool" heard as "you're a fool". So the summary
+# says what the mic is, not whose it usually is; deciding what is addressed to it stays the being's.
+SUMMARY = ("What you said aloud (speak, or say to room) and what the room mic picked up. The mic hears everything "
+           "nearby: people, TV, music and noise, and the transcriber sometimes makes words out of noise or song "
+           "lyrics. A picked-up line does not say who or what it came from unless the words do; dp's words come "
+           "through here too, unmarked. Most of what the mic picks up is not addressed to you. Anything you say "
+           "to room is spoken aloud, not written.")
+
+
 def ensure(instance: Path, member: str) -> dict:
+    """The room conversation, created if missing. An EXISTING room's summary is brought to SUMMARY.
+
+    create() keeps an existing conversation's metadata, so without this a room made before the summary changed
+    would keep telling the being that "the voice you hear is usually dp's" (NOVA on #485). Only `summary` is
+    touched: participants, writable_by, notify, every other field and the turns are left as they are, and a
+    room already up to date is not rewritten."""
     from sage.gateway import conversations as conv
-    return conv.create(
+    m = conv.create(
         Path(instance), ROOM, title="the room: spoken aloud and heard",
-        participants=[member, VOICE], writable_by=[member, VOICE],
-        summary=("What you said aloud (speak, or say to room) and what the mic heard: in the "
-                 "minutes after you speak, or at any time if your ear is always open. A line from 'voice' is whoever was in the room; it does not say "
-                 "who unless the words do. Anything you say to room is spoken aloud, not written."))
+        participants=[member, VOICE], writable_by=[member, VOICE], summary=SUMMARY)
+    if m.get("summary") != SUMMARY:
+        m = dict(m, summary=SUMMARY)
+        conv._write_meta(Path(instance), ROOM, m)
+    return m
 
 
 def _watermark_path(instance: Path) -> Path:

@@ -384,7 +384,13 @@ async function refreshHealth() {
     const d = await r.json();
     document.getElementById('version-display').textContent = d.build || ('v' + d.version);
     document.getElementById('uptime-display').textContent = 'Up: ' + formatUptime(d.uptime_secs);
-    document.getElementById('model-label').textContent = d.model;
+    // The model actually loaded, not only the configured one (dp 2026-10-13: the label said 2B while the being ran
+    // the 4B). Embedding models are not the being's mind and are left out of the label.
+    const minds = (d.loaded_models || []).filter(m => !/embed/i.test(m));
+    let label = d.model;
+    if (d.model_loaded === false && minds.length) label = 'configured ' + d.model + ' \u00b7 loaded ' + minds.join(', ');
+    else if (d.model_loaded === false) label = d.model + ' (not loaded right now)';
+    document.getElementById('model-label').textContent = label;
     document.getElementById('sys-ollama').textContent = 'Ollama: ' + (d.ollama_available ? 'connected' : 'offline');
     document.getElementById('sys-ollama').style.color = d.ollama_available ? 'var(--accent)' : '#ff3333';
     if (!connected) {

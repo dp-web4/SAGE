@@ -10,6 +10,8 @@ import tempfile
 
 os.environ.setdefault("SAGE_CONV_WITNESS_DIR", tempfile.mkdtemp(prefix="conv-witness-test-"))
 os.environ.setdefault("SAGE_CONV_NOTIFY_DIR", tempfile.mkdtemp(prefix="conv-notify-test-"))
+# Nor the inbox drain's seat-owned sender record (#459): a test row there could bind a live being's ask.
+os.environ.setdefault("SAGE_INBOX_SENDERS_DIR", tempfile.mkdtemp(prefix="inbox-senders-test-"))
 
 # NOR THE MACHINE'S REAL HESTIA DAEMON: connecting there mints the test's id as a member of the
 # seat's real society (McNugget, 2026-09-28: `test-being` among 12 phantoms). Unconditional -- an
@@ -44,7 +46,9 @@ def _no_systemd_and_no_live_pending_set(monkeypatch, tmp_path_factory):
     # Pin the systemd path so these tests read the same on a Mac (arousal picks launchd where
     # there is launchctl and no systemctl); the launchd tests set it themselves.
     monkeypatch.setenv("SAGE_WAKE_BACKEND", "systemd")
-    pend = str(tmp_path_factory.mktemp("pending") / "pending_events.json")
+    # And the PipeWire audio path (platform_av picks avfoundation on a Mac).
+    monkeypatch.setenv("SAGE_AUDIO_BACKEND", "pipewire")
+    pend =str(tmp_path_factory.mktemp("pending") / "pending_events.json")
     monkeypatch.setenv("SAGE_PENDING_EVENTS", pend)
     from sage.gateway import arousal, being_join
     monkeypatch.setattr(arousal, "PENDING_PATH", pend)

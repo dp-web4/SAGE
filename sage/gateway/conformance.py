@@ -169,9 +169,13 @@ def run(member: str, instance: str, host_agent: str = "sage-conformance",
 
     # 5. ruling mid-session — an operator decision visible to the SAME session ----------
     live = scope.get("live_grants") or []; standing = scope.get("standing_grants") or []
+    # a ruling that narrowed a grant is still a ruling this session can see (#523): since hestia
+    # #1370 such a grant appears only in grants_by_mode. Step 4 keeps the two lists, since a
+    # narrowed grant admits nothing at a mode-blind gate and so cannot explain an allow.
+    by_mode = scope.get("grants_by_mode") or []
     pend = [r for r in (scope.get("requests") or []) if r.get("status") == "pending"]
-    if live or standing:
-        out.append(_step("ruling_mid_session", "PASS", grants=live + standing))
+    if live or standing or by_mode:
+        out.append(_step("ruling_mid_session", "PASS", grants=(live + standing) or by_mode))
     else:
         out.append(_step("ruling_mid_session", "NOT_YET", pending_requests=[r.get("request_id") or r.get("id") for r in pend],
                          needs="operator ruling (dashboard) — then this session sees the grant without reconnect"))

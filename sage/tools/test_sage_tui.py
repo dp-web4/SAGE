@@ -126,3 +126,64 @@ def test_switching_conversation_returns_to_the_newest():
     st.update([DP, ROOM]); st.scroll_by(+20, 100, 10)
     st.move([DP, ROOM], +1)
     assert st.sel_id == "room" and st.scroll == 0
+
+
+# ---- the machine body, memory first (dp 2026-10-18) ----
+GIB = 1024 ** 3
+BODY = {"line": "GPU 11% · 61°C | CPU 52% · 62°C · RAM 2.8/7.4 GiB (one pool, GPU included) (+3.5 GiB swap)"
+                " | disk 22% (679 GiB free) | memory: unified",
+        "memory": {"pool": "unified", "total_bytes": {"value": 8 * GIB}, "used_bytes": {"value": 6 * GIB},
+                   "available_bytes": {"value": 2 * GIB}, "swap_total_bytes": {"value": 10 * GIB},
+                   "swap_used_bytes": {"value": 3.5 * GIB}},
+        "served_age_s": 4.0}
+
+
+def test_memory_comes_first_as_a_bar_of_the_one_pool():
+    lines = t.body_lines(BODY, {"model": "qwen3.8-distill:4b", "loaded_models": ["qwen3.8-distill:4b"]}, 200)
+    assert lines[0].startswith("RAM  ") and "█" * 15 in lines[0]
+    assert "6.0/8.0 GiB" in lines[0] and "75%" in lines[0] and "one pool, GPU incl." in lines[0]
+    assert "avail 2.0" in lines[0] and "swap 3.5/10.0" in lines[0]
+
+
+def test_the_rest_is_the_samplers_line_without_its_ram_part():
+    lines = t.body_lines(BODY, {"model": "qwen3.8-distill:4b", "loaded_models": ["qwen3.8-distill:4b"]}, 200)
+    assert "GPU 11% · 61°C" in lines[1] and "disk 22% (679 GiB free)" in lines[1]
+    assert "CPU 52% · 62°C" in lines[1], "RAM shares the CPU segment; only RAM is dropped"
+    assert "RAM" not in lines[1] and "memory: unified" not in lines[1]
+    assert "model loaded" in lines[1] and "sampled 4s ago" in lines[1]
+
+
+def test_an_unloaded_model_says_so_and_an_old_daemon_says_nothing():
+    assert "model not loaded" in t.body_lines(BODY, {"model": "m:4b", "loaded_models": []}, 200)[1]
+    assert "model" not in t.body_lines(BODY, {"model": "m:4b"}, 200)[1]   # pre-#433 /health has no field
+
+
+def test_a_same_family_different_tag_is_not_the_loaded_model():
+    """NOVA on #469: matching the text before ':' reported qwen:2b as qwen:4b loaded."""
+    h = {"model": "qwen3.8-distill:4b", "loaded_models": ["qwen3.8-distill:2b"]}
+    assert "model not loaded" in t.body_lines(BODY, h, 200)[1]
+    assert "model not loaded" in t.body_lines(BODY, dict(h, model_loaded=False), 200)[1]
+
+
+def test_the_daemons_own_answer_wins():
+    h = {"model": "m:4b", "loaded_models": ["m:4b"], "model_loaded": False}
+    assert "model not loaded" in t.body_lines(BODY, h, 200)[1]
+    h = {"model": "m:4b", "loaded_models": ["m:4b"], "model_loaded": True}
+    assert "model loaded" in t.body_lines(BODY, h, 200)[1]
+
+
+def test_only_a_bare_name_means_latest():
+    assert t._same_model("m:latest", "m") and t._same_model("m", "m:latest")
+    assert not t._same_model("m:2b", "m:4b") and not t._same_model("m:2b", "m")
+    assert not t._same_model("", "m")
+
+
+def test_an_unsensed_body_is_said_not_drawn_as_zero():
+    assert t.body_lines({}, {}, 200) == ["body: not sensed (the daemon did not answer /body)"]
+    assert t.body_lines({"unavailable": "sampler starting"}, {}, 200) == ["body: not sensed (sampler starting)"]
+    no_mem = dict(BODY, memory={})
+    assert t.body_lines(no_mem, {}, 200)[0] == "RAM  not sensed"
+
+
+def test_body_lines_fit_the_width():
+    assert all(len(l) <= 50 for l in t.body_lines(BODY, {"model": "m", "loaded_models": []}, 50))

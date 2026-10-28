@@ -50,11 +50,92 @@ def test_a_first_run_does_not_replay_the_whole_heard_log():
 
 
 def test_a_voice_turn_says_who_spoke_is_not_known():
+    """Shown as something the mic picked up, with no speaker (dp 2026-10-19)."""
     h = _home()
     room.ingest_heard(h, ME, INV, heard=[_heard(time.time() - 10, "Can you hear me?")])
     shown = conv.drain_new_for(h, ME, mark=False)
-    assert "Can you hear me?" in shown and conv.VOICE_TAG.strip() in shown
+    assert "Can you hear me?" in shown and "**the mic picked up**" in shown
+    assert "**voice**" not in shown
     assert 'reply with say to="room"' in shown
+
+
+def test_the_beat_shows_heard_lines_as_picked_up_and_owed_nothing():
+    h = _home()
+    room.ensure(h, ME)
+    room.ingest_heard(h, ME, INV, heard=[_heard(time.time() - 30, "Two million units, your grace."),
+                                        _heard(time.time() - 20, "I think that's what we're doing with this car.")])
+    shown = conv.render_for_being(h, ME)                      # as the beat renders: new lines are pending
+    room_part = shown.split("### the room")[1]
+    assert "**the mic picked up**" in room_part and "**voice**" not in room_part
+    assert "The mic picked up 2 line(s)" in room_part and "Most room sound is not addressed to you" in room_part
+    assert "unanswered" not in room_part, "picked-up sound is not a turn owed an answer"
+    again = conv.render_for_being(h, ME).split("### the room")[1]   # seen now, still the last thing here
+    assert "The last thing here is something the mic picked up" in again
+    assert "still yours to answer" not in again
+
+
+def test_music_the_transcriber_marked_is_said_beside_the_lines_near_it():
+    """Room 314-315 (2026-10-19): `[Music]`, then a lyric 5 s later the being took up as its own opening line."""
+    h = _home()
+    room.ensure(h, ME)
+    t = time.time() - 300
+    room.ingest_heard(h, ME, INV, heard=[_heard(t, "It's between Bar and Gond."),
+                                        _heard(t + 21, "[Music]"),
+                                        _heard(t + 26, "No single voice could hold the need."),
+                                        _heard(t + 200, "Can you hear me?")])
+    def line_with(shown, words):
+        return next(ln for ln in shown.splitlines() if words in ln)
+
+    for shown in (conv.drain_new_for(h, ME, mark=False), conv.render_for_being(h, ME).split("### the room")[1]):
+        assert "the transcriber marked music here" in line_with(shown, "[Music]")
+        lyric = line_with(shown, "No single voice")
+        assert "music was playing within a minute" in lyric
+        assert "song lyrics, or someone speaking over the music" in lyric, "a person over the music stays possible"
+        assert "music was playing within a minute" in line_with(shown, "Bar and Gond"), "before a mark counts too"
+        assert "music" not in line_with(shown, "Can you hear me?"), "minutes from any mark: no note"
+
+
+def test_music_marks_the_transcriber_writes_are_all_recognised():
+    for text in ("[Music]", "[MUSIC PLAYING]", "(upbeat music)", "♪ Where you are ♪"):
+        assert conv.MUSIC_MARK.search(text), text
+    for text in ("[water splashing]", "[BLANK_AUDIO]", "Musical chairs are fun", "(knocking)"):
+        assert not conv.MUSIC_MARK.search(text), text
+
+
+def test_an_existing_room_with_the_old_summary_is_brought_up_to_date():
+    """NOVA on #485: create() keeps existing metadata, so an upgraded room kept the old speaker guidance."""
+    import json
+    h = _home()
+    conv.create(h, "room", title="the room: spoken aloud and heard", participants=[ME, "voice"],
+                writable_by=[ME, "voice"],
+                summary="This machine sits in dp's room, so the voice you hear is usually dp's.")
+    meta = conv.get_meta(h, "room")
+    meta["notify"] = {"someone": "x"}
+    meta["custom_field"] = 7
+    conv._write_meta(h, "room", meta)
+    room.ingest_heard(h, ME, INV, heard=[_heard(time.time() - 10, "hello there")])
+    before_turns = conv.recent(h, "room")
+    before = conv.get_meta(h, "room")
+
+    room.ensure(h, ME)
+    after = conv.get_meta(h, "room")
+    assert after["summary"] == room.SUMMARY and "usually dp" not in after["summary"]
+    assert {k: v for k, v in after.items() if k != "summary"} == {k: v for k, v in before.items() if k != "summary"}
+    assert conv.recent(h, "room") == before_turns, "turn history unchanged"
+
+    meta_file = conv.conv_dir(h) / "room.meta.json"
+    stamp = meta_file.stat().st_mtime_ns
+    room.ensure(h, ME)
+    assert meta_file.stat().st_mtime_ns == stamp, "an up-to-date room is not rewritten"
+    assert json.loads(meta_file.read_text()) == after
+
+
+def test_the_room_says_what_the_mic_is():
+    h = _home()
+    room.ensure(h, ME)
+    s = conv.get_meta(h, "room")["summary"]
+    assert "TV, music and noise" in s and "Most of what the mic picks up is not addressed to you" in s
+    assert "usually dp" not in s
 
 
 def test_a_voice_that_asked_is_a_turn_waiting_on_the_being():

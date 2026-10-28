@@ -103,7 +103,10 @@ def test_the_json_form_has_its_own_small_step_budget(tmp_path):
     assert hb.explore_json_steps(tmp_path, 8) == 5
     assert hb.explore_json_steps(tmp_path, 4) == 4, "never above the beat's own cap"
     src = Path(hb.__file__).read_text()
-    assert "max_steps=_explore_steps" in src and src.count("max_steps=_explore_steps") == 2
+    # explore takes the JSON budget, and in the JSON form posture shares it (_posture_steps is
+    # _explore_steps there; only the native form gives posture the full --max-steps)
+    assert src.count("max_steps=_explore_steps") == 1 and src.count("max_steps=_posture_steps") == 1
+    assert "_posture_steps = _explore_steps if _json_form else args.max_steps" in src
 
 
 def test_the_argument_ask_is_the_act_name_and_json_only():

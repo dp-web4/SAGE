@@ -40,14 +40,18 @@ WORKTREE_VERBS = ("git_read", "search", "check", "patch_apply", "git_restore", "
 # for a worktree so `search` could find lines in its own scratch file, which search can never
 # read. Each line says what the verb reads and which tool serves the being's own files. The
 # full refusal the verb itself returns is being_gate_client.NO_WORKTREE_REFUSAL.
+#: Worktree verbs that still work with no worktree, on another target, so they are NOT marked
+#: unavailable there. search reads a grant outside the home by absolute path (CBP, 2026-10-21:
+#: 15 refused searches in 12 beats on the governance snapshot it holds read grants for).
+REACH_VERBS = ("search",)
 NO_WORKTREE_HERE = {
-    "search": ("it searches a code-repository checkout (a worktree), not your home, and this "
-               "seat has none; to read lines in your own files use memory_read with "
-               "start_line"),
+    "search": ("it searches a code-repository checkout (a worktree), or with none a folder outside "
+               "your home that you hold a grant for, by absolute path; not your home: to find a "
+               "line in your own files use memory_read with path and find"),
     "git_read": ("it reads the git history of a code-repository checkout (a worktree), not "
                  "your home, and this seat has none; to read your own files use memory_read"),
     "check": ("it runs the test suites of a code-repository checkout (a worktree), not your "
-              "home, and this seat has none; to run one of your own files use request_run"),
+              "home, and this seat has none; to run one of your own files use run"),
     "patch_apply": ("it changes files in a code-repository checkout (a worktree), not your "
                     "home, and this seat has none; to change lines of your own files use "
                     "memory_edit"),
@@ -73,6 +77,19 @@ NO_WORKTREE_HERE = {
 # enabled on this seat". Availability now follows the gate's condition, which is unchanged; the
 # no-worktree reason wins over the body reason because it is the one calling the verb returns.
 WORKTREE_HELD_VERBS = ("camera",)
+
+
+_SANDBOX_HERE: Optional[bool] = None
+
+
+def _sandbox_here() -> bool:
+    """A sandbox `run` can use (being_gate_client.run_sandbox_kind: bwrap, or Seatbelt on a Mac), once
+    per process: it starts a real one."""
+    global _SANDBOX_HERE
+    if _SANDBOX_HERE is None:
+        from sage.gateway.being_gate_client import run_sandbox_kind
+        _SANDBOX_HERE = run_sandbox_kind() is not None
+    return _SANDBOX_HERE
 
 
 def canonical_toolset() -> List[str]:
@@ -102,7 +119,7 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
             out[v] = f"this machine's body has no {part} (measured)"
     if not worktree:
         for v in WORKTREE_VERBS + WORKTREE_HELD_VERBS:
-            if v in _TOOL_SCHEMAS:
+            if v in _TOOL_SCHEMAS and v not in REACH_VERBS:
                 out[v] = NO_WORKTREE_HERE.get(
                     v, "it works in a code-repository checkout (a worktree), and this seat has none")
     # A CORTEX-SOURCED CAMERA (instance.json camera_source "cortex", sage/embodiment/look.py) needs no
@@ -114,8 +131,67 @@ def unavailable(body_reading: Optional[dict] = None, worktree: Optional[str] = N
             out["camera"] = "availability unknown: this machine's body was not measured this turn"
         elif not inv.get("cortex_live"):
             out["camera"] = "your eyes' organ (the cortex) is not running, so there is no frame to give you (measured)"
+    # run needs a sandbox: bubblewrap able to make a user namespace, or Seatbelt on a Mac; without one
+    # the verb refuses rather than run the being's code with the seat's authority, so say so here too.
+    if "run" in _TOOL_SCHEMAS and not _sandbox_here():
+        out["run"] = ("this machine has no usable sandbox (neither bubblewrap nor macOS Seatbelt), "
+                      "and your code is never run outside one; request_run asks the seat instead")
     if "game" in _TOOL_SCHEMAS and not (cfg or {}).get("game_stepper"):
         out["game"] = "no game is set up on this seat (instance.json has no game_stepper)"
+    return out
+
+
+# WHAT A VERB SAYS ON THIS MACHINE, where its registry text describes another machine's mechanism.
+# camera's registry text is the ffmpeg path: "The seat runs ffmpeg against /dev/video0 (or a plain device
+# node you name)", with a `device` parameter defaulting to /dev/video0. On a seat that declares
+# camera_source "cortex" none of that is true: the frame comes from the cortex (sage/embodiment/look.py) and
+# `device` is never read (camera_command; _do_camera). Measured on Sprout, 2026-10-14..27: 612 of the
+# being's 1,010 request_runs were about the device node, across 86 files, while its own tool text said, every
+# beat, that its camera reads that node. The text now says where its frame comes from, and offers only the
+# parameter that does something.
+CORTEX_CAMERA = (
+    "Take ONE frame from your own eye, into your own scratch. Here your eyes are run by your cortex, which "
+    "holds the camera sensors: the frame comes from the cortex as a finished image, and no device node is "
+    "opened or needed. The JPEG lands at out_path (default scratch/camera/last-frame.jpg, replaced each "
+    "time) and, if it lands under scratch/camera/, is shown to you at your next beat. If your eyes are closed (gaze) or the cortex has no frame "
+    "yet, it says so and writes nothing.",
+    {"out_path": "optional: where the JPEG lands, a plain path inside your home "
+                 "(default scratch/camera/last-frame.jpg)"})
+
+
+# THE SAME FAULT ON A MAC (#575's follow-up). A Mac's camera has no device node: _do_camera sets device to
+# "avfoundation" and never reads `device`; camera_command picks the camera by NAME (platform_av.mac_camera).
+# The registry text told McNugget's being the ffmpeg/device-node story every beat. Measured on mcnugget-being,
+# 1,230 beats to 2026-10-27: 0 camera calls, 7,005 mentions of the Linux node in 234 beats, 191 in its todo
+# and 194 in its journal, a grant asked for and held on a node this body cannot have.
+MAC_CAMERA = (
+    "Take ONE frame from this Mac's camera, into your own scratch. A Mac's camera has no device node: the "
+    "seat finds the attached camera by its name and captures one JPEG after a short warm-up. The JPEG lands "
+    "at out_path (default scratch/camera/last-frame.jpg, replaced each time) and is shown to you at your "
+    "next beat, wherever you saved it. If no camera is attached, macOS has not given the "
+    "seat the camera, or it cannot be read (for example just unplugged), it says which and writes nothing.",
+    {"out_path": "optional: where the JPEG lands, a plain path inside your home "
+                 "(default scratch/camera/last-frame.jpg)"})
+
+
+def _av_backend() -> str:
+    """platform_av.backend(): which capture stack this seat's camera and microphone use. "" if unknown."""
+    try:
+        from sage.embodiment import platform_av
+        return platform_av.backend()
+    except Exception:
+        return ""
+
+
+def here(cfg: Optional[dict], backend: Optional[str] = None) -> Dict[str, tuple]:
+    """{verb: (description, params)} that replace the registry text on THIS seat (see CORTEX_CAMERA,
+    MAC_CAMERA). `backend` is platform_av.backend() unless given: the same test _do_camera makes, so the
+    text and the act cannot disagree about which camera this is."""
+    out: Dict[str, tuple] = {}
+    if (cfg or {}).get("camera_source") == "cortex":
+        out["camera"] = CORTEX_CAMERA
+    elif (backend if backend is not None else _av_backend()) == "avfoundation":
+        out["camera"] = MAC_CAMERA
     return out
 
 
@@ -148,11 +224,15 @@ def brief_description(name: str, desc: str) -> str:
     return f"{first} (Full text: {DESCRIBE} {name}.)"
 
 
-def full_text(name: str) -> str:
-    """What `describe` answers: the verb's whole description and each parameter's, from the schema table."""
+def full_text(name: str, cfg: Optional[dict] = None) -> str:
+    """What `describe` answers: the verb's whole description and each parameter's, from the schema table,
+    as this seat offers it (here)."""
     if name not in _TOOL_SCHEMAS:
         return (f"there is no verb called {name!r}. Verbs: " + ", ".join(canonical_toolset()))
     desc, props, required = _TOOL_SCHEMAS[name]
+    if name in here(cfg):
+        desc, props = here(cfg)[name]
+        required = [r for r in required if r in props]
     lines = [f"{name}: {desc}"]
     for k, v in props.items():
         lines.append(f"  {k}{' (required)' if k in required else ''}: {v}")
@@ -160,7 +240,7 @@ def full_text(name: str) -> str:
 
 
 def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, list]] = None,
-          *, brief: bool = False) -> List[dict]:
+          *, brief: bool = False, cfg: Optional[dict] = None) -> List[dict]:
     """The Ollama tool specs for the whole canonical toolset. Available verbs carry their full
     description; an unavailable one carries one line and the reason, parameters intact."""
     unavail = unavail or {}
@@ -170,8 +250,12 @@ def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, 
     from sage.gateway.being_gate_client import _param_enums
     closed = {**_param_enums(), **(enums or {})}
     out = []
+    local = here(cfg)
     for name in canonical_toolset():
         desc, props, required = _TOOL_SCHEMAS[name]
+        if name in local:
+            desc, props = local[name]
+            required = [r for r in required if r in props]
         if name in unavail:
             first = desc.split(". ")[0].rstrip(".")
             desc = (f"{first}. ON THIS MACHINE IT CANNOT WORK: {unavail[name]}. Offered because "

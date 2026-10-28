@@ -51,11 +51,43 @@ mkdir -p "$DEST/heartbeats"
 # filter protects that one directory. Legion measured this on #168: stale file removed by the
 # mirror itself, heartbeats/ survives, run reports "no change".
 rsync -a --delete --delete-excluded --filter="protect heartbeats/" \
+  --filter="protect heartbeat.partial.jsonl.gz" \
   --exclude 'identity.sealed*' --exclude 'heartbeat.log' --exclude 'heartbeats.jsonl' \
-  --exclude 'atp_shadow.jsonl*' \
+  --exclude 'atp_shadow.jsonl*' --exclude 'heartbeat.partial.jsonl' \
   --exclude 'heartbeats/' --exclude '__pycache__/' --exclude '*.tmp' --exclude '.git' \
   "$INSTANCE/" "$DEST/" || die "rsync"
 mkdir -p "$DEST/heartbeats"   # excluded above, so --delete leaves it alone
+
+# heartbeat.partial.jsonl (heartbeat.py: one row per generate, kept so a beat killed by the unit
+# timeout still leaves its trace) is APPEND-ONLY and nothing rotates it. Legion's crossed the 9MB
+# guard below on 2026-10-21 (9.54MB, 30,877 rows since 09-05) and every mirror run failed from
+# 06:27 on; sprout-being's was 7.0MB the same day. It goes gzipped: 9.54MB -> 0.67MB. `-n` keeps
+# the bytes identical when the file has not grown, so an idle run still reports "no change".
+#
+# A FAILED COMPRESSOR MUST NOT PUBLISH A CUT FILE (NOVA HOLD at 012ae47c). Writing straight to the
+# published name meant a killed or ENOSPC gzip left a truncated .gz in the mirror, ready for the
+# commit below. So it compresses to a temp in the same directory, verifies it with `gzip -t`, and
+# only then renames it over the published copy (rename within one directory is atomic). On any
+# failure the temp is removed and the previous copy is left exactly as it was; rsync protects that
+# copy above, because --delete would otherwise remove it every run before this step rewrote it.
+# A leftover temp from a killed run is *.tmp, which the rsync above already deletes. The source
+# gone means the copy goes too, so the file counts below still agree.
+PARTIAL_GZ="$DEST/heartbeat.partial.jsonl.gz"
+if [ -f "$INSTANCE/heartbeat.partial.jsonl" ]; then
+  partial_tmp="$DEST/.heartbeat.partial.jsonl.gz.tmp"
+  if gzip -9 -n -c "$INSTANCE/heartbeat.partial.jsonl" > "$partial_tmp" && gzip -t "$partial_tmp" 2>/dev/null; then
+    if cmp -s "$partial_tmp" "$PARTIAL_GZ"; then
+      rm -f "$partial_tmp"
+    else
+      mv -f "$partial_tmp" "$PARTIAL_GZ" || { rm -f "$partial_tmp"; die "partial publish"; }
+    fi
+  else
+    rm -f "$partial_tmp"
+    die "partial gzip failed; the previous heartbeat.partial.jsonl.gz is unchanged"
+  fi
+else
+  rm -f "$PARTIAL_GZ"
+fi
 
 # heartbeats.jsonl -> heartbeats/YYYY-MM-DD.jsonl.gz ; only days whose content changed are rewritten
 python3 - "$INSTANCE/heartbeats.jsonl" "$DEST/heartbeats" <<'PY' || die "heartbeat split"
