@@ -273,3 +273,60 @@ def _write(instance, name: str, a: Dict[str, str]) -> Tuple[bool, str]:
 
 def _iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+# -- the moment a skill forms: something that failed, then worked, in one beat ---------------------------------
+
+#: Verbs where "failed, then worked" is measurable from the act's own result, and what names the target.
+WORKED_OUT_VERBS = {"run": "path", "request_run": "path", "memory_edit": "path", "camera": None, "patch_apply": None}
+#: A retried edit of its own records is bookkeeping, not a procedure (replayed on Sprout: `memory_edit todo.md`).
+BOOKKEEPING = ("todo.md", "journal.md")
+
+
+def _failed(effector: str, env) -> Optional[bool]:
+    """True/False for an act whose outcome the result states; None when it does not say."""
+    if env is None:
+        return None
+    if not getattr(env, "ok", False):
+        return True
+    if effector == "run":
+        r = getattr(env, "result", None)
+        code = r.get("exit") if isinstance(r, dict) else None
+        return None if code is None else code != 0
+    return False
+
+
+def worked_out(trace) -> Optional[str]:
+    """One line of fact for the reflect turn when this beat holds an act that FAILED and then, on the same
+    target, WORKED: the moment a procedure was found, and the only moment its steps are all in view.
+    dp, 2026-10-28: "once it figures something out, to retain it as a skill for future use". None otherwise.
+    It names what happened and that `skill` can keep it; whether to write one, and what, is the being's."""
+    seen: Dict[tuple, List[bool]] = {}
+    found = None
+    for item in trace or []:
+        try:
+            intent, env = item
+        except (TypeError, ValueError):
+            continue
+        eff = getattr(intent, "effector", None)
+        if eff not in WORKED_OUT_VERBS:
+            continue
+        arg = WORKED_OUT_VERBS[eff]
+        target = str((getattr(intent, "args", None) or {}).get(arg) or "") if arg else ""
+        if target.rsplit("/", 1)[-1] in BOOKKEEPING:
+            continue
+        f = _failed(eff, env)
+        if f is None:
+            continue
+        key = (eff, target)
+        hist = seen.setdefault(key, [])
+        if not f and hist and any(hist):
+            found = (eff, target, sum(hist), len(hist) + 1)
+        hist.append(f)
+    if not found:
+        return None
+    eff, target, fails, tries = found
+    what = f"{eff} {target}".strip()
+    return (f"This beat, `{what}` failed {fails} time{'s' if fails != 1 else ''} and then worked, on try {tries}. "
+            "If you want the steps that got it working kept for next time, `skill` can hold them as a skill of "
+            "your own (name, description, when, body).")

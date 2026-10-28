@@ -90,10 +90,13 @@ def test_when_words_match_whole_words_only():
 def test_a_when_word_ending_in_punctuation_matches_what_follows_it():
     """cbp review of #576: `scope-` and `/dev/video` are prefixes of what a refusal and a device listing print."""
     fleet = {s["name"]: s for s in sk._load(sk.FLEET_DIR, "fleet")}
-    assert "scope-" in sk.match([fleet["when-an-act-is-refused"]], "opened scope-ac881b894a24")[0][2]
     assert "/dev/video" in sk.match([fleet["seeing-with-your-eyes"]], "ls /dev/video0 failed")[0][2]
     s = {"name": "x", "description": "d", "when": ["scope-"], "source": "fleet", "body": ""}
+    assert "scope-" in sk.match([s], "opened scope-ac881b894a24")[0][2]
     assert sk.match([s], "telescope-ac88") == []
+    # the refusal skill no longer lists `scope-` (2026-10-28): a scope id stays in the being's state long after
+    # the refusal that opened it, so it marked the skill on routine beats; the refusal's own words still match
+    assert sk.match([fleet["when-an-act-is-refused"]], "refused: outside your granted scope; opened scope-ac881b894a24")
 
 
 def test_the_index_stays_within_its_budget_and_says_how_many_more(tmp_path):
@@ -200,3 +203,50 @@ def test_a_case_variant_of_the_skills_dir_or_log_is_refused_too():
     for path in ("Skills/probe-skill/SKILL.md", "SKILLS/probe-skill/SKILL.md", "Skills_Log.jsonl"):
         env = d(BeingIntent("memory_write", {"path": path, "content": "x"}), _ALLOW)
         assert not env.ok and "changed only with skill" in env.error, (path, env)
+
+
+def test_a_routine_beat_marks_no_skill_but_a_failure_does():
+    """2026-10-28: on sprout-being's state, 4 of 6 skills were marked every beat by words that every beat's
+    receipts carry (request_run, exit code, memory_edit, scope-, pending). A mark that is always on says nothing."""
+    fleet = sk._load(sk.FLEET_DIR, "fleet")
+    routine = ("[request_run] I ran scratch/a.py (sha 1) with no arguments. exit code 0. UNCHANGED since the request "
+               "at seq 4. memory_edit: replaced lines 3-3. scope-ac881b894a24 granted. pending: 0. sandbox run ok.")
+    assert sk.match(fleet, routine) == []
+    assert [s["name"] for _, s, _ in sk.match(fleet, "Traceback ... NameError: name 'x' is not defined; exit code 1")] \
+        == ["getting-code-run"]
+
+
+class _I:
+    def __init__(self, effector, **args):
+        self.effector, self.args = effector, args
+
+
+class _E:
+    def __init__(self, ok=True, result=None):
+        self.ok, self.result = ok, result
+
+
+def test_worked_out_names_a_target_that_failed_then_worked_in_one_beat():
+    trace = [(_I("run", path="scratch/a.py"), _E(True, {"exit": 1})),
+             (_I("memory_edit", path="scratch/a.py"), _E(True, "edited")),
+             (_I("run", path="scratch/a.py"), _E(True, {"exit": 1})),
+             (_I("run", path="scratch/a.py"), _E(True, {"exit": 0}))]
+    said = sk.worked_out(trace)
+    assert "`run scratch/a.py` failed 2 times and then worked, on try 3" in said and "`skill`" in said
+
+
+def test_worked_out_is_silent_without_a_failure_before_a_success_on_the_same_target():
+    assert sk.worked_out([]) is None
+    assert sk.worked_out([(_I("run", path="a.py"), _E(True, {"exit": 0}))]) is None
+    assert sk.worked_out([(_I("run", path="a.py"), _E(True, {"exit": 1})),
+                          (_I("run", path="b.py"), _E(True, {"exit": 0}))]) is None, "another file is not the same task"
+    assert sk.worked_out([(_I("run", path="a.py"), _E(True, {"exit": 0})),
+                          (_I("run", path="a.py"), _E(True, {"exit": 1}))]) is None, "worked then broke is not worked out"
+    assert sk.worked_out([(_I("camera"), _E(False)), (_I("camera"), _E(True, {"out_path": "x.jpg"}))]).startswith(
+        "This beat, `camera` failed 1 time")
+
+
+def test_reflection_names_skill_and_offers_it():
+    from sage.gateway import heartbeat as hb
+    assert "skill" in hb.REFLECT_TOOLS
+    assert "keep the steps instead with skill" in hb.reflect_prompt(date="d", say_line="", say_first="")
