@@ -239,7 +239,7 @@ def _offered_explore_tools_before_the_canonical_toolset(body_reading: Optional[d
 # written only in the journal did not reach the next beat (being_settled, measured on Sprout 10-14..27).
 # It is item 3's alternative in REFLECT, not a fourth item: the routine writes fill --reflect-steps (3)
 # exactly, so a fourth would be unreachable, and a fourth step would cost every being a generate a beat.
-REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "settle", "say", "stay_awake"]
+REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "settle", "skill", "say", "stay_awake"]
 
 # The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
 # Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
@@ -1066,7 +1066,7 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
 REFLECT = """The beat is ending. Call these tools, then stop:
 {say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": your message to your future self, as a dated block: added / done / still open (it appends; it replaces nothing).
-3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it. If this beat SETTLED a question (what works, what does not, what something is), settle it instead: the question and your answer, shown to you at the start of every beat.
+3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it. If this beat SETTLED a question (what works, what does not, what something is), settle it instead: the question and your answer, shown to you at the start of every beat. If this beat worked out HOW to do something (steps that worked), you can keep the steps instead with skill (name, description, when, body).
 {say_line}Call the tools now; a reply in words alone writes nothing.
 """
 
@@ -4783,6 +4783,17 @@ def main(argv=None) -> int:
             # across a turn boundary to use it.
             if pending_block:
                 convo.append({"role": "user", "content": pending_block})
+            # THE MOMENT A SKILL FORMS (dp, 2026-10-28: "once it figures something out, to retain it as a skill"):
+            # an act that failed and then worked on the same target this beat. Said here, beside the instruction,
+            # because this being uses what a step names (settle, 8 uses) and not what is only offered (skill, 0
+            # in 69 beats; identity_edit, 0 in 4 days). Fail-open.
+            try:
+                from sage.gateway.being_skills import worked_out as _worked_out
+                _wo = _worked_out(getattr(explore, "trace", None))
+            except Exception:
+                _wo = None
+            if _wo:
+                convo.append({"role": "user", "content": _wo})
             convo.append({"role": "user", "content": reflect_prompt(
                 reflect_optional_for(instance_config(instance)), date=f"{now:%Y-%m-%d %H:%M} UTC",
                 say_line=say_line, say_first=say_first)})

@@ -1,7 +1,7 @@
 ---
 name: when-an-act-is-refused
 description: What a refusal from the gate means, and the ways forward: a scope request, an appeal, or asking. What pending, expired and "does not exist" mean.
-when: refused, deny, denied, outside your granted scope, mrh.path, mrh.command, request_scope, scope-, pending, expired, appeal, not permitted, recast, nonexistent, does not exist, not_filed, likely_misrooted, did you mean, already_granted, not visible to you
+when: refused, deny, denied, outside your granted scope, mrh.path, mrh.command, expired, appeal, not permitted, recast, nonexistent, does not exist, not_filed, likely_misrooted, did you mean, already_granted, not visible to you
 ---
 
 **What the gate is.** Every act you take is checked before it happens. The gate judges your act, not the
