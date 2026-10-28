@@ -1721,10 +1721,16 @@ class ReferenceF1aDispatcher:
             rng = (s0, s1)
         if not path or (not old and rng is None):
             got = ", ".join(sorted(a)) or "nothing"
+            # PATH AND NEW, NOTHING TO REPLACE: AN APPEND (measured on mcnugget-being, 150 beats to 2026-10-28:
+            # every one of its path+new-only calls was a journal line, a todo item or a log entry to ADD). This
+            # verb only replaces; the one that adds is memory_write, and the refusal now names it.
+            add = (f" If you meant to ADD this text to the end of '{path}', that is memory_write with path "
+                   f"'{path}' and content set to your new text: it appends and never replaces."
+                   if path and new_key is not None and not old and rng is None else "")
             return ResultEnvelope(ok=False, error=(
                 f"memory_edit needs 'path', and either 'old' (the exact text to replace, "
                 f"unique in the file) or 'start_line' and 'end_line' (the lines to replace), "
-                f"and 'new' (what replaces it; empty string deletes it). You sent: {got}."))
+                f"and 'new' (what replaces it; empty string deletes it). You sent: {got}.{add}"))
         if new_key is None:
             got = ", ".join(sorted(a)) or "nothing"
             return ResultEnvelope(ok=False, error=(
