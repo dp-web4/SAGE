@@ -167,8 +167,8 @@ CORTEX_CAMERA = (
 MAC_CAMERA = (
     "Take ONE frame from this Mac's camera, into your own scratch. A Mac's camera has no device node: the "
     "seat finds the attached camera by its name and captures one JPEG after a short warm-up. The JPEG lands "
-    "at out_path (default scratch/camera/last-frame.jpg, replaced each time) and, if it lands under "
-    "scratch/camera/, is shown to you at your next beat. If no camera is attached, macOS has not given the "
+    "at out_path (default scratch/camera/last-frame.jpg, replaced each time) and is shown to you at your "
+    "next beat, wherever you saved it. If no camera is attached, macOS has not given the "
     "seat the camera, or it cannot be read (for example just unplugged), it says which and writes nothing.",
     {"out_path": "optional: where the JPEG lands, a plain path inside your home "
                  "(default scratch/camera/last-frame.jpg)"})
