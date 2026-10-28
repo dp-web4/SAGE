@@ -21,6 +21,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from sage.gateway.being_gate_client import BeingGateClient, BeingIntent, ResultEnvelope
@@ -1247,6 +1248,17 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         reserve = int(_bp.value(_root, "answer_reserve", _ANSWER_RESERVE)) if _root else _ANSWER_RESERVE
     except Exception:
         reserve = _ANSWER_RESERVE
+    # THE TURN, KEPT WHOLE, WHEN THE SEAT ASKS (`turn_capture`, LFM3 trial 2026-10-28). The beat records
+    # token counts and effector traces, never the prompt, so a candidate model could not be scored on the
+    # being's real turns: there was nothing to replay. Off by default; seat-only; the file sits in the
+    # being's home (gitignored). Each row is one provider call: what was sent, the schemas, the reply.
+    capture = None
+    try:
+        _root = getattr(client, "memory_root", None)
+        if _root and _bp.value(_root, "turn_capture", "off") == "on":
+            capture = Path(_root) / "turn_capture.jsonl"
+    except Exception:
+        capture = None
     tools = tools if tools is not None else ollama_tools()
     # THE SCHEMAS THIS TURN ACTUALLY SENDS (#490). Step 1's preflight used _UNCOUNTED_CHARS, a constant
     # set when the schemas were ~11,700 chars; by 2026-10-19 the 35 verbs measured 26,649 (full) and
@@ -1275,6 +1287,19 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     def _model_call(phase: str, messages, **kwargs):
         response, attempt = generate_with_evidence(llm, messages, phase=phase, **kwargs)
         attempts.append(attempt)
+        if capture is not None:
+            try:
+                r = response or {}
+                row = {"ts": time.time(), "model": getattr(llm, "model_name", None) or getattr(llm, "model", None),
+                       "phase": phase, "messages": messages, "tools": kwargs.get("tools"), "fmt": kwargs.get("fmt"),
+                       "reply": {"content": r.get("content"), "tool_calls": r.get("tool_calls"),
+                                 "thinking": ((r.get("raw") or {}).get("message") or {}).get("thinking")},
+                       "attempt": attempt}
+                with open(capture, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(row, default=str) + "\n")
+            except Exception as _e:
+                import sys as _sys
+                print(f"[tool-loop] turn_capture failed: {type(_e).__name__}: {_e}", file=_sys.stderr)
         return response
 
     def _json_act(msgs: List[Dict[str, Any]]) -> Dict[str, Any]:
