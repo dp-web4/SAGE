@@ -179,3 +179,41 @@ def test_a_case_variant_of_a_verb_owned_file_is_refused_too():
     for name in ("Settled.json", "SETTLED_LOG.jsonl", "Self.json", "SELF_LOG.jsonl", "Tuned.json"):
         env = d(BeingIntent("memory_write", {"path": name, "content": "{}"}), _ALLOW)
         assert not env.ok and "changed only with" in env.error, (name, env)
+
+
+def test_a_new_question_close_to_one_already_settled_is_kept_and_named(tmp_path):
+    # sprout-being 10-28: "Do I need to install libv4l to use v4l2-ctl?" (s6), later "Does v4l2-ctl need libv4l
+    # installed on the seat?" (s9): one conclusion settled twice, both shown every beat
+    _s(tmp_path, question="Do I need to install the test gizmo driver to use gizmoctl?", answer="no")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    ok, msg, changed = _s(tmp_path, question="Does gizmoctl need the test gizmo driver installed?", answer="no, it is there")
+    assert ok and changed and "s3" in msg
+    assert "reads close to s1" in msg and "settle id=s1" in msg and "reopen s3" in msg
+    assert len(st.read(tmp_path)[0]) == 3, "named, never merged: the being decides whether they are one"
+    ok, msg, _ = _s(tmp_path, question="how loud is the test fan?", answer="quiet")
+    assert ok and "reads close" not in msg
+
+
+def test_two_questions_about_one_device_are_not_named_close(tmp_path):
+    # cbp's and mcnugget's reviews of #584: a shared device or file name scored 1.0, so on a camera being
+    # nearly every new settle would have been told to keep one
+    _s(tmp_path, question="what resolutions does /dev/video0 support?", answer="640x480")
+    ok, msg, _ = _s(tmp_path, question="is /dev/video0 owned by the video group?", answer="yes")
+    assert ok and "reads close" not in msg
+    _s(tmp_path, question="why did capture_frame.py stop at line 16?", answer="no scratch dir")
+    ok, msg, _ = _s(tmp_path, question="where does capture_frame.py write its jpg?", answer="scratch/")
+    assert ok and "reads close" not in msg
+
+
+def test_the_named_way_to_keep_one_works_in_its_order_even_with_the_newer_wording(tmp_path):
+    # cbp's review of #584: settling s1 first with s3's wording as question was refused as a duplicate of s3
+    _s(tmp_path, question="Do I need to install the test gizmo driver to use gizmoctl?", answer="no")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    newer = "Does gizmoctl need the test gizmo driver installed?"
+    ok, msg, _ = _s(tmp_path, question=newer, answer="no, it is there")
+    assert "reopen s3, then settle id=s1" in msg
+    ok, _, changed = _s(tmp_path, id="s3", reopen="true")
+    assert ok and changed
+    ok, msg, changed = _s(tmp_path, id="s1", question=newer, answer="no, it is there")
+    assert ok and changed, msg
+    assert sorted(e["id"] for e in st.read(tmp_path)[0]) == ["s1", "s2"]
