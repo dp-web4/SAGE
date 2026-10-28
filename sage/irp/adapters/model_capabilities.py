@@ -18,6 +18,10 @@ class ModelCapabilities:
     api_mode: str = 'chat'                   # 'chat' or 'generate'
     bilateral_prone: bool = False             # Generates both sides of conversation?
     supports_tool_calls: bool = False         # Native Ollama tool calling?
+    # Does the chat template render the tool schemas only when the LAST message is a user turn?
+    # Ollama's llama3.1 template does, so a prompt ending in a tool result counts thousands of
+    # tokens fewer than the same list ending in a user turn (being_tool_loop._tail_kind).
+    tools_on_last_user_only: bool = False
     max_context_tokens: int = 4096            # Approximate context window
     max_context_turns: int = 6               # Recommended history turns
     thinking_supported: bool = False          # Qwen 3.5 /think mode?

@@ -148,7 +148,8 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
             if intent.effector == "describe":
                 # Never dispatched: it reads the schema table and touches nothing (toolset.DESCRIBE).
                 from sage.gateway.toolset import full_text
-                env = ResultEnvelope(ok=True, result=full_text(str((intent.args or {}).get("verb") or "").strip()),
+                env = ResultEnvelope(ok=True, result=full_text(str((intent.args or {}).get("verb") or "").strip(),
+                                                               {"camera_source": getattr(client, "camera_source", None)}),
                                      note="describe")
                 trace.append((intent, env))
                 convo.append({"role": "tool", "effector": intent.effector, "content": env.to_tool_message()})
@@ -467,20 +468,26 @@ _CPT = 2.9
 # real). This fallback is reached only before the server has counted anything, and it is set
 # from the same measurement rather than the disproven one: ~11,700 schema chars plus ~1,200
 # of template.
+# Since #490 the tool loop's preflight measures the schemas it actually sends (run_ollama_tool_turn:
+# `uncounted`), because this constant went stale the same way (12,900 assumed; 26,649 real at 35
+# verbs). It remains only as _est_tokens' fallback for a caller with no tools list in hand.
 _UNCOUNTED_CHARS = 12900
+# The chat template's share of _UNCOUNTED_CHARS: what a prompt carries beyond messages and schemas.
+_TEMPLATE_CHARS = 1200
 
 
-def _est_tokens(chars_now: int, measured) -> float:
+def _est_tokens(chars_now: int, measured, uncounted: Optional[int] = None) -> float:
     """Tokens the next prompt will cost. With a measurement from the previous generate —
     (prompt_eval_count, content chars at that prompt) — the estimate is anchored on what
     the server actually counted and only the DELTA rides a chars-per-token guess:
     conservative in both directions (added chars counted dense, removed chars counted
-    light). Without one, the whole prompt rides the guess, plus the uncounted schema chars."""
+    light). Without one, the whole prompt rides the guess, plus the uncounted schema chars:
+    `uncounted` when the caller measured them (the tool loop does, #490), else _UNCOUNTED_CHARS."""
     if measured:
         tokens_at, chars_at = measured
         delta = chars_now - chars_at
         return tokens_at + (delta / _CPT_ADDED if delta > 0 else delta / _CPT)
-    return (chars_now + _UNCOUNTED_CHARS) / _CPT
+    return (chars_now + (_UNCOUNTED_CHARS if uncounted is None else uncounted)) / _CPT
 
 # What a real answer needs. Explore generations across 506 measured on Legion: median
 # 1,282 tokens, p90 3,909, p99 5,741. Reserve the p99 with headroom rather than
@@ -723,7 +730,7 @@ def convo_composition(msgs: List[Dict[str, Any]]) -> Dict[str, int]:
 
 def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERVE,
                   measured=None, spill_root: Optional[str] = None,
-                  own_turns: bool = False) -> tuple:
+                  own_turns: bool = False, uncounted: Optional[int] = None) -> tuple:
     """Shrink the OLDEST tool results until the prompt leaves room for an answer.
 
     THE SEED FITTING IS NOT ENOUGH. heartbeat.fit_to_window sizes the first prompt; this
@@ -752,7 +759,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # in the sum at all. The previous generate's prompt_eval_count IS the number; use it.
     size = _convo_chars
     room = num_ctx - reserve
-    if _est_tokens(size(msgs), measured) <= room:
+    if _est_tokens(size(msgs), measured, uncounted) <= room:
         return msgs, []
     budget = None  # decided per elision below, against the anchored estimate
     out = [dict(m) for m in msgs]
@@ -769,7 +776,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # prune may delete a file a marker or pointer the being is about to read still names.
     pinned = {r for m in out for r in _SPILL_REF.findall(m.get("content") or "")}
     for i in idx[:-1] if len(idx) > 1 else []:
-        if _est_tokens(size(out), measured) <= room:
+        if _est_tokens(size(out), measured, uncounted) <= room:
             break
         body = out[i].get("content") or ""
         if len(body) <= COMPACT_MIN_BODY:
@@ -830,12 +837,12 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # stubs, the OLDEST stubs are collapsed to a pointer: first line, last line, and the
     # saved file that holds the whole result. Only a stub whose result WAS saved (nothing is
     # lost), and never the newest COMPACT_STUBS_KEPT (what the being is still working with).
-    if _est_tokens(size(out), measured) > room:
+    if _est_tokens(size(out), measured, uncounted) > room:
         older = idx[:-1] if len(idx) > 1 else []
         stubs = [i for i in older if _ELIDED_SIGIL in (out[i].get("content") or "")
                  and _COLLAPSED_SIGIL not in (out[i].get("content") or "")]
         for i in stubs[:-COMPACT_STUBS_KEPT] if len(stubs) > COMPACT_STUBS_KEPT else []:
-            if _est_tokens(size(out), measured) <= room:
+            if _est_tokens(size(out), measured, uncounted) <= room:
                 break
             body = out[i].get("content") or ""
             m = re.search(r"saved as (" + re.escape(COMPACT_SPILL_DIR) + r"/\S+?)(?=[\s,;]|$)", body)
@@ -868,10 +875,10 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # window filled mid-beat at exactly 32,768 — my own turns fill it and compaction never trims
     # them". Results become stubs and then pointers; its own calls stayed whole forever, so a
     # long beat always ended at the wall. Oldest first, the newest kept.
-    if own_turns and _est_tokens(size(out), measured) > room:
+    if own_turns and _est_tokens(size(out), measured, uncounted) > room:
         own = [i for i, m in enumerate(out) if m.get("role") == "assistant"]
         for i in own[:-COMPACT_OWN_TURNS_KEPT] if len(own) > COMPACT_OWN_TURNS_KEPT else []:
-            if _est_tokens(size(out), measured) <= room:
+            if _est_tokens(size(out), measured, uncounted) <= room:
                 break
             freed = 0
             calls = []
@@ -900,7 +907,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
     # one is trimmed too, with a larger keep (the being is working from it right now),
     # rather than letting the window cut the generate at the wall (03:27Z 2026-09-09:
     # 24,466 + 110 == 24,576, done_reason length, nothing said).
-    if idx and _est_tokens(size(out), measured) > room:
+    if idx and _est_tokens(size(out), measured, uncounted) > room:
         i = idx[-1]
         body = out[i].get("content") or ""
         keep = COMPACT_KEEP_CHARS * 4
@@ -948,6 +955,23 @@ PREFLIGHT_CPT = _CPT
 # at 8,172 for a list whose previous step the server had counted at 16,349) and compaction was
 # skipped on exactly the step that needed it.
 SERVER_CUT_RATIO = 0.75
+
+# SOME TEMPLATES SEND THE TOOLS ONLY WHEN THE LAST MESSAGE IS A USER TURN. Ollama's llama3.1
+# template renders the schemas inside the last user message ({{ if and $.Tools $last }}), so once
+# a tool result is last they are gone from the prompt. Measured on pub-being, 2026-10-21: step 1
+# counted ~10.0k, step 2 ~5.6k for a LONGER list (the ~4.3k of schemas gone). Judged against the
+# step-1 anchor that read as a server cut, and since the cut ends the phase, every explore and
+# reflect from 08:13Z ran exactly one act. Such a model (capabilities `tools_on_last_user_only`)
+# keeps one anchor per tail kind, and a count is called a cut only against its own kind.
+_TAIL_USER = "user"
+
+
+def _tail_kind(llm, msgs) -> Optional[str]:
+    """None for a template whose prompt has the same parts whatever comes last (one anchor, as
+    before); else whether the last message is a user turn (tools sent) or not (tools dropped)."""
+    if not getattr(llm, "tools_on_last_user_only", False):
+        return None
+    return _TAIL_USER if msgs and msgs[-1].get("role") == "user" else "after_turn"
 
 # The template's own words for a request whose user turn is gone. Re-sending the same list
 # cannot succeed, so this is never retried as a transport error.
@@ -1224,6 +1248,13 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     except Exception:
         reserve = _ANSWER_RESERVE
     tools = tools if tools is not None else ollama_tools()
+    # THE SCHEMAS THIS TURN ACTUALLY SENDS (#490). Step 1's preflight used _UNCOUNTED_CHARS, a constant
+    # set when the schemas were ~11,700 chars; by 2026-10-19 the 35 verbs measured 26,649 (full) and
+    # 17,781 (brief), so the preflight under-counted step 1 by up to ~4.9k tokens -- the direction the
+    # guard exists to prevent (a seed that passes, then is cut by the server). The tools list is in
+    # hand here, so it is measured, as heartbeat._schema_chars_for measures it (len of the JSON). In
+    # the JSON act form no schemas are sent with the request (_json_act), so only the template counts.
+    uncounted = (len(json.dumps(tools)) if act_form != "json" else 0) + _TEMPLATE_CHARS
     # Keep the think block per generate: when a small model narrates instead of acting,
     # whether it decided not to call or failed to format the call is only visible here.
     thoughts: List[str] = []
@@ -1232,9 +1263,12 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     compacted: List[dict] = []
     json_arg_failures: List[dict] = []     # act_form="json": arguments that could not be formed (no act)
     placeholders: List[dict] = []          # native replies that were only a template, retaken as a JSON act
-    # (prompt_eval_count, chars at that prompt) from the last generate the server counted.
+    # (prompt_eval_count, chars at that prompt) from the last generate the server counted, per
+    # TAIL KIND (_tail_kind: one kind unless the template drops the tools after a tool turn).
     # Compaction is anchored on this, so only the DELTA rides a chars-per-token estimate.
-    measured = tuple(anchor) if anchor else None
+    anchors: Dict[Optional[str], tuple] = {}
+    if anchor:
+        anchors[_tail_kind(llm, [{"role": "user"}])] = tuple(anchor)   # a seed count: its tail is a user turn
     first_measured = None    # this phase's own first whole count: what the next phase anchors on
     attempts: List[dict] = []
 
@@ -1328,7 +1362,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 "window_full": {"step": len(thoughts) - 1, "cause": cause, "estimated_prompt": est, "num_ctx": ctx}}
 
     def generate(convo: List[Dict[str, Any]]) -> Dict[str, Any]:
-        nonlocal measured, first_measured
+        nonlocal first_measured
         attempts.clear()
         # Flatten the loop's convo (carries extra keys) to chat messages. An assistant
         # turn that emitted intents MUST keep them as tool_calls: Qwen's chat template
@@ -1355,15 +1389,27 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 out["tool_calls"] = [{"function": {"name": i.effector, "arguments": dict(i.args or {})}}
                                      for i in m["intents"]]
             msgs.append(out)
+        # The anchor for THIS prompt is a count of the same tail kind. With none yet (the first
+        # step after a tool turn, on a template that drops the tools there), the other kind's
+        # count stands in for the window arithmetic, but it is not a basis for calling a cut.
+        _tail = _tail_kind(llm, msgs)
+        measured = anchors.get(_tail)
+        _same_tail = measured is not None
+        if not _same_tail and anchors:
+            measured = next(iter(anchors.values()))
         # LEAVE ROOM FOR THE ANSWER BEFORE ASKING FOR ONE. Every tool result is appended,
         # so the prompt the loop ENDS on is not the seed it started from. Without this it
         # grows until the server cuts the generate mid-sentence: measured on Legion, 27 of
         # 506 generates ended with prompt + eval == num_ctx exactly, and one beat lost its
         # closing words nine times in a day. Anchored on the server's own count from the
         # previous generate, so only the delta rides an estimate.
+        # THE SAME SCHEMA COUNT THE PREFLIGHT BELOW USES. #490 measured `uncounted` for the preflight
+        # only; compaction still assumed _UNCOUNTED_CHARS (12,900) against ~30,500 sent at 38 verbs, so
+        # with no server count yet it stopped ~17.6k chars short and the preflight then refused the step
+        # (estimated 32,762 of 32,768; found adding one verb, 2026-10-27).
         msgs, _elided = compact_convo(msgs, llm, reserve=reserve, measured=measured,
                                       spill_root=getattr(client, "memory_root", None),
-                                      own_turns=compact_own_turns)
+                                      own_turns=compact_own_turns, uncounted=uncounted)
         if _elided:
             compacted.append({"step": len(thoughts), "elisions": len(_elided),
                               "chars": sum(e["chars"] for e in _elided),
@@ -1379,8 +1425,11 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         if _ctx > 0:
             if measured is not None:
                 _est, _cause = _est_tokens(_convo_chars(msgs), measured), "over_window"
+                if not _same_tail and _tail == _TAIL_USER:
+                    # anchored on a count made WITHOUT the tool schemas, which this prompt carries
+                    _est = max(_est, (_convo_chars(msgs) + uncounted) / PREFLIGHT_CPT)
             else:
-                _est, _cause = (_convo_chars(msgs) + _UNCOUNTED_CHARS) / PREFLIGHT_CPT, "preflight"
+                _est, _cause = (_convo_chars(msgs) + uncounted) / PREFLIGHT_CPT, "preflight"
             if _est > _ctx - WINDOW_SEND_MARGIN:
                 return _window_full(_cause, int(_est), _ctx)
         retried = 0
@@ -1576,12 +1625,12 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             _now = (int(raw["prompt_eval_count"]), _convo_chars(msgs))
             # ... unless the count is of what survived a server cut (SERVER_CUT_RATIO): then the
             # previous anchor stands, and the cut is recorded instead of believed.
-            _expected = _est_tokens(_now[1], measured) if measured is not None else None
+            _expected = _est_tokens(_now[1], measured) if _same_tail else None
             if _expected and _now[0] < SERVER_CUT_RATIO * _expected:
                 _server_cut = {"counted": _now[0], "expected": int(_expected)}
             else:
-                measured = _now
-                if first_measured is None:
+                anchors[_tail] = _now
+                if first_measured is None and _tail in (None, _TAIL_USER):
                     first_measured = _now
         entry = {"done_reason": raw.get("done_reason"), "prompt_eval_count": raw.get("prompt_eval_count"),
                  "eval_count": raw.get("eval_count"), "retried": retried, "num_predict": sent,

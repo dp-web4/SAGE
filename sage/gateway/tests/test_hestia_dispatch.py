@@ -286,13 +286,73 @@ def test_drain_inbox_returns_notices():
     assert [a for n, a in FakeMcp.calls if n == "hestia_member_inbox"][-1]["session_id"] == "sid-1"
 
 
-def test_channel_egress_pending_not_built():
-    d, _ = _disp()
-    env = d(BeingIntent("channel_egress", {"to": "x", "body": "y"}), _ALLOW)
-    assert not env.ok and env.pending and "not built yet" in env.note
-    # the being gets the fact, not design jargon it can mistake for a setting (room seq 306, 2026-10-19)
-    assert "calibration" not in env.note and "no step or setting" in env.note
-    assert "never runs anything" in env.note
+class _Channels(FakeMcp):
+    """hestia_channel_send as #1372's daemon answers it: one bound channel, shadow, nothing sent."""
+    known = True
+
+    def call(self, name, args):
+        if name != "hestia_channel_send":
+            return super().call(name, args)
+        FakeMcp.calls.append((name, args))
+        if not _Channels.known:
+            body = {"_hestia_error": {"code": "hestia.unknown_tool", "message": "Unknown tool: hestia_channel_send"}}
+        elif args.get("channel_id") != "dp-email":
+            body = {"_hestia_error": {"code": "hestia.channel_unbound", "message":
+                    f"no channel '{args.get('channel_id')}' is bound for you. Your bound channels: dp-email. "
+                    "Nothing was sent or recorded."}, "bound_channels": ["dp-email"]}
+        else:
+            body = {"shadow": True, "sent": False, "outbox_id": 4, "channel_id": "dp-email",
+                    "recipient_class": "operator", "decision": "would_send",
+                    "budget": {"limit": 3, "window": "1h", "unanswered": 0, "would_deny": False},
+                    "witnessEntryHash": "chan-hash",
+                    "note": "Shadow: nothing left this machine. Once sends are enforced this would go to "
+                            "'dp-email' (operator). It is in your outbox as #4."}
+        return {"result": {"structuredContent": body}}
+
+
+def _cdisp():
+    FakeMcp.calls, FakeMcp.fail, _Channels.known = [], {}, True
+    root = tempfile.mkdtemp(prefix="hd-")
+    return HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: _Channels(ep, pid)), root
+
+
+def test_channel_egress_sends_through_the_daemon_and_says_it_was_a_shadow():
+    """hestia #1372: judged, witnessed and kept, not delivered. The receipt must not read as a sent message."""
+    d, _ = _cdisp()
+    env = d(BeingIntent("channel_egress", {"channel": "dp-email", "body": "a test message"}), _ALLOW)
+    assert env.ok and env.witness_id == "chan-hash", env
+    assert env.result["sent"] is False and env.result["shadow"] is True and env.result["outbox_id"] == 4
+    assert env.result["note"].startswith("Shadow: nothing left this machine")
+    assert env.result["budget"]["limit"] == 3
+    (sent,) = _mb_calls("hestia_channel_send")
+    # the channel id and the text, with the being's own session; never a recipient or an address
+    assert sent == {"channel_id": "dp-email", "content": "a test message", "session_id": "sid-1"}
+
+
+def test_channel_egress_reads_the_old_to_as_the_channel_id_never_as_a_recipient():
+    d, _ = _cdisp()
+    env = d(BeingIntent("channel_egress", {"to": "dp-email", "body": "hi"}), _ALLOW)
+    assert env.ok and _mb_calls("hestia_channel_send")[-1]["channel_id"] == "dp-email"
+    env = d(BeingIntent("channel_egress", {"to": "dp", "body": "hi"}), _ALLOW)
+    assert not env.ok and env.error.startswith("hestia.channel_unbound") and "dp-email" in env.error, env
+
+
+def test_channel_egress_on_a_daemon_without_the_tool_says_so_plainly():
+    d, _ = _cdisp()
+    _Channels.known = False
+    env = d(BeingIntent("channel_egress", {"channel": "dp-email", "body": "hi"}), _ALLOW)
+    assert not env.ok and "no channel send yet" in env.error and "nothing for you to do" in env.error
+    # the old stub's design words never come back (room seq 306, 2026-10-19)
+    assert "calibration" not in env.error
+
+
+def test_channel_egress_without_a_channel_or_body_asks_nothing_of_the_daemon():
+    d, _ = _cdisp()
+    env = d(BeingIntent("channel_egress", {"channel": "dp-email", "body": "  "}), _ALLOW)
+    assert not env.ok and "body" in env.error
+    env = d(BeingIntent("channel_egress", {"body": "hi"}), _ALLOW)
+    assert not env.ok and "channel" in env.error
+    assert _mb_calls("hestia_channel_send") == []
 
 
 def test_local_verbs_delegate_to_reference():
@@ -2516,6 +2576,33 @@ def test_say_instead_also_names_request_run():
     assert "request_run" in msg, msg
 
 
+def test_peer_ask_to_seat_is_sent_to_the_seat_conversation():
+    """SAGE #530 follow-up: every receipt calls the seat "the seat", and cbp-being sent
+    peer_ask to="seat" seven times, each answered only "not on the hub roster". The seat's own
+    conversation (named for the seat, the seat and the being, with a notify route) answers to
+    "seat"; with no identifiable seat conversation the name is not resolved."""
+    import json as _json
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    published = []
+    d, root = _disp(publish_fn=lambda to, body: published.append((to, body)) or "ptr")
+    assert d._say_instead("seat") is None, "no seat conversation: nothing to point at"
+    conv.create(Path(root), "sprout-claude", title="seat", participants=["sprout-claude", "sprout-being"],
+                writable_by=["sprout-claude", "sprout-being"])
+    meta = conv.conv_dir(Path(root)) / "sprout-claude.meta.json"
+    m = _json.loads(meta.read_text())
+    m["notify"] = {"sprout-claude": "claude-code"}
+    meta.write_text(_json.dumps(m))
+    for name in ("seat", "Seat", "the seat"):
+        msg = d._say_instead(name)
+        assert msg and 'say with the conversation id "sprout-claude"' in msg, (name, msg)
+        assert "request_run" in msg and "did not count against any limit" in msg, msg
+    r = d(BeingIntent("peer_ask", {"to": "seat", "body": "are you there?"}), _ALLOW)
+    assert not r.ok and 'conversation id "sprout-claude"' in (r.error or ""), r
+    assert d.recent_asks() == [], "a redirected ask must not spend the per-peer cap"
+    assert published == [], "and must leave no forum file behind"
+
+
 def test_a_stale_transport_session_reconnects_once():
     """The daemon's HTTP-level "Session not found" (a stale mcp-session-id) is a lost session
     like the JSON one: reconnect once and send again. 2026-09-23 20:04Z a request_run died on
@@ -2548,3 +2635,137 @@ def test_any_other_transport_failure_is_not_retried():
     env = d(BeingIntent("mesh", {"to": "legion", "kind": "reply", "pointer": "p"}), _ALLOW)
     assert not env.ok and "HTTP 500" in env.error
     assert sum(1 for n, _ in FakeMcp.calls if n == "hestia_connect") == 1
+
+
+class _WithScopeQueue(FakeMcp):
+    """The daemon's tool_scope_status: every request of the member's, decided and expired included."""
+    def call(self, name, args):
+        if name == "hestia_scope_status" and "hestia_scope_status" not in FakeMcp.fail:
+            FakeMcp.calls.append((name, args))
+            return {"result": {"structuredContent": {"requests": [
+                {"request_id": "scope-ef204d003703", "path": "/dev/video0", "status": "expired",
+                 "decided_by": None},
+                {"request_id": "scope-0fefb5f67e46", "path": "/home/dp/ai-workspace/sage", "status": "pending",
+                 "decided_by": None},
+                {"request_id": "scope-aaaaaaaaaaaa", "path": "/srv/x", "status": "granted",
+                 "decided_by": "peer:mcnugget"}]}}}
+        return super().call(name, args)
+
+
+def _qdisp():
+    FakeMcp.calls, FakeMcp.fail = [], {}
+    root = tempfile.mkdtemp(prefix="hd-")
+    return HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: _WithScopeQueue(ep, pid)), root
+
+
+def test_a_scope_id_the_being_names_comes_back_with_its_status_in_the_same_receipt():
+    """sprout-being, 2026-10-20..23: 'scope-ef204d003703 pending since 10-19', in 194 of its acts over three
+    days (reasons, asks, notes). It expired 10-17; no receipt ever said so."""
+    d, _ = _qdisp()
+    env = d(BeingIntent("request_scope", {"path": "/srv/elsewhere/x", "reason":
+            "scope-ef204d003703 has been pending since 10-19; also scope-aaaaaaaaaaaa and scope-123456789abc"}), _ALLOW)
+    assert env.ok and env.result["request_id"] == "scope-1"
+    facts = env.result["scope_requests_you_named"]
+    assert facts[0].startswith("scope-ef204d003703: expired") and "/dev/video0" in facts[0]
+    assert facts[1] == "scope-aaaaaaaaaaaa: granted, decided by peer:mcnugget (path /srv/x)"
+    assert facts[2].startswith("scope-123456789abc: no such request is on record") and "nothing is pending" in facts[2]
+    assert len(_mb_calls("hestia_scope_status")) == 1          # one read for all named ids
+    # the same facts ride on a peer_ask's text receipt (the ask itself is untouched)
+    d._publish = lambda *a, **k: "shared-context/forum/x.md"
+    env = d(BeingIntent("peer_ask", {"to": "mcnugget", "body": "is scope-0fefb5f67e46 still waiting?"}), _ALLOW)
+    assert env.ok and env.result["question_at"] == "shared-context/forum/x.md", env
+    assert "scope-0fefb5f67e46: pending" in env.to_tool_message()
+
+
+def test_a_scope_id_named_in_say_gets_its_status_on_the_receipt_not_in_the_turn():
+    """After #518, the expired id reached a person by `say` (a peer_ask had redirected it there)."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _qdisp()
+    conv.create(Path(root), "dp", title="dp", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    words = "scope-ef204d003703 has been pending for days; can you check?"
+    env = d(BeingIntent("say", {"to": "dp", "text": words}), _ALLOW)
+    assert env.ok, env.error
+    assert "scope-ef204d003703: expired" in env.to_tool_message()
+    assert conv.recent(Path(root), "dp", limit=1)[-1]["text"] == words     # the turn is untouched
+    assert len(_mb_calls("hestia_scope_status")) == 1
+
+
+def test_naming_no_scope_id_reads_nothing_and_adds_nothing():
+    d, _ = _qdisp()
+    env = d(BeingIntent("request_scope", {"path": "/srv/elsewhere/x", "reason": "to read a peer's note"}), _ALLOW)
+    assert env.ok and "scope_requests_you_named" not in env.result
+    assert _mb_calls("hestia_scope_status") == []
+
+
+def test_an_unreadable_scope_queue_is_said_never_read_as_no_such_request():
+    d, _ = _qdisp()
+    FakeMcp.fail = {"hestia_scope_status": "down"}
+    env = d(BeingIntent("request_scope", {"path": "/srv/elsewhere/x", "reason": "scope-ef204d003703 again"}), _ALLOW)
+    (fact,) = env.result["scope_requests_you_named"]
+    assert "could not read your scope queue" in fact and "no such request" not in fact, fact
+    FakeMcp.fail = {}
+
+
+def test_already_granted_on_a_device_names_the_verb_not_a_direct_read():
+    """'read or write it directly' sent sprout-being back to run's sandbox for /dev/video0 five times."""
+    from sage.gateway.being_gate_client import GatewayVerdict
+    d, root = _qdisp()
+    env = d(BeingIntent("request_scope", {"path": "/dev/video0", "reason": "persistent camera access"}),
+            GatewayVerdict("allow", granted=(root, "/dev/video0")))
+    assert env.ok and env.result["status"] == "already_granted"
+    assert "camera for frames" in env.result["next"] and "directly" not in env.result["next"], env.result
+    assert not [n for n, _ in FakeMcp.calls if n == "hestia_request_scope"]
+    # an ordinary path keeps its answer
+    env = d(BeingIntent("request_scope", {"path": root + "/config.json", "reason": "my config"}),
+            GatewayVerdict("allow", granted=(root,)))
+    assert "read or write it directly" in env.result["next"]
+
+
+def test_a_say_that_wakes_nobody_says_why():
+    """cbp-being, 2026-10-24 21:32-22:34Z: thirteen turns to its seat came back with no `woke` and
+    no word about it. Nobody answered; it asked one question ten ways, then wrote its own "complete
+    API surface" with invented routes and built a client on it. A receipt silent about delivery
+    reads as delivered-and-ignored. Each reason a wake is not sent is now in the receipt."""
+    from pathlib import Path
+    from sage.gateway import conversations as conv
+    d, root = _disp()
+    home = Path(root)
+    conv.create(home, "seat", title="seat", participants=["seat", "sprout-being"],
+                writable_by=["seat", "sprout-being"])
+    meta = conv.get_meta(home, "seat"); meta["notify"] = {"seat": "claude-code"}
+    conv._write_meta(home, "seat", meta)
+
+    FakeMcp.calls.clear()
+    first = d(BeingIntent("say", {"to": "seat", "text": "What does the daemon do?"}), _ALLOW)
+    assert first.ok and first.result.get("woke") == "seat" and "not_woken" not in first.result
+    again = d(BeingIntent("say", {"to": "seat", "text": "What endpoints does it expose?"}), _ALLOW)
+    why = again.result.get("not_woken", "")
+    assert "already sent" in why and f"seq {first.result['seq']}" in why, why
+    # Nova on #539: the receipt states what is RECORDED, never who reads it or when.
+    assert "recorded in the conversation" in why and "does not confirm" in why, why
+    assert "will be read" not in why and "delivered" not in why, why
+
+    # A seat answering here itself: the receipt names the pause, not silence.
+    conv.append(home, "seat", speaker="seat", text="Answering.", via="seat")
+    conv.pause_wakes(home, "seat", by="seat", minutes=30)
+    paused = d(BeingIntent("say", {"to": "seat", "text": "Thanks."}), _ALLOW)
+    pw = paused.result.get("not_woken", "")
+    assert "paused until" in pw and "does not confirm" in pw and "will see" not in pw, paused.result
+    conv.resume_wakes(home, "seat", force="test")
+
+    # A conversation with no listener says so.
+    conv.create(home, "quiet", title="q", participants=["dp", "sprout-being"],
+                writable_by=["dp", "sprout-being"])
+    q = d(BeingIntent("say", {"to": "quiet", "text": "Hello."}), _ALLOW)
+    qw = q.result.get("not_woken", "")
+    assert "no listener" in qw and "does not confirm" in qw and "will be read" not in qw, q.result
+
+    # A wake that fails to leave says it will be retried.
+    conv.append(home, "seat", speaker="seat", text="Back.", via="seat")
+    FakeMcp.fail = {"hestia_member_notify": "mesh down"}
+    failed = d(BeingIntent("say", {"to": "seat", "text": "One more question."}), _ALLOW)
+    FakeMcp.fail = {}
+    assert "did not go out" in failed.result.get("not_woken", "") and "woke" not in failed.result, \
+        failed.result

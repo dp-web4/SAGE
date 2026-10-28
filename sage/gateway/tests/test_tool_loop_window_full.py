@@ -83,6 +83,39 @@ def test_a_seed_the_size_of_a_real_fitted_one_is_still_sent():
     assert len(llm.sent) == 1 and r.reply == "done" and r.window_full is None
 
 
+def _seed_between_the_constant_and_the_real_schemas(llm):
+    """Message chars that fit under the old constant but not under the schemas the turn really sends."""
+    import json
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import _TEMPLATE_CHARS
+    line = (llm.num_ctx - WINDOW_SEND_MARGIN) * PREFLIGHT_CPT       # chars the preflight lets through
+    real = len(json.dumps(ollama_tools())) + _TEMPLATE_CHARS
+    assert real > _UNCOUNTED_CHARS, "the registry's schemas outgrew the old constant (#490)"
+    return int(line - (real + _UNCOUNTED_CHARS) / 2), real
+
+
+def test_step_one_is_judged_on_the_schemas_it_actually_sends():
+    # #490 (McNugget, 2026-10-19): 35 verbs measured 26,649 schema chars, the preflight assumed 12,900.
+    # A seed the old constant would have sent is refused when the real schemas do not fit.
+    llm = _LLM([{"content": "should not be reached", "tool_calls": []}])
+    chars, real = _seed_between_the_constant_and_the_real_schemas(llm)
+    seed = [{"role": "system", "content": "s" * chars}, {"role": "user", "content": "go"}]
+    assert (chars + 2 + _UNCOUNTED_CHARS) / PREFLIGHT_CPT < llm.num_ctx - WINDOW_SEND_MARGIN, "old: sent"
+    r = run_ollama_tool_turn(_Client(), llm, seed, max_steps=2)          # tools=None: the whole registry
+    assert llm.sent == [] and r.window_full and r.window_full["cause"] == "preflight"
+    assert r.window_full["estimated_prompt"] == int((chars + 2 + real) / PREFLIGHT_CPT)
+
+
+def test_the_json_act_form_counts_no_schemas_because_it_sends_none():
+    # _json_act sends no tools with the request: the same seed is judged on messages + template only.
+    from sage.gateway.being_tool_loop import _TEMPLATE_CHARS
+    llm = _LLM([{"content": "should not be reached", "tool_calls": []}])
+    seed = [{"role": "system", "content": "s" * 60000}, {"role": "user", "content": "go"}]
+    r = run_ollama_tool_turn(_Client(), llm, seed, max_steps=2, act_form="json")
+    assert r.window_full and r.window_full["cause"] == "preflight"
+    assert r.window_full["estimated_prompt"] == int((60002 + _TEMPLATE_CHARS) / PREFLIGHT_CPT)
+
+
 def test_the_preflight_errs_high_against_every_ratio_measured_on_this_being():
     # 3.026..3.152 chars/token over 60 beats: an estimate at PREFLIGHT_CPT over-counts them all.
     assert PREFLIGHT_CPT < 3.026
@@ -182,3 +215,51 @@ def test_the_beat_record_says_the_window_filled_and_that_nothing_the_being_did_c
         "You called no tools this beat."
     carried = H._carry([], res)
     assert carried[-1]["role"] == "assistant" and "context window filled" in carried[-1]["content"]
+
+
+class _LlamaLLM(_LLM):
+    """Ollama's llama3.1 template: the tool schemas ride only on a prompt whose last message is a
+    user turn, so a step after a tool result counts thousands of tokens fewer (pub, 2026-10-21)."""
+    num_ctx = 12288
+    tools_on_last_user_only = True
+
+
+def test_a_template_that_drops_the_tools_after_a_tool_turn_is_not_read_as_a_cut():
+    # pub-being's shape: step 1 counted 10,006 with the schemas, step 2 5,580 without them. Judged
+    # against step 1 that is a "cut", and every explore from 2026-10-21 08:13Z ended after one act.
+    client = _Client()
+    llm = _LlamaLLM([{"content": "", "tool_calls": _call(1), "raw": {"prompt_eval_count": 10006, "eval_count": 18}},
+                     {"content": "", "tool_calls": _call(2), "raw": {"prompt_eval_count": 5580, "eval_count": 17}},
+                     {"content": "done", "tool_calls": [], "raw": {"prompt_eval_count": 5760, "eval_count": 5}}])
+    r = run_ollama_tool_turn(client, llm, [{"role": "user", "content": "go"}], max_steps=5)
+    assert not any(g.get("server_cut") for g in r.generates)
+    assert client.calls == ["witness", "witness"], "step 2's call runs"
+    assert r.window_full is None and r.reply == "done"
+    assert r.seed_measured[0] == 10006, "the anchor handed on is the count WITH the schemas"
+
+
+def test_on_that_template_a_real_cut_is_still_caught_against_its_own_kind():
+    client = _Client()
+    llm = _LlamaLLM([{"content": "", "tool_calls": _call(1), "raw": {"prompt_eval_count": 10006, "eval_count": 18}},
+                     {"content": "", "tool_calls": _call(2), "raw": {"prompt_eval_count": 5580, "eval_count": 17}},
+                     {"content": "", "tool_calls": _call(3), "raw": {"prompt_eval_count": 2500, "eval_count": 17}}])
+    r = run_ollama_tool_turn(client, llm, [{"role": "user", "content": "go"}], max_steps=5)
+    assert r.generates[2]["server_cut"]["counted"] == 2500
+    assert client.calls == ["witness", "witness"], "the cut step's call does not run"
+    assert r.window_full and r.window_full["cause"] == "server_cut"
+
+
+def test_on_that_template_an_anchored_step_one_is_still_judged():
+    # posture after explore: its prompt ends in a user turn, the same kind as explore's seed count
+    seed = _seed(31950)
+    client = _Client()
+    llm = _LlamaLLM([{"content": "", "tool_calls": _call(1), "raw": {"prompt_eval_count": 5000, "eval_count": 20}}])
+    r = run_ollama_tool_turn(client, llm, seed + [{"role": "user", "content": "posture"}], max_steps=2,
+                             anchor=(10006, sum(len(m["content"]) for m in seed)))
+    assert client.calls == [] and r.window_full and r.window_full["cause"] == "server_cut"
+
+
+def test_the_llama31_config_declares_it_and_others_do_not():
+    from sage.irp.adapters.model_capabilities import load_capabilities
+    assert load_capabilities("llama3.1:8b").tools_on_last_user_only is True
+    assert load_capabilities("qwen3.5:27b").tools_on_last_user_only is False

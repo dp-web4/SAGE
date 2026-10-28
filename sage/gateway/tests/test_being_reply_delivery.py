@@ -197,7 +197,9 @@ def test_the_being_can_retire_its_own_note_and_only_its_own():
     assert not (root / "notes" / "hestia-policy-daemon-unreachable.md").exists()
 
     for bad, why in ((("notes/from-the-seat.md", "no"), "said TO you"),   # refused by _safe_path
-                     (("journal.md", "no"), "not directly inside"),
+                     # journal.md and todo.md retire now (test_home_records_start_fresh.py); any
+                     # other home-root file is still out of bounds
+                     (("account.json", "no"), "not directly inside"),
                      (("notes/nope.md", "no"), "nothing to retire")):
         env = d(BeingIntent("retire_note", {"path": bad[0], "reason": bad[1]}), allow)
         assert not env.ok and why in env.error, (bad, env.error)

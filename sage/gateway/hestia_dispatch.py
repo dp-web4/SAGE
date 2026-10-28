@@ -11,8 +11,8 @@ forum/legion-reply-sprout-f1a-r1-stands-verb-map-2026-09-02.md, read from handle
     peer_ask         none — a COMPOSE: publish the question at a         EXECUTED as the compose
                        pointer, member_notify(kind=coordination),
                        drain hestia_member_inbox for the answer
-    channel_egress   hestia_egress_pending is read-side only;           honest `pending`
-                       no send-side tool exists
+    channel_egress   hestia_channel_send(channel_id, content,           EXECUTED, in shadow:
+                       session_id); the binding names the recipient       judged, kept, not delivered
 
 Result envelope (r1, pinned from the owner seat): {ok, result|error, witness_id}. When the
 failure originates in the daemon, `error` carries hestia's own `hestia.<code>` string as its
@@ -38,12 +38,14 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 from pathlib import Path
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict, ResultEnvelope, camera_command
+from sage.gateway.being_gate_client import (BeingIntent, GatewayVerdict, ResultEnvelope, camera_command,
+                                            copy_alternative, same_path_in_reach)
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap, make_hestia_witness_fn
 from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 
@@ -51,6 +53,8 @@ from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 _RUN_MARKER = "[request_run]"
 # The first line of a seat run/decline receipt (seat_run_requests.py): the verb and the path.
 _SEAT_RUN_LINE = re.compile(r"\[request_run\] I (ran|did not run) (\S+)")
+# How many seat-conversation turns request_run reads for earlier asks and their answers.
+_PENDING_SCAN = 80
 
 # What `speak` will not play: text shaped like a shell command (see _do_speak). A leading command
 # word (lowercase, then an argument) or a shell operator. Prose that mentions sudo mid-sentence,
@@ -359,7 +363,9 @@ class HestiaF1aDispatcher:
             # before the local dispatcher tries to open it as a path (see _resolve_pointer).
             if intent.effector == "memory_read":
                 try:
-                    resolved = self._resolve_pointer(str(intent.args.get("path", "")))
+                    raw = str(intent.args.get("path", ""))
+                    resolved = (self._reach_pointer(raw, verdict) if _is_reach_pointer(raw)
+                                else self._resolve_pointer(raw))
                 except Exception as e:                   # a broken lookup must not eat the read
                     resolved = (f"[could not resolve that pointer: {type(e).__name__}]"
                                 if "://" in str(intent.args.get("path", "")) else None)
@@ -368,9 +374,44 @@ class HestiaF1aDispatcher:
             return self._local(intent, verdict)   # witness / memory_read / memory_write
         self._verdict = verdict                   # what the law just consulted (granted roots)
         try:
-            return handler(intent)
+            env = handler(intent)
         except Exception as e:
             return ResultEnvelope(ok=False, error=f"{type(e).__name__}: {e}")
+        if intent.effector in _NAMES_SCOPE_IDS and env.ok:
+            self._attach_named_scope_status(intent, env)
+        return env
+
+    def _attach_named_scope_status(self, intent: BeingIntent, env: ResultEnvelope) -> None:
+        """A SCOPE ID THE BEING NAMES GETS ITS STATUS IN THE SAME RECEIPT.
+
+        Measured on Sprout, 2026-10-20..23: sprout-being held scope-ef204d003703 (/dev/video0) as
+        "pending since 10-19"; 194 of its acts in three days mention it (reasons, asks, notes). That
+        request expired on 10-17 and the grant it wanted was standing. Every receipt answered the act
+        ("already_granted", an ask published) and never the id, so the belief met no fact where it
+        acted. Peers' answers were delivered as forum replies a beat later (mcnugget, 10-22: "a Sprout
+        side fault"). This states what hestia holds for each named id, from the being's own scope queue,
+        and nothing else: no advice, no verdict on the ask."""
+        text = " ".join(str(intent.args.get(k, "")) for k in ("reason", "body", "why", "text"))
+        own = str((env.result or {}).get("request_id") or "") if isinstance(env.result, dict) else ""
+        ids = [i for i in dict.fromkeys(_SCOPE_ID.findall(text)) if i != own][:3]
+        if not ids:
+            return
+        # A status we could not read is said, never guessed: an empty answer would otherwise read as
+        # "no such request", which is a claim.
+        try:
+            st = self._call("hestia_scope_status", {"plugin_id": self.member})
+            err = _hestia_error(st) or (None if isinstance(st.get("requests"), list) else "no request list")
+        except Exception as e:  # noqa: BLE001
+            err = type(e).__name__
+        if err:
+            facts = [f"{i}: could not read your scope queue ({err})" for i in ids]
+        else:
+            rows = {str(r.get("request_id")): r for r in st["requests"]}
+            facts = [_named_scope_fact(i, rows.get(i)) for i in ids]
+        if isinstance(env.result, dict):
+            env.result["scope_requests_you_named"] = facts
+        else:
+            env.result = f"{env.result}\n[scope requests you named, as hestia holds them now: " + "; ".join(facts) + "]"
 
     # -- daemon session ------------------------------------------------------
     def _connect(self) -> str:
@@ -492,10 +533,189 @@ class HestiaF1aDispatcher:
                     return (f"[your scope request {ident} for {r.get('path')}]\n"
                             f"status: {r.get('status')} ; decided by: {r.get('decided_by') or '—'}\n"
                             f"their note: {why}")
-            return f"[no scope request {ident} on record for you; it may have aged out]"
+            # SAY WHAT IS KNOWN, NOT A GUESS (cbp-being, 2026-10-24). This line said "it may have
+            # aged out". The being's notes turned the hedge into a fact, then into "dp replied that
+            # it aged out and needs re-issuing", and it asked dp to re-issue a REFUSED request for a
+            # file it was already reading, about 40 times in 11 hours. All that is known is that the
+            # id is not in the list now; old requests drop off it decided or not, so absence says
+            # nothing about how one ended or where it stands now (Nova: a bounded list cannot prove
+            # nothing waits), and nothing a member holds depends on re-asking.
+            return (f"[{ident} is not in your list of scope requests now. Old requests leave that list "
+                    f"after a while, however they ended, so this says nothing about whether it was "
+                    f"granted or refused, and this list cannot tell its present status either. You do "
+                    f"not need to "
+                    f"re-issue anything to keep what you hold: memory_read hestia://reach lists every "
+                    f"grant you have right now. If something you still need is not listed there, "
+                    f"request_scope it with a reason.]")
         # egress: the fragment IS the fact, and it is already in the pointer
         return (f"[a message of yours was not delivered: {frag or 'no detail recorded'} "
                 f"(egress row {ident}). The row is retired; nothing of yours is queued behind it.]")
+
+    # -- what the member holds, on request (SAGE #530) -------------------------------
+    # cbp-being, 2026-10-24, to dp: "What files or paths are in-scope for me to read? ... I want
+    # to narrow my request to something I can actually read." It held the file it wanted under a
+    # recursive grant the whole time, and had no way to ask except to act and read the refusal.
+    # The beat's "granted paths" line is a set of roots with no modes, beside every request ever
+    # filed; whether a path falls inside one is left to the being. These two reads answer it:
+    #   hestia://reach          every grant it holds now, with modes and provenance, and the floor
+    #   hestia://reach/<path>   does anything it holds cover this path, in which modes, via what
+    # Both read the law (hestia_scope_status, and the reach the gate itself resolved on this
+    # verdict); neither touches the path, judges an act, or opens a request.
+    def _reach_rows(self) -> tuple:
+        """(grants, floor) from hestia_scope_status.
+
+        Each grant: {path, recursive, modes, channel, granted_by, request_id, expires_at}.
+        `grants_by_mode` is preferred (hestia #1370: it alone carries narrowed grants); an older
+        daemon's two lists are read as all-modes.
+
+        Each floor entry: {path, recursive, modes, served, why}. `modes` is what the floor
+        RECORDS; `served` is what this member's gate is actually handed: "rwed" for an entry in
+        `society_floor`, "r" for one in `society_floor_read` (#1381, read acts only), "" for one
+        in `society_floor_withheld` (with its `why`). A daemon without those keys serves every
+        `society_floor` entry as all-modes, as its gate does."""
+        st = self._call("hestia_scope_status", {"plugin_id": self.member}) or {}
+        if not isinstance(st, dict) or "_hestia_error" in st:
+            raise RuntimeError(str((st or {}).get("_hestia_error") if isinstance(st, dict) else st))
+        grants = []
+        if st.get("grants_by_mode") is not None:
+            for g in st.get("grants_by_mode") or []:
+                grants.append({**g, "modes": str(g.get("modes") or "")})
+        else:
+            for chan in ("live", "standing"):
+                for g in st.get(f"{chan}_grants") or []:
+                    grants.append({**g, "channel": chan, "modes": "rwed"})
+
+        def key(f):
+            return (os.path.realpath(os.path.expanduser(str(f.get("path") or ""))), bool(f.get("recursive")))
+        served = {key(f): "rwed" for f in st.get("society_floor") or []}
+        served.update({key(f): "r" for f in st.get("society_floor_read") or []})
+        withheld = {os.path.realpath(os.path.expanduser(str(w.get("path") or ""))): str(w.get("why") or "")
+                    for w in st.get("society_floor_withheld") or []}
+        recorded = (st.get("floor_by_mode") if st.get("floor_by_mode") is not None
+                    else [{**f, "modes": "rwed"} for f in st.get("society_floor") or []])
+        floor = []
+        for f in recorded or []:
+            k = key(f)
+            floor.append({**f, "modes": str(f.get("modes") or ""), "served": served.get(k, ""),
+                          "why": withheld.get(k[0], "" if k in served else "not served to you")})
+        return grants, floor
+
+    @staticmethod
+    def _covers(row: dict, p: str) -> bool:
+        """The gate's own reading of reach (hestia #1002): a grant spelled with /** covers its
+        subtree, a bare one exactly itself. Both sides canonicalized."""
+        root = os.path.realpath(os.path.expanduser(str(row.get("path") or "")))
+        if not root or root == "/":
+            return False
+        return p == root or (bool(row.get("recursive")) and p.startswith(root.rstrip("/") + "/"))
+
+    @staticmethod
+    def _modes_words(modes: str) -> str:
+        names = [w for c, w in (("r", "read"), ("w", "write"), ("e", "run"), ("d", "delete")) if c in modes]
+        return ", ".join(names) or "nothing"
+
+    @staticmethod
+    def _union(modes) -> str:
+        return "".join(sorted(set("".join(modes)), key="rwed".index))
+
+    def _reach_pointer(self, raw: str, verdict) -> str:
+        """The answer to `hestia://reach` or `hestia://reach/<path>` (see the block above).
+
+        WHAT THE GATE ADMITS NOW IS NOT WHAT IS RECORDED (Nova, HOLD on #532). A member asks this
+        to know which acts will go through, so the first line is always the EFFECTIVE answer:
+        the member's grants the gate itself resolved as admitted on this verdict, plus the floor
+        entries this member's gate is served. A recorded grant the gate does not admit (a
+        narrowed grant on a mode-blind gate, hestia #523/#1345) and a floor entry withheld from
+        this member are listed under it, labelled as such, and never counted as "yes". Where
+        the verdict says nothing about reach, admission is reported as unconfirmed."""
+        try:
+            grants, floor = self._reach_rows()
+        except Exception as e:
+            return (f"[what you hold could not be read just now: hestia did not answer "
+                    f"({type(e).__name__}). That is an outage, not a change in what you hold. "
+                    f"Your beat's 'granted paths' line is the last list it gave.]")
+        # what the gate itself resolved as admitted on this verdict, when it says
+        admitted = tuple(_granted_reach_of(verdict)) if verdict is not None else ()
+
+        def gate_admits(row) -> Optional[bool]:
+            if not admitted:
+                return None
+            root = os.path.realpath(os.path.expanduser(str(row.get("path") or "")))
+            return any(os.path.realpath(str(r)) == root and bool(rec) == bool(row.get("recursive"))
+                       for r, rec, *_ in admitted)
+
+        def spell(row) -> str:
+            return f"{row.get('path')}{'/**' if row.get('recursive') else ' (exactly this path)'}"
+
+        def provenance(row) -> str:
+            bits = [str(row.get("channel") or "").strip() or None,
+                    f"granted by {row['granted_by']}" if row.get("granted_by") else None,
+                    f"request {row['request_id']}" if row.get("request_id") else None,
+                    f"expires {row['expires_at']}" if row.get("expires_at") else None]
+            return "; ".join(b for b in bits if b)
+
+        def grant_status(row) -> str:
+            a = gate_admits(row)
+            if a is True:
+                return "the gate admits it now"
+            if a is None:
+                return "whether the gate admits it right now could not be confirmed"
+            if row.get("modes") != "rwed":
+                return ("recorded, but the gate does NOT admit it now: a grant narrowed to fewer "
+                        "than all four modes admits nothing until hestia #1345 part B")
+            return "recorded, but the gate does NOT admit it now"
+
+        def floor_status(f) -> str:
+            if f["served"]:
+                return f"served to your gate now: {self._modes_words(f['served'])}"
+            return f"NOT served to you now ({f['why'] or 'withheld'})"
+
+        rest = raw.strip()[len("hestia://reach"):].lstrip("/")
+        if not rest:
+            lines = ["[what you hold, read from hestia at this moment]"]
+            lines += [f"- {spell(g)}: {self._modes_words(g['modes'])} ({provenance(g)}). {grant_status(g)}."
+                      for g in grants] or ["- no grants"]
+            if floor:
+                lines.append("The society floor (every member's, where none of their own grants reach):")
+                lines += [f"- {spell(f)}: {self._modes_words(f['modes'])}. {floor_status(f)}." for f in floor]
+            lines.append('To ask about one path: memory_read {"path": "hestia://reach/<absolute path>"}. '
+                         "This read looked at the law only: nothing was judged and no request was opened.]")
+            return "\n".join(lines)
+
+        shown = rest if rest.startswith(("/", "~")) else "/" + rest
+        p = os.path.realpath(os.path.expanduser(shown))
+        own = [g for g in grants if self._covers(g, p)]
+        fl = [f for f in floor if self._covers(f, p)]
+        own_now = [g for g in own if gate_admits(g) is True]
+        unknown = [g for g in own if gate_admits(g) is None]
+        floor_now = [f for f in fl if f["served"]]
+        now = self._union([g["modes"] for g in own_now] + [f["served"] for f in floor_now])
+        lines = [f"[does what you hold reach {p}? read from hestia at this moment]"]
+        if now:
+            lines.append(f"now: yes, {self._modes_words(now)}.")
+        elif unknown:
+            lines.append(f"now: unconfirmed. You hold a grant here recording "
+                         f"{self._modes_words(self._union(g['modes'] for g in unknown))}, but whether "
+                         f"the gate admits it right now could not be confirmed.")
+        elif own or fl:
+            lines.append("now: no. Something recorded reaches this path, but the gate does not admit "
+                         "it at the moment (see below), so an act on it would be refused.")
+        else:
+            lines.append("now: no. Nothing you hold reaches this path, so an act on it would be refused.")
+        for g in own:
+            lines.append(f"- your grant {spell(g)}: {self._modes_words(g['modes'])} ({provenance(g)}). "
+                         f"{grant_status(g)}.")
+        for f in fl:
+            lines.append(f"- floor entry {spell(f)}: {self._modes_words(f['modes'])}. {floor_status(f)}.")
+        if now and not os.path.lexists(p):
+            lines.append("Nothing exists at that path yet.")
+        if not now:
+            copies = same_path_in_reach(p, admitted)
+            if copies:
+                lines.append(copy_alternative(p, copies))
+        lines.append("This read looked at the law only: nothing was judged, nothing was read at "
+                     "that path, and no request was opened.]")
+        return "\n".join(lines)
 
     def _escalation_pointer(self, ident: str) -> str:
         """What a `review_request` invitation is actually about (SAGE #109).
@@ -608,6 +828,21 @@ class HestiaF1aDispatcher:
         base = (to or "").split("/", 1)[0].strip().lower()
         if not base:
             return None
+        # "SEAT" IS WHAT EVERY RECEIPT CALLS THE SEAT. cbp-being sent peer_ask to="seat" seven
+        # times (to 2026-10-24) and each time got only "not on the hub roster" and a list of
+        # boxes, nothing leading back: the seat's own conversation title says "(the seat)" and
+        # receipts say "hand the seat", but the name resolved only through a per-instance
+        # `also_known_as`, which no seat had declared. The seat's conversation answers to it here.
+        if base in ("seat", "the seat", "my seat"):
+            seat_conv = self._seat_conversation()
+            if seat_conv:
+                return (f"'{to}' is your seat, and you are already in a conversation with it: "
+                        f"\"{seat_conv}\". The hub is the wrong door and nothing was sent. Use say "
+                        f"with the conversation id \"{seat_conv}\"; it reaches the seat directly "
+                        f"and is not rate-limited the way asks are. This did not count against any "
+                        f"limit. If what you want is for one of your files to be RUN, call "
+                        f"request_run with the path: a message asking for a run is not a run "
+                        f"request.")
         try:
             from sage.gateway import conversations as _conv
             for m in _conv.listing(self.memory_root):
@@ -913,7 +1148,8 @@ class HestiaF1aDispatcher:
         limited = self._ask_limit(to)
         if limited:
             return ResultEnvelope(ok=False, error=limited)
-        pointer = self._publish(to, body)
+        annotation = self._ask_provenance(body)
+        pointer = self._publish(to, body + annotation if annotation else body)
         if not pointer:
             return ResultEnvelope(ok=False, error="peer_ask: publisher returned no pointer")
         env = self._do_mesh(BeingIntent("mesh", {"to": to, "kind": "coordination", "pointer": pointer}),
@@ -922,7 +1158,223 @@ class HestiaF1aDispatcher:
             self._record_ask(to, "peer_ask", body, env.result.get("queued_id"))
             env.result["question_at"] = pointer
             env.result["answer_via"] = "hestia_member_inbox (drain_inbox)"
+            if annotation:
+                # SAID TO THE SENDER TOO: the peer reads the same lines below its message, and a
+                # note the sender cannot see would make the peer's answer look like a non sequitur.
+                env.result["seat_note_attached"] = annotation.strip()
         return env
+
+    # Files a peer_ask may name: code, data and notes. A token with a slash or one of these endings.
+    _ASK_FILE_TOKEN = re.compile(r"[\w~./-]+")
+    _ASK_FILE_EXT = (".py", ".sh", ".ipynb", ".npy", ".npz", ".pt", ".pth", ".json", ".jsonl",
+                     ".md", ".txt", ".csv", ".yaml", ".yml")
+    _ASK_EXEC = re.compile(r"\b(run|re-run|rerun|execute|exec)\b", re.I)
+    # BOUNDED, BECAUSE THE NOTE RIDES ON A MESSAGE THAT MUST STILL GO (Codex/Nova HOLD on #484 at
+    # b8e157bf8). The bare-name walk had no budget and the digest read the whole file, so a large
+    # home or a large file made an otherwise legitimate ask slow; the note says what it skipped.
+    _ASK_WALK_BUDGET = 2000          # directory entries the bare-name search may look at
+    _ASK_HASH_MAX = 8 * 1024 * 1024  # bytes hashed per file; a larger file is named, not hashed
+    _ASK_RECEIPT_WINDOW = 400        # seat-conversation turns searched for a receipt
+
+    def _ask_candidate(self, root: str, path: str) -> Optional[str]:
+        """`path` resolved, if it is a REGULAR file inside `root`; else None.
+
+        THE SAME CHECK FOR EVERY CANDIDATE (HOLD on #484, P1 x2). Only the slash branch checked
+        containment, and neither branch refused special files: a bare `report.txt` symlinked
+        outside the home had its outside bytes hashed into the note as a local file, and a bare
+        `pending.txt` FIFO was accepted, so the open that followed would wait for a writer.
+        stat() never opens the object, so a FIFO is refused here without blocking."""
+        try:
+            full = os.path.realpath(path)
+            if not full.startswith(root + os.sep):
+                return None
+            if not stat.S_ISREG(os.stat(full).st_mode):
+                return None
+            return full
+        except OSError:
+            return None
+
+    def _ask_files(self, body: str) -> list:
+        """Files in the sender's own home that a peer_ask names: [(rel, full)], at most 6."""
+        root = os.path.realpath(self.memory_root or "")
+        if not root or not os.path.isdir(root):
+            return []
+        found, seen = [], set()
+        budget = self._ASK_WALK_BUDGET
+        for tok in self._ASK_FILE_TOKEN.findall(body or ""):
+            tok = tok.strip(".,:;'\"`)(")
+            if not tok or not ("/" in tok or tok.lower().endswith(self._ASK_FILE_EXT)):
+                continue
+            cands = []
+            if "/" in tok:
+                full = self._ask_candidate(root, tok if os.path.isabs(tok) else os.path.join(root, tok))
+                if full:
+                    cands = [full]
+            elif budget > 0:
+                # a bare name: the being's own file of that name, if exactly one is near the top.
+                # Directory symlinks are not followed (os.walk's default); a file entry is
+                # admitted only through the same check as an explicit path.
+                for dp_, dns, fns in os.walk(root):
+                    budget -= len(dns) + len(fns)
+                    if budget <= 0:
+                        cands = []
+                        break
+                    if dp_[len(root):].count(os.sep) >= 3:
+                        dns[:] = []
+                    dns[:] = [d for d in dns if not d.startswith(".") and d not in ("__pycache__",)]
+                    if tok in fns:
+                        full = self._ask_candidate(root, os.path.join(dp_, tok))
+                        if full:
+                            cands.append(full)
+                        if len(cands) > 1:
+                            break
+                cands = cands if len(cands) == 1 else []
+            for full in cands:
+                rel = os.path.relpath(full, root)
+                if rel not in seen:
+                    seen.add(rel)
+                    found.append((rel, full))
+            if len(found) >= 6:
+                break
+        return found
+
+    def _ask_digest(self, root: str, full: str) -> str:
+        """sha256 prefix of the bytes at `full`, read from the object that was checked.
+
+        Opened O_NOFOLLOW|O_NONBLOCK, so a final component swapped for a symlink or a FIFO since
+        `_ask_candidate` fails instead of following or waiting. The open descriptor must still be
+        a regular file and the same inode as the in-home path, and only that descriptor is read,
+        so a name replaced between the check and the open cannot substitute other bytes. Never
+        raises and never blocks: what could not be established is said, not guessed."""
+        import hashlib
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        try:
+            fd = os.open(full, flags)
+        except OSError:
+            return "unreadable, not hashed"
+        try:
+            st = os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode):
+                return "not a regular file, not hashed"
+            now = self._ask_candidate(root, full)
+            if not now:
+                return "changed while being checked, not hashed"
+            at = os.stat(now)
+            if (at.st_dev, at.st_ino) != (st.st_dev, st.st_ino):
+                return "changed while being checked, not hashed"
+            if st.st_size > self._ASK_HASH_MAX:
+                return f"{st.st_size} bytes, over the {self._ASK_HASH_MAX}-byte hashing cap, not hashed"
+            h = hashlib.sha256()
+            left = self._ASK_HASH_MAX
+            while left > 0:
+                chunk = os.read(fd, min(65536, left))
+                if not chunk:
+                    break
+                h.update(chunk)
+                left -= len(chunk)
+            if left <= 0 and os.read(fd, 1):
+                return f"grew past the {self._ASK_HASH_MAX}-byte hashing cap while read, not hashed"
+            return "sha " + h.hexdigest()[:12]
+        except OSError:
+            return "unreadable, not hashed"
+        finally:
+            os.close(fd)
+
+    def _seat_conversation(self) -> Optional[str]:
+        """The id of the being's conversation with ITS SEAT, or None when none is identifiable.
+
+        BOUND TO THE SEAT, NOT TO "ANY CONVERSATION WITH A WAKE ROUTE" (HOLD on #484, P1): the
+        first conversation holding the sender and a nonempty `notify` was taken as the seat's, so
+        a peer thread with a notification route was searched and a peer's line was reported as
+        the seat's receipt. A seat conversation is named for its seat (seat_run_requests:
+        `cbp-claude` on CBP, `legion-claude` on Legion) and holds exactly the seat and the being,
+        in seat-owned meta the being cannot write. When the seat names its conversation
+        (SAGE_SEAT_CONV, else SAGE_SEAT, as seat_run_requests reads them) only that one counts.
+        Two candidates and no configured name is ambiguous, and ambiguity is answered with None."""
+        from sage.gateway import conversations as conv
+        want = (os.environ.get("SAGE_SEAT_CONV") or os.environ.get("SAGE_SEAT") or "").strip()
+        found = []
+        for m in conv.listing(self.memory_root):
+            cid = m.get("id")
+            parts = list(m.get("participants") or [])
+            if not cid or cid == self.member or not (m.get("notify") or {}):
+                continue
+            if sorted(parts) != sorted({cid, self.member}) or len(parts) != 2:
+                continue
+            if want and cid != want:
+                continue
+            found.append(cid)
+        return found[0] if len(found) == 1 else None
+
+    def _seat_run_receipt(self, rel: str) -> str:
+        """The latest run receipt for `rel` that THE SEAT spoke in the seat conversation, as one
+        clause: what the receipt says, not what the being says about it.
+
+        A RECEIPT NAMES A PATH, NOT BYTES (review of #484, 2026-10-19). seat_run_requests writes
+        "I ran <path>" with no digest of what ran, so a match is historical and path-only: the file
+        may have changed since (try-apt-pip.sh did). The clause says so, beside the current digest
+        rather than bound to it. And a search of the last N turns that finds nothing says exactly
+        that, never that the file was not run."""
+        try:
+            from sage.gateway import conversations as conv
+            seat_conv = self._seat_conversation()
+            if not seat_conv:
+                return "no seat conversation could be identified, so no seat receipt was checked"
+            last = None
+            for t in conv.recent(self.memory_root, seat_conv, limit=self._ASK_RECEIPT_WINDOW):
+                if t.get("from") != seat_conv:
+                    continue          # only the seat's own turns are the seat's receipts
+                m = _SEAT_RUN_LINE.match(str(t.get("text", "")).split("\n", 1)[0])
+                if m and m.group(2).rstrip(".") == rel:
+                    last = (t.get("seq"), m.group(1))
+            if last is None:
+                return (f"no seat run receipt names it in the last {self._ASK_RECEIPT_WINDOW} turns "
+                        f"of the seat conversation (older turns were not checked)")
+            return (f"the seat's latest receipt naming this path (seq {last[0]}) says \"I {last[1]} it\": "
+                    f"a historical, path-only record that does not say which bytes ran, so it is not "
+                    f"evidence about the bytes above")
+        except Exception:
+            return "the seat's receipts could not be read"
+
+    def _ask_provenance(self, body: str) -> str:
+        """The seat's note under a peer_ask that names the sender's own files.
+
+        WHERE A FILE IS AND WHETHER IT EVER RAN TRAVEL WITH THE ASK. 2026-10-14/16, measured
+        across Sprout and CBP, from both beings' records and the forum:
+        sprout-being asked CBP's seat and cbp-being to "run scratch/test-os-open.py" and later
+        "bash scratch/try-apt-pip.sh", files in ITS home on ITS machine, after its own seat
+        declined; cbp-being took "this machine" as CBP, rebuilt the script in its own home and
+        asked its own seat nine times. Then cbp-being told sprout-being, in delivered asks, that
+        the script "confirmed: Cannot open /dev/video0: [Errno 2]", a result no run ever produced.
+        Every recipient had to work out where the file lived and whether any run backed the
+        claim. The seat knows both. So it says them, evidence only: that the path is the
+        sender's, the current bytes, the seat's latest run receipt naming the path (or that none
+        was found in the window searched), and, when the ask asks for a run, how the sender's own
+        runs are made. Nothing is refused: asking a peer is legitimate, and a refusal here would
+        teach the shortest way around it.
+
+        WHAT THE NOTE IS NOT (review of #484): plain forum text under the message, not an
+        authenticated authorization or execution receipt. It names no host (sender-relative
+        wording is enough to say the path is not a portable reference) and does not claim the
+        recipient lacks a copy: it cannot know that."""
+        files = self._ask_files(body)
+        if not files:
+            return ""
+        root = os.path.realpath(self.memory_root or "")
+        lines = []
+        for rel, full in files:
+            lines.append(f"- {rel} ({self._ask_digest(root, full)}): a path in {self.member}'s home on "
+                         f"{self.member}'s machine. Whether your machine has a file at that path, and what "
+                         f"it holds, is not known here; {self._seat_run_receipt(rel)}.")
+        out = ["", "", f"[seat note, attached by {self.member}'s seat, not written by {self.member}; "
+                       f"plain text, not an authorization or an execution receipt]",
+               f"This ask names files from {self.member}'s home:"] + lines
+        if self._ASK_EXEC.search(body or ""):
+            out.append(f"It asks for a run. {self.member} runs its own code with `run` (a sandbox on "
+                       f"copies of its files) or asks its seat with request_run for what the sandbox "
+                       f"lacks; a run on your machine would test your machine, not {self.member}'s.")
+        out.append("A result stated above is backed only if a seat receipt holds it.")
+        return "\n".join(out)
 
     def drain_inbox(self, peek: bool = False) -> ResultEnvelope:
         """The answer side of peer_ask: the being's own notices (consume-once unless peek)."""
@@ -1002,6 +1454,15 @@ class HestiaF1aDispatcher:
                 f"before the failure it is in scratch/game/{game}_actions.jsonl; read that, not "
                 f"this message, for what happened."))
         images, captions = self._game_windows(payload)
+        # EXPECT (2026-10-10): a prediction the being attached to this batch, checked by the harness
+        # against the stepper's own result -- never by the being's reading of it (sage.gateway.expectations).
+        if intent.args.get("expect") not in (None, "", []):
+            from sage.gateway import expectations as _ex
+            try:
+                checked = _ex.check_game(_ex.parse(intent.args.get("expect")), payload)
+                payload = {"expectations_summary": _ex.summary(checked), "expectations": checked, **payload}
+            except ValueError as e:
+                payload = {"expectations_summary": f"Your expectations could not be read: {e}", **payload}
         return ResultEnvelope(ok=True, witness_id=action_id, result=payload,
                               images=images, image_captions=captions)
 
@@ -1612,6 +2073,111 @@ class HestiaF1aDispatcher:
                                                  f"{carry['behind_main']} commits behind main — only your newest "
                                                  f"commit is yours, and the PR body says so.")})
 
+    WEB_SEARCH_CAP = 6               # searches per hour per being: "a few times an hour"
+    WEB_SEARCH_WINDOW_S = 3600
+
+    def _web_log(self) -> Path:
+        """SEAT-OWNED rate state, outside the being's writable home (GPT on #335: a ledger the limited actor can
+        write is not a limit). Per member, under the seat's own local state."""
+        safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in str(self.plugin_id))
+        return Path(os.path.expanduser("~/.local/state/sage/web_search")) / f"{safe}.jsonl"
+
+    def _web_recent(self, now: float) -> Optional[list]:
+        """Searches in the window, or None when the ledger exists but cannot be read: never 'cannot tell' as zero."""
+        log = self._web_log()
+        if not log.exists():
+            return []
+        try:
+            rows = [json.loads(x) for x in log.read_text(encoding="utf-8").splitlines() if x.strip()]
+            return [r for r in rows if now - float(r["t"]) < self.WEB_SEARCH_WINDOW_S]
+        except Exception:
+            return None
+
+    def _web_reserve(self, now: float, query: str) -> tuple:
+        """RESERVE A SLOT BEFORE ANYTHING LEAVES (GPT on #335): under an exclusive lock on the seat-owned ledger,
+        read the window, refuse at the cap, and durably append this attempt (flush + fsync) before returning.
+        Attempts are counted, not results. Returns ("ok", n_before) | ("full", recent) | ("unrecorded", None);
+        any failure to read OR record is "unrecorded", so the caller sends nothing."""
+        import fcntl
+        log = self._web_log()
+        try:
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with open(log.with_suffix(".lock"), "a", encoding="utf-8") as lk:
+                fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+                recent = self._web_recent(now)
+                if recent is None:
+                    return ("unrecorded", None)
+                if len(recent) >= self.WEB_SEARCH_CAP:
+                    return ("full", recent)
+                with open(log, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({"t": now, "query": query[:200]}) + "\n")
+                    f.flush()
+                    os.fsync(f.fileno())
+                return ("ok", len(recent))
+        except Exception:
+            return ("unrecorded", None)
+
+    def _do_web_search(self, intent: BeingIntent) -> ResultEnvelope:
+        """Search the web from this machine (sage/gateway/web_search.py), judged and witnessed like any act.
+
+        dp, 2026-10-02: "keep it local to the machine, gated through hestia like all other tools. it should be
+        treated like any other agent's web search." What governs it (GPT on #335): the gate judged the VERB with
+        the query as data, after sweeping the query with the innate denylist (BeingGateClient.gate, egress stage);
+        there is no composed command for the law to judge, so verdict.command is normally None. This handler
+        builds a FIXED command from the validated query (web_search_command) and runs it on this machine. The
+        seat-owned hourly cap RESERVES a slot under a lock, durably, before anything leaves, and fails closed
+        when its ledger cannot be read or written; results come back labelled as other people's words."""
+        import json as _json
+        import shlex
+        import subprocess
+        import sys as _sys
+        from sage.gateway.being_gate_client import web_search_command
+        from sage.gateway.web_search import render
+        try:
+            cmd = web_search_command(intent.args)
+        except ValueError as e:
+            return ResultEnvelope(ok=False, error=str(e))
+        judged = getattr(getattr(self, "_verdict", None), "command", None)
+        if judged is not None and judged != cmd:   # defensive only: this verb is judged uncomposed
+            return ResultEnvelope(ok=False, error=("web_search refused: the law judged a command this dispatcher "
+                                                   "would not execute."))
+        now = self._now()
+        argv = shlex.split(cmd)
+        argv[0] = _sys.executable        # the seat's own interpreter, the module from this checkout
+        query = argv[argv.index("--") + 1]
+        state, recent = self._web_reserve(now, query)
+        if state == "unrecorded":
+            return ResultEnvelope(ok=False, error=(
+                "not searched: this seat's record of your recent searches cannot be read or written, so the "
+                "hourly limit cannot be kept. Nothing was sent. This is the seat's to repair, not yours."))
+        if state == "full":
+            frees = int((float(recent[0]["t"]) + self.WEB_SEARCH_WINDOW_S - now) / 60) + 1
+            return ResultEnvelope(ok=False, error=(
+                f"not searched: you have searched {len(recent)} times in the last hour. You can search again in "
+                f"about {frees} min. What you already found is in your earlier results."))
+        begin = self._call("hestia_begin_action", {"tool_name": "web_search", "target": f"web:{query[:120]}"})
+        err = _hestia_error(begin)
+        if err:
+            return ResultEnvelope(ok=False, error=f"web_search UNVERIFIED: the witness substrate is "
+                                                  f"unreachable ({str(err)[:160]})")
+        action_id = begin.get("actionId")
+        found = {"query": query, "results": [], "error": None}
+        try:
+            proc = subprocess.run(argv, text=True, capture_output=True, timeout=60,
+                                  cwd=str(Path(__file__).resolve().parents[2]))
+            found = _json.loads(proc.stdout or "{}") if proc.returncode == 0 else \
+                {"query": query, "results": [], "error": "the search tool failed on this machine"}
+        except Exception as e:
+            found = {"query": query, "results": [], "error": f"{type(e).__name__}: the search did not finish"}
+        ok = not found.get("error")
+        try:
+            self._call("hestia_record_outcome", {"action_id": action_id, "success": ok, "magnitude": 0.0,
+                                                 **({} if ok else {"error": str(found.get("error"))[:300]})})
+        except Exception:
+            pass
+        return ResultEnvelope(ok=ok, result=render(found) if ok else None,
+                              error=None if ok else render(found), witness_id=action_id)
+
     def _do_pr_read(self, intent: BeingIntent) -> ResultEnvelope:
         """Read a fleet PR through the seat's gh: state, body, reviews and comments, rendered to
         fit a small window. Only reached on an intent the gate ALLOWED as the exact `gh pr view`
@@ -2091,6 +2657,71 @@ class HestiaF1aDispatcher:
                               witness_id=(self._local._witness(f"tune {name}: {text[:120]}")
                                           if name else None))
 
+    def _do_identity_edit(self, intent: BeingIntent) -> ResultEnvelope:
+        """The being's own words about itself (being_self): show them, or replace one field."""
+        from sage.gateway import being_self
+        a = intent.args or {}
+        field = str(a.get("field") or "").strip() or None
+        ok, text, changed = being_self.edit(Path(self.memory_root), field, a.get("text"), a.get("why") or "")
+        if not ok:
+            return ResultEnvelope(ok=False, error=text)
+        return ResultEnvelope(ok=True, result=text,
+                              witness_id=(self._local._witness(f"identity_edit {field}: {text[:120]}")
+                                          if changed else None))
+
+    def _do_settle(self, intent: BeingIntent) -> ResultEnvelope:
+        """The being's own conclusions (being_settled): list them, or settle, re-settle or reopen one."""
+        from sage.gateway import being_settled
+        ok, text, changed = being_settled.settle(Path(self.memory_root), intent.args or {})
+        if not ok:
+            return ResultEnvelope(ok=False, error=text)
+        return ResultEnvelope(ok=True, result=text,
+                              witness_id=(self._local._witness(f"settle: {text[:160]}") if changed else None))
+
+    def _do_skill(self, intent: BeingIntent) -> ResultEnvelope:
+        """Skills (being_skills): list, read or search them, or write one of the being's own."""
+        from sage.gateway import being_skills
+        ok, text, changed = being_skills.skill(Path(self.memory_root), intent.args or {})
+        if not ok:
+            return ResultEnvelope(ok=False, error=text)
+        return ResultEnvelope(ok=True, result=text,
+                              witness_id=(self._local._witness(f"skill: {text[:160]}") if changed else None))
+
+    #: An earlier subject this often asked about, with nothing settled on it, gets one line naming settle.
+    SUBJECT_SETTLE_HINT_AT = 5
+
+    def _request_subject(self, seat_conv: str, rel: str, why: str, p: Path) -> dict:
+        """For a request_run receipt: earlier requests on the same subject and how they were answered
+        (`earlier_on_this`), and what the being has settled that bears on it (`you_settled`). Either key
+        is absent when there is nothing to say."""
+        from sage.gateway import being_settled, relevance
+        from sage.gateway import conversations as conv
+        try:
+            named = " ".join(sorted(relevance.ids(p.read_text(errors="replace")[:20000])))
+        except OSError:
+            named = ""
+        query = f"[request_run] {rel}\nwhy: {why}\n{named}"
+        out = {}
+        found = relevance.earlier_requests(
+            conv.recent(self.memory_root, seat_conv, limit=relevance.EARLIER_LOOKBACK_TURNS),
+            self.member, query)
+        entries, _, err = being_settled.read(self.memory_root)
+        mine = []
+        if entries and not err:
+            rk = relevance.Ranker([f"{e['question']} {e.get('answer', '')}" for e in entries])
+            mine = [entries[i] for _, i in rk.related(relevance.request_subject(query))][:3]
+        if mine:
+            out["you_settled"] = ("You settled this, or something close to it, in your own words:\n"
+                                  + "\n".join("- " + being_settled._line(e, being_settled.RENDER_ENTRY_CHARS)
+                                              for e in mine))
+        if found:
+            said = relevance.earlier_requests_said(found)
+            if not mine and len(found) >= self.SUBJECT_SETTLE_HINT_AT:
+                said += ("\nIf you have concluded something about this, settle keeps it in your own words "
+                         "where every beat shows it.")
+            out["earlier_on_this"] = said
+        return out
+
     def _do_remember(self, intent: BeingIntent) -> ResultEnvelope:
         content = str(intent.args.get("content", "")).strip()
         if not content:
@@ -2454,7 +3085,7 @@ class HestiaF1aDispatcher:
         reach = _granted_reach_of(getattr(self, "_verdict", None))
         inside = target is not None and any(
             target == os.path.realpath(r) or (rec and target.startswith(os.path.realpath(r) + os.sep))
-            for r, rec in reach)
+            for r, rec, *md in reach if _mode_has(md, "r"))
         if not inside:
             return ResultEnvelope(ok=False, error=(
                 f"search refused: {target or 'that path'} is outside the reach you hold. "
@@ -2723,11 +3354,16 @@ class HestiaF1aDispatcher:
         import stat
         import subprocess
         from sage.gateway.being_gate_client import (run_command, run_names, run_stage_dir,
-                                                    run_budget_s, RUN_MIN_S)
+                                                    run_budget_s, RUN_MIN_S, run_grant_mounts)
         ctx = {"memory_root": self.memory_root,
                "member": getattr(self, "member", None),
                "worktree": getattr(self, "worktree", None),
-               "workspace": getattr(self, "workspace", None)}
+               "workspace": getattr(self, "workspace", None),
+               # the grants this verdict carries: run_grant_mounts composes the same mounts the
+               # law judged from the gate's copy of them, or the line differs and nothing runs
+               "granted_reach": _granted_reach_of(getattr(self, "_verdict", None)),
+               # the rule the gate decided by (hestia #1386), so both sides compose one line
+               "reach_rule": getattr(getattr(self, "_verdict", None), "reach_rule", "union")}
         try:
             cmd = run_command(intent.args, ctx)
             names = run_names(intent.args, ctx)
@@ -2745,8 +3381,8 @@ class HestiaF1aDispatcher:
                 f"record is written, and a run must not outlive its beat. Ask again next beat; "
                 f"the file is unchanged and nothing of yours was touched."))
         root = os.path.realpath(self.memory_root)
-        granted = [(os.path.realpath(r), rec) for r, rec in
-                   _granted_reach_of(getattr(self, "_verdict", None))]
+        granted = [(os.path.realpath(r), rec) for r, rec, *md in
+                   _granted_reach_of(getattr(self, "_verdict", None)) if _mode_has(md, "r")]
 
         def _allowed(full: str, is_script: bool) -> bool:
             if full == root or full.startswith(root + os.sep):
@@ -2845,12 +3481,15 @@ class HestiaF1aDispatcher:
                 "was not started and nothing of the other was touched. Ask again when it has "
                 "answered."))
         try:
-            return self._run_staged(stage, staged, cmd, budget, bound_by)
+            return self._run_staged(stage, staged, cmd, budget, bound_by,
+                                    grant_mounts=run_grant_mounts(ctx))
         finally:
             _release_stage_lock(lock_path, lock_fd)
 
-    def _run_staged(self, stage, staged, cmd, budget, bound_by) -> ResultEnvelope:
-        """The staged part of `run`, called only with the stage's lock held (see _do_run)."""
+    def _run_staged(self, stage, staged, cmd, budget, bound_by,
+                    grant_mounts=((), (), False)) -> ResultEnvelope:
+        """The staged part of `run`, called only with the stage's lock held (see _do_run).
+        `grant_mounts` is run_grant_mounts' answer for the line in `cmd`, for the receipt."""
         import os
         import shlex
         import shutil
@@ -2929,6 +3568,7 @@ class HestiaF1aDispatcher:
                                               kill_as=[SUDO, "-n", "-u", RUN_USER])
                     stopped = why == "time"
                 else:
+                    started = time.time()
                     proc = subprocess.Popen(shlex.split(cmd), stdin=subprocess.DEVNULL,
                                             stdout=fo, stderr=fe)
                     try:
@@ -2965,10 +3605,21 @@ class HestiaF1aDispatcher:
                                   error=f"run could not start the sandbox: {errtxt[:400]}")
         # A NON-ZERO EXIT IS A RESULT. A traceback is the most useful thing this verb can hand
         # back: it names the line, and the line is one the being wrote.
-        return ResultEnvelope(ok=True, witness_id=action_id, result={
+        result = {
             "script": staged[0][0], "files": [b for b, _ in staged],
             "exit": rc, "stdout": out.strip(), "stderr": errtxt.strip(),
-            "note": _run_note(rc, errtxt, [b for b, _ in staged], out)})
+            "note": _run_note(rc, errtxt, [b for b, _ in staged], out)}
+        if not seatbelt:
+            mounts, skipped, _mask = grant_mounts
+            result["note"] += _run_reach_note(mounts, skipped)
+            writable = [p for p, _k, h in mounts if h == "rw"]
+            if writable:
+                changed, complete = _changed_since(writable, started)
+                result["changed_in_your_grants"] = changed
+                if not complete:
+                    result["changed_in_your_grants_scan"] = (
+                        f"stopped after {RUN_SCAN_MAX_ENTRIES} entries; later changes are not listed")
+        return ResultEnvelope(ok=True, witness_id=action_id, result=result)
 
 
     def _do_check(self, intent: BeingIntent) -> ResultEnvelope:
@@ -3362,7 +4013,7 @@ class HestiaF1aDispatcher:
                 return ResultEnvelope(ok=False, error=(
                     f"request_scope: '{path}' is ambiguous, it names different files under the roots "
                     f"you hold: {readings}. Ask again with the absolute path you mean"))
-            roots = ", ".join(str(r) for r, _ in reach) or "none known"
+            roots = ", ".join(str(r) for r, *_ in reach) or "none known"
             return ResultEnvelope(ok=False, error=(
                 f"request_scope 'path' must be absolute, and '{path}' is not inside any root you hold "
                 f"({roots}). Do not guess a root: a repo-relative pointer names a file under one of those"))
@@ -3374,9 +4025,17 @@ class HestiaF1aDispatcher:
         import os as _os
         rp = _os.path.realpath(_os.path.expanduser(path))
         exact_above = None
-        for r, recursive in _granted_reach_of(getattr(self, "_verdict", None)):
+        for r, recursive, *_ in _granted_reach_of(getattr(self, "_verdict", None)):
             r = _os.path.realpath(str(r))
             if rp == r or (recursive and rp.startswith(r + "/")):
+                if _HARDWARE_DEV.match(rp):
+                    # "read or write it directly" sent sprout-being back to run's sandbox, which has no
+                    # devices, five times for /dev/video0 (2026-10-20..23). For a device, reach is used
+                    # through its verb.
+                    return ResultEnvelope(ok=True, result={
+                        "status": "already_granted", "path": path, "within": r,
+                        "next": "you already hold reach on this device; there is nothing to request. "
+                                + _device_note()})
                 return ResultEnvelope(ok=True, result={"status": "already_granted", "path": path, "within": r,
                                                        "next": "you already hold reach here; read or write it directly. Reach is read and write, not run: to run a file, call request_run with its path"})
             if rp.startswith(r + "/") and (exact_above is None or len(r) > len(exact_above)):
@@ -3391,16 +4050,25 @@ class HestiaF1aDispatcher:
                 "next": (f"your grant on {exact_above} is EXACT: it reaches that path and nothing beneath it. "
                          f"Only the operator can make it recursive (path:{exact_above}/**). No request was filed; "
                          f"your seat has been told. Do not retry this write in this beat.")})
+        # A copy at the same path under a grant it holds (cbp-being, 2026-10-22..23: at least
+        # six asks for the editable hestia tree's closure file while its governance grant held
+        # a copy it had read). The ask is STILL FILED: a copy is a different file that may
+        # differ, and is no answer to a need for the original's current bytes or to change or
+        # run it (Nova, #522 78efe4a44). The being is told the alternative alongside.
+        copies = same_path_in_reach(path, _granted_reach_of(getattr(self, "_verdict", None)))
         args: Dict[str, Any] = {"plugin_id": self.plugin_id, "path": path,
                                 "reason": f"[{self.plugin_id}] {reason}"}
         out = self._call("hestia_request_scope", args)
         err = _hestia_error(out)
         if err:
-            return ResultEnvelope(ok=False, error=err)
-        return ResultEnvelope(ok=True, witness_id=out.get("witnessEntryHash"),
-                              result={"request_id": out.get("request_id"), "status": out.get("status"),
-                                      "path": path,
-                                      "next": out.get("next"), "on_timeout": out.get("on_timeout")})
+            return ResultEnvelope(ok=False, error=err + (" " + copy_alternative(path, copies) if copies else ""))
+        rid = out.get("request_id")
+        result = {"request_id": rid, "status": out.get("status"), "path": path,
+                  "next": _scope_next(rid, out.get("next")), "on_timeout": out.get("on_timeout")}
+        if copies:
+            result["copy_in_reach"] = [c for c, _ in copies]
+            result["meanwhile"] = copy_alternative(path, copies)
+        return ResultEnvelope(ok=True, witness_id=out.get("witnessEntryHash"), result=result)
 
     def _do_say(self, intent: BeingIntent) -> ResultEnvelope:
         """Add a turn to a conversation the being is in.
@@ -3527,6 +4195,7 @@ class HestiaF1aDispatcher:
                        {"action_id": action_id, "success": True, "magnitude": 0.0})
         except Exception:
             pass
+        self._wake_why = ""
         woke = self._wake_addressee(to, meta, turn)
         # THE RECEIPT'S ECHO IS THE BEING'S OWN WORDS, AND A CUT ONE MUST SAY SO. Measured
         # 2026-09-21 12:13Z (cbp-being, beat d8cff379b67d): a 522-char say came back as "said"
@@ -3542,6 +4211,14 @@ class HestiaF1aDispatcher:
                   "said": said, "action_id": action_id}
         if woke:
             result["woke"] = woke
+        elif getattr(self, "_wake_why", ""):
+            # SAY WHETHER ANYONE HEARD (cbp-being, 2026-10-24). Thirteen turns to its seat between
+            # 21:32 and 22:34Z each came back with no `woke` and no word about it. Nobody answered,
+            # the being asked the same question ten ways, then wrote its own "complete API surface"
+            # (invented routes) and built a client on it. A receipt that is silent about delivery
+            # reads as delivered-and-ignored; the reason a wake was not sent is a fact the being
+            # can act on (wait, or stop repeating), and the beat record now shows the cause.
+            result["not_woken"] = self._wake_why
         return ResultEnvelope(ok=True, witness_id=action_id, result=result)
 
     def _run_ask_target(self, text: str) -> Optional[str]:
@@ -3661,12 +4338,15 @@ class HestiaF1aDispatcher:
         # why claimed "the fixes". The seat's reply could only be the same traceback, a
         # whole wake later. The digest makes the no-op visible NOW, in this beat, where the
         # being can still act on it. It does not block: a being may want a rerun.
-        rel = str(p.relative_to(self.memory_root))
+        # _safe_path RESOLVED p, so the root is resolved too: a home reached through a symlink (macOS
+        # /var -> /private/var, every temp dir) otherwise refused every request_run with a ValueError.
+        rel = str(p.relative_to(Path(self.memory_root).resolve()))
         digest = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
         unchanged = None  # (seq it asked at, seq the seat answered at)
         answer_text = ""   # what that answer SAID, to hand back rather than point at
         asked_at = None
         asked_seqs = []    # every earlier request for these bytes and arguments, oldest first
+        asked_ts = {}      # seq -> when it was asked
         # WHAT RAN IS (PATH, BYTES, ARGUMENTS), NOT BYTES ALONE. GPT HOLD on #276 at 6d7e98d5:
         # the unsolicited match keyed on the 12-char digest only, so notes/new.py holding
         # print(__file__) was told "running it again will give the same result" with the
@@ -3693,7 +4373,13 @@ class HestiaF1aDispatcher:
                 return None
             return m.group(1), m.group(2).rstrip("."), first
 
-        for t in conv.recent(self.memory_root, seat_conv, limit=80):
+        # THE SCAN SEES THE LAST _PENDING_SCAN TURNS, AND A PENDING NOTE SAYS SO (#567, cbp on #566). An
+        # answer to an EARLIER ask for these bytes answers this one (below), and that answer can sit
+        # before the window while a later ask is inside it. "Not answered yet" was then false. When the
+        # conversation is longer than the window, the notes name the window instead of claiming "yet".
+        window = conv.recent(self.memory_root, seat_conv, limit=_PENDING_SCAN + 1)
+        scan_truncated = len(window) > _PENDING_SCAN
+        for t in window[-_PENDING_SCAN:]:
             text = str(t.get("text", ""))
             if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
                 # The prior request counts only if it asked for these bytes WITH THESE
@@ -3703,6 +4389,7 @@ class HestiaF1aDispatcher:
                             else None)
                 if asked_at is not None:
                     asked_seqs.append(asked_at)
+                    asked_ts[asked_at] = str(t.get("ts") or "")
                 continue
             if t.get("from") == self.member:
                 continue
@@ -3766,11 +4453,35 @@ class HestiaF1aDispatcher:
         # `--` (seat_run_requests.py, #175); this is how it sees them. The first line stays
         # "[request_run] <rel>", which the unchanged check above and the seat's reader key on.
         lines.extend(arg_lines)
+        # STILL WAITING IS NOT NEW. Measured on sprout-being, 2026-10-24..27: of 83 request_runs, 21
+        # repeated an identical request the seat had not answered yet (seqs 1878-1881: one file, four
+        # asks in 12 minutes). The receipt said only "asked and woken", the same as for a first ask,
+        # so nothing told it the first one was still in the queue. Say so, and mark the turn for the
+        # seat, so neither side reads a repeat as a new request.
+        pending = [a for a in asked_seqs if a is not None] if not unchanged else []
+        unanswered = (f"not answered in the last {_PENDING_SCAN} turns" if scan_truncated
+                      else "not yet answered")
+        if pending:
+            lines.append(f"SAME AS the request at seq {pending[0]}, {unanswered}"
+                         + (f" (asked {len(pending) + 1} times now)." if len(pending) > 1 else "."))
         if unchanged and unchanged[0] is None:
             lines.append(f"UNCHANGED since the seat ran this exact file at seq {unchanged[1]}.")
         elif unchanged:
             lines.append(f"UNCHANGED since the request at seq {unchanged[0]}; the seat answered "
                          f"at seq {unchanged[1]}.")
+        # THE SAME SUBJECT, NOT ONLY THE SAME FILE (dp, 2026-10-27: "so it can learn conclusively and not
+        # perseverate"). UNCHANGED and SAME AS above match these bytes. Measured on sprout-being 10-14..27:
+        # 612 of 1,010 requests were about one device, across 86 different files, and on each of those 14
+        # days its journal also said, in its own words, that its camera works through the cortex. Each new
+        # file looked new. Say what was asked before on this subject and how it was answered, and what the
+        # being itself settled about it (being_settled), so the history is in the receipt, not only in a
+        # journal it cannot carry. Facts only; nothing is blocked. Fail-open: a record that cannot be read
+        # adds nothing.
+        subject = {}
+        try:
+            subject = self._request_subject(seat_conv, rel, why, p)
+        except Exception:
+            subject = {}
         said = self._do_say(BeingIntent("say", {"to": seat_conv, "text": "\n".join(lines)}))
         if not said.ok:
             return ResultEnvelope(ok=False, error=f"could not hand the request to the seat: {said.error}")
@@ -3835,6 +4546,26 @@ class HestiaF1aDispatcher:
                     f"--- seq {unchanged[1]} ---\n{carried}\n--- end ---\n"
                     f"To change what runs: memory_edit the lines, or retire_note the file and then "
                     f"memory_write it anew.")
+        if pending:
+            from datetime import datetime, timezone
+            first = pending[0]
+            ago = ""
+            try:
+                t0 = datetime.fromisoformat(asked_ts.get(first, "").replace("Z", "+00:00"))
+                mins = int((datetime.now(timezone.utc) - t0).total_seconds() // 60)
+                ago = f", {mins} minute{'s' if mins != 1 else ''} ago" if mins >= 0 else ""
+            except (ValueError, TypeError):
+                pass
+            result["already_asked"] = (
+                f"You already asked for this exact file, with these arguments, at seq {first}{ago}"
+                + (f", and {len(pending) - 1} more time{'s' if len(pending) > 2 else ''} since" if len(pending) > 1 else "")
+                + (f". The seat has not answered it in the last {_PENDING_SCAN} turns of '{seat_conv}' "
+                   f"(older turns were not checked)" if scan_truncated
+                   else ". The seat has not answered it yet")
+                + f". This request is recorded too, marked as the "
+                f"same one; it does not move it up or start anything. The seat answers once, in "
+                f"'{seat_conv}', and that answer covers every copy of this request.")
+        result.update(subject)
         note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
                 "a result. The seat may run it or decline, and either way it answers in "
                 f"'{seat_conv}'. Nothing is owed by you in the meantime.")
@@ -3964,15 +4695,26 @@ class HestiaF1aDispatcher:
                 deduped.append((label, plugin_id))
         targets = deduped
         if not targets:
+            self._wake_why = ("no listener is set to be woken by messages in this conversation. "
+                              "Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None
         # A SEAT HAS JUMPED IN (`conv.pause_wakes`): it is answering here itself, so a mesh wake
         # would be a second voice speaking as the same seat. Nothing is recorded, so the run is
         # still owed and the being's next turn after the pause wakes as usual.
-        if conv.wake_pause(self.memory_root, to):
+        pause = conv.wake_pause(self.memory_root, to)
+        if pause:
+            self._wake_why = (f"wakes for this conversation are paused until "
+                              f"{pause.get('until', 'the pause ends')} (a seat said it is answering here "
+                              f"directly). Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None
         run_start = conv.wake_is_owed(self.memory_root, to, self.member,
                                       skip_answered=self._skips_answered_run_wake())
         if run_start is None:
+            start = conv.unanswered_run_start(self.memory_root, to, self.member)
+            self._wake_why = (f"no new wake: a wake was already sent for your messages since seq "
+                              f"{start}, with no answer recorded since, and further messages in the "
+                              f"same run do not send another. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it" if start else
+                              "no wake was owed for this message. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
             return None            # already woke them about this run; saying more is not new mail
         pointer = f"sage://conversation/{to}#seq={run_start}-{turn['seq']}"
         woke = []
@@ -3995,18 +4737,43 @@ class HestiaF1aDispatcher:
             conv.record_wake(self.memory_root, to, self.member, run_start,
                              covered_through=int(turn.get("seq") or run_start))
             return ", ".join(woke)
+        self._wake_why = ("the wake did not go out (the mesh refused or failed); it is tried "
+                          "again on your next message here. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
         return None
 
-    # -- channel_egress: not built on the daemon ----------------------------
+    # -- channel_egress: hestia_channel_send (hestia #1344 slice 1, SHADOW) -----
     def _do_channel_egress(self, intent: BeingIntent) -> ResultEnvelope:
-        # SAY WHAT IT IS, NOT WHAT IT AWAITS. The note named design work ("F5 enforcement gated on rate-governor
-        # calibration, PRD §12"), and sprout-being took it for a setting it could complete and asked dp what
-        # "rate-governor calibration" required (room seq 306, 2026-10-19), having tried to run shell scripts by
-        # egressing them to stdout. The design state stays in this comment; the being gets the fact.
-        return ResultEnvelope(ok=False, pending=True,
-                              note="channel_egress is not built yet. Nothing was sent, whatever you give it, and "
-                                   "there is no step or setting that makes it work today. It sends messages out; "
-                                   "it never runs anything. To have a script run, request_run asks your seat.")
+        """A message to a channel the operator bound for the being (hestia #1372).
+
+        THE BEING NAMES A CHANNEL, NEVER A RECIPIENT. Who a channel reaches is the operator's
+        binding; the daemon builds the gate target from it and never from caller text. So `to`
+        (the old schema's word) is read as the channel's id, and nothing here turns a name or an
+        address into one.
+
+        SHADOW IS SAID, NOT IMPLIED. The daemon judges, witnesses and keeps every send and
+        delivers none until the delivery slice. A receipt that reads like a sent message would
+        be the misleading kind (sprout-being took the old stub's design words for a setting it
+        could complete, room seq 306): `sent: false` and the daemon's own note go through as they
+        are, with the budget."""
+        channel = str(intent.args.get("channel") or intent.args.get("to") or "").strip()
+        body = str(intent.args.get("body") or intent.args.get("content") or "")
+        if not channel or not body.strip():
+            from sage.gateway.reference_f1a import missing_args
+            return ResultEnvelope(ok=False, error=missing_args(intent.args, ("channel", "body"), "channel_egress"))
+        out = self._call("hestia_channel_send", {"channel_id": channel, "content": body})
+        err = _hestia_error(out)
+        if err:
+            if "unknown_tool" in err:
+                # A daemon from before hestia #1372: say it, rather than a bare code.
+                return ResultEnvelope(ok=False, error=(
+                    "channel_egress: this machine's hestia has no channel send yet, so nothing was sent or "
+                    "recorded. It arrives with a hestia deploy; there is nothing for you to do."))
+            return ResultEnvelope(ok=False, error=err)
+        return ResultEnvelope(ok=True, witness_id=out.get("witnessEntryHash"), result={
+            "sent": bool(out.get("sent")), "shadow": bool(out.get("shadow")),
+            "channel": out.get("channel_id"), "recipient_class": out.get("recipient_class"),
+            "outbox_id": out.get("outbox_id"), "decision": out.get("decision"),
+            "budget": out.get("budget"), "note": out.get("note")})
 
 
 def _fd_path(fd: int, fallback: str) -> str:
@@ -4132,6 +4899,18 @@ def _release_stage_lock(lock_path: str, fd: int) -> None:
         os.close(fd)
 
 
+def _mode_has(rest, mode: str) -> bool:
+    """Whether a reach item's optional third element (its modes, hestia #1345 part B) includes
+    `mode`. An item without one is a full-mode grant, as every grant was before modes."""
+    return mode in (str(rest[0]) if rest else "rwed")
+
+
+def _is_reach_pointer(raw: str) -> bool:
+    """`hestia://reach` or `hestia://reach/<path>` (SAGE #530)."""
+    s = (raw or "").strip()
+    return s == "hestia://reach" or s.startswith("hestia://reach/")
+
+
 def _granted_reach_of(verdict) -> tuple:
     """((root, recursive), ...) from a verdict. A verdict built without reach (older client,
     hand-made in tests) keeps the pre-#1002 prefix reading of its bare `granted` roots."""
@@ -4161,7 +4940,7 @@ def _resolve_relative_in_reach(rel: str, reach) -> list:
         return cand == r or (recursive and cand.startswith(r + "/"))
 
     found = {}
-    for root, recursive in reach:
+    for root, recursive, *_ in reach:
         r = os.path.realpath(str(root))
         base = os.path.dirname(r)
         while True:
@@ -4337,6 +5116,116 @@ _SANDBOX_DEV = r"(?:null|zero|full|random|urandom|tty|ptmx|pts|shm|fd|stdin|stdo
 _HARDWARE_DEV = re.compile(r"/dev/(?!" + _SANDBOX_DEV + r")[A-Za-z]")
 
 
+# Verbs whose free text may name a scope request; their receipts carry its status
+# (HestiaF1aDispatcher._attach_named_scope_status). `say` joined after #518's 24 h on Sprout
+# (2026-10-23..24): mentions of the expired id fell from ~65/day to 9, and the one that reached a
+# person went by `say`, after a peer_ask redirected it there, so it met no fact. The fact goes
+# on the being's receipt only; the turn it spoke is delivered as written.
+_NAMES_SCOPE_IDS = ("request_scope", "peer_ask", "request_run", "say")
+
+
+def _scope_next(request_id, daemon_next) -> str:
+    """What a being does after filing a scope request, in ITS verbs.
+
+    hestia's own `next` is written for a seat: "poll hestia_scope_status; a human decides this,
+    out of band". hestia_scope_status is a daemon tool, not a verb a being has and not a file.
+    cbp-being, 2026-10-23: after reading that line on every ask, it searched the writable hestia
+    tree and the workspace root for a `hestia_scope_status` file, wrote scripts to start hestia
+    and poll it over HTTP (its run has no network and cannot see the daemon), and filed asks to
+    reach the places it searched: a chain of 47 scope requests in 12 hours, most of them for
+    things that do not exist. The being already has the read: memory_read of the request's
+    `hestia://scope/<id>` pointer answers its status, who ruled and their note."""
+    if not request_id:
+        return daemon_next or ""
+    return (f"A human or a peer decides this; you cannot speed it up and nothing needs starting "
+            f"(hestia is running: it is what answered this request). The ruling reaches you by "
+            f"itself, in your beat's scope status and your inbox. To check it now: memory_read "
+            f'{{"path": "hestia://scope/{request_id}"}}. There is no file or script to find for '
+            f"this; do not search for one.")
+_SCOPE_ID = re.compile(r"\bscope-[0-9a-f]{12}\b")
+
+
+def _named_scope_fact(rid: str, row) -> str:
+    """One named request as hestia holds it. tool_scope_status lists every request of the member's,
+    decided and expired included, so an id it lacks is not one waiting on anyone."""
+    if not row:
+        return f"{rid}: no such request is on record for you now, so nothing is pending under that id"
+    status = row.get("status") or "unknown"
+    by = f", decided by {row['decided_by']}" if row.get("decided_by") else ""
+    return f"{rid}: {status}{by} (path {row.get('path')})"
+
+
+#: How many entries a run's post-run scan of the grants it could write will stat, at most.
+RUN_SCAN_MAX_ENTRIES = 50000
+#: How many changed paths a run receipt lists.
+RUN_CHANGED_SHOWN = 25
+
+
+def _changed_since(roots: list, since: float) -> tuple:
+    """([path, ...], complete): files and directories under `roots` whose mtime or ctime is at
+    or after `since`, without following links, stopping after RUN_SCAN_MAX_ENTRIES entries.
+
+    A WRITE THROUGH A GRANT IS A WRITE, AND THE RECEIPT NAMES IT. memory_write leaves a receipt
+    per file; a run that writes the same files through its writable mounts would leave none,
+    and the being's file history is read from its receipts. One second of slack for coarse
+    mtimes. A deletion leaves no entry to stat, so the parent directory's change shows it."""
+    since -= 1.0
+    out, seen, complete = [], 0, True
+    stack = list(roots)
+    while stack:
+        p = stack.pop()
+        try:
+            st = os.lstat(p)
+        except OSError:
+            continue
+        seen += 1
+        if seen > RUN_SCAN_MAX_ENTRIES:
+            complete = False
+            break
+        if max(st.st_mtime, st.st_ctime) >= since:
+            out.append(p)
+        if stat.S_ISDIR(st.st_mode):
+            try:
+                stack.extend(os.path.join(p, n) for n in os.listdir(p))
+            except OSError:
+                pass
+    out.sort()
+    if len(out) > RUN_CHANGED_SHOWN:
+        out = out[:RUN_CHANGED_SHOWN] + [f"... and {len(out) - RUN_CHANGED_SHOWN} more"]
+    return out, complete
+
+
+def _run_reach_note(mounts: list, skipped: list) -> str:
+    """What the run could see beyond its own copies, said where it reads its result.
+
+    A PATH THE SANDBOX CANNOT SEE READS AS ABSENT, AND THE NOTE SAYS SO. cbp-being, 2026-10-23:
+    its check_file.py printed "File exists: False" for a file it had been reading with
+    memory_read all morning, and it trusted the run. os.path.exists() inside a run answers about
+    the sandbox, never about the disk."""
+    def _shown(how):
+        return ", ".join(p + ("/" if k == "dir" else "") for p, k, h in mounts if h == how)
+    rw, ro = _shown("rw"), _shown("ro")
+    parts = []
+    if rw:
+        parts.append(f"WRITABLE where your grant allows writing and deleting: {rw}. Writes there "
+                     "are real and stay, wherever file permissions allow them (a read-only tree "
+                     "stays read-only); changed_in_your_grants lists what changed")
+    if ro:
+        parts.append(f"READ-ONLY, because your grant there does not allow both writing and "
+                     f"deleting: {ro}. memory_write and memory_edit act on what your grant allows")
+    text = (" Inside the run, besides your copies in /work, you could see only "
+            + ("what your grants reach, at the same paths, as your grants hold them right now: "
+               + "; ".join(parts) + ". "
+               if mounts else "the system's own files: no grant of yours reaches a path a run "
+                              "can mount. ")
+            + "Any other path, your home included, does not exist in there, so a check like "
+              "os.path.exists() is False for it whatever is on disk; memory_read answers about "
+              "the disk.")
+    if skipped:
+        text += " Not mounted: " + "; ".join(f"{p} ({why})" for p, why in skipped) + "."
+    return text
+
+
 def _run_note(rc: int, stderr: str, files: list, stdout: str = "") -> str:
     """The run's note, plus one fact when its output names a hardware device (_device_note)."""
     note = _run_note_core(rc, stderr, files)
@@ -4379,8 +5268,9 @@ def _run_note_core(rc: int, stderr: str, files: list) -> str:
     about this run, so stating it keeps the note evidence-only."""
     if rc == 0:
         return ("Ran in a sandbox with no network and no home (your worktree, if any, "
-                "read-only). The copies and every file the run wrote are gone now: the next run "
-                "starts with only the files it names. Only what you printed survives.")
+                "read-only unless a grant of yours covers it). The copies and every file the run "
+                "wrote are gone now, except what it wrote through your grants: the next run "
+                "starts with only the files it names. What you printed survives.")
     ended = f"Ended by signal {-rc}" if rc < 0 else f"Exit {rc}"
     if "Traceback (most recent call last)" in stderr:
         return (f"{ended}. stderr holds a Python traceback: its last frame in your own file "

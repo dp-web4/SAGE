@@ -227,7 +227,11 @@ def _offered_explore_tools_before_the_canonical_toolset(body_reading: Optional[d
 # that is indistinguishable from choosing not to answer.
 # `stay_awake` is offered here because reflection is where the being says what it wants next;
 # asking for another beat right away is one answer to that (SAGE #295).
-REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "say", "stay_awake"]
+# `settle` is offered here because reflection is where a beat's conclusion is written down; a conclusion
+# written only in the journal did not reach the next beat (being_settled, measured on Sprout 10-14..27).
+# It is item 3's alternative in REFLECT, not a fourth item: the routine writes fill --reflect-steps (3)
+# exactly, so a fourth would be unreachable, and a fourth step would cost every being a generate a beat.
+REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "settle", "say", "stay_awake"]
 
 # The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
 # Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
@@ -998,9 +1002,43 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
 REFLECT = """The beat is ending. Call these tools, then stop:
 {say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": your message to your future self, as a dated block: added / done / still open (it appends; it replaces nothing).
-3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it.
+3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it. If this beat SETTLED a question (what works, what does not, what something is), settle it instead: the question and your answer, shown to you at the start of every beat.
 {say_line}Call the tools now; a reply in words alone writes nothing.
 """
+
+
+# THE JOURNAL AND TODO, REQUIRED UNTIL THE SEAT SAYS OTHERWISE (dp, 2026-10-17: "it was appropriate
+# at the start. at some point we should make it optional, when they have had a chance to learn
+# whether it's a benefit or a chore. i'll leave that bar up to each seat"). PER-INSTANCE:
+# instance.json "reflect_optional": ["journal"], ["todo"] or both. Absent means both are required,
+# as before. What a being does once a record is optional (keeps it, reshapes it, drops it) is the
+# measurement, so the setting is recorded in every beat record where it is on.
+REFLECT_RECORDS = ("journal", "todo")
+# Keyed on the call alone, not the instruction after it: the todo line's wording changed on main
+# (10-20) and a key that quoted it matched nothing, so "todo" optional silently changed nothing.
+_REFLECT_OPTIONAL_LINE = {
+    "journal": ('memory_write path "journal.md":',
+                'if you keep a journal and want to: memory_write path "journal.md":'),
+    "todo": ('memory_write path "todo.md":',
+             'if you keep a todo list and want to: memory_write path "todo.md":'),
+}
+
+
+def reflect_optional_for(cfg: Optional[dict]) -> list:
+    """instance.json `reflect_optional`: which of the reflect turn's records are the being's choice."""
+    v = (cfg or {}).get("reflect_optional")
+    if isinstance(v, str):
+        v = [v]
+    return [r for r in REFLECT_RECORDS if isinstance(v, list) and r in v]
+
+
+def reflect_prompt(optional=(), **kw) -> str:
+    """REFLECT, with the records in `optional` offered rather than required."""
+    body = REFLECT.format(**kw)
+    for r in optional:
+        old, new = _REFLECT_OPTIONAL_LINE[r]
+        body = body.replace(old, new, 1)
+    return body
 
 
 def _read(p: Path, limit: int = 4000) -> str:
@@ -1083,6 +1121,27 @@ def fleet_digest(hours: float, forum_dir: Path, repos: list[str]) -> str:
         if prs.strip():
             out.append(f"## Open pull requests, dp-web4/{repo}\n{prs.strip()}")
     return "\n\n".join(out) if out else "(nothing new in the window)"
+
+
+def scope_grant_lines(st: dict) -> list:
+    """The beat's "granted paths", from hestia_scope_status. Spelled with the gate's own suffix:
+    `<root>/**` reaches the subtree, bare is EXACT.
+
+    WITH ITS MODES, AND NARROWED GRANTS KEPT (#523): since hestia #1370 a grant narrowed below
+    rwed appears only in `grants_by_mode`, so reading the two old lists made it vanish from the
+    beat while its request still read "granted". An older daemon has no such key, and its two
+    lists are read as before.
+
+    A NARROWED GRANT IS RECORDED, NOT NECESSARILY ADMITTED (Nova on #532): a mode-blind gate
+    admits nothing for it (hestia #1345 part B). The line says so in those words rather than
+    guess which gate is installed; hestia://reach/<path> gives the effective answer."""
+    if st.get("grants_by_mode") is not None:
+        return [f"{g.get('path')}{'/**' if g.get('recursive') else ''} ({g.get('modes') or '-'}"
+                + ("" if (g.get("modes") or "") == "rwed" else
+                   "; narrowed: recorded, may not be admitted yet, see hestia://reach") + ")"
+                for g in st.get("grants_by_mode") or []]
+    return [f"{g.get('path')}{'/**' if g.get('recursive') else ''}"
+            for g in (st.get("live_grants") or []) + (st.get("standing_grants") or [])]
 
 
 def decided_requests(reqs):
@@ -1190,7 +1249,7 @@ _SCHEMA_CHARS_FLOOR = 12_000   # at least the 18-verb measurement, for when the 
 
 
 def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[dict] = None,
-                      brief: bool = False) -> Optional[int]:
+                      brief: bool = False, cfg: Optional[dict] = None) -> Optional[int]:
     """Chars the offered verbs' schemas actually cost. None rather than a guess if it
     cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
     13 verbs to 18. Callers must route None through _schema_chars_fallback, never `or`
@@ -1204,7 +1263,7 @@ def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[d
             # here, so the cost is measured on THOSE specs, not on the full descriptions
             from sage.gateway import toolset
             names = set(offered)
-            return len(json.dumps([t for t in toolset.specs(unavail, enums, brief=brief)
+            return len(json.dumps([t for t in toolset.specs(unavail, enums, brief=brief, cfg=cfg)
                                    if t["function"]["name"] in names]))
         from sage.gateway.being_gate_client import ollama_tools
         return len(json.dumps(ollama_tools(list(offered))))
@@ -2704,6 +2763,25 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
                      "file. Your own reading of it belongs in notes/plan.md)\n"
                      + entrustment_shown(instance, entrusted, _bp.value(instance, "entrustment_mode", "full"),
                                          mark=mark_conversations))
+    # Who it says it is (being_self), in its own words, before the records: shown only once it has
+    # written something. Fail-open.
+    try:
+        from sage.gateway import being_self as _self
+        _own = _self.render(instance)
+    except Exception:
+        _own = ""
+    if _own:
+        parts.append(_own)
+    # What it has settled (being_settled), in its own words, beside who it says it is and before every
+    # record: a conclusion has to reach the next beat ahead of the journal entries it supersedes. Shown
+    # only once it has settled something. Fail-open.
+    try:
+        from sage.gateway import being_settled as _settled
+        _known = _settled.render(instance)
+    except Exception:
+        _known = ""
+    if _known:
+        parts.append(_known)
     # Its files and runs, measured: also NOW, so beside the body and before every record that
     # narrates them (see files_and_runs). Fail-open: a measurement that errors adds nothing.
     try:
@@ -2765,6 +2843,15 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     parts.append(todo_view(instance))
     journal = _read(instance / "journal.md", 1200)
     parts.append("## journal.md (tail)\n" + (journal.strip() or "(empty: this is your first beat)"))
+    # SKILLS (being_skills), after the records they are matched against: a skill whose `when` words appear
+    # in this beat's state so far is listed first and marked. Fail-open.
+    try:
+        from sage.gateway import being_skills as _skills
+        _sk = _skills.render(instance, "\n\n".join(parts))
+    except Exception:
+        _sk = ""
+    if _sk:
+        parts.append(_sk)
     for d in ("scratch", "notes"):
         parts.append(dir_listing(instance, d, _bp.value(instance, "listing_limit", LISTING_LIMIT)))
     return "\n\n".join(parts)
@@ -4078,9 +4165,7 @@ def main(argv=None) -> int:
     if disp is not None and hasattr(disp, "_call"):
         try:
             st = disp._call("hestia_scope_status", {"plugin_id": args.member})
-            # spelled with the gate's own suffix: `<root>/**` reaches the subtree, bare is EXACT
-            grants = [f"{g.get('path')}{'/**' if g.get('recursive') else ''}"
-                      for g in (st.get("live_grants") or []) + (st.get("standing_grants") or [])]
+            grants = scope_grant_lines(st)
             reqs = [(r.get("request_id"), r.get("path"), r.get("decision") or r.get("status"))
                     for r in (st.get("requests") or [])]
             who_ruled = {r.get("request_id"): r.get("decided_by") for r in (st.get("requests") or [])
@@ -4115,7 +4200,11 @@ def main(argv=None) -> int:
                             + (f". Their note: \"{str(why_ruled[i]).strip()[:400]}\"" if why_ruled.get(i) else "")
                             for i, p_, d in new_decisions) + "\n"
                         if new_decisions else "")
-                     + "(live grants die when the daemon restarts; only standing grants persist)")
+                     + "(live grants die when the daemon restarts; only standing grants persist)\n"
+                     # SAGE #530: the being can ask, instead of acting to find out
+                     + "(modes: r read, w write, e run, d delete. To see what you hold with who "
+                       "granted it, or to ask whether one path is inside it: memory_read "
+                       "{\"path\": \"hestia://reach\"} or {\"path\": \"hestia://reach/<absolute path>\"})")
         except Exception as e:
             scope = f"(scope status unavailable: {type(e).__name__})"
     # the being's own appeals and any ruling new since the last beat (see appeals_block)
@@ -4214,12 +4303,22 @@ def main(argv=None) -> int:
     _enums = _enums or None
     # per instance (RESEARCH_GENERALIZATION_RULE): "brief" shortens available verbs' descriptions
     _tool_desc_mode = _toolset.tool_descriptions_mode(instance_config(instance))
-    _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief")
+    _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief",
+                                    cfg=instance_config(instance))
+    # EXPECT TRIAL (2026-10-10; private-context legion/egai/PREREG-expect.md): `expect` on game is
+    # offered on ON beats only, so its effect can be compared; the arm is recorded on every beat.
+    _expect_arm = trial_arm(instance, instance / "heartbeats.jsonl", "expect_trial")
+    if _expect_arm["arm"] != "on":
+        for _sp in _explore_specs:
+            _fn = _sp.get("function") or {}
+            if _fn.get("name") == "game":
+                ((_fn.get("parameters") or {}).get("properties") or {}).pop("expect", None)
     # the names are DERIVED from the specs offered, never kept beside them: the seed's tool list
     # and the window's schema measurement must describe exactly what the model is handed
     _explore_tools = [t["function"]["name"] for t in _explore_specs]
     entrusted = entrustment(instance)
-    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief")
+    _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief",
+                                         cfg=instance_config(instance))
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
     _state_head = f"# Your own state\n\n"
@@ -4511,8 +4610,9 @@ def main(argv=None) -> int:
             # across a turn boundary to use it.
             if pending_block:
                 convo.append({"role": "user", "content": pending_block})
-            convo.append({"role": "user", "content": REFLECT.format(date=f"{now:%Y-%m-%d %H:%M} UTC",
-                                                                    say_line=say_line, say_first=say_first)})
+            convo.append({"role": "user", "content": reflect_prompt(
+                reflect_optional_for(instance_config(instance)), date=f"{now:%Y-%m-%d %H:%M} UTC",
+                say_line=say_line, say_first=say_first)})
             # One extra step when someone is waiting, because the routine three fill the budget exactly.
             # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
             # asked: reflect spent all three steps on journal, todo and remember, and there was no
@@ -4742,6 +4842,7 @@ def main(argv=None) -> int:
         "no_result_line": no_result_line_for(instance_config(instance)),
         "answered_run_wake": answered_run_wake_for(instance_config(instance)),
         "posture_framing": posture_framing_for(instance_config(instance)),
+        **({"reflect_optional": _ro} if (_ro := reflect_optional_for(instance_config(instance))) else {}),
         **({} if proprioception_for(instance_config(instance)) else {"proprioception": False}),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
@@ -4832,6 +4933,7 @@ def main(argv=None) -> int:
     except Exception as _e:
         record["late_turns"] = {"error": f"{type(_e).__name__}: {_e}"}
     record["stay_awake"] = stay_awake_reason(explore, after, reflect, answer)
+    record["expect_trial"] = _expect_arm
     try:
         from sage.gateway import arousal as _arousal
         record["next_beat"] = _arousal.after_beat(stay_awake=record["stay_awake"])
@@ -5050,6 +5152,24 @@ def body_line(model: str, instance, num_ctx=None, former_homes=None) -> str:
     return (f"Your body: model {model}.{ctx} Your home directory ({instance.name}) carries an "
             f"older name; it is YOURS, not another being's, and the model is the fact to "
             f"attribute findings to.")
+
+
+def trial_arm(instance: Path, log: Path, param: str) -> dict:
+    """A seat-run trial's arm for this beat from being_params `param` (off | on | alternate):
+    alternate = ON on even beat indices (lines already in heartbeats.jsonl). Never raises."""
+    try:
+        from sage.gateway import being_params as _bp
+        mode = _bp.value(instance, param, "off")
+    except Exception:
+        mode = "off"
+    if mode == "alternate":
+        try:
+            with open(log, "rb") as f:
+                n = sum(1 for _ in f)
+        except OSError:
+            n = 0
+        return {"mode": mode, "beat_index": n, "arm": "on" if n % 2 == 0 else "off"}
+    return {"mode": mode, "arm": "on" if mode == "on" else "off"}
 
 
 def harness_revision(workspace: str) -> dict:
