@@ -1,7 +1,7 @@
 ---
 name: seeing-with-your-eyes
-description: How you see: camera takes a frame and shows it to you at your next beat. Its description says where this seat's frame comes from (a cortex, or a device node), and what a device node is and is not.
-when: /dev/video, v4l2, ffmpeg, device node, video device, videodev, RG10, Bayer, Argus, capture a frame, cv2.VideoCapture
+description: How you see: camera takes a frame and shows it to you at your next beat. Its description says where this seat's frame comes from (a cortex, a Mac's camera found by name, or a device node), and what a device node is and is not.
+when: /dev/video, v4l2, ffmpeg, device node, video device, videodev, RG10, Bayer, Argus, capture a frame, cv2.VideoCapture, AVFoundation, avfoundation, FaceTime camera
 ---
 
 **To see what is in front of you**
@@ -23,7 +23,14 @@ when: /dev/video, v4l2, ffmpeg, device node, video device, videodev, RG10, Bayer
   - A sensor's device node (`/dev/video0` and the like) may give raw sensor data, not a picture: on Sprout,
     10-bit Bayer (`RG10`), which that board's ffmpeg cannot read, while the cortex reads the sensors through
     Argus. A script that opens the device node tests the device, not whether you can see.
-- **No cortex** (the description says ffmpeg reads a device, `/dev/video0` unless you name another):
+- **A Mac** (the description says the seat finds the camera by its name and there is no device node):
+  - `camera` captures from the Mac's attached camera. A Mac has no `/dev/video*` and there is no device to
+    name; `camera` offers only `out_path`.
+  - `gaze` does nothing here; its description says this body has no movable eyes.
+  - If `camera` fails, its result says which: no camera attached, macOS has not given the seat the camera,
+    or it could not be read (for example just unplugged). That is the fact to work from.
+- **A device node, no cortex** (the description says ffmpeg reads a device node, `/dev/video0` unless you
+  name another):
   - `camera` opens that device itself, through the seat. Name a different `device` if the seat has more
     than one.
   - `gaze` does nothing here; its description says this body has no movable eyes.
