@@ -196,6 +196,10 @@ def skill(instance, args: Dict) -> Tuple[bool, str, bool]:
         return True, search(instance, a["query"]), False
     if not name:
         return True, listing(instance), False
+    if _truthy(a.get("retire", "")):
+        with _home_lock(Path(instance)):
+            ok, msg = _retire(instance, name, a.get("why", ""))
+        return ok, msg, ok
     if not writing:
         ok, text = read(instance, name)
         return ok, text, False
@@ -204,14 +208,61 @@ def skill(instance, args: Dict) -> Tuple[bool, str, bool]:
     return ok, msg, bool(ok and not msg.startswith(_UNCHANGED))
 
 
+def _truthy(v: str) -> bool:
+    return str(v).strip().lower() in ("true", "yes", "1")
+
+
+def _retire(instance, name: str, why: str) -> Tuple[bool, str]:
+    """Take one of the being's own skills out of its index (dp, 2026-10-28: "does it have ways to update or
+    remove skills?"; it could replace one, never remove one). The whole text goes into skills_log.jsonl
+    FIRST, so nothing is lost, and only a logged retirement removes the file: if the log line cannot be
+    written, the skill stays. Writing the same name later starts a new skill."""
+    if not NAME.match(name):
+        return False, f"{name!r} is not a skill name. Nothing was changed."
+    if any(s["name"] == name for s in _load(FLEET_DIR, "fleet")):
+        return False, (f"{name!r} is a fleet skill (shipped with SAGE, read-only), so it is not yours to retire. "
+                       "Nothing was changed. If it is wrong, say so to your seat.")
+    d = Path(instance) / OWN_DIR / name
+    path = d / SKILL_FILE
+    if not path.is_file():
+        mine = [s["name"] for s in _load(Path(instance) / OWN_DIR, "yours")]
+        return False, (f"you have no skill called {name!r}; yours are: {', '.join(mine) or 'none yet'}. "
+                       "Nothing was changed.")
+    prev = path.read_text(errors="replace")
+    try:
+        lp = Path(instance) / SKILLS_LOG
+        torn = False
+        if lp.exists() and lp.stat().st_size > 0:
+            with open(lp, "rb") as lf:
+                lf.seek(-1, os.SEEK_END)
+                torn = lf.read(1) != b"\n"
+        with open(lp, "a") as f:
+            f.write(("\n" if torn else "") + json.dumps({"at": _iso(), "op": "retire", "name": name, "from": prev,
+                                                         "to": None, "why": str(why)[:WHY_MAX_CHARS]}) + "\n")
+    except OSError as e:
+        return False, f"the retirement could not be recorded in {SKILLS_LOG} ({type(e).__name__}), so the skill stays; nothing changed"
+    try:
+        path.unlink()
+        try:
+            d.rmdir()
+        except OSError:
+            pass                # other files of the being's own in that directory stay where they are
+    except OSError as e:
+        return False, (f"retirement of {name} was recorded but the file could not be removed ({type(e).__name__}); "
+                       "it is still listed. Tell your seat.")
+    return True, (f"retired your skill {name}: it is no longer listed or matched. Its whole text is kept in "
+                  f"{SKILLS_LOG}. Writing a skill with that name again starts a new one.")
+
+
 def _home_lock(root: Path):
     from sage.gateway.reference_f1a import _home_lock as lock
     return lock(root)
 
 
 def own_paths(name: str) -> Tuple[str, ...]:
-    """Every path (relative to the home) a write of skill `name` touches, for the gate."""
-    return (f"{OWN_DIR}/{name}/{SKILL_FILE}.tmp", f"{OWN_DIR}/{name}/{SKILL_FILE}", SKILLS_LOG)
+    """Every path (relative to the home) a write or a retire of skill `name` touches, for the gate: the skill's
+    directory too, which a first write creates and a retire removes."""
+    return (f"{OWN_DIR}/{name}", f"{OWN_DIR}/{name}/{SKILL_FILE}.tmp", f"{OWN_DIR}/{name}/{SKILL_FILE}", SKILLS_LOG)
 
 
 def _write(instance, name: str, a: Dict[str, str]) -> Tuple[bool, str]:
