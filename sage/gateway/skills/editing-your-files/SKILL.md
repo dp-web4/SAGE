@@ -1,7 +1,7 @@
 ---
 name: editing-your-files
 description: Changing lines in a file you wrote with memory_edit, finding them with memory_read, and what memory_edit's refusals mean.
-when: memory_edit, not the text you gave, indentation, appears 2 times, appears 3 times, only ever adds
+when: not the text you gave, indentation, appears 2 times, appears 3 times, only ever adds
 ---
 
 **memory_write only adds to the end of a file.** To change what is already in it, use `memory_edit`.
