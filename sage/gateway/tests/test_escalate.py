@@ -41,6 +41,8 @@ def test_a_referee_that_never_answered_is_not_noted_as_a_law_verdict():
     for rule in ("society.no_verdict", "society.unreachable", "society.unavailable"):
         t = open(e.write_note("b", BeingIntent("memory_edit", {"path": "scratch/a.py"}), _ref(rule, "no verdict [fail-closed]"), "society", {})).read()
         assert rule in t and "NOT a law verdict" in t
+        # SAGE #577: the note never sends a seat to a path outside its grant
+        assert "$HESTIA_HOME" not in t and "telemetry/" not in t and "heartbeats.jsonl" in t
         assert "A law verdict." not in t and "Arbiter protocol" not in t and "Approve ONLY" not in t
     # a decided society deny is still a law verdict, with the protocol
     t = open(e.write_note("b", BeingIntent("memory_edit", {"path": "scratch/a.py"}), _ref("society.unsafe", "denied"), "society", {})).read()

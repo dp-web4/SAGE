@@ -430,3 +430,14 @@ def test_the_receipt_survives_hub_notify_stderr_notes(tmp_path):
     assert ok, detail
     assert ed._hub_receipt(detail) == {"ledger": "1588",
                                        "recipient_lct": "3c999a3a-bb2d-45e1-b996-d4f2f0dc0825"}, detail
+
+
+def test_a_routed_review_request_is_forwarded_in_the_hub_vocabulary():
+    """hestia #904: the daemon accepts `review_request`, the hub KINDS gate does not; the drain
+    forwards it as `pr_review_request`, which every receiver accepts. Other kinds pass unchanged."""
+    from sage.gateway import egress_drain as ed
+    sent = []
+    sender = lambda to, kind, ptr: (sent.append(kind), (True, "ok"))[1]
+    for k in ("review_request", "coordination", "review_done", "reply"):
+        ed._forward({"forward_on": "peer", "kind": k, "pointer_uri": "https://x/1"}, sender=sender)
+    assert sent == ["pr_review_request", "coordination", "review_done", "reply"], sent

@@ -129,7 +129,10 @@ def camera_command(args: dict, ctx: Optional[dict] = None) -> str:
     # worktree: check reports the worktree's dirty flag as EVIDENCE, so an uncommitted
     # frame there degrades your own evidence (measured on this machine 2026-09-14).
     full = os.path.realpath(os.path.join(memory_root, out_rel))
-    if not (full == memory_root or full.startswith(memory_root + os.sep)):
+    # the home is resolved too: `full` is a realpath, so a home reached through a symlink (macOS /var ->
+    # /private/var, every temp dir) failed this test for every path, "escapes your home" (#570's twin)
+    home = os.path.realpath(memory_root)
+    if not (full == home or full.startswith(home + os.sep)):
         raise ValueError(f"camera 'out_path' escapes your home: {out_rel!r}")
 
     # IMAGE2 OWNS THE TRANSACTION. Its atomic_writing option writes to a temporary file
