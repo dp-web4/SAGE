@@ -179,3 +179,16 @@ def test_a_case_variant_of_a_verb_owned_file_is_refused_too():
     for name in ("Settled.json", "SETTLED_LOG.jsonl", "Self.json", "SELF_LOG.jsonl", "Tuned.json"):
         env = d(BeingIntent("memory_write", {"path": name, "content": "{}"}), _ALLOW)
         assert not env.ok and "changed only with" in env.error, (name, env)
+
+
+def test_a_new_question_close_to_one_already_settled_is_kept_and_named(tmp_path):
+    # sprout-being 10-28: "Do I need to install libv4l to use v4l2-ctl?" (s6), later "Does v4l2-ctl need libv4l
+    # installed on the seat?" (s9): one conclusion settled twice, both shown every beat
+    _s(tmp_path, question="Do I need to install the test gizmo driver to use gizmoctl?", answer="no")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    ok, msg, changed = _s(tmp_path, question="Does gizmoctl need the test gizmo driver installed?", answer="no, it is there")
+    assert ok and changed and "s3" in msg
+    assert "reads close to s1" in msg and "settle id=s1" in msg and "reopen s3" in msg
+    assert len(st.read(tmp_path)[0]) == 3, "named, never merged: the being decides whether they are one"
+    ok, msg, _ = _s(tmp_path, question="how loud is the test fan?", answer="quiet")
+    assert ok and "reads close" not in msg
