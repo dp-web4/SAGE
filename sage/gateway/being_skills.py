@@ -280,7 +280,11 @@ def _iso() -> str:
 
 #: Verbs where "failed, then worked" is measurable from the act's own result, and what names the target.
 #: Not request_run: its ok=True means the request was FILED, and nothing has run yet (#585 reviews).
-WORKED_OUT_VERBS = {"run": "path", "memory_edit": "path", "camera": None, "patch_apply": None}
+#: `game`, by the game it plays: a refused probe is ok=False with the rule it broke, and the corrected call on the
+#: same game is ok=True. Measured on legion-being 2026-10-28: its work had moved from `run` to `game`, so the notice
+#: as shipped fired in 0 of 5 beats; one probe-shape refusal had recurred 140 times on 30 days, and was settled as a
+#: fact twice in one beat and still recurred.
+WORKED_OUT_VERBS = {"run": "path", "memory_edit": "path", "camera": None, "patch_apply": None, "game": "game"}
 #: A retried edit of its own records is bookkeeping, not a procedure (replayed on Sprout: `memory_edit todo.md`).
 BOOKKEEPING = ("todo.md", "journal.md")
 
