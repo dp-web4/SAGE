@@ -84,6 +84,12 @@ def word_edits(ref: str, hyp: str) -> int:
 class Candidate:
     name = "?"
     guarded = True          # its segments carry no_speech_prob / avg_logprob for the ear's guard
+    # A RESEARCH candidate is measured here and never offered to the live ear (NOVA on #446): set it to
+    # why, and run()'s meta carries it, so a comparison table cannot present it as a choice.
+    experimental: Optional[str] = None
+    # run() sets this True only around the SCORED rows: load() and the warmup calls are setup work, and a
+    # candidate that counts its own segments must keep setup out of the scored totals (NOVA on #446).
+    scoring = False
 
     def load(self) -> None:
         raise NotImplementedError
@@ -185,8 +191,14 @@ class WhisperKitAne(Candidate):
     decoder default to cpuAndNeuralEngine), OpenAI-compatible verbose_json, whose segments carry
     Whisper's own avg_logprob / no_speech_prob: guarded, judged by the ear's guard like the
     reference. The server is started outside the harness (it compiles the model on first load);
-    its URL is $SAGE_WHISPERKIT_URL, default http://127.0.0.1:50060."""
+    its URL is $SAGE_WHISPERKIT_URL, default http://127.0.0.1:50060.
+
+    EXPERIMENTAL, not a silence guard: its no_speech_prob was 0 on near-silence (so the ear's silence test
+    cannot fire), and it put words on 39 of 40 no-word clips. The energy result stands as a measurement;
+    it is not a recommendation to listen with it."""
     name, model_name = "whisperkit_ane", "base.en"
+    experimental = ("no_speech_prob is constant 0 on near-silence, so the ear's silence test cannot fire; "
+                    "39/40 no-word clips produced words (McNugget, 2026-10-14). Not for the live ear.")
 
     def load(self):
         import os
@@ -220,16 +232,23 @@ class WhisperKitAne(Candidate):
         # no_speech_prob as 0 on near-silence, where the reference reports it high, so the ear's
         # silence test cannot fire and only its logprob test remains. A field that is always 0 would
         # read as "guarded" while guarding nothing; extra_meta says how often it was informative.
-        self.seen = getattr(self, "seen", 0) + len(segs)
-        self.ns_nonzero = getattr(self, "ns_nonzero", 0) + sum(1 for s in segs if s.get("no_speech_prob"))
+        # Scored rows and setup work (load's 1 s of zeros, the warmup clips) are counted APART: setup segments
+        # in the scored totals made "segments_seen" and "no_speech_prob_nonzero" describe more than the rows.
+        bucket = "scored" if self.scoring else "setup"
+        counts = self.__dict__.setdefault("counts", {"scored": [0, 0], "setup": [0, 0]})
+        counts[bucket][0] += len(segs)
+        counts[bucket][1] += sum(1 for s in segs if s.get("no_speech_prob"))
         return [{"text": s.get("text", ""), "no_speech_prob": s.get("no_speech_prob", 0.0),
                  "avg_logprob": s.get("avg_logprob", 0.0)} for s in segs]
 
     def extra_meta(self) -> dict:
         return {"model": self.model_name, "compute_units": "cpuAndNeuralEngine (encoder and decoder)",
                 "server": "whisperkit-cli serve (separate process; its memory is not in peak_rss_mb)",
-                "segments_seen": getattr(self, "seen", 0),
-                "no_speech_prob_nonzero": getattr(self, "ns_nonzero", 0)}
+                # the scored rows only; setup (load's preflight + warmup) is reported apart
+                "segments_seen": self.__dict__.get("counts", {}).get("scored", [0, 0])[0],
+                "no_speech_prob_nonzero": self.__dict__.get("counts", {}).get("scored", [0, 0])[1],
+                "setup_segments_seen": self.__dict__.get("counts", {}).get("setup", [0, 0])[0],
+                "setup_no_speech_prob_nonzero": self.__dict__.get("counts", {}).get("setup", [0, 0])[1]}
 
 
 class GemmaNativeAudio(Candidate):
@@ -240,6 +259,8 @@ class GemmaNativeAudio(Candidate):
     behaviour on silence is exactly what this run measures. It shares the GPU with the being's beats;
     run it in a quiet window. Model: $SAGE_NATIVE_AUDIO_MODEL (default gemma4:12b)."""
     name, guarded = "gemma_native_audio", False
+    experimental = ("research only: no per-segment confidences, so the ear's guard cannot judge it; "
+                    "stops early and comments instead of transcribing (McNugget, 2026-10-14). Not for the live ear.")
     PROMPT = ("Transcribe exactly the words spoken in this audio. Output only those words, with no "
               "commentary, quotes or description. If no one speaks, output nothing at all.")
 
@@ -351,7 +372,11 @@ def run(manifest: str, name: str, out: str, warmup: int = 1) -> dict:
     audios = {it["id"]: read_wav(it["wav"]) for it in items}
     for it in items[:warmup]:                      # first-call costs belong to load, not to an utterance
         cand.segments(audios[it["id"]], it["wav"])
-    rows = [run_one(cand, it, audios[it["id"]]) for it in items]
+    cand.scoring = True                            # only the rows below are scored evidence
+    try:
+        rows = [run_one(cand, it, audios[it["id"]]) for it in items]
+    finally:
+        cand.scoring = False
     Path(out).mkdir(parents=True, exist_ok=True)
     with open(Path(out) / f"rows_{name}.jsonl", "w") as f:
         for r in rows:
@@ -359,6 +384,8 @@ def run(manifest: str, name: str, out: str, warmup: int = 1) -> dict:
     meta = {"candidate": name, "guarded": cand.guarded, "load_s": load_s, "peak_rss_mb": peak_rss_mb(),
             "n": len(rows), "host": os.uname().nodename, "machine": os.uname().machine,
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    if cand.experimental:
+        meta["experimental"] = cand.experimental
     meta.update(getattr(cand, "extra_meta", dict)())
     (Path(out) / f"meta_{name}.json").write_text(json.dumps(meta, indent=2) + "\n")
     return meta

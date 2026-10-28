@@ -126,6 +126,7 @@ def test_the_ane_candidate_maps_verbose_json_and_counts_an_uninformative_no_spee
     try:
         c = h.WhisperKitAne()
         c.url = f"http://127.0.0.1:{srv.server_address[1]}"
+        c.scoring = True            # as run() sets it around the scored rows; setup is counted apart
         audio = [0.0] * h.RATE
         segs = c.segments(audio, "")
         assert segs == [{"text": " You", "no_speech_prob": 0, "avg_logprob": -0.77}], segs
@@ -135,6 +136,66 @@ def test_the_ane_candidate_maps_verbose_json_and_counts_an_uninformative_no_spee
         assert h.CANDIDATES["whisperkit_ane"].guarded is True
     finally:
         srv.shutdown()
+
+
+def test_run_scores_only_the_rows_and_reports_setup_apart(tmp_path=None):
+    """NOVA on #446: load()'s preflight (1 s of zeros) and run()'s warmup both called segments(), and those
+    calls landed in segments_seen / no_speech_prob_nonzero, so the scored totals described more than the
+    rows. End to end through run(): 3 manifest items, warmup=1, a fake WhisperKit that answers every request
+    with one segment whose no_speech_prob is nonzero. Scored totals must equal the 3 rows exactly; the
+    preflight and the 1 warmup clip are the setup bucket; the meta says the candidate is experimental."""
+    import http.server
+    import json as _j
+    import tempfile
+    import threading
+    import wave
+    calls = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            calls.append(1)
+            body = _j.dumps({"segments": [{"text": " hi", "avg_logprob": -0.1, "no_speech_prob": 0.5}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    d = Path(tmp_path or tempfile.mkdtemp())
+    lines = []
+    for i in range(3):
+        with wave.open(str(d / f"c{i}.wav"), "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(h.RATE)
+            w.writeframes(b"\x00\x00" * h.RATE)
+        lines.append(_j.dumps({"id": f"c{i}", "wav": f"c{i}.wav", "text": "hi", "category": "clean"}))
+    (d / "manifest.jsonl").write_text("\n".join(lines) + "\n")
+    import os
+    old = os.environ.get("SAGE_WHISPERKIT_URL")
+    os.environ["SAGE_WHISPERKIT_URL"] = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        meta = h.run(str(d / "manifest.jsonl"), "whisperkit_ane", str(d / "out"), warmup=1)
+    finally:
+        srv.shutdown()
+        if old is None:
+            os.environ.pop("SAGE_WHISPERKIT_URL", None)
+        else:
+            os.environ["SAGE_WHISPERKIT_URL"] = old
+    assert len(calls) == 5, "preflight 1 + warmup 1 + scored 3"
+    assert meta["n"] == 3
+    assert meta["segments_seen"] == 3 and meta["no_speech_prob_nonzero"] == 3, meta
+    assert meta["setup_segments_seen"] == 2 and meta["setup_no_speech_prob_nonzero"] == 2, meta
+    assert "Not for the live ear" in meta["experimental"]
+
+
+def test_research_candidates_say_so_and_the_rest_do_not():
+    assert h.CANDIDATES["whisperkit_ane"].experimental and h.CANDIDATES["gemma_native_audio"].experimental
+    assert not h.CANDIDATES["whisper_ref"].experimental and not h.CANDIDATES["whispercpp_base"].experimental
 
 
 def test_the_native_audio_candidate_is_unguarded_and_keeps_what_the_model_said(tmp_path=None):
