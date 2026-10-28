@@ -184,14 +184,21 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                       "start of every beat. To change it later, settle the same question again or give its id.")
     if ok and close:
         msg += (f" It reads close to {close['id']} ({close['question'][:120]!r}). If they are the same question, "
-                f"keep one: settle id={close['id']} with your newest answer, then reopen {new['id']}.")
+                f"keep one: reopen {new['id']}, then settle id={close['id']} with your newest answer.")
     return ok, msg
 
 
 #: How close a new question must read to an existing one to be named in the receipt (relevance's idf overlap).
 #: Measured on sprout-being's first 9 entries, 2026-10-27..28: its two same-conclusion pairs (s2/s4, s6/s9)
-#: scored 0.58 each; every distinct pair scored 0.30 or less.
+#: scored 0.58 each; every distinct pair scored 0.30 or less. Words only: a shared device or file name makes two
+#: questions one subject, not one question.
 CLOSE_AT = 0.4
+
+
+def _unnamed(text: str) -> str:
+    """The question without its device nodes, scope ids and file names, so only its words are compared."""
+    from sage.gateway.relevance import _IDS
+    return _IDS.sub(" ", text or "")
 
 
 def _close_to(entries: List[dict], question: str) -> Optional[dict]:
@@ -201,8 +208,8 @@ def _close_to(entries: List[dict], question: str) -> Optional[dict]:
         return None
     try:
         from sage.gateway.relevance import Ranker
-        rk = Ranker([e["question"] for e in entries])
-        hits = rk.related(question, CLOSE_AT)
+        rk = Ranker([_unnamed(e["question"]) for e in entries])
+        hits = rk.related(_unnamed(question), CLOSE_AT)
     except Exception:
         return None
     return entries[hits[0][1]] if hits else None
