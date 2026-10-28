@@ -1,7 +1,7 @@
 ---
 name: getting-code-run
 description: Running code you wrote: run (a sandbox, now) or request_run (your seat, later), how to make a run settle a question, and how to read UNCHANGED, SAME AS and a decline.
-when: did not run, declined, traceback, same as the request, already_asked, earlier_on_this, exit code 1, exit code 2, no module named, modulenotfounderror, nameerror, syntaxerror
+when: did not run, declined, traceback, same as the request, already_asked, earlier_on_this, exit code 1, exit code 2, exit code 126, exit code 127, exit code 137, exit code -9, timed out after, no module named, modulenotfounderror, nameerror, syntaxerror
 ---
 
 **Pick the door**

@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import re
 import time
 from pathlib import Path
@@ -278,7 +279,8 @@ def _iso() -> str:
 # -- the moment a skill forms: something that failed, then worked, in one beat ---------------------------------
 
 #: Verbs where "failed, then worked" is measurable from the act's own result, and what names the target.
-WORKED_OUT_VERBS = {"run": "path", "request_run": "path", "memory_edit": "path", "camera": None, "patch_apply": None}
+#: Not request_run: its ok=True means the request was FILED, and nothing has run yet (#585 reviews).
+WORKED_OUT_VERBS = {"run": "path", "memory_edit": "path", "camera": None, "patch_apply": None}
 #: A retried edit of its own records is bookkeeping, not a procedure (replayed on Sprout: `memory_edit todo.md`).
 BOOKKEEPING = ("todo.md", "journal.md")
 
@@ -313,6 +315,7 @@ def worked_out(trace) -> Optional[str]:
             continue
         arg = WORKED_OUT_VERBS[eff]
         target = str((getattr(intent, "args", None) or {}).get(arg) or "") if arg else ""
+        target = posixpath.normpath(target) if target else ""   # `./a.py` and `a.py` are one target
         if target.rsplit("/", 1)[-1] in BOOKKEEPING:
             continue
         f = _failed(eff, env)
@@ -322,7 +325,10 @@ def worked_out(trace) -> Optional[str]:
         hist = seen.setdefault(key, [])
         if not f and hist and any(hist):
             found = (eff, target, sum(hist), len(hist) + 1)
-        hist.append(f)
+        if f:
+            hist.append(f)
+        else:
+            hist.clear()                                           # a success ends a struggle; count the last one
     if not found:
         return None
     eff, target, fails, tries = found

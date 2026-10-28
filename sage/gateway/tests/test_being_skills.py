@@ -214,6 +214,8 @@ def test_a_routine_beat_marks_no_skill_but_a_failure_does():
     assert sk.match(fleet, routine) == []
     assert [s["name"] for _, s, _ in sk.match(fleet, "Traceback ... NameError: name 'x' is not defined; exit code 1")] \
         == ["getting-code-run"]
+    for failed in ("exit code 127", "exit code 137", "exit code -9", "timed out after 60 s"):
+        assert [s["name"] for _, s, _ in sk.match(fleet, failed)] == ["getting-code-run"], failed
 
 
 class _I:
@@ -244,6 +246,20 @@ def test_worked_out_is_silent_without_a_failure_before_a_success_on_the_same_tar
                           (_I("run", path="a.py"), _E(True, {"exit": 1}))]) is None, "worked then broke is not worked out"
     assert sk.worked_out([(_I("camera"), _E(False)), (_I("camera"), _E(True, {"out_path": "x.jpg"}))]).startswith(
         "This beat, `camera` failed 1 time")
+
+
+def test_a_filed_request_run_is_not_reported_as_worked():
+    """#585 reviews (mcnugget, cbp): request_run's ok=True means the request was filed; nothing has run."""
+    assert sk.worked_out([(_I("request_run", path="a.py"), _E(False)),
+                          (_I("request_run", path="a.py"), _E(True, "filed"))]) is None
+
+
+def test_worked_out_counts_the_last_struggle_and_one_spelling_of_a_path():
+    said = sk.worked_out([(_I("run", path="a.py"), _E(True, {"exit": 1})), (_I("run", path="a.py"), _E(True, {"exit": 0})),
+                          (_I("run", path="a.py"), _E(True, {"exit": 1})), (_I("run", path="a.py"), _E(True, {"exit": 0}))])
+    assert "failed 1 time and then worked, on try 2" in said
+    assert "`run a.py` failed 1 time" in sk.worked_out([(_I("run", path="./a.py"), _E(True, {"exit": 1})),
+                                                       (_I("run", path="a.py"), _E(True, {"exit": 0}))])
 
 
 def test_reflection_names_skill_and_offers_it():
