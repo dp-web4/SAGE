@@ -244,6 +244,13 @@ def test_worked_out_is_silent_without_a_failure_before_a_success_on_the_same_tar
                           (_I("run", path="b.py"), _E(True, {"exit": 0}))]) is None, "another file is not the same task"
     assert sk.worked_out([(_I("run", path="a.py"), _E(True, {"exit": 0})),
                           (_I("run", path="a.py"), _E(True, {"exit": 1}))]) is None, "worked then broke is not worked out"
+    assert sk.worked_out([(_I("run", path="a.py"), _E(True, {"exit": 1})), (_I("run", path="a.py"), _E(True, {"exit": 0})),
+                          (_I("run", path="a.py"), _E(True, {"exit": 1}))]) is None, "found then broke again (#585 legion)"
+    assert "`run b.py`" in sk.worked_out([(_I("run", path="b.py"), _E(True, {"exit": 1})),
+                                          (_I("run", path="b.py"), _E(True, {"exit": 0})),
+                                          (_I("run", path="a.py"), _E(True, {"exit": 1})),
+                                          (_I("run", path="a.py"), _E(True, {"exit": 0})),
+                                          (_I("run", path="a.py"), _E(True, {"exit": 1}))]), "another target still worked"
     assert sk.worked_out([(_I("camera"), _E(False)), (_I("camera"), _E(True, {"out_path": "x.jpg"}))]).startswith(
         "This beat, `camera` failed 1 time")
 

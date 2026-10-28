@@ -304,7 +304,7 @@ def worked_out(trace) -> Optional[str]:
     dp, 2026-10-28: "once it figures something out, to retain it as a skill for future use". None otherwise.
     It names what happened and that `skill` can keep it; whether to write one, and what, is the being's."""
     seen: Dict[tuple, List[bool]] = {}
-    found = None
+    found: Dict[tuple, tuple] = {}                                 # per target; the latest worked-out one is told
     for item in trace or []:
         try:
             intent, env = item
@@ -324,14 +324,16 @@ def worked_out(trace) -> Optional[str]:
         key = (eff, target)
         hist = seen.setdefault(key, [])
         if not f and hist and any(hist):
-            found = (eff, target, sum(hist), len(hist) + 1)
+            found.pop(key, None)
+            found[key] = (eff, target, sum(hist), len(hist) + 1)
         if f:
             hist.append(f)
+            found.pop(key, None)                                   # it broke again: its last outcome is a failure
         else:
             hist.clear()                                           # a success ends a struggle; count the last one
     if not found:
         return None
-    eff, target, fails, tries = found
+    eff, target, fails, tries = list(found.values())[-1]
     what = f"{eff} {target}".strip()
     return (f"This beat, `{what}` failed {fails} time{'s' if fails != 1 else ''} and then worked, on try {tries}. "
             "If you want the steps that got it working kept for next time, `skill` can hold them as a skill of "
