@@ -269,6 +269,49 @@ def test_worked_out_counts_the_last_struggle_and_one_spelling_of_a_path():
                                                        (_I("run", path="a.py"), _E(True, {"exit": 0}))])
 
 
+def test_a_skill_of_its_own_can_be_retired_with_its_text_kept(tmp_path):
+    # dp, 2026-10-28: "does it have ways to update or remove skills?" It could replace one, never remove one.
+    _write(tmp_path)
+    ok, msg, changed = sk.skill(tmp_path, {"name": "probe-skill", "retire": "true", "why": "the steps did not work"})
+    assert ok and changed and "retired your skill probe-skill" in msg
+    assert "probe-skill" not in [s["name"] for s in sk.index(tmp_path)]
+    assert not (tmp_path / sk.OWN_DIR / "probe-skill").exists()
+    last = json.loads((tmp_path / sk.SKILLS_LOG).read_text().splitlines()[-1])
+    assert last["op"] == "retire" and "2. note what you saw" in last["from"] and last["why"] == "the steps did not work"
+    ok, msg, _ = _write(tmp_path, body="new steps")              # the name is free again
+    assert ok and "wrote your skill probe-skill" in msg
+
+
+@pytest.mark.parametrize("name,says", [("getting-code-run", "fleet skill"), ("no-such-skill", "no skill called"),
+                                       ("Bad Name", "not a skill name")])
+def test_a_refused_retire_says_why_and_changes_nothing(tmp_path, name, says):
+    _write(tmp_path)
+    before = sorted(p.name for p in tmp_path.rglob("*"))
+    ok, msg, changed = sk.skill(tmp_path, {"name": name, "retire": "true"})
+    assert not ok and not changed and says in msg, msg
+    assert sorted(p.name for p in tmp_path.rglob("*")) == before
+
+
+def test_a_retire_that_cannot_be_logged_removes_nothing(tmp_path):
+    _write(tmp_path)
+    (tmp_path / sk.SKILLS_LOG).unlink()
+    (tmp_path / sk.SKILLS_LOG).mkdir()
+    ok, msg, _ = sk.skill(tmp_path, {"name": "probe-skill", "retire": "true"})
+    assert not ok and "skill stays" in msg and (tmp_path / sk.OWN_DIR / "probe-skill" / sk.SKILL_FILE).exists()
+
+
+def test_the_gate_declares_what_a_retire_touches(tmp_path):
+    from sage.gateway import being_gate_client as g
+    _write(tmp_path)
+    declared = set(g.skill_paths({"name": "probe-skill", "retire": "true"}, {"memory_root": str(tmp_path)}))
+    before = {str(p.resolve()) for p in tmp_path.rglob("*")}
+    assert sk.skill(tmp_path, {"name": "probe-skill", "retire": "true"})[0]
+    after = {str(p.resolve()) for p in tmp_path.rglob("*")}
+    gone = before - after
+    assert gone and gone <= declared, gone - declared
+    assert str((tmp_path / sk.SKILLS_LOG).resolve()) in declared
+
+
 def test_reflection_names_skill_and_offers_it():
     from sage.gateway import heartbeat as hb
     assert "skill" in hb.REFLECT_TOOLS
