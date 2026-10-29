@@ -217,3 +217,14 @@ def test_the_named_way_to_keep_one_works_in_its_order_even_with_the_newer_wordin
     ok, msg, changed = _s(tmp_path, id="s1", question=newer, answer="no, it is there")
     assert ok and changed, msg
     assert sorted(e["id"] for e in st.read(tmp_path)[0]) == ["s1", "s2"]
+
+
+def test_an_id_for_a_new_question_is_refused_with_the_way_forward(tmp_path):
+    # sprout-being 10-29: a new question settled with an id it chose ("cbp-…", then "s20"), told only "no such entry"
+    _s(tmp_path, question="q one", answer="a")
+    for chosen in ("my-own-id", "s2"):
+        ok, msg, _ = _s(tmp_path, id=chosen, question="a new question", answer="an answer")
+        assert not ok and "no settled entry" in msg and "without id" in msg, msg
+    ok, msg, _ = _s(tmp_path, id="s9", answer="a")             # no question: changing, not creating, so no hint
+    assert not ok and "without id" not in msg
+    assert _s(tmp_path, question="a new question", answer="an answer")[0]
