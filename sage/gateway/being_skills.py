@@ -285,6 +285,9 @@ def _iso() -> str:
 #: as shipped fired in 0 of 5 beats; one probe-shape refusal had recurred 140 times on 30 days, and was settled as a
 #: fact twice in one beat and still recurred.
 WORKED_OUT_VERBS = {"run": "path", "memory_edit": "path", "camera": None, "patch_apply": None, "game": "game"}
+#: A target argument the verb itself defaults, so a call that names the default and one that omits it are one target
+#: (mcnugget's #588 review). The game verb's default: being_gate_client, `args.get("game") or "ft09"`.
+WORKED_OUT_DEFAULTS = {"game": "ft09"}
 #: A retried edit of its own records is bookkeeping, not a procedure (replayed on Sprout: `memory_edit todo.md`).
 BOOKKEEPING = ("todo.md", "journal.md")
 
@@ -318,7 +321,8 @@ def worked_out(trace) -> Optional[str]:
         if eff not in WORKED_OUT_VERBS:
             continue
         arg = WORKED_OUT_VERBS[eff]
-        target = str((getattr(intent, "args", None) or {}).get(arg) or "") if arg else ""
+        target = (str((getattr(intent, "args", None) or {}).get(arg) or WORKED_OUT_DEFAULTS.get(eff, "")).strip()
+                  if arg else "")
         target = posixpath.normpath(target) if target else ""   # `./a.py` and `a.py` are one target
         if target.rsplit("/", 1)[-1] in BOOKKEEPING:
             continue
