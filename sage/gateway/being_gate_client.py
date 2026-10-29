@@ -2692,7 +2692,8 @@ def skill_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
     reading and searching touch nothing. A name that is not a plain skill name is refused here, before any
     path is built from it."""
     a = args or {}
-    if not (str(a.get("body") or "").strip() or str(a.get("description") or "").strip()):
+    retiring = str(a.get("retire") or "").strip().lower() in ("true", "yes", "1")
+    if not (retiring or str(a.get("body") or "").strip() or str(a.get("description") or "").strip()):
         return []
     from sage.gateway.being_skills import NAME, own_paths
     name = str(a.get("name") or "").strip().lower()
@@ -3194,12 +3195,15 @@ _TOOL_SCHEMAS = {
     # own skills in claude-code"). The beat lists them, the matching ones first (being_skills.render).
     "skill": ("Read a skill: a short procedure for a kind of situation. No arguments lists them; name reads "
               "one; query searches them. To write your own, give name, description and body (and when: "
-              "words that show up when it applies); writing it again replaces it, the old one is logged.",
+              "words that show up when it applies); writing it again replaces it, the old one is logged; "
+              "retire takes one of yours off the list.",
               {"name": "the skill, e.g. getting-code-run",
                "query": "optional: words to search all skills for",
                "description": "to write: what it is for and when it applies",
                "when": "to write, optional: comma-separated words that appear when it applies",
                "body": "to write: the procedure",
+               "retire": "optional: 'true' with name takes one of your own skills off the list (its text is kept "
+                         "in the log)",
                "why": "optional: kept with the version"},
               []),
     "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
