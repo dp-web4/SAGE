@@ -1386,3 +1386,46 @@ def test_compaction_counts_the_schemas_the_turn_sends_as_the_preflight_does(tmp_
     c.memory_root = str(tmp_path)
     r = run_ollama_tool_turn(c, FakeLLM(), seed, tools=tools)
     assert sent and r.reply == "done" and not r.window_full, (r.window_full, r.generates)
+
+
+def test_turn_capture_keeps_each_call_whole_only_when_the_seat_asks(tmp_path):
+    """LFM3 trial 2026-10-28: the beat kept counts and traces but never the prompt, so a candidate
+    model had nothing real to be scored on. `turn_capture: on` (operator layer) keeps each call's
+    messages, tools and reply; off (the default) writes nothing."""
+    import json as _json
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    class FakeLLM:
+        model_name = "fake:1b"
+
+        def __init__(self):
+            self.n = 0
+
+        def get_chat_response(self, messages, **kwargs):
+            self.n += 1
+            if self.n == 1:
+                return {"content": "", "tool_calls": [{"function": {"name": "witness", "arguments": {"event": "x"}}}],
+                        "raw": {"message": {"thinking": "witness it"}}}
+            return {"content": "done", "tool_calls": []}
+
+    c = _client(OK_DISPATCH)
+    c.memory_root = str(tmp_path)
+    run_ollama_tool_turn(c, FakeLLM(), [{"role": "user", "content": "hi"}])
+    assert not (tmp_path / "turn_capture.jsonl").exists(), "off by default"
+
+    (tmp_path / "instance.json").write_text(_json.dumps({"params": {"turn_capture": "on"}}))
+    run_ollama_tool_turn(c, FakeLLM(), [{"role": "user", "content": "hi"}])
+    rows = [_json.loads(l) for l in (tmp_path / "turn_capture.jsonl").read_text().splitlines()]
+    assert len(rows) == 2
+    assert rows[0]["model"] == "fake:1b" and rows[0]["phase"] == "tools"
+    assert rows[0]["messages"][-1]["content"] == "hi" and rows[0]["tools"]
+    assert rows[0]["reply"]["tool_calls"][0]["function"]["name"] == "witness"
+    assert rows[0]["reply"]["thinking"] == "witness it"
+    assert rows[1]["reply"]["content"] == "done"
+
+
+def test_turn_capture_is_not_the_beings_to_set(tmp_path):
+    import json as _json
+    from sage.gateway import being_params as bp
+    (tmp_path / "tuned.json").write_text(_json.dumps({"turn_capture": "on"}))
+    assert bp.value(str(tmp_path), "turn_capture") == "off"
