@@ -98,13 +98,16 @@ def review_task(view: dict, diff: str) -> str:
 
 
 def is_reasoning_model(model: str) -> bool:
-    """Models that only emit structured tool calls with `think` on (empero Qwen3.8
-    distills, R1-style). Measured on Sprout 2026-09-05: with thinking off, the first two
-    heartbeats narrated a summary with steps=0. The switch is the request's `think` field
-    (irp/plugins/ollama_irp.py:165); a `/no_think` prompt suffix never was one and is no longer sent."""
+    """Whether this model's turn runs with `think` on, by policy (ollama_irp.resolve_think): a
+    config's declared think_default, else the server's capability list, else thinking_supported.
+    dp 2026-10-30: think whenever that's an option. The name is historical: it began as "models
+    that only emit structured tool calls with think on" (empero Qwen3.8 distills, R1-style;
+    Sprout 2026-09-05, think off narrated a summary with steps=0). The switch is the request's
+    `think` field; a `/no_think` prompt suffix never was one and is no longer sent.
+    The probe uses ollama_irp's default host, the same server governed_turn's OllamaIRP chats with."""
     try:
-        from sage.irp.adapters.model_capabilities import load_capabilities
-        return load_capabilities(model).resolve_think(model)
+        from sage.irp.plugins.ollama_irp import resolve_think
+        return resolve_think(model)
     except Exception:
         return any(k in model.lower() for k in ("distill", "qwen3.8", "heretic", "r1"))
 
