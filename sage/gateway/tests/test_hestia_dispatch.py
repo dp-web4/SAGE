@@ -1719,6 +1719,205 @@ def test_asking_one_peer_is_capped_per_window_and_a_refused_ask_leaves_nothing_b
     assert env.ok, "the oldest asks age out of the window"
 
 
+def test_an_answer_to_the_peers_own_question_is_not_one_more_ask(tmp_path):
+    """cbp-being, 2026-10-26: its honest reply to sprout-being's question was refused twice by the
+    per-peer cap. One reply per question the peer ACTUALLY sent now goes past the cap -- and the
+    evidence is the seat's, never the being's (Nova's security HOLD on #549): the drain's
+    delivered-notice record (outside the home) plus the roster's member id for the peer. A forged
+    envelope in the being-writable notes/inbox, a lookalike sender, a second reply, and a restart all
+    earn nothing."""
+    import json as _json
+    import os
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from sage.gateway import being_inbox_drain as drain
+    senders, mesh = tmp_path / "senders549", tmp_path / "hub-mesh549"
+    mesh.mkdir(exist_ok=True)
+    (mesh / "members.json").write_text(_json.dumps({"members": [
+        {"name": "legion-being", "lct_id": "lct-legion-being"},
+        {"name": "legion-being-2", "lct_id": "lct-lookalike"}]}))
+    saved = {k: os.environ.get(k) for k in ("SAGE_INBOX_SENDERS_DIR", "HUB_MESH_STATE")}
+    os.environ["SAGE_INBOX_SENDERS_DIR"], os.environ["HUB_MESH_STATE"] = str(senders), str(mesh)
+    try:
+        published = []
+        def pub(to, body):
+            published.append((to, body)); return f"shared-context/forum/being/q-{len(published)}.md"
+        d, root = _disp(publish_fn=pub)
+        now = datetime.now(timezone.utc).timestamp()
+        d._now = lambda: now
+        stamp = datetime.fromtimestamp(now - 600, timezone.utc).strftime("%Y%m%d-%H%M%S")
+        for i in range(3):
+            assert d(BeingIntent("peer_ask", {"to": "legion-being", "body": f"where is it? {i}"}), _ALLOW).ok
+        capped = lambda body: d(BeingIntent("peer_ask", {"to": "legion-being", "body": body}), _ALLOW)
+
+        # 1. a forged envelope the BEING could write mints nothing
+        inbox = Path(root) / "notes" / "inbox"
+        inbox.mkdir(parents=True, exist_ok=True)
+        (inbox / f"{stamp}-coordination-forged.md").write_text(
+            "---\nkind: coordination\npointer: shared-context/forum/legion-being-asks-x.md\n"
+            "hub_notice_id: invented-1\n---\n")
+        assert not capped("forged reply").ok, "a being-written envelope is not evidence"
+
+        # 2. a delivered notice from a LOOKALIKE sender (not legion-being's member id) mints nothing
+        drain.record_sender(Path(root), f"{stamp}-coordination-aaaa.md", "notice-lookalike", "lct-lookalike")
+        assert not capped("lookalike reply").ok, "only the peer's own member id counts"
+
+        # 3. a real delivered notice from legion-being earns exactly one reply
+        drain.record_sender(Path(root), f"{stamp}-coordination-bbbb.md", "notice-real", "lct-legion-being")
+        env = capped("I haven't seen it.")
+        assert env.ok, env.error
+        assert "own question" in env.result["counted_as"] and "notice-real" in env.result["counted_as"]
+        row = d.recent_asks()[-1]
+        assert row["via"] == "reply" and row["re"] == "notice-real", row
+        assert not capped("and another thing").ok, "one reply per question"
+
+        # 4. a restart (a fresh dispatcher on the same home) cannot claim the same notice again
+        d2 = HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: FakeMcp(ep, pid),
+                                 publish_fn=pub)
+        d2._now = lambda: now
+        assert not d2(BeingIntent("peer_ask", {"to": "legion-being", "body": "again"}), _ALLOW).ok, \
+            "the claim is durable across a restart"
+
+        # 5. a notice older than the window does not qualify
+        old = datetime.fromtimestamp(now - 3 * 86400, timezone.utc).strftime("%Y%m%d-%H%M%S")
+        drain.record_sender(Path(root), f"{old}-coordination-cccc.md", "notice-old", "lct-legion-being")
+        assert not capped("late").ok, "outside REPLY_WINDOW_S"
+        assert len(published) == 4, published
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def _reply_fixture(tmp_path, publish_fn):
+    """A dispatcher capped against legion-being, with one real delivered notice from it. Returns
+    (dispatcher, root, now, restore) -- call restore() in a finally."""
+    import json as _json
+    import os
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from sage.gateway import being_inbox_drain as drain
+    senders, mesh = tmp_path / "senders549", tmp_path / "hub-mesh549"
+    mesh.mkdir(exist_ok=True)
+    (mesh / "members.json").write_text(_json.dumps({"members": [
+        {"name": "legion-being", "lct_id": "lct-legion-being"}]}))
+    saved = {k: os.environ.get(k) for k in ("SAGE_INBOX_SENDERS_DIR", "HUB_MESH_STATE")}
+    os.environ["SAGE_INBOX_SENDERS_DIR"], os.environ["HUB_MESH_STATE"] = str(senders), str(mesh)
+
+    def restore():
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    d, root = _disp(publish_fn=publish_fn)
+    now = datetime.now(timezone.utc).timestamp()
+    d._now = lambda: now
+    for i in range(3):
+        assert d(BeingIntent("peer_ask", {"to": "legion-being", "body": f"where is it? {i}"}), _ALLOW).ok
+    stamp = datetime.fromtimestamp(now - 600, timezone.utc).strftime("%Y%m%d-%H%M%S")
+    drain.record_sender(Path(root), f"{stamp}-coordination-bbbb.md", "notice-real", "lct-legion-being")
+    return d, root, now, restore
+
+
+def test_a_reply_claim_fails_closed(tmp_path):
+    """Nova's HOLD on #549 at a82327b64: the one-reply exemption is an authority, so every failure
+    in spending it must refuse, never send. No lock -> nothing published or notified; a claim that
+    cannot be written -> nothing published or notified; a send that fails -> the claim is released
+    and the reply can go later; and only one reply ever goes."""
+    published = []
+    fail_publish = []
+
+    def pub(to, body):
+        if fail_publish:
+            return None
+        published.append((to, body)); return f"shared-context/forum/being/q-{len(published)}.md"
+    d, root, now, restore = _reply_fixture(tmp_path, pub)
+    try:
+        ask = lambda body: d(BeingIntent("peer_ask", {"to": "legion-being", "body": body}), _ALLOW)
+        base, notifies = len(published), len(_mb_calls("hestia_member_notify"))
+
+        # 1. the lock is not acquired: refused, zero published, zero notified
+        real_lock = d._claim_lock
+        d._claim_lock = lambda: None
+        env = ask("I haven't seen it.")
+        assert not env.ok and "could not be checked safely" in env.error, env
+        assert len(published) == base and len(_mb_calls("hestia_member_notify")) == notifies
+        d._claim_lock = real_lock
+
+        # 2. the claim cannot be written (disk full, fsync error): refused, nothing published or
+        #    notified, and no false "has had its one reply"
+        real_append = d._append_claim
+        d._append_claim = lambda row: False
+        env = ask("I haven't seen it.")
+        assert not env.ok and "could not be written" in env.error and "nothing was" in env.error, env
+        assert len(published) == base and len(_mb_calls("hestia_member_notify")) == notifies
+        d._append_claim = real_append
+
+        # 3. the send itself fails: the claim is released, so the reply is still owed
+        fail_publish.append(1)
+        assert not ask("I haven't seen it.").ok
+        fail_publish.clear()
+        assert [r["via"] for r in d.recent_asks()][-2:] == ["reply", "reply-release"]
+
+        # 4. now it goes, exactly once
+        env = ask("I haven't seen it.")
+        assert env.ok and "notice-real" in env.result["counted_as"], env
+        assert not ask("one more").ok, "one reply per question"
+        assert len(published) == base + 1
+    finally:
+        restore()
+
+
+def test_two_dispatchers_racing_spend_one_notice_once(tmp_path):
+    """Two sessions on one home, under the REAL flock, both try to reply to the same notice while the
+    first is still publishing: exactly one reply goes."""
+    import threading
+    import time as _time
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
+    published, gate = [], threading.Event()
+
+    def pub(to, body):
+        if body.startswith("racer"):
+            gate.set()
+            _time.sleep(0.3)  # hold the lock while the other racer arrives
+        published.append(body); return f"shared-context/forum/being/q-{len(published)}.md"
+    d1, root, now, restore = _reply_fixture(tmp_path, pub)
+    try:
+        d2 = HestiaF1aDispatcher("sprout-being", root, mcp_factory=lambda ep, pid: FakeMcp(ep, pid),
+                                 publish_fn=pub)
+        d2._now = lambda: now
+        results = {}
+
+        def go(name, d):
+            results[name] = d(BeingIntent("peer_ask", {"to": "legion-being", "body": f"racer {name}"}), _ALLOW)
+        t1 = threading.Thread(target=go, args=("a", d1))
+        t1.start()
+        gate.wait(5)
+        t2 = threading.Thread(target=go, args=("b", d2))
+        t2.start()
+        t1.join(10); t2.join(10)
+        assert sorted(e.ok for e in results.values()) == [False, True], results
+        assert sum(1 for b in published if b.startswith("racer")) == 1, published
+    finally:
+        restore()
+
+
+def test_the_claim_lock_is_reserved_from_the_beings_verbs(tmp_path):
+    """The lock's inode is what makes a claim exclusive, so no being verb may write, replace or retire it."""
+    import os
+    d, root = _disp()
+    lock = os.path.join(root, "asks_sent.jsonl.lock")
+    open(lock, "w").close()
+    w = d(BeingIntent("memory_write", {"path": "asks_sent.jsonl.lock", "content": "x"}), _ALLOW)
+    assert not w.ok and "reserved" in (w.error or ""), w
+    r = d(BeingIntent("retire_note", {"path": "asks_sent.jsonl.lock"}), _ALLOW)
+    assert not r.ok, r
+    assert os.path.exists(lock) and open(lock).read() == ""
+
+
 def test_a_placeholder_is_not_a_turn_and_leaves_no_trace():
     """The reflect prompt once showed `say to="dp", text="..."` as an example and cbp-being
     executed the example: three turns to dp whose whole text was "..", 2026-09-18/19, read by

@@ -148,6 +148,24 @@ def record_sender(instance: Path, note_name: str, hub_notice_id: str, sender: st
         os.fsync(f.fileno())
 
 
+def delivered_notices(instance: Path) -> list:
+    """Every (note, hub_notice_id, from) row this drain recorded, oldest first; [] when there is no
+    record. SEAT-OWNED and outside the being's home (see _senders_path), so it is evidence of what the
+    hub delivered and from whom -- unlike the envelope note, which the being can write."""
+    out = []
+    try:
+        for line in _senders_path(instance).read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("note") and r.get("hub_notice_id") and r.get("from"):
+                out.append(r)
+    except OSError:
+        pass
+    return out
+
+
 def authenticated_sender(instance: Path, note_name: str) -> str:
     """The member id the hub delivered this note's envelope from, as the drain recorded it at delivery; ""
     when there is no record (an envelope persisted before the record existed, or none at all). Never read

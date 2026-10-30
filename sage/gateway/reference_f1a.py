@@ -93,8 +93,9 @@ def _is_governance_record_name(name: str) -> bool:
 # would let the being forge a `from: dp` turn, or rewrite who may speak, with no witness
 # and no refusal. The whole subtree, not the two files that happen to exist today.
 # asks_sent.jsonl is the record the ask limit counts (hestia_dispatch, SAGE #92); a being that
-# could rewrite it could reset its own limit.
-RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl")
+# could rewrite it could reset its own limit. Its .lock is what makes a reply's claim exclusive
+# (Nova's HOLD on #549): a being that could replace that inode could spend one notice twice.
+RESERVED_SUBTREES = ("conversations", "asks_sent.jsonl", "asks_sent.jsonl.lock")
 # A memory_read miss names same-named files one directory away; past this many it names the
 # first ones and says how many more there are, rather than dropping them silently.
 _SAME_NAME_SHOWN = 5

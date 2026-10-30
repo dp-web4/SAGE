@@ -1410,7 +1410,8 @@ def recent_asks_block(instance: Path, now: Optional[float] = None, window_s: flo
                 r = json.loads(line)
             except ValueError:
                 continue
-            if now - float(r.get("t", 0)) <= window_s:
+            # a reply's claim and its release are not asks (hestia_dispatch.REPLY_VIAS, SAGE #549)
+            if now - float(r.get("t", 0)) <= window_s and r.get("via") not in ("reply", "reply-release"):
                 rows.append(r)
     except OSError:
         return ""
