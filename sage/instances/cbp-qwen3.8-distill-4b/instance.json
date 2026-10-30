@@ -27,5 +27,6 @@
       8192,
       20480
     ]
-  }
+  },
+  "service_notes": false
 }

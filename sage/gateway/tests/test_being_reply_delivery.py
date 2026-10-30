@@ -409,3 +409,23 @@ def test_a_review_request_says_whose_ask_it_is():
     assert "not an appeal of yours" in out and "nothing is required of you" in out
     assert "memory_read on hestia://escalation/ea83eb0e2af20e81" in out
     assert "#corroborate-or-dissent" not in out, "the pointer handed back is the lookup key"
+
+
+def test_service_notes_can_be_turned_off_per_instance_and_the_stale_copies_retire():
+    """dp, 2026-10-30: present the right affordances, not guardrails. On cbp-being the journal tail,
+    arriving every beat since 10-15, coincided with the daily share of hestia-subject acts going from
+    1-7% to 50-93%. `service_notes: false` stops both exports and removes the beat-written copies,
+    and only those: a note the being wrote under the same name stays."""
+    from sage.gateway.heartbeat import service_notes_for, retire_service_notes
+    assert service_notes_for(None) and service_notes_for({}) and service_notes_for({"service_notes": True})
+    assert service_notes_for({"service_notes": "no"}), "only an explicit false turns it off"
+    assert not service_notes_for({"service_notes": False})
+    inst = Path(tempfile.mkdtemp(prefix="svcoff-"))
+    (inst / "notes").mkdir()
+    (inst / "notes" / "hestia-recent.log").write_text("# hestia.service: the last 25 journal lines, exported at x\n")
+    (inst / "notes" / "hestia-unit.txt").write_text("# hestia.service as systemd resolves it, exported at x\n")
+    assert sorted(retire_service_notes(inst)) == ["hestia-recent.log", "hestia-unit.txt"]
+    assert not (inst / "notes" / "hestia-recent.log").exists()
+    (inst / "notes" / "hestia-recent.log").write_text("my own notes about the daemon\n")
+    assert retire_service_notes(inst) == []
+    assert (inst / "notes" / "hestia-recent.log").read_text() == "my own notes about the daemon\n"
