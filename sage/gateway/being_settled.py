@@ -133,9 +133,15 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         want = want if want.startswith("s") else "s" + want
         target = next((e for e in entries if e["id"] == want), None)
         if target is None:
+            # AN ID NAMES AN ENTRY THAT EXISTS; IT NEVER MAKES ONE. Measured on sprout-being 2026-10-29: it settled
+            # a new question twice with an id of its own choosing ("cbp-scope-escalation-needed", then "s20", the
+            # next free number) and was told only that no such entry existed. A refusal owes the way forward.
+            new_q = bool(a.get("question") and a.get("answer"))
             return False, (f"there is no settled entry {a['id']!r}; "
                            + (f"yours are {', '.join(e['id'] for e in entries)}" if entries else "you have none yet")
-                           + ". Nothing was changed.")
+                           + ". Nothing was changed."
+                           + (" To settle a NEW question, give question and answer without id: ids are given out, not "
+                              "chosen. id is only for changing or reopening an entry you already have." if new_q else ""))
     elif a.get("question"):
         target = next((e for e in entries if _norm(e["question"]) == _norm(a["question"])), None)
 
