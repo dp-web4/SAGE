@@ -14,7 +14,7 @@ import tempfile
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from sage.gateway.being_gate_client import BeingIntent, GatewayVerdict  # noqa: E402
 from sage.gateway.hestia_dispatch import HestiaF1aDispatcher  # noqa: E402
-from sage.gateway.tests.test_hestia_dispatch import FakeMcp, _WithScopeQueue  # noqa: E402
+from sage.gateway.tests.test_hestia_dispatch import FakeMcp, _WithScopeQueue, _ELSEWHERE  # noqa: E402
 
 PENDING = "scope-0fefb5f67e46"     # pending in _WithScopeQueue's queue
 
@@ -38,7 +38,7 @@ def _d():
 
 def test_the_receipt_names_the_beings_own_read_and_never_the_daemon_tool():
     d = _d()
-    env = d(BeingIntent("request_scope", {"path": "/srv/elsewhere/x", "reason": "to read a peer's note"}),
+    env = d(BeingIntent("request_scope", {"path": _ELSEWHERE, "reason": "to read a peer's note"}),
             GatewayVerdict("allow", granted=()))
     assert env.ok and env.result["request_id"] == PENDING, env
     nxt = env.result["next"]
@@ -49,7 +49,7 @@ def test_the_receipt_names_the_beings_own_read_and_never_the_daemon_tool():
 
 def test_the_read_the_receipt_names_answers_with_the_requests_status():
     d = _d()
-    env = d(BeingIntent("request_scope", {"path": "/srv/elsewhere/x", "reason": "to read a peer's note"}),
+    env = d(BeingIntent("request_scope", {"path": _ELSEWHERE, "reason": "to read a peer's note"}),
             GatewayVerdict("allow", granted=()))
     pointer = re.search(r'"path": "(hestia://scope/[^"]+)"', env.result["next"]).group(1)
     got = d(BeingIntent("memory_read", {"path": pointer}), GatewayVerdict("allow", granted=()))
