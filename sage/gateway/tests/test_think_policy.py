@@ -20,6 +20,53 @@ def test_think_policy_is_per_size_not_per_caller():
     assert load_capabilities("gemma3:12b").resolve_think("gemma3:12b") is False
 
 
+def test_a_model_no_config_declares_thinks_when_the_server_says_it_can():
+    """gemma4 has no config of its own, so default.json said thinking_supported=False and the
+    gemma4 beings never thought. A declared think_default still wins (qwen3.5's small sizes)."""
+    import sage.irp.plugins.ollama_irp as oi
+    keep = oi.ollama_can_think
+    asked = []
+
+    def server(model, host="h", timeout=5):
+        asked.append(model)
+        return {"gemma4:e4b": True, "llama3.1:8b": False}.get(model)
+    oi.ollama_can_think = server
+    try:
+        assert oi.resolve_think("gemma4:e4b") is True and is_reasoning_model("gemma4:e4b") is True
+        assert oi.resolve_think("llama3.1:8b") is False
+        assert oi.resolve_think("no-such-model:1b") is False          # the server can't say: config decides
+        asked.clear()
+        assert oi.resolve_think("qwen3.5:0.8b") is False and oi.resolve_think("qwen3.8-distill:4b") is True
+        assert asked == []                                             # declared: the server isn't asked
+    finally:
+        oi.ollama_can_think = keep
+
+
+def test_the_capability_probe_reads_the_list_and_says_none_when_it_cannot():
+    import json as _json
+    import sage.irp.plugins.ollama_irp as oi
+    keep = oi.urllib.request.urlopen
+
+    class Resp:
+        def __init__(self, body): self.body = body
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return _json.dumps(self.body).encode()
+    try:
+        oi.urllib.request.urlopen = lambda req, timeout=5: Resp({"capabilities": ["completion", "thinking"]})
+        assert oi.ollama_can_think("m") is True
+        oi.urllib.request.urlopen = lambda req, timeout=5: Resp({"capabilities": ["completion", "tools"]})
+        assert oi.ollama_can_think("m") is False
+        oi.urllib.request.urlopen = lambda req, timeout=5: Resp({"modelfile": "x"})
+        assert oi.ollama_can_think("m") is None
+        def down(req, timeout=5):
+            raise OSError("refused")
+        oi.urllib.request.urlopen = down
+        assert oi.ollama_can_think("m") is None
+    finally:
+        oi.urllib.request.urlopen = keep
+
+
 def test_think_budget_declared_for_reasoning_models():
     c = load_capabilities("qwen3.8-distill:2b")
     assert c.resolve_num_predict("qwen3.8-distill:2b", True, 3000) == 6000

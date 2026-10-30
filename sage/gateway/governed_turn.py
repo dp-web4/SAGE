@@ -98,28 +98,18 @@ def review_task(view: dict, diff: str) -> str:
 
 
 def is_reasoning_model(model: str) -> bool:
-    """Models for which `think` is turned ON. The name overclaims: it says "reasoning
-    model" but what it decides is a config default (`think_default` in the model family's
-    JSON), not a measured need.
-
-    The switch is the request's `think` field (irp/plugins/ollama_irp.py); a `/no_think`
-    prompt suffix never was one and is no longer sent (retired fleet-wide 2026-09-12 —
-    no fleet template parses it out of the prompt, so it arrived as literal text).
-
-    The measurement behind the default is SPROUT'S, 2026-09-05: under `/no_think` its first
-    two heartbeats narrated a summary with steps=0 and never called a tool. That is real for
-    that body. It is NOT true of Legion's qwen38-heretic:q3km-vl — measured 2026-09-15, three
-    runs, beat-shaped prompt with 19 tools declared: tool calls survive `think=False` every
-    time. legion-being said so first, from reading this file.
-
-    Thinking stays ON for heretic anyway, for a different reason: under the beat's own ask
-    ("do one thing now"), `think=False` goes straight to a tool call in ~26 tokens and
-    describes nothing, while `think=True` both acts and describes. So the behaviour this
-    function produces is right for that body and the justification above it was wrong.
-    Do not cite one machine's measurement as a property of another's model."""
+    """Whether this model's turn runs with `think` on, by policy (ollama_irp.resolve_think): a
+    config's declared think_default, else the server's capability list, else thinking_supported.
+    dp 2026-10-30: think whenever that's an option. The name is historical: it began as "models
+    that only emit structured tool calls with think on" (empero Qwen3.8 distills, R1-style;
+    Sprout 2026-09-05, think off narrated a summary with steps=0). The switch is the request's
+    `think` field; a `/no_think` prompt suffix never was one and is no longer sent.
+    The probe uses ollama_irp's default host, the same server governed_turn's OllamaIRP chats with.
+    Legion (carrier): tool calls survive think=False on qwen38-heretic:q3km-vl (measured 2026-09-15,
+    legion-being's own finding); think stays on there because think=True both acts and describes."""
     try:
-        from sage.irp.adapters.model_capabilities import load_capabilities
-        return load_capabilities(model).resolve_think(model)
+        from sage.irp.plugins.ollama_irp import resolve_think
+        return resolve_think(model)
     except Exception:
         return any(k in model.lower() for k in ("distill", "qwen3.8", "heretic", "r1"))
 

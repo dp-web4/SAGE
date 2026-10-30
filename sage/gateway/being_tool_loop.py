@@ -932,6 +932,56 @@ def _prune_spills(d: str, pinned: Iterable[str] = ()) -> None:
         pass
 
 
+#: Marks the readable copy after a spilled JSON result. The raw JSON stays first and whole, so `raw_decode` from the
+#: first '{' reads exactly what it read before; this section is only ever after it.
+SPILL_DECODED_MARK = "── the same result's text fields, decoded line by line (read them with start_line/end_line) ──"
+
+
+def _decoded_text_fields(body: str) -> str:
+    """A spilled JSON result's multi-line string fields (a run's stdout/stderr, ...) written out as real lines, after
+    the raw JSON. Measured on legion-being 2026-10-30: a run result is ONE physical line, its stdout an escaped string,
+    so memory_read's line ranges could not reach inside it; the being wrote 7 raw_decode parsers in two beats and three
+    skills for the same procedure (reading-elided-tool-results, elided-result-recovery, read-elided-tool-result).
+    '' for a body that is not a JSON object or has no multi-line text field: it is spilled exactly as before."""
+    s = body.lstrip()
+    if not s.startswith("{"):
+        return ""
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(s)
+    except ValueError:
+        return ""
+    if not isinstance(obj, dict):
+        return ""
+    # Each heading counts its lines, so a field whose text holds a line like "== stderr ==" still reads unambiguously,
+    # and a ranged read knows how far to go (nomad's #600 review).
+    parts = [f"== {k} ({len(v.rstrip(chr(10)).splitlines())} lines) ==\n{v.rstrip(chr(10))}\n"
+             for k, v in obj.items() if isinstance(v, str) and "\n" in v]
+    if not parts:
+        return ""
+    head = ", ".join(f"{k}={obj[k]!r}" for k in obj if not isinstance(obj[k], (str, list, dict)) or
+                     (isinstance(obj[k], str) and "\n" not in obj[k] and len(obj[k]) <= 120))
+    return "\n\n" + SPILL_DECODED_MARK + "\n" + (head + "\n" if head else "") + "\n".join(parts)
+
+
+def _decoded_where(body: str) -> str:
+    """What a spill marker adds so the readable copy is FOUND, not only present (nomad's #600 review): the line each
+    decoded field starts on in the spill file. A ranged read of the first lines shows only the header and the one-line
+    JSON, which is what led legion-being to write parsers. '' when the spill has no decoded section. The lines are
+    exact: _spill writes a two-line header, then the body, then the section."""
+    tail = _decoded_text_fields(body)
+    if not tail:
+        return ""
+    before = 2 + body.count("\n")               # header line + blank line + the body's own lines (1-based, last line)
+    at, said = {}, []
+    for n, line in enumerate(tail.split("\n")):
+        m = re.match(r"^== (\S+) \(\d+ lines\) ==$", line)
+        if m and m.group(1) not in at:
+            at[m.group(1)] = before + n + 2   # +1: the heading is line before+n, the field's first line the next
+    for k, ln in at.items():
+        said.append(f"{k} from line {ln}")
+    return " Its " + ", ".join(said) + " are written out as plain lines after the raw JSON: read those lines."
+
+
 def _spill(root: Optional[str], body: str, step: int,
            pinned: Optional[set] = None) -> Optional[str]:
     """Save one elided tool-result body under the being's home. Returns the bare path to
@@ -964,6 +1014,7 @@ def _spill(root: Optional[str], body: str, step: int,
             fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
                      f"result the harness elided from your window, {len(body)} characters]\n\n")
             fh.write(body)
+            fh.write(_decoded_text_fields(body))
         name_rel = f"{COMPACT_SPILL_DIR}/{name}"
         if pinned is not None:
             pinned.add(name_rel)
@@ -1135,6 +1186,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         saved = _spill(spill_root, body, i, pinned)
         where = (f"The WHOLE result is saved as {saved} and outlives this beat — "
                  f"memory_read a narrow range of it (start_line and end_line) when you need the middle."
+                 + _decoded_where(body)
                  if saved else
                  "If you need part of it, read a NARROW range of the source rather than the "
                  "whole file again — a full re-read costs more room than this elision freed.")
@@ -1184,7 +1236,8 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
             ptr = (f"[result {_COLLAPSED_SIGIL} to leave room for your answer. It began: "
                    f"{first!r}" + (f" and ended: {last!r}" if last else "")
                    + f". The WHOLE result is saved as {m.group(1)} -- memory_read a narrow "
-                     f"range of it (start_line and end_line) if you need it.]")
+                     f"range of it (start_line and end_line) if you need it; a JSON result's text fields "
+                     f"are written out as plain lines after its raw JSON.]")
             if len(ptr) >= len(body):
                 continue
             out[i]["content"] = ptr
@@ -1234,7 +1287,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
             h = keep // 2
             elided_n = len(body) - keep
             saved = _spill(spill_root, body, i, pinned)
-            where = (f"the whole thing is saved as {saved}"
+            where = (f"the whole thing is saved as {saved}" + _decoded_where(body)
                      if saved else "read it again in a smaller range if you need the middle")
             out[i]["content"] = (body[:h] +
                                  f"\n[… {elided_n} {_ELIDED_SIGIL} of your NEWEST result to leave "

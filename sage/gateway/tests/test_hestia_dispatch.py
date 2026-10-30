@@ -164,6 +164,11 @@ def _mb_calls(name):
     return [a for n, a in FakeMcp.calls if n == name]
 
 
+# Paths a request_scope test files: they must EXIST, since a missing path is answered
+# 'not_there' and never filed (dp, 2026-10-30).
+_EXISTING = tempfile.mkdtemp(prefix="rs-notes-")
+_ELSEWHERE = tempfile.mkdtemp(prefix="rs-elsewhere-")
+
 def _disp(**kw):
     FakeMcp.calls = []
     root = tempfile.mkdtemp(prefix="hd-")
@@ -570,16 +575,13 @@ def test_membot_iserror_on_search_is_an_error_not_a_recall():
 
 
 def test_request_scope_carries_plugin_path_reason_and_live_session():
-    d, root = _mdisp()
-    # a path that EXISTS: request_scope refuses a phantom before it files one (see
-    # test_scope_on_a_path_that_does_not_exist_is_refused_before_it_is_filed)
-    notes = os.path.join(root, "notes"); os.makedirs(notes, exist_ok=True)
-    env = d(BeingIntent("request_scope", {"path": notes, "reason": "to read my notes"}), _ALLOW)
+    d, _ = _mdisp()
+    env = d(BeingIntent("request_scope", {"path": _EXISTING, "reason": "to read my notes"}), _ALLOW)
     assert env.ok and env.witness_id == "rs-hash", env
     assert env.result["request_id"] == "scope-1" and env.result["status"] == "pending"
-    assert env.result["path"] == notes and "mode" not in env.result
+    assert env.result["path"] == _EXISTING and "mode" not in env.result
     (sent,) = [a for n, a in FakeMcp.calls if n == "hestia_request_scope"]
-    assert sent["plugin_id"] == "sprout-being" and sent["path"] == notes
+    assert sent["plugin_id"] == "sprout-being" and sent["path"] == _EXISTING
     assert sent["session_id"] == "sid-1"                # the live session from hestia_connect
     assert sent["reason"] == "[sprout-being] to read my notes"
     assert set(sent) == {"plugin_id", "path", "reason", "session_id"}  # no mode, no permits_read
@@ -589,7 +591,7 @@ def test_request_scope_refuses_relative_path_and_empty_reason_before_any_round_t
     d, _ = _mdisp()
     env = d(BeingIntent("request_scope", {"path": "notes", "reason": "why"}), _ALLOW)
     assert not env.ok and "absolute" in env.error, env
-    env = d(BeingIntent("request_scope", {"path": "/home/dp/notes", "reason": "  "}), _ALLOW)
+    env = d(BeingIntent("request_scope", {"path": _EXISTING, "reason": "  "}), _ALLOW)
     assert not env.ok and "reason" in env.error, env
     assert FakeMcp.calls == []   # not even hestia_connect
 
@@ -606,7 +608,7 @@ def test_request_scope_daemon_error_is_keyed():
     _root = tempfile.mkdtemp(prefix="hd-")
     d = HestiaF1aDispatcher("sprout-being", _root,
                             mcp_factory=lambda ep, pid: Refuses(ep, pid))
-    env = d(BeingIntent("request_scope", {"path": _root, "reason": "y"}), _ALLOW)
+    env = d(BeingIntent("request_scope", {"path": _EXISTING, "reason": "y"}), _ALLOW)
     assert not env.ok and env.error.startswith("hestia.scope_request_unknown_member"), env
 
 
@@ -694,7 +696,7 @@ def test_request_scope_inside_existing_reach_is_answered_locally_and_files_nothi
     assert env.ok and env.result["status"] == "already_granted" and env.result["within"]
     assert not [n for n, _ in FakeMcp.calls if n == "hestia_request_scope"]
     # outside reach: filed as before
-    env = d(BeingIntent("request_scope", {"path": "/tmp/hd-elsewhere", "reason": "to read a peer's note"}),
+    env = d(BeingIntent("request_scope", {"path": _ELSEWHERE, "reason": "to read a peer's note"}),
             GatewayVerdict("allow", granted=(root,), granted_reach=((root, True),)))
     assert env.ok and env.result["request_id"] == "scope-1"
 
@@ -2224,12 +2226,18 @@ def test_scope_on_a_path_that_does_not_exist_is_refused_before_it_is_filed(tmp_p
     env = d(BeingIntent("request_scope", {"path": ghost, "reason": "because"}),
             GatewayVerdict("allow", granted=(root,)))
 
-    assert env.ok is False, "a phantom path must not become a pending operator decision"
-    assert "does not exist" in (env.error or ""), env.error
-    assert str(tmp_path) in (env.error or ""), \
-        f"the refusal must name the deepest part that DOES exist: {env.error!r}"
+    # CARRIER, after main's #601: one check, main's "not_there" answer (ok, nothing filed), carrying the carrier's
+    # deepest-existing-ancestor hint; create: true still files a real ask for a new path.
+    assert env.ok and env.result["status"] == "not_there", env
+    assert "does not exist" in env.result["next"], env.result
+    assert str(tmp_path) in env.result["next"], \
+        f"the answer must name the deepest part that DOES exist: {env.result['next']!r}"
     assert not [n for n, _ in FakeMcp.calls if n == "hestia_request_scope"], \
         "nothing may be filed for a path that is not there"
+    env_c = d(BeingIntent("request_scope", {"path": ghost, "reason": "to create it", "create": "true"}),
+              GatewayVerdict("allow", granted=(root,)))
+    assert env_c.ok and [n for n, _ in FakeMcp.calls if n == "hestia_request_scope"], "create: true still files"
+    FakeMcp.calls.clear()
 
     # A real path outside reach still files, exactly as before.
     real = tmp_path / "here"
@@ -3455,7 +3463,7 @@ def test_a_scope_id_the_being_names_comes_back_with_its_status_in_the_same_recei
     """sprout-being, 2026-10-20..23: 'scope-ef204d003703 pending since 10-19', in 194 of its acts over three
     days (reasons, asks, notes). It expired 10-17; no receipt ever said so."""
     d, _ = _qdisp()
-    env = d(BeingIntent("request_scope", {"path": _elsewhere(), "reason":
+    env = d(BeingIntent("request_scope", {"path": _ELSEWHERE, "reason":
             "scope-ef204d003703 has been pending since 10-19; also scope-aaaaaaaaaaaa and scope-123456789abc"}), _ALLOW)
     assert env.ok and env.result["request_id"] == "scope-1"
     facts = env.result["scope_requests_you_named"]
@@ -3487,7 +3495,7 @@ def test_a_scope_id_named_in_say_gets_its_status_on_the_receipt_not_in_the_turn(
 
 def test_naming_no_scope_id_reads_nothing_and_adds_nothing():
     d, _ = _qdisp()
-    env = d(BeingIntent("request_scope", {"path": _elsewhere(), "reason": "to read a peer's note"}), _ALLOW)
+    env = d(BeingIntent("request_scope", {"path": _ELSEWHERE, "reason": "to read a peer's note"}), _ALLOW)
     assert env.ok and "scope_requests_you_named" not in env.result
     assert _mb_calls("hestia_scope_status") == []
 
@@ -3495,7 +3503,7 @@ def test_naming_no_scope_id_reads_nothing_and_adds_nothing():
 def test_an_unreadable_scope_queue_is_said_never_read_as_no_such_request():
     d, _ = _qdisp()
     FakeMcp.fail = {"hestia_scope_status": "down"}
-    env = d(BeingIntent("request_scope", {"path": _elsewhere(), "reason": "scope-ef204d003703 again"}), _ALLOW)
+    env = d(BeingIntent("request_scope", {"path": _ELSEWHERE, "reason": "scope-ef204d003703 again"}), _ALLOW)
     (fact,) = env.result["scope_requests_you_named"]
     assert "could not read your scope queue" in fact and "no such request" not in fact, fact
     FakeMcp.fail = {}
@@ -3563,3 +3571,19 @@ def test_a_say_that_wakes_nobody_says_why():
     FakeMcp.fail = {}
     assert "did not go out" in failed.result.get("not_woken", "") and "woke" not in failed.result, \
         failed.result
+
+
+def test_request_scope_for_a_path_that_does_not_exist_is_not_there_and_files_nothing():
+    """dp, 2026-10-30: "a nonexistent path should never escalate to a scope request, it should be
+    flatly denied as not there". The 10-30 shape: a tripled workspace root."""
+    d, root = _disp()
+    FakeMcp.calls.clear()
+    missing = os.path.join(root, "ai-workspace", "ai-workspace", "shared-context", "forum")
+    env = d(BeingIntent("request_scope", {"path": missing, "reason": "to read the forum"}), _ALLOW)
+    assert env.ok and env.result["status"] == "not_there", env
+    assert "does not exist" in env.result["next"] and "no request was filed" in env.result["next"]
+    assert not [n for n, _ in FakeMcp.calls if n == "hestia_request_scope"], "nothing reaches the daemon"
+    # create: true keeps a new path a real ask, and the daemon is told so
+    env = d(BeingIntent("request_scope", {"path": missing, "reason": "to make a new notes dir", "create": "true"}), _ALLOW)
+    (sent,) = [a for n, a in FakeMcp.calls if n == "hestia_request_scope"]
+    assert sent["path"] == missing and sent["create"] is True
