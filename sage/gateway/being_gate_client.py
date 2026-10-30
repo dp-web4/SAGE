@@ -3064,6 +3064,7 @@ _TOOL_SCHEMAS = {
                 "evidence": "optional: what showed it (a seq, a file)",
                 "id": "optional: s1, s2... to change or reopen one",
                 "reopen": "optional: 'true' with id removes it",
+                "distinct": "optional: 'true' when it reads like one you have but is a different question",
                 "why": "optional: why you changed it"},
                []),
     # SKILLS (dp, 2026-10-27: "a 'skills' structure, and membot-type index for them ... model it on your

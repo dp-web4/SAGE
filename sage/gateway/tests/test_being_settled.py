@@ -74,7 +74,7 @@ def test_a_refused_settle_says_why_and_changes_nothing(tmp_path, args, says):
 
 def test_a_full_list_refuses_a_new_question_but_still_changes_an_old_one(tmp_path):
     for i in range(st.MAX_ENTRIES):
-        assert _s(tmp_path, question=f"question {i}", answer="a")[0]
+        assert _s(tmp_path, question=f"question {i}", answer="a", distinct="true")[0]
     ok, msg, _ = _s(tmp_path, question="one more", answer="a")
     assert not ok and "the most this list holds" in msg and "reopen" in msg
     assert _s(tmp_path, question="question 3", answer="b")[0]
@@ -92,7 +92,7 @@ def test_a_change_that_cannot_be_logged_is_undone(tmp_path):
 def test_the_beat_shows_them_newest_first_within_its_budget(tmp_path):
     assert st.render(tmp_path) == ""
     for i in range(st.MAX_ENTRIES):
-        _s(tmp_path, question=f"question number {i}", answer="an answer " + "x" * 200)
+        _s(tmp_path, question=f"question number {i}", answer="an answer " + "x" * 200, distinct="true")
     shown = st.render(tmp_path)
     assert len(shown) <= st.RENDER_CHARS + 200
     assert shown.index("question number 29") < shown.index("question number 28")
@@ -181,39 +181,80 @@ def test_a_case_variant_of_a_verb_owned_file_is_refused_too():
         assert not env.ok and "changed only with" in env.error, (name, env)
 
 
-def test_a_new_question_close_to_one_already_settled_is_kept_and_named(tmp_path):
+def test_a_new_question_close_to_one_already_settled_is_refused_naming_it(tmp_path):
     # sprout-being 10-28: "Do I need to install libv4l to use v4l2-ctl?" (s6), later "Does v4l2-ctl need libv4l
-    # installed on the seat?" (s9): one conclusion settled twice, both shown every beat
+    # installed on the seat?" (s9). #593: naming the close entry in the receipt did not stop the second one
     _s(tmp_path, question="Do I need to install the test gizmo driver to use gizmoctl?", answer="no")
     _s(tmp_path, question="what colour is the test sky?", answer="blue")
     ok, msg, changed = _s(tmp_path, question="Does gizmoctl need the test gizmo driver installed?", answer="no, it is there")
-    assert ok and changed and "s3" in msg
-    assert "reads close to s1" in msg and "settle id=s1" in msg and "reopen s3" in msg
-    assert len(st.read(tmp_path)[0]) == 3, "named, never merged: the being decides whether they are one"
+    assert not ok and not changed
+    assert "reads like s1" in msg and "settle id=s1" in msg and "distinct='true'" in msg and "Nothing was changed" in msg
+    assert len(st.read(tmp_path)[0]) == 2
     ok, msg, _ = _s(tmp_path, question="how loud is the test fan?", answer="quiet")
-    assert ok and "reads close" not in msg
+    assert ok
 
 
-def test_two_questions_about_one_device_are_not_named_close(tmp_path):
+def test_three_wordings_of_one_question_with_opposite_answers_end_as_one_entry(tmp_path):
+    # #593's test, from cbp-being: one question re-worded three times, answered yes, no, yes
+    _s(tmp_path, question="is the test daemon running?", answer="yes")
+    for q, a in (("is the test daemon running right now?", "no"), ("the test daemon: is it running?", "yes")):
+        ok, msg, changed = _s(tmp_path, question=q, answer=a)
+        assert not ok and not changed and "reads like s1" in msg, (q, msg)
+    entries = st.read(tmp_path)[0]
+    assert [e["id"] for e in entries] == ["s1"]
+    ok, _, changed = _s(tmp_path, id="s1", answer="no")
+    assert ok and changed and st.read(tmp_path)[0][0]["answer"] == "no"
+
+
+def test_distinct_adds_a_close_question_and_the_log_records_it(tmp_path):
+    # cbp-being s38 -> s32 (where the binary is / whether it runs), sprout-being s18 -> s9: distinct, over the bar
+    _s(tmp_path, question="is the test daemon binary running?", answer="yes")
+    ok, msg, _ = _s(tmp_path, question="where is the test daemon binary?", answer="in the test bin dir")
+    assert not ok and "reads like s1" in msg
+    ok, msg, changed = _s(tmp_path, question="where is the test daemon binary?", answer="in the test bin dir",
+                          distinct="true")
+    assert ok and changed and "different question from s1" in msg
+    assert [e["id"] for e in st.read(tmp_path)[0]] == ["s1", "s2"]
+    last = _log(tmp_path)[-1]
+    assert last["op"] == "settle" and last["id"] == "s2" and last["distinct_from"] == "s1"
+    _s(tmp_path, question="how loud is the test fan?", answer="quiet", distinct="true")
+    assert "distinct_from" not in _log(tmp_path)[-1], "recorded only when it overrode a refusal"
+
+
+def test_entries_naming_one_device_are_shown_together_and_none_is_refused(tmp_path):
+    # sprout's test for #593: one failure, different causes, asked in different words; none is refused, the
+    # beat shows them adjacent, and nothing labels them
+    _s(tmp_path, question="why does /dev/video0 return no frames?", answer="the driver is missing")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    ok, msg, _ = _s(tmp_path, question="what blocks capture from /dev/video0?", answer="the cortex holds it")
+    assert ok, msg
+    _s(tmp_path, question="how loud is the test fan?", answer="quiet")
+    assert len(st.read(tmp_path)[0]) == 4
+    block = st.render(tmp_path)
+    order = [ln.split("]")[0].split("[")[1] for ln in block.splitlines()[1:]]
+    assert order == ["s4", "s3", "s1", "s2"], order
+    assert "disagree" not in block
+
+
+def test_two_questions_about_one_device_are_not_refused_as_close(tmp_path):
     # cbp's and mcnugget's reviews of #584: a shared device or file name scored 1.0, so on a camera being
     # nearly every new settle would have been told to keep one
     _s(tmp_path, question="what resolutions does /dev/video0 support?", answer="640x480")
     ok, msg, _ = _s(tmp_path, question="is /dev/video0 owned by the video group?", answer="yes")
-    assert ok and "reads close" not in msg
+    assert ok, msg
     _s(tmp_path, question="why did capture_frame.py stop at line 16?", answer="no scratch dir")
     ok, msg, _ = _s(tmp_path, question="where does capture_frame.py write its jpg?", answer="scratch/")
-    assert ok and "reads close" not in msg
+    assert ok, msg
 
 
-def test_the_named_way_to_keep_one_works_in_its_order_even_with_the_newer_wording(tmp_path):
-    # cbp's review of #584: settling s1 first with s3's wording as question was refused as a duplicate of s3
+def test_the_named_way_to_keep_one_works_with_the_newer_wording(tmp_path):
+    # cbp's review of #584: settling s1 with the newer wording as its question must not be refused as close
     _s(tmp_path, question="Do I need to install the test gizmo driver to use gizmoctl?", answer="no")
     _s(tmp_path, question="what colour is the test sky?", answer="blue")
     newer = "Does gizmoctl need the test gizmo driver installed?"
     ok, msg, _ = _s(tmp_path, question=newer, answer="no, it is there")
-    assert "reopen s3, then settle id=s1" in msg
-    ok, _, changed = _s(tmp_path, id="s3", reopen="true")
-    assert ok and changed
+    assert not ok and "settle id=s1" in msg
     ok, msg, changed = _s(tmp_path, id="s1", question=newer, answer="no, it is there")
     assert ok and changed, msg
     assert sorted(e["id"] for e in st.read(tmp_path)[0]) == ["s1", "s2"]
+    assert st.read(tmp_path)[0][-1]["question"] == newer

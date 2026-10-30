@@ -173,25 +173,41 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                                                 "why": why}, now,
                        f"{new['id']} now reads: {question[:120]!r} -> {answer[:200]!r}. The earlier answer is "
                        "kept in settled_log.jsonl. It is shown to you at the start of every beat.")
+    distinct = _truthy(a.get("distinct", ""))
+    close = _close_to(entries, question)
+    if close is not None and not distinct:
+        # #593: a note naming the close entry fired on 20 of cbp-being's 30 settles and the entry was added every
+        # time, so the list held one question re-worded with opposite answers. One question, one live answer.
+        return False, (f"this reads like {close['id']} ({close['question'][:120]!r} -> "
+                       f"{_flat(close.get('answer', ''))[:120]!r}). Nothing was changed. If it is the same "
+                       f"question, settle id={close['id']} with your newest answer (and this question, if you "
+                       "prefer its wording). If it is a different question, settle it again with distinct='true'.")
     if len(entries) >= MAX_ENTRIES:
         return False, (f"you have {len(entries)} settled entries, the most this list holds, so a new one was "
                        "not added. Nothing was changed. Reopen one that no longer needs holding (id and "
                        "reopen='true'), or fold this into one you have by settling that id with a new answer.")
-    close = _close_to(entries, question)
+    log = {"op": "settle", "id": new["id"], "to": new, "why": why}
+    if close is not None:
+        log["distinct_from"] = close["id"]
     entries = entries + [new]
-    ok, msg = _commit(instance, entries, nxt + 1, {"op": "settle", "id": new["id"], "to": new, "why": why}, now,
+    ok, msg = _commit(instance, entries, nxt + 1, log, now,
                       f"settled {new['id']}: {question[:120]!r} -> {answer[:200]!r}. It is shown to you at the "
                       "start of every beat. To change it later, settle the same question again or give its id.")
-    if ok and close:
-        msg += (f" It reads close to {close['id']} ({close['question'][:120]!r}). If they are the same question, "
-                f"keep one: reopen {new['id']}, then settle id={close['id']} with your newest answer.")
+    if ok and close is not None:
+        msg += f" You said it is a different question from {close['id']}; that is recorded in {SETTLED_LOG}."
     return ok, msg
 
 
-#: How close a new question must read to an existing one to be named in the receipt (relevance's idf overlap).
-#: Measured on sprout-being's first 9 entries, 2026-10-27..28: its two same-conclusion pairs (s2/s4, s6/s9)
-#: scored 0.58 each; every distinct pair scored 0.30 or less. Words only: a shared device or file name makes two
-#: questions one subject, not one question.
+#: How close a new question must read to an existing one for the settle to be refused (relevance's idf overlap,
+#: the question alone). Words only: a shared device or file name makes two questions one subject, not one
+#: question. Replayed in settle order on both full lists, 2026-10-29 (#593), question only:
+#: - cbp-being (30): the note this replaced fired on 20 settles; one question re-worded with opposite answers
+#:   scored 0.59-1.00 (daemon running yes/no: 1.00). Matching question+answer put most of those under 0.40,
+#:   because different answers share few words, so the answer is not compared. One distinct pair over the bar
+#:   (where the binary is / whether it runs, 0.60).
+#: - sprout-being (30): 6 refused, 2 restatements (0.58), 3 of one failure given different causes (0.43-0.53),
+#:   1 distinct (0.65). Its first 9 entries had every distinct pair at 0.30 or less; that did not hold at 30.
+#: A distinct question over the bar goes through with distinct='true', which the log records.
 CLOSE_AT = 0.4
 
 
@@ -213,6 +229,35 @@ def _close_to(entries: List[dict], question: str) -> Optional[dict]:
     except Exception:
         return None
     return entries[hits[0][1]] if hits else None
+
+
+def _named(e: dict) -> set:
+    """The device nodes, scope ids and file names an entry's question and answer mention."""
+    try:
+        from sage.gateway.relevance import _IDS
+    except Exception:
+        return set()
+    return {m.lower() for m in _IDS.findall(f"{e.get('question', '')} {e.get('answer', '')}")}
+
+
+def _shown_order(entries: List[dict]) -> List[dict]:
+    """Newest first, each entry followed by the older ones that name a device or file it names, so answers
+    about one thing are read together (sprout's review of #593: one failure given different causes in
+    different questions). Order only: nothing is labelled as agreeing or disagreeing."""
+    newest, out, seen = list(reversed(entries)), [], set()
+    for i, e in enumerate(newest):
+        if id(e) in seen:
+            continue
+        out.append(e)
+        seen.add(id(e))
+        names = _named(e)
+        if not names:
+            continue
+        for o in newest[i + 1:]:
+            if id(o) not in seen and names & _named(o):
+                out.append(o)
+                seen.add(id(o))
+    return out
 
 
 def _commit(instance, entries: List[dict], nxt: int, log: dict, now, ok_msg: str) -> Tuple[bool, str]:
@@ -269,9 +314,10 @@ def render(instance) -> str:
     if not entries:
         return ""
     head = ("## What you have settled (your own conclusions, newest first, each with the day you settled "
-            "it. Settle a question again to change its answer; reopen one with its id and reopen='true')")
+            "it; older ones naming the same device or file follow it. Settle a question again to change its "
+            "answer; reopen one with its id and reopen='true')")
     foot = "- (entries shown without an answer: settle with no arguments shows them whole)"
-    newest = list(reversed(entries))
+    newest = _shown_order(entries)
     # room for the newest whole, then an equal share for each of the rest
     rest = RENDER_CHARS - len(head) - len(foot) - 2 - (len(_line(newest[0], RENDER_ENTRY_CHARS)) + 3)
     short_cap = rest // max(len(newest) - 1, 1) - 3
