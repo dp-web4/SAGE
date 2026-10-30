@@ -4050,6 +4050,22 @@ class HestiaF1aDispatcher:
                 "next": (f"your grant on {exact_above} is EXACT: it reaches that path and nothing beneath it. "
                          f"Only the operator can make it recursive (path:{exact_above}/**). No request was filed; "
                          f"your seat has been told. Do not retry this write in this beat.")})
+        # A PATH THAT DOES NOT EXIST IS NOT THERE, AND NOTHING IS FILED (dp, 2026-10-30: "a
+        # nonexistent path should never escalate to a scope request, it should be flatly denied as
+        # not there"). Measured that day: five of cbp-being's seven requests named paths that do
+        # not exist (a tripled workspace root, a system directory), and each reached the operator.
+        # The daemon applies the same rule (hestia #1411); answering here as well means it holds
+        # before any daemon is rebuilt, and says it in the being's own receipt. `lexists`: a
+        # dangling link is an entry, so it still files. `create: true` keeps a new path a real ask.
+        create = str(intent.args.get("create", "")).strip().lower() in ("true", "1", "yes")
+        if not create and not _os.path.lexists(_os.path.expanduser(path)):
+            hint = same_path_in_reach(path, _granted_reach_of(getattr(self, "_verdict", None)))
+            return ResultEnvelope(ok=True, result={
+                "status": "not_there", "path": path,
+                "next": (f"{path} does not exist, so there is nothing to grant and no request was filed. "
+                         + (f"The path you hold that matches it is {hint[0][0]}; read that. " if hint else
+                            "Check the spelling against the roots you hold. ")
+                         + "If you mean to CREATE it, ask again with create: true.")})
         # A copy at the same path under a grant it holds (cbp-being, 2026-10-22..23: at least
         # six asks for the editable hestia tree's closure file while its governance grant held
         # a copy it had read). The ask is STILL FILED: a copy is a different file that may
@@ -4058,6 +4074,8 @@ class HestiaF1aDispatcher:
         copies = same_path_in_reach(path, _granted_reach_of(getattr(self, "_verdict", None)))
         args: Dict[str, Any] = {"plugin_id": self.plugin_id, "path": path,
                                 "reason": f"[{self.plugin_id}] {reason}"}
+        if create:
+            args["create"] = True     # the daemon's existence-first rule reads the same flag
         out = self._call("hestia_request_scope", args)
         err = _hestia_error(out)
         if err:
