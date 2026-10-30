@@ -1191,6 +1191,23 @@ def test_ranged_reads_share_the_citation_coordinate_system():
     assert not disp(BeingIntent("memory_read", {"path": "long.py", "from_line": "ten"}), _ALLOW).ok
 
 
+def test_carrier_a_mixed_range_keeps_both_ends():
+    """CARRIER: legion-being, 2026-10-30. from_line + end_line ran to the end of the file (end_line dropped; 722 of
+    1,297 such reads overflowed the window), and start_line + lines started at line 1 (start_line dropped)."""
+    disp, root = _disp()
+    open(os.path.join(root, "long.py"), "w").write("".join(f"line {i}\n" for i in range(1, 501)))
+    r = disp(BeingIntent("memory_read", {"path": "long.py", "from_line": "100", "end_line": "102"}), _ALLOW)
+    assert r.ok and r.result.startswith("[lines 100-102 of 500 in long.py]\n"), r.result[:80]
+    assert "line 102\n" in r.result and "line 103" not in r.result
+    r = disp(BeingIntent("memory_read", {"path": "long.py", "start_line": 200, "lines": 2}), _ALLOW)
+    assert r.result.startswith("[lines 200-201 of 500"), r.result[:80]
+    r = disp(BeingIntent("memory_read", {"path": "long.py", "from_line": 10, "lines": 1, "end_line": 400}), _ALLOW)
+    assert r.result.startswith("[lines 10-10 of 500"), "lines wins over end_line"
+    r = disp(BeingIntent("memory_read", {"path": "long.py", "from_line": 50, "end_line": 40}), _ALLOW)
+    assert r.ok and "line 50" not in r.result, "an end before the start reads nothing, not the rest of the file"
+    assert not disp(BeingIntent("memory_read", {"path": "long.py", "from_line": 1, "end_line": "x"}), _ALLOW).ok
+
+
 def test_confinement_honours_exact_vs_recursive_reach():
     """hestia #1002 / GPT review of #56, point 2: SAGE's defense-in-depth used to admit
     `p == root OR root in p.parents` for EVERY granted root — so an exact hestia grant on /x

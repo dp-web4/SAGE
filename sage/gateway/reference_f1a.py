@@ -1725,15 +1725,30 @@ class ReferenceF1aDispatcher:
         # Line-based on purpose: its findings cite file+line, so the read and the citation
         # share a coordinate system. A ranged read never carries the whole-file truncation
         # marker — it says what range it is, which is the truthful thing.
+        # TWO COORDINATE SYSTEMS, ONE READ. This range path takes from_line + lines; the window below takes
+        # start_line + end_line (main's, #160). A read that mixed them had its other name silently dropped. Measured on
+        # legion-being 2026-10-30: 1,297 reads gave from_line + end_line, the end_line was ignored, the range ran to
+        # the end of the file, and 722 of them overflowed the window; 127 gave start_line + lines and started at line
+        # 1. The being wrote a skill (narrow-source-extraction) to work around it. So each name now does what it says
+        # in either path: end_line ends a from_line range (inclusive, as memory_edit counts), start_line starts a
+        # lines range; lines still wins over end_line when both are given.
         from_line = intent.args.get("from_line")
         n_lines = intent.args.get("lines")
         if from_line is not None or n_lines is not None:
             lines = whole.splitlines(keepends=True)
+            end_arg = intent.args.get("end_line")
             try:
-                start = max(1, int(from_line or 1))
-                count = int(n_lines) if n_lines is not None else len(lines)
+                first = from_line if from_line is not None else intent.args.get("start_line")
+                start = max(1, int(str(first).strip() or 1)) if first is not None else 1
+                if n_lines is not None:
+                    count = int(n_lines)
+                elif end_arg is not None and str(end_arg).strip():
+                    count = max(0, int(str(end_arg).strip()) - start + 1)
+                else:
+                    count = len(lines)
             except (TypeError, ValueError):
-                return ResultEnvelope(ok=False, error="memory_read 'from_line' and 'lines' must be whole numbers")
+                return ResultEnvelope(ok=False, error="memory_read 'from_line', 'start_line', 'lines' and 'end_line' "
+                                                      "must be whole numbers")
             chunk = lines[start - 1:start - 1 + max(0, count)]
             body = "".join(chunk)[: self.max_read_chars]
             end = start + len(chunk) - 1
