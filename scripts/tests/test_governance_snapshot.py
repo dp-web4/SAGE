@@ -137,8 +137,31 @@ def test_a_deploy_step_reads_the_deploys_own_clone_at_the_deployed_build_without
     assert _git("-C", private, "rev-parse", "origin/main") == before      # no fetch into it
 
 
-def test_a_source_someone_else_can_write_is_refused(world):
-    os.chmod(world["src"], os.stat(world["src"]).st_mode | stat.S_IWGRP)
+def _group_is_private(path):
+    """The script's rule, asked of Python: nobody but the invoker is in the file's group.
+    It restates the rule, so it proves which branch the script takes, not that the rule is right."""
+    import grp, pwd
+    gid, me = os.stat(path).st_gid, pwd.getpwuid(os.getuid()).pw_name
+    try:
+        members = grp.getgrgid(gid).gr_mem
+    except KeyError:
+        return False
+    return set(members) <= {me} and not [p for p in pwd.getpwall() if p.pw_gid == gid and p.pw_name != me]
+
+
+def test_a_source_anyone_can_write_is_refused(world):
+    os.chmod(world["src"], os.stat(world["src"]).st_mode | stat.S_IWOTH)
     r = _run(world)
     assert r.returncode == 3 and "not owned by" in r.stderr, (r.returncode, r.stderr)
     assert _snapshot(world) is None
+
+
+def test_a_group_writable_source_is_refused_unless_the_group_is_the_invokers_alone(world):
+    # Ubuntu's private group + umask 002 makes every clone g+w; that bit reaches no one else.
+    os.chmod(world["src"], os.stat(world["src"]).st_mode | stat.S_IWGRP)
+    r = _run(world)
+    if shutil.which("getent") and _group_is_private(world["src"]):
+        assert r.returncode == 0 and _snapshot(world) is not None, (r.returncode, r.stderr)
+    else:
+        assert r.returncode == 3 and "not owned by" in r.stderr, (r.returncode, r.stderr)
+        assert _snapshot(world) is None

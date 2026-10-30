@@ -60,8 +60,26 @@ g() {
 }
 
 # Owned by the invoker and writable by no one else (-perm -g+w / -o+w: BSD find has no `/`).
+# GROUP-WRITABLE IN A PRIVATE GROUP IS STILL OWNER-ONLY (pub-claude, 2026-10-23). Ubuntu gives each user a
+# group of their own and a umask of 002, so every clone there is g+w: on pub the hourly snapshot refused its
+# own checkout from the hour #520 landed. A group bit reaches someone else only if the group has someone
+# else in it, so g+w passes when the file's group lists no member but the invoker and is no other account's
+# primary group. Without getent (macOS) that cannot be asked, and g+w is refused as before; a gid with no
+# group entry is refused too. The check is absence-of-evidence: it trusts getent to enumerate every account,
+# which holds on files-backed hosts (pub, cbp, HUB) but not under sssd/LDAP with enumeration off.
+private_group() {
+  command -v getent >/dev/null 2>&1 || return 1
+  pg_gid="$(stat -c %g "$1" 2>/dev/null || stat -f %g "$1" 2>/dev/null)" || return 1
+  pg_me="$(id -un)"
+  pg_entry="$(getent group "$pg_gid")" || return 1
+  pg_members="$(printf '%s\n' "$pg_entry" | cut -d: -f4)"
+  [ -z "$pg_members" ] || [ "$pg_members" = "$pg_me" ] || return 1
+  [ -z "$(getent passwd | awk -F: -v g="$pg_gid" -v me="$pg_me" '$4 == g && $1 != me')" ]
+}
 owner_only() {
-  [ -e "$1" ] && [ -O "$1" ] && [ -z "$(find "$1" -maxdepth 0 \( -perm -g+w -o -perm -o+w \) 2>/dev/null || true)" ]
+  [ -e "$1" ] && [ -O "$1" ] || return 1
+  [ -z "$(find "$1" -maxdepth 0 -perm -o+w 2>/dev/null || true)" ] || return 1
+  [ -z "$(find "$1" -maxdepth 0 -perm -g+w 2>/dev/null || true)" ] || private_group "$1"
 }
 if [ "$PRIVATE" -eq 0 ]; then
   GITDIR="$(g rev-parse --absolute-git-dir 2>/dev/null || true)"
