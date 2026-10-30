@@ -92,6 +92,16 @@ The latest observations include beings that identify themselves and named partic
 
 **Status note:** [LATEST_STATUS](sage/docs/LATEST_STATUS.md) is a dated 2026-09-26 public-source snapshot; it has not been independently refreshed here to certify the current runtime. Individual being observations and private development must not be silently promoted into public-main or fleet claims.
 
+### Public-source delta — 2026-10-28 (not a fleet deployment attestation)
+
+Three merged, test-backed gateway changes extend the **implemented** persistence path:
+
+- [#574](https://github.com/dp-web4/SAGE/pull/574) adds `settle`: a being can record a conclusion as a persistent question/answer visible in later beats. A stored conclusion is **not** a guarantee of correct retrieval, judgment or action.
+- [#584](https://github.com/dp-web4/SAGE/pull/584) suggests similar settled questions at capture time without automatically merging or deleting either record. The heuristic is advisory and can both miss and overflag similarity.
+- [#585](https://github.com/dp-web4/SAGE/pull/585) lets reflection point out a demonstrable failed-then-succeeded tool sequence and offer optional `skill` capture. The being decides whether and what to save; a successful tool receipt is **not** independent proof of a reusable procedure.
+
+These are **merged public-main mechanisms**, not a fleet-wide activation, later-use or cognitive-development result. Runtime availability also has a separate live concern: [#582](https://github.com/dp-web4/SAGE/issues/582) records repeated preflight refusals that silenced one being despite scheduled wakes. Verify per-seat deployment, actual subsequent retrieval/use, and outcome receipts before claiming learning across beats.
+
 ## Core architecture
 
 ### Persistent identity

@@ -80,6 +80,17 @@ def test_a_full_list_refuses_a_new_question_but_still_changes_an_old_one(tmp_pat
     assert _s(tmp_path, question="question 3", answer="b")[0]
 
 
+def test_a_full_list_names_the_entry_a_refused_question_reads_close_to(tmp_path):
+    _s(tmp_path, question="Why can a regular user process not open the widget?", answer="a")
+    for i in range(st.MAX_ENTRIES - 1):
+        assert _s(tmp_path, question=f"filler {i} about lamps", answer="a")[0]
+    ok, msg, _ = _s(tmp_path, question="Why does a regular user process fail to open the widget?", answer="b")
+    assert not ok and "the most this list holds" in msg and "reads close to s1" in msg and "id=s1" in msg
+    ok, msg, _ = _s(tmp_path, question="What colour is the sky at dusk?", answer="b")
+    assert not ok and "reads close to" not in msg
+    assert len(st.read(tmp_path)[0]) == st.MAX_ENTRIES
+
+
 def test_a_change_that_cannot_be_logged_is_undone(tmp_path):
     _s(tmp_path, question="q", answer="a")
     before = (tmp_path / st.SETTLED_FILE).read_bytes()
@@ -217,3 +228,14 @@ def test_the_named_way_to_keep_one_works_in_its_order_even_with_the_newer_wordin
     ok, msg, changed = _s(tmp_path, id="s1", question=newer, answer="no, it is there")
     assert ok and changed, msg
     assert sorted(e["id"] for e in st.read(tmp_path)[0]) == ["s1", "s2"]
+
+
+def test_an_id_for_a_new_question_is_refused_with_the_way_forward(tmp_path):
+    # sprout-being 10-29: a new question settled with an id it chose ("cbp-…", then "s20"), told only "no such entry"
+    _s(tmp_path, question="q one", answer="a")
+    for chosen in ("my-own-id", "s2"):
+        ok, msg, _ = _s(tmp_path, id=chosen, question="a new question", answer="an answer")
+        assert not ok and "no settled entry" in msg and "without id" in msg, msg
+    ok, msg, _ = _s(tmp_path, id="s9", answer="a")             # no question: changing, not creating, so no hint
+    assert not ok and "without id" not in msg
+    assert _s(tmp_path, question="a new question", answer="an answer")[0]

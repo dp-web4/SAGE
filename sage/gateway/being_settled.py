@@ -133,9 +133,15 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         want = want if want.startswith("s") else "s" + want
         target = next((e for e in entries if e["id"] == want), None)
         if target is None:
+            # AN ID NAMES AN ENTRY THAT EXISTS; IT NEVER MAKES ONE. Measured on sprout-being 2026-10-29: it settled
+            # a new question twice with an id of its own choosing ("cbp-scope-escalation-needed", then "s20", the
+            # next free number) and was told only that no such entry existed. A refusal owes the way forward.
+            new_q = bool(a.get("question") and a.get("answer"))
             return False, (f"there is no settled entry {a['id']!r}; "
                            + (f"yours are {', '.join(e['id'] for e in entries)}" if entries else "you have none yet")
-                           + ". Nothing was changed.")
+                           + ". Nothing was changed."
+                           + (" To settle a NEW question, give question and answer without id: ids are given out, not "
+                              "chosen. id is only for changing or reopening an entry you already have." if new_q else ""))
     elif a.get("question"):
         target = next((e for e in entries if _norm(e["question"]) == _norm(a["question"])), None)
 
@@ -173,11 +179,15 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                                                 "why": why}, now,
                        f"{new['id']} now reads: {question[:120]!r} -> {answer[:200]!r}. The earlier answer is "
                        "kept in settled_log.jsonl. It is shown to you at the start of every beat.")
+    close = _close_to(entries, question)
     if len(entries) >= MAX_ENTRIES:
+        # sprout-being, 2026-10-30: four refusals here in its first hour at the cap, and no reopen or fold. Two of
+        # the refused questions read close to one it held; the receipt named neither.
         return False, (f"you have {len(entries)} settled entries, the most this list holds, so a new one was "
                        "not added. Nothing was changed. Reopen one that no longer needs holding (id and "
-                       "reopen='true'), or fold this into one you have by settling that id with a new answer.")
-    close = _close_to(entries, question)
+                       "reopen='true'), or fold this into one you have by settling that id with a new answer."
+                       + (f" This reads close to {close['id']} ({close['question'][:120]!r}): settle "
+                          f"id={close['id']} with your newest answer if they are the same question." if close else ""))
     entries = entries + [new]
     ok, msg = _commit(instance, entries, nxt + 1, {"op": "settle", "id": new["id"], "to": new, "why": why}, now,
                       f"settled {new['id']}: {question[:120]!r} -> {answer[:200]!r}. It is shown to you at the "

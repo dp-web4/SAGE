@@ -40,6 +40,11 @@ class ModelCapabilities:
     ])
     strip_think_tags: bool = False            # Strip <think>...</think> blocks (Qwen 3.5)?
     num_predict: Optional[int] = None         # Family-wide num_predict fallback (thinking budget + response)
+    # Chars per token for the tool loop's step-1 PREFLIGHT estimate (being_tool_loop.PREFLIGHT_CPT,
+    # 2.9, was calibrated on a Qwen-tokenized being and over-counts a denser tokenizer badly: on
+    # llama3.1 it refused every explore for 2.5 days, SAGE #582). Declare it per family from a
+    # MEASURED ratio, set BELOW every measured value so the estimate still errs high. None = 2.9.
+    preflight_chars_per_token: Optional[float] = None
     timeout_seconds: Optional[int] = None     # HTTP wall-clock timeout floor (think+response envelope)
     # Per-size overrides. Requirements differ dramatically by size AND by
     # think/no-think state, so a single family value is wrong. Keyed by the

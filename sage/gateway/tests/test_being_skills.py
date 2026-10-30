@@ -275,6 +275,27 @@ def test_a_filed_request_run_is_not_reported_as_worked():
                           (_I("request_run", path="a.py"), _E(True, "filed"))]) is None
 
 
+def test_a_refused_game_probe_then_a_corrected_one_is_worked_out():
+    """legion-being, 2026-10-28: a probe refused for its shape, then the corrected probe on the same game, was the
+    beat's real discovery, and the notice did not count `game`."""
+    refused = _E(False, "gate.raised: ValueError: game probe 1: LOOK bounds are INCLUSIVE ... at most 16x16")
+    said = sk.worked_out([(_I("game", game="g1", probes='[["LOOK", 40, 0, 63, 24]]'), refused),
+                          (_I("game", game="g1", probes='[["LOOK", 40, 0, 55, 15]]'), _E(True, {"looks": []}))])
+    assert said and "`game g1` failed 1 time and then worked, on try 2" in said
+    assert sk.worked_out([(_I("game", game="g1"), refused), (_I("game", game="g2"), _E(True, {}))]) is None, \
+        "another game is not the same task"
+    assert sk.worked_out([(_I("game", game="g1"), _E(True, {})), (_I("game", game="g1"), _E(True, {}))]) is None
+
+
+def test_naming_the_default_game_and_omitting_it_are_one_target():
+    """mcnugget's #588 review: `game` is optional (default ft09), so a refused call that names the default and a
+    corrected one that omits it are the same task."""
+    for first, second in (({"game": "ft09"}, {}), ({}, {"game": "ft09"}), ({"game": None}, {"game": " ft09 "})):
+        said = sk.worked_out([(_I("game", **first), _E(False, "gate.raised: ValueError: game probe 1: ...")),
+                              (_I("game", **second), _E(True, {}))])
+        assert said and "`game ft09` failed 1 time" in said, (first, second)
+
+
 def test_worked_out_counts_the_last_struggle_and_one_spelling_of_a_path():
     said = sk.worked_out([(_I("run", path="a.py"), _E(True, {"exit": 1})), (_I("run", path="a.py"), _E(True, {"exit": 0})),
                           (_I("run", path="a.py"), _E(True, {"exit": 1})), (_I("run", path="a.py"), _E(True, {"exit": 0}))])

@@ -2765,6 +2765,42 @@ def posture_framing_for(cfg: Optional[dict]) -> Optional[str]:
     return v if v in POSTURE_FRAMINGS else None
 
 
+def service_notes_for(cfg: Optional[dict]) -> bool:
+    """instance.json `service_notes`: whether the beat rewrites the governance daemon's journal tail
+    (`notes/hestia-recent.log`) and its systemd unit (`notes/hestia-unit.txt`) into the being's notes
+    every beat. ON BY DEFAULT (the 09-16 reason still holds for a being that needs them). Only an
+    explicit `false` turns it off, and an off instance has both beat-written files removed, so a stale
+    copy does not keep presenting the same lines.
+
+    WHY AN OFF SWITCH (dp, 2026-10-30: "present the right affordances", not guardrails). On cbp-being
+    the daily share of acts about hestia went from 1-7% (09-21..10-14, a predict-then-run work basin)
+    to 50-93% (10-19..10-30, work ~0%) once the journal tail began arriving every beat on 10-15: its
+    routine state-lock WARNs (`label="mcp:hestia_*"`, `hold_ms`) became an "incident", then an
+    invented "egress lock" it tried for days to release. A line shown every beat, with nothing saying
+    it is routine, is a standing prompt. This tests that by removing it on one instance."""
+    return (cfg or {}).get("service_notes") is not False
+
+
+#: The first line each beat-written service note starts with, so retiring them never removes a file
+#: the being wrote itself under the same name.
+_SERVICE_NOTE_HEADS = {"hestia-recent.log": "# hestia.service: the last ",
+                       "hestia-unit.txt": "# hestia.service as systemd resolves it"}
+
+
+def retire_service_notes(instance: Path) -> List[str]:
+    """Remove the beat-written service notes (only if the beat wrote them). Returns what was removed."""
+    gone = []
+    for name, head in _SERVICE_NOTE_HEADS.items():
+        p = instance / "notes" / name
+        try:
+            if p.is_file() and p.read_text(errors="replace").startswith(head):
+                p.unlink()
+                gone.append(name)
+        except OSError:
+            pass
+    return gone
+
+
 def proprioception_for(cfg: Optional[dict]) -> bool:
     """instance.json `proprioception`: whether the body block carries the machine-body line (GPU,
     CPU, memory, disk; sage.gateway.proprioception). ON BY DEFAULT, the opposite of the opt-in keys
@@ -4452,8 +4488,14 @@ def main(argv=None) -> int:
     _hestia_url = getattr(getattr(client, "_dispatcher", None), "endpoint", None) \
         or "http://127.0.0.1:7711/mcp"
     _services += "\n" + measure_service("governance daemon (hestia)", _hestia_url)
-    _svc_log = export_service_log(instance)
-    _unit = export_unit_file(instance)
+    # PER-INSTANCE (RESEARCH_GENERALIZATION_RULE): `service_notes: false` stops the per-beat journal
+    # and unit exports and retires the beat-written copies (service_notes_for).
+    if service_notes_for(instance_config(instance)):
+        _svc_log = export_service_log(instance)
+        _unit = export_unit_file(instance)
+    else:
+        retire_service_notes(instance)
+        _svc_log = _unit = None
     if _svc_log:
         _services += (f"\nThe governance daemon's last journal lines are in your own notes as "
                       f"`notes/{_svc_log}`, rewritten this beat — read it rather than asking for "
