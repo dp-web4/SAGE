@@ -67,12 +67,14 @@ def test_a_sigterm_during_a_model_call_is_not_turned_into_model_text():
         # certainly blocked waiting for a reply when the parent signals (was: sleep 1.0, a guess
         # that a slow seat could lose, and then the kill landed before the model call)
         # OllamaIRP's constructor probes /api/tags on this same server, so a bare accept would
-        # report the PROBE (before the handler exists). Answer every probe; hold the chat.
+        # report the PROBE (before the handler exists). Answer every probe (/api/show too: the
+        # constructor asks it whether a model with no config can think); hold the chat.
         "def serve():\n"
         "    while True:\n"
         "        c, _ = srv.accept(); req = c.recv(65536)\n"
-        "        if b'/api/tags' in req.split(b'\\r\\n', 1)[0]:\n"
-        "            body = b'{\"models\": [{\"name\": \"m\"}]}'\n"
+        "        line0 = req.split(b'\\r\\n', 1)[0]\n"
+        "        if b'/api/tags' in line0 or b'/api/show' in line0:\n"
+        "            body = b'{\"models\": [{\"name\": \"m\"}], \"capabilities\": [\"completion\"]}'\n"
         "            c.sendall(b'HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\n'\n"
         "                      b'Content-Length: %d\\r\\nConnection: close\\r\\n\\r\\n' % len(body) + body)\n"
         "            c.close(); continue\n"

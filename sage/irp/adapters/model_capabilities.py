@@ -84,12 +84,22 @@ class ModelCapabilities:
         variants[size].think_default, then the family think_default, then
         thinking_supported. dp, 2026-09-05: "generally we want the beings to think";
         the exceptions are declared here per size, not hard-coded in callers."""
+        declared = self.declared_think(model_name)
+        if declared is not None:
+            return declared
+        return bool(self.thinking_supported)
+
+    def declared_think(self, model_name: str) -> Optional[bool]:
+        """The think_default a config states for this model (its size's, else its family's); None
+        when neither says. None is what lets the server's own capability list decide
+        (ollama_irp.ollama_can_think): dp, 2026-10-30, "we should be [thinking], whenever that's
+        an option"."""
         variant = self.variant_for(model_name) or {}
         if variant.get('think_default') is not None:
             return bool(variant['think_default'])
         if self.think_default is not None:
             return bool(self.think_default)
-        return bool(self.thinking_supported)
+        return None
 
     def variant_for(self, model_name: str) -> Optional[Dict]:
         """The declared variant for a model's tag: the exact tag, else the longest declared tag that is
