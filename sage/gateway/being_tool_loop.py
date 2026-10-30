@@ -949,6 +949,28 @@ WINDOW_SEND_MARGIN = 256
 # server_cut path below still catches after the fact.
 PREFLIGHT_CPT = _CPT
 
+
+def preflight_cpt(llm) -> float:
+    """The chars-per-token the step-1 preflight divides by, for THIS model.
+
+    PREFLIGHT_CPT (2.9) is right for the tokenizer it was calibrated on and badly wrong for a
+    denser one: pub-being (llama3.1:8b) tokenizes its own prose at 3.67 chars/token and the tool
+    schemas at 3.92 (measured 2026-10-30, ollama `raw` prompt_eval_count). At 2.9 its step-1 seed
+    was estimated at 14,569 tokens when the server counted 9,806 for the same seed, so every explore
+    from 2026-10-27 07:46Z was refused before it was sent — 125 beats with no step (SAGE #582).
+    A family declares `preflight_chars_per_token` in its model config, from a measured ratio and
+    BELOW every measured value, so the guard still errs high. Absent, unreadable or implausible
+    (outside 1.5..8) -> PREFLIGHT_CPT, so no undeclared model changes behaviour."""
+    try:
+        v = llm._adapter.capabilities.preflight_chars_per_token
+    except AttributeError:
+        return PREFLIGHT_CPT
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return PREFLIGHT_CPT
+    return v if 1.5 <= v <= 8.0 else PREFLIGHT_CPT
+
 # A count far below a server-anchored estimate means the server truncated what was sent: the
 # server's prompt_eval_count is then of what survived its own cut, not of the list we sent.
 # Stored as a measurement, it anchored the next step's estimate ~8k low (a window retry came back
@@ -1427,9 +1449,9 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 _est, _cause = _est_tokens(_convo_chars(msgs), measured), "over_window"
                 if not _same_tail and _tail == _TAIL_USER:
                     # anchored on a count made WITHOUT the tool schemas, which this prompt carries
-                    _est = max(_est, (_convo_chars(msgs) + uncounted) / PREFLIGHT_CPT)
+                    _est = max(_est, (_convo_chars(msgs) + uncounted) / preflight_cpt(llm))
             else:
-                _est, _cause = (_convo_chars(msgs) + uncounted) / PREFLIGHT_CPT, "preflight"
+                _est, _cause = (_convo_chars(msgs) + uncounted) / preflight_cpt(llm), "preflight"
             if _est > _ctx - WINDOW_SEND_MARGIN:
                 return _window_full(_cause, int(_est), _ctx)
         retried = 0
