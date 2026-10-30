@@ -303,6 +303,27 @@ def test_a_skill_of_its_own_can_be_retired_with_its_text_kept(tmp_path):
     assert ok and "wrote your skill probe-skill" in msg
 
 
+def test_a_new_skill_close_to_one_it_has_is_named_and_a_distinct_one_is_not(tmp_path):
+    """legion-being, 2026-10-30: it wrote elided-result-recovery a day after reading-elided-tool-results, rewriting in
+    that beat the parser the first skill already held. The receipt now names the close one, as settle's does (#584)."""
+    first = {"name": "reading-elided-tool-results", "when": "elided, tool result, scratch/elided, raw_decode",
+             "description": "Re-read a tool result the harness elided from your window, and parse its JSON payload.",
+             "body": "Read scratch/elided/<file>, find the first '{', json.JSONDecoder().raw_decode(raw, i)."}
+    assert sk.skill(tmp_path, first)[0]
+    ok, msg, _ = sk.skill(tmp_path, {
+        "name": "elided-result-recovery", "when": "elided, tool result, scratch/elided, full result",
+        "description": "Recover the full tool result when the harness elided it from your window.",
+        "body": "Open the scratch/elided file it names and parse it."})
+    assert ok and "reads close to your skill reading-elided-tool-results" in msg
+    assert "name=elided-result-recovery, retire='true'" in msg, msg
+    ok, msg, _ = sk.skill(tmp_path, {"name": "tile-a-board-probe", "when": "LOOK, probe, 16x16",
+                                     "description": "Split a board into 16x16 windows, at most 8 per call.",
+                                     "body": "x1 = x0 + 15; two calls for a 64x64 board."})
+    assert ok and "reads close to" not in msg, "a distinct procedure names nothing"
+    ok, msg, _ = sk.skill(tmp_path, dict(first, body="Read the file; raw_decode from the first '{'."))
+    assert ok and "replaced" in msg and "reads close to" not in msg, "replacing a skill is not writing a new one"
+
+
 @pytest.mark.parametrize("name,says", [("getting-code-run", "fleet skill"), ("no-such-skill", "no skill called"),
                                        ("Bad Name", "not a skill name")])
 def test_a_refused_retire_says_why_and_changes_nothing(tmp_path, name, says):
