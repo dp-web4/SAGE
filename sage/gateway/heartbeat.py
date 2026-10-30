@@ -4285,8 +4285,8 @@ def main(argv=None) -> int:
     # 275 -> 405, both still thinking) while `think=False` zeroes it. No fleet template parses
     # the string: the think branches that exist key on the API field (`enable_thinking` in the
     # distill's Jinja, `$.IsThinkSet` in qwen3's Go template), never on prompt text. Thinking
-    # stays declared per model in the config (governed_turn.is_reasoning_model ->
-    # ModelCapabilities.resolve_think) and is sent on every request (irp/plugins/ollama_irp.py:165).
+    # is resolved per model (governed_turn.is_reasoning_model -> ollama_irp.resolve_think: a
+    # config's declared think_default, else the server's capability list) and is sent on every request.
     from sage.gateway.governed_turn import acts_under_posture
     act_first = not acts_under_posture(args.model)
     # The museum, where there is one: a form the being may use, or not (dp 2026-09-09).
