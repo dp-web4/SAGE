@@ -179,11 +179,15 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                                                 "why": why}, now,
                        f"{new['id']} now reads: {question[:120]!r} -> {answer[:200]!r}. The earlier answer is "
                        "kept in settled_log.jsonl. It is shown to you at the start of every beat.")
+    close = _close_to(entries, question)
     if len(entries) >= MAX_ENTRIES:
+        # sprout-being, 2026-10-30: four refusals here in its first hour at the cap, and no reopen or fold. Two of
+        # the refused questions read close to one it held; the receipt named neither.
         return False, (f"you have {len(entries)} settled entries, the most this list holds, so a new one was "
                        "not added. Nothing was changed. Reopen one that no longer needs holding (id and "
-                       "reopen='true'), or fold this into one you have by settling that id with a new answer.")
-    close = _close_to(entries, question)
+                       "reopen='true'), or fold this into one you have by settling that id with a new answer."
+                       + (f" This reads close to {close['id']} ({close['question'][:120]!r}): settle "
+                          f"id={close['id']} with your newest answer if they are the same question." if close else ""))
     entries = entries + [new]
     ok, msg = _commit(instance, entries, nxt + 1, {"op": "settle", "id": new["id"], "to": new, "why": why}, now,
                       f"settled {new['id']}: {question[:120]!r} -> {answer[:200]!r}. It is shown to you at the "
