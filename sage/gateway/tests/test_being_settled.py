@@ -80,6 +80,19 @@ def test_a_full_list_refuses_a_new_question_but_still_changes_an_old_one(tmp_pat
     assert _s(tmp_path, question="question 3", answer="b")[0]
 
 
+def test_a_full_list_names_the_entry_a_new_question_reads_close_to(tmp_path):
+    """legion-being, 2026-10-29: at the cap the refusal said 'fold this into one you have' but not which one, and
+    the being kept re-asking one subject. The receipt now names the close entry, as #584's does below the cap."""
+    _s(tmp_path, question="What is the win condition for the widget game?", answer="collect three tokens")
+    for i in range(st.MAX_ENTRIES - 1):
+        _s(tmp_path, question=f"unrelated topic number {i} about {'abcdefghijklmnopqrstuvwxyzabcd'[i]}", answer="a")
+    ok, msg, changed = _s(tmp_path, question="what is the widget game win condition", answer="three tokens")
+    assert not ok and not changed and "the most this list holds" in msg
+    assert "reads close to s1" in msg and "settle id=s1" in msg
+    ok, msg, _ = _s(tmp_path, question="how do lighthouses work at night", answer="a lamp")
+    assert not ok and "reads close to" not in msg, "a question close to nothing names nothing"
+
+
 def test_a_change_that_cannot_be_logged_is_undone(tmp_path):
     _s(tmp_path, question="q", answer="a")
     before = (tmp_path / st.SETTLED_FILE).read_bytes()

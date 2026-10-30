@@ -173,11 +173,17 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                                                 "why": why}, now,
                        f"{new['id']} now reads: {question[:120]!r} -> {answer[:200]!r}. The earlier answer is "
                        "kept in settled_log.jsonl. It is shown to you at the start of every beat.")
+    close = _close_to(entries, question)
     if len(entries) >= MAX_ENTRIES:
+        # A full list is when the close one matters most: folding in is the way forward, and the being has to
+        # know which entry to fold into. Measured on legion-being 2026-10-29: of 36 refusals at the cap, 29 had
+        # an entry _close_to names; told none, it folded by id after 6 and did nothing or `remember`ed after 17.
+        fold = (f" This reads close to {close['id']} ({close['question'][:120]!r}): if it is the same question, "
+                f"settle id={close['id']} with your newest answer." if close else "")
         return False, (f"you have {len(entries)} settled entries, the most this list holds, so a new one was "
                        "not added. Nothing was changed. Reopen one that no longer needs holding (id and "
-                       "reopen='true'), or fold this into one you have by settling that id with a new answer.")
-    close = _close_to(entries, question)
+                       "reopen='true'), or fold this into one you have by settling that id with a new answer."
+                       + fold)
     entries = entries + [new]
     ok, msg = _commit(instance, entries, nxt + 1, {"op": "settle", "id": new["id"], "to": new, "why": why}, now,
                       f"settled {new['id']}: {question[:120]!r} -> {answer[:200]!r}. It is shown to you at the "
