@@ -731,6 +731,30 @@ def test_two_spills_of_the_same_step_in_one_second_do_not_overwrite_each_other()
     assert open(os.path.join(root, b), encoding="utf-8").read().endswith("the second result")
 
 
+def test_a_spilled_run_result_is_readable_by_line_and_still_raw_decodes():
+    """legion-being, 2026-10-30: a run result spilled as ONE physical line (stdout an escaped string), so line ranges
+    could not reach its output; it wrote 7 raw_decode parsers in two beats. The text fields are now written out as
+    lines after the raw JSON, and raw_decode from the first '{' reads exactly the original object."""
+    from sage.gateway.being_tool_loop import _spill, SPILL_DECODED_MARK
+    import json, os, tempfile
+
+    root = tempfile.mkdtemp(prefix="spill-decode-")
+    result = {"script": "probe.py", "exit": 0, "stdout": "".join(f"row {i}\n" for i in range(1, 61)), "stderr": ""}
+    rel = _spill(root, json.dumps(result), 4)
+    raw = open(os.path.join(root, rel), encoding="utf-8").read()
+    obj, _ = json.JSONDecoder().raw_decode(raw, raw.find("{"))
+    assert obj == result, "the being's existing skills parse the raw JSON first, unchanged"
+    lines = raw.splitlines()
+    assert SPILL_DECODED_MARK in lines and "== stdout ==" in lines
+    assert lines[lines.index("== stdout ==") + 37] == "row 37", "a line range now reaches line 37 of the output"
+    assert "script='probe.py'" in raw and "exit=0" in raw
+    # a body that is not a JSON object, or holds no multi-line text, is spilled exactly as before
+    plain = _spill(root, "the first result\nsecond line", 5)
+    assert open(os.path.join(root, plain), encoding="utf-8").read().endswith("the first result\nsecond line")
+    flat = _spill(root, json.dumps({"exit": 1, "stdout": "one line"}), 6)
+    assert SPILL_DECODED_MARK not in open(os.path.join(root, flat), encoding="utf-8").read()
+
+
 def test_collision_names_preserve_creation_order_at_the_prune_boundary(monkeypatch):
     """The filename is the retention clock. A same-step retry must sort AFTER the file it
     followed, even when there are enough collisions to cross 9 -> 10, so that when the byte

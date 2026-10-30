@@ -625,6 +625,34 @@ def _prune_spills(d: str, pinned: Iterable[str] = ()) -> None:
         pass
 
 
+#: Marks the readable copy after a spilled JSON result. The raw JSON stays first and whole, so `raw_decode` from the
+#: first '{' reads exactly what it read before; this section is only ever after it.
+SPILL_DECODED_MARK = "── the same result's text fields, decoded line by line (read them with start_line/end_line) ──"
+
+
+def _decoded_text_fields(body: str) -> str:
+    """A spilled JSON result's multi-line string fields (a run's stdout/stderr, ...) written out as real lines, after
+    the raw JSON. Measured on legion-being 2026-10-30: a run result is ONE physical line, its stdout an escaped string,
+    so memory_read's line ranges could not reach inside it; the being wrote 7 raw_decode parsers in two beats and three
+    skills for the same procedure (reading-elided-tool-results, elided-result-recovery, read-elided-tool-result).
+    '' for a body that is not a JSON object or has no multi-line text field: it is spilled exactly as before."""
+    s = body.lstrip()
+    if not s.startswith("{"):
+        return ""
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(s)
+    except ValueError:
+        return ""
+    if not isinstance(obj, dict):
+        return ""
+    parts = [f"== {k} ==\n{v.rstrip(chr(10))}\n" for k, v in obj.items() if isinstance(v, str) and "\n" in v]
+    if not parts:
+        return ""
+    head = ", ".join(f"{k}={obj[k]!r}" for k in obj if not isinstance(obj[k], (str, list, dict)) or
+                     (isinstance(obj[k], str) and "\n" not in obj[k] and len(obj[k]) <= 120))
+    return "\n\n" + SPILL_DECODED_MARK + "\n" + (head + "\n" if head else "") + "\n".join(parts)
+
+
 def _spill(root: Optional[str], body: str, step: int,
            pinned: Optional[set] = None) -> Optional[str]:
     """Save one elided tool-result body under the being's home. Returns the bare path to
@@ -657,6 +685,7 @@ def _spill(root: Optional[str], body: str, step: int,
             fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
                      f"result the harness elided from your window, {len(body)} characters]\n\n")
             fh.write(body)
+            fh.write(_decoded_text_fields(body))
         name_rel = f"{COMPACT_SPILL_DIR}/{name}"
         if pinned is not None:
             pinned.add(name_rel)
