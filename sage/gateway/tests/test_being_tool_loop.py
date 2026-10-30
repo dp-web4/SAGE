@@ -745,8 +745,17 @@ def test_a_spilled_run_result_is_readable_by_line_and_still_raw_decodes():
     obj, _ = json.JSONDecoder().raw_decode(raw, raw.find("{"))
     assert obj == result, "the being's existing skills parse the raw JSON first, unchanged"
     lines = raw.splitlines()
-    assert SPILL_DECODED_MARK in lines and "== stdout ==" in lines
-    assert lines[lines.index("== stdout ==") + 37] == "row 37", "a line range now reaches line 37 of the output"
+    assert SPILL_DECODED_MARK in lines and "== stdout (60 lines) ==" in lines
+    assert lines[lines.index("== stdout (60 lines) ==") + 37] == "row 37", "a line range reaches line 37 of the output"
+    # the marker names the exact line (nomad's #600 review): reading from it gives the output's first line
+    from sage.gateway.being_tool_loop import _decoded_where
+    where = _decoded_where(json.dumps(result))
+    first = int(where.split("stdout from line ")[1].split()[0].rstrip(","))
+    assert lines[first - 1] == "row 1", (where, lines[first - 2:first + 1])
+    # a stdout line that looks like a heading does not read as one: headings count their lines
+    tricky = {"exit": 0, "stdout": "a\n== stderr ==\nb\n", "stderr": "real\nerror\n"}
+    t = open(os.path.join(root, _spill(root, json.dumps(tricky), 7)), encoding="utf-8").read().splitlines()
+    assert "== stdout (3 lines) ==" in t and "== stderr (2 lines) ==" in t
     assert "script='probe.py'" in raw and "exit=0" in raw
     # a body that is not a JSON object, or holds no multi-line text, is spilled exactly as before
     plain = _spill(root, "the first result\nsecond line", 5)
