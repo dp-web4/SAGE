@@ -357,5 +357,16 @@ sync
 say "OK: $SNAP"
 df -h --output=avail "$MOUNT" | tail -1 | xargs -I{} echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) drive free: {}"
 [ -n "$SUSPECT" ] && exit 3
-[ -n "$MISSING" ] && { say "INCOMPLETE: $SNAP is kept without: $MISSING"; exit 4; }
+if [ -n "$MISSING" ]; then
+    say "INCOMPLETE: $SNAP is kept without: $MISSING"
+    # The unit's verify step never runs after a non-zero exit, so an incomplete snapshot is verified here: the
+    # 2026-10-31 13:07Z one, the being's only fresh copy, was never read back.
+    bash "$(dirname "$0")/verify_being_backup.sh" "$SNAP"
+    vrc=$?
+    # PARTIAL (3) is the expected verdict here; NOT SOUND (2) or a verify that could not finish (1) is a failure.
+    if [ "$vrc" -ne 3 ] && [ "$vrc" -ne 0 ]; then
+        say "FAILED: the kept snapshot did not verify (verify exit $vrc, above)"; exit 2
+    fi
+    exit 4
+fi
 exit 0

@@ -116,21 +116,34 @@ if os.path.isdir(convs):
     for f in os.listdir(convs):
         if f.endswith(".jsonl"):
             n_turns += sum(1 for _ in open(os.path.join(convs, f), errors="replace"))
-print(f"  instance: journal {os.path.getsize(os.path.join(snap,'instance/journal.md'))} bytes, "
+# Read only what exists: a missing record is already a problem above, and must reach the verdict, not crash it.
+_j = os.path.join(snap, "instance/journal.md")
+_h = os.path.join(snap, "instance/heartbeats.jsonl")
+print(f"  instance: journal {os.path.getsize(_j) if os.path.exists(_j) else 'absent'} bytes, "
       f"{n_turns} conversation turns, "
-      f"{sum(1 for _ in open(os.path.join(snap,'instance/heartbeats.jsonl'), errors='replace'))} beats")
+      f"{sum(1 for _ in open(_h, errors='replace')) if os.path.exists(_h) else 'no'} beats")
 if n_turns != int(counts.get("turns", -1)):
     problems.append(f"TURNS {counts.get('turns')} claimed, {n_turns} present")
 
-# 4. hestia identity
+# 4. hestia identity. A file the backup could not fit is recorded in the manifest's `missing` when the snapshot
+# is taken (2026-10-31: witness.db, a full drive). That is a KNOWN gap, reported as PARTIAL; one missing without
+# that record is a problem. (This used to print the witness chain's size unconditionally, so a snapshot without
+# it crashed here instead of getting a verdict.)
+known_missing = set(man.get("missing") or [])
+known = []
+sizes = []
 for rel, floor in (("hestia/vault.enc", 1), ("hestia/witness.db", 1 << 20)):
     p = os.path.join(snap, rel)
     if not os.path.exists(p):
-        problems.append(f"MISSING {rel}")
+        (known if rel in known_missing else problems).append(
+            rel if rel in known_missing else f"MISSING {rel}")
+        sizes.append(f"{rel.split('/')[1]} absent")
     elif os.path.getsize(p) < floor:
         problems.append(f"SUSPICIOUSLY SMALL {rel}: {os.path.getsize(p)} bytes")
-print(f"  hestia: vault {os.path.getsize(os.path.join(snap,'hestia/vault.enc'))} bytes, "
-      f"witness chain {os.path.getsize(os.path.join(snap,'hestia/witness.db'))//(1<<20)} MB")
+        sizes.append(f"{rel.split('/')[1]} {os.path.getsize(p)} bytes")
+    else:
+        sizes.append(f"{rel.split('/')[1]} {os.path.getsize(p) // (1 << 20)} MB")
+print("  hestia: " + ", ".join(sizes))
 
 if man.get("suspect"):
     problems.append(f"snapshot was marked SUSPECT when taken: {man['suspect']}")
@@ -141,5 +154,9 @@ if problems:
     for p in problems:
         print("  -", p)
     sys.exit(2)
+if known:
+    print("PARTIAL: the being's memory, history and records verify; NOT in this snapshot (recorded when it was "
+          f"taken): {', '.join(known)}. Restore those from an older snapshot.")
+    sys.exit(3)
 print("SOUND: this snapshot restores the being's identity, history and memory.")
 PY

@@ -9,10 +9,13 @@ partial snapshot (no manifest.json). Rows:
   2. the regression gate reads the newest complete snapshot: a shrunk count past 5 partials is SUSPECT (exit 3).
   3. a run whose own files (instance) fail dies and leaves no partial directory behind.
   4. a hestia file that does not fit (10:07Z: witness.db, 656 MB free): the snapshot is kept with the being's
-     files, the manifest names what is missing, nothing is pruned, exit 4.
+     files, the manifest names what is missing, nothing is pruned, it is verified (PARTIAL), exit 4.
+  5. the same, but the being's cartridge is missing: verify says NOT SOUND and the run fails (exit 2).
 Run: python3 scripts/backup_being_test.py [script]   (default: the script beside this file)"""
 import json
 import os
+
+import numpy as np
 import pathlib
 import subprocess
 import sys
@@ -29,7 +32,7 @@ def check(name, cond, detail=""):
         bad.append(name)
 
 
-def world(tmp, partials=5, prev_beats=3, rsync_fails_on=None):
+def world(tmp, partials=5, prev_beats=3, rsync_fails_on=None, cartridge=True):
     t = pathlib.Path(tmp)
     mount = t / "drive"
     snaps = mount / "home/dp/being-backups/legion-being/snapshots"
@@ -43,12 +46,21 @@ def world(tmp, partials=5, prev_beats=3, rsync_fails_on=None):
     for i in range(partials):
         (snaps / f"20261025T{i:02d}0700Z" / "instance").mkdir(parents=True)   # no manifest: died mid-copy
     inst = t / "instance"
-    inst.mkdir()
+    (inst / "conversations").mkdir(parents=True)
     (inst / "heartbeats.jsonl").write_text("{}\n" * 3)
+    for rel in ("entrustment.md", "journal.md", "todo.md", "long_term_memory_recovered.jsonl"):
+        (inst / rel).write_text("x\n")
+    (inst / "conversations" / "dp.jsonl").write_text("{}\n")
     (t / "cart").mkdir()
+    if cartridge:   # a cartridge verify can LOAD, with the count its manifest claims
+        np.savez(t / "cart" / "legion-being.cart.npz",
+                 passages=np.array(["a memory long enough to be a memory and not a stub"] * 2, dtype=object),
+                 embeddings=np.ones((2, 8), dtype=np.float32))
+        (t / "cart" / "legion-being.cart_manifest.json").write_text(json.dumps({"count": 2}))
     hh = t / "hestia"
     hh.mkdir()
     (hh / "witness.db").write_text("chain\n")
+    (hh / "vault.enc").write_bytes(b"v" * 64)
     bin_ = t / "bin"
     bin_.mkdir()
     (bin_ / "findmnt").write_text(f"#!/bin/sh\necho {mount}\n")
@@ -61,7 +73,7 @@ def world(tmp, partials=5, prev_beats=3, rsync_fails_on=None):
         (bin_ / "rsync").chmod(0o755)
     env = dict(os.environ, PATH=f"{bin_}:{os.environ['PATH']}", BEING_BACKUP_UUID=UUID, BEING_BACKUP_KEEP="3",
                SAGE_INSTANCE=str(inst), MEMBOT_CARTRIDGES=str(t / "cart"), HESTIA_HOME=str(hh),
-               BEING_WORKTREE=str(t / "no-worktree"))
+               BEING_WORKTREE=str(t / "no-worktree"), BEING_BACKUP_PYTHON=sys.executable)
     return snaps, env
 
 
@@ -110,8 +122,15 @@ with tempfile.TemporaryDirectory() as tmp:
     check("row 4: the manifest names what is missing", man.get("missing") == ["hestia/witness.db"], str(man.get("missing")))
     check("row 4: the being's own files are in THIS run's snapshot",
           newest.name > "20261025" and (newest / "instance/heartbeats.jsonl").is_file(), newest.name)
+    check("row 4: and verified as PARTIAL", "PARTIAL" in r.stdout, r.stdout[-400:])
     check("row 4: nothing is pruned (older snapshots hold the only copies)",
           sum(1 for _, m in after if m) == 4 and "prune " not in r.stdout, str(after))
+
+with tempfile.TemporaryDirectory() as tmp:
+    snaps, env = world(tmp, partials=0, rsync_fails_on="witness.db", cartridge=False)
+    r = run(env)
+    check("row 5: a kept incomplete snapshot that does not verify fails the run (exit 2)",
+          r.returncode == 2 and "did not verify" in r.stdout, f"rc={r.returncode}\n{r.stdout[-500:]}")
 
 print("FAIL:", bad) if bad else print("PASS - partials are never snapshots")
 sys.exit(1 if bad else 0)
