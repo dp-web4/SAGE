@@ -2919,7 +2919,9 @@ _TOOL_SCHEMAS = {
              "data": "optional: up to 8 more files, named by their SOURCE path — relative to your "
                      "home, or absolute anywhere you can read. Inside the sandbox each one "
                      "appears under its base name, so name 'scratch/data/train.npy' here and "
-                     "np.load('train.npy') in your code"},
+                     "np.load('train.npy') in your code. Your script gets NO command-line arguments "
+                     "(sys.argv holds only its own name): open data files by their base name and "
+                     "write any other inputs into the script"},
             ["path"]),
     "check": ("Run a test suite in your own worktree and read the result. This is how you "
               "find out whether something you believe about your harness is true, instead of "
