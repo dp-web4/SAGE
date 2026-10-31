@@ -1019,6 +1019,29 @@ def _fresh_record(name: str, body: str, retired_as: str, stamp: datetime):
             f"A fresh journal.md is started; recall still searches {retired_as}.")
 
 
+def _decoded_section_note(lines: list, end: int, shown: str) -> str:
+    """A READ THAT STOPS ABOVE THE DECODED SECTION IS TOLD WHERE IT IS (legion-being, 2026-10-31).
+
+    #600 writes a spilled JSON result's text fields out as plain lines after the JSON, under
+    SPILL_DECODED_MARK. The section was there, and the elision note named it, but the being read
+    a saved result from the top: at 06:06Z it read lines 1-60 of
+    scratch/elided/20261031-061748-013-000.txt (the header and the one-line JSON), then wrote
+    su15_extract9.py to raw_decode that same file, as its four elided-result skills teach. It
+    found the JSON first and never scrolled. So the read itself says where the plain lines start,
+    at the top, the place it looks."""
+    from sage.gateway.being_tool_loop import SPILL_DECODED_MARK
+    for i, line in enumerate(lines):
+        if line.startswith(SPILL_DECODED_MARK):
+            at = i + 1
+            break
+    else:
+        return ""
+    if end >= at:
+        return ""
+    return (f"[this saved result's text is ALSO written out as plain lines from line {at} on, so it "
+            f"needs no parsing: memory_read path '{shown}' start_line={at}]\n")
+
+
 class ReferenceF1aDispatcher:
     """A Dispatcher (see being_gate_client.Dispatcher) for the being's own safe acts."""
 
@@ -1752,7 +1775,8 @@ class ReferenceF1aDispatcher:
             chunk = lines[start - 1:start - 1 + max(0, count)]
             body = "".join(chunk)[: self.max_read_chars]
             end = start + len(chunk) - 1
-            head = find_note + f"[lines {start}-{end} of {len(lines)} in {p.name}]\n"
+            head = (find_note + _decoded_section_note(lines, end, shown)
+                    + f"[lines {start}-{end} of {len(lines)} in {p.name}]\n")
             if len("".join(chunk)) > self.max_read_chars:
                 head += (f"[… this range alone exceeds {self.max_read_chars} characters; "
                          f"ask for fewer lines …]\n")
@@ -1836,7 +1860,8 @@ class ReferenceF1aDispatcher:
                 f"single line. What you did NOT see is the rest of that line, so absence here is not "
                 f"evidence of absence in the file. Lines were NOT shown beyond this one because there "
                 f"are none.]") + parse, witness_id=self._witness(f"memory_read {p.name} (head)"))
-        head = find_note + dated + (f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else "")
+        head = (find_note + _decoded_section_note(lines, end, shown) + dated
+                + (f"[lines {start}-{end} of {len(lines)} in '{shown}']\n" if start > 1 else ""))
         if stop and end == stop and end < len(lines):
             # Cut where the being asked, not where the window ran out: say so in those words,
             # so a short result is not read as the file running out of lines.
