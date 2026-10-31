@@ -2790,3 +2790,69 @@ def test_request_scope_for_a_path_that_does_not_exist_is_not_there_and_files_not
     env = d(BeingIntent("request_scope", {"path": missing, "reason": "to make a new notes dir", "create": "true"}), _ALLOW)
     (sent,) = [a for n, a in FakeMcp.calls if n == "hestia_request_scope"]
     assert sent["path"] == missing and sent["create"] is True
+
+
+class _ExpiringMembot(FakeMembot):
+    """membot after SESSION_TIMEOUT_SEC idle: the MCP client still works, but its session has no
+    cartridge, so the next store/search answers "No cartridge mounted" until something remounts."""
+    expired = False
+
+    def call(self, name, args):
+        if name == "mount_cartridge":
+            _ExpiringMembot.expired = False
+        elif _ExpiringMembot.expired and name in ("memory_store", "memory_search", "get_passage"):
+            FakeMcp.calls.append((name, args))
+            t = self.SOFT["memory_store"]
+            return {"result": {"content": [{"type": "text", "text": t}], "structuredContent": {"result": t}}}
+        return super().call(name, args)
+
+
+def _expiring_disp():
+    FakeMcp.calls = []
+    _ExpiringMembot.expired = False
+    root = tempfile.mkdtemp(prefix="hd-")
+    return HestiaF1aDispatcher("sprout-being", root,
+                               mcp_factory=lambda ep, pid: _ExpiringMembot(ep, pid)), root
+
+
+def test_remember_after_membot_expired_the_session_remounts_and_keeps_the_memory():
+    """mcnugget-being 2026-10-31 05:30Z: mounted at the beat's start, remember ~35 min later, after
+    membot expired the idle session. The store is retried once on a remounted session and saved."""
+    d, _ = _expiring_disp()
+    assert d(BeingIntent("recall", {"query": "warm up"}), _ALLOW).ok        # mounts at beat start
+    _ExpiringMembot.expired = True                                          # 30 min idle pass
+    FakeMcp.calls = []
+    env = d(BeingIntent("remember", {"content": "kept after a long beat"}), _ALLOW)
+    assert env.ok, env
+    names = [n for n, _ in FakeMcp.calls]
+    assert names == ["memory_store", "mount_cartridge", "memory_store", "save_cartridge"], names
+    assert _mb_calls("save_cartridge") == [{"name": "sprout-being"}]
+
+
+def test_a_store_still_unmounted_after_one_remount_is_refused_and_never_saved():
+    """The retry is once: a membot that will not hold a mount fails the act, and no save runs."""
+    d, _ = _expiring_disp()
+
+    class _NeverHolds(_ExpiringMembot):
+        def call(self, name, args):
+            r = super().call(name, args)
+            if name == "mount_cartridge":
+                _ExpiringMembot.expired = True
+            return r
+    d._mcp_factory = lambda ep, pid: _NeverHolds(ep, pid)
+    d._mb = None
+    env = d(BeingIntent("remember", {"content": "x"}), _ALLOW)
+    assert not env.ok and "NOT saved" in env.error, env
+    assert _mb_calls("save_cartridge") == []
+    assert len(_mb_calls("memory_store")) == 2, "one retry, not a loop"
+
+
+def test_recall_after_the_session_expired_remounts_and_answers():
+    d, _ = _expiring_disp()
+    assert d(BeingIntent("recall", {"query": "a"}), _ALLOW).ok
+    _ExpiringMembot.expired = True
+    FakeMcp.calls = []
+    env = d(BeingIntent("recall", {"query": "b"}), _ALLOW)
+    assert env.ok, env
+    assert [n for n, _ in FakeMcp.calls].count("mount_cartridge") == 1, FakeMcp.calls
+    assert "something remembered" in str(env.result), env.result

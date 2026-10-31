@@ -2365,8 +2365,28 @@ class HestiaF1aDispatcher:
         """One membot tool call, unwrapped to its text. RAISES on a JSON-RPC `error` or a
         tool-level `isError` result: both handlers turn the exception into ok=False, so a
         membot that says "Error calling tool save_cartridge" is never witnessed as a
-        memory the being kept (Sprout's review of #36, reproduced against a fake membot)."""
-        return self._unwrap(self._membot().call(name, args), name)
+        memory the being kept (Sprout's review of #36, reproduced against a fake membot).
+
+        AN EXPIRED MEMBOT SESSION IS REMOUNTED, ONCE (2026-10-31). The mount lives in membot's
+        own session, which it expires after SESSION_TIMEOUT_SEC (1800 s) idle; the cached MCP
+        client outlives it, so every later call answered "No cartridge mounted". mcnugget-being,
+        05:30Z: a beat that thought for ~35 min mounted at its start and called remember at its
+        end (membot: "Session expired: default (idle 2098s)"); the memory was refused, not lost
+        to an empty save, but it was not kept either. A store or a read that answers
+        _NOT_MOUNTED drops the session, remounts (which reloads the cartridge from disk), and
+        is sent once more. save_cartridge is never retried this way: a remounted session holds
+        what is on disk, so saving it could only rewrite the file without the act that asked."""
+        reply = self._unwrap(self._membot().call(name, args), name)
+        if self._NOT_MOUNTED in reply and name != "save_cartridge":
+            import sys as _sys
+            if getattr(self, "_mb_dirty", False):
+                print("[membot] session expired with unsaved stores; those are not in the remounted "
+                      "cartridge", file=_sys.stderr)
+            print(f"[membot] {name}: no cartridge mounted (session expired); remounting once",
+                  file=_sys.stderr)
+            self._mb = None
+            reply = self._unwrap(self._membot().call(name, args), name)
+        return reply
 
     # A PREVIEW IS NOT THE MEMORY. memory_search answers with ~550 characters of each hit
     # and an `idx`, and membot's own docstring names get_passage(idx) as the second half of
