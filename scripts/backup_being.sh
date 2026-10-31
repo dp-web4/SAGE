@@ -68,8 +68,20 @@ DEST_ROOT="$MOUNT/home/dp/being-backups/$BEING"
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SNAP="$DEST_ROOT/snapshots/$STAMP"
-PREV="$(ls -1d "$DEST_ROOT"/snapshots/*/ 2>/dev/null | sort | tail -1)"
-PREV="${PREV%/}"
+
+# A SNAPSHOT WITHOUT manifest.json IS A PARTIAL, NEVER A RESTORE POINT. The manifest is written
+# last, so its absence means the run died mid-copy. Measured 2026-10-31: the drive filled at
+# 2026-10-25T01:07Z and ~52 runs in a row died, each leaving a partial directory. The newest
+# directory was taken as the previous snapshot, so the regression gate below read a partial's
+# missing manifest and checked NOTHING for 6.5 days, and prune (which counted partials) would
+# have kept 24 partials and deleted every good snapshot on the first run that succeeded.
+complete_snapshots() {  # oldest first, complete ones only
+    local d
+    for d in $(ls -1d "$DEST_ROOT"/snapshots/*/ 2>/dev/null | sort); do
+        [ -f "${d%/}/manifest.json" ] && printf '%s\n' "${d%/}"
+    done
+}
+PREV="$(complete_snapshots | tail -1)"
 say "being=$BEING drive=$MOUNT snapshot=$STAMP"
 [ -n "$PREV" ] && say "previous=$(basename "$PREV")" || say "previous=(none: first run)"
 
@@ -126,6 +138,29 @@ if [ -n "$DRY" ]; then
     [ -n "$SUSPECT" ] && exit 3
     exit 0
 fi
+# One run at a time: a manual run beside the timer's would see the other's directory as a partial.
+exec 9>"$DEST_ROOT/.backup.lock" 2>/dev/null || die "cannot open $DEST_ROOT/.backup.lock"
+flock -n 9 || die "another backup run holds $DEST_ROOT/.backup.lock"
+
+# Partials left by failed runs hold space and restore nothing: remove them before copying.
+for d in $(ls -1d "$DEST_ROOT"/snapshots/*/ 2>/dev/null | sort); do
+    if [ ! -f "${d%/}/manifest.json" ]; then
+        say "removing partial $(basename "${d%/}") (no manifest: a run that died mid-copy)"
+        rm -rf "${d%/}"
+    fi
+done
+free_kb="$(df -k --output=avail "$MOUNT" | tail -1 | tr -d " ")"
+say "drive free before copy: $(( ${free_kb:-0} / 1024 )) MB"
+
+# This run's own directory is removed if the run dies before its manifest is written, so a
+# failure leaves nothing that a later run could mistake for a snapshot.
+cleanup_partial() {
+    if [ -d "$SNAP" ] && [ ! -f "$SNAP/manifest.json" ]; then
+        rm -rf "$SNAP"
+        say "removed this run's partial $(basename "$SNAP")"
+    fi
+}
+trap cleanup_partial EXIT
 mkdir -p "$SNAP" || die "cannot create $SNAP"
 
 # rsync resolves --link-dest against the DESTINATION directory, so it has to name the
@@ -283,10 +318,10 @@ EOF
 if [ -n "$SUSPECT" ]; then
     say "not pruning (suspect run); $(ls -1d "$DEST_ROOT"/snapshots/*/ 2>/dev/null | wc -l) snapshots kept"
 else
-    mapfile -t all < <(ls -1d "$DEST_ROOT"/snapshots/*/ 2>/dev/null | sort)
+    mapfile -t all < <(complete_snapshots)
     if [ "${#all[@]}" -gt "$KEEP" ]; then
         for old in "${all[@]:0:$(( ${#all[@]} - KEEP ))}"; do
-            say "prune $(basename "${old%/}")"
+            say "prune $(basename "${old%/}")"   # complete snapshots only: partials never count
             [ -z "$DRY" ] && rm -rf "$old"
         done
     fi
