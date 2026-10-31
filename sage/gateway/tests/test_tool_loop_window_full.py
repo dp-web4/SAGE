@@ -224,7 +224,10 @@ def test_the_beat_record_says_the_window_filled_and_that_nothing_the_being_did_c
 class _LlamaLLM(_LLM):
     """Ollama's llama3.1 template: the tool schemas ride only on a prompt whose last message is a
     user turn, so a step after a tool result counts thousands of tokens fewer (pub, 2026-10-21)."""
-    num_ctx = 12288
+    # Room for the whole toolset: the step-1 preflight (#592) measures every tool spec against this window, and at
+    # 12288 one added sentence in `run` (#609 on Legion's carrier) stopped step 1 before any call ran. The cut
+    # under test is relative (10,006 -> 5,580 -> 2,500), not a matter of window size.
+    num_ctx = 32768
     tools_on_last_user_only = True
 
 

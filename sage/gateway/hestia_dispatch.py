@@ -2490,6 +2490,8 @@ class HestiaF1aDispatcher:
     _STORED_DUPLICATE = ("Duplicate — already stored",)
     _STORE_CONFIRMED = _STORED_NEW + _STORED_DUPLICATE
     _NOT_MOUNTED = "No cartridge mounted"
+    # membot_server.save_cartridge's success text: "Saved '<name>': <n> memories, <mb> MB, fingerprint=..."
+    _SAVE_RECEIPT = re.compile(r"Saved '[^']+': (\d+) memories")
 
     # MEMBOT GETS ITS OWN TIMEOUT. It shared hestia's 4 s, sized for a local daemon that answers in
     # milliseconds. Measured on Sprout 2026-09-27: 205 successful remember/recall calls, median
@@ -2566,7 +2568,11 @@ class HestiaF1aDispatcher:
         mount still raises rather than being retried into a cartridge-less session. The
         retry cannot manufacture a false success: `_do_remember` still requires a confirmed
         store before it will save, so a second failure ends as a refusal with the file on
-        disk untouched."""
+        disk untouched.
+
+        save_cartridge IS NEVER RETRIED ON A REMOUNT (main #610, 2026-10-31; SAGE #611): a remounted session
+        holds only what is on disk, so saving it could only rewrite the file without the stores that asked.
+        An expired session with unsaved stores says so on stderr."""
         try:
             text = self._unwrap(self._membot().call(name, args), name)
         except RuntimeError as e:
@@ -2580,11 +2586,17 @@ class HestiaF1aDispatcher:
             # This is the SAGE#52 shape a second time, in code written to fix the first: a
             # recovery that exists, is correct, and is dead for the commoner form of its own
             # failure. One retry on a fresh session; a second failure is reported as-is.
-            if _remounted or not _session_lost(e):
+            if _remounted or not _session_lost(e) or name == "save_cartridge":
                 raise
             self._mb = None
             return self._membot_call(name, args, _remounted=True)
-        if self._NOT_MOUNTED in text and not _remounted:
+        if self._NOT_MOUNTED in text and not _remounted and name != "save_cartridge":
+            import sys as _sys
+            if getattr(self, "_mb_dirty", False):
+                print("[membot] session expired with unsaved stores; those are not in the remounted "
+                      "cartridge", file=_sys.stderr)
+            print(f"[membot] {name}: no cartridge mounted (session expired); remounting once",
+                  file=_sys.stderr)
             self._mb = None
             return self._membot_call(name, args, _remounted=True)
         return text
@@ -2984,6 +2996,23 @@ class HestiaF1aDispatcher:
             saved = self._membot_call("save_cartridge", {"name": self.membot_cartridge})
         except Exception as e:
             return ResultEnvelope(ok=False, error=f"membot ({type(e).__name__}): {e}")
+        # ONLY A SAVE RECEIPT IS A SAVE (NOVA's review of #610). membot answers save_cartridge in
+        # ordinary text whatever happened ("No cartridge to save...", "Save error: ...", or the
+        # receipt "Saved '<name>': N memories, ..."), so the absence of an exception proves
+        # nothing. And with a name given, a session that expired between the store and this save
+        # is saved anyway: membot writes the EMPTY session and answers "Saved '<name>': 0
+        # memories". A store was just confirmed, so a receipt of 0 is that overwrite, not a
+        # success. Anything but a receipt with memories in it is reported as NOT saved, the
+        # session is dropped so the next act remounts, and _mb_dirty stays set.
+        receipt = self._SAVE_RECEIPT.match(saved or "")
+        if not receipt or int(receipt.group(1)) == 0:
+            self._mb = None
+            emptied = bool(receipt)
+            return ResultEnvelope(ok=False, error=(
+                "membot did not confirm saving this memory, so it was NOT saved"
+                + (" -- and it reported saving an EMPTY cartridge over the real one; the operator "
+                   "should restore it from its last good copy" if emptied else "")
+                + f": {saved[:200]}"))
         self._mb_dirty = False
         return ResultEnvelope(ok=True, result=f"{stored}; {saved}",
                               witness_id=self._local._witness(f"remember {content[:80]}"))
@@ -5528,11 +5557,40 @@ def _run_reach_note(mounts: list, skipped: list) -> str:
 
 
 def _run_note(rc: int, stderr: str, files: list, stdout: str = "") -> str:
-    """The run's note, plus one fact when its output names a hardware device (_device_note)."""
+    """The run's note, plus one fact when its output names a hardware device (_device_note), and one when
+    it reports on this machine's processes, services or ports (_host_note)."""
     note = _run_note_core(rc, stderr, files)
-    if _HARDWARE_DEV.search(f"{stdout}\n{stderr}"):
+    said = f"{stdout}\n{stderr}"
+    if _HARDWARE_DEV.search(said):
         note += " " + _device_note()
+    if _HOST_VIEW.search(said):
+        note += " " + _host_note()
     return note
+
+
+#: Output that reports on the machine outside the sandbox: services, systemd, D-Bus, ports, processes.
+_HOST_VIEW = re.compile(
+    r"systemctl|systemd|\bd-?bus\b|connect to bus|connection refused|not listening|\bport \d{2,5}\b"
+    r"|\bpgrep\b|\bpidof\b|\bnetstat\b|no such process|\bnot running\b|\binactive \(dead\)", re.I)
+
+
+def _host_note() -> str:
+    """THE SANDBOX CANNOT SEE THIS MACHINE, SO WHAT A RUN SAYS ABOUT IT IS ABOUT THE SANDBOX. cbp-being,
+    2026-10-28..31: its runs reported "Failed to connect to bus", "System has not been booted with systemd",
+    port 7711 closed and "the Hestia daemon is not running", and it concluded the daemon was down and asked
+    for systemd, D-Bus and Docker installers, over and over, while the daemon decided every one of its acts.
+    The run is --unshare-pid --unshare-net: PID 1 is the run itself and there is no network. The note said
+    "no network"; it never said that this also hides every other process, service and port. That is the
+    sandbox's design, not a guess about this run, so saying it keeps the note evidence-only (_device_note).
+
+    IT CORRECTS A FALSE NEGATIVE WITHOUT ASSERTING A POSITIVE (NOVA's review of #609). The first cut ended
+    "the daemon that decides your acts is running", which nothing in a run's output proves. The note says
+    only what isolation proves: a probe from here is not evidence that a host service is up or down."""
+    return ("The sandbox has its own process space and no network, by design: this machine's other "
+            "processes, its services, systemd, D-Bus and its listening ports (7711 included) are not visible "
+            "from inside it; only the run's own processes are. So 'not running', 'connection refused' or 'not "
+            "booted with systemd' from a probe like this describes the sandbox. It is not evidence that a "
+            "service on this machine is down, or that it is up.")
 
 
 def _device_note() -> str:

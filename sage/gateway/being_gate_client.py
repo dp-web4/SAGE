@@ -3335,7 +3335,7 @@ _TOOL_SCHEMAS = {
             "it printed: nothing it changes is kept, in your home or your worktree. The sandbox "
             "holds only a Python interpreter, copies of the files you name, and (when you have "
             "one) your worktree READ-ONLY on the import path, so `from sage.gateway... import x` "
-            "imports your worktree's real code. No network, no home, no GPU. "
+            "imports your worktree's real code. No network, no home, no GPU, and no view of this machine: its other processes, services and ports are invisible from inside. "
             "Nothing it does persists, so PRINT what you want to keep. It may run for up to an "
             "hour, or the time left in your beat if that is less, and your beat waits for it: a "
             "long run is time you are not answering anyone. If it is stopped, what it printed "
