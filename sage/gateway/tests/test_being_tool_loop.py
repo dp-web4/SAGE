@@ -1948,3 +1948,72 @@ def test_compaction_counts_the_schemas_the_turn_sends_as_the_preflight_does(tmp_
     c.memory_root = str(tmp_path)
     r = run_ollama_tool_turn(c, FakeLLM(), seed, tools=tools)
     assert sent and r.reply == "done" and not r.window_full, (r.window_full, r.generates)
+
+
+def _cut_llm(num_ctx, first_prompt, first_eval, seen, first_content="The investigation into hub_notify has revealed that the previous search for hub-not"):
+    """A thinking model whose first reply STARTED and was cut at the window wall (prompt + eval ==
+    num_ctx, done_reason length, content but no tool call); the retry answers cleanly."""
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            seen.append({"think": self.think, "chars": sum(len(m.get("content") or "") for m in messages)})
+            if len(seen) == 1:
+                return {"content": first_content, "tool_calls": [],
+                        "raw": {"done_reason": "length", "prompt_eval_count": first_prompt,
+                                "eval_count": first_eval,
+                                "message": {"content": first_content, "thinking": "planning ..."}}}
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 3000, "eval_count": 20, "message": {}}}
+    llm = FakeLLM()
+    llm.num_ctx = num_ctx
+    return llm
+
+
+def test_a_reply_cut_at_the_window_is_retried_not_kept_as_the_last_word():
+    """mcnugget-being 2026-10-30 22:56Z (gemma4:12b, think on, num_ctx 16,384): 13,563 + 2,821 ==
+    16,384, done_reason length, a half-sentence of content and no call. It stood as the step's
+    reply and the beat ended at 4 explore steps. Now it is retried, and recorded as a window cut;
+    with ~2.7k left against a 3,000 think budget, that one retry answers with thinking off."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+    llm = _cut_llm(16384, 13563, 2821, seen)
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+    assert len(seen) == 2, "a reply the window cut must be retried once"
+    assert r.reply == "done", r.reply
+    assert r.generates[0]["retry_cause"] == "window"
+    assert seen[1]["think"] is False, "no room to think and answer: the retry must not think into the wall"
+    assert llm.think is True, "thinking is turned off for that one retry only"
+
+
+def test_a_cut_reply_with_room_after_compaction_keeps_its_thinking(tmp_path):
+    """The same cut, but compaction frees the window: the retry has more room than a thinking
+    reply needs, so thinking is left alone (a cut answer ran out of room; that is the remedy)."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+    llm = _cut_llm(32768, 30768, 2000, seen)
+    seed = [{"role": "system", "content": "s"}, {"role": "user", "content": "go"}]
+    for i in range(4):
+        seed += [{"role": "assistant", "content": "", "tool_calls": [
+                     {"function": {"name": "memory_read", "arguments": {"path": f"f{i}"}}}]},
+                 {"role": "tool", "content": "x" * 6000}]
+    c = _client(OK_DISPATCH)
+    c.memory_root = str(tmp_path)
+    r = run_ollama_tool_turn(c, llm, seed)
+    assert len(seen) == 2 and r.reply == "done"
+    assert seen[1]["chars"] < seen[0]["chars"], "the retry is compacted first, as for an empty window cut"
+    assert seen[1]["think"] is True
+    assert r.generates[0]["retry_cause"] == "window"
+
+
+def test_a_reply_cut_by_its_output_budget_with_room_left_still_stands():
+    """Unchanged: content cut by num_predict while the window still had room is not a window
+    cut, and this change does not retry it."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+    llm = _cut_llm(16384, 9000, 3000, seen, first_content="a long answer that ran out of budget")
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+    assert len(seen) == 1, "an output-budget cut with content is not retried by this change"
+    assert r.reply == "a long answer that ran out of budget"
