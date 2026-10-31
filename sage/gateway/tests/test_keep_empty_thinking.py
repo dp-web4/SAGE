@@ -42,9 +42,13 @@ def test_a_failed_write_never_raises(tmp_path):
 
 
 def test_the_loop_calls_it_on_an_empty_turn():
+    # Anchored on the branch, not on a log line's wording: #603 made the print conditional
+    # ('WINDOW-CUT reply' / 'EMPTY turn'), the old anchor vanished, and main went red with the behaviour intact.
     src = open(btl.__file__, encoding="utf-8").read()
-    i = src.index("'EMPTY turn'}: ")  # the stderr line, reworded by #603 (WINDOW-CUT reply / EMPTY turn)
-    assert "keep_empty_thinking(" in src[i:i + 1200]
+    i = src.index("if (not content and not calls) or cut_reply:")
+    branch = src[i:i + 2000]
+    assert "keep_empty_thinking(" in branch
+    assert "None if cut_reply else" in branch, "a window-cut reply has content, not a kept deliberation (#603)"
 
 
 def test_the_retry_names_where_the_deliberation_was_kept(tmp_path):
