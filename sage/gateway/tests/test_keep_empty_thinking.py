@@ -43,7 +43,8 @@ def test_a_failed_write_never_raises(tmp_path):
 
 def test_the_loop_calls_it_on_an_empty_turn():
     src = open(btl.__file__, encoding="utf-8").read()
-    i = src.index('print(f"[tool-loop] EMPTY turn:')
+    # #603 made the line name a window-cut reply too ("WINDOW-CUT reply" / "EMPTY turn"); both keep the thinking
+    i = src.index("""print(f"[tool-loop] {'WINDOW-CUT reply' if cut_reply else 'EMPTY turn'}:""")
     assert "keep_empty_thinking(" in src[i:i + 1200]
 
 
