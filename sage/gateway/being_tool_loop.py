@@ -855,6 +855,22 @@ _OWN_SIGIL = "chars of this argument elided: the call already ran, and its recei
 # the being's own scratch (private), by age like the spills.
 EMPTY_THINKING_DIR = "scratch/empty-thinking"
 EMPTY_THINKING_KEEP_S = 7 * 24 * 3600
+# THE NUDGE NAMES THE KEPT FILE ONLY WHEN IT IS WORTH REUSING (#602). The pointer was built
+# for legion-being's cut drafts: 204 kept files since 10-24, smallest 7,203 bytes, median
+# 23,250. nomad-being (gemma4:e2b, think on via #599) stops cleanly after 379-2,827 chars
+# that restate its instructions; told to read that, it did, as the one act the nudge asked
+# for: 14 of 30 explore/posture acts in its first seven think-on beats. Every file is still
+# kept; a short clean stop is just not offered as a draft. NOT "contains code": 14 of
+# nomad-being's 49 kept files hold a ```python block, and every one is the task file it had
+# just read with git_read, quoted back, not code it drafted (checked 2026-10-31).
+EMPTY_THINKING_NAME_MIN_CHARS = 4000
+
+
+def empty_thinking_worth_naming(raw: dict, thinking: str) -> bool:
+    """Whether the stopped-thinking nudge should point the being at its kept thinking:
+    a `length` cut (a draft stopped mid-way), or thinking long enough to hold one."""
+    return ((raw or {}).get("done_reason") == "length"
+            or len(thinking) >= EMPTY_THINKING_NAME_MIN_CHARS)
 
 
 def keep_empty_thinking(root: Optional[str], raw: dict, msg: dict) -> Optional[str]:
@@ -1993,7 +2009,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                               f"narrow range of it to reuse what you drafted rather than "
                               f"deriving it again, and draft long code in a scratch file "
                               f"(memory_write) rather than in your thinking. "
-                              if _kept else "")
+                              if _kept and empty_thinking_worth_naming(
+                                  raw, str(msg.get("thinking") or "")) else "")
                     _usage = (f"The provider reported {raw['eval_count']} output tokens"
                               if raw.get("eval_count") is not None else
                               "The provider did not report an output token count")
