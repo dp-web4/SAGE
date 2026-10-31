@@ -2305,6 +2305,8 @@ class HestiaF1aDispatcher:
     _STORED_DUPLICATE = ("Duplicate — already stored",)
     _STORE_CONFIRMED = _STORED_NEW + _STORED_DUPLICATE
     _NOT_MOUNTED = "No cartridge mounted"
+    # membot_server.save_cartridge's success text: "Saved '<name>': <n> memories, <mb> MB, fingerprint=..."
+    _SAVE_RECEIPT = re.compile(r"Saved '[^']+': (\d+) memories")
 
     # MEMBOT GETS ITS OWN TIMEOUT. It shared hestia's 4 s, sized for a local daemon that answers in
     # milliseconds. Measured on Sprout 2026-09-27: 205 successful remember/recall calls, median
@@ -2783,6 +2785,23 @@ class HestiaF1aDispatcher:
             saved = self._membot_call("save_cartridge", {"name": self.membot_cartridge})
         except Exception as e:
             return ResultEnvelope(ok=False, error=f"membot ({type(e).__name__}): {e}")
+        # ONLY A SAVE RECEIPT IS A SAVE (NOVA's review of #610). membot answers save_cartridge in
+        # ordinary text whatever happened ("No cartridge to save...", "Save error: ...", or the
+        # receipt "Saved '<name>': N memories, ..."), so the absence of an exception proves
+        # nothing. And with a name given, a session that expired between the store and this save
+        # is saved anyway: membot writes the EMPTY session and answers "Saved '<name>': 0
+        # memories". A store was just confirmed, so a receipt of 0 is that overwrite, not a
+        # success. Anything but a receipt with memories in it is reported as NOT saved, the
+        # session is dropped so the next act remounts, and _mb_dirty stays set.
+        receipt = self._SAVE_RECEIPT.match(saved or "")
+        if not receipt or int(receipt.group(1)) == 0:
+            self._mb = None
+            emptied = bool(receipt)
+            return ResultEnvelope(ok=False, error=(
+                "membot did not confirm saving this memory, so it was NOT saved"
+                + (" -- and it reported saving an EMPTY cartridge over the real one; the operator "
+                   "should restore it from its last good copy" if emptied else "")
+                + f": {saved[:200]}"))
         self._mb_dirty = False
         return ResultEnvelope(ok=True, result=f"{stored}; {saved}",
                               witness_id=self._local._witness(f"remember {content[:80]}"))
