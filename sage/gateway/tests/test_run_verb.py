@@ -648,6 +648,29 @@ def test_a_run_that_names_a_hardware_device_is_told_the_sandbox_has_none():
     assert said not in _run_note(1, "", ["t.py"], "no devices mentioned")
 
 
+def test_a_run_that_reports_on_this_machine_is_told_the_sandbox_cannot_see_it():
+    """cbp-being, 2026-10-28..31: its runs said the bus was unreachable, systemd was not booted, port 7711
+    was closed and the daemon was not running, and it asked for installers again and again while the
+    daemon decided each act. The note now says the sandbox sees no other process, service or port."""
+    from sage.gateway.hestia_dispatch import _run_note
+    said = "describes the sandbox, never this machine"
+    for out in ("Failed to connect to bus: No medium found",
+                "System has not been booted with systemd as init system (PID 1). Can't operate.",
+                "port 7711 is closed", "ConnectionRefusedError: [Errno 111] Connection refused",
+                "The Hestia daemon is not running", "hestia.service: inactive (dead)"):
+        note = _run_note(1, "", ["t.py"], out)
+        assert said in note and "it is what decided this one" in note, out
+    assert said in _run_note(1, "Failed to connect to bus: No medium found", ["t.py"])
+    assert said in _run_note(0, "", ["t.py"], "systemctl is-active hestia -> unknown")
+    for benign in ("loss 0.81 after 40 epochs", "residual 0.806334", "running mean 3.2", "wrote out.csv"):
+        assert said not in _run_note(0, "", ["t.py"], benign), benign
+
+
+def test_the_run_verb_says_the_sandbox_cannot_see_this_machine():
+    from sage.gateway.being_gate_client import _TOOL_SCHEMAS
+    assert "no view of this machine" in _TOOL_SCHEMAS["run"][0]
+
+
 
 @needs_sandbox
 def test_a_second_run_does_not_see_what_the_first_wrote_and_both_notes_say_so(tmp_path):

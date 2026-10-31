@@ -5245,11 +5245,36 @@ def _run_reach_note(mounts: list, skipped: list) -> str:
 
 
 def _run_note(rc: int, stderr: str, files: list, stdout: str = "") -> str:
-    """The run's note, plus one fact when its output names a hardware device (_device_note)."""
+    """The run's note, plus one fact when its output names a hardware device (_device_note), and one when
+    it reports on this machine's processes, services or ports (_host_note)."""
     note = _run_note_core(rc, stderr, files)
-    if _HARDWARE_DEV.search(f"{stdout}\n{stderr}"):
+    said = f"{stdout}\n{stderr}"
+    if _HARDWARE_DEV.search(said):
         note += " " + _device_note()
+    if _HOST_VIEW.search(said):
+        note += " " + _host_note()
     return note
+
+
+#: Output that reports on the machine outside the sandbox: services, systemd, D-Bus, ports, processes.
+_HOST_VIEW = re.compile(
+    r"systemctl|systemd|\bd-?bus\b|connect to bus|connection refused|not listening|\bport \d{2,5}\b"
+    r"|\bpgrep\b|\bpidof\b|\bnetstat\b|no such process|\bnot running\b|\binactive \(dead\)", re.I)
+
+
+def _host_note() -> str:
+    """THE SANDBOX CANNOT SEE THIS MACHINE, SO WHAT A RUN SAYS ABOUT IT IS ABOUT THE SANDBOX. cbp-being,
+    2026-10-28..31: its runs reported "Failed to connect to bus", "System has not been booted with systemd",
+    port 7711 closed and "the Hestia daemon is not running", and it concluded the daemon was down and asked
+    for systemd, D-Bus and Docker installers, over and over, while the daemon decided every one of its acts.
+    The run is --unshare-pid --unshare-net: PID 1 is the run itself and there is no network. The note said
+    "no network"; it never said that this also hides every other process, service and port. That is the
+    sandbox's design, not a guess about this run, so saying it keeps the note evidence-only (_device_note)."""
+    return ("The sandbox has its own process space and no network, by design: no other process on this "
+            "machine, no service, no systemd or D-Bus, and no port (7711 included) is visible from inside it. "
+            "So 'not running', 'connection refused' or 'not booted with systemd' from a run describes the "
+            "sandbox, never this machine. The daemon that decides your acts is running: it is what decided "
+            "this one.")
 
 
 def _device_note() -> str:
