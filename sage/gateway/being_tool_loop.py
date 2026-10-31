@@ -1554,7 +1554,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # wall (prompt + eval == num_ctx, done_reason "length", no tool call) stood as the step's
         # final answer: no retry, nothing recorded. mcnugget-being, gemma4:12b at num_ctx 16,384,
         # the first five beats after #599 turned its thinking on: three ended this way, mid-
-        # sentence, at prompts of 14,428, 13,563 and ~13.6k, each beat stopping at 4-7 explore
+        # sentence, at prompts of 14,428, 13,563 and 13,701, each beat stopping at 4-7 explore
         # steps instead of 7-8. A cut with content gets the window-cut retry an empty one gets.
         _raw0 = resp.get("raw") or {}
         cut_reply = bool(content and not calls and _raw0.get("done_reason") == "length"
