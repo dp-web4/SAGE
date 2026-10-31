@@ -7,7 +7,9 @@ partial snapshot (no manifest.json). Rows:
   1. 3 complete snapshots, 5 newer partials, KEEP=3: the run removes the partials, links against the newest COMPLETE
      snapshot, and prune keeps complete snapshots (the old script kept the partials and deleted the good ones).
   2. the regression gate reads the newest complete snapshot: a shrunk count past 5 partials is SUSPECT (exit 3).
-  3. a run that dies mid-copy leaves no partial directory behind.
+  3. a run whose own files (instance) fail dies and leaves no partial directory behind.
+  4. a hestia file that does not fit (10:07Z: witness.db, 656 MB free): the snapshot is kept with the being's
+     files, the manifest names what is missing, nothing is pruned, exit 4.
 Run: python3 scripts/backup_being_test.py [script]   (default: the script beside this file)"""
 import json
 import os
@@ -92,10 +94,24 @@ with tempfile.TemporaryDirectory() as tmp:
           sum(1 for _, m in listing(snaps) if m) == 4, str(listing(snaps)))
 
 with tempfile.TemporaryDirectory() as tmp:
+    snaps, env = world(tmp, partials=0, rsync_fails_on="instance")
+    r = run(env)
+    check("row 3: a run whose OWN files fail exits non-zero", r.returncode not in (0, 4), f"rc={r.returncode}")
+    check("row 3: and leaves no partial directory", all(m for _, m in listing(snaps)), str(listing(snaps)))
+
+with tempfile.TemporaryDirectory() as tmp:
     snaps, env = world(tmp, partials=0, rsync_fails_on="witness.db")
     r = run(env)
-    check("row 3: a run that dies mid-copy exits non-zero", r.returncode != 0, f"rc={r.returncode}")
-    check("row 3: and leaves no partial directory", all(m for _, m in listing(snaps)), str(listing(snaps)))
+    after = listing(snaps)
+    newest = snaps / max(n for n, _ in after)
+    man = json.loads((newest / "manifest.json").read_text()) if (newest / "manifest.json").is_file() else {}
+    check("row 4: a hestia file that does not fit keeps the snapshot (exit 4)", r.returncode == 4,
+          f"rc={r.returncode}\n{r.stdout[-700:]}")
+    check("row 4: the manifest names what is missing", man.get("missing") == ["hestia/witness.db"], str(man.get("missing")))
+    check("row 4: the being's own files are in THIS run's snapshot",
+          newest.name > "20261025" and (newest / "instance/heartbeats.jsonl").is_file(), newest.name)
+    check("row 4: nothing is pruned (older snapshots hold the only copies)",
+          sum(1 for _, m in after if m) == 4 and "prune " not in r.stdout, str(after))
 
 print("FAIL:", bad) if bad else print("PASS - partials are never snapshots")
 sys.exit(1 if bad else 0)

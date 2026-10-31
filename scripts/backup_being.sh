@@ -110,6 +110,13 @@ say "counts: memories=$memories beats=$beats turns=$turns journal_bytes=$journal
 # proof of damage — a log can be rotated, a conversation pruned — so the run continues and
 # the snapshot is taken. What it must NOT do is let the last good snapshot be pruned.
 SUSPECT=""
+# A HESTIA FILE THAT DOES NOT FIT DOES NOT COST THE BEING ITS MEMORY. Measured 2026-10-31 10:07Z: with
+# 656 MB free, the instance and the cartridge copied, witness.db did not, and the run died, keeping
+# nothing -- though the cartridge, the 09-08 loss this script exists for, was already on the drive.
+# A hestia file that fails is now named here and in the manifest, the snapshot is kept, nothing is
+# pruned (the older snapshots are the only copies holding it), and the run still exits non-zero.
+# The being's own files (instance, cartridge) stay fatal: a snapshot without them is not a backup.
+MISSING=""
 if [ -n "$PREV" ] && [ -f "$PREV/manifest.json" ]; then
     SUSPECT="$(python3 - "$PREV/manifest.json" "$memories" "$beats" "$turns" "$journal" <<'PY'
 import json, sys
@@ -199,11 +206,16 @@ for f in vault.enc witness.db inbox.db public-identity.json current-build.json \
     if [ -e "$HESTIA_HOME/$f" ]; then
         # no --delete here: these are named files, not a mirrored tree
         rsync -a --info=stats1 $DRY "${hlink[@]}" "$HESTIA_HOME/$f" "$SNAP/hestia/" \
-            || die "rsync hestia/$f"
+            || { say "MISSING: hestia/$f did not copy (see rsync above); the snapshot is kept without it"
+                 MISSING="${MISSING:+$MISSING }hestia/$f"; rm -f "$SNAP/hestia/$f"; }
     fi
 done
 for d in trust seats telemetry archive; do
-    [ -d "$HESTIA_HOME/$d" ] && rs "hestia/$d" "$HESTIA_HOME/$d/" "$SNAP/hestia/$d/"
+    if [ -d "$HESTIA_HOME/$d" ]; then
+        rs "hestia/$d" "$HESTIA_HOME/$d/" "$SNAP/hestia/$d/" || {
+            say "MISSING: hestia/$d did not copy; the snapshot is kept without it"
+            MISSING="${MISSING:+$MISSING }hestia/$d"; }
+    fi
 done
 say "vault unlock material is NOT copied by design — see the note at the top of this script"
 
@@ -224,11 +236,12 @@ fi
 
 # ---------------------------------------------------------------- the manifest
 python3 - "$SNAP" "$BEING" "$STAMP" "$memories" "$beats" "$turns" "$journal" "$recovered" \
-         "${SUSPECT:-}" <<'PY'
+         "${SUSPECT:-}" "${MISSING:-}" <<'PY'
 import hashlib, json, os, subprocess, sys
 snap, being, stamp = sys.argv[1], sys.argv[2], sys.argv[3]
 memories, beats, turns, journal, recovered = map(int, sys.argv[4:9])
 suspect = sys.argv[9]
+missing = sys.argv[10].split() if len(sys.argv) > 10 else []
 
 def sha(p):
     h = hashlib.sha256()
@@ -257,6 +270,7 @@ json.dump({
     "counts": {"memories": memories, "beats": beats, "turns": turns,
                "journal_bytes": journal, "recovered_memory_lines": recovered},
     "suspect": suspect or None,
+    "missing": missing,
     "total_bytes": total, "file_count": len(files),
     "files": files,
 }, open(os.path.join(snap, "manifest.json"), "w"), indent=1, sort_keys=True)
@@ -315,8 +329,8 @@ Then restart \`membot-*\`, \`hestia\`, and the being's heartbeat, and confirm th
 mounts with the count this manifest names.
 EOF
 
-if [ -n "$SUSPECT" ]; then
-    say "not pruning (suspect run); $(ls -1d "$DEST_ROOT"/snapshots/*/ 2>/dev/null | wc -l) snapshots kept"
+if [ -n "$SUSPECT" ] || [ -n "$MISSING" ]; then
+    say "not pruning (${SUSPECT:+suspect}${SUSPECT:+${MISSING:+, }}${MISSING:+missing: $MISSING}); $(ls -1d "$DEST_ROOT"/snapshots/*/ 2>/dev/null | wc -l) snapshots kept"
 else
     mapfile -t all < <(complete_snapshots)
     if [ "${#all[@]}" -gt "$KEEP" ]; then
@@ -343,4 +357,5 @@ sync
 say "OK: $SNAP"
 df -h --output=avail "$MOUNT" | tail -1 | xargs -I{} echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) drive free: {}"
 [ -n "$SUSPECT" ] && exit 3
+[ -n "$MISSING" ] && { say "INCOMPLETE: $SNAP is kept without: $MISSING"; exit 4; }
 exit 0
