@@ -38,7 +38,7 @@ def test_settling_the_same_question_again_replaces_the_answer_and_keeps_the_old_
 def test_an_id_changes_or_reopens_one_and_a_reopened_one_is_no_longer_shown(tmp_path):
     _s(tmp_path, question="q one", answer="a one")
     _s(tmp_path, question="q two", answer="a two")
-    ok, _, _ = _s(tmp_path, id="s1", answer="a one, revised")
+    ok, _, _ = _s(tmp_path, id="s1", question="q one", answer="a one, revised")
     assert ok and st.read(tmp_path)[0][-1]["answer"] == "a one, revised"
     ok, msg, changed = _s(tmp_path, id="2", reopen="true", why="no longer holds")
     assert ok and changed and "reopened s2" in msg
@@ -239,3 +239,45 @@ def test_an_id_for_a_new_question_is_refused_with_the_way_forward(tmp_path):
     ok, msg, _ = _s(tmp_path, id="s9", answer="a")             # no question: changing, not creating, so no hint
     assert not ok and "without id" not in msg
     assert _s(tmp_path, question="a new question", answer="an answer")[0]
+
+
+ESCALATE = "When should I escalate a scope request?"
+
+
+def test_an_id_only_change_is_refused_and_shown_the_question_it_would_answer(tmp_path):
+    # cbp-being 10-28..30: s10 kept ESCALATE while id-only settles replaced its answer five times with conclusions
+    # about other things (a daemon status, a unit-file fix). Every beat then showed the question with a wrong answer.
+    _s(tmp_path, question=ESCALATE, answer="only when a request is refused")
+    ok, msg, changed = _s(tmp_path, id="s1", answer="The daemon is running but egress-locked; wait, then restart it.")
+    assert not ok and not changed
+    assert ESCALATE in msg and "id=s1 with that question" in msg and "without id" in msg, msg
+    assert st.read(tmp_path)[0][0]["answer"] == "only when a request is refused"
+    assert len(_log(tmp_path)) == 1
+
+
+def test_an_id_with_its_own_question_still_changes_the_answer(tmp_path):
+    _s(tmp_path, question=ESCALATE, answer="only when a request is refused")
+    ok, msg, changed = _s(tmp_path, id="s1", question=ESCALATE, answer="when refused, after the appeal")
+    assert ok and changed, msg
+    assert st.read(tmp_path)[0][0]["answer"] == "when refused, after the appeal"
+
+
+def test_an_id_with_a_different_question_is_refused_with_the_way_to_settle_it_new(tmp_path):
+    _s(tmp_path, question=ESCALATE, answer="only when a request is refused")
+    ok, msg, _ = _s(tmp_path, id="s1", question="Is the egress lock held by the daemon?", answer="no")
+    assert not ok and "reads as a different question" in msg and "without id" in msg, msg
+    assert st.read(tmp_path)[0][0]["question"] == ESCALATE
+
+
+def test_reopen_by_id_alone_still_works(tmp_path):
+    _s(tmp_path, question=ESCALATE, answer="a")
+    ok, msg, changed = _s(tmp_path, id="s1", reopen="true")
+    assert ok and changed and "reopened s1" in msg
+
+
+def test_a_full_list_names_what_to_reopen_and_never_advises_folding(tmp_path):
+    for i in range(st.MAX_ENTRIES):
+        assert _s(tmp_path, question=f"question {i} about lamps", answer="a")[0]
+    ok, msg, _ = _s(tmp_path, question="What colour is the sky at dusk?", answer="b")
+    assert not ok and "fold" not in msg and "settling that id with a new answer" not in msg
+    assert "reopen" in msg and "s1 (" in msg and "different question" in msg, msg
