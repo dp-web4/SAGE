@@ -2305,6 +2305,8 @@ class HestiaF1aDispatcher:
     _STORED_DUPLICATE = ("Duplicate — already stored",)
     _STORE_CONFIRMED = _STORED_NEW + _STORED_DUPLICATE
     _NOT_MOUNTED = "No cartridge mounted"
+    # membot_server.save_cartridge's success text: "Saved '<name>': <n> memories, <mb> MB, fingerprint=..."
+    _SAVE_RECEIPT = re.compile(r"Saved '[^']+': (\d+) memories")
 
     # MEMBOT GETS ITS OWN TIMEOUT. It shared hestia's 4 s, sized for a local daemon that answers in
     # milliseconds. Measured on Sprout 2026-09-27: 205 successful remember/recall calls, median
@@ -2365,8 +2367,28 @@ class HestiaF1aDispatcher:
         """One membot tool call, unwrapped to its text. RAISES on a JSON-RPC `error` or a
         tool-level `isError` result: both handlers turn the exception into ok=False, so a
         membot that says "Error calling tool save_cartridge" is never witnessed as a
-        memory the being kept (Sprout's review of #36, reproduced against a fake membot)."""
-        return self._unwrap(self._membot().call(name, args), name)
+        memory the being kept (Sprout's review of #36, reproduced against a fake membot).
+
+        AN EXPIRED MEMBOT SESSION IS REMOUNTED, ONCE (2026-10-31). The mount lives in membot's
+        own session, which it expires after SESSION_TIMEOUT_SEC (1800 s) idle; the cached MCP
+        client outlives it, so every later call answered "No cartridge mounted". mcnugget-being,
+        05:30Z: a beat that thought for ~35 min mounted at its start and called remember at its
+        end (membot: "Session expired: default (idle 2098s)"); the memory was refused, not lost
+        to an empty save, but it was not kept either. A store or a read that answers
+        _NOT_MOUNTED drops the session, remounts (which reloads the cartridge from disk), and
+        is sent once more. save_cartridge is never retried this way: a remounted session holds
+        what is on disk, so saving it could only rewrite the file without the act that asked."""
+        reply = self._unwrap(self._membot().call(name, args), name)
+        if self._NOT_MOUNTED in reply and name != "save_cartridge":
+            import sys as _sys
+            if getattr(self, "_mb_dirty", False):
+                print("[membot] session expired with unsaved stores; those are not in the remounted "
+                      "cartridge", file=_sys.stderr)
+            print(f"[membot] {name}: no cartridge mounted (session expired); remounting once",
+                  file=_sys.stderr)
+            self._mb = None
+            reply = self._unwrap(self._membot().call(name, args), name)
+        return reply
 
     # A PREVIEW IS NOT THE MEMORY. memory_search answers with ~550 characters of each hit
     # and an `idx`, and membot's own docstring names get_passage(idx) as the second half of
@@ -2763,6 +2785,23 @@ class HestiaF1aDispatcher:
             saved = self._membot_call("save_cartridge", {"name": self.membot_cartridge})
         except Exception as e:
             return ResultEnvelope(ok=False, error=f"membot ({type(e).__name__}): {e}")
+        # ONLY A SAVE RECEIPT IS A SAVE (NOVA's review of #610). membot answers save_cartridge in
+        # ordinary text whatever happened ("No cartridge to save...", "Save error: ...", or the
+        # receipt "Saved '<name>': N memories, ..."), so the absence of an exception proves
+        # nothing. And with a name given, a session that expired between the store and this save
+        # is saved anyway: membot writes the EMPTY session and answers "Saved '<name>': 0
+        # memories". A store was just confirmed, so a receipt of 0 is that overwrite, not a
+        # success. Anything but a receipt with memories in it is reported as NOT saved, the
+        # session is dropped so the next act remounts, and _mb_dirty stays set.
+        receipt = self._SAVE_RECEIPT.match(saved or "")
+        if not receipt or int(receipt.group(1)) == 0:
+            self._mb = None
+            emptied = bool(receipt)
+            return ResultEnvelope(ok=False, error=(
+                "membot did not confirm saving this memory, so it was NOT saved"
+                + (" -- and it reported saving an EMPTY cartridge over the real one; the operator "
+                   "should restore it from its last good copy" if emptied else "")
+                + f": {saved[:200]}"))
         self._mb_dirty = False
         return ResultEnvelope(ok=True, result=f"{stored}; {saved}",
                               witness_id=self._local._witness(f"remember {content[:80]}"))

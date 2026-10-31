@@ -138,7 +138,8 @@ class FakeMembot(FakeMcp):
         text = {"memory_search": "1. something remembered",
                 "memory_store": "Stored memory #7 (12ms)",
                 "mount_cartridge": f"Mounted '{args.get('name')}': 223 memories",
-                "save_cartridge": f"Saved cartridge {args.get('name')}"}[name]
+                # membot_server.save_cartridge's real receipt (#610 counts only this as a save)
+                "save_cartridge": f"Saved '{args.get('name')}': 224 memories, 1.2 MB, fingerprint=0a1b2c3d4e5f6a7b"}[name]
         return {"result": {"content": [{"type": "text", "text": text}],
                            "structuredContent": {"result": text}}}
 
@@ -2790,3 +2791,113 @@ def test_request_scope_for_a_path_that_does_not_exist_is_not_there_and_files_not
     env = d(BeingIntent("request_scope", {"path": missing, "reason": "to make a new notes dir", "create": "true"}), _ALLOW)
     (sent,) = [a for n, a in FakeMcp.calls if n == "hestia_request_scope"]
     assert sent["path"] == missing and sent["create"] is True
+
+
+class _ExpiringMembot(FakeMembot):
+    """membot after SESSION_TIMEOUT_SEC idle: the MCP client still works, but its session has no
+    cartridge, so the next store/search answers "No cartridge mounted" until something remounts."""
+    expired = False
+
+    def call(self, name, args):
+        if name == "mount_cartridge":
+            _ExpiringMembot.expired = False
+        elif _ExpiringMembot.expired and name in ("memory_store", "memory_search", "get_passage"):
+            FakeMcp.calls.append((name, args))
+            t = self.SOFT["memory_store"]
+            return {"result": {"content": [{"type": "text", "text": t}], "structuredContent": {"result": t}}}
+        return super().call(name, args)
+
+
+def _expiring_disp():
+    FakeMcp.calls = []
+    _ExpiringMembot.expired = False
+    root = tempfile.mkdtemp(prefix="hd-")
+    return HestiaF1aDispatcher("sprout-being", root,
+                               mcp_factory=lambda ep, pid: _ExpiringMembot(ep, pid)), root
+
+
+def test_remember_after_membot_expired_the_session_remounts_and_keeps_the_memory():
+    """mcnugget-being 2026-10-31 05:30Z: mounted at the beat's start, remember ~35 min later, after
+    membot expired the idle session. The store is retried once on a remounted session and saved."""
+    d, _ = _expiring_disp()
+    assert d(BeingIntent("recall", {"query": "warm up"}), _ALLOW).ok        # mounts at beat start
+    _ExpiringMembot.expired = True                                          # 30 min idle pass
+    FakeMcp.calls = []
+    env = d(BeingIntent("remember", {"content": "kept after a long beat"}), _ALLOW)
+    assert env.ok, env
+    names = [n for n, _ in FakeMcp.calls]
+    assert names == ["memory_store", "mount_cartridge", "memory_store", "save_cartridge"], names
+    assert _mb_calls("save_cartridge") == [{"name": "sprout-being"}]
+
+
+def test_a_store_still_unmounted_after_one_remount_is_refused_and_never_saved():
+    """The retry is once: a membot that will not hold a mount fails the act, and no save runs."""
+    d, _ = _expiring_disp()
+
+    class _NeverHolds(_ExpiringMembot):
+        def call(self, name, args):
+            r = super().call(name, args)
+            if name == "mount_cartridge":
+                _ExpiringMembot.expired = True
+            return r
+    d._mcp_factory = lambda ep, pid: _NeverHolds(ep, pid)
+    d._mb = None
+    env = d(BeingIntent("remember", {"content": "x"}), _ALLOW)
+    assert not env.ok and "NOT saved" in env.error, env
+    assert _mb_calls("save_cartridge") == []
+    assert len(_mb_calls("memory_store")) == 2, "one retry, not a loop"
+
+
+def test_recall_after_the_session_expired_remounts_and_answers():
+    d, _ = _expiring_disp()
+    assert d(BeingIntent("recall", {"query": "a"}), _ALLOW).ok
+    _ExpiringMembot.expired = True
+    FakeMcp.calls = []
+    env = d(BeingIntent("recall", {"query": "b"}), _ALLOW)
+    assert env.ok, env
+    assert [n for n, _ in FakeMcp.calls].count("mount_cartridge") == 1, FakeMcp.calls
+    assert "something remembered" in str(env.result), env.result
+
+
+def _remember_with_save_reply(text):
+    """A confirmed store followed by a save_cartridge that answers `text` as ordinary result text."""
+    d, _ = _mdisp()
+
+    class _SaveSays(FakeMembot):
+        def call(self, name, args):
+            if name == "save_cartridge":
+                FakeMcp.calls.append((name, args))
+                return {"result": {"content": [{"type": "text", "text": text}],
+                                   "structuredContent": {"result": text}}}
+            return super().call(name, args)
+    d._mcp_factory = lambda ep, pid: _SaveSays(ep, pid)
+    d._mb = None
+    env = d(BeingIntent("remember", {"content": "a memory"}), _ALLOW)
+    return d, env
+
+
+def test_a_save_that_answers_not_mounted_after_a_confirmed_store_is_not_a_kept_memory():
+    """NOVA on #610: the session lost its mount between a confirmed memory_store and save_cartridge.
+    The save's text is not a receipt, so the act fails NOT saved, is not witnessed, and the save is
+    neither retried nor followed by a remount in this act; the session is dropped for the next."""
+    d, env = _remember_with_save_reply("No cartridge mounted. Use mount_cartridge first.")
+    assert not env.ok and "NOT saved" in env.error, env
+    assert env.witness_id is None
+    names = [n for n, _ in FakeMcp.calls]
+    assert names.count("save_cartridge") == 1 and names.count("mount_cartridge") == 1, names
+    assert d._mb is None and d._mb_dirty is True
+
+
+def test_a_save_receipt_of_zero_memories_after_a_store_is_reported_as_an_emptied_cartridge():
+    """With a name given, membot saves an EXPIRED session anyway: "Saved 'x': 0 memories". After a
+    confirmed store that is the empty overwrite, not a save, and it is said as such."""
+    d, env = _remember_with_save_reply("Saved 'sprout-being': 0 memories, 0.0 MB, fingerprint=5feceb66ffc86f38")
+    assert not env.ok and "NOT saved" in env.error and "EMPTY cartridge" in env.error, env
+    assert env.witness_id is None and d._mb is None
+
+
+def test_other_save_texts_are_not_receipts():
+    for text in ("No cartridge to save. Mount one first or provide a name.", "Save error: disk full",
+                 "Server is in read-only mode. save_cartridge is disabled."):
+        _, env = _remember_with_save_reply(text)
+        assert not env.ok and "NOT saved" in env.error and "EMPTY" not in env.error, (text, env)
