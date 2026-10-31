@@ -5269,12 +5269,16 @@ def _host_note() -> str:
     for systemd, D-Bus and Docker installers, over and over, while the daemon decided every one of its acts.
     The run is --unshare-pid --unshare-net: PID 1 is the run itself and there is no network. The note said
     "no network"; it never said that this also hides every other process, service and port. That is the
-    sandbox's design, not a guess about this run, so saying it keeps the note evidence-only (_device_note)."""
-    return ("The sandbox has its own process space and no network, by design: no other process on this "
-            "machine, no service, no systemd or D-Bus, and no port (7711 included) is visible from inside it. "
-            "So 'not running', 'connection refused' or 'not booted with systemd' from a run describes the "
-            "sandbox, never this machine. The daemon that decides your acts is running: it is what decided "
-            "this one.")
+    sandbox's design, not a guess about this run, so saying it keeps the note evidence-only (_device_note).
+
+    IT CORRECTS A FALSE NEGATIVE WITHOUT ASSERTING A POSITIVE (NOVA's review of #609). The first cut ended
+    "the daemon that decides your acts is running", which nothing in a run's output proves. The note says
+    only what isolation proves: a probe from here is not evidence that a host service is up or down."""
+    return ("The sandbox has its own process space and no network, by design: this machine's other "
+            "processes, its services, systemd, D-Bus and its listening ports (7711 included) are not visible "
+            "from inside it; only the run's own processes are. So 'not running', 'connection refused' or 'not "
+            "booted with systemd' from a probe like this describes the sandbox. It is not evidence that a "
+            "service on this machine is down, or that it is up.")
 
 
 def _device_note() -> str:

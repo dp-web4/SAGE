@@ -653,13 +653,18 @@ def test_a_run_that_reports_on_this_machine_is_told_the_sandbox_cannot_see_it():
     was closed and the daemon was not running, and it asked for installers again and again while the
     daemon decided each act. The note now says the sandbox sees no other process, service or port."""
     from sage.gateway.hestia_dispatch import _run_note
-    said = "describes the sandbox, never this machine"
+    said = "describes the sandbox"
     for out in ("Failed to connect to bus: No medium found",
                 "System has not been booted with systemd as init system (PID 1). Can't operate.",
                 "port 7711 is closed", "ConnectionRefusedError: [Errno 111] Connection refused",
                 "The Hestia daemon is not running", "hestia.service: inactive (dead)"):
         note = _run_note(1, "", ["t.py"], out)
-        assert said in note and "it is what decided this one" in note, out
+        assert said in note and "not evidence that a service on this machine is down, or that it is up" in note, out
+        # NOVA's review of #609: a false negative is never corrected with an unproven positive.
+        low = note.lower()
+        assert "is running" not in low and "decided this one" not in low, note
+        # the run's OWN processes exist; only the host's are hidden
+        assert "only the run's own processes are" in note
     assert said in _run_note(1, "Failed to connect to bus: No medium found", ["t.py"])
     assert said in _run_note(0, "", ["t.py"], "systemctl is-active hestia -> unknown")
     for benign in ("loss 0.81 after 40 epochs", "residual 0.806334", "running mean 3.2", "wrote out.csv"):
