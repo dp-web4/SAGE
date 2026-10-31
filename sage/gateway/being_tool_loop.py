@@ -1094,6 +1094,20 @@ def _retry_budget(llm, raw: Optional[dict] = None) -> int:
     return max(floor, num_ctx - prompt - RETRY_MARGIN)
 
 
+def _window_left(llm, raw: Optional[dict] = None) -> int:
+    """Tokens the window has left after this prompt for a reply (num_ctx - prompt_eval_count -
+    RETRY_MARGIN), or a very large number when either count is unknown, so that an unknown
+    window never reads as a tight one."""
+    try:
+        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
+        prompt = int((raw or {}).get("prompt_eval_count") or 0)
+    except (TypeError, ValueError):
+        return 1 << 30
+    if num_ctx <= 0 or prompt <= 0:
+        return 1 << 30
+    return num_ctx - prompt - RETRY_MARGIN
+
+
 class _no_think:
     """Turn thinking off for one retry, and put it back.
 
@@ -1535,17 +1549,29 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 sent = budget
             content = resp.get("content", "") or ""
             calls = resp.get("tool_calls", []) or []
-        if not content and not calls:
+        # A REPLY THE WINDOW CUT IS NOT THE BEING'S LAST WORD (2026-10-30). The remedies below
+        # were reached only by an EMPTY turn, so a reply that had started and was then cut at the
+        # wall (prompt + eval == num_ctx, done_reason "length", no tool call) stood as the step's
+        # final answer: no retry, nothing recorded. mcnugget-being, gemma4:12b at num_ctx 16,384,
+        # the first five beats after #599 turned its thinking on: three ended this way, mid-
+        # sentence, at prompts of 14,428, 13,563 and ~13.6k, each beat stopping at 4-7 explore
+        # steps instead of 7-8. A cut with content gets the window-cut retry an empty one gets.
+        _raw0 = resp.get("raw") or {}
+        cut_reply = bool(content and not calls and _raw0.get("done_reason") == "length"
+                         and retry_cause_of(llm, _raw0) == "window")
+        if (not content and not calls) or cut_reply:
             # An empty turn is a harness signal, not a being's choice: say why on stderr
             # (budget exhausted in deliberation, adapter stripped everything, ...).
             import sys as _sys
             raw = resp.get("raw") or {}
             msg = raw.get("message") or {}
-            print(f"[tool-loop] EMPTY turn: done_reason={raw.get('done_reason')} "
+            print(f"[tool-loop] {'WINDOW-CUT reply' if cut_reply else 'EMPTY turn'}: "
+                  f"done_reason={raw.get('done_reason')} "
                   f"prompt_eval={raw.get('prompt_eval_count')} eval={raw.get('eval_count')} "
                   f"raw_content={str(msg.get('content', ''))[:200]!r} "
                   f"thinking={str(msg.get('thinking', ''))[:200]!r}", file=_sys.stderr)
-            _kept = keep_empty_thinking(getattr(client, "memory_root", None), raw, msg)
+            _kept = (None if cut_reply else
+                     keep_empty_thinking(getattr(client, "memory_root", None), raw, msg))
             if _kept:
                 print(f"[tool-loop] EMPTY turn's whole thinking kept: {_kept}", file=_sys.stderr)
             # Qwen3.8 (heretic) sometimes re-opens a think block even with think=false and
@@ -1648,7 +1674,12 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 from contextlib import ExitStack
                 with ExitStack() as _stack:
                     budget = _stack.enter_context(_retry_room(llm, _retry_budget(llm, _budget_raw)))
-                    unthought = bool(thought_only and _stack.enter_context(_no_think(llm)))
+                    # NO ROOM TO THINK AND ANSWER: a cut reply whose retry has less window left than
+                    # one thinking reply's budget would only think into the same wall again (the
+                    # cuts above left 1.9-2.8k tokens, against a 3,000 think budget), so that one
+                    # retry answers without thinking. With room enough, thinking is left alone.
+                    _tight = bool(cut_reply and sent and _window_left(llm, _budget_raw) < int(sent))
+                    unthought = bool((thought_only or _tight) and _stack.enter_context(_no_think(llm)))
                     print(f"[tool-loop] retrying once with num_predict={budget}"
                           f"{' , thinking OFF and a nudge' if unthought else ''} "
                           f"(num_ctx={getattr(llm, 'num_ctx', None)} prompt_eval={raw.get('prompt_eval_count')})",
