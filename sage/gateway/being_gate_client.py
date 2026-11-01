@@ -2565,10 +2565,9 @@ def thread_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
     root = (ctx or {}).get("memory_root")
     if not root:
         raise ValueError("retire_thread: no home to retire a thread in")
-    from pathlib import Path
     from sage.gateway.being_threads import writes
     from sage.gateway.reference_f1a import HOME_LOCK   # taken, as memory_write takes it (#544)
-    return [os.path.realpath(os.path.join(root, f)) for f in writes(Path(root)) + (HOME_LOCK,)]
+    return [os.path.realpath(os.path.join(root, f)) for f in writes(a) + (HOME_LOCK,)]
 
 
 def skill_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
@@ -3095,7 +3094,7 @@ _TOOL_SCHEMAS = {
     # only retire one note or one entry per act).
     "retire_thread": ("Close a whole line of work at once: every OPEN todo item and every settled entry "
                       "that names one of your words is moved out of what you are shown each beat, into one "
-                      "retired file (todo.retired-<date>-thread.md) that recall still searches. Use it when a "
+                      "retired file (todo.retired-thread-<id>.md) that recall still searches. Use it when a "
                       "topic is finished or someone asks you to drop it, so it stops coming back uninvited. "
                       "Other items and entries stay as they are. preview='true' shows what would move and "
                       "changes nothing.",

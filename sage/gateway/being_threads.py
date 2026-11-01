@@ -11,7 +11,7 @@ said "this whole line is finished".
 
 WHAT IT DOES. Given topic words (comma separated) and a reason, every OPEN todo item and every settled
 entry that names one of the words is moved out of what the beat shows, into one retired file at the
-home root (todo.retired-<date>-thread.md). recall still searches that file (home_recall indexes
+home root (todo.retired-thread-<hash>.md, named by the words and reason). recall still searches that file (home_recall indexes
 todo.retired-*), so nothing is lost and a deliberate search finds it; it just stops arriving uninvited.
 Done items, other open items and other settled entries are untouched. The retired file keeps the old
 todo.md whole below a header that lists exactly what was taken out, and settled_log.jsonl records each
@@ -23,6 +23,7 @@ nothing, so a being (or its seat) can check a word list before using it.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -31,7 +32,6 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 TODO = "todo.md"
-TODO_TMP = ".todo.md.tmp"
 MIN_WORD = 3          # shorter words match too much to be a topic ("ap", "in")
 MAX_WORDS = 100       # cbp-being's hestia thread (11-01) took 68 to cover without catching its own work
 REASON_MAX = 600
@@ -59,24 +59,36 @@ def matcher(words: List[str]) -> Callable[[str], bool]:
     return lambda text: any(p.search(text or "") for p in pats)
 
 
-def archive_name(instance: Path, now: Optional[float] = None) -> str:
-    """The retired file this call writes: never one that already exists (a second retire the same day
-    gets -2, -3, as retire_note's copies do)."""
-    day = _stamp(now).strftime("%Y-%m-%d")
-    name, n = f"todo.retired-{day}-thread.md", 2
-    while (Path(instance) / name).exists():
-        name, n = f"todo.retired-{day}-thread-{n}.md", n + 1
-    return name
+def _reason_of(args: Dict) -> str:
+    return re.sub(r"\s+", " ", str((args or {}).get("reason") or "")).strip()[:REASON_MAX]
 
 
-def writes(instance: Path, now: Optional[float] = None) -> Tuple[str, ...]:
-    """Every file a (non-preview) retire_thread touches in the home, for the gate."""
+def archive_name(args: Dict) -> str:
+    """The retired file this call writes, from the call's OWN arguments and nothing else.
+
+    NOVA's hold on #619 (1bd4fd69): the first cut picked the name from the home's listing, once when the
+    gate was told the write set and again after the lock was taken, so a retire landing in between moved
+    this one to "-2", a path the gate never saw. A name that is a function of (words, reason) is the same
+    at both points. If that file already exists (the same words and reason were used before), the retire
+    is REFUSED rather than renamed: no path outside the declared set is ever written."""
+    key = json.dumps([[w.lower() for w in words_of(args.get("words"))], _reason_of(args)])
+    return f"todo.retired-thread-{hashlib.sha256(key.encode()).hexdigest()[:12]}.md"
+
+
+def _tmp(name: str) -> str:
+    return f".{name}.tmp"           # _write_atomic's temp file for `name`
+
+
+def writes(args: Dict) -> Tuple[str, ...]:
+    """Every file a (non-preview) retire_thread opens for writing in the home, for the gate: todo.md and
+    its temp, the archive and its temp (NOVA, 1bd4fd69: the temp was undeclared), and settled's own."""
     from sage.gateway.being_settled import SETTLED_WRITES
-    return (TODO, TODO_TMP, archive_name(instance, now)) + tuple(SETTLED_WRITES)
+    arch = archive_name(args)
+    return (TODO, _tmp(TODO), arch, _tmp(arch)) + tuple(SETTLED_WRITES)
 
 
 def _write_atomic(p: Path, text: str) -> None:
-    tmp = p.with_name(f".{p.name}.tmp")
+    tmp = p.with_name(_tmp(p.name))
     with open(tmp, "w") as f:
         f.write(text)
         f.flush()
@@ -121,7 +133,7 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
     from sage.gateway import being_settled as st
     a = args or {}
     words = words_of(a.get("words"))
-    reason = re.sub(r"\s+", " ", str(a.get("reason") or "")).strip()[:REASON_MAX]
+    reason = _reason_of(a)
     preview = str(a.get("preview") or "").strip().lower() in ("true", "yes", "1")
     if not words:
         return False, ("retire_thread needs 'words': the topic, as words separated by commas, e.g. "
@@ -156,7 +168,10 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
             return True, (f"Nothing names {topic}: no open todo item and no settled entry. Nothing was "
                           f"changed."), False
         stamp = _stamp(now)
-        name = archive_name(instance, now)
+        name = archive_name(a)
+        if (instance / name).exists():
+            return False, (f"a retire with these same words and reason already wrote {name}; nothing was "
+                           f"changed. Give a different reason (say what is new) to retire again."), False
         head = [f"> RETIRED {stamp:%Y-%m-%d %H:%M}Z with retire_thread"
                 + (f" (by {by})" if by else "") + f". Topic words: {topic}.",
                 f"> No longer current: {reason}", "",

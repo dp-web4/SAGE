@@ -1,7 +1,10 @@
 """retire_thread: close a whole line of work at once (being_threads). dp, 2026-11-01, to cbp-being: "retire
 the whole hestia thread and work on something different" -- 550 of its 584 open todo items and 29 of its
 30 settled entries were on that thread, and retire_note / settle could only move one at a time."""
+import builtins
+import io
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -47,14 +50,14 @@ def test_a_thread_leaves_the_todo_and_the_settled_list_and_the_rest_stays(tmp_pa
     assert _open(h) == ["Build a small neural net and test it on the sine data",
                         "Explore what a living document could be"]
     assert [e["question"] for e in st.read(h)[0]] == ["Why does the net overfit?"]
-    arch = (h / "todo.retired-1970-01-01-thread.md").read_text()
+    arch = (h / bt.archive_name({"words": "widget, daemon", "reason": "dp: drop it"})).read_text()
     assert "Topic words: widget, daemon" in arch and "No longer current: dp: drop it" in arch
     assert "- [ ] Install the widget package with apt (since 2026-10-30 09:00 UTC)" in arch
     assert "Is the widget daemon running? -> no, port 9911 is closed" in arch
     assert arch.endswith(TODO), "the replaced todo.md is kept whole"
     log = [json.loads(l) for l in (h / st.SETTLED_LOG).read_text().splitlines()]
     assert log[-1]["op"] == "retire_thread" and log[-1]["ids"] == ["s1", "s3"]
-    assert log[-1]["to"] == "todo.retired-1970-01-01-thread.md" and len(log[-1]["from"]) == 2
+    assert log[-1]["to"].startswith("todo.retired-thread-") and len(log[-1]["from"]) == 2
 
 
 def test_open_items_keep_the_date_they_were_opened(tmp_path):
@@ -101,23 +104,97 @@ def test_refusals_change_nothing(tmp_path):
     assert {p.name: p.read_bytes() for p in h.iterdir() if p.is_file()} == before
 
 
-def test_a_second_retire_the_same_day_gets_its_own_file(tmp_path):
+def test_the_archive_is_named_by_the_call_and_a_repeat_is_refused_not_renamed(tmp_path):
+    """NOVA's hold on #619: the name was picked from the listing, so a retire landing between the gate's
+    write set and the lock moved this one to '-2'. Now it is a function of (words, reason) only."""
+    a, b = {"words": "daemon", "reason": "r"}, {"words": "widget", "reason": "r"}
+    assert bt.archive_name(a) == bt.archive_name({"words": " Daemon ", "reason": "r"}) != bt.archive_name(b)
     h = _home(tmp_path)
-    bt.retire_thread(h, {"words": "daemon", "reason": "r"}, now=0)
-    bt.retire_thread(h, {"words": "widget", "reason": "r"}, now=0)
-    assert (h / "todo.retired-1970-01-01-thread.md").exists()
-    assert (h / "todo.retired-1970-01-01-thread-2.md").exists()
+    assert bt.retire_thread(h, a, now=0)[0] and bt.retire_thread(h, b, now=0)[0]
+    assert (h / bt.archive_name(a)).exists() and (h / bt.archive_name(b)).exists()
+    (h / "todo.md").write_text(TODO)            # the thread crept back; the same call again
+    before = {p.name: p.read_bytes() for p in h.iterdir() if p.is_file()}
+    ok, msg, changed = bt.retire_thread(h, a, now=0)
+    assert not ok and not changed and "Give a different reason" in msg
+    assert {p.name: p.read_bytes() for p in h.iterdir() if p.is_file()} == before
 
 
-def test_the_gate_is_told_every_file_it_writes(tmp_path):
+class _Writes:
+    """Every path opened for writing, replaced into, or unlinked while active (reads are not writes)."""
+
+    def __init__(self, monkeypatch):
+        self.paths = set()
+        real_open, real_replace, real_unlink = builtins.open, os.replace, os.unlink
+
+        def _open(f, mode="r", *a, **k):
+            if isinstance(f, (str, bytes, os.PathLike)) and any(c in mode for c in "wax+"):
+                self.paths.add(os.path.realpath(f))
+            return real_open(f, mode, *a, **k)
+
+        def _replace(src, dst, *a, **k):
+            self.paths.update({os.path.realpath(src), os.path.realpath(dst)})
+            return real_replace(src, dst, *a, **k)
+
+        def _unlink(p, *a, **k):
+            self.paths.add(os.path.realpath(p))
+            return real_unlink(p, *a, **k)
+
+        for mod in (builtins, io):
+            monkeypatch.setattr(mod, "open", _open)
+        monkeypatch.setattr(os, "replace", _replace)
+        monkeypatch.setattr(os, "unlink", _unlink)
+
+
+def _declared(h, args):
+    return set(thread_paths(args, {"memory_root": str(h)}))
+
+
+def test_no_path_outside_the_declared_set_is_opened_for_writing(tmp_path, monkeypatch):
+    """NOVA (1bd4fd69): the archive's atomic temp was written and undeclared. Checked on the real
+    open/replace calls, not on what is left on disk (a temp file is gone by then)."""
     h = _home(tmp_path)
-    declared = set(thread_paths({"words": "widget", "reason": "r"}, {"memory_root": str(h)}))
+    args = {"words": "widget", "reason": "r"}
     assert thread_paths({"words": "widget", "preview": "true"}, {"memory_root": str(h)}) == []
-    before = {p: p.read_bytes() for p in h.iterdir() if p.is_file()}
-    bt.retire_thread(h, {"words": "widget", "reason": "r"})
-    after = {p: p.read_bytes() for p in h.iterdir() if p.is_file()}
-    changed = {str(p.resolve()) for p in set(before) | set(after) if before.get(p) != after.get(p)}
-    assert changed and changed <= declared, changed - declared
+    declared = _declared(h, args)
+    w = _Writes(monkeypatch)
+    assert bt.retire_thread(h, args)[0]
+    assert os.path.realpath(h / f".{bt.archive_name(args)}.tmp") in w.paths, "the temp is exercised"
+    assert w.paths and w.paths <= declared, w.paths - declared
+
+
+def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_path, monkeypatch):
+    h = _home(tmp_path)
+    mine, other = {"words": "widget", "reason": "mine"}, {"words": "daemon", "reason": "other"}
+    declared = _declared(h, mine)               # the gate is told, then another retire lands first
+    assert bt.retire_thread(h, other)[0]
+    w = _Writes(monkeypatch)
+    assert bt.retire_thread(h, mine)[0]
+    assert w.paths <= declared, w.paths - declared
+    # the same call landing first takes the declared name: the second is refused and writes nothing
+    (tmp_path / "two").mkdir()
+    h2 = _home(tmp_path / "two")
+    declared = _declared(h2, mine)
+    monkeypatch.undo()
+    assert bt.retire_thread(h2, mine)[0]
+    (h2 / "todo.md").write_text(TODO)           # the thread crept back before the second ran
+    w = _Writes(monkeypatch)
+    ok, msg, _ = bt.retire_thread(h2, mine)
+    assert not ok and "Give a different reason" in msg
+    assert not (w.paths - {os.path.realpath(h2 / ".home.lock")}), w.paths
+
+
+def test_a_failed_settled_commit_rolls_back_within_the_declared_paths(tmp_path, monkeypatch):
+    h = _home(tmp_path)
+    args = {"words": "widget", "reason": "r"}
+    declared = _declared(h, args)
+    entries_before = (h / "settled.json").read_bytes()
+    monkeypatch.setattr(st, "_commit", lambda *a, **k: (False, "could not write settled.json (OSError)"))
+    w = _Writes(monkeypatch)
+    ok, msg, changed = bt.retire_thread(h, args)
+    assert not ok and not changed and "put back as it was" in msg
+    assert (h / "todo.md").read_text() == TODO and (h / "settled.json").read_bytes() == entries_before
+    assert not (h / bt.archive_name(args)).exists()
+    assert w.paths <= declared, w.paths - declared
 
 
 def test_the_verb_retires_and_witnesses():
