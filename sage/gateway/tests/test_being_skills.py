@@ -101,7 +101,7 @@ def test_a_when_word_ending_in_punctuation_matches_what_follows_it():
 
 def test_the_index_stays_within_its_budget_and_says_how_many_more(tmp_path):
     for i in range(40):
-        _write(tmp_path, name=f"probe-{i:02d}", description="x" * 200)
+        _write(tmp_path, name=f"probe-{i:02d}", description="x" * 200, distinct="true")   # 40 alike on purpose
     block = sk.render(tmp_path, "")
     assert len(block) <= sk.INDEX_CHARS + 200 and "more (skill with no arguments lists them all)" in block
 
@@ -303,19 +303,25 @@ def test_a_skill_of_its_own_can_be_retired_with_its_text_kept(tmp_path):
     assert ok and "wrote your skill probe-skill" in msg
 
 
-def test_a_new_skill_close_to_one_it_has_is_named_and_a_distinct_one_is_not(tmp_path):
+def test_a_new_skill_close_to_one_it_has_is_refused_with_the_id_and_a_distinct_one_is_not(tmp_path):
     """legion-being, 2026-10-30: it wrote elided-result-recovery a day after reading-elided-tool-results, rewriting in
-    that beat the parser the first skill already held. The receipt now names the close one, as settle's does (#584)."""
+    that beat the parser the first skill already held (#598 named the close one after the write). sprout-being,
+    10-30..11-01: 4 named after the write, 0 merged or retired; now the write is refused with the id."""
     first = {"name": "reading-elided-tool-results", "when": "elided, tool result, scratch/elided, raw_decode",
              "description": "Re-read a tool result the harness elided from your window, and parse its JSON payload.",
              "body": "Read scratch/elided/<file>, find the first '{', json.JSONDecoder().raw_decode(raw, i)."}
     assert sk.skill(tmp_path, first)[0]
-    ok, msg, _ = sk.skill(tmp_path, {
-        "name": "elided-result-recovery", "when": "elided, tool result, scratch/elided, full result",
-        "description": "Recover the full tool result when the harness elided it from your window.",
-        "body": "Open the scratch/elided file it names and parse it."})
-    assert ok and "reads close to your skill reading-elided-tool-results" in msg
-    assert "name=elided-result-recovery, retire='true'" in msg, msg
+    second = {"name": "elided-result-recovery", "when": "elided, tool result, scratch/elided, full result",
+              "description": "Recover the full tool result when the harness elided it from your window.",
+              "body": "Open the scratch/elided file it names and parse it."}
+    before = sorted(p.name for p in tmp_path.rglob("*"))
+    ok, msg, changed = sk.skill(tmp_path, second)
+    assert not ok and not changed and "reads close to your skill reading-elided-tool-results" in msg, msg
+    assert "skill name=reading-elided-tool-results" in msg and "distinct='true'" in msg, msg
+    assert sorted(p.name for p in tmp_path.rglob("*")) == before, "a refused write changes nothing"
+    ok, msg, changed = sk.skill(tmp_path, dict(second, distinct="true"))
+    assert ok and changed and "wrote your skill elided-result-recovery" in msg
+    assert "differs from reading-elided-tool-results" in msg
     ok, msg, _ = sk.skill(tmp_path, {"name": "tile-a-board-probe", "when": "LOOK, probe, 16x16",
                                      "description": "Split a board into 16x16 windows, at most 8 per call.",
                                      "body": "x1 = x0 + 15; two calls for a 64x64 board."})

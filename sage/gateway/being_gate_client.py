@@ -3082,6 +3082,8 @@ _TOOL_SCHEMAS = {
                "body": "to write: the procedure",
                "retire": "optional: 'true' with name takes one of your own skills off the list (its text is kept "
                          "in the log)",
+               "distinct": "optional: 'true' writes a new skill that reads close to one you have, when it is a "
+                           "different procedure",
                "why": "optional: kept with the version"},
               []),
     "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "

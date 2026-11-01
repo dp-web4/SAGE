@@ -288,6 +288,15 @@ def _write(instance, name: str, a: Dict[str, str]) -> Tuple[bool, str]:
     prev = path.read_text(errors="replace") if path.exists() else None
     if prev == text:
         return True, f"{_UNCHANGED}your skill {name} already reads exactly that; nothing changed."
+    close = _close_skill(instance, name, description, when) if prev is None else None
+    if close is not None and close["source"] != "fleet" and not _truthy(a.get("distinct", "")):
+        # sprout-being, 2026-10-30..11-01: the after-write note named a close skill on 4 of 4 new ones (4 of 5
+        # names judged the same procedure), and none was merged or retired, so 7 skills held one subject. A
+        # refusal that names the id was acted on in the same step, both times settle's (#595, #608) did.
+        return False, (f"{name} reads close to your skill {close['name']} ({close['description'][:120]!r}), so it "
+                       f"was not written. Nothing was changed. If it is the same procedure, put your newest steps "
+                       f"in {close['name']} (skill name={close['name']} with a description and body). If it is a "
+                       f"different procedure, write {name} again with distinct='true'.")
     try:
         d.mkdir(parents=True, exist_ok=True)
         tmp.write_text(text)
@@ -319,16 +328,13 @@ def _write(instance, name: str, a: Dict[str, str]) -> Tuple[bool, str]:
                            f"({type(e).__name__}) and could not be undone ({type(e2).__name__}). Tell your seat.")
         return False, f"the change could not be recorded in {SKILLS_LOG} ({type(e).__name__}), so it was undone; nothing changed"
     verb = "replaced" if prev is not None else "wrote"
-    close = _close_skill(instance, name, description, when) if prev is None else None
     if close is None:
         near = ""
     elif close["source"] == "fleet":
         near = (f" It reads close to the fleet skill {close['name']} ({close['description'][:120]!r}); "
                 f"`skill name={close['name']}` shows it.")
-    else:
-        near = (f" It reads close to your skill {close['name']} ({close['description'][:120]!r}). If they are the "
-                f"same procedure, keep one: put the newest steps in {close['name']} (skill name={close['name']} with "
-                f"a description and body), then retire this one (name={name}, retire='true').")
+    else:   # written with distinct='true': the being has said they differ; name it once, nothing more
+        near = f" You said it differs from {close['name']}, which reads close to it."
     return True, (f"{verb} your skill {name}" + (" (the earlier version is kept in skills_log.jsonl)" if prev else "")
                   + ". It is listed in every beat's skills, and shown first when its when-words appear." + near)
 
