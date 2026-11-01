@@ -1779,3 +1779,29 @@ def test_an_extension_already_on_disk_is_not_applied_twice():
                                          "new": "x = np.zeros(3) + 1"}), _ALLOW)
     assert r.ok, r.error
     assert "x = np.zeros(3) + 1\n" in f.read_text()
+
+
+def test_a_read_above_the_decoded_section_is_told_where_it_starts():
+    """legion-being, 2026-10-31 06:06Z: it read the top of a spilled run result (the header and the one-line JSON),
+    then wrote a script to raw_decode the same file; #600's plain lines sat below, unread. A read that stops above the
+    decoded section now names its first line; one that reaches it, or a file without one, is unchanged."""
+    import json as _json
+    from sage.gateway.being_tool_loop import SPILL_DECODED_MARK, _decoded_text_fields
+    disp, root = _disp()
+    os.makedirs(os.path.join(root, "scratch", "elided"))
+    body = _json.dumps({"exit_code": 0, "stdout": "".join(f"row {i}\n" for i in range(40))})
+    rel = "scratch/elided/20261031-061748-013-000.txt"
+    open(os.path.join(root, rel), "w").write("[saved tool result: run]\n" + body + _decoded_text_fields(body))
+    lines = open(os.path.join(root, rel)).read().splitlines()
+    at = next(i + 1 for i, line in enumerate(lines) if line.startswith(SPILL_DECODED_MARK))
+    note = f"plain lines from line {at} on"
+
+    r = disp(BeingIntent("memory_read", {"path": rel, "start_line": 1, "end_line": 2}), _ALLOW)
+    assert r.ok and note in r.result.split("\n")[0] and f"start_line={at}" in r.result, r.result[:200]
+    r = disp(BeingIntent("memory_read", {"path": rel, "start_line": at, "end_line": at + 5}), _ALLOW)
+    assert note not in r.result and "row 0" in r.result, r.result[:200]
+    r = disp(BeingIntent("memory_read", {"path": rel}), _ALLOW)
+    assert note not in r.result
+    open(os.path.join(root, "long.py"), "w").write("".join(f"line {i}\n" for i in range(1, 501)))
+    r = disp(BeingIntent("memory_read", {"path": "long.py", "start_line": 100, "end_line": 102}), _ALLOW)
+    assert note not in r.result and r.result.startswith("[lines 100-102 of 500"), r.result[:80]
