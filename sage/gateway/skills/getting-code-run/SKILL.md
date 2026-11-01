@@ -8,8 +8,11 @@ when: did not run, declined, traceback, same as the request, already_asked, earl
 - `run` runs a `.py` file NOW, in a sandbox, on copies of your files. No network, no home, no GPU, no devices;
   nothing it changes is kept, so print what you want to keep. Most code belongs here.
 - `request_run` asks your seat to run a file OUTSIDE the sandbox, for what the sandbox lacks (network, files
-  that must stay changed, the GPU, more than an hour). What comes back at once is a receipt, not a result;
-  the seat answers in your seat conversation with "Answers your request seq N".
+  in your home that must stay changed, the GPU, more than an hour). What comes back at once is a receipt, not
+  a result; the seat answers in your seat conversation with "Answers your request seq N".
+- The seat never installs or changes anything on this machine outside your home: no apt or pip packages, no
+  services, systemd units or D-Bus, no system directories or owners, no starting or stopping daemons. A file
+  that does any of that is declined every time, so there is nothing to gain by asking again with a new reason.
 
 **Make the run settle something**
 1. Before running, write down what it should print if you are right, and what would mean you are wrong.

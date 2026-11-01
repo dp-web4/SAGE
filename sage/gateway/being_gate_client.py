@@ -3231,8 +3231,12 @@ _TOOL_SCHEMAS = {
                     ["path", "new"]),
     "request_run": ("Ask the seat to RUN one of your own files OUTSIDE the sandbox, and tell "
                     "you what happened. Most code you run yourself, with `run`. This is for code "
-                    "that needs what the sandbox does not have: the network, files that must "
-                    "stay changed, more than an hour, or the GPU. Say which, and why, in `why`. "
+                    "that needs what the sandbox does not have: the network, files in your home "
+                    "that must stay changed, more than an hour, or the GPU. Say which, and why, in `why`. "
+                    "The seat does not install or change anything on this machine outside your "
+                    "home: no packages (apt, pip), no services, systemd units or D-Bus, no system "
+                    "directories or owners, and no starting or stopping daemons. A file that does "
+                    "any of that is declined, every time, whatever its reason. "
                     "You name the file — the only thing it needs — and the seat decides whether to run it and "
                     "answers with the real output: exit code, stdout, stderr. Adding what you "
                     "expect to learn is optional and helps the seat decide. It may decline, and "
@@ -3344,8 +3348,10 @@ _TOOL_SCHEMAS = {
             "before the stop comes back. "
             "This is how a claim becomes testable: before you run it, say what it should print "
             "if you are right, and what would mean you are wrong. If your code truly needs what "
-            "the sandbox lacks (the network, files that must stay changed, more than an hour, "
-            "the GPU), ask the seat with request_run and say why.",
+            "the sandbox lacks (the network, files in your home that must stay changed, more "
+            "than an hour, the GPU), ask the seat with request_run and say why. Installing or "
+            "changing anything on this machine outside your home is not one of those: the seat "
+            "declines it.",
             {"path": "a .py file in your home, e.g. 'scratch/evaluator.py'",
              "data": "optional: up to 8 more files, named by their SOURCE path — relative to your "
                      "home, or absolute anywhere you can read. Inside the sandbox each one "

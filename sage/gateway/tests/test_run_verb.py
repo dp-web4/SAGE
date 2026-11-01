@@ -594,6 +594,27 @@ def test_run_and_request_run_each_name_the_other_and_neither_says_you_cannot_run
     assert "request_run asks the seat" in AFFORDANCES
 
 
+def test_request_run_says_the_seat_never_installs_or_changes_the_machine():
+    """cbp-being, 2026-10-28..11-01: 104 of its 144 request_run calls were installs or host changes
+    (apt, D-Bus, systemd, system directories, starting daemons) and 5 were its own work; through
+    mid-October its own work was 95%+. Every one was declined. The door's text listed "the network"
+    and "files that must stay changed" as reasons to use it, which is exactly what an installer
+    needs, so the text offered what the seat would always refuse. It now says so before the file
+    is written, in all three places the being reads it (dp, 2026-11-01: change the affordance)."""
+    from pathlib import Path
+    from sage.gateway.being_gate_client import _TOOL_SCHEMAS
+    run, req = _TOOL_SCHEMAS["run"][0], _TOOL_SCHEMAS["request_run"][0]
+    skill = (Path(__file__).resolve().parents[1] / "skills" / "getting-code-run" / "SKILL.md").read_text()
+    for text in (run, req, skill):
+        assert "files in your home that must stay changed" in " ".join(text.split()), text[:120]
+        assert "files that must stay changed" not in " ".join(text.split())
+    assert "does not install or change anything on this machine outside your home" in req
+    for what in ("apt", "pip", "systemd", "D-Bus", "system directories", "daemons", "declined, every time"):
+        assert what in req, what
+    assert "the seat declines it" in run
+    assert "declined every time" in skill
+
+
 @needs_sandbox
 def test_an_empty_stderr_failure_says_where_its_files_are_not_to_read_stderr(tmp_path):
     # cbp-being 2026-10-18 23:41Z: exit 1, stderr empty, told "read stderr, it names the line"
