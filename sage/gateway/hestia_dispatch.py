@@ -3871,6 +3871,8 @@ class HestiaF1aDispatcher:
             "script": staged[0][0], "files": [b for b, _ in staged],
             "exit": rc, "stdout": out.strip(), "stderr": errtxt.strip(),
             "note": _run_note(rc, errtxt, [b for b, _ in staged], out)}
+        if action_id and _HOST_VIEW.search(f"{out}\n{errtxt}"):
+            result["note"] += " " + _daemon_answered_note(action_id)
         if not seatbelt:
             mounts, skipped, _mask = grant_mounts
             result["note"] += _run_reach_note(mounts, skipped)
@@ -5566,6 +5568,24 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "") -> str:
     if _HOST_VIEW.search(said):
         note += " " + _host_note()
     return note
+
+
+def _daemon_answered_note(action_id: str) -> str:
+    """THE ONE FACT ABOUT THE HOST THAT A RUN DOES CARRY. cbp-being, 2026-11-01 18:27Z: dp told it the
+    daemon is running and is the gate; in the same beat it ran three port checks seven times, each
+    receipt carried _host_note ("not evidence that a service on this machine is down, or that it is
+    up"), and its own scripts printed "The Hestia daemon is NOT running". It replied that the daemon
+    was down. A note that only says "this proves nothing" loses to a sentence the being wrote itself.
+
+    NOVA's review of #609 refused "the daemon that decides your acts is running" because nothing in a
+    run's output proves it. This is not that claim. Before a run executes, _do_run calls
+    hestia_begin_action on the daemon and refuses the run ("run UNVERIFIED ... not executed") unless
+    the daemon answers with an action id. So a run that executed holds an id the daemon issued for it
+    moments earlier: evidence that the daemon answered when the run started, and nothing beyond that."""
+    return (f"One fact from outside the sandbox: before this run started, the Hestia daemon on this "
+            f"machine was asked to open its record and answered (action {str(action_id)[:8]}). A run "
+            f"the daemon does not answer for is not executed, so the daemon was answering when this "
+            f"one began.")
 
 
 #: Output that reports on the machine outside the sandbox: services, systemd, D-Bus, ports, processes.
