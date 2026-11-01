@@ -288,6 +288,16 @@ def _write(instance, name: str, a: Dict[str, str]) -> Tuple[bool, str]:
     prev = path.read_text(errors="replace") if path.exists() else None
     if prev == text:
         return True, f"{_UNCHANGED}your skill {name} already reads exactly that; nothing changed."
+    close = _close_skill(instance, name, description, when) if prev is None else None
+    if close is not None and close["source"] != "fleet" and not _truthy(a.get("distinct", "")):
+        # sprout-being, 2026-10-30..11-01: the after-write note named a close skill on 4 of 4 new ones (4 of 5
+        # names judged the same procedure), and none was merged or retired, so 7 skills held one subject. A
+        # refusal that names the id was acted on in the same step, both times settle's (#595, #608) did.
+        return False, (f"{name} reads close to your skill {close['name']} ({close['description'][:120]!r}), so it "
+                       f"was not written. Nothing was changed. If it is the same procedure, `skill name={close['name']}` "
+                       f"shows it; write {close['name']} again with its steps and your newest ones together (a "
+                       f"write replaces the whole skill). If it is a different procedure, write {name} again with "
+                       f"distinct='true'.")
     try:
         d.mkdir(parents=True, exist_ok=True)
         tmp.write_text(text)
@@ -305,9 +315,11 @@ def _write(instance, name: str, a: Dict[str, str]) -> Tuple[bool, str]:
             with open(lp, "rb") as lf:
                 lf.seek(-1, os.SEEK_END)
                 torn = lf.read(1) != b"\n"
+        entry = {"at": _iso(), "name": name, "from": prev, "to": text, "why": a.get("why", "")[:WHY_MAX_CHARS]}
+        if close is not None and close["source"] != "fleet":
+            entry["distinct"] = close["name"]   # written past a refusal: how often is countable from the log (cbp)
         with open(lp, "a") as f:
-            f.write(("\n" if torn else "") + json.dumps({"at": _iso(), "name": name, "from": prev, "to": text,
-                                                         "why": a.get("why", "")[:WHY_MAX_CHARS]}) + "\n")
+            f.write(("\n" if torn else "") + json.dumps(entry) + "\n")
     except OSError as e:
         try:
             if prev is None:
@@ -319,16 +331,13 @@ def _write(instance, name: str, a: Dict[str, str]) -> Tuple[bool, str]:
                            f"({type(e).__name__}) and could not be undone ({type(e2).__name__}). Tell your seat.")
         return False, f"the change could not be recorded in {SKILLS_LOG} ({type(e).__name__}), so it was undone; nothing changed"
     verb = "replaced" if prev is not None else "wrote"
-    close = _close_skill(instance, name, description, when) if prev is None else None
     if close is None:
         near = ""
     elif close["source"] == "fleet":
         near = (f" It reads close to the fleet skill {close['name']} ({close['description'][:120]!r}); "
                 f"`skill name={close['name']}` shows it.")
-    else:
-        near = (f" It reads close to your skill {close['name']} ({close['description'][:120]!r}). If they are the "
-                f"same procedure, keep one: put the newest steps in {close['name']} (skill name={close['name']} with "
-                f"a description and body), then retire this one (name={name}, retire='true').")
+    else:   # written with distinct='true': the being has said they differ; name it once, nothing more
+        near = f" You said it differs from {close['name']}, which reads close to it."
     return True, (f"{verb} your skill {name}" + (" (the earlier version is kept in skills_log.jsonl)" if prev else "")
                   + ". It is listed in every beat's skills, and shown first when its when-words appear." + near)
 
@@ -339,7 +348,8 @@ def _close_skill(instance, name: str, description: str, when: str) -> Optional[d
     with relevance.Ranker over name + description + when: its two same-procedure pairs scored 0.61
     (elided-result-recovery / reading-elided-tool-results, written a day apart; the second beat rewrote the
     parser the first skill already holds) and 0.48 (dump-line-range / narrow-source-extraction, an hour apart);
-    every distinct pair among its own and the fleet's skills scored 0.27 or less."""
+    every distinct pair among its own and the fleet's skills scored 0.27 or less. The best OWN hit wins over a
+    higher fleet one: an own duplicate is refused and a fleet one only noted, so a fleet hit must not hide it."""
     try:
         from sage.gateway.being_settled import CLOSE_AT
         from sage.gateway.relevance import Ranker
@@ -351,7 +361,8 @@ def _close_skill(instance, name: str, description: str, when: str) -> Optional[d
         hits = rk.related(card(name, description, when), CLOSE_AT)
     except Exception:
         return None
-    return others[hits[0][1]] if hits else None
+    own = [others[i] for _, i in hits if others[i]["source"] != "fleet"]
+    return own[0] if own else (others[hits[0][1]] if hits else None)
 
 
 def _iso() -> str:
