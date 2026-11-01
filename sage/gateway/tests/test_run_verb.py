@@ -692,6 +692,30 @@ def test_a_run_that_reports_on_this_machine_is_told_the_sandbox_cannot_see_it():
         assert said not in _run_note(0, "", ["t.py"], benign), benign
 
 
+def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
+    """cbp-being 2026-11-01: _host_note alone ("not evidence either way") lost to its own script's
+    "The Hestia daemon is NOT running". The run's action id is a real answer from the daemon, issued
+    before the run executed; the note says that and claims nothing later or wider (NOVA on #609)."""
+    from sage.gateway.hestia_dispatch import _daemon_answered_note
+    note = _daemon_answered_note("652a0df6-9f71-4b57-948a-fecc6d456929")
+    assert "action 652a0df6" in note and "answering when this one began" in note
+    low = note.lower()
+    assert "is running" not in low and "decides your acts" not in low
+
+
+@needs_sandbox
+def test_a_run_that_reports_on_the_host_carries_the_daemons_answer(tmp_path):
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "probe.py").write_text("print('Port 7711 is CLOSED. The Hestia daemon is NOT running.')\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/probe.py"}))
+    assert r.ok, r.error
+    assert "not evidence that a service on this machine is down" in r.result["note"]
+    assert "action w-run" in r.result["note"]
+    (home / "scratch" / "plain.py").write_text("print('loss 0.81 after 40 epochs')\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/plain.py"}))
+    assert r.ok and "action w-run" not in r.result["note"], r.result["note"]
+
+
 def test_the_run_verb_says_the_sandbox_cannot_see_this_machine():
     from sage.gateway.being_gate_client import _TOOL_SCHEMAS
     assert "no view of this machine" in _TOOL_SCHEMAS["run"][0]
