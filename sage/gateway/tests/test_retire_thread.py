@@ -206,3 +206,15 @@ def test_the_verb_retires_and_witnesses():
     assert env.ok and env.witness_id, env.error
     assert "Build a small neural net" in (root / "todo.md").read_text()
     assert "widget" not in (root / "todo.md").read_text().split("UTC:", 1)[-1].lower()
+
+
+def test_a_preview_on_a_fresh_home_writes_nothing_not_even_the_lock(tmp_path, monkeypatch):
+    """NOVA on 577adb4b: thread_paths declares [] for a preview, but the preview took _home_lock, which
+    opens .home.lock in append mode and so CREATES it on a home that never had one."""
+    (tmp_path / "todo.md").write_text(TODO)                 # no settle: no .home.lock exists yet
+    assert not (tmp_path / ".home.lock").exists()
+    w = _Writes(monkeypatch)
+    ok, msg, changed = bt.retire_thread(tmp_path, {"words": "widget", "preview": "true"})
+    assert ok and not changed and msg.startswith("PREVIEW") and "3 of 5 open todo" in msg
+    assert w.paths == set(), w.paths
+    assert not (tmp_path / ".home.lock").exists()

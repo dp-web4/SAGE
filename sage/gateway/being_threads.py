@@ -149,21 +149,15 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
         return False, ("retire_thread needs a 'reason': why this line of work is finished. It is written "
                        "at the top of the retired file. (preview='true' shows what would move without one.)"), False
     instance = Path(instance)
+    if preview:
+        # A PREVIEW TAKES NO LOCK (NOVA on 577adb4b): _home_lock opens .home.lock in append mode, which
+        # creates it on a fresh home, a write thread_paths does not declare for a preview. It only reads.
+        return _preview(instance, words)
     with st._home_lock(instance):
         body, kept, moved, entries, nxt, gone, err = plan(instance, words)
         if err:
             return False, f"cannot read your settled list: {err}. Nothing was changed.", False
         topic = ", ".join(words)
-        if preview:
-            lines = [f"PREVIEW, nothing was changed. Words: {topic}. "
-                     f"{len(moved)} of {len(moved) + len(kept)} open todo item(s) and {len(gone)} of "
-                     f"{len(entries)} settled entr{'y' if len(entries) == 1 else 'ies'} would be retired."]
-            lines += [f"- settled [{e['id']}] {st._flat(e['question'])[:140]}" for e in gone]
-            lines += [f"- todo: {t[:140]}" for t, _ in moved[:20]]
-            if len(moved) > 20:
-                lines.append(f"- … and {len(moved) - 20} more todo item(s)")
-            lines += [f"- STAYS: {t[:140]}" for t, _ in kept[:10]]
-            return True, "\n".join(lines), False
         if not moved and not gone:
             return True, (f"Nothing names {topic}: no open todo item and no settled entry. Nothing was "
                           f"changed."), False
@@ -202,3 +196,20 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
             f"entr{'y' if len(gone) == 1 else 'ies'} moved to {name}, where recall still finds them. "
             f"Still open: {len(kept)} todo item(s); still settled: {len(entries) - len(gone)}.")
     return True, said, True
+
+
+def _preview(instance: Path, words: List[str]) -> Tuple[bool, str, bool]:
+    from sage.gateway import being_settled as st
+    body, kept, moved, entries, nxt, gone, err = plan(instance, words)
+    if err:
+        return False, f"cannot read your settled list: {err}. Nothing was changed.", False
+    topic = ", ".join(words)
+    lines =[f"PREVIEW, nothing was changed. Words: {topic}. "
+             f"{len(moved)} of {len(moved) + len(kept)} open todo item(s) and {len(gone)} of "
+             f"{len(entries)} settled entr{'y' if len(entries) == 1 else 'ies'} would be retired."]
+    lines += [f"- settled [{e['id']}] {st._flat(e['question'])[:140]}" for e in gone]
+    lines += [f"- todo: {t[:140]}" for t, _ in moved[:20]]
+    if len(moved) > 20:
+        lines.append(f"- … and {len(moved) - 20} more todo item(s)")
+    lines += [f"- STAYS: {t[:140]}" for t, _ in kept[:10]]
+    return True, "\n".join(lines), False
