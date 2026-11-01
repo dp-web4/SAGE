@@ -318,16 +318,37 @@ def test_a_new_skill_close_to_one_it_has_is_refused_with_the_id_and_a_distinct_o
     ok, msg, changed = sk.skill(tmp_path, second)
     assert not ok and not changed and "reads close to your skill reading-elided-tool-results" in msg, msg
     assert "skill name=reading-elided-tool-results" in msg and "distinct='true'" in msg, msg
+    assert "its steps and your newest ones together" in msg, "a merge keeps the old steps: a write is a replace"
     assert sorted(p.name for p in tmp_path.rglob("*")) == before, "a refused write changes nothing"
     ok, msg, changed = sk.skill(tmp_path, dict(second, distinct="true"))
     assert ok and changed and "wrote your skill elided-result-recovery" in msg
     assert "differs from reading-elided-tool-results" in msg
+    last = json.loads((tmp_path / sk.SKILLS_LOG).read_text().splitlines()[-1])
+    assert last["distinct"] == "reading-elided-tool-results", "a write past the refusal is countable from the log"
+    assert "with its steps and your newest ones together" not in msg
     ok, msg, _ = sk.skill(tmp_path, {"name": "tile-a-board-probe", "when": "LOOK, probe, 16x16",
                                      "description": "Split a board into 16x16 windows, at most 8 per call.",
                                      "body": "x1 = x0 + 15; two calls for a 64x64 board."})
     assert ok and "reads close to" not in msg, "a distinct procedure names nothing"
     ok, msg, _ = sk.skill(tmp_path, dict(first, body="Read the file; raw_decode from the first '{'."))
     assert ok and "replaced" in msg and "reads close to" not in msg, "replacing a skill is not writing a new one"
+
+
+def test_a_close_fleet_skill_does_not_hide_a_close_own_one(tmp_path, monkeypatch):
+    """pub, cbp, mcnugget on #617: _close_skill took only the top hit, so a fleet skill ranked over a close own one
+    turned the refusal into a fleet note and the own duplicate was written."""
+    own = {"name": "reading-elided-tool-results", "when": "elided, tool result",
+           "description": "Re-read a tool result the harness elided.", "body": "Read scratch/elided/<file>."}
+    assert sk.skill(tmp_path, own)[0]
+    fleet = {"name": "fleet-elided", "description": "x", "when": "", "source": "fleet", "body": "", "path": None}
+    mine = [s for s in sk.index(tmp_path) if s["source"] != "fleet"]
+    monkeypatch.setattr(sk, "index", lambda inst: [fleet] + mine)
+    from sage.gateway import relevance
+    monkeypatch.setattr(relevance.Ranker, "related", lambda self, q, t=0, among=None: [(0.9, 0), (0.5, 1)])
+    close = sk._close_skill(tmp_path, "elided-result-recovery", "Recover an elided tool result.", "")
+    assert close["name"] == "reading-elided-tool-results", close
+    monkeypatch.setattr(relevance.Ranker, "related", lambda self, q, t=0, among=None: [(0.9, 0)])
+    assert sk._close_skill(tmp_path, "elided-result-recovery", "x", "")["name"] == "fleet-elided"
 
 
 @pytest.mark.parametrize("name,says", [("getting-code-run", "fleet skill"), ("no-such-skill", "no skill called"),
