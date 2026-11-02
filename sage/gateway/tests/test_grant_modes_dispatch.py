@@ -187,7 +187,8 @@ def _core_with_modes():
     def _with_modes(policy, ws):
         return tuple((r, rec, "rwed") for r, rec in _roots(policy.scope, ws))
     return SimpleNamespace(scope_roots_with_modes=_with_modes, _scope_roots_with_reach=_roots,
-                           _scope_parts=lambda s, w: ((), ()))
+                           _scope_parts=lambda s, w: ((), ()),
+                           nearest_grant_modes=lambda *a, **k: None)
 
 
 def test_a_read_only_floor_entry_is_reach_for_reading_and_never_for_writing():
@@ -357,6 +358,7 @@ def test_nested_mode_floors_require_nearest_capability_and_keep_nearest_behavior
         (f"path:{forum}/**", "rw"), (f"path:{archive}/**", "r")))
 
     incompatible = _core_with_modes()
+    del incompatible.nearest_grant_modes
     reach = _granted_reach(incompatible, policy, ws)
     verdict = GatewayVerdict("allow", granted_reach=reach, reach_rule="union")
     d = ReferenceF1aDispatcher(memory_root=home)
@@ -370,6 +372,24 @@ def test_nested_mode_floors_require_nearest_capability_and_keep_nearest_behavior
     denied = d(BeingIntent("memory_write", {"path": os.path.join(archive, "x.md"), "content": "x"}), verdict)
     allowed = d(BeingIntent("memory_write", {"path": os.path.join(forum, "outside.md"), "content": "x"}), verdict)
     assert not denied.ok and allowed.ok, (denied, allowed)
+
+
+def test_mismatched_core_preserves_own_grants_and_legacy_read_floor():
+    ws, home, forum = _floor_world()
+    own = os.path.join(ws, "own")
+    os.makedirs(own)
+    core = _core_with_modes()
+    core.nearest_grant_modes = None  # present but not callable is not the capability
+    policy = SimpleNamespace(scope=(f"path:{own}/**",), read_scope=(f"path:{forum}/**",),
+                             floor_mode_scope=((f"path:{forum}/**", "rw"),))
+    reach = _granted_reach(core, policy, ws)
+    assert (own, True, "rwed") in reach
+    assert (forum, True, "r") in reach and (forum, True, "rw") not in reach
+    d = ReferenceF1aDispatcher(memory_root=home)
+    verdict = GatewayVerdict("allow", granted_reach=reach, reach_rule="union")
+    assert d(BeingIntent("memory_read", {"path": os.path.join(forum, "note.md")}), verdict).ok
+    assert not d(BeingIntent("memory_write", {"path": os.path.join(forum, "x.md"), "content": "x"}), verdict).ok
+    assert d(BeingIntent("memory_write", {"path": os.path.join(own, "x.md"), "content": "x"}), verdict).ok
 
 
 def test_exact_own_read_grant_wins_over_recursive_write_floor_at_same_file():

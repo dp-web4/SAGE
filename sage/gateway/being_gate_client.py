@@ -3478,10 +3478,12 @@ def _floor_mode_reach(core, policy, workspace: str, own) -> tuple:
     instead of refusing it "outside your reach" after the law said yes.
 
     Same suppression rule as `_floor_read_reach` (the floor fills only where no own grant
-    reaches, hestia #1386), and only with a mode-aware core. A core that predates the field
-    gives the policy no `floor_mode_scope`, so nothing is added: inert until the gate carries it."""
+    reaches, hestia #1386), and only with a mode-aware nearest-rule core. The mode-floor
+    policy must not be interpreted by a union-rule dispatcher: a wider parent would then
+    defeat a narrower nested floor. A missing capability adds nothing from this field."""
     import os
-    if getattr(core, "scope_roots_with_modes", None) is None:
+    if not callable(getattr(core, "scope_roots_with_modes", None)) or not callable(
+            getattr(core, "nearest_grant_modes", None)):
         return ()
     entries = list(getattr(policy, "floor_mode_scope", ()) or ())
     if not entries:
