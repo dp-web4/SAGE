@@ -488,6 +488,18 @@ def test_json_salvage_refuses_unknown_nested_arguments_and_prior_calls(body):
     assert salvage_tool_calls(body, ollama_tools(["memory_write", "recall"])) == []
 
 
+@pytest.mark.parametrize("body", [
+    '{"name":"recall","name":"memory_write","arguments":{"path":"notes/x","content":"draft"}}',
+    '{"name":"memory_write","arguments":{"path":"notes/x","path":"notes/y","content":"draft"}}',
+    '[{"name":"recall","arguments":{"query":"q"}},'
+    '{"name":"memory_write","arguments":{"path":"notes/x","path":"notes/y","content":"draft"}}]',
+])
+def test_json_salvage_refuses_duplicate_keys_and_prior_calls(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls(body, ollama_tools(["memory_write", "recall"])) == []
+
+
 def test_run_ollama_tool_turn_gates_a_salvaged_call_and_records_it():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
