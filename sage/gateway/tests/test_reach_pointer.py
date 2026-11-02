@@ -160,6 +160,33 @@ def test_a_served_floor_entry_answers_where_no_own_grant_reaches():
     assert "now: yes, read, write, run, delete." in out and "floor" not in out, out
 
 
+def test_pointer_does_not_union_a_floor_over_an_own_grant():
+    ws, home = _world()
+    root = os.path.join(ws, "hestia")
+    row = {"path": root, "recursive": True}
+    st = {"grants_by_mode": [{**row, "modes": "w", "channel": "standing"}],
+          "floor_by_mode": [{**row, "modes": "r"}],
+          "society_floor": [], "society_floor_read": [row], "society_floor_withheld": []}
+    reach = ((root, True, "w"), (root, True, "r", "floor"))
+    v = GatewayVerdict("allow", granted=(root,), granted_reach=reach, reach_rule="nearest")
+    out = _read(_disp(st), f"hestia://reach{root}/_shared/gate.py", v)
+    assert out.splitlines()[1] == "now: yes, write.", out
+
+
+def test_a_floor_row_does_not_confirm_a_recorded_own_grant():
+    ws, home = _world()
+    root = os.path.join(ws, "hestia")
+    row = {"path": root, "recursive": True}
+    st = {"grants_by_mode": [{**row, "modes": "w", "channel": "standing"}],
+          "floor_by_mode": [{**row, "modes": "r"}],
+          "society_floor": [], "society_floor_read": [row], "society_floor_withheld": []}
+    reach = ((root, True, "r", "floor"),)
+    v = GatewayVerdict("allow", granted=(root,), granted_reach=reach, reach_rule="nearest")
+    out = _read(_disp(st), f"hestia://reach{root}/_shared/gate.py", v)
+    assert out.splitlines()[1] == "now: yes, read.", out
+    assert "the gate admits it now" not in out, out
+
+
 def test_an_older_daemon_serves_its_whole_floor_and_reads_every_grant_as_all_modes():
     ws, home = _world()
     st = _status(ws, home, by_mode=False)
