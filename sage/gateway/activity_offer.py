@@ -49,7 +49,7 @@ _FIELDS = {
     "beat_started": {"beat"},
     "presented": {"beat", "request_sha256"},
     "beat_finished": {"beat"},
-    "utterance": {"actor", "text"},
+    "utterance": {"actor", "beat", "text"},
     "disposition": {"actor", "decision"},
     "opportunity_claimed": {"observer", "claim"},
     "result_observed": {"observer", "claim", "receipt"},
@@ -64,7 +64,9 @@ def project(offer, events, *, now):
 
     Every record binds the whole offer, including actor, source and deadline.
     A claim is only a reserved opportunity: NOT an action, grant, or completion.
-    Exact duplicate records are idempotent; conflicting sequence reuse is invalid.
+    Exact duplicate records and repeated identical claim/receipt pairs are
+    idempotent; conflicting sequence reuse or receipts are invalid. Utterances
+    bind their beat, but remain ordinary speech, not an offer disposition.
     """
     if not isinstance(offer, Offer) or not _time(now) or now < offer.opened_at:
         raise ValueError("invalid offer or observation time")
@@ -104,8 +106,12 @@ def project(offer, events, *, now):
         # An observed receipt may arrive after close/deadline: it adds evidence about
         # the existing claim, not a new opportunity or proof of successful execution.
         if kind == "result_observed":
-            if claimed is None or event["claim"] != claimed["id"] or result is not None:
+            if claimed is None or event["claim"] != claimed["id"]:
                 raise ValueError("result requires the unique matching claim")
+            if result is not None:
+                if event["receipt"] != result["receipt"]:
+                    raise ValueError("conflicting receipt for claim")
+                continue  # Keep the first observation time for an at-least-once retry.
             result = {"claim": event["claim"], "receipt": event["receipt"], "at": at}
             continue
         if terminal is not None or at >= offer.deadline:
@@ -114,6 +120,8 @@ def project(offer, events, *, now):
             # bookkeeping, not a late attempt to reopen the offer.
             if kind == "beat_finished" and active == event["beat"]:
                 active = None
+                continue
+            if kind == "utterance" and active is not None and active == event["beat"]:
                 continue
             late += 1
             continue
@@ -146,6 +154,8 @@ def project(offer, events, *, now):
             claimed = {"id": event["claim"], "beat": active, "at": at}
         elif kind in ("preempted", "closed"):
             terminal = kind
+        elif kind == "utterance" and (active is None or event["beat"] != active):
+            raise ValueError("utterance must bind the active beat")
         # utterance deliberately has no disposition/action semantics.
     if terminal is None and now >= offer.deadline:
         terminal = "deadline_presented" if beats else "deadline_unpresented"

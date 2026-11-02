@@ -25,7 +25,7 @@ def accepted():
 def test_acknowledgement_and_completion_prose_are_not_acceptance():
     rows = [event(1, "beat_started", beat="b1"),
             event(2, "presented", beat="b1", request_sha256=offer().request_sha256),
-            event(3, "utterance", actor="being", text="Yes, I accept. Done! I read it.")]
+            event(3, "utterance", actor="being", beat="b1", text="Yes, I accept. Done! I read it.")]
     out = project(offer(), rows, now=1010)
     assert out["disposition"] is None and not out["eligible_to_claim"]
     assert out["execution"] == out["completion"] == "not_established"
@@ -122,6 +122,28 @@ def test_normal_closeout_of_declined_beat_is_not_late(decision):
     assert out["late_records"] == 0
 
 
+@pytest.mark.parametrize("closure", ["decline", "deadline"])
+def test_closing_beat_speech_is_not_late_but_another_beat_is(closure):
+    rows = accepted()
+    if closure == "decline":
+        rows[-1]["decision"] = "decline"
+        speech_at = 1004
+    else:
+        speech_at = 1600
+    rows += [dict(event(4, "utterance", actor="being", beat="b1", text="Moving on."), at=speech_at),
+             dict(event(5, "beat_finished", beat="b1"), at=speech_at),
+             dict(event(6, "utterance", actor="being", beat="b2", text="A new turn."), at=speech_at)]
+    out = project(offer(), rows, now=speech_at)
+    assert out["active_beat"] is None and out["late_records"] == 1
+    assert out["terminal_reason"] == ("decline" if closure == "decline" else "deadline_presented")
+
+
+def test_utterance_during_open_episode_must_bind_the_active_beat():
+    rows = accepted() + [event(4, "utterance", actor="being", beat="other", text="Hello.")]
+    with pytest.raises(ValueError, match="active beat"):
+        project(offer(), rows, now=1010)
+
+
 def test_receipt_after_deadline_is_evidence_not_a_new_opportunity():
     claim = event(4, "opportunity_claimed", observer="observer", claim="claim-1")
     receipt = dict(event(5, "result_observed", observer="observer", claim="claim-1",
@@ -134,9 +156,20 @@ def test_receipt_after_deadline_is_evidence_not_a_new_opportunity():
         project(offer(), accepted() + [claim, dict(receipt, claim="other")], now=1601)
 
 
+def test_retried_receipt_is_idempotent_but_conflicting_receipt_is_not():
+    claim = event(4, "opportunity_claimed", observer="observer", claim="claim-1")
+    receipt = event(5, "result_observed", observer="observer", claim="claim-1", receipt="receipt-1")
+    retry = dict(receipt, seq=6, at=1601)
+    out = project(offer(), accepted() + [claim, receipt, retry], now=1601)
+    assert out["result_observed"] == {"claim": "claim-1", "receipt": "receipt-1", "at": 1005}
+    assert out["execution"] == out["completion"] == "not_established"
+    with pytest.raises(ValueError, match="conflicting receipt"):
+        project(offer(), accepted() + [claim, receipt, dict(retry, receipt="receipt-2")], now=1601)
+
+
 def test_preemption_closes_without_suppressing_or_reclassifying_later_input():
     rows = accepted() + [event(4, "preempted"),
-                         event(5, "utterance", actor="being", text="Answering the newer request.")]
+                         event(5, "utterance", actor="being", beat="b2", text="Answering the newer request.")]
     out = project(offer(), rows, now=1010)
     assert out["terminal_reason"] == "preempted" and out["late_records"] == 1
     assert not out["eligible_to_claim"]
