@@ -732,7 +732,7 @@ class HestiaF1aDispatcher:
         if now and not os.path.lexists(p):
             lines.append("Nothing exists at that path yet.")
         if not now:
-            copies = same_path_in_reach(p, admitted)
+            copies = same_path_in_reach(p, admitted, rule)
             if copies:
                 lines.append(copy_alternative(p, copies))
         lines.append("This read looked at the law only: nothing was judged, nothing was read at "
@@ -4038,7 +4038,7 @@ class HestiaF1aDispatcher:
         # a copy it had read). The ask is STILL FILED: a copy is a different file that may
         # differ, and is no answer to a need for the original's current bytes or to change or
         # run it (Nova, #522 78efe4a44). The being is told the alternative alongside.
-        copies = same_path_in_reach(path, _granted_reach_of(getattr(self, "_verdict", None)))
+        copies = same_path_in_reach(path, reach, rule)
         args: Dict[str, Any] = {"plugin_id": self.plugin_id, "path": path,
                                 "reason": f"[{self.plugin_id}] {reason}"}
         out = self._call("hestia_request_scope", args)

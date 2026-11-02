@@ -120,6 +120,25 @@ def test_request_scope_does_not_offer_copy_beneath_a_narrowed_grant():
     assert [a for n, a in FakeMcp.calls if n == "hestia_request_scope"]
 
 
+def test_reference_and_gate_hints_honor_a_narrowed_own_grant():
+    ws, edit, copy, home = _ws()
+    gov, narrowed = str(ws / "governance"), str(Path(copy).parent)
+    reach = ((gov, True, "r", "floor"), (narrowed, True, "w"))
+    verdict = GatewayVerdict("allow", granted=(gov, narrowed), granted_reach=reach,
+                             reach_rule="nearest")
+    ref = ReferenceF1aDispatcher(str(home))
+    env = ref(BeingIntent("memory_read", {"path": edit}), verdict)
+    assert not env.ok and copy not in str(env.error), env
+
+    c = BeingGateClient.__new__(BeingGateClient)
+    c._dispatcher = None
+    c._core = types.SimpleNamespace(nearest_grant_modes=lambda *args: None)
+    c.gate = lambda intent: GatewayVerdict("deny", "mrh.path", reason="not granted")
+    c._policy_grants = lambda: ((gov, narrowed), reach)
+    env = c._dispatch_resolved(BeingIntent("memory_read", {"path": edit}))
+    assert env.refused and copy not in str(env.error), env
+
+
 def test_exact_grants_absent_copies_and_paths_already_in_reach_do_not_match():
     ws, edit, copy, _ = _ws()
     gov = str(ws / "governance")

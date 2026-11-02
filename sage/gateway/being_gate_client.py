@@ -3296,7 +3296,7 @@ def _misrooted_home_file(intent: "BeingIntent", memory_root, policy_grants) -> s
             f"place; if not, send it again with path '{name}'.")
 
 
-def same_path_in_reach(p, reach) -> list:
+def same_path_in_reach(p, reach, rule="union") -> list:
     """Where the path `p` asks for already exists under a recursive grant, as sorted
     [(path, root)]; [] if nowhere.
 
@@ -3322,6 +3322,7 @@ def same_path_in_reach(p, reach) -> list:
         target = os.path.realpath(os.path.expanduser(str(p)))
     except (OSError, ValueError):
         return []
+    reach = tuple(reach or ())
     found = set()
     for item in reach or ():
         r, recursive = item[0], item[1]       # (root, recursive[, modes]) since #521
@@ -3337,7 +3338,8 @@ def same_path_in_reach(p, reach) -> list:
         if target == rr or target.startswith(rr + os.sep):
             continue                      # already inside this grant: not a copy, it is reach
         cand = os.path.realpath(os.path.join(rr, target[len(parent.rstrip(os.sep)) + 1:]))
-        if cand != target and cand.startswith(rr + os.sep) and os.path.exists(cand):
+        if (cand != target and cand.startswith(rr + os.sep) and os.path.exists(cand)
+                and "r" in reach_modes_at(cand, reach, rule)):
             found.add((cand, rr))
     return sorted(found)
 
@@ -3357,7 +3359,7 @@ def copy_alternative(asked: str, copies) -> str:
             f"run it), request_scope it and say which.")
 
 
-def _copy_in_reach_hint(intent: "BeingIntent", reach) -> str:
+def _copy_in_reach_hint(intent: "BeingIntent", reach, rule="union") -> str:
     """For a refused READ: a copy at the same path under a grant the being already holds,
     said first. '' when there is none. Reads only; a copy is no answer to a refused write."""
     try:
@@ -3366,7 +3368,7 @@ def _copy_in_reach_hint(intent: "BeingIntent", reach) -> str:
         raw = str((intent.args or {}).get("path", "")).strip()
         if not os.path.isabs(os.path.expanduser(raw)):
             return ""
-        copies = same_path_in_reach(raw, reach)
+        copies = same_path_in_reach(raw, reach, rule)
         if not copies:
             return ""
         return copy_alternative(raw, copies) + " What the gate said about the path you asked for: "
@@ -4259,7 +4261,7 @@ class BeingGateClient:
             # First, not appended: the gate's text runs to a grant list and a pending-request
             # note, and the being acted on those, not on anything after them.
             if intent.effector in _READS_A_PATH:
-                err = _copy_in_reach_hint(intent, self._policy_grants()[1]) + err
+                err = _copy_in_reach_hint(intent, self._policy_grants()[1], self._reach_rule()) + err
             err += (f" (deny witnessed {wid}; if you think this is wrong, appeal with deny_hash={wid})"
                     if wid else " (deny not witnessed: daemon unreachable, so it cannot be appealed yet)")
             return ResultEnvelope(ok=False, refused=True, verdict=v, error=err, witness_id=wid)

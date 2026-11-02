@@ -1157,6 +1157,14 @@ class ReferenceF1aDispatcher:
             (r, True) for r in (getattr(self, "_extra_roots", ()) or ())))
             if "r" in modes.get((r, rec), "rwed"))
 
+    def _reach_for_hints(self) -> tuple:
+        """Keep mode and origin for read suggestions; root pairs alone lose precedence."""
+        entries = getattr(self, "_extra_mode_entries", None)
+        if entries:
+            return tuple((r, rec, modes, "floor" if floor else "own")
+                         for r, rec, modes, floor in entries)
+        return self._reach_pairs()
+
     @staticmethod
     def _nearest_modes(p: Path, held, modes, entries=None) -> Optional[str]:
         """Own grants decide before floors; the nearest node within that class decides."""
@@ -1304,7 +1312,7 @@ class ReferenceF1aDispatcher:
         if writing:
             return head + (" memory_write creates a file inside your home; name a path there "
                            "instead, or request_scope and say what you would write.")
-        copies = same_path_in_reach(p, self._reach_pairs())
+        copies = same_path_in_reach(p, self._reach_for_hints(), getattr(self, "_reach_rule", "union"))
         if copies:
             # First, before the boundary: the alternative is what the being can act on now.
             return copy_alternative(str(p), copies) + " " + head
@@ -1384,7 +1392,7 @@ class ReferenceF1aDispatcher:
                 # `hestia/plugins/...` to the editable tree and its refusal (2026-10-23 00:23Z)
                 # while a copy sat under its governance grant. Name both: the original as what
                 # it is (outside reach), and the copy as an alternative, not as the same file.
-                copies = same_path_in_reach(above, self._reach_pairs())
+                copies = same_path_in_reach(above, self._reach_for_hints(), getattr(self, "_reach_rule", "union"))
                 if copies:
                     return ResultEnvelope(
                         ok=True,
