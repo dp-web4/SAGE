@@ -79,6 +79,14 @@ generation-level samples. Generations within a trajectory are correlated. Shared
 not paired random samples, when the adapter does not enforce them; arm contrasts retain sampling
 variance. Preserve failures and null results.
 
+World-state correctness remains a distinct outcome. When the delivered request contains no
+observations, evidence overlay or inherited text, the summary also scores the case's explicitly
+pre-registered `no_evidence_expected` choice (or counts it as unscored if absent). This records
+abstention or a conservative authority request without pretending it recovers the hidden state.
+The labels are design judgments, not automatically verified ground truth, and nonempty text is
+not proof that relevant evidence survived. These counts do not make the no-memory arm a fair
+budget-matched task-solving comparator.
+
 The bundled adapter observes backend version and an exact-tag digest when available, and records
 bounded content and provider counts for empty or malformed replies without retaining thinking
 text. An unavailable/ambiguous metadata lookup remains explicit; observation is not proof that

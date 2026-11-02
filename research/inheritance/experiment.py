@@ -62,6 +62,8 @@ def validate(config):
             raise ValueError('invalid options')
         if c['initial_expected'] not in c['options'] or c['corrected_expected'] not in c['options']:
             raise ValueError('unknown expected decision')
+        if 'no_evidence_expected' in c and c['no_evidence_expected'] not in c['options']:
+            raise ValueError('unknown no-evidence expected decision')
         if not 0 < c['correction_generation'] < config['generations']:
             raise ValueError('correction must fall inside trajectory')
         if any(x not in c['options'] for x in c.get('consequential_choices', [])):
@@ -267,13 +269,22 @@ def summarize(path):
         totals = results.setdefault(row['arm'], {'steps': 0, 'correct': 0, 'post_correction_steps': 0,
                                                 'post_correction_correct': 0, 'denied_attempts': 0,
                                                 'adapter_calls': 0, 'seconds': 0.0,
-                                                'request_chars': 0, 'response_chars': 0})
+                                                'request_chars': 0, 'response_chars': 0,
+                                                'no_evidence_steps': 0, 'no_evidence_appropriate': 0,
+                                                'no_evidence_unscored': 0})
         totals['steps'] += 1
         totals['correct'] += correct
         if row['generation'] >= case['correction_generation']:
             totals['post_correction_steps'] += 1
             totals['post_correction_correct'] += correct
         totals['denied_attempts'] += status == 'denied_simulation'
+        req = row['request']
+        if not req['observations'] and not req['evidence_overlay'] and not req['inherited']:
+            totals['no_evidence_steps'] += 1
+            if 'no_evidence_expected' in case:
+                totals['no_evidence_appropriate'] += response['decision'] == case['no_evidence_expected']
+            else:
+                totals['no_evidence_unscored'] += 1
         totals['adapter_calls'] += 1 + bool(row['archivist'])
         totals['seconds'] += row['usage']['seconds'] + (row['archivist']['usage']['seconds'] if row['archivist'] else 0)
         for key in ('request_chars', 'response_chars'):

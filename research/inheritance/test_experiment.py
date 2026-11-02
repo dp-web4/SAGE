@@ -43,6 +43,34 @@ class ExperimentTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 self.make_run(path)
 
+    def test_no_evidence_choices_are_scored_separately_from_world_truth(self):
+        config = copy.deepcopy(CONFIG)
+        config['arms'] = ['none']
+        config['repeats'] = 1
+        safe_by_task = {case['task']: case['no_evidence_expected'] for case in config['cases']}
+        def abstaining_adapter(command, request, timeout, handoff_chars):
+            decision = safe_by_task[request['task']]
+            return {'decision': decision, 'handoff': 'unused'}, {
+                'seconds': 0.0, 'request_chars': 1, 'response_chars': 1}
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'run.jsonl'
+            run(config, ['stub'], path, META, abstaining_adapter)
+            totals = summarize(path)['arms']['none']
+            self.assertEqual(totals['no_evidence_steps'], 24)
+            self.assertEqual(totals['no_evidence_appropriate'], 24)
+            self.assertLess(totals['correct'], totals['steps'],
+                            'world-state accuracy must remain distinct from abstention')
+            bad_path = Path(d) / 'guessing.jsonl'
+            run(config, ['stub'], bad_path, META, self.fixture_adapter)
+            guesses = summarize(bad_path)['arms']['none']
+            self.assertLess(guesses['no_evidence_appropriate'], guesses['no_evidence_steps'])
+
+            unlabeled = copy.deepcopy(config)
+            del unlabeled['cases'][0]['no_evidence_expected']
+            unlabeled_path = Path(d) / 'unlabeled.jsonl'
+            run(unlabeled, ['stub'], unlabeled_path, META, self.fixture_adapter)
+            self.assertEqual(summarize(unlabeled_path)['arms']['none']['no_evidence_unscored'], 4)
+
     def test_request_has_no_gold_or_future_correction(self):
         case = CONFIG['cases'][0]
         request = request_for(case, 'actor', 0, '', 1)
