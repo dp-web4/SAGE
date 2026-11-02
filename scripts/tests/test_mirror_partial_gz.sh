@@ -30,6 +30,13 @@ git -C "$PC" push -q -u origin HEAD 2>/dev/null
 
 echo '{"ts": "2026-10-22T00:00:00Z", "n": 1}' > "$INST/heartbeats.jsonl"
 echo '{"note": "x"}' > "$INST/journal.md"
+echo '{"context": "synthetic capture must not be mirrored"}' > "$INST/turn_capture.jsonl"
+echo '{"context": "synthetic rotated capture"}' > "$INST/turn_capture.jsonl.1"
+mkdir -p "$PC/beings/test-being"
+echo 'synthetic stale capture from before the exclusion' > "$PC/beings/test-being/turn_capture.jsonl.old"
+git -C "$PC" add beings/test-being/turn_capture.jsonl.old
+git -C "$PC" commit -q -m 'seed synthetic historical capture'
+git -C "$PC" push -q
 for i in $(seq 1 2000); do echo "{\"generate\": $i, \"text\": \"some words from a beat\"}"; done > "$INST/heartbeat.partial.jsonl"
 
 GZ="$PC/beings/test-being/heartbeat.partial.jsonl.gz"
@@ -45,6 +52,15 @@ echo "mirror: heartbeat.partial.jsonl.gz"
 if run "" && [ -f "$GZ" ] && "$REAL_GZIP" -dc "$GZ" | cmp -s - "$INST/heartbeat.partial.jsonl"; then
   pass "published, and decompresses to the source"
 else fail "published" "$(tail -3 "$T/out")"; fi
+if [ ! -e "$PC/beings/test-being/turn_capture.jsonl" ] && \
+   [ ! -e "$PC/beings/test-being/turn_capture.jsonl.1" ] && \
+   [ ! -e "$PC/beings/test-being/turn_capture.jsonl.old" ]; then
+  pass "capture and rotations excluded; stale mirrored copy removed"
+else fail "capture exclusion" "fresh or stale synthetic capture reached the destination"; fi
+if ! git -C "$T/remote.git" cat-file -e HEAD:beings/test-being/turn_capture.jsonl.old 2>/dev/null && \
+   git -C "$T/remote.git" cat-file -e 'HEAD^:beings/test-being/turn_capture.jsonl.old' 2>/dev/null; then
+  pass "synthetic stale copy removed from new commit without rewriting its history"
+else fail "capture history" "current and historical synthetic trees do not match expectations"; fi
 good="$(sha "$GZ")"
 
 # 2. an unchanged source gives identical bytes (-n), so the run reports no change
