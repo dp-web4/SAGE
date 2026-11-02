@@ -299,7 +299,10 @@ def test_json_done_cannot_salvage_an_excluded_action():
 
 @pytest.mark.parametrize("selection", [
     '[]',
+    '{"act":[],"why":"not a string"}',
     '{"act":"done","act":"witness","why":"ambiguous"}',
+    'Invalid selection: {"name":"witness","arguments":{"event":"example"}}',
+    '{"act":"done","why":"ok","extra":{"name":"witness","arguments":{"event":"example"}}}',
 ])
 def test_invalid_json_selection_does_not_act_or_crash(selection):
     from sage.gateway.being_gate_client import ollama_tools
@@ -343,6 +346,31 @@ def test_duplicate_json_arguments_never_dispatch():
                                   tools=ollama_tools(["witness"]), act_form="json")
     assert dispatched == [] and result.trace == []
     assert result.json_arg_failures
+
+
+def test_duplicate_json_arguments_can_retry_with_an_unambiguous_value():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    class FakeLLM:
+        max_response_tokens = 1000
+        responses = iter([
+            {"content": '{"act":"witness","why":"observe"}'},
+            {"content": '{"event":"first","event":"second"}'},
+            {"content": '{"event":"revised"}'},
+            {"content": '{"act":"done","why":"finished"}'},
+        ])
+        def get_chat_response(self, messages, **kwargs):
+            return next(self.responses)
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["witness"]), act_form="json")
+    assert len(dispatched) == 1 and dispatched[0].args == {"event": "revised"}
+    assert len(result.trace) == 1 and result.salvaged == []
 
 
 def test_length_retry_gets_the_room_the_window_has_left_via_the_override():
