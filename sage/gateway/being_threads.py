@@ -20,13 +20,31 @@ entry removed, so the change is auditable and reversible by hand.
 A word matches at the start of a word ("install" matches "installer", "scope" matches "scopes", "api"
 does not match "rapid"), case-insensitively. `preview='true'` reports what would move and writes
 nothing, so a being (or its seat) can check a word list before using it.
+
+A BROAD RETIRE IS CONFIRMED FROM ITS OWN PREVIEW (NOVA on #619, after Codex's candidate d217a7a8). A
+selection that takes a strict majority of the open todo or of the settled list (and at least two) needs
+`confirmation`: a one-use value a preview WITH THE SAME WORDS AND REASON returned, bound to the exact
+todo bytes and settled entries it previewed, valid for five minutes in this process. A changed source
+consumes it. It is coordination evidence that the selection was looked at, not a grant: the gate still
+decides the act.
+
+ONLY QUESTION AND ANSWER SELECT A SETTLED ENTRY. Evidence explains how a conclusion was supported; a
+shared citation or tool name does not make every conclusion about that topic (NOVA, item 1).
+
+A FAILURE AFTER THE FIRST WRITE IS REPORTED AS POSSIBLY PARTIAL, never as "nothing was retired": the
+archive (which carries the exact prior todo and settled bytes, base64) is kept as recovery evidence,
+the todo is restored from its exact bytes, and the result says what is known (NOVA, item 3).
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
 import re
+import secrets
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
@@ -35,6 +53,11 @@ TODO = "todo.md"
 MIN_WORD = 3          # shorter words match too much to be a topic ("ap", "in")
 MAX_WORDS = 100       # cbp-being's hestia thread (11-01) took 68 to cover without catching its own work
 REASON_MAX = 600
+STOPWORDS = frozenset({"the", "and", "for", "with", "this", "that", "from"})
+_PREVIEW_TTL = 300.0
+_PREVIEW_CAP = 128
+_preview_lock = threading.Lock()
+_previews: Dict[str, Tuple[str, float]] = {}   # one-use, in-process; never authority or durable proof
 
 
 def _stamp(now: Optional[float]) -> datetime:
@@ -87,9 +110,9 @@ def writes(args: Dict) -> Tuple[str, ...]:
     return (TODO, _tmp(TODO), arch, _tmp(arch)) + tuple(SETTLED_WRITES)
 
 
-def _write_atomic(p: Path, text: str) -> None:
+def _write_atomic(p: Path, text) -> None:
     tmp = p.with_name(_tmp(p.name))
-    with open(tmp, "w") as f:
+    with open(tmp, "wb" if isinstance(text, bytes) else "w") as f:
         f.write(text)
         f.flush()
         os.fsync(f.fileno())
@@ -118,14 +141,63 @@ def plan(instance: Path, words: List[str]):
     from sage.gateway.heartbeat import _todo_items
     instance = Path(instance)
     hit = matcher(words)
-    p = instance / TODO
-    body = p.read_text(errors="replace") if p.exists() else ""
+    raw = _todo_bytes(instance)
+    try:
+        body = raw.decode("utf-8") if raw is not None else ""
+    except UnicodeDecodeError:   # a replacement decode would rewrite unrelated bytes on retire
+        return "", [], [], [], 0, [], "todo.md is not valid UTF-8; repair its encoding before retiring"
+    body = body.replace("\r\n", "\n").replace("\r", "\n")
     items = list(_todo_items(body).values()) if body else []
     moved = [x for x in items if hit(x[0])]
     kept = [x for x in items if not hit(x[0])]
     entries, nxt, err = st.read(instance)
-    gone = [e for e in entries if hit(f"{e.get('question', '')} {e.get('answer', '')} {e.get('evidence', '')}")]
+    gone = [e for e in entries if hit(f"{e.get('question', '')} {e.get('answer', '')}")]
     return body, kept, moved, entries, nxt, gone, err
+
+
+def _todo_bytes(instance: Path) -> Optional[bytes]:
+    p = Path(instance) / TODO
+    return p.read_bytes() if p.exists() else None
+
+
+def _broad(kept, moved, entries, gone) -> bool:
+    """At least two, and a strict majority of either collection."""
+    return ((len(moved) >= 2 and len(moved) * 2 > len(moved) + len(kept))
+            or (len(gone) >= 2 and len(gone) * 2 > len(entries)))
+
+
+def _binding(instance: Path, words: List[str], reason: str, entries, nxt) -> str:
+    """The full source state a confirmation is bound to: exact todo bytes and every settled entry."""
+    raw = _todo_bytes(instance)
+    return hashlib.sha256(json.dumps(
+        {"home": os.path.realpath(instance), "words": [w.lower() for w in words], "reason": reason,
+         "todo": base64.b64encode(raw).decode("ascii") if raw is not None else None,
+         "entries": entries, "next": nxt}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def _issue(binding: str) -> str:
+    now = time.monotonic()
+    with _preview_lock:
+        for k, (_, exp) in list(_previews.items()):
+            if exp <= now:
+                del _previews[k]
+        while len(_previews) >= _PREVIEW_CAP:
+            del _previews[next(iter(_previews))]
+        token = secrets.token_urlsafe(16)       # 22 characters, 128 random bits
+        _previews[token] = (binding, now + _PREVIEW_TTL)
+    return token
+
+
+def _consume(token, binding: str) -> str:
+    if token is None:
+        return "missing"
+    if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{22}", token.strip()):
+        return "unknown"
+    with _preview_lock:
+        rec = _previews.pop(token.strip(), None)
+    if not rec or rec[1] <= time.monotonic():
+        return "unknown"
+    return "accepted" if secrets.compare_digest(rec[0], binding) else "changed"
 
 
 def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "") -> Tuple[bool, str, bool]:
@@ -145,6 +217,8 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                        f"matching everything: {', '.join(repr(w) for w in short)}. Nothing was changed."), False
     if len(words) > MAX_WORDS:
         return False, f"at most {MAX_WORDS} words in one retire; nothing was changed.", False
+    if any(w.casefold() in STOPWORDS for w in words):
+        return False, "a common word is not a topic; choose more specific words. Nothing was changed.", False
     if not preview and not reason:
         return False, ("retire_thread needs a 'reason': why this line of work is finished. It is written "
                        "at the top of the retired file. (preview='true' shows what would move without one.)"), False
@@ -152,11 +226,23 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
     if preview:
         # A PREVIEW TAKES NO LOCK (NOVA on 577adb4b): _home_lock opens .home.lock in append mode, which
         # creates it on a fresh home, a write thread_paths does not declare for a preview. It only reads.
-        return _preview(instance, words)
+        return _preview(instance, words, reason)
     with st._home_lock(instance):
         body, kept, moved, entries, nxt, gone, err = plan(instance, words)
         if err:
-            return False, f"cannot read your settled list: {err}. Nothing was changed.", False
+            return False, f"cannot prepare the retire: {err}. Nothing was changed.", False
+        confirmation = a.get("confirmation")
+        if _broad(kept, moved, entries, gone) or confirmation is not None:
+            status = _consume(confirmation, _binding(instance, words, reason, entries, nxt))
+            if status != "accepted":
+                why = {"missing": f"This retire takes most of a list ({len(moved)} of {len(moved) + len(kept)} "
+                                  f"open items, {len(gone)} of {len(entries)} settled), so it needs the "
+                                  f"confirmation a preview with the same words and reason returns.",
+                       "unknown": "That confirmation is unknown, mistyped or expired (five minutes, this beat).",
+                       "changed": "Your todo, settled list, words or reason changed since that preview; the "
+                                  "confirmation is used up."}[status]
+                return False, (f"{why} Preview again with preview='true' and the same reason, then retire with "
+                               f"the confirmation it gives. Nothing was changed."), False
         topic = ", ".join(words)
         if not moved and not gone:
             return True, (f"Nothing names {topic}: no open todo item and no settled entry. Nothing was "
@@ -175,30 +261,50 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                  + f" (settled {str(e.get('at', ''))[:10]})" for e in gone]
         head += ["", f"## Open todo items retired ({len(moved)})", ""]
         head += [(f"- [ ] {t}" + (f" (since {s:%Y-%m-%d %H:%M} UTC)" if s else "")) for t, s in moved]
+        todo_raw = _todo_bytes(instance)
+        settled_p = instance / st.SETTLED_FILE
+        settled_raw = settled_p.read_bytes() if settled_p.exists() else None
+        b64 = lambda b: "absent" if b is None else base64.b64encode(b).decode("ascii")  # noqa: E731
+        head += ["", "## Exact prior todo.md (base64, for recovery)", "", b64(todo_raw),
+                 "", "## Exact prior settled.json (base64, for recovery)", "", b64(settled_raw)]
         head += ["", "> The todo.md this retire replaced, kept whole below, as it was written.", "", ""]
         arch = instance / name
-        _write_atomic(arch, "\n".join(head) + body)
+        _write_atomic(arch, "\n".join(head) + body)    # before this, nothing has changed
         todo = instance / TODO
-        if moved:
-            _write_atomic(todo, _fresh_todo(kept, stamp, name))
+        try:
+            if moved:
+                _write_atomic(todo, _fresh_todo(kept, stamp, name))
+        except OSError as e:
+            return False, (f"the retire may be partial ({type(e).__name__} writing todo.md). {name} holds "
+                           f"the exact prior todo and settled list; ask your seat before retrying."), True
         if gone:
             left = [e for e in entries if e not in gone]
-            ok, msg = st._commit(instance, left, nxt,
-                                 {"op": "retire_thread", "words": words, "ids": [e["id"] for e in gone],
-                                  "from": gone, "to": name, "why": reason, **({"by": by} if by else {})},
-                                 now, "ok")
-            if not ok:   # undo: the todo back as it was, and no retired file claiming a retire
+            try:
+                ok, msg = st._commit(instance, left, nxt,
+                                     {"op": "retire_thread", "words": words, "ids": [e["id"] for e in gone],
+                                      "from": gone, "to": name, "why": reason, **({"by": by} if by else {})},
+                                     now, "ok")
+            except OSError as e:
+                ok, msg = False, f"the settled commit raised {type(e).__name__}"
+            if not ok:
+                # _commit can fail AFTER its own rollback failed, so a failure is never read as a no-op:
+                # the todo is restored from its exact bytes and the archive stays as recovery evidence.
+                state = "todo.md was not changed"
                 if moved:
-                    _write_atomic(todo, body)
-                arch.unlink(missing_ok=True)
-                return False, f"{msg}. The todo was put back as it was; nothing was retired.", False
+                    try:
+                        _write_atomic(todo, todo_raw if todo_raw is not None else b"")
+                        state = "todo.md was restored"
+                    except OSError:
+                        state = "todo.md could NOT be restored"
+                return False, (f"{msg}. The retire may be partial; {state}. {name} holds the exact prior "
+                               f"todo and settled list; ask your seat before retrying."), True
     said = (f"Retired the thread ({topic}): {len(moved)} open todo item(s) and {len(gone)} settled "
             f"entr{'y' if len(gone) == 1 else 'ies'} moved to {name}, where recall still finds them. "
             f"Still open: {len(kept)} todo item(s); still settled: {len(entries) - len(gone)}.")
     return True, said, True
 
 
-def _preview(instance: Path, words: List[str]) -> Tuple[bool, str, bool]:
+def _preview(instance: Path, words: List[str], reason: str = "") -> Tuple[bool, str, bool]:
     from sage.gateway import being_settled as st
     body, kept, moved, entries, nxt, gone, err = plan(instance, words)
     if err:
@@ -212,4 +318,12 @@ def _preview(instance: Path, words: List[str]) -> Tuple[bool, str, bool]:
     if len(moved) > 20:
         lines.append(f"- … and {len(moved) - 20} more todo item(s)")
     lines += [f"- STAYS: {t[:140]}" for t, _ in kept[:10]]
+    if _broad(kept, moved, entries, gone):
+        if reason:
+            lines.append(f"This takes most of a list, so it needs this confirmation: "
+                         f"{_issue(_binding(instance, words, reason, entries, nxt))} -- retire with the same "
+                         f"words and reason and confirmation='<it>' in this beat, within five minutes. It is "
+                         f"used once, and any change to your todo or settled list before then voids it.")
+        else:
+            lines.append("This takes most of a list: preview again WITH the reason to get a confirmation.")
     return True, "\n".join(lines), False

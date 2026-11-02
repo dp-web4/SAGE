@@ -5,6 +5,7 @@ import builtins
 import io
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -38,13 +39,21 @@ def _home(tmp_path):
     return tmp_path
 
 
+def _go(h, args, now=None):
+    """Preview with the same words and reason, then retire with the confirmation it returned (if any)."""
+    ok, msg, _ = bt.retire_thread(h, dict(args, preview="true"), now=now)
+    assert ok, msg
+    m = re.search(r"confirmation: ([A-Za-z0-9_-]{22})", msg)
+    return bt.retire_thread(h, dict(args, **({"confirmation": m.group(1)} if m else {})), now=now)
+
+
 def _open(h):
     return [t for t, _ in _todo_items((h / "todo.md").read_text()).values()]
 
 
 def test_a_thread_leaves_the_todo_and_the_settled_list_and_the_rest_stays(tmp_path):
     h = _home(tmp_path)
-    ok, msg, changed = bt.retire_thread(h, {"words": "widget, daemon", "reason": "dp: drop it"}, now=0)
+    ok, msg, changed = _go(h, {"words": "widget, daemon", "reason": "dp: drop it"}, now=0)
     assert ok and changed, msg
     assert "3 open todo item(s) and 2 settled entries" in msg and "Still open: 2" in msg
     assert _open(h) == ["Build a small neural net and test it on the sine data",
@@ -63,14 +72,14 @@ def test_a_thread_leaves_the_todo_and_the_settled_list_and_the_rest_stays(tmp_pa
 def test_open_items_keep_the_date_they_were_opened(tmp_path):
     h = _home(tmp_path)
     before = {t: s for t, s in _todo_items(TODO).values()}
-    bt.retire_thread(h, {"words": "widget", "reason": "r"}, now=0)
+    assert _go(h, {"words": "widget", "reason": "r"}, now=0)[0]
     after = {t: s for t, s in _todo_items((h / "todo.md").read_text()).values()}
     assert after and all(before[t] == s for t, s in after.items())
 
 
 def test_recall_still_finds_what_was_retired(tmp_path):
     h = _home(tmp_path)
-    bt.retire_thread(h, {"words": "widget", "reason": "r"}, now=0)
+    assert _go(h, {"words": "widget", "reason": "r"}, now=0)[0]
     hits = search_home(h, "widget installer")
     assert any(r["source"].startswith("todo.retired-") for r in hits), hits
 
@@ -110,11 +119,11 @@ def test_the_archive_is_named_by_the_call_and_a_repeat_is_refused_not_renamed(tm
     a, b = {"words": "daemon", "reason": "r"}, {"words": "widget", "reason": "r"}
     assert bt.archive_name(a) == bt.archive_name({"words": " Daemon ", "reason": "r"}) != bt.archive_name(b)
     h = _home(tmp_path)
-    assert bt.retire_thread(h, a, now=0)[0] and bt.retire_thread(h, b, now=0)[0]
+    assert _go(h, a, now=0)[0] and _go(h, b, now=0)[0]
     assert (h / bt.archive_name(a)).exists() and (h / bt.archive_name(b)).exists()
     (h / "todo.md").write_text(TODO)            # the thread crept back; the same call again
     before = {p.name: p.read_bytes() for p in h.iterdir() if p.is_file()}
-    ok, msg, changed = bt.retire_thread(h, a, now=0)
+    ok, msg, changed = _go(h, a, now=0)
     assert not ok and not changed and "Give a different reason" in msg
     assert {p.name: p.read_bytes() for p in h.iterdir() if p.is_file()} == before
 
@@ -156,8 +165,10 @@ def test_no_path_outside_the_declared_set_is_opened_for_writing(tmp_path, monkey
     args = {"words": "widget", "reason": "r"}
     assert thread_paths({"words": "widget", "preview": "true"}, {"memory_root": str(h)}) == []
     declared = _declared(h, args)
+    ok, msg, _ = bt.retire_thread(h, dict(args, preview="true"))
+    token = re.search(r"confirmation: ([A-Za-z0-9_-]{22})", msg).group(1)
     w = _Writes(monkeypatch)
-    assert bt.retire_thread(h, args)[0]
+    assert bt.retire_thread(h, dict(args, confirmation=token))[0]
     assert os.path.realpath(h / f".{bt.archive_name(args)}.tmp") in w.paths, "the temp is exercised"
     assert w.paths and w.paths <= declared, w.paths - declared
 
@@ -166,19 +177,19 @@ def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_p
     h = _home(tmp_path)
     mine, other = {"words": "widget", "reason": "mine"}, {"words": "daemon", "reason": "other"}
     declared = _declared(h, mine)               # the gate is told, then another retire lands first
-    assert bt.retire_thread(h, other)[0]
+    assert _go(h, other)[0]
     w = _Writes(monkeypatch)
-    assert bt.retire_thread(h, mine)[0]
+    assert _go(h, mine)[0]
     assert w.paths <= declared, w.paths - declared
     # the same call landing first takes the declared name: the second is refused and writes nothing
     (tmp_path / "two").mkdir()
     h2 = _home(tmp_path / "two")
     declared = _declared(h2, mine)
     monkeypatch.undo()
-    assert bt.retire_thread(h2, mine)[0]
+    assert _go(h2, mine)[0]
     (h2 / "todo.md").write_text(TODO)           # the thread crept back before the second ran
     w = _Writes(monkeypatch)
-    ok, msg, _ = bt.retire_thread(h2, mine)
+    ok, msg, _ = _go(h2, mine)
     assert not ok and "Give a different reason" in msg
     assert not (w.paths - {os.path.realpath(h2 / ".home.lock")}), w.paths
 
@@ -188,12 +199,17 @@ def test_a_failed_settled_commit_rolls_back_within_the_declared_paths(tmp_path, 
     args = {"words": "widget", "reason": "r"}
     declared = _declared(h, args)
     entries_before = (h / "settled.json").read_bytes()
+    ok, msg, _ = bt.retire_thread(h, dict(args, preview="true"))
+    token = re.search(r"confirmation: ([A-Za-z0-9_-]{22})", msg).group(1)
     monkeypatch.setattr(st, "_commit", lambda *a, **k: (False, "could not write settled.json (OSError)"))
     w = _Writes(monkeypatch)
-    ok, msg, changed = bt.retire_thread(h, args)
-    assert not ok and not changed and "put back as it was" in msg
+    ok, msg, changed = bt.retire_thread(h, dict(args, confirmation=token))
+    # NOVA item 3: a failure after the first write is never reported as a no-op; the archive stays as
+    # recovery evidence (it holds the exact prior bytes), and the todo is restored from its exact bytes.
+    assert not ok and changed and "may be partial" in msg and "todo.md was restored" in msg, msg
     assert (h / "todo.md").read_text() == TODO and (h / "settled.json").read_bytes() == entries_before
-    assert not (h / bt.archive_name(args)).exists()
+    arch = (h / bt.archive_name(args)).read_text()
+    assert "## Exact prior settled.json (base64, for recovery)" in arch
     assert w.paths <= declared, w.paths - declared
 
 
@@ -202,7 +218,9 @@ def test_the_verb_retires_and_witnesses():
     root = Path(tempfile.mkdtemp(prefix="rt-"))
     d = HestiaF1aDispatcher("sprout-being", str(root), mcp_factory=lambda ep, pid: FakeMcp(ep, pid))
     _home(root)
-    env = d(BeingIntent("retire_thread", {"words": "widget", "reason": "finished"}), _ALLOW)
+    pre = d(BeingIntent("retire_thread", {"words": "widget", "reason": "finished", "preview": "true"}), _ALLOW)
+    token = re.search(r"confirmation: ([A-Za-z0-9_-]{22})", pre.result).group(1)
+    env = d(BeingIntent("retire_thread", {"words": "widget", "reason": "finished", "confirmation": token}), _ALLOW)
     assert env.ok and env.witness_id, env.error
     assert "Build a small neural net" in (root / "todo.md").read_text()
     assert "widget" not in (root / "todo.md").read_text().split("UTC:", 1)[-1].lower()
@@ -218,3 +236,76 @@ def test_a_preview_on_a_fresh_home_writes_nothing_not_even_the_lock(tmp_path, mo
     assert ok and not changed and msg.startswith("PREVIEW") and "3 of 5 open todo" in msg
     assert w.paths == set(), w.paths
     assert not (tmp_path / ".home.lock").exists()
+
+
+# -- NOVA's three #619-specific items (from Codex's candidate d217a7a8) ----------------------------------
+
+def test_evidence_alone_does_not_select_a_settled_entry(tmp_path):
+    """NOVA item 1: a shared citation or tool name in evidence does not make a conclusion about the topic."""
+    h = _home(tmp_path)
+    assert st.settle(h, {"question": "Does the sine net generalise?", "answer": "yes, test error 0.04",
+                         "evidence": "ran widget-free eval.py"}, now=0)[0]
+    ok, msg, _ = bt.retire_thread(h, {"words": "widget", "preview": "true"})
+    assert "Does the sine net generalise?" not in msg and "2 of 4 settled entries" in msg, msg
+
+
+def test_a_broad_retire_without_confirmation_changes_nothing(tmp_path):
+    h = _home(tmp_path)
+    before = {p.name: p.read_bytes() for p in h.iterdir() if p.is_file()}
+    ok, msg, changed = bt.retire_thread(h, {"words": "widget", "reason": "r"})
+    assert not ok and not changed and "needs the confirmation" in msg and "Nothing was changed" in msg
+    assert {p.name: p.read_bytes() for p in h.iterdir() if p.is_file()} == before
+
+
+def test_a_confirmation_is_used_once_and_bound_to_what_was_previewed(tmp_path):
+    h = _home(tmp_path)
+    args = {"words": "widget", "reason": "r"}
+    get = lambda: re.search(r"confirmation: ([A-Za-z0-9_-]{22})",  # noqa: E731
+                            bt.retire_thread(h, dict(args, preview="true"))[1]).group(1)
+    tok = get()
+    with open(h / "todo.md", "a") as f:                       # the source changes after the preview
+        f.write("- [ ] Another widget chore\n")
+    ok, msg, _ = bt.retire_thread(h, dict(args, confirmation=tok))
+    assert not ok and "changed since that preview" in msg
+    ok, msg, _ = bt.retire_thread(h, dict(args, confirmation=tok))
+    assert not ok and "unknown, mistyped or expired" in msg, "a consumed confirmation is gone"
+    tok = get()
+    ok, msg, _ = bt.retire_thread(h, dict(args, reason="other", confirmation=tok))
+    assert not ok and "changed since that preview" in msg, "the reason is part of what was previewed"
+    assert bt.retire_thread(h, dict(args, confirmation=get()))[0]
+
+
+def test_a_preview_without_a_reason_says_how_to_get_a_confirmation(tmp_path):
+    h = _home(tmp_path)
+    ok, msg, _ = bt.retire_thread(h, {"words": "widget", "preview": "true"})
+    assert ok and "preview again WITH the reason" in msg and "confirmation:" not in msg
+
+
+def test_a_narrow_retire_needs_no_confirmation(tmp_path):
+    h = _home(tmp_path)
+    ok, msg, changed = bt.retire_thread(h, {"words": "installer", "reason": "r"})
+    assert ok and changed and "1 open todo item(s)" in msg, msg
+
+
+def test_a_common_word_is_not_a_topic(tmp_path):
+    h = _home(tmp_path)
+    ok, msg, changed = bt.retire_thread(h, {"words": "widget, the", "reason": "r"})
+    assert not ok and not changed and "common word" in msg
+
+
+def test_a_todo_write_failure_is_reported_as_possibly_partial(tmp_path, monkeypatch):
+    h = _home(tmp_path)
+    args = {"words": "widget", "reason": "r"}
+    tok = re.search(r"confirmation: ([A-Za-z0-9_-]{22})",
+                    bt.retire_thread(h, dict(args, preview="true"))[1]).group(1)
+    real = bt._write_atomic
+
+    def failing(p, text):
+        if p.name == "todo.md":
+            raise OSError("disk full")
+        return real(p, text)
+    monkeypatch.setattr(bt, "_write_atomic", failing)
+    ok, msg, changed = bt.retire_thread(h, dict(args, confirmation=tok))
+    assert not ok and changed and "may be partial" in msg and bt.archive_name(args) in msg
+    assert (h / bt.archive_name(args)).exists() and (h / "todo.md").read_text() == TODO
+

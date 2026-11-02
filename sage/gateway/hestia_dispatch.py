@@ -2704,8 +2704,10 @@ class HestiaF1aDispatcher:
         """Close a line of work: its open todo items and settled entries, into one retired file (being_threads)."""
         from sage.gateway import being_threads
         ok, text, changed = being_threads.retire_thread(Path(self.memory_root), intent.args or {})
-        if not ok:
-            return ResultEnvelope(ok=False, error=text)
+        if not ok:   # a possibly-partial failure changed files, so it is witnessed (NOVA, item 3)
+            return ResultEnvelope(ok=False, error=text,
+                                  witness_id=(self._local._witness(f"retire_thread partial: {text[:150]}")
+                                              if changed else None))
         return ResultEnvelope(ok=True, result=text,
                               witness_id=(self._local._witness(f"retire_thread: {text[:160]}") if changed else None))
 
