@@ -381,10 +381,12 @@ def test_invalid_todo_encoding_never_silently_rewrites_unrelated_content(tmp_pat
     original = TODO.encode("utf-8") + b"\n- [ ] unrelated damaged byte: \xff\n"
     (h / bt.TODO).write_bytes(original)
     args = {"words": "widget", "reason": "finished"}
-    result = bt.retire_thread(h, {**args, "preview": "true"})
-    assert not result[0] and not result[2]
-    assert "encoding" in result[1].lower() or "utf-8" in result[1].lower()
-    assert (h / bt.TODO).read_bytes() == original
+    for request in ({**args, "preview": "true"}, args):
+        result = bt.retire_thread(h, request)
+        assert not result[0] and not result[2]
+        assert "encoding" in result[1].lower() or "utf-8" in result[1].lower()
+        assert (h / bt.TODO).read_bytes() == original
+        assert not (h / bt.archive_name(args)).exists()
 
 
 def test_confirmation_is_bound_to_exact_todo_bytes_not_normalized_text(tmp_path):

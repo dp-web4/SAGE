@@ -99,9 +99,10 @@ def writes(args: Dict) -> Tuple[str, ...]:
     return (TODO, _tmp(TODO), arch, _tmp(arch)) + tuple(SETTLED_WRITES)
 
 
-def _write_atomic(p: Path, text: str) -> None:
+def _write_atomic(p: Path, text: str | bytes) -> None:
     tmp = p.with_name(_tmp(p.name))
-    with open(tmp, "w") as f:
+    stream = open(tmp, "wb") if isinstance(text, bytes) else open(tmp, "w", encoding="utf-8")
+    with stream as f:
         f.write(text)
         f.flush()
         os.fsync(f.fileno())
@@ -124,14 +125,33 @@ def _fresh_todo(items: List[Tuple[str, Optional[datetime]]], stamp: datetime, re
     return "".join(out)
 
 
-def plan(instance: Path, words: List[str]):
+_TODO_UNREAD = object()
+
+
+def _read_todo_bytes(instance: Path) -> Optional[bytes]:
+    try:
+        return (instance / TODO).read_bytes()
+    except FileNotFoundError:
+        return None
+
+
+def plan(instance: Path, words: List[str], *, todo_snapshot=_TODO_UNREAD):
     """(todo_body, kept_items, moved_items, entries, nxt, moved_entries, error) -- reads only."""
     from sage.gateway import being_settled as st
     from sage.gateway.heartbeat import _todo_items
     instance = Path(instance)
     hit = matcher(words)
-    p = instance / TODO
-    body = p.read_text(errors="replace") if p.exists() else ""
+    try:
+        raw = _read_todo_bytes(instance) if todo_snapshot is _TODO_UNREAD else todo_snapshot
+        # The todo format is UTF-8 text. Replacement decoding could rewrite
+        # unrelated damaged bytes on retirement; fail before changing records.
+        body = raw.decode("utf-8") if raw is not None else ""
+    except UnicodeDecodeError:
+        return "", [], [], [], 0, [], "todo.md is not valid UTF-8; repair its encoding before retirement"
+    except OSError as exc:
+        return "", [], [], [], 0, [], f"cannot read todo.md ({type(exc).__name__})"
+    # Match the universal-newline behavior of the former Path.read_text call.
+    body = body.replace("\r\n", "\n").replace("\r", "\n")
     items = list(_todo_items(body).values()) if body else []
     moved = [x for x in items if hit(x[0])]
     kept = [x for x in items if not hit(x[0])]
@@ -148,11 +168,13 @@ def _broad(kept, moved, entries, gone):
             (len(gone) >= 2 and len(gone) * 2 > len(entries)))
 
 
-def _preview_binding(instance, words, reason, body, entries, nxt):
+def _preview_binding(instance, words, reason, todo_bytes, entries, nxt):
     # Bind complete semantic source state, not just counts or the first 20
     # items rendered. This digest is not an authentication or authority claim.
     raw = json.dumps({"instance": os.path.realpath(instance), "words": [w.lower() for w in words],
-                      "reason": reason, "todo": body, "entries": entries, "next": nxt},
+                      "reason": reason, "todo_bytes": (base64.b64encode(todo_bytes).decode("ascii")
+                                                          if todo_bytes is not None else None),
+                      "entries": entries, "next": nxt},
                      sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -214,12 +236,16 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
         # creates it on a fresh home, a write thread_paths does not declare for a preview. It only reads.
         return _preview(instance, words, reason)
     with st._home_lock(instance):
-        body, kept, moved, entries, nxt, gone, err = plan(instance, words)
+        try:
+            todo_bytes = _read_todo_bytes(instance)
+        except OSError as exc:
+            return False, f"cannot read todo.md ({type(exc).__name__}); nothing was changed.", False
+        body, kept, moved, entries, nxt, gone, err = plan(instance, words, todo_snapshot=todo_bytes)
         if err:
-            return False, f"cannot read your settled list: {err}. Nothing was changed.", False
+            return False, f"cannot prepare retirement: {err}. Nothing was changed.", False
         confirmation = a.get("confirmation")
         if _broad(kept, moved, entries, gone) or confirmation is not None:
-            binding = _preview_binding(instance, words, reason, body, entries, nxt)
+            binding = _preview_binding(instance, words, reason, todo_bytes, entries, nxt)
             status = _consume_confirmation(confirmation, binding)
             if status != "accepted":
                 explanation = {
@@ -252,6 +278,8 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                  + f" (settled {str(e.get('at', ''))[:10]})" for e in gone]
         head += ["", f"## Open todo items retired ({len(moved)})", ""]
         head += [(f"- [ ] {t}" + (f" (since {s:%Y-%m-%d %H:%M} UTC)" if s else "")) for t, s in moved]
+        head += ["", "## Original todo snapshot (base64; exact bytes)", "",
+                 "absent" if todo_bytes is None else base64.b64encode(todo_bytes).decode("ascii")]
         head += ["", "## Original settled snapshot (base64; exact bytes)", "",
                  "absent" if settled_before is None else base64.b64encode(settled_before).decode("ascii")]
         head += ["", "> The todo.md this retire replaced, kept whole below, as it was written.", "", ""]
@@ -279,7 +307,7 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                 todo_status = "todo was not changed"
                 if moved:
                     try:
-                        _write_atomic(todo, body)
+                        _write_atomic(todo, todo_bytes)
                         todo_status = "todo was restored"
                     except OSError:
                         todo_status = "todo restoration failed"
@@ -293,9 +321,13 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
 
 def _preview(instance: Path, words: List[str], reason: str = "") -> Tuple[bool, str, bool]:
     from sage.gateway import being_settled as st
-    body, kept, moved, entries, nxt, gone, err = plan(instance, words)
+    try:
+        todo_bytes = _read_todo_bytes(instance)
+    except OSError as exc:
+        return False, f"cannot read todo.md ({type(exc).__name__}); nothing was changed.", False
+    body, kept, moved, entries, nxt, gone, err = plan(instance, words, todo_snapshot=todo_bytes)
     if err:
-        return False, f"cannot read your settled list: {err}. Nothing was changed.", False
+        return False, f"cannot prepare retirement: {err}. Nothing was changed.", False
     topic = ", ".join(words)
     lines =[f"PREVIEW, no files or records were changed. Words: {topic}. "
              f"{len(moved)} of {len(moved) + len(kept)} open todo item(s) and {len(gone)} of "
@@ -307,7 +339,7 @@ def _preview(instance: Path, words: List[str], reason: str = "") -> Tuple[bool, 
     lines += [f"- STAYS: {t[:140]}" for t, _ in kept[:10]]
     if _broad(kept, moved, entries, gone):
         if reason:
-            binding = _preview_binding(instance, words, reason, body, entries, nxt)
+            binding = _preview_binding(instance, words, reason, todo_bytes, entries, nxt)
             lines.append(f"Broad retirement: confirmation: {_issue_confirmation(binding)}")
             lines.append("Confirm once in the same beat, within 5 minutes, using the same words, reason and source state. "
                          "A later beat or restart may lose this confirmation.")
