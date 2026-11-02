@@ -83,6 +83,21 @@ def test_copy_hints_exclude_write_only_paths():
     assert same_path_in_reach(edit, ((gov, True, "w"),)) == []
 
 
+def test_copy_hint_does_not_check_existence_of_write_only_candidate(monkeypatch):
+    ws, edit, copy, _ = _ws()
+    gov = str(ws / "governance")
+    original = os.path.exists
+    checked = []
+
+    def record_exists(path):
+        checked.append(str(path))
+        return original(path)
+
+    monkeypatch.setattr(os.path, "exists", record_exists)
+    assert same_path_in_reach(edit, ((gov, True, "w"),)) == []
+    assert copy not in checked
+
+
 def test_copy_hints_honor_nearest_narrowed_paths():
     ws, edit, copy, _ = _ws()
     gov = str(ws / "governance")
