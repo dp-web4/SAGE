@@ -411,3 +411,22 @@ def test_exact_own_read_grant_wins_over_recursive_write_floor_at_same_file():
     assert not result.ok, "the own exact grant must decide at its node"
     with open(target) as stream:
         assert stream.read() == "original"
+
+
+def test_run_mount_does_not_widen_exact_own_file_from_a_same_node_floor():
+    from sage.gateway.being_gate_client import run_grant_mounts
+    ws = os.path.realpath(tempfile.mkdtemp(prefix="floor-mount-node-"))
+    home = os.path.join(ws, "home")
+    os.makedirs(home)
+    target = os.path.join(ws, "single.md")
+    with open(target, "w") as stream:
+        stream.write("original")
+    core = _core_with_modes()
+    core.scope_roots_with_modes = lambda p, w: ((target, False, "r"),)
+    policy = SimpleNamespace(scope=(f"path:{target}",), read_scope=(),
+                             floor_mode_scope=((f"path:{target}/**", "rwd"),))
+    reach = _granted_reach(core, policy, ws)
+    mounts, _, _ = run_grant_mounts({"memory_root": home, "granted_reach": reach,
+                                      "reach_rule": "nearest"})
+    assert (target, "file", "ro") in mounts, mounts
+    assert (target, "file", "rw") not in mounts, mounts
