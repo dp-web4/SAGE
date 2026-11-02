@@ -12,8 +12,10 @@ to reopen. None of these establish acceptance or inability to act.
 ## Existing seams, not a replacement being
 
 Rechecked against main `1672f6a28`: `heartbeat.mark_conversations_after_beat`
-advances conversation cursors when exploration acted or a successful `say` addressed
-the conversation; it is not a work ledger. The existing `act_after_answer` path is
+advances all shown conversation cursors when the explore turn attempted at least one
+call, successful or refused, or advances a conversation's cursor when a successful
+`say` addressed it. A cursor is not a work ledger or proof that an action succeeded.
+The existing `act_after_answer` path is
 opt-in and requires preemption, a selected input, and a sent answer-form result.
 It does not follow every reflection acknowledgement. `after_answer_messages` carries
 the request and reply into a bounded tool turn, but merely adding another predicate
