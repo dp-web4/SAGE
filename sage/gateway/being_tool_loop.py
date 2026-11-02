@@ -354,10 +354,21 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
     # can otherwise execute a prefix the being intended to qualify later.
     for stmt in tree.body:
         target = None
-        if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+        if isinstance(stmt, ast.Import):
+            if any(alias.name != "tools" or alias.asname not in (None, "tools") for alias in stmt.names):
+                return []
+            continue
+        if isinstance(stmt, ast.ImportFrom):
+            if (stmt.level != 0 or stmt.module != "tools" or any(
+                alias.name not in names or alias.asname not in (None, alias.name) for alias in stmt.names
+            )):
+                return []
             continue
         if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
             target = stmt.targets[0].id
+            # A literal or result assigned over a tool or its namespace is not a tool call.
+            if target == "tools" or target in names:
+                return []
             # A later assignment must not leave an earlier value in scope.
             consts.pop(target, None)
             if isinstance(stmt.value, ast.Constant):
@@ -367,8 +378,7 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
             node = stmt.value
         elif isinstance(stmt, ast.Expr):
             node = stmt.value
-            if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                continue
+            # A standalone string may be a quotation or qualification, not executable intent.
         else:
             return []
         if not isinstance(node, ast.Call):
