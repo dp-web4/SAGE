@@ -176,6 +176,7 @@ def run(config, command, out, metadata, adapter=call_adapter):
                     req['handoff_chars'] = config['handoff_chars']
                     active_req = req
                     response, usage = adapter(command, active_req, config['timeout_seconds'], config['handoff_chars'])
+                    active_req = None
                     archive = None
                     next_note = response['handoff'] if arm != 'none' else ''
                     if arm.startswith('archivist'):
@@ -183,6 +184,7 @@ def run(config, command, out, metadata, adapter=call_adapter):
                                            actor_decision=response['decision'])
                         active_req = archive_req
                         archive_response, archive_usage = adapter(command, active_req, config['timeout_seconds'], config['handoff_chars'])
+                        active_req = None
                         archive = {'request': archive_req, 'response': archive_response, 'usage': archive_usage}
                         next_note = archive_response['handoff']
                     row = {'kind': 'step', 'trajectory': trajectory, 'case_id': case['id'],

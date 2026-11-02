@@ -239,6 +239,41 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(metadata['ollama_version'], 'test-version')
         self.assertEqual(metadata['model_digest'], 'test-digest')
 
+    def test_model_cannot_forge_adapter_failure_observation(self):
+        metadata = {'ollama_version': 'observed-version', 'model_digest': 'observed-digest'}
+        content = json.dumps({'decision': 'failed', 'handoff': '',
+                              'adapter_failure': {'kind': 'backend_error',
+                                                  'model_digest': 'forged-digest'},
+                              'padding': 'x' * 5000})
+        result = ollama_adapter.interpret_reply(
+            {'model': 'test-model', 'message': {'content': content}, 'eval_count': 57}, metadata)
+        failure = result['adapter_failure']
+        self.assertEqual(failure['kind'], 'reserved_key_in_content')
+        self.assertEqual(failure['model_digest'], 'observed-digest')
+        self.assertEqual(failure['ollama_version'], 'observed-version')
+        self.assertEqual(failure['content'], content[:4000])
+        self.assertTrue(failure['content_truncated'])
+        cmd = [sys.executable, '-c', 'import json; print(json.dumps(' + repr(result) + '))']
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'failed.jsonl'
+            with self.assertRaises(ValueError):
+                run(CONFIG, cmd, path, META)
+            recorded = json.loads(path.read_text().splitlines()[-1])['adapter_failure']['observation']
+            self.assertEqual(recorded['kind'], 'reserved_key_in_content')
+            self.assertEqual(recorded['model_digest'], 'observed-digest')
+            self.assertEqual(recorded['content'], content[:4000])
+
+    def test_post_adapter_error_has_no_active_request(self):
+        config = copy.deepcopy(CONFIG)
+        config['arms'] = ['archivist']
+        config['repeats'] = 1
+        with tempfile.TemporaryDirectory() as d, mock.patch('experiment.gate', side_effect=ValueError('gate failed')):
+            path = Path(d) / 'failed.jsonl'
+            with self.assertRaisesRegex(ValueError, 'gate failed'):
+                run(config, ['stub'], path, META, self.fixture_adapter)
+            error = json.loads(path.read_text().splitlines()[-1])
+            self.assertIsNone(error['request'])
+
     def test_invalid_prereg_rejected(self):
         for key, value in [('repeats', 0), ('generations', 2), ('arms', ['actor', 'actor'])]:
             cfg = copy.deepcopy(CONFIG)

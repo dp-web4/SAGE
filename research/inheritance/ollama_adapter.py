@@ -52,9 +52,13 @@ def interpret_reply(reply, metadata):
         try:
             response = json.loads(content)
             if isinstance(response, dict):
-                response['adapter_observation'] = observation
-                return response
-            kind = 'non_object_content'
+                if 'adapter_failure' in response:
+                    kind = 'reserved_key_in_content'
+                else:
+                    response['adapter_observation'] = observation
+                    return response
+            else:
+                kind = 'non_object_content'
         except json.JSONDecodeError:
             kind = 'malformed_content'
     raw = content if isinstance(content, str) else ''
