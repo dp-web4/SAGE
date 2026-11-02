@@ -222,7 +222,7 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
             if status != "accepted":
                 explanation = {
                     "missing": "No confirmation was provided for this broad retirement.",
-                    "unknown": "Confirmation is unknown or expired; it does not survive a restart or different worker.",
+                    "unknown": "Confirmation is unknown, mistyped or expired; a later beat or restart may lose it.",
                     "changed": "The source, words or reason changed since preview; that confirmation is consumed.",
                 }[status]
                 return False, (f"{explanation} Make a fresh preview with the reason, then confirm in the same beat. "
@@ -308,7 +308,7 @@ def _preview(instance: Path, words: List[str], reason: str = "") -> Tuple[bool, 
             binding = _preview_binding(instance, words, reason, body, entries, nxt)
             lines.append(f"Broad retirement: confirmation: {_issue_confirmation(binding)}")
             lines.append("Confirm once in the same beat, within 5 minutes, using the same words, reason and source state. "
-                         "A restart or different worker loses this confirmation.")
+                         "A later beat or restart may lose this confirmation.")
         else:
             lines.append("Broad retirement: preview again with a reason to obtain a confirmation.")
     return True, "\n".join(lines), False

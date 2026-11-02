@@ -3098,8 +3098,8 @@ _TOOL_SCHEMAS = {
                       "topic is finished or someone asks you to drop it, so it stops coming back uninvited. "
                       "Other items and entries stay as they are. preview='true' shows what would move and "
                       "changes nothing. A broad retirement needs a preview with the same reason, then "
-                      "the one-use confirmation it returns in the same beat; a changed source, restart or "
-                      "different worker requires another preview.",
+                      "the one-use confirmation it returns in the same beat; a changed source or a later "
+                      "beat may require another preview.",
                       {"words": "the topic, as words separated by commas, e.g. 'webserver, port 8080'. A word "
                                 "matches at the start of a word: 'install' also matches 'installer'",
                        "reason": "why this line is finished; also needed in a broad preview to get confirmation",

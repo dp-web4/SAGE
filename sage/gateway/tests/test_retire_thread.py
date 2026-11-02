@@ -57,16 +57,18 @@ def _broad_home(tmp_path):
 def _preview_confirmation(h, args):
     preview = bt.retire_thread(h, {**args, "preview": "true"})
     assert preview[0] and not preview[2], preview
-    assert "same beat" in preview[1] and "different worker" in preview[1]
+    assert "same beat" in preview[1] and "later beat or restart" in preview[1]
     match = re.search(r"confirmation: ([0-9a-f]{64})", preview[1])
     assert match, preview[1]
     return match.group(1)
 
 
-def _confirmed_if_broad(h, args):
+def _confirmed_if_broad(h, args, *, require=False):
     preview = bt.retire_thread(h, {**args, "preview": "true"})
     assert preview[0] and not preview[2], preview
     match = re.search(r"confirmation: ([0-9a-f]{64})", preview[1])
+    if require:
+        assert match, "recovery fixture must exercise a confirmed broad retirement"
     return {**args, "confirmation": match.group(1)} if match else args
 
 
@@ -134,12 +136,12 @@ def test_broad_refusal_explains_missing_unknown_and_changed_confirmation(tmp_pat
     missing = bt.retire_thread(h, args)
     assert not missing[0] and "no confirmation" in missing[1].lower()
     unknown = bt.retire_thread(h, {**args, "confirmation": "not-a-confirmation"})
-    assert not unknown[0] and "unknown or expired" in unknown[1].lower()
+    assert not unknown[0] and "unknown, mistyped or expired" in unknown[1].lower()
     token = _preview_confirmation(h, args)
     changed = bt.retire_thread(h, {**args, "reason": "different", "confirmation": token})
     assert not changed[0] and "changed" in changed[1].lower() and "preview" in changed[1].lower()
     consumed = bt.retire_thread(h, {**args, "confirmation": token})
-    assert not consumed[0] and "unknown or expired" in consumed[1].lower()
+    assert not consumed[0] and "unknown, mistyped or expired" in consumed[1].lower()
 
 
 def test_one_item_is_not_classed_as_a_broad_retirement(tmp_path):
@@ -345,7 +347,7 @@ def test_a_failed_settled_commit_rolls_back_within_the_declared_paths(tmp_path, 
 def test_a_failed_settled_rollback_preserves_recovery_evidence(tmp_path, monkeypatch):
     """A failed commit can mean the settled replacement happened but undo failed."""
     h = _home(tmp_path)
-    args = _confirmed_if_broad(h, {"words": "widget", "reason": "r"})
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "r"}, require=True)
     original = (h / "settled.json").read_bytes()
 
     def commit_with_failed_undo(instance, entries, nxt, log, now, msg):
@@ -367,7 +369,7 @@ def test_a_failed_settled_rollback_preserves_recovery_evidence(tmp_path, monkeyp
 
 def test_real_settled_log_and_restore_failures_do_not_erase_recovery(tmp_path, monkeypatch):
     h = _home(tmp_path)
-    args = _confirmed_if_broad(h, {"words": "widget", "reason": "r"})
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "r"}, require=True)
     original = (h / st.SETTLED_FILE).read_bytes()
     real_open, real_write_bytes = builtins.open, Path.write_bytes
 
@@ -393,7 +395,7 @@ def test_real_settled_log_and_restore_failures_do_not_erase_recovery(tmp_path, m
 
 def test_todo_restore_failure_preserves_archive_and_reports_partial_effect(tmp_path, monkeypatch):
     h = _home(tmp_path)
-    args = _confirmed_if_broad(h, {"words": "widget", "reason": "r"})
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "r"}, require=True)
     real_write = bt._write_atomic
     todo_writes = 0
 
@@ -418,7 +420,7 @@ def test_todo_restore_failure_preserves_archive_and_reports_partial_effect(tmp_p
 @pytest.mark.parametrize("stage", ["archive", "todo"])
 def test_write_failure_reports_partial_and_preserves_available_evidence(tmp_path, monkeypatch, stage):
     h = _home(tmp_path)
-    args = _confirmed_if_broad(h, {"words": "widget", "reason": "r"})
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "r"}, require=True)
     original_todo, original_settled = (h / bt.TODO).read_bytes(), (h / st.SETTLED_FILE).read_bytes()
     target = h / (bt.archive_name(args) if stage == "archive" else bt.TODO)
     real_replace = os.replace
@@ -454,7 +456,7 @@ def test_the_verb_retires_and_witnesses():
 def test_partial_retire_failure_is_witnessed(tmp_path, monkeypatch):
     FakeMcp.calls = []
     _home(tmp_path)
-    args = _confirmed_if_broad(tmp_path, {"words": "widget", "reason": "finished"})
+    args = _confirmed_if_broad(tmp_path, {"words": "widget", "reason": "finished"}, require=True)
     monkeypatch.setattr(st, "_commit", lambda *a, **k: (False, "synthetic unknown outcome"))
     d = HestiaF1aDispatcher("sprout-being", str(tmp_path), mcp_factory=lambda ep, pid: FakeMcp(ep, pid))
     env = d(BeingIntent("retire_thread", args), _ALLOW)
