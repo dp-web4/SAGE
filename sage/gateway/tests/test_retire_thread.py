@@ -352,6 +352,24 @@ def test_other_retirement_writes_refuse_a_post_preflight_symlink(tmp_path, stage
     assert not result[0], result
 
 
+def test_home_lock_symlink_after_preflight_is_not_opened_for_writing(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    h = _home(home)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    declared = _declared(h, args)
+    victim = tmp_path / "outside.txt"
+    victim.write_bytes(b"synthetic outside content")
+    assert os.path.realpath(victim) not in declared
+    lock = h / ".home.lock"
+    lock.unlink()
+    lock.symlink_to(victim)
+    writes = _Writes(monkeypatch)
+    result = bt.retire_thread(h, args)
+    assert os.path.realpath(victim) not in writes.paths
+    assert not result[0], result
+
+
 def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_path, monkeypatch):
     h = _home(tmp_path)
     mine, other = {"words": "widget", "reason": "mine"}, {"words": "daemon", "reason": "other"}
