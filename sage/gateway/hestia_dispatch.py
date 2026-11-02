@@ -1212,8 +1212,9 @@ class HestiaF1aDispatcher:
         #   * no lock, no reply: without a held lock two sessions could both spend one notice;
         #   * the claim is written and fsynced BEFORE anything is published, and a reply whose claim
         #     could not be written is not sent;
-        #   * a send that fails writes a release, so the notice can be answered again. If the
-        #     release cannot be written the notice stays spent: one reply lost, never two sent.
+        #   * once sending starts, a failure or lost response is an unknown outcome, not proof that
+        #     no effect occurred. Keep the claim until an explicit recovery protocol can establish
+        #     otherwise: a reply may be delayed or lost, but it cannot be spent twice on a retry.
         claim = self._claim_lock()
         if claim is None:
             return ResultEnvelope(ok=False, error=limited + (
@@ -1228,14 +1229,17 @@ class HestiaF1aDispatcher:
                     f"not sent: this would be your one reply to {to}'s question (hub notice {reply_to}), "
                     f"but the record that spends that reply could not be written, so nothing was "
                     f"published or sent. Try again next beat."))
-            sent = False
             try:
                 env = self._send_peer_ask(to, body, reply_to)
-                sent = env.ok
-                return env
-            finally:
-                if not sent:
-                    self._append_claim(self._claim_row(to, "reply-release", "", reply_to))
+            except Exception as exc:
+                return ResultEnvelope(ok=False, pending=True, error=(
+                    f"reply outcome unknown ({type(exc).__name__}); its one-use claim remains "
+                    "held. Do not retry until the effect is reconciled."))
+            if not env.ok:
+                return ResultEnvelope(ok=False, pending=True, error=(
+                    f"reply outcome unknown ({env.error or 'no confirmed receipt'}); its one-use "
+                    "claim remains held. Do not retry until the effect is reconciled."))
+            return env
         finally:
             self._release_claim(claim)
 

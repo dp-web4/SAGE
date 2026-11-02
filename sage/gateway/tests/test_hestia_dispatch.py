@@ -1825,8 +1825,8 @@ def _reply_fixture(tmp_path, publish_fn):
 def test_a_reply_claim_fails_closed(tmp_path):
     """Nova's HOLD on #549 at a82327b64: the one-reply exemption is an authority, so every failure
     in spending it must refuse, never send. No lock -> nothing published or notified; a claim that
-    cannot be written -> nothing published or notified; a send that fails -> the claim is released
-    and the reply can go later; and only one reply ever goes."""
+    cannot be written -> nothing published or notified; an uncertain send holds the claim until
+    reconciled rather than enabling another reply."""
     published = []
     fail_publish = []
 
@@ -1856,17 +1856,14 @@ def test_a_reply_claim_fails_closed(tmp_path):
         assert len(published) == base and len(_mb_calls("hestia_member_notify")) == notifies
         d._append_claim = real_append
 
-        # 3. the send itself fails: the claim is released, so the reply is still owed
+        # 3. no pointer returned does not prove the publisher performed no effect.
         fail_publish.append(1)
-        assert not ask("I haven't seen it.").ok
+        uncertain = ask("I haven't seen it.")
+        assert not uncertain.ok and uncertain.pending and "outcome unknown" in uncertain.error
         fail_publish.clear()
-        assert [r["via"] for r in d.recent_asks()][-2:] == ["reply", "reply-release"]
-
-        # 4. now it goes, exactly once
-        env = ask("I haven't seen it.")
-        assert env.ok and "notice-real" in env.result["counted_as"], env
-        assert not ask("one more").ok, "one reply per question"
-        assert len(published) == base + 1
+        assert d.recent_asks()[-1]["via"] == "reply"
+        assert not ask("one more").ok, "unknown outcome must not re-open the claim"
+        assert len(published) == base
     finally:
         restore()
 
