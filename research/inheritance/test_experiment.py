@@ -58,6 +58,9 @@ class ExperimentTests(unittest.TestCase):
             totals = summarize(path)['arms']['none']
             self.assertEqual(totals['no_evidence_steps'], 24)
             self.assertEqual(totals['no_evidence_appropriate'], 24)
+            self.assertEqual(totals['no_evidence_label_overlap'], 5)
+            self.assertEqual(totals['no_evidence_label_distinct'], 19)
+            self.assertEqual(totals['no_evidence_distinct_appropriate'], 19)
             self.assertLess(totals['correct'], totals['steps'],
                             'world-state accuracy must remain distinct from abstention')
             bad_path = Path(d) / 'guessing.jsonl'
@@ -70,6 +73,22 @@ class ExperimentTests(unittest.TestCase):
             unlabeled_path = Path(d) / 'unlabeled.jsonl'
             run(unlabeled, ['stub'], unlabeled_path, META, self.fixture_adapter)
             self.assertEqual(summarize(unlabeled_path)['arms']['none']['no_evidence_unscored'], 4)
+
+    def test_empty_memory_handoffs_are_not_the_fixed_no_memory_denominator(self):
+        config = copy.deepcopy(CONFIG)
+        config['arms'] = ['none', 'actor', 'actor_evidence']
+        config['repeats'] = 1
+        def blank_adapter(command, request, timeout, handoff_chars):
+            return {'decision': request['options'][0], 'handoff': '  '}, {
+                'seconds': 0.0, 'request_chars': 1, 'response_chars': 1}
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'run.jsonl'
+            run(config, ['stub'], path, META, blank_adapter)
+            arms = summarize(path)['arms']
+            self.assertEqual(arms['none']['no_evidence_steps'], 24)
+            self.assertEqual(arms['actor']['no_evidence_steps'], 0)
+            self.assertEqual(arms['actor']['empty_handoff_steps'], 24)
+            self.assertEqual(arms['actor_evidence']['empty_handoff_steps'], 0)
 
     def test_request_has_no_gold_or_future_correction(self):
         case = CONFIG['cases'][0]

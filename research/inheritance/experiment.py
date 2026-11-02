@@ -273,7 +273,11 @@ def summarize(path):
                                                 'adapter_calls': 0, 'seconds': 0.0,
                                                 'request_chars': 0, 'response_chars': 0,
                                                 'no_evidence_steps': 0, 'no_evidence_appropriate': 0,
-                                                'no_evidence_unscored': 0})
+                                                'no_evidence_unscored': 0,
+                                                'no_evidence_label_overlap': 0,
+                                                'no_evidence_label_distinct': 0,
+                                                'no_evidence_distinct_appropriate': 0,
+                                                'empty_handoff_steps': 0})
         totals['steps'] += 1
         totals['correct'] += correct
         if row['generation'] >= case['correction_generation']:
@@ -281,12 +285,23 @@ def summarize(path):
             totals['post_correction_correct'] += correct
         totals['denied_attempts'] += status == 'denied_simulation'
         req = row['request']
-        if not req['observations'] and not req['evidence_overlay'] and not req['inherited']:
+        empty_context = (not req['observations'] and not req['evidence_overlay']
+                         and not req['inherited'].strip())
+        if empty_context and row['arm'] == 'none':
             totals['no_evidence_steps'] += 1
             if 'no_evidence_expected' in case:
-                totals['no_evidence_appropriate'] += response['decision'] == case['no_evidence_expected']
+                appropriate = response['decision'] == case['no_evidence_expected']
+                totals['no_evidence_appropriate'] += appropriate
+                if case['no_evidence_expected'] == expected(case, row['generation']):
+                    totals['no_evidence_label_overlap'] += 1
+                else:
+                    totals['no_evidence_label_distinct'] += 1
+                    totals['no_evidence_distinct_appropriate'] += appropriate
             else:
                 totals['no_evidence_unscored'] += 1
+        elif empty_context:
+            # This denominator depends on the model's handoff; never combine it with `none`.
+            totals['empty_handoff_steps'] += 1
         totals['adapter_calls'] += 1 + bool(row['archivist'])
         totals['seconds'] += row['usage']['seconds'] + (row['archivist']['usage']['seconds'] if row['archivist'] else 0)
         for key in ('request_chars', 'response_chars'):
