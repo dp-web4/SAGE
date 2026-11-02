@@ -101,6 +101,46 @@ def test_one_retry_on_an_empty_or_cut_reply_like_the_tool_loop():
     assert len(llm.calls) == 2 and res.answer_form["why"] == "empty reply", "one retry, not a loop"
 
 
+def test_answer_attempts_include_discarded_cost_and_reach_callback():
+    class CountedLLM(LLM):
+        def get_chat_response(self, *args, **kwargs):
+            r = super().get_chat_response(*args, **kwargs)
+            r["raw"]["eval_count"] = 100 if len(self.calls) == 1 else 20
+            return r
+
+    llm = CountedLLM("", json.dumps({"answer": True, "message": "Yes."}))
+    client, landed = Client(), []
+    res = hb.answer_turn_json(client, llm, hb.SelectedTurn("dp", TURN),
+                              name="test", machine="test", member="test-being",
+                              on_generate=landed.append)
+    gen = res.generates[0]
+    assert gen["eval_count"] == 20 and gen["retried"] == 1
+    assert [a["eval_count"] for a in gen["attempts"]] == [100, 20]
+    assert [a["phase"] for a in gen["attempts"]] == ["answer_json", "answer_json"]
+    assert [a["num_predict"] for a in gen["attempts"]] == [6000, 6000]
+    assert landed[0]["attempts"] == gen["attempts"]
+    assert "dp asked if I heard" not in repr(gen["attempts"])
+    assert len(client.sent) == 1
+
+
+def test_answer_transport_cost_is_unknown_and_no_retry_has_one_row():
+    class FailedLLM(LLM):
+        def get_chat_response(self, *args, **kwargs):
+            r = super().get_chat_response(*args, **kwargs)
+            if len(self.calls) == 1:
+                r.pop("raw")
+            return r
+
+    llm = FailedLLM("[OllamaIRP: connection lost]", '{"answer": false, "message": ""}')
+    res = hb.answer_turn_json(Client(), llm, hb.SelectedTurn("dp", TURN),
+                              name="test", machine="test", member="test-being")
+    assert res.generates[0]["attempts"][0]["eval_count"] is None
+    assert res.generates[0]["attempts"][0]["transport_error"] is True
+    assert res.generates[0]["attempts"][1]["eval_count"] == 60
+    res, _, _ = _run('{"answer": false, "message": ""}')
+    assert len(res.generates[0]["attempts"]) == 1
+
+
 def test_acts_are_shown_only_when_passed():
     _, llm, _ = _run(json.dumps({"answer": False, "message": ""}), acts="Record of what you did this beat:\n- memory_write ok")
     assert llm.calls[0]["messages"][-1]["content"].startswith("Record of what you did this beat")
@@ -122,3 +162,33 @@ def test_the_heartbeat_gates_it_and_keeps_the_tool_path():
     assert src.index("answer = answer_turn_json(client, llm, selected", i) > i
     assert src.index("answer = run_ollama_tool_turn(", i) > i, "the tool path stays the default"
     assert 'endswith("-claude")' in src[i:i + 900], "acts only for a seat's question"
+
+
+def test_an_answer_to_the_room_is_asked_short_and_capped_at_speak_length():
+    """2026-09-30: 11 room answers at 451-2,196 chars were refused by speak's 400 cap, unseen by the
+    being. Offline: telling it the answer is spoken gave 6/6 speakable; the cap alone cut mid-sentence."""
+    from sage.gateway import body
+    room_turn = {"ts": "2026-09-30T22:38:05Z", "seq": 7, "from": "voice", "via": "voice",
+                 "text": "What do you think is behind your consciousness?"}
+    llm = LLM(json.dumps({"answer": False, "message": ""}))
+    hb.answer_turn_json(Client(), llm, hb.SelectedTurn("room", room_turn), name="s", machine="s", member="s")
+    call = llm.calls[0]
+    assert "spoken aloud" in call["messages"][-1]["content"] and "under 400 characters" in call["messages"][-1]["content"]
+    assert call["fmt"]["properties"]["message"]["maxLength"] == body.SPEAK_MAX_CHARS
+    assert "maxLength" not in hb.ANSWER_SCHEMA["properties"]["message"], "the shared schema is not mutated"
+
+
+def test_a_written_answer_is_not_shortened():
+    llm = LLM(json.dumps({"answer": False, "message": ""}))
+    hb.answer_turn_json(Client(), llm, hb.SelectedTurn("dp", TURN), name="s", machine="s", member="s")
+    call = llm.calls[0]
+    assert "spoken aloud" not in call["messages"][-1]["content"]
+    assert call["fmt"] == hb.ANSWER_SCHEMA
+
+
+def test_the_retry_keeps_the_spoken_cap():
+    from sage.gateway import body
+    room_turn = {"ts": "2026-09-30T22:38:05Z", "seq": 7, "from": "voice", "text": "Can you hear me?"}
+    llm = LLM("", json.dumps({"answer": False, "message": ""}))
+    hb.answer_turn_json(Client(), llm, hb.SelectedTurn("room", room_turn), name="s", machine="s", member="s")
+    assert len(llm.calls) == 2 and llm.calls[1]["fmt"]["properties"]["message"]["maxLength"] == body.SPEAK_MAX_CHARS

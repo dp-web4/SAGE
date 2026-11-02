@@ -1,0 +1,106 @@
+"""Brief verb descriptions, opt-in per instance, with `describe` for the full text (dp, 2026-10-03: "yes").
+
+Measured on legion-being: the seed compaction cannot touch grew 15.7k -> 17.1k tokens in a week, much
+of it verb schemas, leaving ~1.3k tokens of the 18.4k compaction target for a beat's work; long beats
+retried ~50% of generates at the window. Brief mode keeps each available verb's FIRST SENTENCE and
+every parameter; the rest is one `describe` away.
+"""
+import inspect
+import json
+
+from sage.gateway import toolset
+from sage.gateway.being_gate_client import _TOOL_SCHEMAS, BeingIntent, ResultEnvelope
+from sage.gateway.being_tool_loop import run_tool_turn
+
+
+def test_off_by_default_and_only_brief_turns_it_on():
+    assert toolset.tool_descriptions_mode({}) == "full"
+    assert toolset.tool_descriptions_mode(None) == "full"
+    assert toolset.tool_descriptions_mode({"tool_descriptions": "brief"}) == "brief"
+    assert toolset.tool_descriptions_mode({"tool_descriptions": "short"}) == "full"
+    assert toolset.specs() == toolset.specs(brief=False), "the default rendering is unchanged"
+
+
+def test_brief_keeps_every_verb_parameter_and_enum_and_is_smaller():
+    full = {t["function"]["name"]: t["function"] for t in toolset.specs()}
+    brief = {t["function"]["name"]: t["function"] for t in toolset.specs(brief=True)}
+    assert set(full) == set(brief), "every verb is still offered"
+    for name in full:
+        assert brief[name]["parameters"] == full[name]["parameters"], name
+        assert len(brief[name]["description"]) <= max(len(full[name]["description"]),
+                                                       toolset.BRIEF_DESC_CHARS + 60), name
+    assert len(json.dumps(list(brief.values()))) < 0.8 * len(json.dumps(list(full.values())))
+
+
+def test_a_cut_description_says_where_the_rest_is_and_a_short_one_stays_whole():
+    long_name = max(_TOOL_SCHEMAS, key=lambda n: len(_TOOL_SCHEMAS[n][0]))
+    b = toolset.brief_description(long_name, _TOOL_SCHEMAS[long_name][0])
+    assert b.endswith(f"(Full text: describe {long_name}.)") and len(b) < len(_TOOL_SCHEMAS[long_name][0])
+    assert toolset.brief_description("x", "One sentence only.") == "One sentence only."
+
+
+def test_an_unavailable_verb_keeps_its_reason_in_brief_mode():
+    u = {"gaze": "this machine's body has no movable eyes (measured)"}
+    g = {t["function"]["name"]: t["function"] for t in toolset.specs(u, brief=True)}["gaze"]
+    assert "CANNOT WORK" in g["description"] and "no movable eyes" in g["description"]
+
+
+def test_describe_returns_the_full_text_and_is_never_dispatched():
+    calls = []
+
+    class C:
+        def gate(self, intent):
+            calls.append(intent.effector)
+            from types import SimpleNamespace
+            return SimpleNamespace(decision="allow", rule="", reason="ok", command=None)
+
+        def dispatch(self, intent, v):
+            calls.append(("dispatch", intent.effector))
+            return ResultEnvelope(ok=True, result="r", witness_id="w")
+    seq = iter([{"content": "", "intents": [BeingIntent("describe", {"verb": "memory_edit"})]},
+                {"content": "done", "intents": []}])
+    r = run_tool_turn(C(), lambda convo: next(seq), [{"role": "user", "content": "beat"}], max_steps=4)
+    body = r.trace[0][1].result
+    assert body.startswith("memory_edit: " + _TOOL_SCHEMAS["memory_edit"][0][:40])
+    assert all(f"  {k}" in body for k in _TOOL_SCHEMAS["memory_edit"][1])
+    assert calls == [], "describe touches nothing: no gate, no dispatch"
+    assert "no verb called" in toolset.full_text("nonsense")
+
+
+def test_the_heartbeat_offers_and_measures_the_same_specs():
+    from sage.gateway import heartbeat as hb
+    import re
+    src = re.sub(r"\s+", " ", inspect.getsource(hb.main))
+    # the same arguments to both, this seat's config included (toolset.here: what a verb says on this seat)
+    assert ('_toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief", cfg=instance_config(instance))'
+            in src)
+    assert ('_schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief", '
+            'cfg=instance_config(instance))' in src)
+    assert '"tool_descriptions": _tool_desc_mode' in src, "the beat record says which mode ran"
+
+
+def test_brief_text_says_where_each_writing_verb_writes():
+    """legion-being, 2026-10-05 (dp chat seq 148): "I confused which tools touch the worktree vs
+    my home ... a one-line reminder in the tool descriptions would save a beat." In brief mode
+    the first sentence is all a being sees, so where each verb writes lives there. (On the
+    Legion carrier, where `check` is sandboxed, memory_* also reach the worktree and `run` works
+    on copies; main says only what main does: the home or a granted path, and the worktree patch.)"""
+    from sage.gateway import toolset
+    brief = {s["function"]["name"]: s["function"]["description"].split(" (Full text")[0]
+             for s in toolset.specs(brief=True)}
+    assert "worktree" in brief["patch_apply"] and "all-or-nothing" in brief["patch_apply"]
+    for verb in ("memory_edit", "memory_write"):
+        assert "home" in brief[verb] and "granted" in brief[verb]
+    for verb in ("patch_apply", "memory_edit", "memory_write"):
+        assert len(brief[verb]) <= toolset.BRIEF_DESC_CHARS
+
+
+def test_run_says_its_script_gets_no_arguments_even_in_brief_mode():
+    """legion-being, 2026-10-31: 8 runs on 6 days failed on sys.argv[1] (IndexError), because `run` copies
+    data files in but passes no arguments; the being wrote a skill (run-tool-script-args) to remember it.
+    It runs with brief descriptions, which cut a verb's text to its first sentence but keep every
+    parameter's, so the fact lives in `data`'s description, where a brief-mode being still reads it."""
+    from sage.gateway import toolset
+    run = next(s for s in toolset.specs(brief=True) if s["function"]["name"] == "run")
+    data = run["function"]["parameters"]["properties"]["data"]["description"]
+    assert "NO command-line arguments" in data and "sys.argv" in data and "base name" in data

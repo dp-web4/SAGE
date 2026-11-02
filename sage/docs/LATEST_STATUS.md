@@ -1,7 +1,9 @@
 # SAGE Current Status
 
-**As of:** 2026-09-27
-**Snapshot basis:** public `main` through `587b401e9`; inheritance research additions on this branch (not deployed)
+**As of:** 2026-09-26  
+**Snapshot basis:** public `main` through documentation refresh `a8461d5`
+
+> **Public-main delta checked 2026-10-28 (not a new fleet census):** `settle` ([#574](https://github.com/dp-web4/SAGE/pull/574)), advisory close-question hints ([#584](https://github.com/dp-web4/SAGE/pull/584)) and optional failed-then-worked `skill` prompting ([#585](https://github.com/dp-web4/SAGE/pull/585)) are merged. They are mechanisms, **not** verified per-host deployment or proven cross-beat learning. See [preflight-availability issue #582](https://github.com/dp-web4/SAGE/issues/582). The 2026-09-26 snapshot below is retained as dated evidence; its machine/session census has not been silently recalculated.
 
 This is the **current-status landing page**, not a session chronicle. It is intentionally short, dated, and falsifiable. Detailed raising histories, experiment analyses, instance records, PRs/issues, and git history remain the evidence of record.
 
@@ -48,7 +50,7 @@ As of this snapshot, the active edge is less about adding conceptual modules and
 9. **State-conditioned agency.** Persistent beings may carry endogenous/metabolic state across interactions, including suffering-like, failure-related or self-evaluative states that alter later policy. Phenomenology is treated as a first-class observation under substrate-symmetric evidence standards; neither automatic promotion nor automatic dismissal is acceptable. See `STATE_CONDITIONED_AGENCY.md`.
 10. **External SWE ablation.** `SWE-SAGE` is the private Gemma 4 software-engineering-agent competition workspace. It separates the contribution of post-training, persistent state, source-grounded premises and governed execution on a common task distribution. General findings are promoted into public SAGE deliberately; competition implementation is not live-published.
 
-11. **Inheritance boundaries.** [Analysis](INHERITANCE_WITHOUT_WEIGHT_UPDATES.md) and [PRD](PRD_INHERITANCE_BOUNDARIES.md) extend premise fidelity through handoff/restart: distinguish witnessed history, admitted interpretation and current authority. The [IH-01 synthetic runner](../../research/inheritance/README.md) compares handoff writers and evidence replay, including correction/revocation fixtures. Instrument tests pass; live-model runs, real-path integration and any selection/evolution claim remain pending.
+11. **Inheritance boundaries (proposed).** [Analysis](INHERITANCE_WITHOUT_WEIGHT_UPDATES.md) and [PRD](PRD_INHERITANCE_BOUNDARIES.md) extend premise fidelity through handoff/restart: distinguish witnessed history, admitted interpretation and current authority. The [IH-01 synthetic runner](../../research/inheritance/README.md) compares handoff writers and evidence replay, including correction/revocation fixtures. The instrument remains on HOLD for design and independent review; no pilot is authorized and live-model benefits, real-path integration and any selection/evolution claim remain unproven.
 
 The large `legion/mission-artifact` PR remains a reconciliation/nursery branch; narrow independently reviewable slices continue to be preferred for canonical main.
 

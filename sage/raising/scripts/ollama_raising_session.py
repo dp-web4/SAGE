@@ -118,6 +118,24 @@ def _get_siblings_text(machine: str) -> str:
     return "you are part of a collective of SAGE instances"
 
 
+def raising_num_ctx(model: str, instance_root) -> int:
+    """The raising session's window: exactly the governed beat's (`governed_turn`), i.e. the
+    model config's per-size num_ctx over an 8192 floor, then this being's own `num_ctx`
+    parameter (operator value or its own `tune`) within its bounds.
+
+    ONE MODEL, ONE WINDOW, OR OLLAMA RELOADS IT. The raising session applied only the first
+    step. On Sprout the operator raised the being's window to 24576 (instance.json, 2026-10-15),
+    which the beat honoured and raising did not: on 2026-10-17 every raising turn loaded
+    qwen3.8-distill:4b at 16384 and the next call at 24576 reloaded it (ollama log, 24 loads at
+    16384 interleaved with 52 at 24576; session 775's seven turns, 18:00-18:16 PDT, were seven
+    reload pairs). On unified memory each reload is a full model load the being pays for."""
+    try:
+        from sage.gateway.governed_turn import resolve_num_ctx, tuned_num_ctx
+        return int(tuned_num_ctx(instance_root, resolve_num_ctx(model, 8192)))
+    except Exception:
+        return 8192
+
+
 class OllamaRaisingSession:
     """
     Raising session for any SAGE instance using OllamaIRP.
@@ -1261,9 +1279,10 @@ RESPONSE STYLE:
         # `content` clean, so we embrace the reasoning ability rather than suppress
         # it (dp 2026-08-26: "the runner needs to deal with reasoning models, not
         # replace the ability"). Non-reasoning models (qwen3.5:0.8b) keep think off.
-        try:  # one source of truth: the model config's think policy (2026-09-05)
-            from sage.irp.adapters.model_capabilities import load_capabilities
-            self._is_reasoning_model = load_capabilities(self.model_name).resolve_think(self.model_name)
+        try:  # one source of truth, the same one the governed beat uses: a config's declared
+            # think_default, then the server's capability list, then thinking_supported (#599)
+            from sage.irp.plugins.ollama_irp import resolve_think
+            self._is_reasoning_model = resolve_think(self.model_name, self.ollama_host)
         except Exception:
             self._is_reasoning_model = (
                 'distill' in self.model_name.lower() or 'qwen3.8' in self.model_name.lower()
@@ -1272,11 +1291,7 @@ RESPONSE STYLE:
         # model config may raise). Until 2026-09-13 the raising session sent no num_ctx at all
         # and ran on Ollama's 4096 default — one window on the beat channel, another on the
         # raising channel, and the PRD's UPTAKE read pinned to the one nobody measured (CBP).
-        try:
-            from sage.gateway.governed_turn import resolve_num_ctx
-            _num_ctx = resolve_num_ctx(self.model_name, 8192)
-        except Exception:
-            _num_ctx = 8192
+        _num_ctx = raising_num_ctx(self.model_name, self.instance.root)
         self.llm = OllamaIRP({
             'model_name': self.model_name,
             'ollama_host': self.ollama_host,
@@ -1537,6 +1552,14 @@ RESPONSE STYLE:
             # included, so this is the path on which the being actually meets them.
             from sage.gateway.governed_turn import worktree_for
             worktree = worktree_for(self.instance.root)
+            # where `camera` gets a frame ("cortex" or absent), read once for both halves as
+            # governed_turn does: without it the description says "cortex" and the act still
+            # takes the device path (pub's review of #575).
+            try:
+                from sage.gateway.governed_turn import instance_config as _icfg0
+                camera_source = _icfg0(self.instance.root).get("camera_source") or None
+            except Exception:
+                camera_source = None
             try:
                 from sage.gateway.hestia_dispatch import HestiaF1aDispatcher, make_forum_publisher
                 _ppd = os.path.expanduser("~/ai-workspace/shared-context/forum")
@@ -1544,7 +1567,7 @@ RESPONSE STYLE:
                 dispatcher = HestiaF1aDispatcher(
                     _pid, memory_root=str(self.instance.root),
                     publish_fn=make_forum_publisher(_ppd, _pid) if os.path.isdir(_ppd) else None,
-                    worktree=worktree)
+                    worktree=worktree, camera_source=camera_source)
             except Exception as _e:
                 print(f"[tools] real F1a unavailable ({type(_e).__name__}); using reference dispatcher")
                 from sage.gateway.hestia_witness import make_hestia_witness_fn
@@ -1562,6 +1585,7 @@ RESPONSE STYLE:
                 workspace=workspace,
                 dispatcher=dispatcher,
                 worktree=worktree,
+                camera_source=camera_source,
             )
             seed = [
                 {"role": "system", "content":
@@ -1575,7 +1599,21 @@ RESPONSE STYLE:
                  "like to do right now — reach out to a sibling, note something down — you "
                  "may reach for a tool. Or simply say what, if anything, you would do."},
             ]
-            result = run_ollama_tool_turn(client, self.llm, seed, max_steps=2)
+            # THE CANONICAL TOOLSET (sage/gateway/toolset.py): the same list every being is
+            # offered, with what this machine cannot do said in each verb's description.
+            from sage.gateway import toolset as _toolset
+            try:
+                from sage.gateway import body as _body
+                _reading = _body.reading()
+            except Exception:
+                _reading = None
+            try:
+                from sage.gateway.governed_turn import instance_config as _icfg
+                _cfg = _icfg(self.instance.root)
+            except Exception:
+                _cfg = {}
+            result = run_ollama_tool_turn(client, self.llm, seed, max_steps=2,
+                                          tools=_toolset.specs(_toolset.unavailable(_reading, worktree, _cfg), cfg=_cfg))
             self._record_tool_turn(result)
         except Exception as e:
             try:

@@ -28,14 +28,30 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+# Run as a plain script, conftest does not load -- so this file isolates itself the same way:
+# never reach the seat's LIVE hestia daemon, which would mint `test-being` as a real member.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _isolate_hestia  # noqa: E402,F401  -- isolates on import, unconditionally
 from sage.gateway import being_gate_client as B  # noqa: E402
+from sage.gateway.tests._gate_core import requires_gate_core, standalone_skip_reason  # noqa: E402
 
 FAILS = []
+# UNDER PYTEST A FAILED CHECK MUST FAIL THE TEST (GPT, review of SAGE #257: check() only appended
+# to FAILS, which only the __main__ runner reads -- so under pytest every test here returned
+# normally, whatever it found). _fail() raises unless the standalone runner has set STANDALONE,
+# which it does so it can report every failure in one pass instead of stopping at the first.
+STANDALONE = False
+
+
+def _fail(msg):
+    FAILS.append(msg)
+    if not STANDALONE:
+        raise AssertionError(msg)
 
 
 def check(name, got, want=True):
     if got != want:
-        FAILS.append(f"{name}: got {got!r}, want {want!r}")
+        _fail(f"{name}: got {got!r}, want {want!r}")
 
 
 def _client(worktree):
@@ -61,6 +77,7 @@ def test_every_registry_composer_takes_ctx():
               inspect.signature(compose).parameters["ctx"].default is None)
 
 
+@requires_gate_core
 def test_the_gate_composes_with_the_worktree():
     """With a worktree, the worktree verbs reach the law instead of raising in the composer."""
     with tempfile.TemporaryDirectory() as wt:
@@ -71,8 +88,14 @@ def test_the_gate_composes_with_the_worktree():
         check("the ctx carries the worktree", ctx.get("worktree"), c.worktree)
         check("...and the memory root, the other fact a composer may know",
               ctx.get("memory_root"), c.memory_root)
-        check("the ctx carries nothing else -- a composer must not reach past the act",
-              sorted(ctx), ["memory_root", "worktree"])
+        # An ENUMERATION, and it grows only with a reason: #218 (the ARC game verb) added
+        # `game_stepper`, which `game` composes the judged line from, and `member`, which a
+        # composed git verb needs to name only the being's own branches (being_branch_prefix).
+        # The camera-from-cortex PR (2026-10-12) added `camera_source`: `camera` composes either ffmpeg or the
+        # cortex look client from it, so it is part of what the law judges.
+        # A key not listed here is a composer reaching past the law's view of the act.
+        check("the ctx carries nothing unlisted -- a composer must not reach past the act",
+              sorted(ctx), ["camera_source", "game_stepper", "member", "memory_root", "worktree"])
         for eff, args in (("search", {"pattern": "def compose("}), ("git_read", {"op": "log"})):
             ev = c._normalize(B.BeingIntent(effector=eff, args=args))
             check(f"{eff}: the gate composed a command at all", bool(ev.command))
@@ -90,6 +113,7 @@ def test_the_gate_composes_with_the_worktree():
               c.worktree not in (ev.command or ""))
 
 
+@requires_gate_core
 def test_without_a_worktree_the_verbs_still_fail_closed():
     """The refusal is CORRECT and must survive. A seat with no worktree declared gets a deny
     that names what is missing -- not a command composed against the shared checkout, which is
@@ -111,6 +135,218 @@ def test_without_a_worktree_the_verbs_still_fail_closed():
         check(f"{eff}: denied", v.decision, "deny")
         check(f"{eff}: and says a worktree is what is missing",
               "worktree" in (v.reason or "").lower())
+
+
+# What each no-worktree refusal must say (2026-10-04). verb -> (words naming what it is FOR,
+# the home-file tool it points to or None, that tool's parameters it must name).
+# cbp-being asked dp three times to configure a worktree so `search` could find lines in its
+# own scratch file. Search cannot read the home at all; memory_read with find (#351) can.
+_REFUSAL_MUST_SAY = {
+    "search":      ("code-repository checkout", "memory_read", ("path", "find", "start_line")),
+    "git_read":    ("git history", "memory_read", ("path", "start_line")),
+    "check":       ("test suites", "request_run", ("path",)),
+    # patch_apply has search's trap: changing a line of your own file is memory_edit's job.
+    "patch_apply": ("applying a patch", "memory_edit", ("path", "start_line", "end_line", "new")),
+    # git_restore: the home keeps no readable history, so memory_edit is the only honest pointer.
+    "git_restore": ("git history", "memory_edit", ("path", "start_line", "end_line", "new")),
+    # The PR verbs have no home counterpart: purpose plus "this seat has none".
+    "pr_open":     ("opens a pull request", None, ()),
+    "pr_amend":    ("revises a pull request", None, ()),
+    "pr_sync":     ("up to date with its base branch", None, ()),
+    "git_clean":   ("deletes one untracked file", None, ()),
+    "camera":      ("No other tool captures a frame", None, ()),
+}
+# Minimal args per verb. Every composer refuses on the missing worktree before it reads them.
+_NO_WORKTREE_ARGS = {
+    "search": {"pattern": "x"}, "git_read": {"op": "log"}, "check": {"target": "gateway"},
+    "patch_apply": {"diff": "x", "why": "y"}, "git_restore": {"rev": "HEAD", "path": "a.py"},
+    "pr_open": {"slug": "x-y", "title": "a title long enough", "body": "b"},
+    "pr_amend": {"title": "a title long enough", "message": "why"}, "pr_sync": {},
+    "git_clean": {"path": "scratch.py"}, "camera": {},
+}
+_COMPOSERS = {"search": B.search_command, "git_read": B.git_read_command,
+              "check": B.check_command, "patch_apply": B.patch_apply_command,
+              "git_restore": B.git_restore_command, "pr_open": B.pr_open_command,
+              "pr_amend": B.pr_amend_command, "pr_sync": B.pr_sync_command,
+              "git_clean": B.git_clean_command, "camera": B.camera_command}
+
+
+def test_every_worktree_verb_has_a_refusal_and_a_check():
+    """The table, the tests and the toolset's worktree verbs name the same set: a new worktree
+    verb added without a refusal (and so with the old "configure one" shape) fails here."""
+    from sage.gateway import toolset
+    check("every toolset worktree verb has a refusal",
+          sorted(set(toolset.WORKTREE_VERBS) - set(B.NO_WORKTREE_REFUSAL)), [])
+    check("every refusal is pinned by _REFUSAL_MUST_SAY",
+          sorted(B.NO_WORKTREE_REFUSAL), sorted(_REFUSAL_MUST_SAY))
+# Wording that tells the being to get a worktree set up, or names the file someone would edit.
+_CONFIGURE_WORDS = ("configur", "instance.json", "ask the operator", "ask dp", "request_scope",
+                    "declare", "set up a worktree", "needs a worktree")
+# Claims a no-worktree check never observed. The only fact in hand is "no checkout here": it says
+# nothing about whether the home's files are tracked (the CBP being's home has 461 paths on main)
+# or whether the being has an open PR. A refusal states what the verb cannot do, not these.
+_UNOBSERVED_CLAIMS = ("not part of any repository", "not in any repository",
+                      "no pull request of yours", "no proposal of yours", "you have no pull request")
+
+
+# Refusals that do NOT say "this seat has none" (#351). search's did, and after it the being was
+# refused at search 120 times and asked the seat to run git-worktree setup scripts 15 times: a
+# clause naming a missing thing reads as a job to do. Where a home tool serves the need in full
+# (memory_read with find), the refusal points there and names nothing absent.
+_NAMES_NO_MISSING_THING = ("search",)
+
+
+def _assert_refusal_says_what_the_verb_is_for(verb, text):
+    purpose, tool, params = _REFUSAL_MUST_SAY[verb]
+    check(f"{verb}: names what it is for ({purpose!r})", purpose in text)
+    if verb in _NAMES_NO_MISSING_THING:
+        # #351: "and this seat has none" read as a missing thing to build.
+        check(f"{verb}: names no missing thing to build", "this seat has none" not in text)
+    else:
+        check(f"{verb}: says this seat has none, or that it is not enabled",
+              "this seat has none" in text or "not enabled" in text)
+    if tool:
+        check(f"{verb}: says what it works on is not the being's home",
+              any(s in text for s in ("not your home", "not in your home", "not read your home",
+                                      "not files in your home", "not reach your home",
+                                      "not anything in your home")))
+        check(f"{verb}: points to {tool}", tool in text)
+        schema_params = B._TOOL_SCHEMAS[tool][1]
+        for p in params:
+            check(f"{verb}: names {tool}'s {p}", p in text)
+            check(f"{verb}: {p} is a parameter {tool} really takes", p in schema_params)
+        # EVERY line parameter the refusal names must be one the tool takes, listed or not. The
+        # original fix predated end_line. That parameter now exists, but any parameter a
+        # refusal names must still be one the tool actually takes.
+        for word in ("start_line", "end_line", "delete_lines"):
+            if word in text:
+                check(f"{verb}: {word} is a parameter {tool} really takes", word in schema_params)
+    else:
+        for other in ("memory_read", "memory_edit", "request_run"):
+            check(f"{verb}: points to no home tool it was not given ({other})", other not in text)
+    low = text.lower()
+    for w in _CONFIGURE_WORDS:
+        check(f"{verb}: contains no instruction to configure a worktree ({w!r})", w not in low)
+    for w in _UNOBSERVED_CLAIMS:
+        check(f"{verb}: asserts nothing the check did not observe ({w!r})", w not in low)
+
+
+@requires_gate_core
+def test_no_worktree_refusals_say_what_the_verb_is_for():
+    """The deny the GATE returns, verb by verb: still a deny (the fail-closed test above), but now
+    one that says what the verb is for, where the being's own files are served instead, and
+    nothing that reads as "get someone to configure a worktree"."""
+    c = _client(None)
+    for eff in sorted(B.NO_WORKTREE_REFUSAL):
+        v = c.gate(B.BeingIntent(effector=eff, args=dict(_NO_WORKTREE_ARGS[eff])))
+        check(f"{eff}: denied", v.decision, "deny")
+        reason = v.reason or ""
+        check(f"{eff}: the deny carries the whole refusal", B.NO_WORKTREE_REFUSAL[eff] in reason)
+        _assert_refusal_says_what_the_verb_is_for(eff, B.NO_WORKTREE_REFUSAL[eff])
+
+
+_FIND_WORDS = ("find", "search", "grep", "locate", "look up", "look for")
+# The home tools that address a file by path and line. request_run is not here: check's refusal
+# says "To find out what one of your own files does when it runs, use request_run", and running a
+# file is how one finds that out.
+_HOME_TOOLS = ("memory_read", "memory_edit")
+# The one way a home tool finds (#351): memory_read given `find` lists the line numbers in one
+# file where literal text occurs. A clause may credit memory_read with finding only if it names
+# that parameter, so the being is told the call that finds, not just the tool.
+_FINDS_WITH = {"memory_read": "and find"}
+
+
+def test_no_home_tool_is_credited_with_finding():
+    """No refusal and no toolset availability line credits a home tool with FINDING, unless the
+    clause names the parameter that really finds.
+
+    History. #354's search refusal said "To find or read lines in your own files ... use
+    memory_read" when memory_read only read a window from start_line on and searched nothing
+    (Codex, #354 follow-up); #357 made the rule absolute and the refusal said "read lines". That
+    was true and did not help: what the being wanted was to locate `head = nn.Linear` in a scratch
+    file, so it kept calling search (120 refusals by 2026-10-07) and writing worktree setup
+    scripts. #351 gave memory_read a `find` parameter, which does find. The rule is now: a clause
+    crediting memory_read with finding must name `find` (as "... and find"); memory_edit is never
+    credited with finding. Pinned the other way too: the search refusal and the toolset's search
+    line must now point at memory_read with find, so a revert to "read lines" fails here.
+
+    Checked per CLAUSE (split on '.' and ';'), so "search reads a code-repository checkout" in the
+    search refusal's first sentence is not mistaken for a claim about memory_read in its second."""
+    import re
+    from sage.gateway import toolset
+    texts = [(f"refusal {k}", v) for k, v in B.NO_WORKTREE_REFUSAL.items()]
+    texts += [(f"toolset {k}", v) for k, v in toolset.NO_WORKTREE_HERE.items()]
+    for label, text in texts:
+        for clause in re.split(r"[.;]\s", text):
+            low = clause.lower()
+            tools = [t for t in _HOME_TOOLS if t in low]
+            if not tools:
+                continue
+            credited = [w for w in _FIND_WORDS if w in low]
+            if not credited:
+                continue
+            for t in tools:
+                need = _FINDS_WITH.get(t)
+                check(f"{label}: {t} is credited with {credited} only beside its find parameter "
+                      f"({clause!r})", bool(need) and need in low)
+    check("find is a parameter memory_read really takes", "find" in B._TOOL_SCHEMAS["memory_read"][1])
+    for label, text in (("refusal search", B.NO_WORKTREE_REFUSAL["search"]),
+                        ("toolset search", toolset.NO_WORKTREE_HERE["search"])):
+        check(f"{label}: points at memory_read with find",
+              "memory_read" in text and "and find" in text)
+
+
+# Phrases that place a worktree verb in the being's home. "your home" is allowed only negated.
+_HOME_CLAIMS = ("your own files", "your files", "your notes", "your own notes", "your scratch")
+
+
+def test_no_worktree_ability_claims_the_home():
+    """The answer turn's facts (heartbeat._ABILITIES) must not say a worktree verb works on the
+    being's own files. search's said "search your own files" until the #354 follow-up: the same
+    belief that had cbp-being ask dp three times for a worktree so search could read its scratch.
+    Covers every worktree verb (and camera, held to the same condition), so a git_read or
+    patch_apply fact added later is held to the same rule."""
+    from sage.gateway import heartbeat as hb
+    from sage.gateway import toolset
+    gated = set(toolset.WORKTREE_VERBS) | set(toolset.WORKTREE_HELD_VERBS)
+    seen = []
+    for verb, txt in hb._ABILITIES:
+        if verb not in gated:
+            continue
+        seen.append(verb)
+        low = txt.lower()
+        for w in _HOME_CLAIMS:
+            check(f"_ABILITIES {verb}: does not claim the home ({w!r} in {txt!r})", w not in low)
+        if "your home" in low:
+            check(f"_ABILITIES {verb}: 'your home' only as what it is NOT ({txt!r})", "not your home" in low)
+        for w in _FIND_WORDS:
+            for t in _HOME_TOOLS:
+                check(f"_ABILITIES {verb}: {w!r} not credited to {t}", not (w in low and t in low))
+    check("_ABILITIES: the search fact is covered", "search" in seen)
+
+
+def test_the_composers_and_the_dispatcher_say_the_same_refusal():
+    """Without the gate core: each composer raises the refusal text, and the dispatcher's own
+    no-worktree branch (its second line of defence) says the same words, so the being hears one
+    answer however the act reaches it."""
+    from sage.gateway.hestia_dispatch import HestiaF1aDispatcher as D
+    for verb in sorted(B.NO_WORKTREE_REFUSAL):
+        try:
+            _COMPOSERS[verb](dict(_NO_WORKTREE_ARGS[verb]), {"worktree": None, "memory_root": "/tmp/x"})
+            _fail(f"{verb}: composed with no worktree")
+        except ValueError as e:
+            check(f"{verb}: the composer raises the shared refusal", str(e), B.NO_WORKTREE_REFUSAL[verb])
+        _assert_refusal_says_what_the_verb_is_for(verb, B.NO_WORKTREE_REFUSAL[verb])
+    with tempfile.TemporaryDirectory() as home:
+        d = D.__new__(D)
+        d.worktree = os.path.join(home, "does-not-exist")
+        d.memory_root = home
+        # camera has no dispatcher-side worktree branch: its composer is the only refusal.
+        for verb in sorted(set(B.NO_WORKTREE_REFUSAL) - {"camera"}):
+            args = dict(_NO_WORKTREE_ARGS[verb])
+            env = getattr(d, f"_do_{verb}")(B.BeingIntent(effector=verb, args=args))
+            check(f"{verb}: dispatcher still refuses (pending, not run)", (env.ok, env.pending), (False, True))
+            check(f"{verb}: dispatcher says the shared refusal", env.note, B.NO_WORKTREE_REFUSAL[verb])
 
 
 def _call_args(src, needle, start=0):
@@ -145,7 +381,10 @@ def test_the_construction_sites_give_both_halves_the_same_tree():
     body = gt[gt.index("def build_client("):gt.index("\ndef ", gt.index("def build_client(") + 10)]
     check("build_client: resolved through the one resolver",
           "worktree = worktree_for(instance)" in body)
-    check("build_client: handed to the dispatcher", "worktree=worktree)" in body)
+    # The PROPERTY, not the spelling: the first cut pinned `worktree=worktree)` and went red when
+    # #218 appended an argument after it, with the dispatcher still receiving the worktree.
+    disp = body[body.index("HestiaF1aDispatcher("):body.index("client = BeingGateClient(")]
+    check("build_client: handed to the dispatcher", "worktree=worktree" in disp)
     check("build_client: ...and to the gate client", body.count("worktree=worktree") >= 2)
     # One variable, not two lookups: two would be one edit away from disagreeing.
     check("build_client: not looked up twice", body.count("worktree_for("), 1)
@@ -159,7 +398,9 @@ def test_the_construction_sites_give_both_halves_the_same_tree():
           "from sage.gateway.governed_turn import worktree_for" in offer
           and "worktree = worktree_for(self.instance.root)" in offer)
     check("raising: not looked up twice", offer.count("worktree_for("), 1)
-    check("raising: handed to the real dispatcher", "worktree=worktree)" in offer)
+    # the property, not the spelling (as build_client above): #575 appended camera_source
+    rdisp = offer[offer.index("HestiaF1aDispatcher("):offer.index("except Exception as _e:")]
+    check("raising: handed to the real dispatcher", "worktree=worktree" in rdisp)
     check("raising: ...and to the gate client", "worktree=worktree," in offer)
 
 
@@ -201,12 +442,19 @@ def test_no_other_call_site_builds_a_gate_without_a_worktree():
 def main():
     for fn in (test_every_registry_composer_takes_ctx, test_the_gate_composes_with_the_worktree,
                test_without_a_worktree_the_verbs_still_fail_closed,
+               test_every_worktree_verb_has_a_refusal_and_a_check,
+               test_no_worktree_refusals_say_what_the_verb_is_for,
+               test_the_composers_and_the_dispatcher_say_the_same_refusal,
                test_the_construction_sites_give_both_halves_the_same_tree,
                test_no_other_call_site_builds_a_gate_without_a_worktree):
+        why = standalone_skip_reason(fn)
+        if why:
+            print(f"SKIPPED {fn.__name__}: {why}")
+            continue
         try:
             fn()
         except Exception as e:  # noqa: BLE001
-            FAILS.append(f"{fn.__name__} raised {type(e).__name__}: {e}")
+            _fail(f"{fn.__name__} raised {type(e).__name__}: {e}")
     for f in FAILS:
         print("FAIL", f)
     print(f"{'FAILED' if FAILS else 'ok'}: {len(FAILS)} failure(s)")
@@ -214,4 +462,5 @@ def main():
 
 
 if __name__ == "__main__":
+    STANDALONE = True
     sys.exit(main())

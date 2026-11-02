@@ -1,0 +1,1 @@
+{"gpu_data": [{"gpu": 0, "usage": {"gfx_activity": 4}, "temperature": {"edge": 42, "hotspot": 44}, "mem_usage": {"total_vram": 8176, "used_vram": 410, "used_gtt": 12}}]}

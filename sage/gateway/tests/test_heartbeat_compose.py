@@ -107,6 +107,102 @@ def test_inbox_renders_newest_first_with_replies_ahead_of_stale_dispositions():
     assert len(text) < 600 and render_inbox([]) == "(empty)"
 
 
+def _beat(effector=None, path=None, ok=True):
+    """A stand-in for one phase's result: a trace of (intent, envelope) pairs."""
+    from types import SimpleNamespace as NS
+    trace = [] if effector is None else [(NS(effector=effector, args={"path": path}), NS(ok=ok))]
+    return NS(trace=trace)
+
+
+def _run_beats(notices, beats):
+    """Drive render_inbox + inbox_ledger the way main() does, beat after beat. Each beat is
+    (explore_acted, [phase results]). Returns the rendered inbox of every beat."""
+    from sage.gateway.heartbeat import inbox_handled, inbox_ledger, render_inbox
+    last, seen = {}, []
+    for acted, results in beats:
+        shown = []
+        seen.append(render_inbox(notices, handled=inbox_handled(last), shown=shown))
+        last = {"inbox": inbox_ledger(last, notices, results, acted, shown)}
+    seen.append(render_inbox(notices, handled=inbox_handled(last)))
+    return seen
+
+
+OLD_REPLY = {"id": 100, "kind": "reply", "from_plugin": "claude-code", "queued_at": "2026-09-21T10:00:00Z",
+             "pointer_uri": "sage://conversation/cbp-claude#seq=3000"}
+OLD_HANDOFF = {"id": 101, "kind": "handoff", "from_plugin": "legion", "queued_at": "2026-09-21T10:05:00Z",
+               "pointer_uri": "shared-context/handoff/h.md"}
+OLD_RULING = {"id": 102, "kind": "disposition", "from_plugin": "hestia", "queued_at": "2026-09-21T10:06:00Z",
+              "pointer_uri": "hestia://appeal/abc123def456#ruled"}
+STALE_REVIEW = {"id": 13840, "kind": "review_done", "from_plugin": "claude-code",
+                "queued_at": "2026-09-21T14:15:02.1Z",
+                "pointer_uri": "hestia://appeal/8285#ruled-deny-stands;seat-ran-it-14:13Z;use-request_run"}
+
+
+def test_old_actionable_mail_stays_until_it_is_opened_not_until_it_is_old():
+    """GPT HOLD on #164: age is not acknowledgement. The first cut folded every notice queued
+    before the last beat began, so an unopened reply, handoff or appeal ruling vanished after
+    exactly one beat -- including when that beat crashed before reading it. Pin the negative
+    arm: several beats that act but never open them, and all three are still mail."""
+    notices = [OLD_REPLY, OLD_HANDOFF, OLD_RULING]
+    seen = _run_beats(notices, [(True, [_beat("say", "x")])] * 4)
+    for text in seen:
+        assert "seq=3000" in text and "shared-context/handoff/h.md" in text, text
+        assert "abc123def456" in text, text
+        assert "already handled" not in text, text
+
+
+def test_an_opened_notice_folds_and_only_that_one():
+    """The acknowledgement is an act: a successful memory_read of the notice's pointer. The
+    reply opened in beat 1 folds from beat 2; the handoff nobody opened stays; a failed read
+    acknowledges nothing."""
+    notices = [OLD_REPLY, OLD_HANDOFF]
+    seen = _run_beats(notices, [(True, [_beat("memory_read", "sage://conversation/cbp-claude"),
+                                        _beat("memory_read", "shared-context/handoff/h.md", ok=False)])])
+    assert "seq=3000" in seen[0] and "seq=3000" not in seen[1], seen
+    assert "shared-context/handoff/h.md" in seen[1], seen[1]
+    assert "1 notice(s) already handled" in seen[1], seen[1]
+
+
+def test_a_finished_review_folds_after_one_beat_that_acted_on_it_not_one_that_crashed():
+    """The measured case, 2026-09-22: a 14:15 review_done whose pointer read
+    '...seat-ran-it-14:13Z;...;use-request_run' topped cbp-being's inbox for 11 h, and at 01:10
+    it acted on that over the seat's answer from 3 minutes before. A finished review carries no
+    obligation, so once shown to a beat whose explore turn acted it folds -- but a beat that
+    never got to act (crashed, killed) has not been shown anything."""
+    crashed = _run_beats([STALE_REVIEW], [(None, []), (False, [])])
+    assert all("use-request_run" in t for t in crashed), crashed
+    acted = _run_beats([STALE_REVIEW], [(True, [_beat("say", "x")])])
+    assert "use-request_run" in acted[0] and "use-request_run" not in acted[1], acted
+    assert acted[1].startswith("- 1 notice(s) already handled"), acted[1]
+
+
+COORDINATION = {"id": 104, "kind": "coordination", "from_plugin": "legion-claude",
+                "queued_at": "2026-09-21T10:07:00Z", "pointer_uri": "shared-context/plans/p.md"}
+
+
+def test_a_coordination_note_shown_to_an_acting_beat_stays_until_its_pointer_is_opened():
+    """GPT re-review of c25999cf6: coordination is general work coordination pointing at a
+    forum/plan/file, and hestia leaves it out of member_unanswered because it may be acted on in
+    silence -- not because seeing it handles it. Several acting beats that never open it: still
+    mail. A successful memory_read of its pointer: folds."""
+    seen = _run_beats([COORDINATION], [(True, [_beat("say", "x")])] * 3)
+    assert all("shared-context/plans/p.md" in t for t in seen), seen
+    assert all("already handled" not in t for t in seen), seen
+    opened = _run_beats([COORDINATION], [(True, [_beat("memory_read", "shared-context/plans/p.md")])])
+    assert "p.md" in opened[0] and "p.md" not in opened[1], opened
+    assert opened[1].startswith("- 1 notice(s) already handled"), opened[1]
+
+
+def test_the_ledger_is_pruned_to_the_inbox_and_an_id_less_notice_never_folds():
+    from sage.gateway.heartbeat import inbox_ledger, render_inbox
+    last = {"inbox": {"opened": [1, 2, 100], "presented": [13840, 7]}}
+    led = inbox_ledger(last, [OLD_REPLY, STALE_REVIEW], [], True, [])
+    assert led["opened"] == [100] and led["presented"] == [13840], led
+    assert inbox_ledger(last, [], [], True, [])["opened"] == [1, 2, 100], "an unread inbox prunes nothing"
+    no_id = dict(OLD_REPLY); no_id.pop("id")
+    assert "seq=3000" in render_inbox([no_id], handled={None, 100})
+
+
 def test_the_inbox_rides_the_turn_the_being_acts_in():
     """Sprout, 85 beats to 2026-09-17: the posture turn acted in 1 of 85, the first turn in 25,
     and a peer's reply sat unopened in the posture turn the whole time."""
@@ -156,6 +252,41 @@ def test_the_conversation_header_keys_on_reply_expectation_not_on_pending():
     assert "Nobody is waiting" in conversation_header(inst, me), \
         "a STATEMENT asks nothing — the row that produced twelve messages"
     assert "say` is for answering a person" in conversation_header(inst, me)
+
+def test_standing_guidance_frames_the_posture_without_changing_it_or_the_tools():
+    """posture_framing="standing_guidance" (per-instance): the posture turn says the posture is
+    standing guidance that awaits no reply, keeps every tool (say included), and carries the
+    posture and the digest byte-identical. cbp-being 2026-10-03 20:41Z: the default framing ("in
+    the operator's words ... say in a few words") drew a `say` to dp thanking it for the posture."""
+    from sage.gateway.heartbeat import POSTURE_TURN, POSTURE_TURN_STANDING
+    _, default = compose(True, **KW)
+    _, standing = compose(True, posture_framing="standing_guidance", **KW)
+    assert "Standing guidance" in standing and "does not await a reply" in standing
+    assert "act within it" in standing and "dp's posture" in standing, "attribution kept, truthfully"
+    assert "in the operator's words" not in standing
+    assert "say" in EXPLORE_TOOLS and TOOLS in standing, "no tool removed, say still offered"
+    # the posture itself is unchanged: the same text, verbatim, in both framings
+    assert POSTURE in standing and POSTURE in default
+    assert standing.split(POSTURE)[1].split("This is still your time.")[0] == \
+        default.split(POSTURE)[1].split("This is still your time.")[0], "digest block identical"
+    # default unchanged; unknown values fall back to it; posture-first has no posture turn at all
+    assert default == POSTURE_TURN.format(posture=POSTURE, digest="DIGEST", tools=TOOLS)
+    assert compose(True, posture_framing="nonsense", **KW)[1] == default
+    assert compose(False, posture_framing="standing_guidance", **KW)[1] is None
+    assert standing == POSTURE_TURN_STANDING.format(posture=POSTURE, digest="DIGEST", tools=TOOLS)
+
+
+def test_posture_framing_is_per_instance_and_recorded():
+    import inspect
+    from sage.gateway import heartbeat
+    from sage.gateway.heartbeat import posture_framing_for
+    assert posture_framing_for(None) is None and posture_framing_for({}) is None
+    assert posture_framing_for({"posture_framing": "nonsense"}) is None
+    assert posture_framing_for({"posture_framing": "standing_guidance"}) == "standing_guidance"
+    src = inspect.getsource(heartbeat)
+    assert '"posture_framing": posture_framing_for(instance_config(instance))' in src, "recorded per beat"
+    assert "posture_framing=posture_framing_for(instance_config(instance))" in src, "reaches compose"
+
 
 if __name__ == "__main__":
     for n, f in list(globals().items()):

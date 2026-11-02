@@ -902,6 +902,7 @@ def _load_world_model_summary(game_family: str, max_chars: int = 1500) -> str:
         Path(os.environ.get("SHARED_CONTEXT_DIR", "")),
         Path("/mnt/c/exe/projects/ai-agents/shared-context"),
         Path("/mnt/c/projects/ai-agents/shared-context"),
+        Path.home() / "ai-agents" / "shared-context",
         Path.home() / "ai-workspace" / "shared-context",
         Path.home() / "repos" / "shared-context",
     ]:

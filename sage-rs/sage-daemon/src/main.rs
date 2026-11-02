@@ -1,3 +1,5 @@
+mod activity;
+mod body;
 mod conversations;
 mod ollama;
 mod consciousness;
@@ -48,6 +50,11 @@ struct AppState {
     probe_metabolic: Mutex<MetabolicController>,
     /// What the consciousness loop publishes about itself. The loop is the only writer.
     loop_state: Arc<Mutex<consciousness::LoopSnapshot>>,
+    /// What the being is doing, as reported (SAGE #291). This, not the ATP controller, is
+    /// what `/status`, `/health` and the dashboard show as its state.
+    activity: activity::SharedActivity,
+    /// The machine body, sampled on a cadence by `body::run` and served at `GET /body`.
+    body: body::SharedBody,
     consciousness: ConsciousnessHandle,
     ollama: OllamaClient,
     fleet: Option<FleetRegistry>,
@@ -77,7 +84,16 @@ struct HealthResponse {
     /// Which build is answering (SAGE #111 finding 6).
     build: &'static str,
     port: u16,
+    /// The model this daemon is CONFIGURED to use (SAGE_MODEL).
     model: String,
+    /// What Ollama actually has loaded right now (/api/ps), embedding models included; None when
+    /// Ollama could not be asked. dp 2026-10-13: the console still said 2B after the being moved to
+    /// the 4B -- it showed the daemon's configuration, not what was running.
+    loaded_models: Option<Vec<String>>,
+    /// Whether the configured model is among them (None when that is unknown).
+    model_loaded: Option<bool>,
+    /// The context window this daemon asks for (SAGE_NUM_CTX), or None for Ollama's default.
+    num_ctx: Option<u32>,
     ollama_available: bool,
     consciousness_loop: bool,
     // THE FIELDS A PEER'S MONITOR ALREADY PARSES (SAGE #111 finding 4). `federation::monitor`
@@ -86,7 +102,11 @@ struct HealthResponse {
     // succeeded anyway — so a reachable peer went green carrying nothing at all.
     metabolic_state: Option<String>,
     atp_level: Option<f64>,
+    /// No longer populated (SAGE #295): it carried the loop's 100 ms tick count (uptime x 10),
+    /// which a peer read as work done. Kept as a field so an older monitor still parses.
     cycle_count: Option<u64>,
+    /// Beats that reported their end since this daemon started, from the heartbeat's reports.
+    beats_completed: u64,
 }
 
 #[derive(Serialize)]
@@ -95,10 +115,30 @@ struct StatusResponse {
     sprint: &'static str,
     snarc_detectors: Vec<&'static str>,
     half_lives: Vec<(&'static str, f64)>,
-    /// Owned, not `&'static str`: this is the LOOP's state now, read at request time.
+    /// What the being is doing: wake | wrap-up | dream | rest (| crisis, if something real
+    /// ever reports one). The activity indicator, set only by reports of real activity
+    /// (SAGE #291). Until #291 this was a 10-second ATP oscillator.
     metabolic_state: String,
+    /// Unix seconds when the displayed state began, and how long ago that was.
+    metabolic_since: u64,
+    metabolic_age_secs: u64,
+    /// Who set it: "heartbeat:reflect", "consolidation", "daemon:generate", "startup", or
+    /// "stale:<source>" when a report went unrefreshed past its bound and decayed to rest.
+    metabolic_source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    metabolic_beat_id: Option<String>,
+    metabolic_decayed: bool,
+    /// The INTERNAL ATP controller's number: a free-running oscillator the loop ticks every
+    /// 100 ms, kept for the shadow-metabolism experiment. It is not the being's energy and
+    /// not what `metabolic_state` shows (SAGE #291).
     atp_percentage: f64,
-    total_cycles: u64,
+    /// The consciousness loop's 100 ms ticks (uptime x 10). Was `total_cycles` (SAGE #295); it
+    /// counts nothing the being did. Beats are `beats`.
+    loop_ticks: u64,
+    /// Real counts, from the heartbeat's activity reports (SAGE #295): beats completed since
+    /// the daemon started, the beat running now (its phase and phase reports), and how long
+    /// since the last beat ended.
+    beats: activity::BeatsView,
     model: String,
     fleet_size: usize,
     /// Derived from the publish age, not asserted (SAGE #111): it was a hard-coded `true`.
@@ -179,7 +219,7 @@ struct ChatResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     salience: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    cycle: Option<u64>,
+    tick: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -320,10 +360,28 @@ fn chat_history_path(root: &std::path::Path, machine: &str, model: &str) -> std:
     ))
 }
 
+/// Ollama names a model `name:tag` and treats a bare `name` as `name:latest`.
+fn same_model(a: &str, b: &str) -> bool {
+    let norm = |s: &str| if s.contains(':') { s.to_string() } else { format!("{s}:latest") };
+    norm(a) == norm(b)
+}
+
+#[cfg(test)]
+mod same_model_tests {
+    #[test]
+    fn tags_compare_with_latest_as_the_default() {
+        assert!(super::same_model("qwen3.8-distill:4b", "qwen3.8-distill:4b"));
+        assert!(super::same_model("nomic-embed-text", "nomic-embed-text:latest"));
+        assert!(!super::same_model("qwen3.8-distill:2b", "qwen3.8-distill:4b"));
+    }
+}
+
 // --- Handlers ---
 
 async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let available = state.ollama.is_available().await;
+    let loaded = if available { state.ollama.loaded_models().await.ok() } else { None };
+    let model_loaded = loaded.as_ref().map(|l| l.iter().any(|m| same_model(m, &state.model)));
     let snap = state.loop_state.lock().await.clone();
     let alive = snap.published_at > 0 && now_secs().saturating_sub(snap.published_at) <= LOOP_STALE_SECS;
     Json(HealthResponse {
@@ -333,13 +391,18 @@ async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
         build: build_stamp(),
         port: port(),
         model: state.model.clone(),
+        loaded_models: loaded,
+        model_loaded,
+        num_ctx: state.ollama.num_ctx(),
         ollama_available: available,
         consciousness_loop: alive,
-        // Only when the loop is actually publishing. A stale loop reports None rather than
-        // its last numbers: a peer must be able to tell "quiet" from "stopped".
-        metabolic_state: alive.then(|| snap.metabolic_state.clone()),
+        // The activity indicator (SAGE #291). It is not one of the loop's numbers: reports
+        // reach it through /activity whether or not the loop is publishing, and an
+        // unrefreshed report decays to rest on its own. So it is shown either way.
+        metabolic_state: Some(activity::read(&state.activity, now_secs()).state.to_string()),
         atp_level: alive.then_some(snap.atp_percentage),
-        cycle_count: alive.then_some(snap.total_cycles),
+        cycle_count: None,
+        beats_completed: activity::read_beats(&state.activity, now_secs()).completed,
     })
 }
 
@@ -362,6 +425,7 @@ fn build_stamp() -> &'static str {
 
 async fn status(State(state): State<Arc<AppState>>) -> Json<StatusResponse> {
     let snap = state.loop_state.lock().await.clone();
+    let shown = activity::read(&state.activity, now_secs());
     // A loop that stopped leaves its last numbers behind; only the publish age says so.
     let age = now_secs().saturating_sub(snap.published_at);
     let alive = snap.published_at > 0 && age <= LOOP_STALE_SECS;
@@ -370,9 +434,15 @@ async fn status(State(state): State<Arc<AppState>>) -> Json<StatusResponse> {
         sprint: "6 — dashboard + cutover",
         snarc_detectors: vec!["surprise", "novelty", "arousal", "reward", "conflict"],
         half_lives: temporal::DEFAULT_HALF_LIVES.to_vec(),
-        metabolic_state: if alive { snap.metabolic_state.clone() } else { "unknown".to_string() },
+        metabolic_state: shown.state.to_string(),
+        metabolic_since: shown.since,
+        metabolic_age_secs: shown.age_secs,
+        metabolic_source: shown.source.clone(),
+        metabolic_beat_id: shown.beat_id.clone(),
+        metabolic_decayed: shown.decayed,
         atp_percentage: snap.atp_percentage,
-        total_cycles: snap.total_cycles,
+        loop_ticks: snap.ticks,
+        beats: activity::read_beats(&state.activity, now_secs()),
         model: state.model.clone(),
         fleet_size: state.fleet.as_ref().map_or(0, |f| f.fleet_size()),
         consciousness_loop: alive,
@@ -384,6 +454,15 @@ async fn status(State(state): State<Arc<AppState>>) -> Json<StatusResponse> {
         loop_published_age_secs: if snap.published_at > 0 { Some(age) } else { None },
         build: build_stamp(),
     })
+}
+
+/// The machine body (proprioception): the last snapshot and its age, or 503 with the reason.
+async fn body_view(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_json::Value>) {
+    let (code, v) = match state.body.lock() {
+        Ok(st) => body::view(&st, now_secs()),
+        Err(_) => (503, serde_json::json!({"unavailable": "the body cell is poisoned"})),
+    };
+    (StatusCode::from_u16(code).unwrap_or(StatusCode::SERVICE_UNAVAILABLE), Json(v))
 }
 
 async fn snarc_observe(
@@ -417,7 +496,7 @@ async fn metabolic_cycle(
         atp_current: ctrl.atp_current,
         atp_percentage: ctrl.atp_percentage(),
         total_cycles: ctrl.total_cycles,
-        transitions: ctrl.history.len(),
+        transitions: ctrl.transitions_total as usize,
     })
 }
 
@@ -433,12 +512,15 @@ async fn chat(
         });
         match state.ollama.chat(&messages).await {
             Ok(text) => {
-                // The being's real metabolism, not the probe controller (SAGE #111).
+                // The being's own numbers, not the probe controller (SAGE #111), and its
+                // displayed state from the activity indicator (SAGE #291). This branch goes
+                // straight to the model and bypasses the loop, so it neither feels nor shows
+                // as the being acting; its reply names the state as it stands.
                 let snap = state.loop_state.lock().await.clone();
                 (StatusCode::OK, Json(serde_json::json!({
                     "response": text,
                     "model": state.model,
-                    "metabolic_state": snap.metabolic_state,
+                    "metabolic_state": activity::read(&state.activity, now_secs()).state,
                     "atp_percentage": snap.atp_percentage,
                 })))
             }
@@ -456,7 +538,7 @@ async fn chat(
                 "metabolic_state": resp.metabolic_state,
                 "atp_percentage": resp.atp_percentage,
                 "salience": resp.salience.total,
-                "cycle": resp.cycle,
+                "tick": resp.tick,
             }))),
             Err(e) => (StatusCode::BAD_GATEWAY, Json(serde_json::json!({
                 "error": e,
@@ -536,20 +618,20 @@ fn loopback_reader(peer: std::net::SocketAddr, route: &str)
     }))))
 }
 
-/// What to tell the speaker about delivery, from what arousal OBSERVED. `engage` is the
-/// policy wanting a wake; `started` is the wake actually launching. They differ on a host
-/// whose beats are not systemd units or when the unit fails, and "waking the being now"
-/// must never be said for a wake that did not start (GPT review of SAGE#81).
+/// Scheduler acceptance is not observed beat entry. Legacy started=true also meant only
+/// acceptance; never turn it into execution evidence. Shared fixtures pin the Python peer.
 fn delivery_text(woke: &serde_json::Value) -> String {
-    let started = woke.get("started").and_then(|v| v.as_bool()).unwrap_or(false);
+    let accepted = match woke.get("start_accepted") {
+        Some(value) => value.as_bool(),
+        None => woke.get("started").and_then(|v| v.as_bool()).filter(|v| *v),
+    };
     let engage = woke.get("engage").and_then(|v| v.as_bool()).unwrap_or(false);
-    if started {
-        "waking the being now".to_string()
-    } else if engage {
-        let why = woke.get("wake_error").and_then(|v| v.as_str()).unwrap_or("unknown reason");
-        format!("recorded; a wake was wanted and did not start ({why}); it will be read at the next beat")
-    } else {
-        "recorded; it will be read at the next beat".to_string()
+    let why = woke.get("wake_error").and_then(|v| v.as_str()).unwrap_or("unknown reason");
+    match accepted {
+        Some(true) => "recorded; wake request accepted; beat entry unconfirmed".to_string(),
+        Some(false) => format!("recorded; wake request was not accepted ({why}); awaiting a later beat"),
+        None if engage => format!("recorded; wake request outcome unknown ({why}); beat entry unconfirmed"),
+        None => "recorded; awaiting the next beat".to_string(),
     }
 }
 
@@ -641,6 +723,78 @@ async fn observe(
         "note": if felt { "felt; the being reacts on its own rhythm and answers to nobody for it" }
                 else { "not felt: the loop's queue is full or the loop is not running" },
     })))
+}
+
+#[derive(Deserialize)]
+struct ActivityRequest {
+    /// wake | wrap-up | dream | rest | crisis
+    state: String,
+    /// Who is reporting, and at which step: "heartbeat:reflect", "consolidation".
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
+    beat_id: Option<String>,
+    /// How long this report stands without a refresh before the display decays to rest.
+    /// Absent: `activity::DEFAULT_TTL_SECS` (the beat unit's own bound).
+    #[serde(default)]
+    ttl_secs: Option<u64>,
+}
+
+/// Bound a reporter-supplied label: `[A-Za-z0-9:._-]`, at most 64 chars, else "unnamed".
+fn activity_label(raw: Option<&str>) -> Option<String> {
+    let raw = raw?;
+    let cleaned: String = raw.trim().chars()
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, ':' | '.' | '_' | '-') { c } else { '-' })
+        .take(64)
+        .collect();
+    if cleaned.trim_matches('-').is_empty() { None } else { Some(cleaned) }
+}
+
+/// A report is accepted only from this machine: `/activity` sets what every dashboard shows
+/// as the being's state, and nothing here authenticates a reporter. The same loopback rule
+/// as the speaker routes (`/chat`, `/observe`, `/conversations/:id/say`), which #118 found
+/// missing on `/chat/raw`.
+fn loopback_reporter(peer: std::net::SocketAddr)
+    -> Option<(StatusCode, Json<serde_json::Value>)> {
+    if peer.ip().is_loopback() {
+        return None;
+    }
+    Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
+        "error": format!("/activity accepts a report only over loopback; {} is not this machine", peer.ip()),
+        "why": "the report sets what every reader is shown as the being's state; no route here authenticates a reporter",
+        "hint": "report from the machine the being runs on (the heartbeat and consolidation units do)",
+    }))))
+}
+
+/// A report of what the being is doing (SAGE #291). The heartbeat sends wake at beat start,
+/// then wake for explore/posture/account, wrap-up for reflect/answer, and rest at beat end.
+/// The consolidation unit sends dream while it runs and rest after. Reports only set the
+/// indicator; nothing reads it to decide anything.
+async fn report_activity(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    Json(req): Json<ActivityRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(refused) = loopback_reporter(peer) {
+        return refused;
+    }
+    let Some(kind) = activity::Activity::parse(&req.state) else {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": format!("unknown state {:?}", req.state),
+            "accepted": ["wake", "wrap-up", "dream", "rest", "crisis"],
+        })));
+    };
+    let source = activity_label(req.source.as_deref()).unwrap_or_else(|| "unnamed".to_string());
+    let beat_id = activity_label(req.beat_id.as_deref());
+    let now = now_secs();
+    let (applied, view) = {
+        let mut g = state.activity.lock().unwrap_or_else(|p| p.into_inner());
+        let applied = g.report(kind, &source, beat_id, req.ttl_secs, now);
+        (applied, g.view(now))
+    };
+    // A rest from a reporter that did not set the standing activity is not applied (see
+    // `ActivityIndicator::report`); the reply says so rather than pretending it landed.
+    (StatusCode::OK, Json(serde_json::json!({ "applied": applied, "shown": view })))
 }
 
 #[derive(Deserialize)]
@@ -887,7 +1041,7 @@ fn run_simulation(cycles: u64) {
     let elapsed = start.elapsed();
     println!("{:-<60}", "");
     println!("{cycles} cycles in {:.3}s ({:.0} cycles/s)", elapsed.as_secs_f64(), cycles as f64 / elapsed.as_secs_f64());
-    println!("transitions: {}", ctrl.history.len());
+    println!("transitions: {}", ctrl.transitions_total);
     println!("state distribution:");
     let mut sorted: Vec<_> = state_counts.iter().collect();
     sorted.sort_by_key(|(_, c)| std::cmp::Reverse(**c));
@@ -956,6 +1110,10 @@ async fn main() {
     info!("shadow metabolism log: {}", shadow_path.display());
     // The cell the loop publishes into and the HTTP layer reads (SAGE #111).
     let loop_state = Arc::new(Mutex::new(consciousness::LoopSnapshot::default()));
+    // The activity indicator (SAGE #291): reports set it, the loop marks its own generations
+    // on it, and the HTTP layer reads it.
+    let activity_cell: activity::SharedActivity =
+        Arc::new(std::sync::Mutex::new(activity::ActivityIndicator::new(now_secs())));
     let consciousness_loop = ConsciousnessLoop::new(
         OllamaClient::default_local(&model),
         experience,
@@ -964,7 +1122,8 @@ async fn main() {
         &model,
         Some(shadow_path),
     )
-    .with_snapshot(loop_state.clone());
+    .with_snapshot(loop_state.clone())
+    .with_activity(activity_cell.clone());
 
     let loop_shutdown = shutdown_rx.clone();
     let loop_handle = tokio::spawn(async move {
@@ -992,6 +1151,14 @@ async fn main() {
         (None, None)
     };
 
+    // Proprioception: the body is sampled off every request path and served from this cell.
+    let body_cell: body::SharedBody = Arc::new(std::sync::Mutex::new(body::BodyState::default()));
+    let being_instance = conversations::being_instance(&root, &machine, &model);
+    {
+        let (cell, r, inst, sd) = (body_cell.clone(), root.clone(), being_instance.clone(), shutdown_rx.clone());
+        tokio::spawn(async move { body::run(cell, r, inst, sd).await; });
+    }
+
     let state = Arc::new(AppState {
         surprise: Mutex::new(SurpriseDetector::with_defaults()),
         novelty: Mutex::new(NoveltyDetector::with_defaults()),
@@ -1000,6 +1167,8 @@ async fn main() {
         conflict: Mutex::new(ConflictDetector::with_defaults()),
         probe_metabolic: Mutex::new(MetabolicController::with_defaults()),
         loop_state: loop_state.clone(),
+        activity: activity_cell.clone(),
+        body: body_cell.clone(),
         consciousness: consciousness_handle,
         ollama: OllamaClient::default_local(&model),
         fleet,
@@ -1011,7 +1180,7 @@ async fn main() {
         chat_history_file: chat_path,
         images_dir: root.join("images"),
         being: std::env::var("SAGE_BEING").unwrap_or_else(|_| format!("{machine}-being")),
-        being_instance: conversations::being_instance(&root, &machine, &model),
+        being_instance,
         root: root.clone(),
     });
 
@@ -1019,6 +1188,7 @@ async fn main() {
         .route("/", get(dashboard))
         .route("/health", get(health))
         .route("/status", get(status))
+        .route("/body", get(body_view))
         .route("/snarc/observe", post(snarc_observe))
         .route("/metabolic/cycle", post(metabolic_cycle))
         // Canonical: talking to the BEING. /chat is the being's conversation; the raw
@@ -1026,6 +1196,7 @@ async fn main() {
         // and much narrower thing than talking to the entity that lives here.
         .route("/chat", post(chat_being))
         .route("/observe", post(observe))
+        .route("/activity", post(report_activity))
         .route("/chat/raw", post(chat))
         .route("/conversations", get(conversations_list))
         .route("/conversations/:id", get(conversation_get))
@@ -1074,14 +1245,18 @@ mod speaker_route_tests {
     fn peer(s: &str) -> std::net::SocketAddr { s.parse().unwrap() }
 
     #[test]
+    fn delivery_evidence_matches_python_contract() {
+        let cases: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../sage/gateway/tests/fixtures/wake_delivery.json"
+        )).unwrap();
+        for case in cases.as_array().unwrap() {
+            assert_eq!(delivery_text(&case["input"]), case["expected"].as_str().unwrap(),
+                       "fixture {}", case["name"]);
+        }
+    }
+
+    #[test]
     fn a_speaker_is_accepted_only_from_this_machine() {
-        // delivery text follows the observed start, never the policy alone
-        let j = |v: &str| -> serde_json::Value { serde_json::from_str(v).unwrap() };
-        assert_eq!(delivery_text(&j(r#"{"engage":true,"started":true}"#)), "waking the being now");
-        let failed = delivery_text(&j(r#"{"engage":true,"started":false,"wake_error":"no systemctl"}"#));
-        assert!(failed.contains("did not start") && failed.contains("no systemctl") && !failed.contains("waking"), "{failed}");
-        assert!(!delivery_text(&j(r#"{"engage":true}"#)).contains("waking"), "engage without started is not a wake");
-        assert_eq!(delivery_text(&j(r#"{"engage":false}"#)), "recorded; it will be read at the next beat");
         assert!(loopback_reader(peer("127.0.0.1:5000"), "/conversations").is_none());
         assert!(loopback_reader(peer("[::1]:5000"), "/conversations/:id").is_none());
         for lan in ["10.0.0.146:5000", "100.75.141.17:5000", "192.168.1.9:5000"] {
@@ -1096,6 +1271,27 @@ mod speaker_route_tests {
             assert_eq!(code, StatusCode::FORBIDDEN, "{lan}");
             assert!(body.0["error"].as_str().unwrap().contains("only over loopback"), "{lan}");
         }
+    }
+
+    #[test]
+    fn an_activity_report_is_accepted_only_from_this_machine() {
+        assert!(loopback_reporter(peer("127.0.0.1:5000")).is_none());
+        assert!(loopback_reporter(peer("[::1]:5000")).is_none());
+        for lan in ["192.168.1.20:5000", "10.0.0.3:1", "100.75.141.17:9", "[fe80::1]:1"] {
+            let (code, body) = loopback_reporter(peer(lan)).expect(lan);
+            assert_eq!(code, StatusCode::FORBIDDEN, "{lan}");
+            assert!(body.0["error"].as_str().unwrap().contains("only over loopback"), "{lan}");
+        }
+    }
+
+    #[test]
+    fn a_reporters_labels_are_bounded() {
+        assert_eq!(activity_label(Some("heartbeat:reflect")).as_deref(), Some("heartbeat:reflect"));
+        assert_eq!(activity_label(Some("heartbeat-0a1b2c3d4e5f")).as_deref(), Some("heartbeat-0a1b2c3d4e5f"));
+        assert_eq!(activity_label(Some("<script>")).as_deref(), Some("-script-"));
+        assert_eq!(activity_label(Some(&"x".repeat(500))).map(|s| s.len()), Some(64));
+        assert_eq!(activity_label(Some("   ")), None);
+        assert_eq!(activity_label(None), None);
     }
 
     #[test]

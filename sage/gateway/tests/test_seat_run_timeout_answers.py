@@ -24,6 +24,16 @@ def test_a_timed_out_run_returns_text_with_its_partial_output(tmp_path):
     assert "before the wait" in out and "err before" in err
 
 
+def test_a_timed_out_run_keeps_output_it_never_flushed(tmp_path):
+    """The being's scripts print without flush=True. Into a pipe that output sat in Python's
+    buffer and died with the child at the timeout (Sprout seq 489, 531: "stdout: (empty)")."""
+    slow = "import time; print('opened, now reading'); time.sleep(30)"
+    rc, out, err, timed = srr.run_child([sys.executable, "-c", slow], str(tmp_path), 2,
+                                        srr.child_env(False, str(tmp_path)))
+    assert timed and rc is None
+    assert "opened, now reading" in out
+
+
 def test_a_finished_run_is_unchanged(tmp_path):
     rc, out, err, timed = srr.run_child([sys.executable, "-c", "print('hi')"], str(tmp_path), 30, None)
     assert (rc, out, err, timed) == (0, "hi\n", "", False)

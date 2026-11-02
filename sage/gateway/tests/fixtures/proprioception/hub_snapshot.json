@@ -1,0 +1,95 @@
+{
+ "schema": "sage.body/1",
+ "sampled_at": 1791350202.319,
+ "host": "HUB",
+ "platform": {
+  "os": "linux",
+  "kind": "wsl2",
+  "detail": "6.6.114.1-microsoft-standard-WSL2"
+ },
+ "memory_topology": "unknown",
+ "memory_topology_why": "no GPU sensed",
+ "gpus": [],
+ "cpu": {
+  "cores": 16,
+  "model": "11th Gen Intel(R) Core(TM) i7-11700 @ 2.50GHz",
+  "utilization_pct": {
+   "value": 0.9,
+   "source": "/proc/stat over 0.5 s"
+  },
+  "load_1m": {
+   "value": 0.42,
+   "source": "getloadavg"
+  },
+  "load_5m": {
+   "value": 0.38,
+   "source": "getloadavg"
+  },
+  "temperature_c": {
+   "value": null,
+   "unavailable": "not exposed inside WSL"
+  }
+ },
+ "memory": {
+  "pool": "system",
+  "scope": "wsl guest (its cap, not the host)",
+  "total_bytes": {
+   "value": 33510457344,
+   "source": "/proc/meminfo MemTotal"
+  },
+  "used_bytes": {
+   "value": 13985005568,
+   "source": "/proc/meminfo MemTotal-MemAvailable"
+  },
+  "swap_used_bytes": {
+   "value": 3940352,
+   "source": "/proc/meminfo"
+  },
+  "swap_total_bytes": {
+   "value": 8589934592,
+   "source": "/proc/meminfo"
+  }
+ },
+ "disks": [
+  {
+   "labels": [
+    "sage"
+   ],
+   "path": "/home/dp/ai-workspace/SAGE",
+   "mount": "/",
+   "total_bytes": {
+    "value": 1081101176832,
+    "source": "statvfs"
+   },
+   "free_bytes": {
+    "value": 787966902272,
+    "source": "statvfs"
+   },
+   "used_pct": {
+    "value": 23.2,
+    "source": "statvfs"
+   }
+  }
+ ],
+ "gpu_unavailable": "a GPU is paravirtualized into WSL (/dev/dxg) but no vendor tool answered: nvidia-smi not found; AMD and Intel GPUs expose no sysfs inside the WSL guest",
+ "disks_unavailable": [
+  {
+   "label": "models",
+   "unavailable": "OLLAMA_MODELS unset and no ollama models directory found"
+  }
+ ],
+ "wsl_host": {
+  "sampled_at": 1791350202.8367088,
+  "memory_total_bytes": {
+   "value": 68426993664,
+   "source": "Windows Win32_OperatingSystem"
+  },
+  "memory_used_bytes": {
+   "value": 27156336640,
+   "source": "Windows Win32_OperatingSystem"
+  }
+ },
+ "sample_ms": 1969.7,
+ "cpu_window_ms": 500,
+ "line": "GPU: none sensed | CPU 1% \u00b7 RAM 13.0/31.2 GiB (WSL cap; Windows host 25.3/63.7) | disk 23% (734 GiB free) | memory: unknown | unavailable: GPU: a GPU is paravirtualized into WSL (/dev/dxg) but no vendor tool answered: nvidia-smi not found; AMD and Intel GPUs expose no sysfs inside the WSL guest; CPU temp: not exposed inside WSL"
+}

@@ -113,3 +113,29 @@ def test_a_bare_name_is_untouched_and_records_no_reroute():
     r._rerouted_from = None
     assert r._safe_path("journal.md", writing=True) == (home / "journal.md").resolve()
     assert not getattr(r, "_rerouted_from", None), "nothing to explain when nothing was fumbled"
+
+
+def test_the_being_cannot_write_its_entrustment_by_any_spelling():
+    """entrustment.md is what the being was GIVEN; its own reading goes in notes/plan.md."""
+    tmp = Path(tempfile.mkdtemp())
+    r, home = _being(tmp)
+    (home / "entrustment.md").write_text("extended to you\n")
+    for spelling in ("entrustment.md", str(home / "entrustment.md"), "/wherever/entrustment.md"):
+        with pytest.raises(ValueError) as e:
+            r._safe_path(spelling, writing=True)
+        assert "yours to read and not to edit" in str(e.value)
+    assert r._safe_path("entrustment.md", writing=False) == (home / "entrustment.md").resolve()
+    assert r._safe_path("notes/plan.md", writing=True), "its own reading stays writable"
+
+
+def test_the_entrustment_is_rendered_whole_and_named_in_the_record():
+    from sage.gateway.heartbeat import entrustment, own_state
+    tmp = Path(tempfile.mkdtemp())
+    _r, home = _being(tmp)
+    assert entrustment(home) == ""
+    body = "# What you are entrusted with\n\n**Entrusted by:** someone, on a date.\n\n" + "x" * 5000
+    (home / "entrustment.md").write_text(body)
+    got = entrustment(home)
+    assert got.startswith("# What you are entrusted with") and len(got) > 5000, "read whole"
+    state = own_state(home, "t-being", got, mark_conversations=False)
+    assert "## What you are entrusted with" in state and "**Entrusted by:**" in state

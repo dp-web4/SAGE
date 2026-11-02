@@ -17,7 +17,10 @@ pub struct PeerState {
     pub last_checked: f64,
     pub metabolic_state: Option<String>,
     pub atp_level: Option<f64>,
+    /// A peer's loop ticks, from daemons older than SAGE #295. Newer daemons leave it empty.
     pub cycle_count: Option<u64>,
+    /// Beats the peer completed since its daemon started (SAGE #295).
+    pub beats_completed: Option<u64>,
     pub latency_ms: Option<f64>,
     pub hardware: String,
     pub error: Option<String>,
@@ -35,6 +38,8 @@ struct HealthResponse {
     atp_remaining: Option<f64>,
     #[serde(default)]
     cycle_count: Option<u64>,
+    #[serde(default)]
+    beats_completed: Option<u64>,
 }
 
 pub struct PeerMonitor {
@@ -65,6 +70,7 @@ impl PeerMonitor {
                 metabolic_state: None,
                 atp_level: None,
                 cycle_count: None,
+                beats_completed: None,
                 latency_ms: None,
                 hardware: info.hardware.clone(),
                 error: None,
@@ -127,6 +133,7 @@ impl PeerMonitor {
                 metabolic_state: None,
                 atp_level: None,
                 cycle_count: None,
+                beats_completed: None,
                 latency_ms: None,
                 hardware: String::new(),
                 error: None,
@@ -142,6 +149,7 @@ impl PeerMonitor {
                         state.metabolic_state = health.metabolic_state;
                         state.atp_level = health.atp_level.or(health.atp_remaining);
                         state.cycle_count = health.cycle_count;
+                        state.beats_completed = health.beats_completed;
                         state.latency_ms = Some(latency);
                         state.error = None;
                         online_count += 1;

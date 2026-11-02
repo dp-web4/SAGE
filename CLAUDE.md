@@ -45,6 +45,8 @@ The model is a substrate inside the organism, not the organism's whole identity.
 
 **Current assessment docs:** `README.md`, `sage/docs/LATEST_STATUS.md`, `AGENTS.md`, and claim-specific code/experiment evidence.
 
+If the question is whether Web4/Hestia governance is useful **to the acting participant**, do not infer that from SAGE architecture prose. Use Web4's participant self-assessment and then verify the relevant Hestia/Hub evidence; SAGE's role is to study persistent cognition inside those boundaries.
+
 `docs/why/HRM_EXPLAINED.md` and `sage/docs/SYSTEM_UNDERSTANDING.md` are historical architecture records, not current-status authorities.
 
 ---

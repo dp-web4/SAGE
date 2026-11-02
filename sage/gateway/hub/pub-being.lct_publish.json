@@ -1,0 +1,35 @@
+{
+  "_sprout": {
+    "note": "seed generated and held on sprout; document only is relayed",
+    "public_key_hex": "324efd96aec75fe755356c92cb399d39266fde050620a6377e32e82326d2e7fc",
+    "seed_path": "/home/tl/.web4/pub-being/channel_key.bin"
+  },
+  "action": "lct_publish",
+  "document": {
+    "binding_proof": {
+      "bytes": "881ca4ef46398bf9c8d105786c4bff9f489b44c173ada8875114c23f9e9ab73b15764dfbd002fd6f107721db1690e2acb38476e3c2b80e8a38ab4cfb5fe55c03"
+    },
+    "created_at": "2026-10-20T23:01:23.659341195Z",
+    "created_by": null,
+    "entity_type": "ai_embodied",
+    "hardware_binding": {
+      "description": "Software-bound keys (development)",
+      "level": 4,
+      "trust_ceiling": 0.75
+    },
+    "id": "76fc552d-983f-4915-b15d-0520bc44fa98",
+    "lineage_depth": 0,
+    "mrh": {
+      "horizon_depth": 0
+    },
+    "parent_id": null,
+    "public_key": {
+      "key": "324efd96aec75fe755356c92cb399d39266fde050620a6377e32e82326d2e7fc"
+    },
+    "status": "active"
+  },
+  "lct_id": "lct:web4:mb32:bfjhfdv4battuxixrufgnfwuiharj4qrg5lak2ejtjngnruk27hiq",
+  "provenance": "self_issued",
+  "published_at": "<relayer: set at send time>",
+  "published_by": "<relayer: MUST equal the envelope signer's member uuid>"
+}

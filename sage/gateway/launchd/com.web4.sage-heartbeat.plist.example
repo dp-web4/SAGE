@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SAGE being heartbeat on macOS: one governed exploration beat every ~30 minutes.
+  The launchd counterpart of ../systemd/sage-heartbeat.{service,timer}.example — read that file's
+  header too; everything it says about the model, membot and the law applies here.
+
+  Install (replace every {…}, then):
+    cp com.web4.sage-heartbeat.plist.example ~/Library/LaunchAgents/com.web4.sage-heartbeat.{machine}.plist
+    plutil -lint ~/Library/LaunchAgents/com.web4.sage-heartbeat.{machine}.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.web4.sage-heartbeat.{machine}.plist
+  Remove:  launchctl bootout gui/$(id -u)/com.web4.sage-heartbeat.{machine}
+
+  PREREQUISITES, in order (sage/scripts/being_hub_join.sh prints the same list):
+    1. the being is REGISTERED on this seat's hestia (Discover → the SAGE row → register), which
+       makes {machine}-being a member;
+    2. its identity is minted and joined (being_hub_join.sh mint, join);
+    3. its drain env exists (sage/docs/DESIGN_BEING_INBOX_DRAIN.md §3);
+    4. its conversations exist — nothing creates them automatically: a "dp" one and one named for
+       the seat (sage.gateway.conversations.create). Without them the SAGE console shows the raw
+       model's chat, not the being (SAGE #242);
+    5. optional but expected: the being's OWN membot (see ../systemd/membot-being.service.example).
+       Without it recall/remember refuse; the beat still runs.
+
+  WHY THE ENVIRONMENT BLOCK IS NOT OPTIONAL. launchd reads no shell profile. Each variable below
+  was found missing on a real seat, and each failure was silent:
+    HESTIA_HOME  the gate client resolves the law as: override → $HESTIA_HOME/shared (the installed,
+                 attested copy) → the hestia SOURCE checkout. Without it a seat WITH a checkout is
+                 judged by the checkout (Sprout, 2026-09-26: 4 days older than the seat's law); a
+                 seat WITHOUT one (McNugget) resolves to nothing and the gate refuses every act.
+    SAGE_SEAT    this seat's name, {machine}-{model}, e.g. mcnugget-claude. Unset, the being is told
+                 its seat is "{machine}-unknown", and the seat channel looks for a conversation by
+                 that name and finds none of the seat's answers (SAGE #231).
+    SAGE_INSTANCE the being's home directory under sage/instances/. Pinned rather than derived from
+                 the model: the seal's derivation includes this path.
+  And on macOS, SAGE #130 (a PATH-independent seal anchor) must be on the checkout this runs from,
+  or a launchd-started beat derives a different key than the shell that sealed the identity.
+
+  The interpreter: use one that imports PyNaCl (the being's connect proves possession of its key).
+  A project venv is fine here — launchd is not a governed session.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.web4.sage-heartbeat.{machine}</string>
+
+	<key>WorkingDirectory</key>
+	<string>/Users/{user}/{path-to}/SAGE</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/{user}/{path-to}/SAGE/.venv/bin/python3</string>
+		<string>-m</string>
+		<string>sage.gateway.heartbeat</string>
+		<string>--member</string>
+		<string>{machine}-being</string>
+		<string>--model</string>
+		<string>{model}</string>
+		<string>--instance</string>
+		<string>sage/instances/{instance-dir}</string>
+		<string>--max-steps</string>
+		<string>8</string>
+	</array>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/Users/{user}</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+		<key>PYTHONPATH</key>
+		<string>/Users/{user}/{path-to}/SAGE</string>
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+		<key>HESTIA_HOME</key>
+		<string>/Users/{user}/.hestia</string>
+		<key>SAGE_SEAT</key>
+		<string>{machine}-claude</string>
+		<key>SAGE_INSTANCE</key>
+		<string>{instance-dir}</string>
+	</dict>
+
+	<!-- ~30 min, like the systemd timer. launchd does not start an interval job that is still
+	     running, so a slow beat is not stacked; a beat is bounded by its own max-steps argument. -->
+	<key>StartInterval</key>
+	<integer>1800</integer>
+	<key>RunAtLoad</key>
+	<false/>
+
+	<key>StandardOutPath</key>
+	<string>/Users/{user}/{path-to}/SAGE/sage/instances/{instance-dir}/heartbeat.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/{user}/Library/Logs/sage/heartbeat_error.log</string>
+</dict>
+</plist>

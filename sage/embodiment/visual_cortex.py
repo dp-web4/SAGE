@@ -20,6 +20,7 @@ from sage.embodiment.proprioception import Proprioception
 from sage.embodiment.salience import SalienceFilter
 from sage.embodiment.audio import Hearing
 from sage.embodiment.detector import ObjectDetector
+from sage.embodiment import look as _look
 
 STATE_PATH = os.path.expanduser("~/.sprout/perception.json")
 GAZE_PATH = os.path.expanduser("~/.sprout/gaze.json")   # the self's attention stance: {"mode": open|avert|dwell|closed, "target": [cx,cy]}
@@ -37,6 +38,25 @@ RECOVER_CYCLES = 60      # frozen this long (~15s) → self-heal: reopen the cam
 RECOVER_COOLDOWN_S = 30  # min seconds between reopen attempts per eye (covers warmup, avoids thrash)
 DET_PERIOD = 1.0         # object detection cadence (1Hz) — objects don't change fast, and fewer GPU
                          # inference spikes eases the Orin's power/thermal budget (overcurrent throttle)
+
+# A LEAN CORTEX, per body (2026-10-11). Measured on Sprout (7.4 GB unified, desktop kept): the whole organ
+# cost ~700 MB of available memory: an eye ~235 MB each (Argus + its buffers), YOLO/TensorRT/torch ~350 MB.
+# That is the room a 4B model with its own vision needs. Defaults are the full organ, unchanged elsewhere.
+#   SAGE_CORTEX_EYES="0"         which sensors open ("0,1" both; "0" the left only, the other rests)
+#   SAGE_CORTEX_DETECT=0         no object detector (no TensorRT, no torch at start)
+#   SAGE_CORTEX_SENSOR_MODE=4    force an Argus sensor mode (Argus picked 1920x1080 for 1280x720@30 caps)
+def _env_eyes() -> list:
+    try:
+        ids = [int(x) for x in (os.environ.get("SAGE_CORTEX_EYES") or "0,1").split(",") if x.strip() != ""]
+        return sorted({i for i in ids if i in (0, 1)}) or [0, 1]
+    except ValueError:
+        return [0, 1]
+
+
+EYES = _env_eyes()
+DETECT = (os.environ.get("SAGE_CORTEX_DETECT") or "1").strip() != "0"
+SENSOR_MODE = (os.environ.get("SAGE_CORTEX_SENSOR_MODE") or "").strip()
+SIDES = {0: "left", 1: "right"}
 
 
 class ObjectStabilizer:
@@ -112,7 +132,8 @@ def _object_phrase(objects_by_eye: list) -> str:
 
 
 def gst_pipeline(sid: int, w: int = 640, h: int = 360) -> str:
-    return (f"nvarguscamerasrc sensor-id={sid} ! "
+    mode = f"sensor-mode={int(SENSOR_MODE)} " if SENSOR_MODE.isdigit() else ""
+    return (f"nvarguscamerasrc sensor-id={sid} {mode}! "
             f"video/x-raw(memory:NVMM),width=1280,height=720,framerate=30/1 ! "
             f"nvvidconv ! video/x-raw,width={w},height={h},format=BGRx ! "
             f"videoconvert ! video/x-raw,format=BGR ! appsink drop=true max-buffers=1 sync=false")
@@ -407,9 +428,11 @@ def describe(eyes: list[dict], binoc: dict, prop: dict, gaze: str = "open", aud:
         strong = max(eyes, key=lambda e: e["motion"])
         level = "strong" if mot > 0.5 else "gentle" if mot < 0.3 else "clear"
         dirw = _dir_word(strong["attention"]["cx"], strong["attention"]["cy"])
-        both = eyes[0]["motion"] > 0.15 and eyes[1]["motion"] > 0.15
-        confirmed = both and binoc.get("agreement", 0) > 0.45  # both eyes see a correlated feature
-        if confirmed:
+        both = len(eyes) > 1 and eyes[0]["motion"] > 0.15 and eyes[1]["motion"] > 0.15
+        confirmed = both and (binoc.get("agreement") or 0) > 0.45  # both eyes see a correlated feature
+        if len(eyes) == 1:
+            motion_clause = f"{level} motion to the {dirw}"   # one eye open by design: not "one eye only"
+        elif confirmed:
             standout = " and standing out from the background" if binoc.get("depth") == "standout" else ""
             motion_clause = f"{level} motion to the {dirw}, both eyes on it{standout}"
         elif both:
@@ -428,8 +451,9 @@ def describe(eyes: list[dict], binoc: dict, prop: dict, gaze: str = "open", aud:
         self_clause = ""
     view = "clear view" if trust > 0.6 else "murky view" if trust > 0.3 else "almost no view (dark or blurred)"
     stance = {"avert": "choosing to look away — ", "dwell": "holding my gaze — "}.get(gaze, "")
-    dark = [("left" if i == 0 else "right") for i, e in enumerate(eyes) if e.get("stalled")]
-    stale = [("left" if i == 0 else "right") for i, e in enumerate(eyes) if e.get("frozen") and not e.get("stalled")]
+    side = lambda i, e: e.get("side") or ("left" if i == 0 else "right")  # noqa: E731
+    dark = [side(i, e) for i, e in enumerate(eyes) if e.get("stalled")]
+    stale = [side(i, e) for i, e in enumerate(eyes) if e.get("frozen") and not e.get("stalled")]
     if dark:
         prefix = f"my {' and '.join(f'{s} eye' for s in dark)} has gone dark (no fresh frames); "
     elif stale:
@@ -508,20 +532,27 @@ class Journal:
 
 
 class VisualCortex:
+    sids: list = [0, 1]     # the full organ, unless __init__ opens fewer (SAGE_CORTEX_EYES)
+    resting: list = []
+
     def __init__(self, display: bool = False):
-        self.cams = [Camera(0), Camera(1)]
-        self.focus = [GravityFocus(), GravityFocus()]
-        self.prev = [None, None]
-        self._stall = [0, 0]  # consecutive unchanged-frame counts, per eye
-        self._last_recover = [0.0, 0.0]  # last self-heal timestamp, per eye
+        self.sids = list(EYES)                                     # which sensors are open
+        self.resting = [SIDES[s] for s in (0, 1) if s not in self.sids]   # eyes closed by the body's config
+        n = len(self.sids)
+        self.cams = [Camera(s) for s in self.sids]
+        self.focus = [GravityFocus() for _ in range(n)]
+        self.prev = [None] * n
+        self._stall = [0] * n  # consecutive unchanged-frame counts, per eye
+        self._last_recover = [0.0] * n  # last self-heal timestamp, per eye
         self.binoc = BinocularCorrelator()
         self.dfield = DisparityField()   # measurement instrument (non-forcing): the eyes' misalignment field
         self._dfield_ts = 0.0
-        self._motion_hist: list = [[], []]  # per-eye recent motion, for median smoothing (spike reject)
-        self.detector = ObjectDetector()   # semantic vision: WHAT it sees (YOLO11n/COCO via TensorRT)
+        self._motion_hist: list = [[] for _ in range(n)]  # per-eye recent motion, for median smoothing
+        # semantic vision: WHAT it sees (YOLO11n/COCO via TensorRT); None when the body turned it off
+        self.detector = ObjectDetector() if DETECT else None
         self._det_ts = 0.0
-        self._objects: list = [[], []]     # last-detected objects, per eye (stabilized)
-        self._stab = [ObjectStabilizer(), ObjectStabilizer()]  # temporal hysteresis, per eye
+        self._objects: list = [[] for _ in range(n)]     # last-detected objects, per eye (stabilized)
+        self._stab = [ObjectStabilizer() for _ in range(n)]  # temporal hysteresis, per eye
         self.prop = Proprioception()
         self.hearing = Hearing()
         self.salience = SalienceFilter()
@@ -620,7 +651,8 @@ class VisualCortex:
         if frozen:
             motion = 0.0  # frozen frame → no real motion, whether the scene is still OR the eye is dead
         return {"motion": round(motion, 3), "attention": self.focus[i].roi(),
-                "trust": round(vision_trust(gray), 3), "frozen": frozen, "stalled": False}, gray
+                "trust": round(vision_trust(gray), 3), "frozen": frozen, "stalled": False,
+                "side": SIDES[self.sids[i]]}, gray
 
     def _adjudicate_sensors(self, eyes: list, binoc: dict, prop: dict):
         """Still vs stalled is genuinely ambiguous without effectors to act and check for
@@ -629,11 +661,13 @@ class VisualCortex:
         keeps both eyes mutually consistent). Only zero trust with corroboration; a
         frozen-but-consistent view is trusted as a genuinely still world."""
         moved = prop.get("self_motion") in ("moving", "rotating")
-        agree = binoc.get("agreement", 0.0)
+        agree = binoc.get("agreement")
         for i, e in enumerate(eyes):
             if not e.get("frozen"):
                 continue
-            if moved or agree < 0.4:
+            # With one eye open there is no other eye to compare: only ego-motion can confirm a stall
+            # (agreement None = cannot compare, never "disagree").
+            if moved or (agree is not None and agree < 0.4):
                 # the head moved yet this eye didn't change, OR its view no longer matches the
                 # other eye — evidence it is not seeing a live, shared scene.
                 e["stalled"] = True
@@ -653,13 +687,13 @@ class VisualCortex:
         """Self-heal a stalled eye. Verified (Test A, 2026-07-09): the stuck state lives in the
         camera's per-process Argus consumer session — a fresh consumer clears it, no nvargus
         restart needed. So tear down this one camera and reopen it, leaving the other eye alone."""
-        side = "left" if i == 0 else "right"
+        side = SIDES[self.sids[i]]
         try:
             self.cams[i].stop()  # release the stuck consumer
         except Exception:
             pass
         time.sleep(0.3)
-        cam = Camera(i)  # fresh Argus consumer session
+        cam = Camera(self.sids[i])  # fresh Argus consumer session
         self._last_recover[i] = time.time()
         if not cam.ok:
             return  # reopen failed; cooldown before the next attempt
@@ -671,6 +705,8 @@ class VisualCortex:
                               "descriptor": f"my {side} eye stalled — I reopened it"})
 
     def _emit(self, state: dict):
+        if self.resting:
+            state["eyes_resting"] = list(self.resting)   # closed by the body's config, not dark
         os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=os.path.dirname(STATE_PATH))
         with os.fdopen(fd, "w") as f:
@@ -695,7 +731,7 @@ class VisualCortex:
                 eyes.append({"motion": 0.0,
                              "attention": {"cx": 0.5, "cy": 0.5, "w": 0.5, "h": 0.375},
                              "trust": 0.0, "frozen": True, "stalled": True,
-                             "sensor": "no-frames", "objects": []})
+                             "sensor": "no-frames", "objects": [], "side": SIDES[self.sids[i]]})
             else:
                 e, _gray = self._perceive_one(i, f, gaze, target)
                 e["objects"] = self._objects[i]
@@ -706,8 +742,9 @@ class VisualCortex:
                  "object_agreement": None, "shared_objects": []}
         dmeta: dict = {}
         state = {"ts": round(now, 2),
-                 "cameras": {str(i): eyes[i] for i in range(len(eyes))},
-                 "dominant_eye": 0, "binocular": binoc, "proprioception": prop,
+                 "cameras": {str(self.sids[i]): eyes[i] for i in range(len(eyes))},
+                 "dominant_eye": self.sids[next((i for i, e in enumerate(eyes) if not e.get("stalled")), 0)],
+                 "binocular": binoc, "proprioception": prop,
                  "audio": aud, "gaze": gaze,
                  "descriptor": _object_phrase(self._objects)
                                + describe(eyes, binoc, prop, gaze, aud, meta=dmeta)}
@@ -736,6 +773,16 @@ class VisualCortex:
                 t0 = time.time()
                 gaze, target = self._read_gaze()
                 self._note_choice(gaze, target)
+                # A FRAME ON DEMAND (sage/embodiment/look.py): the being's `camera` act on a seat whose eyes
+                # only this organ can read. Answered here, before the closed-eyes branch, so a request made
+                # with the eyes shut gets "your eyes are closed" rather than silence. Never fatal to seeing,
+                # but never silent either: a failure is logged at most once a minute (GPT on #425).
+                try:
+                    _look.respond([c.frame for c in self.cams], self.sids, gaze)
+                except Exception as e:
+                    if t0 - getattr(self, "_look_err_ts", 0.0) > 60:
+                        self._look_err_ts = t0
+                        print(f"[cortex] frame-on-demand failed: {type(e).__name__}: {e}"[:300], flush=True)
                 if gaze == "closed":
                     # eyes shut — the self refuses the stream. The senses rest.
                     self._emit({"ts": round(time.time(), 2), "gaze": "closed",
@@ -759,22 +806,26 @@ class VisualCortex:
                     if dt < period:
                         time.sleep(period - dt)
                     continue
-                perceived = [self._perceive_one(i, frames[i], gaze, target) for i in range(2)]
+                n = len(self.cams)
+                perceived = [self._perceive_one(i, frames[i], gaze, target) for i in range(n)]
                 eyes = [p[0] for p in perceived]; grays = [p[1] for p in perceived]
-                binoc = self.binoc.correlate(grays[0], grays[1], eyes[0]["attention"])
-                self.dfield.update(grays[0], grays[1])   # instrument: accumulate the misalignment field
-                if t0 - self._det_ts > DET_PERIOD:       # semantic vision: WHAT it sees (throttled ~2.5Hz)
+                if n == 2:
+                    binoc = self.binoc.correlate(grays[0], grays[1], eyes[0]["attention"])
+                    self.dfield.update(grays[0], grays[1])   # instrument: accumulate the misalignment field
+                else:   # one eye: nothing to correlate. None = cannot compare (never "disagree")
+                    binoc = {"agreement": None, "offset": [0, 0], "depth": "unknown"}
+                if self.detector is not None and t0 - self._det_ts > DET_PERIOD:   # semantic vision (throttled)
                     self._det_ts = t0
-                    raw = [self.detector.detect(frames[i]) for i in range(2)]
-                    self._objects = [self._stab[i].update(raw[i]) for i in range(2)]  # temporal hysteresis
-                for i in range(2):
+                    raw = [self.detector.detect(frames[i]) for i in range(n)]
+                    self._objects = [self._stab[i].update(raw[i]) for i in range(n)]  # temporal hysteresis
+                for i in range(n):
                     eyes[i]["objects"] = self._objects[i]
                 prop = self.prop.state()
                 aud = self.hearing.state()
                 self._adjudicate_sensors(eyes, binoc, prop)  # still vs stalled, using ego-motion + cross-eye
                 dmeta = {}
-                state = {"ts": round(time.time(), 2), "cameras": {str(i): eyes[i] for i in range(2)},
-                         "dominant_eye": int(np.argmax([e["motion"] for e in eyes])),
+                state = {"ts": round(time.time(), 2), "cameras": {str(self.sids[i]): eyes[i] for i in range(n)},
+                         "dominant_eye": self.sids[int(np.argmax([e["motion"] for e in eyes]))],
                          "binocular": binoc, "proprioception": prop, "audio": aud, "gaze": gaze,
                          "descriptor": _object_phrase(self._objects) + describe(eyes, binoc, prop, gaze, aud, meta=dmeta)}
                 state.update(dmeta)  # modalities + audio_onset, truth from composition time
@@ -783,24 +834,28 @@ class VisualCortex:
                 # binocular agreement: prefer SEMANTIC correspondence (both eyes name the same thing)
                 # when objects are present — robust to the eyes' misalignment/focus that defeats pixel
                 # matching — and fall back to the pixel-based agreement on object-less scenes.
-                obj_agree, shared = binocular_object_agreement(self._objects[0], self._objects[1])
+                obj_agree, shared = (binocular_object_agreement(self._objects[0], self._objects[1])
+                                     if n == 2 else (None, []))
                 binoc["object_agreement"] = obj_agree
                 binoc["shared_objects"] = shared
-                agree = obj_agree if obj_agree is not None else binoc.get("agreement", 0.0)
+                agree = obj_agree if obj_agree is not None else binoc.get("agreement")
                 # coherence — how well the senses agree (a candidate reward signal; reward exploration
                 # E2). High when the eyes correlate (semantically when they can), the reafference is
                 # unambiguous, and the senses are live; low under conflict or a dead sensor.
-                eyes_live = sum(0.0 if e.get("stalled") else 1.0 for e in eyes) / 2.0
+                eyes_live = sum(0.0 if e.get("stalled") else 1.0 for e in eyes) / n
                 liveness = (eyes_live + (1.0 if prop.get("ok") else 0.0) + (1.0 if aud.get("ok") else 0.0)) / 3.0
-                state["coherence"] = round(0.4 * agree
-                                           + 0.3 * (1.0 - sal.get("conflict", 0.0))
-                                           + 0.3 * liveness, 3)
+                if agree is None:   # one eye: the agreement term is unavailable, not zero (as in _sense_blind)
+                    state["coherence"] = round((0.3 * (1.0 - sal.get("conflict", 0.0)) + 0.3 * liveness) / 0.6, 3)
+                else:
+                    state["coherence"] = round(0.4 * agree
+                                               + 0.3 * (1.0 - sal.get("conflict", 0.0))
+                                               + 0.3 * liveness, 3)
                 self._emit(state)
                 self.journal.observe(state, sal)
                 # self-heal: a camera frozen too long has a stuck Argus consumer — reopen it
                 now = time.time()
                 # instrument: periodically dump the measured misalignment field (non-forcing)
-                if now - self._dfield_ts > 8.0:
+                if n == 2 and now - self._dfield_ts > 8.0:
                     self._dfield_ts = now
                     try:
                         snap = self.dfield.snapshot()
@@ -810,7 +865,7 @@ class VisualCortex:
                         os.replace(tmp, DISPARITY_PATH)
                     except Exception:
                         pass
-                for i in range(2):
+                for i in range(n):
                     if self._stall[i] >= RECOVER_CYCLES and now - self._last_recover[i] > RECOVER_COOLDOWN_S:
                         self._recover_camera(i)
                 if self.display:

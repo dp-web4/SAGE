@@ -1,0 +1,35 @@
+{
+  "_sprout": {
+    "note": "seed generated and held on sprout; document only is relayed",
+    "public_key_hex": "2bd26d4b9927b342f97434c756f9c27a1088ef4c577810d992b6b2b1b55e9b6f",
+    "seed_path": "/Users/dennispalatov/.web4/mcnugget-being/channel_key.bin"
+  },
+  "action": "lct_publish",
+  "document": {
+    "binding_proof": {
+      "bytes": "052be81b551d73286ce78be5ba3994cc87394b2f39cefcdb818cc34550b43b3426f5cfdf73d2606c4381e8744c69a3fde81bac9431ef951e932354c460157904"
+    },
+    "created_at": "2026-09-28T20:25:44.216282Z",
+    "created_by": null,
+    "entity_type": "ai_embodied",
+    "hardware_binding": {
+      "description": "Software-bound keys (development)",
+      "level": 4,
+      "trust_ceiling": 0.75
+    },
+    "id": "3c999a3a-bb2d-45e1-b996-d4f2f0dc0825",
+    "lineage_depth": 0,
+    "mrh": {
+      "horizon_depth": 0
+    },
+    "parent_id": null,
+    "public_key": {
+      "key": "2bd26d4b9927b342f97434c756f9c27a1088ef4c577810d992b6b2b1b55e9b6f"
+    },
+    "status": "active"
+  },
+  "lct_id": "lct:web4:mb32:bkkfsn7nftxrmh3yqtzguf6krd2sokf37rmikpr66wqk7pcd4lwda",
+  "provenance": "self_issued",
+  "published_at": "<relayer: set at send time>",
+  "published_by": "<relayer: MUST equal the envelope signer's member uuid>"
+}

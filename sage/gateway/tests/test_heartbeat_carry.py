@@ -39,3 +39,36 @@ def test_an_ok_act_carries_its_result_so_an_older_claim_cannot_outweigh_it():
     assert _record_line(intent, env).endswith("x…")
     assert _record_line(intent, SimpleNamespace(ok=True, refused=False, error=None)).endswith("-> ok")
     assert "REFUSED nope" in _record_line(intent, SimpleNamespace(ok=False, refused=True, error="nope"))
+
+
+def test_a_pending_act_is_recorded_as_not_run_with_its_reason_never_as_error_none():
+    # sprout-being 2026-10-13/14: 125 request_run calls returned pending ("no seat conversation
+    # is configured ... nobody to hand this to"), and the reflect record said "-> error None" for
+    # every one; the being journaled that its scripts failed with error None and diagnosed a
+    # camera fault for 17 hours. A pending act ran nothing, and the record must say so and why.
+    from sage.gateway.being_gate_client import ResultEnvelope
+    from sage.gateway.heartbeat import _record_line
+    intent = SimpleNamespace(effector="request_run", args={"path": "scratch/test-cv2.py"})
+    note = ("no seat conversation is configured on this instance, so there is nobody to "
+            "hand this to. Your file is untouched.")
+    line = _record_line(intent, ResultEnvelope(ok=False, pending=True, note=note))
+    assert "None" not in line
+    assert "error" not in line
+    assert line.endswith("-> NOT RUN — " + note)
+    # pending with no note still says nothing ran, not "error None"
+    line = _record_line(intent, ResultEnvelope(ok=False, pending=True))
+    assert line.endswith("-> NOT RUN — allowed, but nothing executed it")
+    # SimpleNamespace envelopes without the newer fields still render (older callers/tests)
+    assert "error boom" in _record_line(intent, SimpleNamespace(ok=False, refused=False, error="boom"))
+
+
+def test_a_failure_that_explains_itself_in_result_is_recorded_with_that_explanation():
+    # Mirrors ResultEnvelope.to_tool_message: a not-ok envelope with error unset and a result
+    # (legion/mission-artifact 2026-09-14) must not reach the record as "error None".
+    from sage.gateway.being_gate_client import ResultEnvelope
+    from sage.gateway.heartbeat import _record_line
+    intent = SimpleNamespace(effector="x", args={})
+    line = _record_line(intent, ResultEnvelope(ok=False, result={"exit": 2, "why": "no device"}))
+    assert line.endswith('-> failed — {"exit": 2, "why": "no device"}')
+    line = _record_line(intent, ResultEnvelope(ok=False))
+    assert "None" not in line and "harness defect" in line

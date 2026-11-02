@@ -32,7 +32,8 @@ def test_an_edit_during_the_run_does_not_become_the_version_that_ran(tmp_path, m
     monkeypatch.setattr(srr, "bind", lambda *a, **k: [])
     monkeypatch.setattr(srr, "run_child", edits_mid_run)
     monkeypatch.setattr(srr, "_say", said.append)
-    srr.cmd_run(argparse.Namespace(path="a.py", seq=None, gpu=False, gpu_anyway=False, timeout=10))
+    srr.cmd_run(argparse.Namespace(path="a.py", seq=None, gpu=False, gpu_anyway=False, timeout=10,
+                                   unrequested=True))
 
     after = hashlib.sha256(target.read_bytes()).hexdigest()[:12]
     assert before != after

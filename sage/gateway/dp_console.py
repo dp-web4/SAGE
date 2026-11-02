@@ -52,8 +52,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 WORKSPACE = Path(os.environ.get("SAGE_WORKSPACE", Path(__file__).resolve().parents[2]))
-FORUM = Path(os.environ.get("SAGE_FORUM_DIR",
-                            Path.home() / "ai-workspace/shared-context/forum"))
+from sage.gateway.fleet_paths import forum_dir as _forum_dir  # noqa: E402
+FORUM = Path(os.getenv("SAGE_FORUM_DIR") or _forum_dir())
 INSTANCE = Path(os.environ.get("SAGE_INSTANCE",
                                WORKSPACE / "sage/instances/legion-gemma3-12b"))
 BEING = os.environ.get("SAGE_BEING", "legion-being")
@@ -484,12 +484,9 @@ class Handler(BaseHTTPRequestHandler):
                         f'<a href="/conversations">all conversations</a>',
                     flash=f'<div class="card" style="border-color:var(--gn)">Sent as turn '
                           f'#{turn["seq"]}. '
-                          + (f'<b>Waking {html.escape(BEING)} now</b> — a beat is starting for this.'
-                             if woke.get("started")
-                             else f'A wake was wanted and did not start ({html.escape(str(woke.get("wake_error", "")))}); '
-                                  f'it will be read at the next beat.'
-                             if woke.get("engage")
-                             else f'It will be read at the next beat: {html.escape(woke["reason"])}.')
+                          + html.escape(arousal.delivery_text(woke))
+                          + (f' ({html.escape(str(woke.get("reason", "")))})'
+                             if not woke.get("engage") else '')
                           + '</div>',
                     body=body))
             elif self.path == "/reply":

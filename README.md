@@ -22,6 +22,8 @@ SAGE is the cognition/embodiment research layer in the broader Web4 stack:
 
 The long-term goal is an embodied, sovereign agent stack with its own identity, memory, tools, sensors, effectors and eventually stronger A2+ isolation. That destination is not claimed as current capability.
 
+For the participant-side question — whether the surrounding identity/governance substrate is useful to the acting entity itself — see Web4's [participant self-assessment](https://github.com/dp-web4/web4/blob/main/docs/ENTITY_START_HERE.md).
+
 ## The research question
 
 A modern model can reason impressively in one turn and still fail as an organism because the surrounding system does not reliably preserve:
@@ -71,7 +73,9 @@ This split is intentional. The public repo is the inspectable architecture and r
 
 ## Current fleet
 
-The public SAGE census on **2026-09-08** records:
+As of **2026-10-23**: **8 machines**, each running a persistent SAGE being under the same Hestia gate (thor's is paused for ARC and SWE competition runs and resumes after 2026-11-08).
+
+The public census on **2026-09-08** recorded:
 
 - **8 machines** in the fleet;
 - **21 configured SAGE instances**;
@@ -81,6 +85,22 @@ The public SAGE census on **2026-09-08** records:
 Hardware spans Jetson edge devices, laptops, workstations, Apple Silicon and society-host machines. Different models and machines are used as independent seats rather than pretending one configuration represents the whole system.
 
 The fleet is part of the experimental method: implementations, critiques and behavioral observations become commits and artifacts that other seats can inspect and challenge.
+
+## Current research directions (2026-10-23)
+
+The latest observations include beings that identify themselves and named participants in role-specific relationships, cross-machine delegation requests (Sprout), authorization appeals and repeated boundary requests (CBP-being), and gameplay under changing environmental feedback (Legion). These are contextual observations, not fleet-wide capability claims or proof of internal phenomenology. The important next question is whether preserved memory produces correct **retrieval, interpretation, judgment and action** across wakes. See [continuity exploration](research-notes/MEMORY_JUDGMENT_CONTINUITY_EXPLORATION_2026-10-23.md) (hypothesis registered; controlled validation is the next step), and the [Research Generalization Rule](sage/docs/RESEARCH_GENERALIZATION_RULE.md).
+
+**Status note:** [LATEST_STATUS](sage/docs/LATEST_STATUS.md) is a dated 2026-09-26 public-source snapshot; it has not been independently refreshed here to certify the current runtime. Individual being observations and private development must not be silently promoted into public-main or fleet claims.
+
+### Public-source delta — 2026-10-28 (not a fleet deployment attestation)
+
+Three merged, test-backed gateway changes extend the **implemented** persistence path:
+
+- [#574](https://github.com/dp-web4/SAGE/pull/574) adds `settle`: a being can record a conclusion as a persistent question/answer visible in later beats. A stored conclusion is **not** a guarantee of correct retrieval, judgment or action.
+- [#584](https://github.com/dp-web4/SAGE/pull/584) suggests similar settled questions at capture time without automatically merging or deleting either record. The heuristic is advisory and can both miss and overflag similarity.
+- [#585](https://github.com/dp-web4/SAGE/pull/585) lets reflection point out a demonstrable failed-then-succeeded tool sequence and offer optional `skill` capture. The being decides whether and what to save; a successful tool receipt is **not** independent proof of a reusable procedure.
+
+These are **merged public-main mechanisms**, not a fleet-wide activation, later-use or cognitive-development result. Runtime availability also has a separate live concern: [#582](https://github.com/dp-web4/SAGE/issues/582) records repeated preflight refusals that silenced one being despite scheduled wakes. Verify per-seat deployment, actual subsequent retrieval/use, and outcome receipts before claiming learning across beats.
 
 ## Core architecture
 
@@ -106,7 +126,7 @@ Multiple memory paths coexist because they solve different problems:
 
 A recurring lesson from the research is that **lossy summaries can destroy exactly the evidence a later decision needs**, while unstructured verbatim memory alone is too expensive to reason over. The current direction is model-legible external artifacts plus learned policies for when and how to inspect them.
 
-The [inheritance-boundary program](sage/docs/PRD_INHERITANCE_BOUNDARIES.md) extends this to repeated handoffs: preserve source relations, corrections and role scope while keeping authority external to remembered state. Its [IH-01 pilot](research/inheritance/README.md) is executable synthetic instrumentation; live-model benefits and runtime integration remain unmeasured.
+The [inheritance-boundary program](sage/docs/PRD_INHERITANCE_BOUNDARIES.md) extends this to repeated handoffs: preserve source relations, corrections and role scope while keeping authority external to remembered state. Its [IH-01 pilot](research/inheritance/README.md) is executable synthetic instrumentation under review; no pilot is authorized, and live-model benefits and runtime integration remain unmeasured.
 
 ### Tools and effectors
 

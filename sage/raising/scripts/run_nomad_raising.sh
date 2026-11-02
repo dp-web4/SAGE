@@ -17,7 +17,7 @@
 
 set -e
 
-SAGE_DIR="/mnt/c/projects/ai-agents/SAGE"
+SAGE_DIR="${SAGE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 export PYTHONPATH="$SAGE_DIR"
 LOG_DIR="/tmp/nomad-raising-logs"
 mkdir -p "$LOG_DIR"

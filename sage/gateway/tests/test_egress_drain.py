@@ -133,12 +133,42 @@ def test_a_stamped_row_is_signed_by_its_carrier_and_the_mark_names_it():
     row = dict(ROW, transport={"mode": "direct", "carrier_lct": "BEING-LCT", "version": 3})
     with _SwapHome(home):
         m = FakeMcp(pending=[row])
-        r = drain_once(plugin_id="cbp-being", mcp=m,
-                       sender=lambda to, kind, ptr: (True, "[hub-notify] -> legion kind=coordination ledger=1588 hash=h"),
-                       log=lambda *_: None)
+        r = drain_once(
+            plugin_id="cbp-being",
+            mcp=m,
+            sender=lambda to, kind, ptr: (
+                True,
+                "[hub-notify] -> legion (61525719-def6-475c-a030-917f24a9dbf2) "
+                "kind=coordination ledger=1588 hash=h",
+            ),
+            log=lambda *_: None,
+        )
     assert r["forwarded"] == 1 and r["transport_faults"] == []
     mark = [a for n, a in m.calls if "mark_forwarded" in a][0]
-    assert mark["carrier_lct"] == "being-lct" and mark["hub_receipt"] == {"ledger": "1588"}
+    assert mark["carrier_lct"] == "being-lct"
+    assert mark["hub_receipt"] == {
+        "ledger": "1588",
+        "recipient_lct": "61525719-def6-475c-a030-917f24a9dbf2",
+    }
+
+
+def test_hub_receipt_never_infers_recipient_when_sender_did_not_report_one():
+    from sage.gateway import egress_drain as ed
+    assert ed._hub_receipt("ledger=9") == {"ledger": "9"}
+    assert ed._hub_receipt("[hub-notify] -> thor kind=coordination ledger=9") == {"ledger": "9"}
+
+
+def test_hub_receipt_parses_recipient_from_real_success_shape_only():
+    from sage.gateway import egress_drain as ed
+    detail = (
+        "signed_as=being; [hub-notify] -> thor "
+        "(aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee) "
+        "kind=coordination ledger=42 hash=sha256-content:x"
+    )
+    assert ed._hub_receipt(detail) == {
+        "ledger": "42",
+        "recipient_lct": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    }
 
 
 def test_a_stamped_row_with_no_key_for_its_carrier_is_never_sent_under_another():
@@ -331,3 +361,43 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_the_receipt_survives_hub_notify_stderr_notes(tmp_path):
+    """McNugget, 2026-10-04: every forwarded row recorded hub_receipt None. _forward keeps only the
+    last 300 chars of hub-notify's output, and with stdout first, the stderr notes it prints while
+    resolving a name pushed the stdout success line (the receipt) out of that tail."""
+    import os
+    from sage.gateway import egress_drain as ed
+    fake_notify = tmp_path / "hub-notify.sh"
+    fake_notify.write_text("#!/bin/sh\nexit 0\n")
+    fake_notify.chmod(0o755)
+    env_file = tmp_path / "ident"
+    env_file.write_text("")
+
+    class P:
+        returncode = 0
+        stdout = "[hub-notify] -> legion-being (3c999a3a-bb2d-45e1-b996-d4f2f0dc0825) kind=coordination ledger=1588 hash=h pdigest=p ptr=x"
+        stderr = "[hub-notify] resolved 'legion-being' via hub roster -> 3c999a3a-bb2d-45e1-b996-d4f2f0dc0825\n" + "note " * 80
+
+    real_run, old_notify = ed.subprocess.run, ed.HUB_NOTIFY
+    ed.HUB_NOTIFY, ed.subprocess.run = str(fake_notify), (lambda argv, **kw: P())
+    try:
+        ok, detail = ed._forward({"forward_on": "legion-being", "kind": "coordination", "pointer_uri": "x"},
+                                 env_file=str(env_file), signed_as="being")
+    finally:
+        ed.HUB_NOTIFY, ed.subprocess.run = old_notify, real_run
+    assert ok, detail
+    assert ed._hub_receipt(detail) == {"ledger": "1588",
+                                       "recipient_lct": "3c999a3a-bb2d-45e1-b996-d4f2f0dc0825"}, detail
+
+
+def test_a_routed_review_request_is_forwarded_in_the_hub_vocabulary():
+    """hestia #904: the daemon accepts `review_request`, the hub KINDS gate does not; the drain
+    forwards it as `pr_review_request`, which every receiver accepts. Other kinds pass unchanged."""
+    from sage.gateway import egress_drain as ed
+    sent = []
+    sender = lambda to, kind, ptr: (sent.append(kind), (True, "ok"))[1]
+    for k in ("review_request", "coordination", "review_done", "reply"):
+        ed._forward({"forward_on": "peer", "kind": k, "pointer_uri": "https://x/1"}, sender=sender)
+    assert sent == ["pr_review_request", "coordination", "review_done", "reply"], sent

@@ -16,6 +16,16 @@ Two corollaries follow:
 
 This is the behavioral analogue of the existing rule that mechanism is not capability. A mechanism that helps one instance is not a fleet capability claim, and a local failure is not automatically a fleet failure.
 
+### Verified-information and correctness changes
+
+The rule governs **behavioral interventions**, not the mere addition of verified information or correction of an objectively wrong mechanism. A change may ship as a fleet default without cross-instance behavioral evidence when it only:
+
+- exposes source-grounded facts that were already true and independently checkable;
+- corrects a false statement about measured state or an ignored explicit argument; or
+- makes an existing mechanism faithfully report what it actually did.
+
+That exemption is about correctness, not effect. If the change also alters authority, policy, cadence, action semantics, tool choice, prompting strategy, or any other behavior-shaping mechanism, the normal generalization rule applies. And any claim that the added information **improves behavior** still requires evidence on the behavior classes to which that claim is generalized.
+
 ## Why
 
 Persistent beings are not interchangeable benchmark workers. The same harness change can interact differently with:

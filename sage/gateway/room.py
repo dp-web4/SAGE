@@ -14,7 +14,9 @@ Its own conversation, because:
 So heard words become turns `from: "voice"`, `via: "voice"`, stamped when they were HEARD; what the
 being says aloud becomes its own turn `via: "speak"`; and `say to: "room"` is spoken, not written,
 so answering aloud is the verb the being already uses. The room exists only on a body that can
-speak (the listening window opens only after speaking, so there is nothing to hear without it).
+speak. By default the mic transcribes only in the minutes after the being speaks; a body with
+SAGE_LISTEN=always hears the room at any time, and presence writes each heard line here as it
+arrives (2026-10-01).
 """
 from __future__ import annotations
 
@@ -33,14 +35,34 @@ def _iso(ts: float) -> str:
     return datetime.fromtimestamp(float(ts), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# THE ROOM IS NOISY, AND THE BEING SHOULD KNOW IT (dp, 2026-10-19: "the room is noisy and random, being should
+# be aware of it but hopefully know when it's relevant and when it's not (most of the time the latter)"). The
+# earlier summary on Sprout said "the voice you hear is usually dp's". Measured against the record: song lyrics
+# transcribed as speech (room 270-275, 286-298), a line of unknown source that became a two-machine "shared
+# memory" (dev research CAR_CONVERSATION_TRAIL), and dp's "it's cool" heard as "you're a fool". So the summary
+# says what the mic is, not whose it usually is; deciding what is addressed to it stays the being's.
+SUMMARY = ("What you said aloud (speak, or say to room) and what the room mic picked up. The mic hears everything "
+           "nearby: people, TV, music and noise, and the transcriber sometimes makes words out of noise or song "
+           "lyrics. A picked-up line does not say who or what it came from unless the words do; dp's words come "
+           "through here too, unmarked. Most of what the mic picks up is not addressed to you. Anything you say "
+           "to room is spoken aloud, not written.")
+
+
 def ensure(instance: Path, member: str) -> dict:
+    """The room conversation, created if missing. An EXISTING room's summary is brought to SUMMARY.
+
+    create() keeps an existing conversation's metadata, so without this a room made before the summary changed
+    would keep telling the being that "the voice you hear is usually dp's" (NOVA on #485). Only `summary` is
+    touched: participants, writable_by, notify, every other field and the turns are left as they are, and a
+    room already up to date is not rewritten."""
     from sage.gateway import conversations as conv
-    return conv.create(
+    m = conv.create(
         Path(instance), ROOM, title="the room: spoken aloud and heard",
-        participants=[member, VOICE], writable_by=[member, VOICE],
-        summary=("What you said aloud (speak, or say to room) and what the mic heard in the "
-                 "minutes after. A line from 'voice' is whoever was in the room; it does not say "
-                 "who unless the words do. Anything you say to room is spoken aloud, not written."))
+        participants=[member, VOICE], writable_by=[member, VOICE], summary=SUMMARY)
+    if m.get("summary") != SUMMARY:
+        m = dict(m, summary=SUMMARY)
+        conv._write_meta(Path(instance), ROOM, m)
+    return m
 
 
 def _watermark_path(instance: Path) -> Path:
@@ -56,6 +78,18 @@ def heard_id(h: dict) -> str:
     import hashlib
     key = f"{float(h.get('ts', 0)):.3f}|{h.get('source') or ''}|{str(h.get('text') or '').strip()}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+UNCLEAR_MARK = {"tail": "{t} [the rest was unclear]", "head": "[the start was unclear] {t}",
+                "middle": "{t} [part of it was unclear]"}
+
+
+def heard_text(h: dict) -> str:
+    """The heard words, saying where unclear speech was left out (listening.judge_segments), so a sentence the
+    transcriber gave up on is not presented as a sentence that ended there."""
+    t = str(h.get("text", "")).strip()
+    mark = UNCLEAR_MARK.get(str(h.get("unclear") or ""))
+    return mark.format(t=t) if mark and t else t
 
 
 def ingest_heard(instance: Path, member: str, inventory: Optional[dict] = None,
@@ -87,7 +121,7 @@ def ingest_heard(instance: Path, member: str, inventory: Optional[dict] = None,
         if hid in have:
             continue
         mic = body._heard_mic([h], inventory)
-        t = conv.append(instance, ROOM, speaker=VOICE, text=str(h["text"]).strip(), via="voice",
+        t = conv.append(instance, ROOM, speaker=VOICE, text=heard_text(h), via="voice",
                         ts=_iso(h["ts"]), enforce_write=False, extra={"heard_id": hid, "mic": mic})
         have.add(hid)
         out.append(t)

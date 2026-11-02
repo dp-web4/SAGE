@@ -376,3 +376,10 @@ Architecture validated for deployment:
 **Outcome**: Resource-aware routing validated, 1033 gen activation speedup, production-ready architecture
 **Synthesis**: "Trust = permission to consume scarce shared resources" - operationalized
 **Next**: Session 91 (Hybrid Inference) or MoE deployment testing
+
+---
+
+## 2026-10-12 follow-up: external physical-tiering reference (low priority)
+
+[GLM Flash Lite exploration](explorations/GLM_FLASH_LITE_EXPERT_TIERING_2026-10-12.md) illustrates a separate physical caching/prefetch/execution scheduler that preserves native MoE routing. Session 90's 80% cache hit is from its own experimental setup; 1166 → 133 generations is **1033 fewer generations to trust activation**, not a 1033x inference-speed improvement. Real-model decode speed, latency, and semantic fidelity remain separate unverified claims for SAGE. Keep this as a parked reference, not a deployment commitment.
+

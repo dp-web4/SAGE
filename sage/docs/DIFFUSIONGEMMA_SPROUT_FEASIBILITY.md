@@ -106,3 +106,10 @@ The model — streaming itself through a 4GB window on an edge device — chose 
 *"a story about a lonely edge device that discovers something unexpected"*, starring
 a Raspberry Pi named Node-74-B. Noted without comment in the curator's log of the
 universe's sense of humor.
+
+---
+
+## 2026-10-12 comparison: sparse autoregressive expert tiering (low priority)
+
+See [GLM Flash Lite expert tiering exploration](explorations/GLM_FLASH_LITE_EXPERT_TIERING_2026-10-12.md). Its physical cache, concurrent CPU/GPU experts and layer-ahead prefetch exploit sparse autoregressive model access on an RTX 3090 with substantial CPU/NVMe bandwidth. Our 256-token block-diffusion workload touched nearly the entire expert mass each denoising step; the 0.48 tok/s and ~92% I/O bottleneck measurements remain valid. Do not infer that its reported throughput is transferable to 8GB unified-memory Sprout. No immediate follow-up scheduled.
+

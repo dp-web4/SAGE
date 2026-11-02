@@ -27,6 +27,14 @@ WorkingDirectory=/home/dp/ai-workspace/SAGE
 Environment=HOME=/home/dp
 Environment="PATH=/home/dp/.local/bin:/usr/local/bin:/usr/bin:/bin"
 Environment=PYTHONUNBUFFERED=1
+# The daemon's state display shows dream while this runs, then rest (SAGE #291). This is the
+# only real consolidation step a being has, so it is the only thing that shows dream. The
+# report lives here, not in consolidation.py, because that file is pre-registered to make no
+# network calls (F4). `-` and the reporter's own exit 0 mean a daemon that is down never
+# fails the job. --ttl is TimeoutStartSec plus systemd's 90 s stop window: a run killed
+# before ExecStopPost decays to rest on its own.
+ExecStartPre=-/usr/bin/python3 -m sage.gateway.activity dream consolidation --ttl 690
+ExecStopPost=-/usr/bin/python3 -m sage.gateway.activity rest consolidation
 ExecStart=/usr/bin/python3 -m sage.memory.consolidation --instance sage/instances/<instance-dir> --member <machine>-being --seat <machine>-timer --cartridge-manifest /home/dp/ai-workspace/membot/cartridges/<machine>-being.cart_manifest.json
 TimeoutStartSec=600
 StandardOutput=append:/home/dp/ai-workspace/SAGE/sage/instances/<instance-dir>/consolidation.log

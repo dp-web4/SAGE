@@ -45,14 +45,30 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+# Run as a plain script, conftest does not load -- so this file isolates itself the same way:
+# never reach the seat's LIVE hestia daemon, which would mint `test-being` as a real member.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _isolate_hestia  # noqa: E402,F401  -- isolates on import, unconditionally
 from sage.gateway import being_gate_client as B  # noqa: E402
+from sage.gateway.tests._gate_core import requires_gate_core, standalone_skip_reason  # noqa: E402
 
 FAILS = []
+# UNDER PYTEST A FAILED CHECK MUST FAIL THE TEST (GPT, review of SAGE #257: check() only appended
+# to FAILS, which only the __main__ runner reads -- so under pytest every test here returned
+# normally, whatever it found). _fail() raises unless the standalone runner has set STANDALONE,
+# which it does so it can report every failure in one pass instead of stopping at the first.
+STANDALONE = False
+
+
+def _fail(msg):
+    FAILS.append(msg)
+    if not STANDALONE:
+        raise AssertionError(msg)
 
 
 def check(name, got, want=True):
     if got != want:
-        FAILS.append(f"{name}: got {got!r}, want {want!r}")
+        _fail(f"{name}: got {got!r}, want {want!r}")
 
 
 def refuses(name, args, ctx, must_say):
@@ -64,12 +80,12 @@ def refuses(name, args, ctx, must_say):
         B.patch_apply_command(args, ctx)
     except ValueError as e:
         if must_say.lower() not in str(e).lower():
-            FAILS.append(f"{name}: refused, but the reason did not say {must_say!r}: {e}")
+            _fail(f"{name}: refused, but the reason did not say {must_say!r}: {e}")
         return
     except Exception as e:  # noqa: BLE001
-        FAILS.append(f"{name}: raised {type(e).__name__}, not a named ValueError: {e}")
+        _fail(f"{name}: raised {type(e).__name__}, not a named ValueError: {e}")
         return
-    FAILS.append(f"{name}: was ACCEPTED, and must not be")
+    _fail(f"{name}: was ACCEPTED, and must not be")
 
 
 def _diff(*paths, body="@@ -1 +1 @@\n-old\n+new\n"):
@@ -181,6 +197,7 @@ def test_git_applies_what_the_parser_now_accounts_for():
             os.unlink(pf)
 
 
+@requires_gate_core
 def test_the_normalized_event_carries_those_paths_to_the_law():
     """The parse is worthless if `_normalize` does not hand the result to the gate. This is the
     wire between the two, and it is the wire that was missing for `check`, `search` and
@@ -593,6 +610,7 @@ def test_a_command_the_law_did_not_bind_is_refused():
               [n for n, _ in mcp.calls if n == "hestia_begin_action"], [])
 
 
+@requires_gate_core
 def test_the_verdict_actually_carries_the_command_now():
     """THE FINDING THIS TURNED UP (2026-09-25). `GatewayVerdict` had no `command` field, so
     `_do_check`'s `getattr(verdict, "command", None)` was always None and its judged==executed
@@ -615,7 +633,9 @@ def test_the_verdict_actually_carries_the_command_now():
                else len(src)]
     built_from_ev = [ln for ln in gate.splitlines()
                      if "GatewayVerdict(" in ln and "gate.raised" not in ln
-                     and "gate.unreachable" not in ln and "registry.unbounded" not in ln]
+                     and "gate.unreachable" not in ln and "registry.unbounded" not in ln
+                     # the egress stage (SAGE #335) runs BEFORE any event is normalized: no command exists yet
+                     and "egress.unswept" not in ln and '"egress.secret", innate=True, stage="egress"' not in ln]
     check("gate() builds verdicts from the event in more than one place", len(built_from_ev) >= 3)
     check("...and EVERY such verdict reports the command the law ruled on",
           gate.count("command=judged_command"), len(built_from_ev))
@@ -656,15 +676,48 @@ def test_a_stale_diff_is_an_answer_about_the_tree():
               open(os.path.join(tmp, "f.py")).read(), "something else entirely\n")
 
 
+def test_a_miscounted_hunk_refusal_names_the_verb_that_needs_no_counts():
+    """legion-being 2026-10-08: six hand-written #360 patches in one beat, four refused for
+    miscounted hunk headers, each told only to "send a diff produced by git diff" -- which it
+    cannot do for an edit not yet made. The counts stay exact; the refusal names memory_edit.
+    Above TESTS, so the standalone runner runs it too."""
+    diff = ("diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n"
+            "@@ -1,3 +1,3 @@\n a\n-b\n+c\n")
+    try:
+        B.patch_targets(diff)
+    except ValueError as e:
+        msg = str(e)
+    else:
+        msg = ""
+    check("a miscounted hunk is refused", "ends inside a hunk" in msg)
+    check("the refusal names memory_edit and its line arguments",
+          "memory_edit" in msg and "start_line" in msg and "end_line" in msg)
+
+
+def test_a_patch_that_did_not_apply_names_memory_edit_too():
+    """The context-drift failure (git apply refused) gets the same pointer. A source pin: the
+    dispatcher arm needs the gate core, and this string is the whole change."""
+    with open(os.path.join(os.path.dirname(B.__file__), "hestia_dispatch.py")) as f:
+        src = f.read()
+    i = src.index("that patch did not apply")
+    check("the did-not-apply error names memory_edit", "memory_edit" in src[i:i + 600])
+
+
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
 
 
 def main():
+    gate_skipped = 0
     for fn in TESTS:
+        why = standalone_skip_reason(fn)
+        if why:
+            print(f"SKIPPED {fn.__name__}: {why}")
+            gate_skipped += 1
+            continue
         try:
             fn()
         except Exception as e:  # noqa: BLE001
-            FAILS.append(f"{fn.__name__} raised {type(e).__name__}: {e}")
+            _fail(f"{fn.__name__} raised {type(e).__name__}: {e}")
     for f in FAILS:
         print("FAIL", f)
     if SKIPPED:
@@ -673,9 +726,10 @@ def main():
         print(f"SKIPPED: the dispatcher arm (4 tests) -- it could not be imported here "
               f"({SKIPPED[0][:90]}). The source pins above still ran; CI is the authority.")
     print(f"{'FAILED' if FAILS else 'ok'}: {len(FAILS)} failure(s) across "
-          f"{len(TESTS) - (4 if SKIPPED else 0)} tests that ran")
+          f"{len(TESTS) - (4 if SKIPPED else 0) - gate_skipped} tests that ran")
     return 1 if FAILS else 0
 
 
 if __name__ == "__main__":
+    STANDALONE = True
     sys.exit(main())

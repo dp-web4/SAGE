@@ -250,22 +250,16 @@ def d2_tripwire(now: float | None = None) -> dict:
 
 
 def reserves() -> str:
-    """RESERVES (FUEL) source binding: the being's ATP + the machine's margins."""
+    """RESERVES (FUEL) source binding: the machine's margins.
+
+    NO ATP (SAGE #291). This used to lead with "ATP N%" from the newest experience record, as
+    "the being's own metabolic read". The daemon stamps each record with its internal
+    controller's `atp_percentage`: a free-running oscillator ticked every 100 ms, which nothing
+    the being does moves. On a FUEL line it read as the being's reserves; it was the phase of a
+    clock at the moment of the last exchange. The field stays on the records (the shadow
+    experiment's business); it is not a reading and is not shown here."""
     import glob as _glob
     parts = []
-    # ATP from the most recent experience record (the being's own metabolic read)
-    try:
-        latest, latest_ts = None, 0
-        for path in _glob.glob(EXPERIENCE_GLOB):
-            for d in _jsonl_ts(path, 0, ts_key="timestamp"):
-                if d.get("timestamp", 0) > latest_ts:
-                    latest, latest_ts = d, d["timestamp"]
-        if latest and "atp_percentage" in latest:
-            age_h = (time.time() - latest_ts) / 3600
-            parts.append(f"ATP {latest['atp_percentage']:.0f}% ({age_h:.1f}h ago)")
-    except OSError:
-        pass
-    # machine margins
     try:
         mem = {l.split(":")[0]: int(l.split()[1]) for l in open("/proc/meminfo") if ":" in l}
         parts.append(f"RAM {mem.get('MemAvailable', 0) / 1048576:.1f}G avail")

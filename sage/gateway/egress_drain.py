@@ -30,9 +30,12 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 
+from sage.gateway.fleet_paths import hub_notify_path
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap
 
-HUB_NOTIFY = os.path.expanduser("~/ai-workspace/private-context/hub-mesh/hub-notify.sh")
+# Derived, not the Linux seats' layout (fleet_paths): on McNugget private-context is ~/repos/private-context,
+# and the hard-coded ~/ai-workspace path failed every peer send the being made.
+HUB_NOTIFY = str(hub_notify_path())
 
 
 def _row_id(r: Dict[str, Any]) -> Optional[int]:
@@ -160,8 +163,37 @@ def signer_for(row: Dict[str, Any], plugin_id: str) -> tuple[Optional[str], str,
 
 
 def _hub_receipt(detail: str) -> Optional[Dict[str, str]]:
-    m = re.search(r"ledger=(\S+)", detail or "")
-    return {"ledger": m.group(1)} if m and m.group(1) != "?" else None
+    """Project what the REAL hub-notify success line proves.
+
+    The resolved recipient LCT is load-bearing for F3 D2 parity. The legacy
+    egress row carries only a peer NAME today; hub-notify is the edge that
+    actually resolves that name (exact/unique-prefix/static fallback) to a Hub
+    member LCT. Throwing the value away made it impossible to compare the
+    historical next hop with F3's configured neighbor after the fact.
+
+    Do not infer a recipient from the input row here. Parse only the value
+    hub-notify says it actually used.
+    """
+    detail = detail or ""
+    ledger = re.search(r"ledger=(\S+)", detail)
+    recipient = re.search(
+        r"\[hub-notify\]\s+->\s+.+?\s+\(([^()\s]+)\)\s+kind=",
+        detail,
+    )
+    out: Dict[str, str] = {}
+    if ledger and ledger.group(1) != "?":
+        out["ledger"] = ledger.group(1)
+    if recipient:
+        out["recipient_lct"] = recipient.group(1)
+    return out or None
+
+
+#: The daemon's local notice kinds (hestia MEMBER_NOTICE_KINDS) spelled for the hub-mesh KINDS gate,
+#: where they differ (hestia #904). The local surface spells the review ask `review_request`, which
+#: the hub vocabulary does not have, so a routed review ask was accepted locally ("queued") and then
+#: refused by every receiver's kind gate: it could never leave the machine. `pr_review_request` is the
+#: legacy atom every receiver accepts, fractal gate or not. The other local kinds exist in both sets.
+_HUB_KIND = {"review_request": "pr_review_request"}
 
 
 def _forward(row: Dict[str, Any], sender=None, plugin_id: str = "sprout-being",
@@ -171,6 +203,7 @@ def _forward(row: Dict[str, Any], sender=None, plugin_id: str = "sprout-being",
     variables stripped, so the shell sources exactly the file the resolver read."""
     to = row.get("forward_on") or row.get("dest_peer_lct") or row.get("peer")
     kind = row.get("kind") or "coordination"
+    kind = _HUB_KIND.get(kind, kind)
     ptr = row.get("pointer_uri") or row.get("pointer") or ""
     if not to or not ptr:
         return False, f"row missing forward_on/pointer_uri: {row}"
@@ -185,7 +218,11 @@ def _forward(row: Dict[str, Any], sender=None, plugin_id: str = "sprout-being",
     env = _clean_env()
     env["HUB_MESH_ENV"] = env_file
     p = subprocess.run([HUB_NOTIFY, str(to), str(kind), str(ptr)], capture_output=True, text=True, timeout=60, env=env)
-    out = (p.stdout + p.stderr).strip()
+    # stderr FIRST, stdout LAST: only the tail is kept, and the receipt is hub-notify's stdout
+    # success line ("[hub-notify] -> peer (lct) kind=… ledger=N …"). With stdout first, its stderr
+    # notes ("resolved 'legion-being' via hub roster …") pushed that line out of the tail, and every
+    # forwarded row recorded hub_receipt: null although the hub had accepted it (McNugget, 10-04).
+    out = (p.stderr + "\n" + p.stdout).strip()
     return (p.returncode == 0 and "ledger=" in out), f"signed_as={signed_as} " + out[-300:]
 
 

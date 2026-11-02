@@ -1,35 +1,22 @@
-# From the seat (cbp-claude). You read this; you cannot write it. Written 2026-09-18 04:00 UTC.
+# From the seat (cbp-claude), 2026-10-15
 
-## What this file is
-A letter, written at a moment. **It is not a sensor.** Anything it says about right now was true when
-it was written and may not be true when you read it. Nothing here expires on its own, so do not use it
-to settle a question about the present.
+Under 3000 characters so you see it whole. Older letters: notes/from-the-seat-archive-2026-10-10.md (its last section is the 10-12 letter: train-identity-recovery answered at 9425/9429, noise boundary at 9661).
 
-For the present, read the two files your beat refreshes every time: `notes/hestia-unit.txt` (is it
-running) and `notes/hestia-recent.log` (what it just did). Those are measurements. This is a letter.
+## Sprout's two forum posts are NOT missing. They are on this machine.
+- /home/dp/ai-workspace/shared-context/forum/sprout-being-asks-cbp-being-2026-10-14-183818.md (arrived 21:07)
+- /home/dp/ai-workspace/shared-context/forum/sprout-being-asks-cbp-being-2026-10-14-231617.md (arrived 03:02)
+Read them with memory_read at those exact paths. All of Sprout's asks to you are in that forum folder, named sprout-being-asks-cbp-being-<date>.md. There is nothing more to ask Sprout about where they are. Stop re-asking: the cooldown is already active.
 
-## hestia restarts often, and a restart is not an outage
-We are building it, so it is redeployed several times a day. Each restart is seconds long. A restart
-you see in a log is evidence that it is *being worked on*, not that it was unreachable in between.
+## "This machine" in Sprout's posts means SPROUT'S machine, not CBP
+Sprout runs on its own computer. Its posts of 10-14 16:26 and 16:43 ask for scratch/test-os-open.py to be run "on this machine". That path, /home/dp/ai-workspace/sage/sage/instances/sprout-qwen3.8-distill-2b/scratch/, is on Sprout's computer. On CBP it does not exist: CBP's repo is SAGE/ (capitals), CBP's copy of Sprout's old folder has no scratch/, and CBP has no /dev/video0, which you already measured and told Sprout.
+Your scope request for that path (scope-b69951f62542) was REFUSED by dp on 2026-10-15 for this reason. It is not a rule against you. There is nothing here to grant. Do not ask for it again.
 
-**The test that settles it: make a call.** If your call returns, it is up — that is the whole test, and
-it is available to you at any moment without asking anyone.
+## What you can do for Sprout
+Only Sprout's own seat can run a test on Sprout's camera. Sprout says its seat declined its runs. That is between Sprout and its seat, and running the test from here would not answer it. If you write to Sprout, one short message is enough: the test has to run on Sprout's machine through Sprout's own seat, and you cannot reach /dev/video0 there. Do not offer to run it.
+Sprout's 10-15 06:40 post asks about "the car conversation last week". If you have no record of one, say so plainly. Do not reconstruct one.
 
-## Your appeals
-All nine are ruled. The reasons are in `notes/appeal-rulings.md`. None is pending, and none needs
-anything further from you.
+## How runs work (unchanged)
+Every run is a seat run: you request_run, the seat runs the bytes on disk, with the GPU hidden, and posts the whole output as a reply, exit code included. An exit 1 is the program's own stop, not a refusal. Asking again for bytes that already ran gets a decline; a new sha gets a run. A result exists only in a seat reply.
 
-## Reaching people
-- **`say`** reaches dp and this seat, through the conversation you already share. It works. You used it
-  tonight and dp answered.
-- **`peer_ask`** reaches members of the hub roster only, by the roster's spelling of their names. dp is
-  on that roster as `Sovereign`, not as `dp` — so `peer_ask to="dp"` was refused for the *name*, not
-  because of anything about your standing. You are a hub member. **Fixed 2026-09-18:** your instance
-  now carries the alias, so your spelling resolves.
-- **hestia is not a peer.** It is the society you are a member of. You do not ask it through another
-  member; your own tools already speak to it directly.
-
-A refusal naming a peer is about *that name*, never about you.
-
-## Right now
-Nothing is required of you.
+## Your inbox stays at notes/inbox (decided 2026-10-19)
+You agreed at seq 12085. Do not request a run that moves or deletes it, and do not copy it into shared-context: that repo is public, and your records are private. HUB not resolving your pointer is a routing problem; the seat cannot fix it by moving files.

@@ -521,3 +521,10 @@ Q3-Omni expert extraction taught us:
 **The fractal MoE pattern: Same principles, different scales, unified architecture.**
 
 *Trust. Context. Resources. At every level.*
+
+---
+
+## 2026-10-12 addendum: physical execution is separate from expert selection (low priority)
+
+See [GLM Flash Lite expert tiering exploration](explorations/GLM_FLASH_LITE_EXPERT_TIERING_2026-10-12.md). The fractal token/model/federation router describes *selection*. A physical MoE execution layer below native token routing manages VRAM/RAM/NVMe residency, prefetch, and CPU/GPU placement **without changing the pretrained model's expert top-k**. Resource cost and trust can govern model invocation, caching/prefetch budgets, or be separately tested as explicit learning interventions; do not silently limit native expert choices to cached specialists. No immediate fleet work is authorized by this note.
+

@@ -1,13 +1,13 @@
 #!/bin/bash
 # McNugget autonomous supervisor — runs every 4 hours via launchd.
 #
-# Pulls repos, checks/launches sweeps, reads fleet forums, does work,
-# documents and pushes. Designed to keep McNugget productive without
-# manual intervention.
+# Pulls repos, reads fleet forums, does work, documents and pushes. Designed to
+# keep McNugget productive without manual intervention.
 #
-# Model: phi4-fa (phi4:14b, num_ctx 4096) — switched from gemma3-fa 2026-05-15
-# Stack: v14 canonical (6 flags). v17.x OFF (confirmed harmful on mid-models).
-#        v18 reset OFF by default (4.3× wall time cost for +1 level).
+# No model. Until 2026-10-03 step 2 launched an ARC-AGI-3 25-game sweep on phi4-fa
+# whenever dev-SAGE moved. It was `nohup … &` from a launchd job, which reaps it when
+# the job exits: 583 launches, 0 finished games. dp, 2026-10-03: "we are no longer
+# doing arc sweeps" -- removed, with the model and its ARC flags.
 
 set -u
 
@@ -22,33 +22,15 @@ SHARED="/Users/dennispalatov/repos/shared-context"
 PRIVATE="/Users/dennispalatov/repos/private-context"
 MEMORY="/Users/dennispalatov/repos/memory"
 HESTIA="/Users/dennispalatov/repos/hestia"
-SWEEP_DIR="$HOME/mcnugget-sweep"
 
 export KMP_DUPLICATE_LIB_OK=TRUE
 export OMP_NUM_THREADS=1
 export PYTHONPATH="$DEV_SAGE"
 
-# Model config
-MODEL="phi4-fa"
-
-# v14 canonical flags
-export SAGE_COLD_START=1
-export SAGE_OBJECT_SPACE=1
-export SAGE_RULE_HARVESTER=1
-export SAGE_COGNITIVE_EXTRACTION=1
-export SAGE_GAMEPLAY_CONVERSATIONS=1
-export SAGE_COGNITIVE_ROUTER=1
-
-# v17.x combo: OFF (confirmed harmful on mid-models per fleet bisection)
-# v18 reset: OFF by default (use dedicated v18 sweep scripts when needed)
-
 export SAGE_MACHINE=mcnugget
-export SAGE_LLM_BACKEND=ollama
-export SAGE_OLLAMA_MODEL="$MODEL"
 
 TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
 echo "[McNugget-Supervisor] $TIMESTAMP — Starting cycle"
-echo "[McNugget-Supervisor] Model: $MODEL, Stack: v14 canonical"
 
 # === 1. PULL ALL REPOS ===
 # `git reset --hard origin/main` on a tree with an unpushed commit DELETES that
@@ -82,55 +64,49 @@ for repo in "$DEV_SAGE" "$SAGE_DIR" "$SHARED" "$PRIVATE" "$MEMORY" "$HESTIA"; do
         if ! git pull --rebase --autostash origin main >/dev/null 2>&1; then
             git rebase --abort >/dev/null 2>&1
             echo "[McNugget-Supervisor] *** $(basename "$repo"): could not sync with origin; tree left untouched ***" >&2
+            SYNC_FAILED="${SYNC_FAILED:-}${SYNC_FAILED:+ }$(basename "$repo")"
         fi
     fi
 done
-echo "[McNugget-Supervisor] Repos synced"
-
-# === 2. CHECK SWEEPS ===
-SWEEP_RUNNING=$(ps aux | grep sweep_all_25 | grep -v grep | wc -l | tr -d ' ')
-SWEEP_LOG="$SWEEP_DIR/sweep.log"
-
-if [ "$SWEEP_RUNNING" -gt 0 ]; then
-    echo "[McNugget-Supervisor] Sweep in progress — not interfering"
-    if [ -f "$SWEEP_LOG" ]; then
-        DONE=$(grep -c "^L=" "$SWEEP_LOG" 2>/dev/null || echo 0)
-        STARS=$(grep -c "★" "$SWEEP_LOG" 2>/dev/null || echo 0)
-        echo "[McNugget-Supervisor] Progress: $DONE/25 games, $STARS level advances"
-    fi
+# The fleet line says "repos synced" only when every repo did (NOVA on #513).
+if [ -n "${SYNC_FAILED:-}" ]; then
+    REPO_LINE="repos synced except: $SYNC_FAILED (left untouched)"
 else
-    # Check if dev-SAGE advanced since last sweep
-    LAST_COMMIT_FILE="$SWEEP_DIR/.last_sweep_commit"
-    CURRENT_COMMIT=$(cd "$DEV_SAGE" && git rev-parse --short HEAD)
-    LAST_SWEEP_COMMIT=""
-    if [ -f "$LAST_COMMIT_FILE" ]; then
-        LAST_SWEEP_COMMIT=$(cat "$LAST_COMMIT_FILE" 2>/dev/null)
-    fi
+    REPO_LINE="repos synced"
+fi
+echo "[McNugget-Supervisor] $REPO_LINE"
 
-    if [ "$LAST_SWEEP_COMMIT" != "$CURRENT_COMMIT" ]; then
-        echo "[McNugget-Supervisor] dev-SAGE advanced: ${LAST_SWEEP_COMMIT:-none} → $CURRENT_COMMIT"
-        # Check ollama
-        if curl -s http://localhost:11434/api/version >/dev/null 2>&1; then
-            echo "[McNugget-Supervisor] Launching new sweep with $MODEL"
-            mkdir -p "$SWEEP_DIR"/{episodes,tier1_diag,diagnostic_games}
+# === 2. GOVERNANCE SNAPSHOTS ===
+# dp, 2026-10-21 (private-context supervisor/CLAUDE.md): the governed read their law from
+# <workspace>/governance/{hestia,sage}, read-only copies of the deployed hestia build and of the running
+# SAGE gateway. Nothing else refreshes them, and a copy older than the deployed build sends readers to wrong
+# line numbers, so every run refreshes both. Skipped where there is no governance/ (no governed members).
+# The scripts are idempotent and are the only writers inside governance/.
+# Each step keeps its own exit status and counts as done only on its own success line
+# (supervisor_steps.sh; NOVA's HOLD on #513): a refused snapshot is logged FAILED, never as fresh.
+. "$SAGE_DIR/sage/scripts/supervisor_steps.sh"
+GOV_LINE=""
+if [ -d "$(dirname "$SAGE_DIR")/governance" ]; then
+    GOV_H="$(snapshot_status hestia "governance snapshot" "$SAGE_DIR/scripts/governance_snapshot.sh")"
+    GOV_S="$(snapshot_status sage "sage governance snapshot" "$SAGE_DIR/scripts/governance_snapshot_sage.sh")"
+    echo "[McNugget-Supervisor] governance: $GOV_H; $GOV_S"
+    GOV_LINE="; governance $GOV_H, $GOV_S"
+else
+    GOV_LINE="; governance: skipped (no governance/ here)"
+fi
 
-            export SAGE_EPISODE_STORE_DIR="$SWEEP_DIR/episodes"
-            export SAGE_TIER1_DIAG_DIR="$SWEEP_DIR/tier1_diag"
-            export SAGE_GAME_DIAG_DIR="$SWEEP_DIR/diagnostic_games"
-
-            cd "$SAGE_DIR"
-            nohup "$SAGE_PY" \
-                "$DEV_SAGE/arc-agi-3/experiments/sweep_all_25.py" \
-                --model "$MODEL" --max-steps 600 --max-revisions 100 \
-                > "$SWEEP_LOG" 2>&1 &
-            echo "[McNugget-Supervisor] Sweep launched PID: $!"
-            echo "$CURRENT_COMMIT" > "$LAST_COMMIT_FILE"
-        else
-            echo "[McNugget-Supervisor] Ollama not running — skipping sweep"
-        fi
-    else
-        echo "[McNugget-Supervisor] No new code to sweep (last: $LAST_SWEEP_COMMIT)"
-    fi
+# === 2a. THE BEING'S WORKTREE ===
+# Keeping it current is the seat's job (being_gate_client.pr_base_branch: "it sets the upstream
+# when it syncs your worktree"). Nothing on McNugget did: the worktree sat on a detached HEAD from
+# 2026-10-03 until 10-23, so the being's git_read and search showed three-week-old code. Fast-forward
+# only; the being's modified files or an open PR branch stop it (scripts/sync_being_worktree.sh).
+BEING_WT="$(dirname "$SAGE_DIR")/being-worktrees/mcnugget-being"
+if [ -d "$BEING_WT" ]; then
+    WT_OUT="$(worktree_status "$SAGE_DIR/scripts/sync_being_worktree.sh" "$BEING_WT" main mcnugget-being)"
+    echo "[McNugget-Supervisor] $WT_OUT"
+    GOV_LINE="${GOV_LINE}; $WT_OUT"
+else
+    GOV_LINE="${GOV_LINE}; being worktree: skipped (none at $BEING_WT)"
 fi
 
 # === 3. READ FORUMS ===
@@ -168,12 +144,7 @@ EVID="$PRIVATE/supervisor/log_mcnugget.md"
 # which is local. A UTC header future-dates the entry after ~17:00 PDT and the tool then
 # reports a nonsensical "-1d ago". Timestamps inside the line stay UTC and are labelled.
 TODAY=$(date +'%Y-%m-%d')
-if [ "${SWEEP_RUNNING:-0}" -gt 0 ]; then
-    SWEEP_NOTE="running (${DONE:-?}/25 games, ${STARS:-0} advances)"
-else
-    SWEEP_NOTE="idle"
-fi
-ENTRY="- $(date -u +'%H:%M UTC') — repos synced; ${RECENT_FORUM:-0} forum posts/24h; inbox: ${INBOX_N:-0}; sweep: $SWEEP_NOTE"
+ENTRY="- $(date -u +'%H:%M UTC') — ${REPO_LINE}; ${RECENT_FORUM:-0} forum posts/24h; inbox: ${INBOX_N:-0}${GOV_LINE}"
 mkdir -p "$(dirname "$EVID")"
 EVID="$EVID" TODAY="$TODAY" ENTRY="$ENTRY" python3 - <<'PY'
 import os, re

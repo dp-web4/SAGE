@@ -22,7 +22,7 @@
       "machine": "mcnugget",
       "transport": "ssh",
       "host": "mcnugget.local",
-      "path": "~/ai-workspace/private-context/training-data/router/mcnugget"
+      "path": "~/repos/private-context/training-data/router/mcnugget"
     },
     {
       "machine": "legion",

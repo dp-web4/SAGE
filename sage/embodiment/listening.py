@@ -10,12 +10,26 @@ three bounds chosen so the ear is a reply channel and not a room recorder:
      nothing is written. The room is not transcribed while the being is silent.
   2. NEVER ITS OWN VOICE. speak() marks speaking_until before playback; while it holds, the
      segmenter drops audio, so the being is not handed its own words back as someone else's.
+  ALWAYS LISTENING (opt-in per body, dp 2026-10-01): with SAGE_LISTEN=always in the cortex's environment
+     the window is always open. dp asked aloud "what do you want to remember about today" long after the
+     being last spoke; nothing was transcribed and nothing reached the being. dp: "any recognized voice
+     input should be logged in the voice chat as it arrives. and hopefully presented to the being also."
+     Bound 2 (never its own voice) and bound 3 (no speaker identity) still hold. The cortex records the
+     mode in listen.json ("always"), so the being is told what its ear does (body.hears_always).
+  WAKE PHRASE (opt-in per body, dp 2026-10-08): with SAGE_LISTEN=wake the ear still hears everything, but a
+     voice becomes WORDS FOR THE BEING only after someone says its name ("hey Sprout"). That opens an
+     engaged window of KEEPALIVE_S (dp: 30-45 s), extended by each addressed utterance and each of the
+     being's spoken replies; "bye Sprout" closes it. Speech heard while not engaged is recorded only as the
+     fact "speech nearby, not addressed to you" -- never its words (a news reel the being answered as if dp
+     had spoken it, 2026-10-08). A short chime says the window opened. An interim step: the direction is a
+     learned addressee/translation organ in the IRP stack, not a keyword.
   3. NO SPEAKER IDENTITY. A voice is not authenticated. heard.jsonl records words, time and the
      mic — never who. The beat says "a voice in the room", not "dp said".
 
 Transcription is whisper base.en on the GPU, loaded lazily on the first utterance (measured on
 Sprout 2026-09-26: 2.3 s load, 0.47 s for a 3 s clip warm, 439 MB). Fails open: no whisper → the
-state says so and Hearing's level/onset are untouched.
+state says so and Hearing's level/onset are untouched. SAGE_LISTEN_BACKEND=whispercpp runs the same model
+through whisper.cpp on the CPU instead (sage/embodiment/whispercpp.py): no torch, no GPU memory.
 """
 from __future__ import annotations
 
@@ -29,29 +43,171 @@ from typing import Optional
 BODY_DIR = os.environ.get("SAGE_BODY_DIR") or os.path.expanduser("~/.sprout")
 LISTEN_PATH = os.path.join(BODY_DIR, "listen.json")
 HEARD_PATH = os.path.join(BODY_DIR, "heard.jsonl")
+EAR_LOG = os.path.join(BODY_DIR, "ear.jsonl")      # transitions of the ear's state, so "since when" is known
 
 RATE = 16000
 SPEECH_JUMP = 0.03         # a window this far above ambient baseline counts as voiced
 SPEECH_FLOOR = 0.03        # ...and above this absolute level
-END_SILENCE_S = 0.8        # this much unvoiced audio ends an utterance
+# this much unvoiced audio ends an utterance. Per body (SAGE_LISTEN_PAUSE_S): at 0.8 s, dp's sentences
+# arrived as several turns a second apart wherever he paused for breath (2026-10-01).
+END_SILENCE_S = float(os.environ.get("SAGE_LISTEN_PAUSE_S") or 0.8)
+UNHEARD_PATH = os.path.join(BODY_DIR, "unheard.jsonl")   # audio that produced no kept words, for measurement
 MIN_VOICED_S = 0.4         # shorter than this is a knock or a cough, not words
 MAX_UTTERANCE_S = 20.0     # cut and transcribe rather than buffer forever
 PRE_ROLL_S = 0.3           # keep a little audio from before the onset so first syllables survive
 # whisper hallucinates short stock phrases on near-silence; these gates drop them
 NO_SPEECH_MAX = 0.6
 LOGPROB_MIN = -1.0
+KEEPALIVE_S = float(os.environ.get("SAGE_LISTEN_KEEPALIVE_S") or 40)   # wake mode: engaged window (dp: 30-45 s)
+# Memory, per body (2026-10-11): whisper base.en held ~430 MB of GPU once loaded, forever. SAGE_LISTEN_MODEL picks
+# the model (default base.en, unchanged); SAGE_LISTEN_UNLOAD_S frees it after that many seconds with nothing to
+# transcribe (default 0 = never, unchanged).
+MODEL_NAME = (os.environ.get("SAGE_LISTEN_MODEL") or "base.en").strip()
+# Per body (2026-10-11): "torch" (default, unchanged) is openai-whisper, on the GPU where there is one;
+# "whispercpp" is the same model through whisper.cpp on the CPU (sage/embodiment/whispercpp.py): no torch, no GPU
+# memory, the same no_speech_prob / avg_logprob for judge_segments. Unloading it stops its server process.
+BACKEND = (os.environ.get("SAGE_LISTEN_BACKEND") or "torch").strip().lower()
+try:
+    UNLOAD_IDLE_S = max(0.0, float(os.environ.get("SAGE_LISTEN_UNLOAD_S") or 0))
+except ValueError:
+    UNLOAD_IDLE_S = 0.0
+
+import re as _re
+# The name as whisper actually writes it: "Sprout", and the near-misses it produces for it. Per body
+# (2026-10-17, McNugget): SAGE_WAKE_NAME is the regex alternation for this body's name and SAGE_WAKE_SAY how
+# the being is told to be called. Measured on McNugget with base.en: "McNugget", "McNagut"; small.en: "McNigod";
+# "chicken nuggets" never matched, so the "Mc" is required.
+_NAME = "(?:" + (os.environ.get("SAGE_WAKE_NAME") or r"sprout|sprouts|spout|sprite|spraut").strip() + ")"
+WAKE_SAY = (os.environ.get("SAGE_WAKE_SAY") or "Sprout").strip()
+WAKE_RE = _re.compile(r"(?:^\W*" + _NAME + r"\b|\b(?:hey|hi|hello|ok|okay|yo)\W+" + _NAME + r"\b)\W*", _re.I)
+# "by" too: whisper writes a spoken "bye McNugget" as "by McNugget" (base.en and small.en, 2026-10-17)
+BYE_RE = _re.compile(r"\b(?:bye|by|goodbye|good\s*night|that'?s\s+all)\W+" + _NAME + r"\b", _re.I)
+
+
+def wake_match(text: str):
+    """(addressed by name?, the words after the name). 'Hey Sprout, what do you see?' -> (True, 'what do you see?')."""
+    m = WAKE_RE.search(text or "")
+    if not m:
+        return False, ""
+    return True, (text[m.end():] or "").strip()
+
+
+def says_goodbye(text: str) -> bool:
+    return bool(BYE_RE.search(text or ""))
+
+
+def always_listening() -> bool:
+    """This body's opt-in: SAGE_LISTEN=always in this process's environment."""
+    return os.environ.get("SAGE_LISTEN", "").strip().lower() == "always"
+
+
+def wake_listening() -> bool:
+    """This body's opt-in: SAGE_LISTEN=wake (hear everything, take words only after its name)."""
+    return os.environ.get("SAGE_LISTEN", "").strip().lower() == "wake"
 
 
 def window(now: Optional[float] = None, path: Optional[str] = None) -> dict:
-    """{'listening': bool, 'speaking': bool} from listen.json. Absent/unreadable → neither."""
+    """{'listening', 'speaking', 'always'} from listen.json, plus this process's opt-in.
+    Absent/unreadable file → closed unless the opt-in is set."""
     now = time.time() if now is None else now
     path = path or LISTEN_PATH
     try:
         d = json.load(open(path))
     except Exception:
-        return {"listening": False, "speaking": False}
-    return {"listening": now < float(d.get("listen_until", 0)),
-            "speaking": now < float(d.get("speaking_until", 0))}
+        d = {}
+    wake = wake_listening() or d.get("mode") == "wake"
+    always = (always_listening() or bool(d.get("always"))) and not wake
+    engaged = now < float(d.get("listen_until", 0))
+    muted_until = float(d.get("muted_until", 0) or 0)
+    muted = {"until": muted_until, "by": str(d.get("muted_by") or "")} if now < muted_until else None
+    # In wake mode the segmenter must run while NOT engaged, or the name could never be heard.
+    return {"listening": (always or wake or engaged) and not muted,
+            "speaking": now < float(d.get("speaking_until", 0)),
+            "always": always, "muted": muted, "wake": wake, "engaged": engaged,
+            "keepalive_s": float(d.get("keepalive_s") or KEEPALIVE_S),
+            "wake_say": str(d.get("wake_say") or WAKE_SAY),
+            "last_overheard": float(d.get("last_overheard") or 0)}
+
+
+def engage(seconds: Optional[float] = None, path: Optional[str] = None, now: Optional[float] = None) -> float:
+    """Open (or extend) the engaged window. Returns its end."""
+    now = time.time() if now is None else now
+    until = now + float(seconds if seconds is not None else window(now, path)["keepalive_s"])
+    mark(path, listen_until=until)
+    return until
+
+
+def disengage(path: Optional[str] = None) -> None:
+    mark(path, listen_until=0)
+
+
+# THE EAR CAN BE OFF FOR ANY REASON (dp, 2026-10-01): "it should be resilient to audio being offline for
+# any number of reasons - mute, bt disconnect, power off, or just me not being there. that's part of the
+# world and its uncertain nature." So the ear's state is itself a sensed fact, with the cause when one is
+# known, and "could not listen" is never presented as "heard nothing".
+MUTE_MAX_MIN = 240          # a forgotten mute must not leave the being deaf for a day
+
+
+def mute(minutes: float, by: str = "", path: Optional[str] = None) -> float:
+    """Stop transcribing for `minutes` (capped); the being is told who and until when. Returns the end."""
+    until = time.time() + max(0.0, min(float(minutes), MUTE_MAX_MIN)) * 60
+    mark(path, muted_until=until, muted_by=by)
+    return until
+
+
+def unmute(path: Optional[str] = None) -> None:
+    mark(path, muted_until=0, muted_by="")
+
+
+def ear_state(ok: bool, words, win: dict, device_connected: Optional[bool] = None) -> tuple:
+    """(hearing words?, reason in words, reason key). The first known cause wins, most physical first."""
+    if device_connected is False:
+        return False, "the headset is not connected", "device"
+    if not ok:
+        return False, "no sound is reaching the mic (the audio stream is down)", "stream"
+    if str(words or "").startswith("unavailable"):
+        return False, "word recognition is not available", "recognizer"
+    m = (win or {}).get("muted")
+    if m:
+        return False, (f"muted by {m.get('by') or 'someone'} until "
+                       f"{time.strftime('%H:%M', time.localtime(m['until']))}"), "muted"
+    if not (win or {}).get("listening"):
+        return False, "it only listens in the minutes after you speak", "window"
+    if (win or {}).get("wake"):
+        if (win or {}).get("engaged"):
+            return True, "open since someone said your name", "engaged"
+        return True, (f"listening for your name ('hey {(win or {}).get('wake_say') or WAKE_SAY}'); other speech nearby is not given to you as "
+                      "words"), "wake"
+    return True, ("always open" if (win or {}).get("always") else "open since you spoke"), \
+        ("always" if (win or {}).get("always") else "window")
+
+
+def note_ear(hearing: bool, reason: str, key: str, path: Optional[str] = None,
+             now: Optional[float] = None) -> Optional[dict]:
+    """Append a line to ear.jsonl when the ear's state CHANGES (by hearing + key). Fails open."""
+    path, now = path or EAR_LOG, time.time() if now is None else now
+    try:
+        last = ear_since(path)
+        if last and bool(last.get("hearing")) == bool(hearing) and last.get("key") == key:
+            return None
+        line = {"ts": round(now, 2), "hearing": bool(hearing), "key": key, "reason": reason}
+        with open(path, "a") as f:
+            f.write(json.dumps(line) + "\n")
+        return line
+    except Exception:
+        return None
+
+
+def ear_since(path: Optional[str] = None) -> Optional[dict]:
+    """The last ear transition (its ts is "since when"), or None."""
+    try:
+        with open(path or EAR_LOG, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 4096))
+            lines = f.read().decode(errors="replace").splitlines()
+        return json.loads(lines[-1]) if lines else None
+    except Exception:
+        return None
 
 
 def mark(path: Optional[str] = None, **fields) -> None:
@@ -109,23 +265,57 @@ class Segmenter:
 class Transcriber(threading.Thread):
     """Turns queued utterances into heard.jsonl lines. Loads whisper on first use; fails open."""
 
-    def __init__(self, source: str, heard_path: Optional[str] = None, model_name: str = "base.en"):
+    def __init__(self, source: str, heard_path: Optional[str] = None, model_name: Optional[str] = None):
         super().__init__(daemon=True)
         self.q: "queue.Queue[bytes]" = queue.Queue(maxsize=8)
-        self.source, self.heard_path, self.model_name = source, heard_path or HEARD_PATH, model_name
+        self.source, self.heard_path = source, heard_path or HEARD_PATH
+        self.model_name = model_name or MODEL_NAME
         self.model = None
+        self._last_use = 0.0          # last transcription, for UNLOAD_IDLE_S
         self.status = "idle"          # idle | loading | ready | unavailable: <why>
         self.running = True
+        self.backlog_drops = 0        # utterances dropped because transcription fell behind (counted, logged)
 
-    def submit(self, audio: bytes) -> bool:
+    def submit(self, audio: bytes, ended_at: Optional[float] = None) -> bool:
+        """Queue one utterance. `ended_at` is when the segmenter closed it (the person stopped speaking):
+        the start of the latency the compiled-transducers arc's Track A measures (end of speech -> kept words)."""
         try:
-            self.q.put_nowait(audio)
+            self.q.put_nowait((audio, time.time() if ended_at is None else float(ended_at)))
             return True
         except queue.Full:
-            return False              # a backlog means we are behind; drop rather than lag forever
+            # a backlog means we are behind; drop rather than lag forever, but never silently
+            self.backlog_drops += 1
+            _append(UNHEARD_PATH, {"ts": round(time.time(), 2), "why": "backlog", "seconds":
+                                   round(len(audio) / 2 / RATE, 1), "source": self.source})
+            return False
 
     def _load(self):
         self.status = "loading"
+        if BACKEND == "mlx":
+            # Apple silicon (McNugget, 2026-10-17): the same whisper model through MLX on the GPU. Measured there:
+            # base.en ~0.1 s per short phrase warm. Its segments carry no_speech_prob / avg_logprob like torch's.
+            # IT DECODES IN THIS PROCESS, holding the GIL the capture reader needs: in a room with music it starved
+            # the reader on McNugget (2026-10-24, see ear.py). For a live ear prefer whispercpp (its own process).
+            try:
+                import numpy as np
+                import mlx_whisper
+                repo = self.model_name if "/" in self.model_name else f"mlx-community/whisper-{self.model_name}-mlx"
+                mlx_whisper.transcribe(np.zeros(RATE // 2, np.float32), path_or_hf_repo=repo, language="en")
+                self.model, self._fp16, self.status = repo, True, "ready"
+            except Exception as e:
+                self.model = None
+                self.status = f"unavailable: {type(e).__name__}: {e}"[:160]
+            return
+        if BACKEND == "whispercpp":
+            try:
+                from sage.embodiment.whispercpp import WhisperCpp
+                server = WhisperCpp(self.model_name)
+                server.start()
+                self.model, self._fp16, self.status = server, False, "ready"
+            except Exception as e:
+                self.model = None
+                self.status = f"unavailable: {type(e).__name__}: {e}"[:160]
+            return
         try:
             import torch
             import whisper
@@ -138,36 +328,188 @@ class Transcriber(threading.Thread):
             self.status = f"unavailable: {type(e).__name__}: {e}"[:160]
 
     def transcribe(self, audio: bytes) -> Optional[dict]:
+        if BACKEND == "whispercpp":
+            return judge_segments(self.model.segments(audio), seconds=round(len(audio) / 2 / RATE, 1),
+                                  source=self.source)
         import numpy as np
         a = np.frombuffer(audio, np.int16).astype(np.float32) / 32768.0
+        if BACKEND == "mlx":
+            import mlx_whisper
+            r = mlx_whisper.transcribe(a, path_or_hf_repo=self.model, language="en", condition_on_previous_text=False)
+            return judge_segments(r.get("segments") or [], seconds=round(len(a) / RATE, 1), source=self.source)
         r = self.model.transcribe(a, fp16=self._fp16, language="en", condition_on_previous_text=False)
-        segs = r.get("segments") or []
-        keep = [s for s in segs if s.get("no_speech_prob", 0) < NO_SPEECH_MAX
-                and s.get("avg_logprob", 0) > LOGPROB_MIN]
-        text = " ".join(s.get("text", "").strip() for s in keep).strip()
-        if not text:
-            return None
-        return {"ts": round(time.time(), 2), "text": text, "seconds": round(len(a) / RATE, 1),
-                "source": self.source}
+        return judge_segments(r.get("segments") or [], seconds=round(len(a) / RATE, 1), source=self.source)
+
+    def unload_if_idle(self, now: Optional[float] = None) -> bool:
+        """Free whisper after UNLOAD_IDLE_S with nothing to transcribe (0 = never). The next utterance
+        reloads it (2.3 s on Sprout for base.en); the loss is that much latency on the first words, never words."""
+        now = time.time() if now is None else now
+        if not UNLOAD_IDLE_S or self.model is None or now - self._last_use < UNLOAD_IDLE_S:
+            return False
+        if BACKEND == "whispercpp":
+            # its server process IS the memory: stopping it frees all of it. Never touch torch here; the point
+            # of this backend is an ear without it (and a body that has no torch at all).
+            self.model.stop()
+            self.model = None
+            self.status = "idle"
+            return True
+        self.model = None
+        self.status = "idle"
+        if BACKEND == "mlx":
+            try:   # mlx_whisper keeps the loaded model in its ModelHolder; drop it and MLX's buffer cache
+                from mlx_whisper.transcribe import ModelHolder
+                import mlx.core as mx
+                ModelHolder.model, ModelHolder.model_path = None, None
+                mx.clear_cache()
+            except Exception:
+                pass
+            return True
+        try:
+            import gc
+            gc.collect()
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+        return True
 
     def run(self):
         while self.running:
             try:
-                audio = self.q.get(timeout=1.0)
+                item = self.q.get(timeout=1.0)
             except queue.Empty:
+                self.unload_if_idle()
                 continue
+            audio, ended_at = item if isinstance(item, tuple) else (item, None)
             if self.model is None and not self.status.startswith("unavailable"):
                 self._load()
             if self.model is None:
                 continue
-            try:
-                rec = self.transcribe(audio)
-            except Exception:
-                rec = None
-            if rec:
-                os.makedirs(os.path.dirname(self.heard_path), exist_ok=True)
-                with open(self.heard_path, "a") as f:
-                    f.write(json.dumps(rec) + "\n")
+            self._last_use = time.time()
+            self._handle(audio, ended_at)
+
+    def _handle(self, audio: bytes, ended_at: Optional[float] = None) -> None:
+        # TIMING BESIDE THE WORDS (compiled-transducers arc, Track A baseline): when the utterance ended, how long
+        # it waited in the queue, and how long whisper took. Measurement only; nothing about what is kept changes.
+        t0 = time.time()
+        timing = {"asr_s": None}
+        if ended_at is not None:
+            timing.update({"t_end": round(float(ended_at), 2), "queue_s": round(t0 - float(ended_at), 3)})
+        try:
+            rec = self.transcribe(audio)
+            timing["asr_s"] = round(time.time() - t0, 3)
+        except Exception as e:
+            # A TRANSCRIBER FAILURE IS NOT SILENCE (GPT on #325): measured, never shown as speech. The error's
+            # class only, never its text (it can carry paths or audio-derived content).
+            self.transcribe_errors = getattr(self, "transcribe_errors", 0) + 1
+            _append(UNHEARD_PATH, {"ts": round(time.time(), 2), "why": "transcribe_error",
+                                   "error": type(e).__name__, "seconds": round(len(audio) / 2 / RATE, 1),
+                                   "source": self.source, **timing})
+            return
+        self._route(rec, timing)
+
+    def _route(self, rec: Optional[dict], timing: dict, now: Optional[float] = None) -> str:
+        """Where a transcription goes. Returns 'heard' | 'woke' | 'overheard' | 'unheard' (for tests and logs).
+
+        Outside wake mode: kept words are heard, as before. In wake mode: engaged -> heard and the window is
+        extended ("bye Sprout" closes it); the name -> the window opens (chime), and the words AFTER the name
+        are this utterance's turn; anything else -> only the fact of speech nearby, never its words."""
+        now = time.time() if now is None else now
+        if not rec:
+            return "none"
+        if not rec.get("text"):
+            _append(UNHEARD_PATH, dict(rec, why="no kept words", **timing))
+            return "unheard"
+        win = window(now)
+        if not win.get("wake"):
+            _append(self.heard_path, dict(rec, **timing))
+            return "heard"
+        text = rec["text"]
+        if win.get("engaged"):
+            _append(self.heard_path, dict(rec, **timing))
+            if says_goodbye(text):
+                disengage()
+            else:
+                engage(now=now)
+            return "heard"
+        named, rest = wake_match(text)
+        if named:
+            engage(now=now)
+            chime()
+            if rest:
+                _append(self.heard_path, dict(rec, text=rest, by_name=True, **timing))
+            return "woke"
+        # Not addressed: the fact, not the words (other people's speech, a TV, a news reel).
+        _append(UNHEARD_PATH, {"ts": rec.get("ts"), "why": "not addressed", "seconds": rec.get("seconds"),
+                               "source": rec.get("source"), **timing})
+        mark(last_overheard=round(now, 2))
+        return "overheard"
+
+
+CHIME_PATH = os.path.join(BODY_DIR, "chime.wav")
+
+
+def chime() -> None:
+    """A short, soft two-note chime: the engaged window opened. Fire-and-forget, never fatal. The ear is marked
+    speaking for its length so it does not hear itself."""
+    try:
+        if not os.path.exists(CHIME_PATH):
+            import math
+            import struct
+            import wave
+            frames = b""
+            for f, dur in ((880.0, 0.09), (1320.0, 0.12)):
+                n = int(RATE * dur)
+                for i in range(n):
+                    env = min(1.0, i / 400, (n - i) / 400)          # no clicks
+                    frames += struct.pack("<h", int(0.18 * 32767 * env * math.sin(2 * math.pi * f * i / RATE)))
+            os.makedirs(os.path.dirname(CHIME_PATH), exist_ok=True)
+            with wave.open(CHIME_PATH, "wb") as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(frames)
+        mark(speaking_until=time.time() + 0.6)
+        import subprocess
+        from sage.embodiment.platform_av import play_cmd
+        subprocess.Popen(play_cmd(CHIME_PATH), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass   # measured, never shown as speech
+
+
+def _append(path: str, rec: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except Exception:
+        pass
+
+
+def judge_segments(segs: list, seconds: float = 0.0, source: str = "", now: Optional[float] = None) -> dict:
+    """Whisper's segments -> one heard record. NOTHING IS DROPPED SILENTLY (dp, 2026-10-01: "voice transcription
+    now cuts off what i said"). A segment is still left out of the words when it is probably silence
+    (no_speech_prob >= NO_SPEECH_MAX, where whisper hallucinates stock phrases) or unclear speech
+    (avg_logprob <= LOGPROB_MIN). But each left-out segment is kept in `dropped` with its reason, confidences
+    and place, and `unclear` says where UNCLEAR speech was left out (head / middle / tail), so the room can
+    say "the rest was unclear" instead of ending the sentence where the transcriber gave up."""
+    kept_i, dropped = [], []
+    for i, s in enumerate(segs):
+        ns, lp = float(s.get("no_speech_prob", 0) or 0), float(s.get("avg_logprob", 0) or 0)
+        if ns < NO_SPEECH_MAX and lp > LOGPROB_MIN:
+            kept_i.append(i)
+        else:
+            dropped.append({"i": i, "text": str(s.get("text", "")).strip()[:200], "no_speech_prob": round(ns, 3),
+                            "avg_logprob": round(lp, 3), "why": "silence" if ns >= NO_SPEECH_MAX else "unclear"})
+    text = " ".join(str(segs[i].get("text", "")).strip() for i in kept_i).strip()
+    rec = {"ts": round(time.time() if now is None else now, 2), "text": text, "seconds": seconds, "source": source}
+    if dropped:
+        for d in dropped:
+            d["at"] = ("head" if kept_i and d["i"] < kept_i[0] else "tail" if kept_i and d["i"] > kept_i[-1]
+                       else "middle" if kept_i else "all")
+        rec["dropped"] = dropped
+        places = [d["at"] for d in dropped if d["why"] == "unclear" and d["at"] != "all"]
+        if places:
+            rec["unclear"] = "tail" if "tail" in places else "head" if "head" in places else "middle"
+    return rec
 
 
 def since(ts: float, path: Optional[str] = None, limit: int = 10) -> list:
@@ -185,3 +527,24 @@ def since(ts: float, path: Optional[str] = None, limit: int = 10) -> list:
     except FileNotFoundError:
         return []
     return out[-limit:]
+
+
+def main(argv=None) -> int:
+    """sprout's ear, by hand:  python -m sage.embodiment.listening mute 45 [--by dp]  |  on  |  status"""
+    import argparse
+    ap = argparse.ArgumentParser(prog="python -m sage.embodiment.listening")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    m = sub.add_parser("mute"); m.add_argument("minutes", type=float); m.add_argument("--by", default="")
+    sub.add_parser("on"); sub.add_parser("status")
+    a = ap.parse_args(argv)
+    if a.cmd == "mute":
+        until = mute(a.minutes, a.by)
+        print(f"ear muted until {time.strftime('%H:%M', time.localtime(until))} (max {MUTE_MAX_MIN} min)")
+    elif a.cmd == "on":
+        unmute(); print("ear unmuted")
+    print(json.dumps({"window": window(), "since": ear_since()}, default=str))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

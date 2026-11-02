@@ -14,8 +14,30 @@ returns [] and the organ degrades gracefully to motion-only perception — visio
 naming, never a crash.
 """
 from __future__ import annotations
+import json
 import os
+import time
 import numpy as np
+
+# TRACK B BASELINE INSTRUMENT (compiled-transducers arc, explorations/2026-10-06-compiled-transducers-sensors-
+# effectors.md): is this organ bound by the TensorRT arithmetic or by the seams around it? Per-detect stage times
+# (perf_counter, ~microseconds of overhead), summarised every TIMING_EVERY detections into TIMING_PATH. Measurement
+# only: detections are unchanged.
+TIMING_PATH = os.path.expanduser(os.getenv("SAGE_DETECTOR_TIMING", "~/.sprout/detector_timing.jsonl"))
+TIMING_EVERY = 60
+TIMING_STAGES = ("prep", "gpu", "d2h", "post", "total")
+
+
+def timing_summary(rows: list) -> dict:
+    """p50/p95 milliseconds per stage over `rows` ({stage: seconds}), plus counts. Pure, for tests and the log."""
+    out = {"n": len(rows)}
+    for st in TIMING_STAGES:
+        xs = sorted(r[st] * 1000.0 for r in rows if r.get(st) is not None)
+        if xs:
+            q = lambda p: xs[min(len(xs) - 1, int(p * len(xs)))]
+            out[st] = {"p50_ms": round(q(.5), 2), "p95_ms": round(q(.95), 2)}
+    out["with_detections"] = sum(1 for r in rows if r.get("dets"))
+    return out
 
 def _best_engine() -> str:
     """Pick the engine the POWER BUDGET can sustain. Empirically (2026-07-20, dp at the rig),
@@ -96,6 +118,19 @@ class ObjectDetector:
         self._ready = False; self._failed = False
         self._ctx = None; self._in = None; self._out = None
         self._in_name = self._out_name = None; self._stream = None; self._torch = None
+        self._timing: list = []
+
+    def _note_timing(self, row: dict) -> None:
+        self._timing.append(row)
+        if len(self._timing) >= TIMING_EVERY:
+            rows, self._timing = self._timing, []
+            try:
+                os.makedirs(os.path.dirname(TIMING_PATH), exist_ok=True)
+                with open(TIMING_PATH, "a") as f:
+                    f.write(json.dumps({"ts": round(time.time(), 2), "engine": os.path.basename(self.engine_path),
+                                        **timing_summary(rows)}) + "\n")
+            except Exception:
+                pass      # an instrument never breaks the organ
 
     def _load(self):
         if self._ready or self._failed:
@@ -135,15 +170,27 @@ class ObjectDetector:
             return []
         torch = self._torch
         H, W = frame_bgr.shape[:2]
+        t0 = time.perf_counter()
         chw, s, px, py = _letterbox(frame_bgr, IMGSZ)
+        t1 = time.perf_counter()
         try:
             self._in.copy_(torch.from_numpy(chw).unsqueeze(0))
             self._ctx.execute_async_v3(self._stream.cuda_stream)
             self._stream.synchronize()
+            t2 = time.perf_counter()
             out = self._out.cpu().numpy()[0]                     # [84, 8400]
+            t3 = time.perf_counter()
         except Exception as e:
             print(f"[detector] inference error: {type(e).__name__}: {e}", flush=True)
             return []
+        dets = self._post(out, s, px, py, W, H)
+        t4 = time.perf_counter()
+        self._note_timing({"prep": t1 - t0, "gpu": t2 - t1, "d2h": t3 - t2, "post": t4 - t3,
+                           "total": t4 - t0, "dets": len(dets)})
+        return dets
+
+    def _post(self, out, s, px, py, W, H) -> list[dict]:
+        """Raw engine output -> detections in frame pixel coords (moved out of detect() unchanged, to time it)."""
         out = out.T                                              # [8400, 84]
         cls_scores = out[:, 4:]
         cls = cls_scores.argmax(1); conf = cls_scores[np.arange(len(cls)), cls]

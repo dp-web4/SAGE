@@ -5,7 +5,7 @@
 
 set -e
 
-SAGE_DIR="/mnt/c/projects/ai-agents/SAGE"
+SAGE_DIR="${SAGE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 PYTHONPATH="$SAGE_DIR"
 export PYTHONPATH
 PYTHON="python3"

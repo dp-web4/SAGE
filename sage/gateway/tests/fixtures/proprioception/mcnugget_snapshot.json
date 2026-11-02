@@ -1,0 +1,100 @@
+{
+ "schema": "sage.body/1",
+ "sampled_at": 1791350275.932,
+ "host": "McNugget",
+ "platform": {
+  "os": "macos",
+  "kind": "macos",
+  "detail": "macOS 26.5.1 arm64"
+ },
+ "memory_topology": "unified",
+ "memory_topology_why": "the GPU and CPU share one memory pool",
+ "gpus": [
+  {
+   "vendor": "apple",
+   "name": "Apple M4",
+   "topology": "unified",
+   "utilization_pct": {
+    "value": 99.0,
+    "source": "ioreg PerformanceStatistics"
+   },
+   "memory_used_bytes": {
+    "value": null,
+    "unavailable": "unified memory: the GPU has no separate pool (see memory)"
+   },
+   "memory_total_bytes": {
+    "value": null,
+    "unavailable": "unified memory: the GPU has no separate pool (see memory)"
+   },
+   "temperature_c": {
+    "value": null,
+    "unavailable": "macOS exposes GPU temperature only to root (powermetrics)"
+   },
+   "shared_memory_used_bytes": {
+    "value": 8992276480,
+    "source": "ioreg In use system memory"
+   }
+  }
+ ],
+ "cpu": {
+  "cores": 10,
+  "model": "Apple M4",
+  "utilization_pct": {
+   "value": 14.0,
+   "source": "psutil over 0.5 s"
+  },
+  "load_1m": {
+   "value": 3.6,
+   "source": "getloadavg"
+  },
+  "load_5m": {
+   "value": 2.02,
+   "source": "getloadavg"
+  },
+  "temperature_c": {
+   "value": null,
+   "unavailable": "macOS exposes CPU temperature only to root (powermetrics) or private SMC APIs"
+  }
+ },
+ "memory": {
+  "pool": "unified",
+  "scope": "machine",
+  "total_bytes": {
+   "value": 17179869184,
+   "source": "sysctl hw.memsize"
+  },
+  "used_bytes": {
+   "value": 14283653120,
+   "source": "vm_stat (app + wired + compressed)"
+  },
+  "swap_used_bytes": {
+   "value": null,
+   "unavailable": "not read on macOS"
+  }
+ },
+ "disks": [
+  {
+   "labels": [
+    "sage",
+    "models"
+   ],
+   "path": "/Users/dennispalatov/repos/SAGE",
+   "mount": null,
+   "total_bytes": {
+    "value": 245107195904,
+    "source": "statvfs"
+   },
+   "free_bytes": {
+    "value": 75686699008,
+    "source": "statvfs"
+   },
+   "used_pct": {
+    "value": 69.1,
+    "source": "statvfs"
+   }
+  }
+ ],
+ "sample_ms": 691.1,
+ "cpu_window_ms": 500,
+ "line": "GPU 99% \u00b7 8.4 GiB of shared RAM | CPU 14% \u00b7 RAM 13.3/16.0 GiB (one pool, GPU included) | disk 69% (70 GiB free) | memory: unified | unavailable: GPU temp: macOS exposes GPU temperature only to root (powermetrics); CPU temp: macOS exposes CPU temperature only to root (powermetrics) or private SMC APIs"
+}

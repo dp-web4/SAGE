@@ -1,0 +1,134 @@
+{
+ "schema": "sage.body/1",
+ "sampled_at": 1791350220.633,
+ "host": "tl-Precision-3650-Tower",
+ "platform": {
+  "os": "linux",
+  "kind": "linux",
+  "detail": "7.0.0-28-generic"
+ },
+ "memory_topology": "mixed",
+ "memory_topology_why": "GPUs of different topologies: intel unified, amd discrete",
+ "gpus": [
+  {
+   "vendor": "intel",
+   "name": "Intel integrated GPU at 00:02.0",
+   "topology": "unified",
+   "utilization_pct": {
+    "value": null,
+    "unavailable": "Intel iGPU: no unprivileged busy counter (intel_gpu_top needs root)"
+   },
+   "memory_used_bytes": {
+    "value": null,
+    "unavailable": "unified memory: the GPU has no separate pool (see memory)"
+   },
+   "memory_total_bytes": {
+    "value": null,
+    "unavailable": "unified memory: the GPU has no separate pool (see memory)"
+   },
+   "temperature_c": {
+    "value": null,
+    "unavailable": "no iGPU temperature sensor in sysfs"
+   },
+   "shared_memory_used_bytes": {
+    "value": null,
+    "unavailable": "not exposed without root"
+   }
+  },
+  {
+   "vendor": "amd",
+   "name": "AMD GPU at 03:00.0",
+   "topology": "discrete",
+   "utilization_pct": {
+    "value": 0.0,
+    "source": "amdgpu sysfs card2"
+   },
+   "memory_used_bytes": {
+    "value": 919990272,
+    "source": "amdgpu sysfs card2"
+   },
+   "memory_total_bytes": {
+    "value": 8573157376,
+    "source": "amdgpu sysfs card2"
+   },
+   "temperature_c": {
+    "value": 35.0,
+    "source": "amdgpu sysfs card2 (edge)"
+   },
+   "shared_memory_used_bytes": {
+    "value": 63545344,
+    "source": "amdgpu sysfs card2 (GTT: system RAM the GPU maps, inside memory.used)"
+   },
+   "temperatures": {
+    "edge": 35.0,
+    "junction": 35.0,
+    "mem": 0.0
+   }
+  }
+ ],
+ "cpu": {
+  "cores": 16,
+  "model": "11th Gen Intel(R) Core(TM) i7-11700 @ 2.50GHz",
+  "utilization_pct": {
+   "value": 2.8,
+   "source": "/proc/stat over 0.5 s"
+  },
+  "load_1m": {
+   "value": 0.46,
+   "source": "getloadavg"
+  },
+  "load_5m": {
+   "value": 0.43,
+   "source": "getloadavg"
+  },
+  "temperature_c": {
+   "value": 39.0,
+   "source": "thermal_zone x86_pkg_temp"
+  }
+ },
+ "memory": {
+  "pool": "system",
+  "scope": "machine",
+  "total_bytes": {
+   "value": 32823459840,
+   "source": "/proc/meminfo MemTotal"
+  },
+  "used_bytes": {
+   "value": 7100006400,
+   "source": "/proc/meminfo MemTotal-MemAvailable"
+  },
+  "swap_used_bytes": {
+   "value": 1506156544,
+   "source": "/proc/meminfo"
+  },
+  "swap_total_bytes": {
+   "value": 8589930496,
+   "source": "/proc/meminfo"
+  }
+ },
+ "disks": [
+  {
+   "labels": [
+    "sage",
+    "models"
+   ],
+   "path": "/home/tl/ai-agents/SAGE",
+   "mount": "/",
+   "total_bytes": {
+    "value": 501809635328,
+    "source": "statvfs"
+   },
+   "free_bytes": {
+    "value": 331583070208,
+    "source": "statvfs"
+   },
+   "used_pct": {
+    "value": 30.4,
+    "source": "statvfs"
+   }
+  }
+ ],
+ "sample_ms": 508.9,
+ "cpu_window_ms": 500,
+ "line": "Intel GPU: no readings; AMD GPU 0% \u00b7 VRAM 0.9/8.0 GiB \u00b7 35\u00b0C | CPU 3% \u00b7 39\u00b0C \u00b7 RAM 6.6/30.6 GiB | disk 30% (309 GiB free) | memory: mixed"
+}

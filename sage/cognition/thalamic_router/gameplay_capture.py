@@ -478,6 +478,7 @@ def _discover_trace(game_family: str, game_id: str) -> Optional[Path]:
         Path(os.environ.get("ARC_SAGE_DIR", "")),
         Path("/mnt/c/exe/projects/ai-agents/ARC-SAGE"),
         Path("/mnt/c/projects/ai-agents/arc-sage"),
+        Path.home() / "ai-agents" / "arc-sage",
         Path.home() / "ai-workspace" / "ARC-SAGE",
         Path.home() / "repos" / "ARC-SAGE",
     ]:
@@ -552,7 +553,9 @@ def main() -> int:
             Path(os.environ.get("ARC_SAGE_DIR", "")),
             Path("/mnt/c/exe/projects/ai-agents/ARC-SAGE"),
             Path("/mnt/c/projects/ai-agents/arc-sage"),
+            Path.home() / "ai-agents" / "arc-sage",
             Path("/mnt/c/projects/ai-agents/shared-context/arc-agi-3"),
+            Path.home() / "ai-agents" / "shared-context" / "arc-agi-3",
             Path.home() / "ai-workspace" / "ARC-SAGE",
             Path.home() / "repos" / "ARC-SAGE",
         ]:

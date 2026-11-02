@@ -12,5 +12,10 @@
     "stop_sequences": ["[Claude]:", "Claude:", "[hub]:"],
     "echo_prefixes": ["[{self_name}]:", "{self_name}:", "[hub]:", "hub:", "[SAGE]:", "SAGE:"],
     "bilateral_speakers": ["Claude", "System", "User", "Human"],
-    "notes": "IBM Granite 4.0-H-Tiny (Mamba-2/transformer hybrid MoE, ~7B total / ~1B active) — HUB's AMD-GPU (Radeon Pro W5500 via Mesa Dozen/Vulkan) raising model. bilateral_prone=true: Session 5 leaked a tutor turn + a re-labeled hub turn ('[Claude]:... [hub]:') inside one response; stop_sequences halt the role-play, echo_prefixes strip self-labels. Conservative tier/tools until proven. Was falling back to default.json (empty stop_sequences) before this config existed."
+    "variants": {
+        "h-tiny": {
+            "num_ctx": 16384
+        }
+    },
+    "notes": "IBM Granite 4.0-H-Tiny (Mamba-2/transformer hybrid MoE, ~7B total / ~1B active) — HUB's AMD-GPU (Radeon Pro W5500 via Mesa Dozen/Vulkan) raising model. bilateral_prone=true: Session 5 leaked a tutor turn + a re-labeled hub turn ('[Claude]:... [hub]:') inside one response; stop_sequences halt the role-play, echo_prefixes strip self-labels. Conservative tier/tools until proven. Was falling back to default.json (empty stop_sequences) before this config existed. WHY variants.h-tiny.num_ctx 16384 (HUB, 2026-10-19): HUB serves this model from llama-server, not ollama, so the window is the server's `-c` and nothing the harness sends changes it. sage-llm.service has run `-c 16384` since 2026-10-12 (GET :8080/props n_ctx 16384), raised because a 9,873-token explore prompt overflowed 8192. This file declared no window, so the harness kept assuming the 8192 floor. After #458 (2026-10-15, never send a prompt the window cannot hold), every hub-being explore turn from 10-16 to 10-19 (182 beats) ended at step 0 with window_full cause=preflight, estimated_prompt ~10.7k against num_ctx 8192. The being called no tools, and the server would have held the prompt. Declaring the server's real window removes that phantom limit. If the `-c` changes, change this number with it."
 }

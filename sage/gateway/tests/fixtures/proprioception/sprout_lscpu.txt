@@ -1,0 +1,5 @@
+Architecture:                         aarch64
+CPU(s):                               6
+Vendor ID:                            ARM
+Model name:                           Cortex-A78AE
+Model:                                1

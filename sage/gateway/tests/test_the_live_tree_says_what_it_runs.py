@@ -108,3 +108,26 @@ def test_main_prints_the_alarm_every_beat():
     main = [n for n in ast.parse(src).body if getattr(n, "name", "") == "main"][0]
     seg = ast.get_source_segment(src, main)
     assert "harness_alarm(_harness)" in seg and "file=sys.stderr" in seg[seg.index("harness_alarm(_harness)"):][:200]
+
+
+def test_the_harness_revision_never_takes_the_index_lock(monkeypatch, tmp_path):
+    """status and diff refresh the index as a side effect, under .git/index.lock. If the beat's
+    timeout kills git mid-refresh the lock is left and every later git act in the checkout fails
+    (nomad, 2026-09-28 and 2026-09-29). Every git the harness revision starts must pass
+    --no-optional-locks, except the plumbing that never locks."""
+    import subprocess
+    from sage.gateway import heartbeat
+    seen = []
+    real = subprocess.run
+
+    def spy(cmd, *a, **k):
+        if cmd and cmd[0] == "git":
+            seen.append(tuple(cmd))
+        return real(cmd, *a, **k)
+
+    monkeypatch.setattr(subprocess, "run", spy)
+    root = __import__("pathlib").Path(heartbeat.__file__).resolve().parents[2]
+    heartbeat.harness_revision(str(root))
+    locking = [c for c in seen if any(v in c for v in ("status", "diff"))]
+    assert locking, "expected the revision to run git status/diff"
+    assert all(c[1] == "--no-optional-locks" for c in locking), locking

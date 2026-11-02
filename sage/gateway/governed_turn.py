@@ -18,6 +18,7 @@ id the daemon returned. A refused act is a first-class outcome, not an error.
 """
 from __future__ import annotations
 
+from sage.gateway.fleet_paths import forum_dir as _fleet_forum_dir
 import argparse
 import json
 import os
@@ -97,13 +98,16 @@ def review_task(view: dict, diff: str) -> str:
 
 
 def is_reasoning_model(model: str) -> bool:
-    """Models that only emit structured tool calls with `think` on (empero Qwen3.8
-    distills, R1-style). Measured on Sprout 2026-09-05: with thinking off, the first two
-    heartbeats narrated a summary with steps=0. The switch is the request's `think` field
-    (irp/plugins/ollama_irp.py:165); a `/no_think` prompt suffix never was one and is no longer sent."""
+    """Whether this model's turn runs with `think` on, by policy (ollama_irp.resolve_think): a
+    config's declared think_default, else the server's capability list, else thinking_supported.
+    dp 2026-10-30: think whenever that's an option. The name is historical: it began as "models
+    that only emit structured tool calls with think on" (empero Qwen3.8 distills, R1-style;
+    Sprout 2026-09-05, think off narrated a summary with steps=0). The switch is the request's
+    `think` field; a `/no_think` prompt suffix never was one and is no longer sent.
+    The probe uses ollama_irp's default host, the same server governed_turn's OllamaIRP chats with."""
     try:
-        from sage.irp.adapters.model_capabilities import load_capabilities
-        return load_capabilities(model).resolve_think(model)
+        from sage.irp.plugins.ollama_irp import resolve_think
+        return resolve_think(model)
     except Exception:
         return any(k in model.lower() for k in ("distill", "qwen3.8", "heretic", "r1"))
 
@@ -123,6 +127,25 @@ def resolve_num_ctx(model: str, floor: int) -> int:
         return floor
 
 
+def tuned_num_ctx(instance, resolved: int) -> int:
+    """The window this being runs with: its `num_ctx` parameter (being_params; the operator's
+    value or its own `tune`) when set, else the model config's. Never above the parameter's
+    ceiling, and with no declared ceiling never above what the model config resolved: a being
+    may shrink its window anywhere, but only a measured ceiling lets it grow one, because past
+    the VRAM fit ollama spills to CPU (legion, 40,960: 7%/93%) and every generate slows."""
+    try:
+        from sage.gateway import being_params
+        want = being_params.value(instance, "num_ctx")
+        if not want:
+            return resolved
+        _lo, hi = being_params.bounds(instance, "num_ctx")
+        return int(min(want, hi if hi else resolved))
+    except Exception as e:
+        print(f"[governed-turn] num_ctx parameter unreadable, using {resolved}: "
+              f"{type(e).__name__}: {e}", file=sys.stderr)
+        return resolved
+
+
 def needs_think_to_act(model: str) -> bool:
     """Narrower than is_reasoning_model: models that emit no tool calls at all with thinking
     off. The heretic acts with think off (Legion, 09-04), so it is NOT in this set; the empero
@@ -140,8 +163,11 @@ def acts_under_posture(model: str) -> bool:
     then the posture and the digest as a second tool turn, then reflect. The words are
     BEING_POSTURE.md verbatim either way; only the order of presentation is per model.
     qwen2.5:1.5b is deliberately not here: under a short prompt it emits the tool call as
-    text, so a different order would not move it (a parser question, Legion 09-05)."""
-    return not any(k in model.lower() for k in ("distill",))
+    text, so a different order would not move it (a parser question, Legion 09-05).
+    gemma4:e2b narrates under the posture (nomad-being, 2026-09-26..29: 0 explore tool calls in
+    100+ beats, replies "Resting." or "I am Gemma 4 ... How may I assist you?") while calling
+    tools natively in reflect every beat, where the ask is short and concrete."""
+    return not any(k in model.lower() for k in ("distill", "gemma4:e2b"))
 
 
 def instance_config(instance: Path) -> dict:
@@ -154,6 +180,18 @@ def instance_config(instance: Path) -> dict:
         return json.loads((Path(instance) / "instance.json").read_text())
     except Exception:
         return {}
+
+
+def trial_name(instance: Path | str) -> str | None:
+    """The live trial this being is under, from `instance.json` "trial", or None.
+
+    dp, 2026-10-03, after a trial's argument step put "Add a turn to the conversation with dp: 'I'm sorry I was
+    late. My car broke down…'" into his conversation looking like the being's own words: "in trial messages you
+    might want to include a note that it's a test message". While set, every turn the being writes and every
+    line it speaks carries {"trial": <name>} BESIDE its words (never in them, never in the audio), and so does
+    the beat record. Set it when a trial starts, remove it when it ends."""
+    v = instance_config(Path(instance)).get("trial")
+    return v.strip()[:80] if isinstance(v, str) and v.strip() else None
 
 
 def worktree_for(instance: Path | str) -> str | None:
@@ -199,9 +237,16 @@ def offered_tools(tools_arg, instance):
     from sage.gateway.being_gate_client import ollama_tools
     if tools_arg:
         return ollama_tools([t.strip() for t in tools_arg.split(",")])
-    if instance_config(instance).get("game_stepper"):
-        return None
-    return [t for t in ollama_tools() if t["function"]["name"] != "game"]
+    # THE CANONICAL TOOLSET (sage/gateway/toolset.py): every verb, availability said. This used
+    # to drop `game` where no stepper was set up; now `game` is offered with that reason instead.
+    from sage.gateway import toolset
+    try:
+        from sage.gateway import body as _body
+        reading = _body.reading()
+    except Exception:
+        reading = None
+    cfg = instance_config(instance)
+    return toolset.specs(toolset.unavailable(reading, worktree_for(instance), cfg), cfg=cfg)
 
 
 def build_client(member: str, instance: Path, model: str, workspace: str,
@@ -224,16 +269,19 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
     # the seat's ARC stepper, the same way and for the same reason: one read, both halves.
     # Absent, `game` refuses at composition with "no game is set up on this seat".
     game_stepper = instance_config(instance).get("game_stepper") or None
+    # where `camera` gets a frame, the same way: one read, both halves ("cortex" or absent)
+    camera_source = instance_config(instance).get("camera_source") or None
     dispatcher = None if gate_only else HestiaF1aDispatcher(
         member, memory_root=str(instance), publish_fn=publish_fn,
         host_session_id=host_session_id, being_lct=being_lct_for(member, workspace),
         peer_aliases=instance_config(instance).get("peer_aliases") or None,
-        worktree=worktree, game_stepper=game_stepper)
+        worktree=worktree, game_stepper=game_stepper, camera_source=camera_source)
     client = BeingGateClient(member_id=member,
                              identity_path=str(instance / "identity.json"),
                              workspace=workspace, dispatcher=dispatcher,
                              host_session_id=host_session_id,
-                             worktree=worktree, game_stepper=game_stepper)
+                             worktree=worktree, game_stepper=game_stepper,
+                             camera_source=camera_source)
     # Reasoning models (empero Qwen3.8 distills etc.) only emit structured tool calls
     # with `think` on — off, they narrate a bracketed placeholder instead of acting
     # (measured on Sprout 2026-08-28 and again on the first governed turn, 2026-09-03:
@@ -245,6 +293,7 @@ def build_client(member: str, instance: Path, model: str, workspace: str,
     # (variants[size].num_ctx) gets it, else this caller value silently overrides its
     # Modelfile and a thinking model spends the whole window deliberating (Legion, 09-05).
     num_ctx = resolve_num_ctx(model, num_ctx)
+    num_ctx = tuned_num_ctx(instance, num_ctx)
     llm = OllamaIRP({"model_name": model, "temperature": temperature, "think": _reasoning,
                      "max_response_tokens": max_tokens, "timeout_seconds": 600,
                      "num_ctx": num_ctx})
@@ -264,7 +313,7 @@ def main(argv=None) -> int:
                     help="judge every intent by the law but execute nothing (allowed -> pending)")
     ap.add_argument("--system-file", help="system turn; default is the gateway seed")
     ap.add_argument("--workspace", default=None, help="gate workspace root (default: repo root)")
-    ap.add_argument("--forum-dir", default=os.path.expanduser("~/ai-workspace/shared-context/forum"))
+    ap.add_argument("--forum-dir", default=str(_fleet_forum_dir()))
     ap.add_argument("--max-steps", type=int, default=2)
     ap.add_argument("--no-escalate", action="store_true",
                     help="do not route refusals to the seat's auto session (default: route)")

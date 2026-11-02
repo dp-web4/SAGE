@@ -236,13 +236,15 @@ def test_one_malformed_window_costs_one_picture_not_all():
     assert imgs == (base64.b64encode(b"IMGb.jpg").decode(),) and len(caps) == 1
 
 
-def test_a_seat_without_a_stepper_is_not_offered_the_game(tmp_path):
+def test_a_seat_without_a_stepper_is_offered_the_game_and_told_why_it_cannot_play(tmp_path):
     import json
     from sage.gateway.governed_turn import offered_tools
     inst = tmp_path / "i"; inst.mkdir()
-    names = lambda ts: [t["function"]["name"] for t in ts]  # noqa: E731
-    assert "game" not in names(offered_tools(None, inst))
-    assert "pr_review" in names(offered_tools(None, inst)), "only the game is dropped"
-    assert set(names(offered_tools("game,witness", inst))) == {"game", "witness"}, "an explicit cut is honoured"
+    by_name = lambda ts: {t["function"]["name"]: t["function"]["description"] for t in ts}  # noqa: E731
+    d = by_name(offered_tools(None, inst))
+    assert "game" in d and "no game is set up" in d["game"], "offered, with the reason"
+    assert "pr_review" in d
+    assert set(by_name(offered_tools("game,witness", inst))) == {"game", "witness"}, "an explicit cut is honoured"
     (inst / "instance.json").write_text(json.dumps({"game_stepper": "/seat/stepper.py"}))
-    assert offered_tools(None, inst) is None, "with a stepper: the whole registry, as before"
+    d = by_name(offered_tools(None, inst))
+    assert "CANNOT WORK" not in d["game"], "with a stepper the game carries its full description"

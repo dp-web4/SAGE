@@ -197,12 +197,41 @@ def test_the_being_can_retire_its_own_note_and_only_its_own():
     assert not (root / "notes" / "hestia-policy-daemon-unreachable.md").exists()
 
     for bad, why in ((("notes/from-the-seat.md", "no"), "said TO you"),   # refused by _safe_path
-                     (("journal.md", "no"), "not directly inside"),
+                     # journal.md and todo.md retire now (test_home_records_start_fresh.py); any
+                     # other home-root file is still out of bounds
+                     (("account.json", "no"), "not directly inside"),
                      (("notes/nope.md", "no"), "nothing to retire")):
         env = d(BeingIntent("retire_note", {"path": bad[0], "reason": bad[1]}), allow)
         assert not env.ok and why in env.error, (bad, env.error)
     env = d(BeingIntent("retire_note", {"path": "notes/x.md"}), allow)
     assert not env.ok and "reason" in env.error, "a retirement says what it knows now"
+
+
+def test_a_second_retire_of_the_same_name_on_the_same_day_keeps_both():
+    """Measured 2026-10-07 on cbp-being: scratch/validate-overfitting.py was retired at 04:47Z,
+    rewritten under the same name, and retired again at 07:50Z. Both landed on
+    validate-overfitting.retired-2026-10-07.py, and the second write replaced the first, so the
+    04:47Z copy was gone while the receipt said ok. 'Nothing is destroyed' has to hold per call."""
+    from sage.gateway.reference_f1a import ReferenceF1aDispatcher, BeingIntent
+    root = Path(tempfile.mkdtemp(prefix="retire-twice-"))
+    (root / "scratch").mkdir()
+    d = ReferenceF1aDispatcher(memory_root=root)
+    allow = SimpleNamespace(decision="allow", rule="", reason="ok", innate=False, stage="local-law")
+    results = []
+    for body in ("first version\n", "second version\n", "third version\n"):
+        (root / "scratch" / "v.py").write_text(body)
+        env = d(BeingIntent("retire_note", {"path": "scratch/v.py", "reason": "rewritten"}), allow)
+        assert env.ok, env.error
+        results.append(env.result)
+    kept = sorted((root / "scratch").glob("v.retired-*"))
+    assert len(kept) == 3, [k.name for k in kept]
+    texts = " ".join(k.read_text() for k in kept)
+    for body in ("first version", "second version", "third version"):
+        assert body in texts, "every retired copy survives"
+    names = {k.name for k in kept}
+    for r in results:
+        assert r.split(" -> ")[1] in names, "the receipt names the file it actually wrote"
+    assert all(k.suffix == ".py" for k in kept), "the extension stays last"
 
 
 def test_the_unit_file_is_exported_from_systemds_own_answer():
@@ -380,3 +409,23 @@ def test_a_review_request_says_whose_ask_it_is():
     assert "not an appeal of yours" in out and "nothing is required of you" in out
     assert "memory_read on hestia://escalation/ea83eb0e2af20e81" in out
     assert "#corroborate-or-dissent" not in out, "the pointer handed back is the lookup key"
+
+
+def test_service_notes_can_be_turned_off_per_instance_and_the_stale_copies_retire():
+    """dp, 2026-10-30: present the right affordances, not guardrails. On cbp-being the journal tail,
+    arriving every beat since 10-15, coincided with the daily share of hestia-subject acts going from
+    1-7% to 50-93%. `service_notes: false` stops both exports and removes the beat-written copies,
+    and only those: a note the being wrote under the same name stays."""
+    from sage.gateway.heartbeat import service_notes_for, retire_service_notes
+    assert service_notes_for(None) and service_notes_for({}) and service_notes_for({"service_notes": True})
+    assert service_notes_for({"service_notes": "no"}), "only an explicit false turns it off"
+    assert not service_notes_for({"service_notes": False})
+    inst = Path(tempfile.mkdtemp(prefix="svcoff-"))
+    (inst / "notes").mkdir()
+    (inst / "notes" / "hestia-recent.log").write_text("# hestia.service: the last 25 journal lines, exported at x\n")
+    (inst / "notes" / "hestia-unit.txt").write_text("# hestia.service as systemd resolves it, exported at x\n")
+    assert sorted(retire_service_notes(inst)) == ["hestia-recent.log", "hestia-unit.txt"]
+    assert not (inst / "notes" / "hestia-recent.log").exists()
+    (inst / "notes" / "hestia-recent.log").write_text("my own notes about the daemon\n")
+    assert retire_service_notes(inst) == []
+    assert (inst / "notes" / "hestia-recent.log").read_text() == "my own notes about the daemon\n"
