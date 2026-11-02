@@ -3338,8 +3338,8 @@ def same_path_in_reach(p, reach, rule="union") -> list:
         if target == rr or target.startswith(rr + os.sep):
             continue                      # already inside this grant: not a copy, it is reach
         cand = os.path.realpath(os.path.join(rr, target[len(parent.rstrip(os.sep)) + 1:]))
-        if (cand != target and cand.startswith(rr + os.sep) and os.path.exists(cand)
-                and "r" in reach_modes_at(cand, reach, rule)):
+        if (cand != target and cand.startswith(rr + os.sep)
+                and "r" in reach_modes_at(cand, reach, rule) and os.path.exists(cand)):
             found.add((cand, rr))
     return sorted(found)
 
