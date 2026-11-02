@@ -332,6 +332,26 @@ def test_temp_symlink_swapped_after_preflight_cannot_redirect_retirement(tmp_pat
     assert not result[0], result
 
 
+@pytest.mark.parametrize("stage", ["todo_tmp", "settled_tmp", "settled_log"])
+def test_other_retirement_writes_refuse_a_post_preflight_symlink(tmp_path, stage):
+    home = tmp_path / "home"
+    home.mkdir()
+    h = _home(home)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    declared = _declared(h, args)
+    victim = tmp_path / "outside.txt"
+    victim.write_bytes(b"synthetic outside content")
+    assert os.path.realpath(victim) not in declared
+    path = h / {"todo_tmp": ".todo.md.tmp", "settled_tmp": st.SETTLED_TMP,
+                "settled_log": st.SETTLED_LOG}[stage]
+    if path.exists():
+        path.unlink()  # remove only this test fixture's log before planting a link
+    path.symlink_to(victim)
+    result = bt.retire_thread(h, args)
+    assert victim.read_bytes() == b"synthetic outside content", stage
+    assert not result[0], result
+
+
 def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_path, monkeypatch):
     h = _home(tmp_path)
     mine, other = {"words": "widget", "reason": "mine"}, {"words": "daemon", "reason": "other"}
