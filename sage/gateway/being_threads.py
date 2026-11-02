@@ -170,11 +170,17 @@ def _issue_confirmation(binding):
 
 
 def _consume_confirmation(token, binding):
+    if token is None:
+        return "missing"
     if not isinstance(token, str) or not re.fullmatch(r"[0-9a-f]{64}", token):
-        return False
+        return "unknown"
     with _preview_lock:
         record = _previews.pop(token, None)
-    return bool(record and record[1] > time.monotonic() and secrets.compare_digest(record[0], binding))
+    if not record or record[1] <= time.monotonic():
+        return "unknown"
+    if not secrets.compare_digest(record[0], binding):
+        return "changed"
+    return "accepted"
 
 
 def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "") -> Tuple[bool, str, bool]:
@@ -211,8 +217,14 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
         confirmation = a.get("confirmation")
         if _broad(kept, moved, entries, gone) or confirmation is not None:
             binding = _preview_binding(instance, words, reason, body, entries, nxt)
-            if not _consume_confirmation(confirmation, binding):
-                return False, ("Broad or changed retirement requires a fresh preview and confirmation. "
+            status = _consume_confirmation(confirmation, binding)
+            if status != "accepted":
+                explanation = {
+                    "missing": "No confirmation was provided for this broad retirement.",
+                    "unknown": "Confirmation is unknown or expired; it does not survive a restart or different worker.",
+                    "changed": "The source, words or reason changed since preview; that confirmation is consumed.",
+                }[status]
+                return False, (f"{explanation} Make a fresh preview with the reason, then confirm in the same beat. "
                                "No todo or settled records were changed."), False
         topic = ", ".join(words)
         if not moved and not gone:
@@ -273,7 +285,8 @@ def _preview(instance: Path, words: List[str], reason: str = "") -> Tuple[bool, 
         if reason:
             binding = _preview_binding(instance, words, reason, body, entries, nxt)
             lines.append(f"Broad retirement: confirmation: {_issue_confirmation(binding)}")
-            lines.append("Use this confirmation once with the same words, reason and source state within 5 minutes.")
+            lines.append("Confirm once in the same beat, within 5 minutes, using the same words, reason and source state. "
+                         "A restart or different worker loses this confirmation.")
         else:
             lines.append("Broad retirement: preview again with a reason to obtain a confirmation.")
     return True, "\n".join(lines), False

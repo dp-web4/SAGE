@@ -56,6 +56,7 @@ def _broad_home(tmp_path):
 def _preview_confirmation(h, args):
     preview = bt.retire_thread(h, {**args, "preview": "true"})
     assert preview[0] and not preview[2], preview
+    assert "same beat" in preview[1] and "different worker" in preview[1]
     match = re.search(r"confirmation: ([0-9a-f]{64})", preview[1])
     assert match, preview[1]
     return match.group(1)
@@ -124,6 +125,20 @@ def test_confirmation_is_bound_to_the_home_and_preview_needs_reason(tmp_path):
     ok, _, changed = bt.retire_thread(second, {**args, "confirmation": token})
     assert not ok and not changed
     assert not (second / bt.archive_name(args)).exists()
+
+
+def test_broad_refusal_explains_missing_unknown_and_changed_confirmation(tmp_path):
+    h = _broad_home(tmp_path)
+    args = {"words": "widget", "reason": "finished"}
+    missing = bt.retire_thread(h, args)
+    assert not missing[0] and "no confirmation" in missing[1].lower()
+    unknown = bt.retire_thread(h, {**args, "confirmation": "not-a-confirmation"})
+    assert not unknown[0] and "unknown or expired" in unknown[1].lower()
+    token = _preview_confirmation(h, args)
+    changed = bt.retire_thread(h, {**args, "reason": "different", "confirmation": token})
+    assert not changed[0] and "changed" in changed[1].lower() and "preview" in changed[1].lower()
+    consumed = bt.retire_thread(h, {**args, "confirmation": token})
+    assert not consumed[0] and "unknown or expired" in consumed[1].lower()
 
 
 def test_one_item_is_not_classed_as_a_broad_retirement(tmp_path):
