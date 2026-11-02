@@ -3984,7 +3984,8 @@ class BeingGateClient:
                 # `git_read cat sage/gateway/fleet_paths.py` beat after beat. Root it where it is read.
                 # (The composer already refuses a path that escapes the worktree.)
                 _wt = self._compose_ctx().get("worktree")
-                if (_REGISTRY[intent.effector].get("compose") and _wt and tool_input.get("path")
+                if (intent.effector != "run" and _REGISTRY[intent.effector].get("compose")
+                        and _wt and tool_input.get("path")
                         and not os.path.isabs(str(tool_input["path"]))):
                     tool_input["path"] = os.path.realpath(os.path.join(_wt, str(tool_input["path"])))
                 # AND A RUN'S SCRIPT IS IN THE HOME (Sprout, 2026-10-20/21). run is composed with no

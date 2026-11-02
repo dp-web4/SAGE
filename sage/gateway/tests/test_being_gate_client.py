@@ -1146,18 +1146,16 @@ def test_a_symlink_in_the_home_is_judged_at_its_target_not_at_the_link(tmp_path,
     judged = ev["tool_input"]["paths"]
     assert os.path.realpath(out / "other.py") in judged, judged
     assert os.path.realpath(out / "target.txt") in judged, judged
+    assert ev["tool_input"]["path"] == os.path.realpath(out / "other.py")
     _assert_every_bind_is_judged_or_plumbing(calls)
 
 
-@pytest.mark.xfail(strict=True, reason="pre-existing (on main too): the worktree-rooting block runs "
-                   "before the run-in-home block, so with a worktree a run's `path` is judged at "
-                   "<worktree>/<path>, a file that is not what runs. The real sources still reach "
-                   "`paths`, so nothing goes unjudged; a phantom path can only add a false deny.")
 def test_a_runs_script_path_is_judged_in_the_home_when_the_being_has_a_worktree(tmp_path, monkeypatch):
     c, calls, home, _wt = _real_run_client(tmp_path, monkeypatch)
     (home / "scratch" / "s.py").write_text("print(1)\n")
     c.gate(BeingIntent("run", {"path": "scratch/s.py"}))
     assert calls[-1][0]["tool_input"]["path"] == os.path.realpath(home / "scratch" / "s.py")
+    assert os.path.realpath(home / "scratch" / "s.py") in calls[-1][0]["tool_input"]["paths"]
 
 
 def test_a_grant_that_is_a_symlink_is_not_bound_so_nothing_unjudged_enters_the_box(tmp_path, monkeypatch):
