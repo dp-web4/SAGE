@@ -485,6 +485,25 @@ def test_a_preview_on_a_fresh_home_writes_nothing_not_even_the_lock(tmp_path, mo
     assert not (tmp_path / ".home.lock").exists()
 
 
+@pytest.mark.parametrize("value,is_preview", [
+    ("true", True), (" YES ", True), ("1", True), (True, True), (1, True),
+    ("false", False), ("on", False), ("", False), (False, False), (None, False),
+])
+def test_gate_preview_interpretation_matches_actual_write_behavior(tmp_path, monkeypatch, value, is_preview):
+    """A no-path gate decision must never hide a real retirement, even if parsing drifts."""
+    (tmp_path / "todo.md").write_text(
+        "- [ ] widget task\n- [ ] unrelated first\n- [ ] unrelated second\n")
+    args = {"words": "widget", "reason": "finished", "preview": value}
+    declared = _declared(tmp_path, args)
+    w = _Writes(monkeypatch)
+    ok, message, changed = bt.retire_thread(tmp_path, args)
+    assert ok, message
+    if is_preview:
+        assert not declared and not changed and not w.paths
+    else:
+        assert declared and changed and w.paths and w.paths <= declared
+
+
 def test_broad_preview_with_reason_and_confirmation_writes_no_files(tmp_path, monkeypatch):
     _broad_home(tmp_path)
     before = {p.name: p.read_bytes() for p in tmp_path.iterdir() if p.is_file()}
