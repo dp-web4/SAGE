@@ -287,7 +287,8 @@ class ExperimentTests(unittest.TestCase):
             nonlocal calls
             handoff = '  ' if calls % 2 == 0 else 'note'
             calls += 1
-            return {'decision': request['options'][0], 'handoff': handoff}, {
+            return {'decision': request['options'][0], 'handoff': handoff,
+                    'adapter_observation': observation()}, {
                 'seconds': 0.0, 'request_chars': 1, 'response_chars': 1}
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / 'run.jsonl'
@@ -315,7 +316,8 @@ class ExperimentTests(unittest.TestCase):
         for case in config['cases']:
             case.pop('no_evidence_expected', None)
         def no_handoff_adapter(command, request, timeout, handoff_chars):
-            return {'decision': request['options'][0], 'handoff': ''}, {
+            return {'decision': request['options'][0], 'handoff': '',
+                    'adapter_observation': observation()}, {
                 'seconds': 0.0, 'request_chars': 1, 'response_chars': 1}
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / 'run.jsonl'
@@ -341,7 +343,7 @@ class ExperimentTests(unittest.TestCase):
         case['initial_expected'] = None
         case['no_evidence_expected'] = None
         def null_adapter(command, request, timeout, handoff_chars):
-            return {'decision': None, 'handoff': ''}, {
+            return {'decision': None, 'handoff': '', 'adapter_observation': observation()}, {
                 'seconds': 0.0, 'request_chars': 1, 'response_chars': 1}
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / 'run.jsonl'
