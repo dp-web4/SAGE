@@ -316,6 +316,22 @@ def test_no_path_outside_the_declared_set_is_opened_for_writing(tmp_path, monkey
     assert w.paths and w.paths <= declared, w.paths - declared
 
 
+def test_temp_symlink_swapped_after_preflight_cannot_redirect_retirement(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    h = _home(home)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    declared = _declared(h, args)
+    victim = tmp_path / "outside.txt"
+    victim.write_bytes(b"synthetic outside content")
+    assert os.path.realpath(victim) not in declared
+    tmp_archive = h / f".{bt.archive_name(args)}.tmp"
+    tmp_archive.symlink_to(victim)  # swapped after the gate's path preflight
+    result = bt.retire_thread(h, args)
+    assert victim.read_bytes() == b"synthetic outside content"
+    assert not result[0], result
+
+
 def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_path, monkeypatch):
     h = _home(tmp_path)
     mine, other = {"words": "widget", "reason": "mine"}, {"words": "daemon", "reason": "other"}
