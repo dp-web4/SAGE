@@ -58,7 +58,7 @@ def _preview_confirmation(h, args):
     preview = bt.retire_thread(h, {**args, "preview": "true"})
     assert preview[0] and not preview[2], preview
     assert "same beat" in preview[1] and "later beat or restart" in preview[1]
-    match = re.search(r"confirmation: ([0-9a-f]{64})", preview[1])
+    match = re.search(r"confirmation: ([A-Za-z0-9_-]{22})(?=\s|$)", preview[1])
     assert match, preview[1]
     return match.group(1)
 
@@ -66,7 +66,7 @@ def _preview_confirmation(h, args):
 def _confirmed_if_broad(h, args, *, require=False):
     preview = bt.retire_thread(h, {**args, "preview": "true"})
     assert preview[0] and not preview[2], preview
-    match = re.search(r"confirmation: ([0-9a-f]{64})", preview[1])
+    match = re.search(r"confirmation: ([A-Za-z0-9_-]{22})(?=\s|$)", preview[1])
     if require:
         assert match, "recovery fixture must exercise a confirmed broad retirement"
     return {**args, "confirmation": match.group(1)} if match else args
@@ -142,6 +142,16 @@ def test_broad_refusal_explains_missing_unknown_and_changed_confirmation(tmp_pat
     assert not changed[0] and "changed" in changed[1].lower() and "preview" in changed[1].lower()
     consumed = bt.retire_thread(h, {**args, "confirmation": token})
     assert not consumed[0] and "unknown, mistyped or expired" in consumed[1].lower()
+
+
+@pytest.mark.parametrize("suffix", ["-", "_"])
+def test_confirmation_accepts_urlsafe_suffixes(tmp_path, monkeypatch, suffix):
+    h = _broad_home(tmp_path)
+    token = "A" * 20 + suffix + "A"
+    monkeypatch.setattr(bt.secrets, "token_urlsafe", lambda size: token)
+    args = {"words": "widget", "reason": "finished"}
+    assert _preview_confirmation(h, args) == token
+    assert bt.retire_thread(h, {**args, "confirmation": token})[0]
 
 
 def test_one_item_is_not_classed_as_a_broad_retirement(tmp_path):

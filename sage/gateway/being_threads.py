@@ -165,7 +165,9 @@ def _issue_confirmation(binding):
                 del _previews[key]
         while len(_previews) >= _PREVIEW_CAP:
             del _previews[next(iter(_previews))]
-        token = secrets.token_hex(32)
+        # 128 random bits in 22 URL-safe characters: shorter to transcribe,
+        # while still unpredictable and never an authorization grant.
+        token = secrets.token_urlsafe(16)
         _previews[token] = (binding, current + _PREVIEW_TTL)
     return token
 
@@ -173,7 +175,7 @@ def _issue_confirmation(binding):
 def _consume_confirmation(token, binding):
     if token is None:
         return "missing"
-    if not isinstance(token, str) or not re.fullmatch(r"[0-9a-f]{64}", token):
+    if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{22}", token):
         return "unknown"
     with _preview_lock:
         record = _previews.pop(token, None)
