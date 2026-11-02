@@ -681,6 +681,9 @@ def test_salvage_does_not_drop_qualifiers_or_execute_a_prior_block(body):
     '{"memory_write":{"path":"notes/x","content":"draft"},"dry_run":true}',
     '{"memory_write":{"path":"notes/x","content":"draft"},"recall":{"query":"q"},"dry_run":true}',
     '{"name":"memory_write","action":"recall","arguments":{"path":"notes/x","content":"draft"}}',
+    '{"name":"memory_write","arguments":{"path":"notes/x","content":"draft"},"args":{}}',
+    '```json\n{"name":"recall","arguments":{"query":"q"}}\n```\n'
+    '```json\n{"name":"memory_write","arguments":{"path":"notes/x","content":"draft"},"dry_run":true}\n```',
 ])
 def test_salvage_rejects_wrapper_qualifiers_and_conflicting_tool_selectors(body):
     from sage.gateway.being_gate_client import ollama_tools
@@ -694,6 +697,13 @@ def test_flat_tool_argument_named_name_is_not_discarded():
     calls = salvage_tool_calls('{"action":"tune","name":"temperature","value":"0.5"}', ollama_tools(["tune"]))
     assert len(calls) == 1
     assert calls[0]["function"]["arguments"]["name"] == "temperature"
+
+
+def test_empty_schema_does_not_allow_unknown_flat_arguments():
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    tools = [{"function": {"name": "ping", "parameters": {"properties": {}}}}]
+    assert salvage_tool_calls('{"name":"ping","dry_run":true}', tools) == []
+    assert salvage_tool_calls('{"name":"ping"}', tools)[0]["function"]["arguments"] == {}
 
 
 def test_salvage_keeps_two_valid_fenced_calls_in_order():
@@ -754,9 +764,10 @@ def test_salvage_accepts_the_other_name_keys_and_flat_arguments():
     r = salvage_tool_calls('```json\n[{"tool": "memory_write", "path": "journal.md", "content": "x"},'
                            ' {"tool": "memory_write", "path": "todo.md", "content": "y"}]\n```', names)
     assert [c["function"]["arguments"]["path"] for c in r] == ["journal.md", "todo.md"]
-    # stray keys beside a flat call are not arguments; an unknown action is not a call
+    # Formerly these extra keys were silently discarded. Their meaning is unknown, so
+    # recovering the call would change its expressed semantics; refuse the whole object.
     r = salvage_tool_calls('{"action": "recall", "query": "q", "timestamp": "now", "status": "final"}', names)
-    assert r and r[0]["function"]["arguments"] == {"query": "q"}
+    assert r == []
     assert salvage_tool_calls('{"action": "complete_beat", "timestamp": "t", "status": "final"}', names) == []
     r = salvage_tool_calls('{"function": "recall", "args": {"query": "q"}}', names)
     assert r and r[0]["function"]["arguments"] == {"query": "q"}
@@ -764,11 +775,12 @@ def test_salvage_accepts_the_other_name_keys_and_flat_arguments():
     r = salvage_tool_calls('```json\n{"memory_write": {"path": "journal.md", "content": "an entry"}}\n```', names)
     assert [(c["function"]["name"], c["function"]["arguments"]) for c in r] == [("memory_write", {"path": "journal.md", "content": "an entry"})]
     assert salvage_tool_calls('{"not_a_tool": {"x": 1}}', names) == []
-    # beat 148: the first name key names the BEING, the tool is under action; flat args
+    # Beat 148 included a being name alongside the selector. It may be benign, but is
+    # indistinguishable here from an unsupported qualifier; do not silently discard it.
     r = salvage_tool_calls('```json\n{"name": "sprout", "action": "recall", "query": "what was decided about #39", "top_k": 1}\n```', names)
-    assert [(c["function"]["name"], c["function"]["arguments"]) for c in r] == [("recall", {"query": "what was decided about #39", "top_k": 1})]
+    assert r == []
     r = salvage_tool_calls('{"name": "sage", "action": "memory_write", "path": "journal.md", "content": "x"}', names)
-    assert r and r[0]["function"]["name"] == "memory_write" and r[0]["function"]["arguments"]["path"] == "journal.md"
+    assert r == []
     # beat 30: the tool named inside the arguments
     r = salvage_tool_calls('```json\n{"name": "tool", "arguments": {"type": "recall", "query": "q", "top_k": 3}}\n```', names)
     assert [(c["function"]["name"], c["function"]["arguments"]) for c in r] == [("recall", {"query": "q", "top_k": 3})]
