@@ -252,6 +252,10 @@ class _DuplicateJsonKey(ValueError):
     """Ambiguous JSON must not become an executable tool call."""
 
 
+class _UnsafeToolPayload(ValueError):
+    """A recognized tool payload is unsafe to partially recover."""
+
+
 def _unique_json_object(pairs):
     result = {}
     for key, value in pairs:
@@ -274,7 +278,7 @@ def _json_calls(text: str, names) -> List[dict]:
         try:
             obj, end = dec.raw_decode(text, j)
         except _DuplicateJsonKey:
-            return []
+            raise _UnsafeToolPayload("duplicate JSON key")
         except ValueError:
             i = j + 1
             continue
@@ -311,7 +315,7 @@ def _json_calls(text: str, names) -> List[dict]:
                     # iteration preserves the order they appeared in the text, and that order
                     # is the being's, not ours.
                     if any(set(v) - set(known[k]) for k, v in inner):
-                        return []  # Never execute a prefix when a qualifier is unsupported.
+                        raise _UnsafeToolPayload("unsupported nested arguments")
                     for k, v in inner:
                         out.append({"function": {"name": k, "arguments": dict(v)},
                                     "_salvaged": "json"})
@@ -322,7 +326,7 @@ def _json_calls(text: str, names) -> List[dict]:
                 else:
                     continue
             if args is not None and set(args) - set(known[name]):
-                return []
+                raise _UnsafeToolPayload("unsupported nested arguments")
             if args is None:
                 # flat form: the arguments sit beside the name key; keep only schema params
                 # when the schema is known, so stray keys ("timestamp", "status") never
@@ -471,6 +475,14 @@ def _attr_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
     return out
 
 def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
+    """Recover calls, refusing the entire reply if a recognized JSON payload is unsafe."""
+    try:
+        return _salvage_tool_calls(content, tools)
+    except _UnsafeToolPayload:
+        return []
+
+
+def _salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
     """Lift well-formed tool calls that a model put in the TEXT channel, in Ollama's
     tool_calls shape (plus `_salvaged`: "json" | "python" | "attr"). Accepted: a JSON object or
     array of {"name", "arguments"} (fenced or bare), fenced Python `name(k="v", ...)`
