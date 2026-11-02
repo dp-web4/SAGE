@@ -101,12 +101,24 @@ def writes(args: Dict) -> Tuple[str, ...]:
 
 def _write_atomic(p: Path, text: str | bytes) -> None:
     tmp = p.with_name(_tmp(p.name))
-    stream = open(tmp, "wb") if isinstance(text, bytes) else open(tmp, "w", encoding="utf-8")
+    # Do not truncate or follow a pre-existing temp path. A crash may have
+    # left recovery evidence there, and a link may have appeared since gate
+    # preflight. This does not secure the parent directory or later rename.
+    def nofollow_opener(path, flags):
+        if not hasattr(os, "O_NOFOLLOW"):
+            raise OSError("exclusive no-follow file creation is unavailable")
+        return os.open(path, flags | os.O_NOFOLLOW, 0o666)
+    stream = (open(tmp, "xb", opener=nofollow_opener) if isinstance(text, bytes)
+              else open(tmp, "x", encoding="utf-8", opener=nofollow_opener))
     with stream as f:
         f.write(text)
         f.flush()
         os.fsync(f.fileno())
-    os.replace(tmp, p)
+        expected = os.fstat(f.fileno())
+        os.replace(tmp, p)
+        observed = os.stat(p, follow_symlinks=False)
+        if (observed.st_dev, observed.st_ino) != (expected.st_dev, expected.st_ino):
+            raise OSError("replacement no longer names the file written")
 
 
 def _fresh_todo(items: List[Tuple[str, Optional[datetime]]], stamp: datetime, retired_as: str) -> str:

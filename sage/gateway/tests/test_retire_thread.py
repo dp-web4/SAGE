@@ -332,6 +332,38 @@ def test_temp_symlink_swapped_after_preflight_cannot_redirect_retirement(tmp_pat
     assert not result[0], result
 
 
+def test_existing_temp_recovery_evidence_is_not_truncated(tmp_path):
+    h = _home(tmp_path)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    temp = h / f".{bt.archive_name(args)}.tmp"
+    temp.write_bytes(b"prior recovery evidence")
+    ok, message, changed = bt.retire_thread(h, args)
+    assert not ok and changed and "partial" in message.lower()
+    assert temp.read_bytes() == b"prior recovery evidence"
+
+
+def test_temp_replaced_after_write_cannot_be_reported_as_a_valid_archive(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    h = _home(home)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    victim = tmp_path / "outside.txt"
+    victim.write_bytes(b"synthetic outside content")
+    temp = h / f".{bt.archive_name(args)}.tmp"
+    real_replace = os.replace
+
+    def swap_before_rename(src, dst, *a, **kw):
+        if Path(src) == temp:
+            temp.unlink()
+            temp.symlink_to(victim)
+        return real_replace(src, dst, *a, **kw)
+
+    monkeypatch.setattr(os, "replace", swap_before_rename)
+    ok, _, _ = bt.retire_thread(h, args)
+    assert not ok, "a swapped temp cannot be reported as the retained archive"
+    assert victim.read_bytes() == b"synthetic outside content"
+
+
 @pytest.mark.parametrize("stage", ["todo_tmp", "settled_tmp", "settled_log"])
 def test_other_retirement_writes_refuse_a_post_preflight_symlink(tmp_path, stage):
     home = tmp_path / "home"
