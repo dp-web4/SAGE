@@ -373,6 +373,38 @@ def test_duplicate_json_arguments_can_retry_with_an_unambiguous_value():
     assert len(result.trace) == 1 and result.salvaged == []
 
 
+def test_json_act_rejects_unknown_arguments_for_empty_schema():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    class FakeLLM:
+        max_response_tokens = 1000
+        def __init__(self):
+            self.calls = 0
+        def get_chat_response(self, messages, **kwargs):
+            self.calls += 1
+            return {"content": ('{"act":"pair_audio","why":"connect"}' if self.calls == 1
+                                else '{"dry_run":true}')}
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["pair_audio"]), act_form="json")
+    assert dispatched == [] and result.trace == []
+    assert result.json_arg_failures
+
+
+def test_empty_object_schema_rejects_extra_unless_explicitly_open():
+    from sage.gateway.being_tool_loop import _check_args
+    closed = {"type": "object", "properties": {}}
+    assert _check_args('{"dry_run":true}', closed)[1] is not None
+    assert _check_args('{}', closed) == ({}, None)
+    assert _check_args('{"value":1}', dict(closed, additionalProperties=True)) == ({"value": 1}, None)
+    assert _check_args('{"value":1}', {"type": "object"}) == ({"value": 1}, None)
+
+
 def test_length_retry_gets_the_room_the_window_has_left_via_the_override():
     """The once-retry must be MORE room than the first attempt, not the same budget again:
     with thinking on OllamaIRP already sends num_predict_think first, and its resolver
