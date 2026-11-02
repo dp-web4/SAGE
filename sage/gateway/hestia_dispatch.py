@@ -634,11 +634,22 @@ class HestiaF1aDispatcher:
                     f"Your beat's 'granted paths' line is the last list it gave.]")
         # what the gate itself resolved as admitted on this verdict, when it says
         admitted = tuple(_granted_reach_of(verdict)) if verdict is not None else ()
+        rule = getattr(verdict, "reach_rule", "union")
+        explicit_reach = bool(getattr(verdict, "granted_reach", ()) or ())
 
         def gate_admits(row) -> Optional[bool]:
             if not admitted:
                 return None
             root = os.path.realpath(os.path.expanduser(str(row.get("path") or "")))
+            if rule == "nearest":
+                if not explicit_reach:
+                    return None
+                own = [item for item in admitted if len(item) >= 2
+                       and not (len(item) > 3 and item[3] == "floor")
+                       and os.path.realpath(str(item[0])) == root
+                       and bool(item[1]) == bool(row.get("recursive"))]
+                modes = set("".join(str(item[2]) if len(item) > 2 else "rwed" for item in own))
+                return bool(own) and set(str(row.get("modes") or "")) <= modes
             return any(os.path.realpath(str(r)) == root and bool(rec) == bool(row.get("recursive"))
                        for r, rec, *_ in admitted)
 
@@ -658,6 +669,8 @@ class HestiaF1aDispatcher:
                 return "the gate admits it now"
             if a is None:
                 return "whether the gate admits it right now could not be confirmed"
+            if rule == "nearest":
+                return "recorded, but the gate does NOT confirm all of its modes now"
             if row.get("modes") != "rwed":
                 return ("recorded, but the gate does NOT admit it now: a grant narrowed to fewer "
                         "than all four modes admits nothing until hestia #1345 part B")
@@ -665,6 +678,9 @@ class HestiaF1aDispatcher:
 
         def floor_status(f) -> str:
             if f["served"]:
+                if rule == "nearest":
+                    return (f"served to your gate as floor: {self._modes_words(f['served'])}; "
+                            "your own covering grant may take precedence")
                 return f"served to your gate now: {self._modes_words(f['served'])}"
             return f"NOT served to you now ({f['why'] or 'withheld'})"
 
@@ -687,10 +703,18 @@ class HestiaF1aDispatcher:
         own_now = [g for g in own if gate_admits(g) is True]
         unknown = [g for g in own if gate_admits(g) is None]
         floor_now = [f for f in fl if f["served"]]
-        now = self._union([g["modes"] for g in own_now] + [f["served"] for f in floor_now])
+        if rule == "nearest" and explicit_reach:
+            from sage.gateway.being_gate_client import reach_modes_at
+            now = reach_modes_at(p, admitted, rule)
+        elif rule == "nearest":
+            now = ""
+        else:
+            now = self._union([g["modes"] for g in own_now] + [f["served"] for f in floor_now])
         lines = [f"[does what you hold reach {p}? read from hestia at this moment]"]
         if now:
             lines.append(f"now: yes, {self._modes_words(now)}.")
+        elif rule == "nearest" and not explicit_reach and (own or floor_now):
+            lines.append("now: unconfirmed. The gate's resolved reach was not available on this verdict.")
         elif unknown:
             lines.append(f"now: unconfirmed. You hold a grant here recording "
                          f"{self._modes_words(self._union(g['modes'] for g in unknown))}, but whether "

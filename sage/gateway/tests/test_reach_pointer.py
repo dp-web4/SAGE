@@ -187,6 +187,28 @@ def test_a_floor_row_does_not_confirm_a_recorded_own_grant():
     assert "the gate admits it now" not in out, out
 
 
+def test_a_nearest_verdict_without_explicit_reach_does_not_claim_modes():
+    ws, home = _world()
+    root = os.path.join(ws, "hestia")
+    row = {"path": root, "recursive": True}
+    st = {"grants_by_mode": [{**row, "modes": "rw", "channel": "standing"}]}
+    v = GatewayVerdict("allow", granted=(root,), reach_rule="nearest")
+    out = _read(_disp(st), f"hestia://reach{root}/_shared/gate.py", v)
+    assert out.splitlines()[1].startswith("now: unconfirmed."), out
+
+
+def test_a_narrower_admitted_row_does_not_confirm_all_recorded_modes():
+    ws, home = _world()
+    root = os.path.join(ws, "hestia")
+    row = {"path": root, "recursive": True}
+    st = {"grants_by_mode": [{**row, "modes": "rw", "channel": "standing"}]}
+    v = GatewayVerdict("allow", granted=(root,), granted_reach=((root, True, "r"),),
+                       reach_rule="nearest")
+    out = _read(_disp(st), f"hestia://reach{root}/_shared/gate.py", v)
+    assert out.splitlines()[1] == "now: yes, read.", out
+    assert "does NOT confirm all of its modes" in out, out
+
+
 def test_an_older_daemon_serves_its_whole_floor_and_reads_every_grant_as_all_modes():
     ws, home = _world()
     st = _status(ws, home, by_mode=False)
