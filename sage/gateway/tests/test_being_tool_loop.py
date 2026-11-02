@@ -588,6 +588,19 @@ def test_python_salvage_never_promotes_conditional_or_unreached_code():
     assert [call["function"]["arguments"]["content"] for call in r] == ["first", "second"]
 
 
+@pytest.mark.parametrize("body", [
+    '"Do not run this example"\nmemory_write(path="notes/x", content="draft")',
+    'from unrelated import memory_write\nmemory_write(path="notes/x", content="draft")',
+    'import unrelated as tools\ntools.memory_write(path="notes/x", content="draft")',
+    'tools = "not the tool namespace"\ntools.memory_write(path="notes/x", content="draft")',
+    'memory_write = "not the offered tool"\nmemory_write(path="notes/x", content="draft")',
+])
+def test_python_salvage_does_not_promote_quoted_or_rebound_names(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls('```python\n' + body + '\n```', ollama_tools(["memory_write"])) == []
+
+
 def test_run_ollama_tool_turn_gates_a_salvaged_call_and_records_it():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
