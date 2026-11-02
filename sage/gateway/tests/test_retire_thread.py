@@ -1,12 +1,15 @@
 """retire_thread: close a whole line of work at once (being_threads). dp, 2026-11-01, to cbp-being: "retire
 the whole hestia thread and work on something different" -- 550 of its 584 open todo items and 29 of its
 30 settled entries were on that thread, and retire_note / settle could only move one at a time."""
+import base64
 import builtins
 import io
 import json
 import os
 import tempfile
 from pathlib import Path
+
+import pytest
 
 from sage.gateway import being_settled as st
 from sage.gateway import being_threads as bt
@@ -191,9 +194,9 @@ def test_a_failed_settled_commit_rolls_back_within_the_declared_paths(tmp_path, 
     monkeypatch.setattr(st, "_commit", lambda *a, **k: (False, "could not write settled.json (OSError)"))
     w = _Writes(monkeypatch)
     ok, msg, changed = bt.retire_thread(h, args)
-    assert not ok and not changed and "put back as it was" in msg
+    assert not ok and changed and "todo was restored" in msg and "may be partial" in msg
     assert (h / "todo.md").read_text() == TODO and (h / "settled.json").read_bytes() == entries_before
-    assert not (h / bt.archive_name(args)).exists()
+    assert (h / bt.archive_name(args)).exists()
     assert w.paths <= declared, w.paths - declared
 
 
@@ -215,6 +218,9 @@ def test_a_failed_settled_rollback_preserves_recovery_evidence(tmp_path, monkeyp
     assert (h / bt.archive_name(args)).exists(), "partial-effect recovery evidence must survive"
     assert "nothing was retired" not in msg.lower(), "unknown or partial effect is not a no-op"
     assert changed, "caller must not record a partial effect as unchanged"
+    archive = (h / bt.archive_name(args)).read_text()
+    encoded = archive.split("## Original settled snapshot (base64; exact bytes)\n\n", 1)[1].splitlines()[0]
+    assert base64.b64decode(encoded) == original
 
 
 def test_real_settled_log_and_restore_failures_do_not_erase_recovery(tmp_path, monkeypatch):
@@ -243,6 +249,30 @@ def test_real_settled_log_and_restore_failures_do_not_erase_recovery(tmp_path, m
     assert changed
 
 
+@pytest.mark.parametrize("stage", ["archive", "todo"])
+def test_write_failure_reports_partial_and_preserves_available_evidence(tmp_path, monkeypatch, stage):
+    h = _home(tmp_path)
+    args = {"words": "widget", "reason": "r"}
+    original_todo, original_settled = (h / bt.TODO).read_bytes(), (h / st.SETTLED_FILE).read_bytes()
+    target = h / (bt.archive_name(args) if stage == "archive" else bt.TODO)
+    real_replace = os.replace
+
+    def fail_one_replace(src, dst, *a, **kw):
+        if Path(dst) == target:
+            raise OSError("synthetic replace failure")
+        return real_replace(src, dst, *a, **kw)
+
+    monkeypatch.setattr(os, "replace", fail_one_replace)
+    ok, msg, changed = bt.retire_thread(h, args)
+    assert not ok and changed and "may be partial" in msg and "Do not retry blindly" in msg
+    assert (h / bt.TODO).read_bytes() == original_todo
+    assert (h / st.SETTLED_FILE).read_bytes() == original_settled
+    # An archive replacement failure leaves the written temp for recovery; a
+    # later todo replacement failure keeps the already committed archive.
+    evidence = h / (bt._tmp(bt.archive_name(args)) if stage == "archive" else bt.archive_name(args))
+    assert evidence.exists()
+
+
 def test_the_verb_retires_and_witnesses():
     FakeMcp.calls = []
     root = Path(tempfile.mkdtemp(prefix="rt-"))
@@ -252,6 +282,15 @@ def test_the_verb_retires_and_witnesses():
     assert env.ok and env.witness_id, env.error
     assert "Build a small neural net" in (root / "todo.md").read_text()
     assert "widget" not in (root / "todo.md").read_text().split("UTC:", 1)[-1].lower()
+
+
+def test_partial_retire_failure_is_witnessed(tmp_path, monkeypatch):
+    FakeMcp.calls = []
+    _home(tmp_path)
+    monkeypatch.setattr(st, "_commit", lambda *a, **k: (False, "synthetic unknown outcome"))
+    d = HestiaF1aDispatcher("sprout-being", str(tmp_path), mcp_factory=lambda ep, pid: FakeMcp(ep, pid))
+    env = d(BeingIntent("retire_thread", {"words": "widget", "reason": "finished"}), _ALLOW)
+    assert not env.ok and "may be partial" in env.error and env.witness_id
 
 
 def test_a_preview_on_a_fresh_home_writes_nothing_not_even_the_lock(tmp_path, monkeypatch):

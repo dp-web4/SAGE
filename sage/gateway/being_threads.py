@@ -23,6 +23,7 @@ nothing, so a being (or its seat) can check a word list before using it.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -166,6 +167,11 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
         if (instance / name).exists():
             return False, (f"a retire with these same words and reason already wrote {name}; nothing was "
                            f"changed. Give a different reason (say what is new) to retire again."), False
+        settled_path = instance / st.SETTLED_FILE
+        try:
+            settled_before = settled_path.read_bytes() if settled_path.exists() else None
+        except OSError as exc:
+            return False, f"cannot snapshot the settled list ({type(exc).__name__}); nothing was retired.", False
         head = [f"> RETIRED {stamp:%Y-%m-%d %H:%M}Z with retire_thread"
                 + (f" (by {by})" if by else "") + f". Topic words: {topic}.",
                 f"> No longer current: {reason}", "",
@@ -175,23 +181,39 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                  + f" (settled {str(e.get('at', ''))[:10]})" for e in gone]
         head += ["", f"## Open todo items retired ({len(moved)})", ""]
         head += [(f"- [ ] {t}" + (f" (since {s:%Y-%m-%d %H:%M} UTC)" if s else "")) for t, s in moved]
+        head += ["", "## Original settled snapshot (base64; exact bytes)", "",
+                 "absent" if settled_before is None else base64.b64encode(settled_before).decode("ascii")]
         head += ["", "> The todo.md this retire replaced, kept whole below, as it was written.", "", ""]
         arch = instance / name
-        _write_atomic(arch, "\n".join(head) + body)
         todo = instance / TODO
-        if moved:
-            _write_atomic(todo, _fresh_todo(kept, stamp, name))
+        try:
+            _write_atomic(arch, "\n".join(head) + body)
+            if moved:
+                _write_atomic(todo, _fresh_todo(kept, stamp, name))
+        except OSError as exc:
+            return False, (f"retirement outcome may be partial ({type(exc).__name__}); preserve {name} "
+                           "and any temporary files for recovery and ask your seat. Do not retry blindly."), True
         if gone:
             left = [e for e in entries if e not in gone]
-            ok, msg = st._commit(instance, left, nxt,
-                                 {"op": "retire_thread", "words": words, "ids": [e["id"] for e in gone],
-                                  "from": gone, "to": name, "why": reason, **({"by": by} if by else {})},
-                                 now, "ok")
-            if not ok:   # undo: the todo back as it was, and no retired file claiming a retire
+            try:
+                ok, msg = st._commit(instance, left, nxt,
+                                     {"op": "retire_thread", "words": words, "ids": [e["id"] for e in gone],
+                                      "from": gone, "to": name, "why": reason, **({"by": by} if by else {})},
+                                     now, "ok")
+            except OSError as exc:
+                ok, msg = False, f"settled commit raised {type(exc).__name__}"
+            if not ok:
+                # _commit can return failure after its own rollback failed. Never
+                # erase the pre-change evidence or infer a no-op from its result.
+                todo_status = "todo was not changed"
                 if moved:
-                    _write_atomic(todo, body)
-                arch.unlink(missing_ok=True)
-                return False, f"{msg}. The todo was put back as it was; nothing was retired.", False
+                    try:
+                        _write_atomic(todo, body)
+                        todo_status = "todo was restored"
+                    except OSError:
+                        todo_status = "todo restoration failed"
+                return False, (f"{msg}. Retirement outcome may be partial; {todo_status}. "
+                               f"Recovery evidence remains in {name}; ask your seat before retrying."), True
     said = (f"Retired the thread ({topic}): {len(moved)} open todo item(s) and {len(gone)} settled "
             f"entr{'y' if len(gone) == 1 else 'ies'} moved to {name}, where recall still finds them. "
             f"Still open: {len(kept)} todo item(s); still settled: {len(entries) - len(gone)}.")
